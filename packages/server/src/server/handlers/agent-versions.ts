@@ -1,4 +1,4 @@
-import { deepEqual } from '@mastra/core/utils';
+import deepEqual from 'fast-deep-equal';
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,

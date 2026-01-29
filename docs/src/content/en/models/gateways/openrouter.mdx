@@ -9,13 +9,13 @@ description: "Use AI models through OpenRouter."
 
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 140 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 144 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
 ## Usage
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
@@ -56,6 +56,8 @@ ANTHROPIC_API_KEY=ant-...
 | `anthropic/claude-opus-4.5` |
 | `anthropic/claude-sonnet-4` |
 | `anthropic/claude-sonnet-4.5` |
+| `arcee-ai/trinity-large-preview:free` |
+| `arcee-ai/trinity-mini:free` |
 | `cognitivecomputations/dolphin3.0-mistral-24b` |
 | `cognitivecomputations/dolphin3.0-r1-mistral-24b` |
 | `deepseek/deepseek-chat-v3-0324` |
@@ -85,6 +87,7 @@ ANTHROPIC_API_KEY=ant-...
 | `google/gemma-2-9b-it:free` |
 | `google/gemma-3-12b-it` |
 | `google/gemma-3-27b-it` |
+| `google/gemma-3-27b-it:free` |
 | `google/gemma-3n-e4b-it` |
 | `google/gemma-3n-e4b-it:free` |
 | `kwaipilot/kat-coder-pro:free` |
@@ -116,6 +119,7 @@ ANTHROPIC_API_KEY=ant-...
 | `moonshotai/kimi-k2-0905:exacto` |
 | `moonshotai/kimi-k2-thinking` |
 | `moonshotai/kimi-k2:free` |
+| `moonshotai/kimi-k2.5` |
 | `nousresearch/deephermes-3-llama-3-8b-preview` |
 | `nousresearch/hermes-4-405b` |
 | `nousresearch/hermes-4-70b` |

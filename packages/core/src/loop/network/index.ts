@@ -1,14 +1,16 @@
 import z from 'zod';
 import type { Mastra } from '../..';
 import type { AgentExecutionOptions } from '../../agent';
-import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
+import type { MultiPrimitiveExecutionOptions, NetworkOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
+import { noopLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
+import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
@@ -38,14 +40,22 @@ type NetworkIdGenerator = (context?: IdGeneratorContext) => string;
  * Excludes:
  * - isNetwork: true JSON (result markers after primitive execution)
  * - Routing agent decision JSON (has primitiveId/primitiveType/selectionReason)
+ * - Completion feedback messages (metadata.mode === 'network' or metadata.completionResult)
  */
 function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage[] {
   return messages.filter(msg => {
     // Include all user messages
     if (msg.role === 'user') return true;
 
-    // Include assistant messages that are NOT internal network JSON
+    // Include assistant messages that are NOT internal network messages
     if (msg.role === 'assistant') {
+      // Check metadata for network-internal markers (e.g., completion feedback)
+      // These messages are saved with metadata flags but plain text content
+      const metadata = msg.content?.metadata;
+      if (metadata?.mode === 'network' || metadata?.completionResult) {
+        return false;
+      }
+
       // Check ALL parts for network-internal JSON
       const parts = msg.content?.parts ?? [];
       for (const part of parts) {
@@ -331,22 +341,64 @@ export async function prepareMemoryStep({
  *
  * @internal
  */
+/**
+ * Helper function to apply output processors to messages before saving.
+ * This ensures that user-configured output processors (like TraceIdInjector)
+ * are applied to all messages saved during network execution.
+ */
+async function saveMessagesWithProcessors(
+  memory:
+    | { saveMessages: (params: { messages: MastraDBMessage[] }) => Promise<{ messages: MastraDBMessage[] }> }
+    | undefined,
+  messages: MastraDBMessage[],
+  processorRunner: ProcessorRunner | null,
+  context?: {
+    tracingContext?: TracingContext;
+    requestContext?: RequestContext;
+  },
+): Promise<void> {
+  if (!memory) return;
+
+  if (!processorRunner || messages.length === 0) {
+    await memory.saveMessages({ messages });
+    return;
+  }
+
+  // Create a MessageList and add the messages as 'response' type
+  const messageList = new MessageList();
+  for (const msg of messages) {
+    messageList.add(msg, 'response');
+  }
+
+  // Run output processors on the messages
+  await processorRunner.runOutputProcessors(messageList, context?.tracingContext, context?.requestContext);
+
+  // Get the processed messages and save them
+  const processedMessages = messageList.get.response.db();
+  await memory.saveMessages({ messages: processedMessages });
+}
+
 async function saveFinalResultIfProvided({
   memory,
   finalResult,
   threadId,
   resourceId,
   generateId,
+  processorRunner,
+  requestContext,
 }: {
   memory: Awaited<ReturnType<Agent['getMemory']>>;
   finalResult: string | undefined;
   threadId: string;
   resourceId: string;
   generateId: () => string;
+  processorRunner: ProcessorRunner | null;
+  requestContext?: RequestContext;
 }) {
   if (memory && finalResult) {
-    await memory.saveMessages({
-      messages: [
+    await saveMessagesWithProcessors(
+      memory,
+      [
         {
           id: generateId(),
           type: 'text',
@@ -360,7 +412,9 @@ async function saveFinalResultIfProvided({
           resourceId,
         },
       ] as MastraDBMessage[],
-    });
+      processorRunner,
+      { requestContext },
+    );
   }
 }
 
@@ -372,6 +426,8 @@ export async function createNetworkLoop({
   generateId,
   routingAgentOptions,
   routing,
+  onAbort,
+  abortSignal,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -383,7 +439,23 @@ export async function createNetworkLoop({
     additionalInstructions?: string;
     verboseIntrospection?: boolean;
   };
+  onAbort?: (event: any) => Promise<void> | void;
+  abortSignal?: AbortSignal;
 }) {
+  // Get configured output processors from the agent for applying to saved messages
+  const configuredOutputProcessors = await agent.listConfiguredOutputProcessors(requestContext);
+
+  // Create a ProcessorRunner if there are output processors to apply
+  const processorRunner =
+    configuredOutputProcessors.length > 0
+      ? new ProcessorRunner({
+          outputProcessors: configuredOutputProcessors,
+          inputProcessors: [],
+          logger: agent.getMastraInstance()?.getLogger() || noopLogger,
+          agentName: agent.name,
+        })
+      : null;
+
   const routingStep = createStep({
     id: 'routing-agent-step',
     inputSchema: z.object({
@@ -409,6 +481,35 @@ export async function createNetworkLoop({
       conversationContext: z.array(z.any()).optional(),
     }),
     execute: async ({ inputData, getInitData, writer }) => {
+      // Check if aborted before executing
+      if (abortSignal?.aborted) {
+        await onAbort?.({
+          primitiveType: 'routing',
+          primitiveId: 'routing-agent',
+          iteration: inputData.iteration,
+        });
+        await writer?.write({
+          type: 'routing-agent-abort',
+          runId,
+          from: ChunkFrom.NETWORK,
+          payload: {
+            primitiveType: 'routing',
+            primitiveId: 'routing-agent',
+          },
+        });
+        return {
+          task: inputData.task,
+          primitiveId: 'none',
+          primitiveType: 'none' as const,
+          prompt: '',
+          result: 'Aborted',
+          isComplete: true,
+          selectionReason: 'Aborted',
+          iteration: inputData.iteration,
+          conversationContext: [],
+        };
+      }
+
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
 
       const routingAgent = await getRoutingAgent({ requestContext, agent, routingConfig: routing });
@@ -497,6 +598,8 @@ export async function createNetworkLoop({
           },
         },
         ...routingAgentOptions,
+        abortSignal,
+        onAbort,
       };
 
       const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
@@ -586,6 +689,32 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer, getInitData, suspend, resumeData }) => {
+      // Check if aborted before executing
+      if (abortSignal?.aborted) {
+        await onAbort?.({
+          primitiveType: 'agent',
+          primitiveId: inputData.primitiveId,
+          iteration: inputData.iteration,
+        });
+        await writer?.write({
+          type: 'agent-execution-abort',
+          runId,
+          from: ChunkFrom.NETWORK,
+          payload: {
+            primitiveType: 'agent',
+            primitiveId: inputData.primitiveId,
+          },
+        });
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: 'Aborted',
+          isComplete: true,
+          iteration: inputData.iteration,
+        };
+      }
+
       const agentsMap = await agent.listAgents({ requestContext });
 
       const agentForStep = agentsMap[inputData.primitiveId];
@@ -652,6 +781,8 @@ export async function createNetworkLoop({
                 lastMessages: 0,
               },
             },
+            abortSignal,
+            onAbort,
           })
         : agentForStep.stream(messagesForSubAgent, {
             requestContext: requestContext,
@@ -663,12 +794,16 @@ export async function createNetworkLoop({
                 lastMessages: 0,
               },
             },
+            abortSignal,
+            onAbort,
           }));
 
       let requireApprovalMetadata: Record<string, any> | undefined;
       let suspendedTools: Record<string, any> | undefined;
 
       let toolCallDeclined = false;
+
+      let agentCallAborted = false;
 
       for await (const chunk of result.fullStream) {
         await writer.write({
@@ -717,6 +852,10 @@ export async function createNetworkLoop({
             toolCallDeclined = true;
           }
         }
+
+        if (chunk.type === 'abort') {
+          agentCallAborted = true;
+        }
       }
 
       const memory = await agent.getMemory({ requestContext: requestContext });
@@ -728,8 +867,13 @@ export async function createNetworkLoop({
         finalText = finalText + '\n\nTool call was not approved by the user';
       }
 
-      await memory?.saveMessages({
-        messages: [
+      if (agentCallAborted) {
+        finalText = 'Aborted';
+      }
+
+      await saveMessagesWithProcessors(
+        memory,
+        [
           {
             id: generateId({
               idType: 'message',
@@ -770,7 +914,29 @@ export async function createNetworkLoop({
             resourceId: initData?.threadResourceId || networkName,
           },
         ] as MastraDBMessage[],
-      });
+        processorRunner,
+        { requestContext },
+      );
+
+      if (agentCallAborted) {
+        await writer?.write({
+          type: 'agent-execution-abort',
+          runId,
+          from: ChunkFrom.NETWORK,
+          payload: {
+            primitiveType: 'agent',
+            primitiveId: inputData.primitiveId,
+          },
+        });
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: 'Aborted',
+          isComplete: true,
+          iteration: inputData.iteration,
+        };
+      }
 
       if (requireApprovalMetadata || suspendedTools) {
         await writer.write({
@@ -863,6 +1029,32 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer, getInitData, suspend, resumeData, mastra }) => {
+      // Check if aborted before executing
+      if (abortSignal?.aborted) {
+        await onAbort?.({
+          primitiveType: 'workflow',
+          primitiveId: inputData.primitiveId,
+          iteration: inputData.iteration,
+        });
+        await writer?.write({
+          type: 'workflow-execution-abort',
+          runId,
+          from: ChunkFrom.NETWORK,
+          payload: {
+            primitiveType: 'workflow',
+            primitiveId: inputData.primitiveId,
+          },
+        });
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: 'Aborted',
+          isComplete: true,
+          iteration: inputData.iteration,
+        };
+      }
+
       const workflowsMap = await agent.listWorkflows({ requestContext: requestContext });
       const workflowId = inputData.primitiveId;
       const wf = workflowsMap[workflowId];
@@ -907,6 +1099,20 @@ export async function createNetworkLoop({
         stepType: 'workflow-execution',
       });
       const run = await wf.createRun({ runId });
+
+      // listen for the network-level abort signal
+      const networkAbortCb = async () => {
+        await run.cancel();
+        await onAbort?.({
+          primitiveType: 'workflow',
+          primitiveId: inputData.primitiveId,
+          iteration: inputData.iteration,
+        });
+      };
+      if (abortSignal) {
+        abortSignal.addEventListener('abort', networkAbortCb);
+      }
+
       const toolData = {
         workflowId: wf.id,
         args: inputData,
@@ -930,8 +1136,18 @@ export async function createNetworkLoop({
             requestContext: requestContext,
           });
 
+      // const wflowAbortCb = () => {
+      //   abort();
+      // };
+      // run.abortController.signal.addEventListener('abort', wflowAbortCb);
+      // wflowAbortSignal.addEventListener('abort', async () => {
+      //   run.abortController.signal.removeEventListener('abort', wflowAbortCb);
+      //   await run.cancel();
+      // });
+
       // let result: any;
       // let stepResults: Record<string, any> = {};
+      let workflowCancelled = false;
       let chunks: ChunkType[] = [];
       for await (const chunk of stream.fullStream) {
         chunks.push(chunk);
@@ -944,6 +1160,9 @@ export async function createNetworkLoop({
           from: ChunkFrom.NETWORK,
           runId,
         });
+        if (chunk.type === 'workflow-canceled') {
+          workflowCancelled = true;
+        }
       }
 
       let runSuccess = true;
@@ -998,8 +1217,9 @@ export async function createNetworkLoop({
 
       const memory = await agent.getMemory({ requestContext: requestContext });
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
-      await memory?.saveMessages({
-        messages: [
+      await saveMessagesWithProcessors(
+        memory,
+        [
           {
             id: generateId({
               idType: 'message',
@@ -1040,7 +1260,29 @@ export async function createNetworkLoop({
             resourceId: initData?.threadResourceId || networkName,
           },
         ] as MastraDBMessage[],
-      });
+        processorRunner,
+        { requestContext },
+      );
+
+      if (workflowCancelled && abortSignal?.aborted) {
+        await writer?.write({
+          type: 'workflow-execution-abort',
+          runId,
+          from: ChunkFrom.NETWORK,
+          payload: {
+            primitiveType: 'workflow',
+            primitiveId: inputData.primitiveId,
+          },
+        });
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: 'Aborted',
+          isComplete: true,
+          iteration: inputData.iteration,
+        };
+      }
 
       if (suspendPayload) {
         await writer?.write({
@@ -1118,6 +1360,32 @@ export async function createNetworkLoop({
     execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       const logger = mastra?.getLogger();
+
+      // Check if aborted before executing
+      if (abortSignal?.aborted) {
+        await onAbort?.({
+          primitiveType: 'tool',
+          primitiveId: inputData.primitiveId,
+          iteration: inputData.iteration,
+        });
+        await writer?.write({
+          type: 'tool-execution-abort',
+          runId,
+          from: ChunkFrom.NETWORK,
+          payload: {
+            primitiveType: 'tool',
+            primitiveId: inputData.primitiveId,
+          },
+        });
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: 'Aborted',
+          isComplete: true,
+          iteration: inputData.iteration,
+        };
+      }
 
       const agentTools = await agent.listTools({ requestContext });
       const memory = await agent.getMemory({ requestContext });
@@ -1225,8 +1493,9 @@ export async function createNetworkLoop({
               }),
             ),
           );
-          await memory?.saveMessages({
-            messages: [
+          await saveMessagesWithProcessors(
+            memory,
+            [
               {
                 id: generateId(),
                 type: 'text',
@@ -1267,7 +1536,9 @@ export async function createNetworkLoop({
                 resourceId: initData.threadResourceId || networkName,
               },
             ] as MastraDBMessage[],
-          });
+            processorRunner,
+            { requestContext },
+          );
           await writer?.write({
             type: 'tool-execution-approval',
             payload: {
@@ -1290,8 +1561,9 @@ export async function createNetworkLoop({
         } else {
           if (!resumeData.approved) {
             const rejectionResult = 'Tool call was not approved by the user';
-            await memory?.saveMessages({
-              messages: [
+            await saveMessagesWithProcessors(
+              memory,
+              [
                 {
                   id: generateId(),
                   type: 'text',
@@ -1317,7 +1589,9 @@ export async function createNetworkLoop({
                   resourceId: initData.threadResourceId || networkName,
                 },
               ] as MastraDBMessage[],
-            });
+              processorRunner,
+              { requestContext },
+            );
 
             const endPayload = {
               task: inputData.task,
@@ -1347,6 +1621,7 @@ export async function createNetworkLoop({
       const finalResult = await tool.execute(
         inputDataToUse,
         {
+          abortSignal,
           requestContext,
           mastra: agent.getMastraInstance(),
           agent: {
@@ -1354,8 +1629,9 @@ export async function createNetworkLoop({
             toolCallId,
             threadId: initData.threadId,
             suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
-              await memory?.saveMessages({
-                messages: [
+              await saveMessagesWithProcessors(
+                memory,
+                [
                   {
                     id: generateId(),
                     type: 'text',
@@ -1399,7 +1675,9 @@ export async function createNetworkLoop({
                     resourceId: initData.threadResourceId || networkName,
                   },
                 ] as MastraDBMessage[],
-              });
+                processorRunner,
+                { requestContext },
+              );
               await writer?.write({
                 type: 'tool-execution-suspended',
                 payload: {
@@ -1437,8 +1715,72 @@ export async function createNetworkLoop({
         });
       }
 
-      await memory?.saveMessages({
-        messages: [
+      if (abortSignal?.aborted) {
+        await onAbort?.({
+          primitiveType: 'tool',
+          primitiveId: inputData.primitiveId,
+          iteration: inputData.iteration,
+        });
+        await writer?.write({
+          type: 'tool-execution-abort',
+          runId,
+          from: ChunkFrom.NETWORK,
+          payload: {
+            primitiveType: 'tool',
+            primitiveId: inputData.primitiveId,
+          },
+        });
+        await saveMessagesWithProcessors(
+          memory,
+          [
+            {
+              id: generateId({
+                idType: 'message',
+                source: 'agent',
+                entityId: toolId,
+                threadId: initData.threadId,
+                resourceId: initData.threadResourceId || networkName,
+                role: 'assistant',
+              }),
+              type: 'text',
+              role: 'assistant',
+              content: {
+                parts: [
+                  {
+                    type: 'text',
+                    text: JSON.stringify({
+                      isNetwork: true,
+                      selectionReason: inputData.selectionReason,
+                      primitiveType: inputData.primitiveType,
+                      primitiveId: toolId,
+                      finalResult: { result: 'Aborted', toolCallId },
+                      input: inputDataToUse,
+                    }),
+                  },
+                ],
+                format: 2,
+              },
+              createdAt: new Date(),
+              threadId: initData.threadId || runId,
+              resourceId: initData.threadResourceId || networkName,
+            },
+          ] as MastraDBMessage[],
+          processorRunner,
+          { requestContext },
+        );
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result: 'Aborted',
+          isComplete: true,
+          iteration: inputData.iteration,
+        };
+      }
+
+      await saveMessagesWithProcessors(
+        memory,
+        [
           {
             id: generateId({
               idType: 'message',
@@ -1471,7 +1813,9 @@ export async function createNetworkLoop({
             resourceId: initData.threadResourceId || networkName,
           },
         ] as MastraDBMessage[],
-      });
+        processorRunner,
+        { requestContext },
+      );
 
       const endPayload = {
         task: inputData.task,
@@ -1624,7 +1968,7 @@ export async function createNetworkLoop({
     })
     .commit();
 
-  return { networkWorkflow };
+  return { networkWorkflow, processorRunner };
 }
 
 export async function networkLoop<OUTPUT = undefined>({
@@ -1645,11 +1989,13 @@ export async function networkLoop<OUTPUT = undefined>({
   autoResumeSuspendedTools,
   mastra,
   structuredOutput,
+  onAbort,
+  abortSignal,
 }: {
   networkName: string;
   requestContext: RequestContext;
   runId: string;
-  routingAgent: Agent<any, any, any>;
+  routingAgent: Agent<any, any, any, any>;
   routingAgentOptions?: AgentExecutionOptions<OUTPUT>;
   generateId: NetworkIdGenerator;
   maxIterations: number;
@@ -1687,6 +2033,8 @@ export async function networkLoop<OUTPUT = undefined>({
   resumeData?: any;
   autoResumeSuspendedTools?: boolean;
   mastra?: Mastra;
+  onAbort?: NetworkOptions<OUTPUT>['onAbort'];
+  abortSignal?: NetworkOptions<OUTPUT>['abortSignal'];
 }): Promise<MastraAgentNetworkStream<OUTPUT>> {
   // Validate that memory is available before starting the network
   const memoryToUse = await routingAgent.getMemory({ requestContext });
@@ -1788,7 +2136,7 @@ export async function networkLoop<OUTPUT = undefined>({
 
   const { memory: routingAgentMemoryOptions, ...routingAgentOptionsWithoutMemory } = routingAgentOptions || {};
 
-  const { networkWorkflow } = await createNetworkLoop({
+  const { networkWorkflow, processorRunner } = await createNetworkLoop({
     networkName,
     requestContext,
     runId: runIdToUse,
@@ -1796,6 +2144,8 @@ export async function networkLoop<OUTPUT = undefined>({
     routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
     routing,
+    onAbort,
+    abortSignal,
   });
 
   // Validation step: runs external checks when LLM says task is complete
@@ -1863,7 +2213,15 @@ export async function networkLoop<OUTPUT = undefined>({
       let generatedFinalResult: string | undefined;
       let structuredObject: OUTPUT | undefined;
 
-      if (hasConfiguredScorers) {
+      if (inputData.result === 'Aborted') {
+        completionResult = {
+          complete: true,
+          completionReason: 'Task aborted',
+          scorers: [],
+          totalDuration: 0,
+          timedOut: false,
+        };
+      } else if (hasConfiguredScorers) {
         completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);
 
         // Generate and stream finalResult if validation passed
@@ -1885,15 +2243,23 @@ export async function networkLoop<OUTPUT = undefined>({
                 stepId: generateId(),
                 runId: runIdToUse,
               },
+              abortSignal,
+              onAbort,
             );
             generatedFinalResult = structuredResult.text;
             structuredObject = structuredResult.object;
           } else {
-            generatedFinalResult = await generateFinalResult(routingAgentToUse, completionContext, {
-              writer,
-              stepId: generateId(),
-              runId: runIdToUse,
-            });
+            generatedFinalResult = await generateFinalResult(
+              routingAgentToUse,
+              completionContext,
+              {
+                writer,
+                stepId: generateId(),
+                runId: runIdToUse,
+              },
+              abortSignal,
+              onAbort,
+            );
           }
 
           // Save finalResult to memory if the LLM provided one
@@ -1903,6 +2269,8 @@ export async function networkLoop<OUTPUT = undefined>({
             threadId: inputData.threadId || runIdToUse,
             resourceId: inputData.threadResourceId || networkName,
             generateId,
+            processorRunner,
+            requestContext,
           });
         }
       } else {
@@ -1912,11 +2280,17 @@ export async function networkLoop<OUTPUT = undefined>({
           routingConfig: routing,
         });
         // Use the default LLM completion check
-        const defaultResult = await runDefaultCompletionCheck(routingAgentToUse, completionContext, {
-          writer,
-          stepId: generateId(),
-          runId: runIdToUse,
-        });
+        const defaultResult = await runDefaultCompletionCheck(
+          routingAgentToUse,
+          completionContext,
+          {
+            writer,
+            stepId: generateId(),
+            runId: runIdToUse,
+          },
+          abortSignal,
+          onAbort,
+        );
         completionResult = {
           complete: defaultResult.passed,
           completionReason: defaultResult.reason,
@@ -1939,6 +2313,8 @@ export async function networkLoop<OUTPUT = undefined>({
               stepId: generateId(),
               runId,
             },
+            abortSignal,
+            onAbort,
           );
           if (structuredResult.text) {
             generatedFinalResult = structuredResult.text;
@@ -1954,6 +2330,8 @@ export async function networkLoop<OUTPUT = undefined>({
             threadId: inputData.threadId || runIdToUse,
             resourceId: inputData.threadResourceId || networkName,
             generateId,
+            processorRunner,
+            requestContext,
           });
         }
       }
@@ -1995,35 +2373,36 @@ export async function networkLoop<OUTPUT = undefined>({
 
       // Save feedback to memory so the next iteration can see it
       const memoryInstance = await routingAgent.getMemory({ requestContext });
-      if (memoryInstance) {
-        await memoryInstance.saveMessages({
-          messages: [
-            {
-              id: generateId(),
-              type: 'text',
-              role: 'assistant',
-              content: {
-                parts: [
-                  {
-                    type: 'text',
-                    text: feedback,
-                  },
-                ],
-                format: 2,
-                metadata: {
-                  mode: 'network',
-                  completionResult: {
-                    passed: completionResult.complete,
-                  },
+      await saveMessagesWithProcessors(
+        memoryInstance,
+        [
+          {
+            id: generateId(),
+            type: 'text',
+            role: 'assistant',
+            content: {
+              parts: [
+                {
+                  type: 'text',
+                  text: feedback,
+                },
+              ],
+              format: 2,
+              metadata: {
+                mode: 'network',
+                completionResult: {
+                  passed: completionResult.complete,
                 },
               },
-              createdAt: new Date(),
-              threadId: inputData.threadId || runIdToUse,
-              resourceId: inputData.threadResourceId || networkName,
             },
-          ] as MastraDBMessage[],
-        });
-      }
+            createdAt: new Date(),
+            threadId: inputData.threadId || runIdToUse,
+            resourceId: inputData.threadResourceId || networkName,
+          },
+        ] as MastraDBMessage[],
+        processorRunner,
+        { requestContext },
+      );
 
       if (isComplete) {
         // Task is complete - use generatedFinalResult if LLM provided one,
@@ -2177,6 +2556,7 @@ export async function networkLoop<OUTPUT = undefined>({
       if (resumeDataToUse) {
         return run.resumeStream({
           resumeData: resumeDataToUse,
+          requestContext,
         }).fullStream;
       }
       return run.stream({
@@ -2191,6 +2571,7 @@ export async function networkLoop<OUTPUT = undefined>({
           isOneOff: false,
           verboseIntrospection: true,
         },
+        requestContext,
       }).fullStream;
     },
   });
