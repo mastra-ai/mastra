@@ -263,12 +263,30 @@ const info = await workspace.getInfo();
 
 #### `getPathContext()`
 
-Get information about filesystem and sandbox path mapping.
+Get information about filesystem and sandbox paths, including instructions for agents.
 
 ```typescript
 const context = workspace.getPathContext();
-// { type, filesystem?, sandbox?, requiresSync, instructions }
+// { filesystem?, sandbox?, instructions }
 ```
+
+**Returns:** `PathContext`
+
+```typescript
+interface PathContext {
+  filesystem?: {
+    provider: string;
+    basePath?: string;
+  };
+  sandbox?: {
+    provider: string;
+    workingDirectory?: string;
+  };
+  instructions: string;
+}
+```
+
+The `instructions` field contains provider-generated descriptions combined from the filesystem and sandbox. These instructions are included in tool descriptions to help agents understand the execution context.
 
 #### `getToolsConfig()`
 

@@ -91,6 +91,26 @@ const filesystem = new LocalFilesystem({
   ]}
 />
 
+## Methods
+
+### `getInfo()`
+
+Returns metadata about this filesystem instance.
+
+```typescript
+const info = filesystem.getInfo();
+// { id: '...', name: 'LocalFilesystem', provider: 'local', basePath: '/workspace', readOnly: false }
+```
+
+### `getInstructions()`
+
+Returns a description of how paths work in this filesystem. Used in tool descriptions.
+
+```typescript
+const instructions = filesystem.getInstructions();
+// 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
+```
+
 ## Path Resolution
 
 ### How basePath works

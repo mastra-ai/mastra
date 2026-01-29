@@ -162,6 +162,17 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
   ]}
 />
 
+## Methods
+
+### `getInstructions()`
+
+Returns a description of how this sandbox works. Used in tool descriptions.
+
+```typescript
+const instructions = sandbox.getInstructions();
+// 'Local command execution. Working directory: "/workspace".'
+```
+
 ## Path Resolution
 
 ### Relative paths and execution context

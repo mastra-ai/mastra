@@ -129,6 +129,17 @@ interface SandboxInfo {
 }
 ```
 
+### `getInstructions()`
+
+Get a description of how this sandbox works. Used in tool descriptions to help agents understand the execution context.
+
+```typescript
+const instructions = sandbox.getInstructions?.();
+// 'Local command execution. Working directory: "/workspace".'
+```
+
+**Returns:** `string`
+
 ## Related
 
 - [Workspace Class](/reference/workspace/workspace-class)

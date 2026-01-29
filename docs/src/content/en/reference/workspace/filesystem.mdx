@@ -241,6 +241,44 @@ Clean up resources. Called by `workspace.destroy()`.
 await filesystem.destroy?.();
 ```
 
+### `getInfo()`
+
+Get filesystem metadata.
+
+```typescript
+const info = await filesystem.getInfo?.();
+// { id, name, provider, basePath, readOnly, status, storage? }
+```
+
+**Returns:** `Promise<FilesystemInfo>`
+
+```typescript
+interface FilesystemInfo {
+  id: string;
+  name: string;
+  provider: string;
+  basePath?: string;
+  readOnly?: boolean;
+  status?: string;
+  storage?: {
+    totalBytes?: number;
+    usedBytes?: number;
+    availableBytes?: number;
+  };
+}
+```
+
+### `getInstructions()`
+
+Get a description of how this filesystem works. Used in tool descriptions to help agents understand path semantics.
+
+```typescript
+const instructions = filesystem.getInstructions?.();
+// 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
+```
+
+**Returns:** `string`
+
 ## Related
 
 - [Workspace Class](/reference/workspace/workspace-class)
