@@ -10,5 +10,6 @@ export const GLOBAL_EXTERNALS = [
   'typescript',
   'undici',
   'readable-stream',
+  'fast-deep-equal',
 ];
 export const DEPRECATED_EXTERNALS = ['fastembed', 'nodemailer', 'jsdom', 'sqlite3'];
