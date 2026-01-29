@@ -494,9 +494,9 @@ export class Mastra<
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
-            'Import and instantiate: import { Observability, DefaultExporter } from "@mastra/observability"; ' +
-            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new DefaultExporter()] } } }). ' +
-            'Observability has been disabled.',
+          'Import and instantiate: import { Observability, DefaultExporter } from "@mastra/observability"; ' +
+          'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new DefaultExporter()] } } }). ' +
+          'Observability has been disabled.',
         );
         this.#observability = new NoOpObservability();
       }
@@ -861,7 +861,19 @@ export class Mastra<
       this.#logger?.debug(`[getStoredAgentById] Cache miss for agent "${id}", fetching from storage`);
     }
 
-    const storedAgent = await agentsStore.getAgentByIdResolved({ id });
+    if (!agentsStore?.getAgentByIdResolved) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_STORED_AGENT_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'agentsStore.getAgentByIdResolved is not available. Please make sure you are on the latest version of your MastraStorage.',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    const storedAgent = await agentsStore.getAgentByIdResolved({ id })
 
     if (!storedAgent) {
       return null;
@@ -991,7 +1003,19 @@ export class Mastra<
       throw error;
     }
 
-    // Use listAgentsResolved to get version-resolved configs
+    if (!agentsStore?.listAgentsResolved) {
+      const error = new MastraError({
+        id: 'MASTRA_LIST_STORED_AGENTS_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'agentsStore.listAgentsResolved is not available. Please make sure you are on the latest version of your MastraStorage.',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    // Use listAgentsResolved to get version-resolved configs, fall back to listAgents for older storage implementations
     const result = await agentsStore.listAgentsResolved({
       page: args?.page,
       perPage: args?.perPage,
@@ -1021,7 +1045,7 @@ export class Mastra<
   #createAgentFromStoredConfig(storedAgent: StorageAgentType): Agent {
     // Build model config from stored data
     // The model field stores { provider, name, ...otherConfig }
-    const modelConfig = storedAgent.model as { provider?: string; name?: string; [key: string]: unknown };
+    const modelConfig = storedAgent.model as { provider?: string; name?: string;[key: string]: unknown };
 
     // Build the model string in "provider/modelName" format
     if (!modelConfig.provider || !modelConfig.name) {

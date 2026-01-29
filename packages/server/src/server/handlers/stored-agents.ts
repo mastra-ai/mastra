@@ -86,7 +86,13 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      // Use getAgentByIdResolved to automatically resolve from active version
+      if (!agentsStore.getAgentByIdResolved) {
+        throw new HTTPException(500, {
+          message:
+            'agentsStore.getAgentByIdResolved is not available. Please make sure you are on the latest version of your MastraStorage.',
+        });
+      }
+
       const agent = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
 
       if (!agent) {
