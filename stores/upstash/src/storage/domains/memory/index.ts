@@ -364,6 +364,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
           `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
         );
       }
+
       return {
         ...message,
         _index: index,
@@ -526,6 +527,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
   private parseStoredMessage(storedMessage: MastraDBMessage & { _index?: number }): MastraDBMessage {
     const defaultMessageContent = { format: 2, parts: [{ type: 'text', text: '' }] };
     const { _index, ...rest } = storedMessage;
+
     return {
       ...rest,
       createdAt: new Date(rest.createdAt),
@@ -693,6 +695,18 @@ export class StoreMemoryUpstash extends MemoryStorage {
         (msg: MastraDBMessage) => new Date(msg.createdAt),
         filter?.dateRange,
       );
+
+      // Apply metadata filter
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        messagesData = messagesData.filter((msg: MastraDBMessage) => {
+          const metadata = msg.content?.metadata;
+          if (!metadata) return false;
+          for (const [key, value] of Object.entries(filter.metadata!)) {
+            if (metadata[key] !== value) return false;
+          }
+          return true;
+        });
+      }
 
       // Determine sort field and direction, default to ASC (oldest first)
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');

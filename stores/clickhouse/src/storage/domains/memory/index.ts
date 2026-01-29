@@ -68,11 +68,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
-    // Add resourceId column for backwards compatibility
+    // Add resourceId and metadataJson columns for backwards compatibility
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
-      ifNotExists: ['resourceId'],
+      ifNotExists: ['resourceId', 'metadataJson'],
     });
   }
 
@@ -270,6 +270,17 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         dataParams.toDate = endDate;
       }
 
+      // Metadata filter using JSONExtract for each key
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        let metadataIdx = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metadata${metadataIdx++}`;
+          dataQuery += ` AND JSONExtractString(metadataJson, {${paramName}Key:String}) = {${paramName}Value:String}`;
+          dataParams[`${paramName}Key`] = key;
+          dataParams[`${paramName}Value`] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        }
+      }
+
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       dataQuery += ` ORDER BY "${field}" ${direction}`;
@@ -328,6 +339,17 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         const endOp = filter.dateRange.endExclusive ? '<' : '<=';
         countQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         countParams.toDate = endDate;
+      }
+
+      // Metadata filter using JSONExtract for each key
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        let metadataIdx = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metadata${metadataIdx++}`;
+          countQuery += ` AND JSONExtractString(metadataJson, {${paramName}Key:String}) = {${paramName}Value:String}`;
+          countParams[`${paramName}Key`] = key;
+          countParams[`${paramName}Value`] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        }
       }
 
       const countResult = await this.client.query({
@@ -612,11 +634,19 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         });
       });
 
-      const updatePromises = toUpdate.map(message =>
-        this.client.command({
+      const updatePromises = toUpdate.map(message => {
+        // Extract metadata for the metadataJson column (for JSON filtering)
+        let metadataJson: string | null = null;
+        if (typeof message.content === 'object' && message.content !== null) {
+          const content = message.content as { metadata?: Record<string, unknown> };
+          if (content.metadata) {
+            metadataJson = JSON.stringify(content.metadata);
+          }
+        }
+        return this.client.command({
           query: `
       ALTER TABLE ${TABLE_MESSAGES}
-      UPDATE content = {var_content:String}, role = {var_role:String}, type = {var_type:String}, resourceId = {var_resourceId:String}
+      UPDATE content = {var_content:String}, role = {var_role:String}, type = {var_type:String}, resourceId = {var_resourceId:String}, metadataJson = {var_metadataJson:Nullable(String)}
       WHERE id = {var_id:String} AND thread_id = {var_thread_id:String}
     `,
           query_params: {
@@ -624,6 +654,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             var_role: message.role,
             var_type: message.type || 'v2',
             var_resourceId: message.resourceId,
+            var_metadataJson: metadataJson,
             var_id: message.id,
             var_thread_id: message.threadId,
           },
@@ -633,8 +664,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             use_client_time_zone: 1,
             output_format_json_quote_64bit_integers: 0,
           },
-        }),
-      );
+        });
+      });
 
       // Execute message operations and thread update in parallel for better performance
       await Promise.all([
@@ -642,15 +673,26 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         this.client.insert({
           table: TABLE_MESSAGES,
           format: 'JSONEachRow',
-          values: toInsert.map(message => ({
-            id: message.id,
-            thread_id: message.threadId,
-            resourceId: message.resourceId,
-            content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-            createdAt: message.createdAt.toISOString(),
-            role: message.role,
-            type: message.type || 'v2',
-          })),
+          values: toInsert.map(message => {
+            // Extract metadata for the metadataJson column (for JSON filtering)
+            let metadataJson: string | null = null;
+            if (typeof message.content === 'object' && message.content !== null) {
+              const content = message.content as { metadata?: Record<string, unknown> };
+              if (content.metadata) {
+                metadataJson = JSON.stringify(content.metadata);
+              }
+            }
+            return {
+              id: message.id,
+              thread_id: message.threadId,
+              resourceId: message.resourceId,
+              content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+              createdAt: message.createdAt.toISOString(),
+              role: message.role,
+              type: message.type || 'v2',
+              metadataJson,
+            };
+          }),
           clickhouse_settings: {
             // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
             date_time_input_format: 'best_effort',
@@ -1133,6 +1175,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           setClauses.push(`content = {var_content_${paramIdx}:String}`);
           values[`var_content_${paramIdx}`] = JSON.stringify(newContent);
           paramIdx++;
+
+          // Sync metadataJson column if metadata was updated
+          if (updatableFields.content.metadata || newContent.metadata) {
+            setClauses.push(`metadataJson = {var_metadataJson_${paramIdx}:Nullable(String)}`);
+            values[`var_metadataJson_${paramIdx}`] = JSON.stringify(newContent.metadata || {});
+            paramIdx++;
+          }
+
           delete updatableFields.content;
         }
 
