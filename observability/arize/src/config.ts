@@ -1,17 +1,10 @@
 import {
-  SpanType,
-  type SpanOutputProcessor,
   type SerializationOptions,
   type ObservabilityInstanceConfig,
-  type AnySpan,
 } from '@mastra/core/observability';
 
-import { ArizeExporter, type ArizeExporterConfig } from './tracing.js';
 
-/**
- * Default serialization options for Arize config
- */
-const DEFAULT_SERIALIZATION_OPTIONS: SerializationOptions = {
+export const ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS: SerializationOptions = {
   maxStringLength: 9999999,
   maxDepth: 9999999,
   maxArrayLength: 9999999,
@@ -19,61 +12,51 @@ const DEFAULT_SERIALIZATION_OPTIONS: SerializationOptions = {
 };
 
 /**
- * Span types that should be filtered out by the workflow loop filter
+ * Configuration options for creating an Arize observability config.
+ * Extends ObservabilityInstanceConfig to allow pass-through of all properties.
  */
-const FILTERED_WORKFLOW_SPAN_TYPES: readonly SpanType[] = [
-  SpanType.WORKFLOW_LOOP,
-  SpanType.WORKFLOW_PARALLEL,
-  SpanType.WORKFLOW_CONDITIONAL,
-  SpanType.WORKFLOW_CONDITIONAL_EVAL,
-];
-
-/**
- * Default workflow loop filter span processor
- */
-const DEFAULT_WORKFLOW_LOOP_FILTER: SpanOutputProcessor = {
-  name: 'workflow-loop-filter',
-  process: (span) =>
-    span && FILTERED_WORKFLOW_SPAN_TYPES.includes((span as AnySpan).type as SpanType)
-      ? undefined
-      : span,
-  shutdown: () => Promise.resolve(),
-};
-
-/**
- * Configuration options for creating an Arize observability config
- */
-export interface CreateArizeConfigOptions {
-  /**
-   * Exporter configuration using ArizeExporterConfig
-   * At minimum, endpoint should be provided (or spaceId for Arize AX)
-   */
-  exporter: ArizeExporterConfig;
+export interface CreateArizeConfigOptions extends Omit<ObservabilityInstanceConfig, 'name' | 'serviceName'> {
   serviceName?: string;
   serializationOptions?: SerializationOptions;
-  spanProcessors?: SpanOutputProcessor[];
 }
 
+/**
+ * Creates an Arize observability config with recommended serialization defaults.
+ *
+ * @example
+ * ```typescript
+ * createArizeConfig({
+ *   exporters: [new ArizeExporter({ endpoint: '...' })],
+ * })
+ * ```
+ *
+ * @example Multiple exporters
+ * ```typescript
+ * createArizeConfig({
+ *   exporters: [
+ *     new ArizeExporter({ endpoint: '...' }),
+ *     new DefaultExporter(),
+ *   ],
+ * })
+ * ```
+ */
 export function createArizeConfig(
   options: CreateArizeConfigOptions,
 ): Omit<ObservabilityInstanceConfig, 'name'> {
   const {
-    exporter,
     serviceName = process.env.PHOENIX_PROJECT_NAME ||
       process.env.ARIZE_PROJECT_NAME ||
       'mastra-tracing',
     serializationOptions,
-    spanProcessors = [],
+    ...rest
   } = options;
 
   return {
+    ...rest,
     serviceName,
-    exporters: [new ArizeExporter(exporter)],
-    serializationOptions: {
-      ...DEFAULT_SERIALIZATION_OPTIONS,
-      ...serializationOptions,
-    },
-    spanOutputProcessors: [DEFAULT_WORKFLOW_LOOP_FILTER, ...spanProcessors],
+    serializationOptions: serializationOptions
+      ? { ...ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS, ...serializationOptions }
+      : ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS,
   };
 }
 

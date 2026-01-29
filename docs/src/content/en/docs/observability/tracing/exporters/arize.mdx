@@ -60,34 +60,33 @@ export const mastra = new Mastra({
 });
 ```
 
-#### Simplified Configuration with `createArizeConfig`
+#### Configuration with `createArizeConfig`
 
-For a simpler setup with optimized defaults, use `createArizeConfig`:
+The `createArizeConfig` function returns a configuration object that sets default `serializationOptions` to `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS` (`maxStringLength: 9999999`, `maxDepth: 9999999`, `maxArrayLength: 9999999`, `maxObjectKeys: 9999999`), which prevents truncation of span data. Compared to manual configuration, `createArizeConfig` omits the need to explicitly set `serializationOptions` and provides a default `serviceName` resolution order (`PHOENIX_PROJECT_NAME` → `ARIZE_PROJECT_NAME` → `'mastra-tracing'`).
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
-import { createArizeConfig } from "@mastra/arize";
+import { createArizeConfig, ArizeExporter } from "@mastra/arize";
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       arize: createArizeConfig({
-        exporter: {
-          endpoint: process.env.PHOENIX_ENDPOINT!,
-          apiKey: process.env.PHOENIX_API_KEY,
-          projectName: process.env.PHOENIX_PROJECT_NAME,
-        },
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+            apiKey: process.env.PHOENIX_API_KEY,
+            projectName: process.env.PHOENIX_PROJECT_NAME,
+          }),
+        ],
       }),
     },
   }),
 });
 ```
 
-This provides:
-- **Optimized serialization options** - Large payload limits by default (no truncation)
-- **Built-in workflow filter** - Automatically filters out workflow loop/parallel/conditional spans
-- **Simplified API** - Less boilerplate than manual configuration
+The `ArizeExporter` in the `exporters` array accepts `endpoint` (for Phoenix/collectors), `apiKey` (optional, for authenticated instances), and `projectName` (optional, for resource attributes). All properties from `ObservabilityInstanceConfig` (except `name`) can be passed through `createArizeConfig` to the returned configuration object.
 
 #### Explicit Configuration
 
@@ -173,24 +172,26 @@ export const mastra = new Mastra({
 });
 ```
 
-#### Simplified Configuration with `createArizeConfig`
+#### Configuration with `createArizeConfig`
 
-For a simpler setup with optimized defaults:
+Minimal configuration that applies recommended default settings:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
-import { createArizeConfig } from "@mastra/arize";
+import { createArizeConfig, ArizeExporter } from "@mastra/arize";
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       arize: createArizeConfig({
-        exporter: {
-          spaceId: process.env.ARIZE_SPACE_ID!,
-          apiKey: process.env.ARIZE_API_KEY!,
-          projectName: process.env.ARIZE_PROJECT_NAME,
-        },
+        exporters: [
+          new ArizeExporter({
+            spaceId: process.env.ARIZE_SPACE_ID!,
+            apiKey: process.env.ARIZE_API_KEY!,
+            projectName: process.env.ARIZE_PROJECT_NAME,
+          }),
+        ],
       }),
     },
   }),
@@ -226,28 +227,54 @@ export const mastra = new Mastra({
 
 ## Customizing `createArizeConfig`
 
-The `createArizeConfig` helper works with both Phoenix and Arize AX. You can customize serialization options and span processors regardless of which platform you're using.
+The `createArizeConfig` function returns a configuration object with default `serializationOptions` set to `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS` (which sets `maxStringLength: 9999999`, `maxDepth: 9999999`, `maxArrayLength: 9999999`, `maxObjectKeys: 9999999` to prevent truncation). The `exporters` field accepts an array of exporter instances, where each `ArizeExporter` can be configured with either an `endpoint` (for Phoenix/collectors) or `spaceId` (for Arize AX). You can override the default `serializationOptions` by passing a `serializationOptions` object, and you can add custom span processors via the `spanOutputProcessors` field.
 
-### Customizing Serialization Options
+### Multiple Exporters
 
-By default, `createArizeConfig` uses optimized serialization options that prevent truncation of outputs and large payloads. You can customize these options by providing `serializationOptions`:
+Pass an array of exporters to send traces to different destinations:
 
 ```typescript title="src/mastra/index.ts"
 import { Observability } from "@mastra/observability";
-import { createArizeConfig } from "@mastra/arize";
+import { createArizeConfig, ArizeExporter } from "@mastra/arize";
+import { DefaultExporter } from "@mastra/observability";
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       arize: createArizeConfig({
-        exporter: {
-          // Works with either Phoenix (endpoint) or Arize AX (spaceId)
-          endpoint: process.env.PHOENIX_ENDPOINT!,
-          // or
-          // spaceId: process.env.ARIZE_SPACE_ID!,
-        },
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+            apiKey: process.env.PHOENIX_API_KEY,
+          }),
+          new DefaultExporter(),
+        ],
+      }),
+    },
+  }),
+});
+```
+
+### Customizing Serialization Options
+
+By default, `createArizeConfig` sets `serializationOptions` to `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS`, which defines the following limits: `maxStringLength: 9999999`, `maxDepth: 9999999`, `maxArrayLength: 9999999`, `maxObjectKeys: 9999999`. These limits prevent truncation of span data (input, output, and attributes). You can override specific values by passing a `serializationOptions` object that will be merged with these defaults:
+
+```typescript title="src/mastra/index.ts"
+import { Observability } from "@mastra/observability";
+import { createArizeConfig, ArizeExporter, ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: createArizeConfig({
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+          }),
+        ],
         serializationOptions: {
-          // Customize serialization limits as needed
+          ...ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS,
+          maxStringLength: 500, // Override maxStringLength; other limits inherit defaults
         },
       }),
     },
@@ -255,27 +282,42 @@ export const mastra = new Mastra({
 });
 ```
 
+The `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS` constant provides these defaults:
+```typescript
+{
+  maxStringLength: 9999999,
+  maxDepth: 9999999,
+  maxArrayLength: 9999999,
+  maxObjectKeys: 9999999,
+}
+```
+
 ### Customizing Span Processors
 
-The config includes a built-in workflow filter that automatically filters out internal workflow spans (like "Workflow loop", "Workflow parallel", etc.) so you won't see internal steps of building an agent. You can add additional custom span processors:
+You can add custom span output processors via the `spanOutputProcessors` field. All properties from `ObservabilityInstanceConfig` (except `name`) can be passed through `createArizeConfig`, including `spanOutputProcessors`, `sampling`, `bridge`, `includeInternalSpans`, and `requestContextKeys`. The `spanOutputProcessors` field accepts an array of span output processors that are used as-is without any default processors added.
 
 ```typescript title="src/mastra/index.ts"
 import { Observability } from "@mastra/observability";
-import { createArizeConfig } from "@mastra/arize";
+import { createArizeConfig, ArizeExporter } from "@mastra/arize";
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       arize: createArizeConfig({
-        exporter: {
-          // Works with either Phoenix (endpoint) or Arize AX (spaceId)
-          endpoint: process.env.PHOENIX_ENDPOINT!,
-          // or
-          // spaceId: process.env.ARIZE_SPACE_ID!,
-        },
-        spanProcessors: [
-          // Add your custom span processors here
-          // The default workflow filter is always included first
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+          }),
+        ],
+        spanOutputProcessors: [
+          {
+            name: 'custom-processor',
+            process: (span) => {
+              // Custom span processing logic
+              return span;
+            },
+            shutdown: () => Promise.resolve(),
+          },
         ],
       }),
     },

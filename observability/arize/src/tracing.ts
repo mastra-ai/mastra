@@ -35,7 +35,6 @@ export type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
   headers?: Record<string, string>;
 };
 
-console.log("UPDATED");
 export class ArizeExporter extends OtelExporter {
   name = 'arize';
 
