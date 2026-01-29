@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 12 - Client Coordinate Mapping and Click
-Plan: 01 of 03
+Plan: 02 of 03
 Status: In progress
-Last activity: 2026-01-29 -- Completed 12-01-PLAN.md
+Last activity: 2026-01-29 -- Completed 12-02-PLAN.md
 
-Progress: [███████░░░░░░░░░░░░░] 37% (3/8 plans in v1.2)
+Progress: [████████░░░░░░░░░░░░] 42% (4/8 plans -- 10-01, 11-01, 12-01, 12-02 of total 8 in v1.2 so far)
 
 ## Performance Metrics
 
@@ -27,7 +27,7 @@ Progress: [███████░░░░░░░░░░░░░] 37% (3/
 - Phases: 3 (7, 8, 9)
 
 **v1.2 Milestone:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Phases: 6 (10-15)
 - Requirements: 27
 
@@ -57,6 +57,9 @@ Phase 12 decisions:
 - LINE_HEIGHT_PX = 16 for deltaMode 1 (DOM_DELTA_LINE) conversion
 - MAX_DELTA = 500 clamping for wheel normalization
 - Unknown deltaMode falls back to pixel passthrough
+- sendMessage uses empty deps array (wsRef is stable ref identity)
+- viewport reset to null on disconnect to prevent stale dimensions
+- viewport parsing at same level as url check (ViewportMessage has no status field)
 
 ### Pending Todos
 
@@ -82,7 +85,7 @@ None.
 ### Phase 12: Client Coordinate Mapping and Click
 **Goal:** User can click and scroll in the live view frame with accurate coordinate mapping
 **Requirements:** CLICK-01 through CLICK-06, SCROLL-01, SCROLL-02, VIS-03 (9 total)
-**Status:** In Progress (Plan 01 of 03 complete)
+**Status:** In Progress (Plans 01 and 02 of 03 complete)
 **Depends on:** Phases 10 (complete), 11 (complete)
 
 ### Phase 13: Focus Management and Keyboard
@@ -110,15 +113,14 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-29T20:39:47Z
-Stopped at: Completed 12-01-PLAN.md
+Last session: 2026-01-29T20:44:30Z
+Stopped at: Completed 12-02-PLAN.md
 Resume file: None
 
-**Next action:** Execute Phase 12 Plan 02 (useBrowserStream viewport extension) and Plan 03 (useMouseInteraction hook).
+**Next action:** Execute Phase 12 Plan 03 (useMouseInteraction hook).
 
 **Context for next session:**
 - Phase 12 Plan 01 complete: coordinate-mapping.ts exports mapClientToViewport, normalizeWheelDelta, getModifiers
-- All three are pure functions with no DOM/React dependencies, tested with 28 vitest cases
-- Plan 02 extends useBrowserStream to parse ViewportMessage and expose sendMessage
-- Plan 03 creates useMouseInteraction hook that imports all three functions from coordinate-mapping.ts
+- Phase 12 Plan 02 complete: useBrowserStream returns viewport state and sendMessage callback
+- Plan 03 creates useMouseInteraction hook that consumes viewport + sendMessage from useBrowserStream and coordinate-mapping utilities
 - Phase 13 can run in parallel (no dependency on Phase 12)
