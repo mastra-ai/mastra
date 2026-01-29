@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path, { normalize } from 'node:path';
-import resolveFrom from 'resolve-from';
 import type { Plugin } from 'rollup';
 import stripJsonComments from 'strip-json-comments';
 import type { RegisterOptions } from 'typescript-paths';

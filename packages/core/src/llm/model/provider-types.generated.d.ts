@@ -303,7 +303,6 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-instruct',
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwq-32b',
-    'z-ai/glm-4.7',
     'z-ai/glm4.7',
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
@@ -1199,6 +1198,7 @@ export type ProviderModelsMap = {
     'gemini-3-pro',
     'glm-4.6',
     'glm-4.7',
+    'glm-4.7-free',
     'gpt-5',
     'gpt-5-codex',
     'gpt-5-nano',
@@ -1212,6 +1212,7 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking',
     'kimi-k2.5',
     'minimax-m2.1',
+    'minimax-m2.1-free',
     'qwen3-coder',
   ];
   readonly fastrouter: readonly [
@@ -1429,10 +1430,14 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-pro-preview-06-05',
     'google/gemini-3-flash-preview',
     'google/gemini-3-pro-preview',
-    'google/gemma-2-9b-it:free',
+    'google/gemma-2-9b-it',
     'google/gemma-3-12b-it',
+    'google/gemma-3-12b-it:free',
     'google/gemma-3-27b-it',
     'google/gemma-3-27b-it:free',
+    'google/gemma-3-4b-it',
+    'google/gemma-3-4b-it:free',
+    'google/gemma-3n-e2b-it:free',
     'google/gemma-3n-e4b-it',
     'google/gemma-3n-e4b-it:free',
     'kwaipilot/kat-coder-pro:free',
@@ -1565,6 +1570,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2-0905',
     'moonshotai/kimi-k2-thinking',
     'moonshotai/kimi-k2-thinking-turbo',
+    'moonshotai/kimi-k2.5',
     'openai/gpt-5',
     'openai/gpt-5-codex',
     'openai/gpt-5.1',
@@ -1572,7 +1578,9 @@ export type ProviderModelsMap = {
     'openai/gpt-5.1-codex',
     'openai/gpt-5.1-codex-mini',
     'openai/gpt-5.2',
+    'openai/gpt-5.2-codex',
     'qwen/qwen3-coder-plus',
+    'qwen/qwen3-max-thinking',
     'stepfun/step-3',
     'volcengine/doubao-seed-1.8',
     'volcengine/doubao-seed-code',
@@ -1590,6 +1598,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.6v-flash',
     'z-ai/glm-4.6v-flash-free',
     'z-ai/glm-4.7',
+    'z-ai/glm-4.7-flashx',
   ];
   readonly 'minimax-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1'];
   readonly ovhcloud: readonly [
@@ -1754,15 +1763,11 @@ export type ProviderModelsMap = {
   readonly friendli: readonly [
     'LGAI-EXAONE/EXAONE-4.0.1-32B',
     'LGAI-EXAONE/K-EXAONE-236B-A23B',
+    'MiniMaxAI/MiniMax-M2.1',
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
-    'Qwen/Qwen3-235B-A22B-Thinking-2507',
-    'Qwen/Qwen3-30B-A3B',
-    'Qwen/Qwen3-32B',
-    'meta-llama-3.1-8b-instruct',
-    'meta-llama-3.3-70b-instruct',
-    'meta-llama/Llama-4-Maverick-17B-128E-Instruct',
-    'meta-llama/Llama-4-Scout-17B-16E-Instruct',
-    'zai-org/GLM-4.6',
+    'meta-llama/Llama-3.1-8B-Instruct',
+    'meta-llama/Llama-3.3-70B-Instruct',
+    'zai-org/GLM-4.7',
   ];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',

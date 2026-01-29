@@ -1,0 +1,152 @@
+---
+title: "Workspace | Mastra Docs"
+description: Give agents filesystem access and code execution through workspaces.
+packages:
+  - "@mastra/core"
+---
+
+# Workspace
+
+A workspace gives agents a persistent environment for storing files and executing commands. Agents use workspace tools to read and write files, run shell commands, and search indexed content.
+
+## How Workspaces Work
+
+A workspace combines up to three components:
+
+- **[Filesystem provider](/docs/workspace/filesystem)** - Handles file storage (read, write, list, delete)
+- **[Sandbox provider](/docs/workspace/sandbox)** - Handles command execution (shell commands)
+- **[Skills](/docs/workspace/skills)** - Reusable instructions for agents
+
+When you assign a workspace to an agent, Mastra includes the corresponding tools in the agent's toolset. The agent can then use these tools to interact with files and execute commands as part of its task.
+
+You can create a workspace with any combination of these components. The agent receives only the tools relevant to what's configured.
+
+## Creating a Workspace
+
+```typescript
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+  }),
+  skills: ['/skills'],
+});
+```
+
+## Initialization
+
+You can optionally call `init()` to initialize the workspace before use:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+});
+
+await workspace.init();
+```
+
+### What init() does
+
+Initialization runs setup logic for each configured provider:
+
+- **LocalFilesystem**: Creates the base directory if it doesn't exist
+- **LocalSandbox**: Creates working directory
+- **Search**: Indexes files from `autoIndexPaths` (if configured)
+
+External providers may perform additional setup like establishing connections or authenticating.
+
+## Global Workspace
+
+Set a workspace on the Mastra instance. All agents inherit this workspace unless they define their own:
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+});
+
+const mastra = new Mastra({
+  workspace,
+  agents: { myAgent },
+});
+```
+
+## Agent-scoped Workspace
+
+Assign a workspace directly to an agent to override the global workspace:
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './agent-workspace' }),
+});
+
+export const myAgent = new Agent({
+  id: 'my-agent',
+  model: 'openai/gpt-4o',
+  workspace,
+});
+```
+
+## Tool Configuration
+
+Configure tool behavior through the `tools` option on the Workspace. This controls which tools are enabled and their safety settings.
+
+```typescript
+import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    // Global defaults
+    enabled: true,
+    requireApproval: false,
+
+    // Per-tool overrides
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireApproval: true,
+      requireReadBeforeWrite: true,
+    },
+    [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
+      enabled: false,
+    },
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      requireApproval: true,
+    },
+  },
+});
+```
+
+### Tool Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `enabled` | `boolean` | Whether the tool is available (default: `true`) |
+| `requireApproval` | `boolean` | Whether the tool requires user approval before execution (default: `false`) |
+| `requireReadBeforeWrite` | `boolean` | For write tools: require reading the file first (default: `false`) |
+
+### Read-before-write
+
+When `requireReadBeforeWrite` is enabled on write tools, agents must read a file before writing to it. This prevents overwriting files the agent hasn't seen:
+
+- **New files** - Can be written without reading (they don't exist yet)
+- **Existing files** - Must be read first
+- **Externally modified files** - If a file changed since the agent read it, the write fails
+
+## Related
+
+- [Filesystem](/docs/workspace/filesystem)
+- [Sandbox](/docs/workspace/sandbox)
+- [Skills](/docs/workspace/skills)
+- [Search and Indexing](/docs/workspace/search)
+- [Workspace Class Reference](/reference/workspace/workspace-class)
