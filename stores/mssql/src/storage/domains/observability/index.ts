@@ -1,11 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import * as coreStorage from '@mastra/core/storage';
 import {
   createStorageErrorId,
   listTracesArgsSchema,
   ObservabilityStorage,
   SPAN_SCHEMA,
   TABLE_SPANS,
-  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
@@ -30,6 +30,14 @@ import type { ConnectionPool } from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
 import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
+
+// Use core's toTraceSpans if available, otherwise provide fallback for backwards compatibility
+const toTraceSpans = ((coreStorage as Record<string, unknown>).toTraceSpans ??
+  ((spans: SpanRecord[]) =>
+    spans.map(span => ({
+      ...span,
+      status: span.error != null ? TraceStatus.ERROR : span.endedAt == null ? TraceStatus.RUNNING : TraceStatus.SUCCESS,
+    })))) as (spans: SpanRecord[]) => (SpanRecord & { status: TraceStatus })[];
 
 export class ObservabilityMSSQL extends ObservabilityStorage {
   public pool: ConnectionPool;
