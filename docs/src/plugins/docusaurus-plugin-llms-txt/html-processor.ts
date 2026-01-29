@@ -173,17 +173,28 @@ const CLEANUP_PATTERNS = {
   multipleBlankLines: /\n{3,}/g,
   // Remove trailing whitespace from lines
   trailingWhitespace: /[ \t]+$/gm,
+  // Match consecutive links with the same URL (cards render title and description as separate links)
+  // Pattern: [text1](url)\n\n[text2](same-url)
+  consecutiveSameLinks: /\[([^\]]+)\]\(([^)]+)\)\n+\[([^\]]+)\]\(\2\)/g,
 }
 
 /**
  * Clean up markdown artifacts from conversion
  */
 function cleanupMarkdown(markdown: string): string {
-  return markdown
+  let result = markdown
     .replace(CLEANUP_PATTERNS.escapedEquals, '')
     .replace(CLEANUP_PATTERNS.emptyObjects, '')
     .replace(CLEANUP_PATTERNS.htmlComments, '')
     .replace(CLEANUP_PATTERNS.escapedAngleBrackets, match => match.trim())
-    .replace(CLEANUP_PATTERNS.multipleBlankLines, '\n\n')
-    .replace(CLEANUP_PATTERNS.trailingWhitespace, '')
+
+  // Merge consecutive links with the same URL (from card components)
+  // Keep applying until no more matches (handles chains of 3+ links)
+  let prev = ''
+  while (prev !== result) {
+    prev = result
+    result = result.replace(CLEANUP_PATTERNS.consecutiveSameLinks, '[$1]($2): $3')
+  }
+
+  return result.replace(CLEANUP_PATTERNS.multipleBlankLines, '\n\n').replace(CLEANUP_PATTERNS.trailingWhitespace, '')
 }
