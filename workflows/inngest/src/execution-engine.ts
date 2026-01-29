@@ -16,7 +16,6 @@ import type {
   WorkflowResult,
 } from '@mastra/core/workflows';
 import type { Inngest, BaseContext } from 'inngest';
-import { InngestWorkflow } from './workflow';
 
 export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
@@ -55,10 +54,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }
 
   /**
-   * Detect InngestWorkflow instances for special nested workflow handling
+   * Detect Inngest workflow steps for nested workflow handling.
+   * Uses duck-typing so nested workflows are handled correctly when the step
+   * comes from a different module instance (e.g. create-mastra or bundling).
    */
   isNestedWorkflowStep(step: Step<any, any, any>): boolean {
-    return step instanceof InngestWorkflow;
+    return step.component === 'WORKFLOW' && typeof (step as { getFunction?: () => unknown }).getFunction === 'function';
   }
 
   /**
@@ -422,8 +423,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     perStep?: boolean;
     stepSpan?: any;
   }): Promise<StepResult<any, any, any, any> | null> {
-    // Only handle InngestWorkflow instances
-    if (!(params.step instanceof InngestWorkflow)) {
+    if (
+      params.step.component !== 'WORKFLOW' ||
+      typeof (params.step as { getFunction?: () => unknown }).getFunction !== 'function'
+    ) {
       return null;
     }
 
