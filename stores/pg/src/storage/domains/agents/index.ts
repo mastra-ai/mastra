@@ -13,6 +13,7 @@ import type {
   StorageListAgentsInput,
   StorageListAgentsOutput,
   CreateIndexOptions,
+  StorageColumn,
 } from '@mastra/core/storage';
 import type {
   AgentVersion,
@@ -65,14 +66,26 @@ export class AgentsPG extends AgentsStorage {
     // No default indexes for agents domain
   }
 
+  /**
+   * Safely gets a schema, checking if getSchema method exists first.
+   * Returns undefined if the method doesn't exist or the schema isn't found.
+   */
+  #safeGetSchema(tableName: string): Record<string, StorageColumn> | undefined {
+    if (typeof this.getSchema === 'function') {
+      return this.getSchema(tableName);
+    }
+    return undefined;
+  }
+
   async init(): Promise<void> {
     // Use getSchema() for backwards compatibility - schemas may not exist in older core versions
-    const agentsSchema = this.getSchema(TABLE_AGENTS);
+    // Also check if getSchema exists (it may not in older core versions)
+    const agentsSchema = this.#safeGetSchema(TABLE_AGENTS);
     if (agentsSchema) {
       await this.#db.createTable({ tableName: TABLE_AGENTS, schema: agentsSchema });
     }
 
-    const agentVersionsSchema = this.getSchema(TABLE_AGENT_VERSIONS);
+    const agentVersionsSchema = this.#safeGetSchema(TABLE_AGENT_VERSIONS);
     if (agentVersionsSchema) {
       await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: agentVersionsSchema });
     }
