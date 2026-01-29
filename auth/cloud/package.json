@@ -29,7 +29,9 @@
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
-  "dependencies": {},
+  "dependencies": {
+    "jose": "^5.9.6"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",

@@ -40,11 +40,24 @@ export class CloudApiError extends Error {
 export interface CloudUser {
   id: string;
   email: string;
+  sessionToken: string;
   name?: string;
   avatarUrl?: string;
-  roles: string[];
   createdAt: Date;
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * JWT claims from Mastra Cloud tokens.
+ */
+export interface JWTClaims {
+  sub: string;
+  email: string;
+  role: string;
+  name?: string;
+  avatar?: string;
+  exp: number;
+  iat: number;
 }
 
 /**
@@ -273,11 +286,13 @@ export class MastraCloudClient {
 
   /**
    * Exchange authorization code for session.
+   * Cloud API returns JWT in response for sessionToken flow.
    */
-  async exchangeCode(options: ExchangeCodeOptions): Promise<{ user: CloudUser; session: CloudSession }> {
+  async exchangeCode(options: ExchangeCodeOptions): Promise<{ user: CloudUser; session: CloudSession; jwt: string }> {
     const data = await this.request<{
       user: Record<string, unknown>;
       session: Record<string, unknown>;
+      jwt: string;
     }>(
       `${this.apiPrefix}/auth/callback`,
       {
@@ -287,21 +302,23 @@ export class MastraCloudClient {
     );
 
     return {
-      user: this.parseUser(data.user),
+      user: this.parseUser(data.user, data.jwt),
       session: this.parseSession(data.session),
+      jwt: data.jwt,
     };
   }
 
   /**
    * Parse user from API response.
+   * When jwt provided, uses it as sessionToken for local JWT decode flow.
    */
-  private parseUser(data: Record<string, unknown>): CloudUser {
+  private parseUser(data: Record<string, unknown>, jwt?: string): CloudUser {
     return {
       id: data['id'] as string,
       email: data['email'] as string,
+      sessionToken: jwt ?? '',
       name: data['name'] as string | undefined,
       avatarUrl: data['avatar_url'] as string | undefined,
-      roles: (data['roles'] as string[]) ?? ['member'],
       createdAt: new Date(data['created_at'] as string),
       metadata: data['metadata'] as Record<string, unknown> | undefined,
     };
