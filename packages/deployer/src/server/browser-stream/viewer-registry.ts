@@ -1,6 +1,6 @@
 import type { WSContext } from 'hono/ws';
 
-import type { StatusMessage, BrowserStreamConfig } from './types.js';
+import type { StatusMessage, BrowserStreamConfig, ViewportMessage } from './types.js';
 
 /** Minimal screencast stream interface matching BrowserToolsetLike.startScreencast return type */
 interface ScreencastStreamLike {
@@ -46,6 +46,9 @@ export class ViewerRegistry {
   /** Map of agentId to last known URL (for dedup) */
   private lastUrls = new Map<string, string>();
 
+  /** Map of agentId to last known viewport dimensions (for change detection) */
+  private lastViewports = new Map<string, { width: number; height: number }>();
+
   /**
    * Add a viewer for an agent. Starts screencast if this is the first viewer.
    *
@@ -88,6 +91,7 @@ export class ViewerRegistry {
     if (viewerSet.size === 0) {
       this.viewers.delete(agentId);
       this.lastUrls.delete(agentId);
+      this.lastViewports.delete(agentId);
 
       // Clean up browser ready callback if pending
       const cleanup = this.browserReadyCleanups.get(agentId);
@@ -167,6 +171,33 @@ export class ViewerRegistry {
   }
 
   /**
+   * Broadcast viewport metadata to all viewers for an agent.
+   * Only sends if dimensions have changed from last broadcast.
+   * Called on stream start and on each frame to detect dimension changes.
+   */
+  private broadcastViewportIfChanged(agentId: string, viewport: { width: number; height: number }): void {
+    const last = this.lastViewports.get(agentId);
+    if (last && last.width === viewport.width && last.height === viewport.height) {
+      return;
+    }
+
+    this.lastViewports.set(agentId, { width: viewport.width, height: viewport.height });
+
+    const viewerSet = this.viewers.get(agentId);
+    if (!viewerSet) return;
+
+    const message: ViewportMessage = { viewport: { width: viewport.width, height: viewport.height } };
+    const json = JSON.stringify(message);
+    for (const ws of viewerSet) {
+      try {
+        ws.send(json);
+      } catch (error) {
+        console.warn('[ViewerRegistry] Error broadcasting viewport:', error);
+      }
+    }
+  }
+
+  /**
    * Start screencast for an agent. Only starts if browser is already running.
    * If browser not running, registers a callback to start when browser becomes ready.
    */
@@ -226,9 +257,10 @@ export class ViewerRegistry {
 
       this.screencasts.set(agentId, stream);
 
-      // Wire up frame events + URL tracking
+      // Wire up frame events + viewport/URL tracking
       stream.on('frame', frame => {
         this.broadcastFrame(agentId, frame.data);
+        this.broadcastViewportIfChanged(agentId, frame.viewport);
         this.broadcastUrlIfChanged(agentId, toolset.getCurrentUrl());
       });
 
@@ -306,8 +338,9 @@ export class ViewerRegistry {
     // tool call. Callback cleanup only happens in removeViewer() when
     // the last viewer disconnects.
 
-    // Clear URL tracking so next session sends fresh URL
+    // Clear URL and viewport tracking so next session sends fresh data
     this.lastUrls.delete(agentId);
+    this.lastViewports.delete(agentId);
 
     // Stop screencast if active
     const stream = this.screencasts.get(agentId);
