@@ -314,13 +314,13 @@ describe('OM Error State', () => {
       options: {
         observationalMemory: {
           enabled: true,
-          observer: {
+          observation: {
             model: createFailingObserverModel() as any,
-            threshold: 20,
+            messageTokens: 20,
           },
-          reflector: {
+          reflection: {
             model: createMockReflectorModel() as any,
-            threshold: 50000,
+            observationTokens: 50000,
           },
         },
       },
@@ -441,13 +441,13 @@ describe('OM Persistence', () => {
       options: {
         observationalMemory: {
           enabled: true,
-          observer: {
+          observation: {
             model: createMockObserverModel() as any,
-            threshold: 20,
+            messageTokens: 20,
           },
-          reflector: {
+          reflection: {
             model: createMockReflectorModel() as any,
-            threshold: 50000,
+            observationTokens: 50000,
           },
         },
       },

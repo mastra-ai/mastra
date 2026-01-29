@@ -36,11 +36,11 @@ export const omObservationSuccessFixture = [
       type: 'data-om-progress',
       data: {
         pendingTokens: 5000,
-        threshold: 10000,
-        thresholdPercent: 50,
+        messageTokens: 10000,
+        messageTokensPercent: 50,
         observationTokens: 0,
-        reflectionThreshold: 40000,
-        reflectionThresholdPercent: 0,
+        observationTokensThreshold: 40000,
+        observationTokensPercent: 0,
         willObserve: false,
         recordId: RECORD_ID,
         threadId: THREAD_ID,
@@ -65,11 +65,11 @@ export const omObservationSuccessFixture = [
       type: 'data-om-progress',
       data: {
         pendingTokens: 10500,
-        threshold: 10000,
-        thresholdPercent: 105,
+        messageTokens: 10000,
+        messageTokensPercent: 105,
         observationTokens: 0,
-        reflectionThreshold: 40000,
-        reflectionThresholdPercent: 0,
+        observationTokensThreshold: 40000,
+        observationTokensPercent: 0,
         willObserve: true,
         recordId: RECORD_ID,
         threadId: THREAD_ID,
@@ -88,8 +88,8 @@ export const omObservationSuccessFixture = [
         threadId: THREAD_ID,
         threadIds: [THREAD_ID],
         config: {
-          observationThreshold: 10000,
-          reflectionThreshold: 40000,
+          messageTokens: 10000,
+          observationTokensThreshold: 40000,
         },
       },
     },
@@ -147,11 +147,11 @@ export const omObservationFailedFixture = [
       type: 'data-om-progress',
       data: {
         pendingTokens: 10500,
-        threshold: 10000,
-        thresholdPercent: 105,
+        messageTokens: 10000,
+        messageTokensPercent: 105,
         observationTokens: 0,
-        reflectionThreshold: 40000,
-        reflectionThresholdPercent: 0,
+        observationTokensThreshold: 40000,
+        observationTokensPercent: 0,
         willObserve: true,
         recordId: RECORD_ID,
         threadId: THREAD_ID,
@@ -170,8 +170,8 @@ export const omObservationFailedFixture = [
         threadId: THREAD_ID,
         threadIds: [THREAD_ID],
         config: {
-          observationThreshold: 10000,
-          reflectionThreshold: 40000,
+          messageTokens: 10000,
+          observationTokensThreshold: 40000,
         },
       },
     },
@@ -225,11 +225,11 @@ export const omReflectionFixture = [
       type: 'data-om-progress',
       data: {
         pendingTokens: 10500,
-        threshold: 10000,
-        thresholdPercent: 105,
+        messageTokens: 10000,
+        messageTokensPercent: 105,
         observationTokens: 35000,
-        reflectionThreshold: 40000,
-        reflectionThresholdPercent: 87,
+        observationTokensThreshold: 40000,
+        observationTokensPercent: 87,
         willObserve: true,
         recordId: RECORD_ID,
         threadId: THREAD_ID,
@@ -248,8 +248,8 @@ export const omReflectionFixture = [
         threadId: THREAD_ID,
         threadIds: [THREAD_ID],
         config: {
-          observationThreshold: 10000,
-          reflectionThreshold: 40000,
+          messageTokens: 10000,
+          observationTokensThreshold: 40000,
         },
       },
     },
@@ -280,8 +280,8 @@ export const omReflectionFixture = [
         threadId: THREAD_ID,
         threadIds: [THREAD_ID],
         config: {
-          observationThreshold: 10000,
-          reflectionThreshold: 40000,
+          messageTokens: 10000,
+          observationTokensThreshold: 40000,
         },
       },
     },
@@ -309,10 +309,10 @@ export const omReflectionFixture = [
 ];
 
 /**
- * Fixture: Adaptive threshold behavior
+ * Fixture: Shared token budget behavior
  * Tests: Progress bars show shared budget, thresholds adjust dynamically
  */
-export const omAdaptiveThresholdFixture = [
+export const omSharedBudgetFixture = [
   [
     { type: 'stream-start', warnings: [] },
     {
@@ -321,16 +321,16 @@ export const omAdaptiveThresholdFixture = [
       timestamp: new Date().toISOString(),
       modelId: 'gpt-4o-mini',
     },
-    // Progress with adaptive threshold - observations are low, so message threshold is higher
+    // Progress with shared token budget - observations are low, so message threshold is higher
     {
       type: 'data-om-progress',
       data: {
         pendingTokens: 8000,
-        threshold: 45000, // Higher than base because observations are low
-        thresholdPercent: 18,
+        messageTokens: 45000, // Higher than base because observations are low
+        messageTokensPercent: 18,
         observationTokens: 500,
-        reflectionThreshold: 5000, // Lower because most budget goes to messages
-        reflectionThresholdPercent: 10,
+        observationTokensThreshold: 5000, // Lower because most budget goes to messages
+        observationTokensPercent: 10,
         willObserve: false,
         recordId: RECORD_ID,
         threadId: THREAD_ID,

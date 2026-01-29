@@ -66,8 +66,8 @@ describe('Storage Operations', () => {
         resourceId,
         scope: 'thread',
         config: {
-          observer: { observationThreshold: 10000, model: 'test-model' },
-          reflector: { reflectionThreshold: 20000, model: 'test-model' },
+          observation: { messageTokens: 10000, model: 'test-model' },
+          reflection: { observationTokens: 20000, model: 'test-model' },
         },
       });
 
@@ -1230,12 +1230,12 @@ describe('ObservationalMemory Integration', () => {
 
     om = new ObservationalMemory({
       storage,
-      observer: {
-        observationThreshold: 500, // Low threshold for testing
+      observation: {
+        messageTokens: 500, // Low threshold for testing
         model: 'test-model',
       },
-      reflector: {
-        reflectionThreshold: 1000,
+      reflection: {
+        observationTokens: 1000,
         model: 'test-model',
       },
     });
@@ -2289,8 +2289,8 @@ describe('Thread Attribution Helpers', () => {
     storage = createInMemoryStorage();
     om = new ObservationalMemory({
       storage,
-      observer: { observationThreshold: 100 },
-      reflector: { reflectionThreshold: 1000 },
+      observation: { messageTokens: 100 },
+      reflection: { observationTokens: 1000 },
       scope: 'resource',
     });
   });
@@ -2435,11 +2435,11 @@ Ask about preferred brewing method
 
     const om = new ObservationalMemory({
       storage,
-      observer: {
-        observationThreshold: 10, // Low threshold to trigger observation
+      observation: {
+        messageTokens: 10, // Low threshold to trigger observation
         model: mockModel as any,
       },
-      reflector: { reflectionThreshold: 10000 },
+      reflection: { observationTokens: 10000 },
       scope: 'resource',
     });
 
@@ -2507,11 +2507,11 @@ Ask about preferred brewing method
 
     const om = new ObservationalMemory({
       storage,
-      observer: {
-        observationThreshold: 10,
+      observation: {
+        messageTokens: 10,
         model: mockModel as any,
       },
-      reflector: { reflectionThreshold: 10000 },
+      reflection: { observationTokens: 10000 },
       scope: 'thread', // Thread scope
     });
 
@@ -2586,12 +2586,12 @@ describe('Locking Behavior', () => {
 
     const om = new ObservationalMemory({
       storage,
-      observer: {
-        observationThreshold: 100,
+      observation: {
+        messageTokens: 100,
         model: mockObserverModel as any,
       },
-      reflector: {
-        reflectionThreshold: 100, // Low threshold to trigger reflection
+      reflection: {
+        observationTokens: 100, // Low threshold to trigger reflection
         model: mockReflectorModel as any,
       },
       scope: 'thread',
@@ -2657,11 +2657,11 @@ describe('Locking Behavior', () => {
 
     const om = new ObservationalMemory({
       storage,
-      observer: {
-        observationThreshold: 10, // Very low threshold
+      observation: {
+        messageTokens: 10, // Very low threshold
         model: mockObserverModel as any,
       },
-      reflector: { reflectionThreshold: 10000 },
+      reflection: { observationTokens: 10000 },
       scope: 'thread',
     });
 
@@ -2744,9 +2744,9 @@ describe('Reflection with Thread Attribution', () => {
 
     const om = new ObservationalMemory({
       storage,
-      observer: { observationThreshold: 10000 },
-      reflector: {
-        reflectionThreshold: 100, // Low threshold to trigger reflection
+      observation: { messageTokens: 10000 },
+      reflection: {
+        observationTokens: 100, // Low threshold to trigger reflection
         model: mockReflectorModel as any,
       },
       scope: 'resource',
@@ -2826,9 +2826,9 @@ describe('Reflection with Thread Attribution', () => {
 
     const om = new ObservationalMemory({
       storage,
-      observer: { observationThreshold: 10000 },
-      reflector: {
-        reflectionThreshold: 100,
+      observation: { messageTokens: 10000 },
+      reflection: {
+        observationTokens: 100,
         model: mockReflectorModel as any,
       },
       scope: 'resource',
@@ -2902,9 +2902,9 @@ describe('Reflection with Thread Attribution', () => {
 
     const om = new ObservationalMemory({
       storage,
-      observer: { observationThreshold: 10000 },
-      reflector: {
-        reflectionThreshold: 100,
+      observation: { messageTokens: 10000 },
+      reflection: {
+        observationTokens: 100,
         model: mockReflectorModel as any,
       },
       scope: 'resource',
@@ -3242,13 +3242,13 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
     // Use REAL model for Observer/Reflector - they need real LLMs to extract observations
     const om = new ObservationalMemory({
       storage,
-      observer: {
+      observation: {
         model: 'google/gemini-2.5-flash',
-        observationThreshold: 30000,
+        messageTokens: 30000,
       },
-      reflector: {
+      reflection: {
         model: 'google/gemini-2.5-flash',
-        reflectionThreshold: 30000,
+        observationTokens: 30000,
       },
       scope: 'resource', // Cross-session memory - critical for LongMemEval
     });
@@ -3404,13 +3404,13 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
 
       const om = new ObservationalMemory({
         storage,
-        observer: {
+        observation: {
           model: 'google/gemini-2.5-flash',
-          observationThreshold: 500, // Low threshold to trigger on each session
+          messageTokens: 500, // Low threshold to trigger on each session
         },
-        reflector: {
+        reflection: {
           model: 'google/gemini-2.5-flash',
-          reflectionThreshold: 100000, // Won't trigger
+          observationTokens: 100000, // Won't trigger
         },
         scope: 'resource',
       });
@@ -3542,13 +3542,13 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
 
       const om = new ObservationalMemory({
         storage,
-        observer: {
+        observation: {
           model: 'google/gemini-2.5-flash',
-          observationThreshold: 100000, // Won't trigger
+          messageTokens: 100000, // Won't trigger
         },
-        reflector: {
+        reflection: {
           model: 'google/gemini-2.5-flash',
-          reflectionThreshold: 100000,
+          observationTokens: 100000,
         },
         scope: 'resource',
       });
@@ -3580,7 +3580,7 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Unit Tests: Pattern Toggles and observeFutureOnly
+// Unit Tests: Pattern Toggles
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Pattern recognition feature is disabled - tests skipped
@@ -3594,7 +3594,7 @@ describe.skip('Pattern Toggles', () => {
   });
 
   describe('Observer patterns toggle', () => {
-    it('should store patterns when observer.recognizePatterns is true', async () => {
+    it('should store patterns when observation.recognizePatterns is true', async () => {
       // Mock model that returns observations WITH patterns
       const mockModelWithPatterns = new MockLanguageModelV2({
         doGenerate: async () => ({
@@ -3622,16 +3622,15 @@ Date: January 7, 2026
 
       const om = new ObservationalMemory({
         storage,
-        observer: {
+        observation: {
           model: mockModelWithPatterns as any,
-          observationThreshold: 10, // Low threshold to trigger observation
+          messageTokens: 10, // Low threshold to trigger observation
           recognizePatterns: true, // Explicitly enable patterns
         },
-        reflector: {
+        reflection: {
           model: mockModelWithPatterns as any,
-          reflectionThreshold: 50000,
+          observationTokens: 50000,
         },
-        observeFutureOnly: false,
       });
 
       // Initialize record
@@ -3659,7 +3658,7 @@ Date: January 7, 2026
       expect(result.patterns.hobbies).toContain('hiking (Jan 7, 2026)');
     });
 
-    it('should NOT store patterns when observer.recognizePatterns is false', async () => {
+    it('should NOT store patterns when observation.recognizePatterns is false', async () => {
       // Mock model that returns observations WITH patterns
       const mockModelWithPatterns = new MockLanguageModelV2({
         doGenerate: async () => ({
@@ -3687,16 +3686,15 @@ Date: January 7, 2026
 
       const om = new ObservationalMemory({
         storage,
-        observer: {
+        observation: {
           model: mockModelWithPatterns as any,
-          observationThreshold: 10,
+          messageTokens: 10,
           recognizePatterns: false, // Disable patterns
         },
-        reflector: {
+        reflection: {
           model: mockModelWithPatterns as any,
-          reflectionThreshold: 50000,
+          observationTokens: 50000,
         },
-        observeFutureOnly: false,
       });
 
       // Initialize record
@@ -3722,7 +3720,7 @@ Date: January 7, 2026
       expect(result.patterns).toBeUndefined();
     });
 
-    it('should NOT inject patterns into context when observer.recognizePatterns is false even if patterns exist in storage', async () => {
+    it('should NOT inject patterns into context when observation.recognizePatterns is false even if patterns exist in storage', async () => {
       // First, manually add patterns to storage
       const record = await storage.initializeObservationalMemory({ threadId, resourceId, scope: 'thread', config: {} });
       await storage.updateActiveObservations({
@@ -3745,14 +3743,14 @@ Date: January 7, 2026
 
       const om = new ObservationalMemory({
         storage,
-        observer: {
+        observation: {
           model: mockModel as any,
-          observationThreshold: 10000,
+          messageTokens: 10000,
           recognizePatterns: false, // Patterns disabled
         },
-        reflector: {
+        reflection: {
           model: mockModel as any,
-          reflectionThreshold: 50000,
+          observationTokens: 50000,
         },
       });
 
@@ -3775,7 +3773,7 @@ Date: January 7, 2026
   });
 
   describe('Reflector patterns toggle', () => {
-    it('should pass patterns to reflector when reflector.recognizePatterns is true', async () => {
+    it('should pass patterns to reflection when reflection.recognizePatterns is true', async () => {
       let reflectorReceivedPatterns = false;
 
       const mockModel = new MockLanguageModelV2({
@@ -3805,13 +3803,13 @@ Date: January 7, 2026
 
       const om = new ObservationalMemory({
         storage,
-        observer: {
+        observation: {
           model: mockModel as any,
-          observationThreshold: 10000,
+          messageTokens: 10000,
         },
-        reflector: {
+        reflection: {
           model: mockModel as any,
-          reflectionThreshold: 50000,
+          observationTokens: 50000,
           recognizePatterns: true, // Explicitly enable patterns
         },
       });
@@ -3825,7 +3823,7 @@ Date: January 7, 2026
       expect(reflectorReceivedPatterns).toBe(true);
     });
 
-    it('should NOT pass patterns to reflector when reflector.patterns is false', async () => {
+    it('should NOT pass patterns to reflection when reflection.patterns is false', async () => {
       let reflectorReceivedPatterns = false;
 
       const mockModel = new MockLanguageModelV2({
@@ -3855,13 +3853,13 @@ Date: January 7, 2026
 
       const om = new ObservationalMemory({
         storage,
-        observer: {
+        observation: {
           model: mockModel as any,
-          observationThreshold: 10000,
+          messageTokens: 10000,
         },
-        reflector: {
+        reflection: {
           model: mockModel as any,
-          reflectionThreshold: 50000,
+          observationTokens: 50000,
           recognizePatterns: false, // Disable patterns for reflector
         },
       });
@@ -3895,201 +3893,4 @@ Date: January 7, 2026
   });
 });
 
-describe('observeFutureOnly', () => {
-  let storage: InMemoryMemory;
-  let mockModel: MockLanguageModelV2;
-  const threadId = 'test-thread';
-  const resourceId = 'test-resource';
 
-  beforeEach(() => {
-    storage = createInMemoryStorage();
-    mockModel = new MockLanguageModelV2({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
-        content: [{ type: 'text' as const, text: '<observations>\nTest observation\n</observations>' }],
-        warnings: [],
-      }),
-    });
-  });
-
-  it('should default to true', async () => {
-    const om = new ObservationalMemory({
-      storage,
-      observer: {
-        model: mockModel as any,
-        observationThreshold: 100,
-      },
-      reflector: {
-        model: mockModel as any,
-        reflectionThreshold: 50000,
-      },
-    });
-
-    expect((om as any).observeFutureOnly).toBe(false);
-  });
-
-  it('should set lastObservedAt to now when observeFutureOnly is true and record is created', async () => {
-    const om = new ObservationalMemory({
-      storage,
-      observer: {
-        model: mockModel as any,
-        observationThreshold: 100,
-      },
-      reflector: {
-        model: mockModel as any,
-        reflectionThreshold: 50000,
-      },
-      observeFutureOnly: true,
-    });
-
-    const beforeCreate = new Date();
-
-    // Trigger record creation via getOrCreateRecord (private method, access via processInputStep)
-    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
-
-    const afterCreate = new Date();
-
-    // lastObservedAt should be set to approximately now
-    expect(record.lastObservedAt).toBeDefined();
-    expect(record.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeCreate.getTime());
-    expect(record.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterCreate.getTime());
-  });
-
-  it('should NOT set lastObservedAt when observeFutureOnly is false and record is created', async () => {
-    const om = new ObservationalMemory({
-      storage,
-      observer: {
-        model: mockModel as any,
-        observationThreshold: 100,
-      },
-      reflector: {
-        model: mockModel as any,
-        reflectionThreshold: 50000,
-      },
-      observeFutureOnly: false,
-    });
-
-    // Trigger record creation
-    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
-
-    // lastObservedAt should NOT be set
-    expect(record.lastObservedAt).toBeUndefined();
-  });
-
-  it('should skip historical messages when observeFutureOnly is true', async () => {
-    // First, save some historical messages
-    await storage.saveThread({
-      thread: {
-        id: threadId,
-        resourceId,
-        title: 'Test Thread',
-        createdAt: new Date('2023-01-01'),
-        updatedAt: new Date('2023-01-01'),
-        metadata: {},
-      },
-    });
-
-    const historicalDate = new Date('2023-01-01T10:00:00Z');
-    await storage.saveMessages({
-      messages: [
-        {
-          id: 'historical-msg-1',
-          threadId,
-          role: 'user',
-          content: { format: 2, parts: [{ type: 'text', text: 'Historical message 1' }] },
-          createdAt: historicalDate,
-          type: 'text',
-        },
-        {
-          id: 'historical-msg-2',
-          threadId,
-          role: 'assistant',
-          content: { format: 2, parts: [{ type: 'text', text: 'Historical response 1' }] },
-          createdAt: new Date(historicalDate.getTime() + 1000),
-          type: 'text',
-        },
-      ],
-    });
-
-    const om = new ObservationalMemory({
-      storage,
-      observer: {
-        model: mockModel as any,
-        observationThreshold: 100,
-      },
-      reflector: {
-        model: mockModel as any,
-        reflectionThreshold: 50000,
-      },
-      observeFutureOnly: true,
-    });
-
-    // Create the record (this sets lastObservedAt to now)
-    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
-
-    // Now load unobserved messages - should be empty since lastObservedAt is set to now
-    const unobservedMessages = await (om as any).loadUnobservedMessages(threadId, resourceId, record.lastObservedAt);
-
-    expect(unobservedMessages).toHaveLength(0);
-  });
-
-  it('should include historical messages when observeFutureOnly is false', async () => {
-    // First, save some historical messages
-    await storage.saveThread({
-      thread: {
-        id: threadId,
-        resourceId,
-        title: 'Test Thread',
-        createdAt: new Date('2023-01-01'),
-        updatedAt: new Date('2023-01-01'),
-        metadata: {},
-      },
-    });
-
-    const historicalDate = new Date('2023-01-01T10:00:00Z');
-    await storage.saveMessages({
-      messages: [
-        {
-          id: 'historical-msg-1',
-          threadId,
-          role: 'user',
-          content: { format: 2, parts: [{ type: 'text', text: 'Historical message 1' }] },
-          createdAt: historicalDate,
-          type: 'text',
-        },
-        {
-          id: 'historical-msg-2',
-          threadId,
-          role: 'assistant',
-          content: { format: 2, parts: [{ type: 'text', text: 'Historical response 1' }] },
-          createdAt: new Date(historicalDate.getTime() + 1000),
-          type: 'text',
-        },
-      ],
-    });
-
-    const om = new ObservationalMemory({
-      storage,
-      observer: {
-        model: mockModel as any,
-        observationThreshold: 100,
-      },
-      reflector: {
-        model: mockModel as any,
-        reflectionThreshold: 50000,
-      },
-      observeFutureOnly: false,
-    });
-
-    // Create the record (this should NOT set lastObservedAt)
-    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
-
-    // Now load unobserved messages - should include historical messages (lastObservedAt is undefined)
-    const unobservedMessages = await (om as any).loadUnobservedMessages(threadId, resourceId, record.lastObservedAt);
-
-    expect(unobservedMessages.length).toBeGreaterThan(0);
-    expect(unobservedMessages.some((m: any) => m.id === 'historical-msg-1')).toBe(true);
-  });
-});

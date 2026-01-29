@@ -21,8 +21,8 @@ export {
 
 // Types
 export type {
-  ObserverConfig,
-  ReflectorConfig,
+  ObservationConfig,
+  ReflectionConfig,
   ObserverResult,
   ReflectorResult,
   ObservationalMemoryModelConfig,

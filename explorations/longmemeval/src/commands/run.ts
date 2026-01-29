@@ -908,17 +908,16 @@ Active evaluations:`;
       }
 
       observationalMemory = new ObservationalMemory({
-        observeFutureOnly: false,
         obscureThreadIds: true, // can't show answer_x in context when we put the thread id in xml tags
         storage: omStorage,
-        observer: {
+        observation: {
           // model: retry4o.model,
-          observationThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
+          messageTokens: OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           recognizePatterns: false,
         },
-        reflector: {
+        reflection: {
           // model: retry4o.model,
-          reflectionThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
+          observationTokens: OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
           recognizePatterns: false,
         },
         scope: 'resource',
@@ -1371,8 +1370,8 @@ ${JSON.stringify(responses, null, 2)}`,
         ...(metricsConfigDef.usesObservationalMemory && {
           observationalMemoryConfig: {
             scope: 'resource',
-            observationThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
-            reflectionThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
+            messageTokens: OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
+            observationTokens: OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
             recognizePatterns: false,
           },
         }),

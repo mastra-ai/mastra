@@ -22,12 +22,12 @@ const customMessageHistory = new MessageHistory({
 // Create OM that uses the same storage
 const om = new ObservationalMemory({
   storage,
-  observer: {
-    observationThreshold: 100, // VERY low - trigger after ~2 exchanges
+  observation: {
+    messageTokens: 100, // VERY low - trigger after ~2 exchanges
     model: 'google/gemini-2.5-flash',
   },
-  reflector: {
-    reflectionThreshold: 500, // Very low - trigger reflection quickly
+  reflection: {
+    observationTokens: 500, // Very low - trigger reflection quickly
     model: 'google/gemini-2.5-flash',
   },
 });
@@ -74,8 +74,8 @@ async function chat(message: string, label: string) {
 async function main() {
   console.log('═'.repeat(70));
   console.log('🧪 OBSERVATIONAL MEMORY - EXTREME RECALL TEST');
-  console.log(`   observationThreshold: 100 tokens (trigger observation)`);
-  console.log(`   reflectionThreshold: 500 tokens (trigger reflection)`);
+  console.log(`   messageTokens: 100 tokens (trigger observation)`);
+  console.log(`   observationTokens: 500 tokens (trigger reflection)`);
   console.log('═'.repeat(70));
   console.log('\nThis test plants 30+ specific facts across 6 categories,');
   console.log('then tests recall with increasingly difficult questions.\n');

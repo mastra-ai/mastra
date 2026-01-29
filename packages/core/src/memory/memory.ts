@@ -37,6 +37,7 @@ import type {
   MessageDeleteInput,
   MemoryRequestContext,
 } from './types';
+import { isObservationalMemoryEnabled } from './types';
 
 export type MemoryProcessorOpts = {
   systemMessage?: string;
@@ -610,7 +611,7 @@ https://mastra.ai/en/docs/memory/overview`,
       // Check if ObservationalMemory is present (via processor or config) - it handles its own message loading and saving
       const hasObservationalMemory =
         configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
-        effectiveConfig.observationalMemory?.enabled === true;
+        isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
 
       // Skip MessageHistory input processor if ObservationalMemory handles message loading
       if (!hasMessageHistory && !hasObservationalMemory) {
@@ -765,7 +766,7 @@ https://mastra.ai/en/docs/memory/overview`,
       // Check if ObservationalMemory is present (via processor or config) - it handles its own message saving
       const hasObservationalMemory =
         configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
-        effectiveConfig.observationalMemory?.enabled === true;
+        isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
 
       // Skip MessageHistory output processor if ObservationalMemory handles message saving
       if (!hasMessageHistory && !hasObservationalMemory) {

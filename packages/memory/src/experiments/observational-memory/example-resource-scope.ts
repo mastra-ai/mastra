@@ -26,12 +26,12 @@ const messageHistory = new MessageHistory({
 const om = new ObservationalMemory({
   storage,
   scope: 'resource', // 🔑 This enables cross-thread memory!
-  observer: {
-    observationThreshold: 100,
+  observation: {
+    messageTokens: 100,
     model: 'google/gemini-2.5-flash',
   },
-  reflector: {
-    reflectionThreshold: 2000,
+  reflection: {
+    observationTokens: 2000,
     model: 'google/gemini-2.5-flash',
   },
 });

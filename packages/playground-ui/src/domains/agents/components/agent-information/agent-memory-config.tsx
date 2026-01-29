@@ -86,10 +86,10 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
         items: [
           { label: 'Enabled', value: true, badge: 'success' },
           { label: 'Scope', value: omConfig.scope || 'resource' },
-          { label: 'Observation Threshold', value: formatThreshold(omConfig.observationThreshold) },
-          { label: 'Reflection Threshold', value: formatThreshold(omConfig.reflectionThreshold) },
-          ...(omConfig.observerModel ? [{ label: 'Observer Model', value: omConfig.observerModel }] : []),
-          ...(omConfig.reflectorModel ? [{ label: 'Reflector Model', value: omConfig.reflectorModel }] : []),
+          { label: 'Message Tokens', value: formatThreshold(omConfig.messageTokens) },
+          { label: 'Observation Tokens', value: formatThreshold(omConfig.observationTokens) },
+          ...(omConfig.observationModel ? [{ label: 'Observation Model', value: omConfig.observationModel }] : []),
+          ...(omConfig.reflectionModel ? [{ label: 'Reflection Model', value: omConfig.reflectionModel }] : []),
         ],
       });
     }

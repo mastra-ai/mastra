@@ -27,12 +27,12 @@ export type ObservationalMemoryModelConfig = MastraModelConfig | DynamicModel | 
  *
  * Simple form:
  * ```ts
- * observationThreshold: 10_000
+ * messageTokens: 10_000
  * ```
  *
  * Range form (dynamic threshold based on observation space):
  * ```ts
- * observationThreshold: { min: 8_000, max: 15_000 }
+ * messageTokens: { min: 8_000, max: 15_000 }
  * ```
  */
 export type ThresholdRange = {
@@ -82,25 +82,28 @@ export interface ProviderOptions {
 }
 
 /**
- * Configuration for the Observer agent
+ * Configuration for the observation step (Observer agent).
  */
-export interface ObserverConfig {
+export interface ObservationConfig {
   /**
    * Model for the Observer agent.
    * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
    * a function that returns either (for dynamic model selection),
    * or an array of ModelWithRetries for fallback support.
+   *
+   * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
+   *
    * @default 'google/gemini-2.5-flash'
    */
   model?: ObservationalMemoryModelConfig;
 
   /**
-   * Token threshold for message history before triggering observation.
-   * When unobserved messages exceed this, Observer is called.
+   * Token count of unobserved messages that triggers observation.
+   * When unobserved message tokens exceed this, the Observer is called.
    *
-   * @default 10000
+   * @default 30000
    */
-  observationThreshold?: number;
+  messageTokens?: number;
 
   /**
    * Model settings for the Observer agent.
@@ -126,25 +129,28 @@ export interface ObserverConfig {
 }
 
 /**
- * Configuration for the Reflector agent
+ * Configuration for the reflection step (Reflector agent).
  */
-export interface ReflectorConfig {
+export interface ReflectionConfig {
   /**
    * Model for the Reflector agent.
    * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
    * a function that returns either (for dynamic model selection),
    * or an array of ModelWithRetries for fallback support.
+   *
+   * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
+   *
    * @default 'google/gemini-2.5-flash'
    */
   model?: ObservationalMemoryModelConfig;
 
   /**
-   * Token threshold for observations before triggering reflection.
-   * When observations exceed this, Reflector is called to condense them.
+   * Token count of observations that triggers reflection.
+   * When observation tokens exceed this, the Reflector is called to condense them.
    *
-   * @default 30000
+   * @default 40000
    */
-  reflectionThreshold?: number;
+  observationTokens?: number;
 
   /**
    * Model settings for the Reflector agent.
@@ -185,8 +191,8 @@ export interface ReflectorResult {
  * Config snapshot included in observation markers for debugging.
  */
 export interface ObservationMarkerConfig {
-  observationThreshold: number;
-  reflectionThreshold: number;
+  messageTokens: number;
+  observationTokens: number;
   scope: 'thread' | 'resource';
 }
 
@@ -314,20 +320,20 @@ export interface DataOmProgressPart {
     /** Current pending tokens (unobserved message tokens) */
     pendingTokens: number;
 
-    /** Current observation threshold */
-    threshold: number;
+    /** Current message token threshold that triggers observation */
+    messageTokens: number;
 
-    /** Percentage of threshold reached */
-    thresholdPercent: number;
+    /** Percentage of message token threshold reached */
+    messageTokensPercent: number;
 
     /** Current observation tokens (for reflection progress) */
     observationTokens: number;
 
-    /** Reflection threshold */
-    reflectionThreshold: number;
+    /** Observation token threshold that triggers reflection */
+    observationTokensThreshold: number;
 
-    /** Percentage of reflection threshold reached */
-    reflectionThresholdPercent: number;
+    /** Percentage of observation token threshold reached */
+    observationTokensPercent: number;
 
     /** Whether observation will trigger */
     willObserve: boolean;

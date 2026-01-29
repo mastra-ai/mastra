@@ -878,21 +878,20 @@ export class PrepareCommand {
 
       observationalMemory = new ObservationalMemory({
         obscureThreadIds: true, // can't show answer_x in context when we put the thread id in xml tags
-        observeFutureOnly: false,
         storage: omStorage,
-        observer: {
-          model: omModel, // Real model for Observer
+        observation: {
+          model: omModel, // Real model for Observation
           // Shortcut: use Infinity to skip observation during processing (finalize() does it at the end)
-          observationThreshold: usesShortcutOM ? Infinity : 30000,
+          messageTokens: usesShortcutOM ? Infinity : 30000,
           recognizePatterns: false,
           // Allow config to override maxTokensPerBatch (default is 5000 in OM)
           ...(configDef.observerMaxTokensPerBatch && { maxTokensPerBatch: configDef.observerMaxTokensPerBatch }),
           // Allow config to enable sequential batch processing (default is parallel)
         },
-        reflector: {
-          model: omModel, // Real model for Reflector
+        reflection: {
+          model: omModel, // Real model for Reflection
           // Shortcut: use Infinity to skip reflection during processing (finalize() does it at the end)
-          reflectionThreshold: usesShortcutOM ? Infinity : 80000,
+          observationTokens: usesShortcutOM ? Infinity : 80000,
           recognizePatterns: false,
         },
         scope: 'resource',
@@ -1285,7 +1284,7 @@ export class PrepareCommand {
         sessionsWithDates[sessionsWithDates.length - 1]?.sessionId || `session_${question.question_id}`;
       await observationalMemory.finalize(lastSessionId, resourceId, {
         reflect: true,
-        reflectionThreshold: 20000,
+        observationTokens: 20000,
         // For configs with token limits: use maxInputTokens to trigger mid-loop reflection
         maxInputTokens: configDef.omMaxInputTokens ?? undefined,
       });
@@ -1337,10 +1336,10 @@ export class PrepareCommand {
         observationalMemoryConfig: {
           scope: 'resource',
           // Actual values used in ObservationalMemory constructor
-          observationThreshold: 30000,
-          reflectionThreshold: 40000,
-          observerModel: configDef.omModel ?? 'google/gemini-2.5-flash',
-          reflectorModel: configDef.omModel ?? 'google/gemini-2.5-flash',
+          messageTokens: 30000,
+          observationTokens: 40000,
+          observationModel: configDef.omModel ?? 'google/gemini-2.5-flash',
+          reflectionModel: configDef.omModel ?? 'google/gemini-2.5-flash',
           recognizePatterns: false,
         },
       }),

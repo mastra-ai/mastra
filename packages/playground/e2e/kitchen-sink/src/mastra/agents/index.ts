@@ -89,20 +89,19 @@ const mockFailingObserverModel = {
 
 // Memory with Observational Memory enabled for testing OM UI
 // Using very low thresholds so observations trigger quickly in E2E tests
-// Using mock models for observer/reflector to avoid real API calls
+// Using mock models for observation/reflection to avoid real API calls
 const omMemory = new Memory({
   storage,
   options: {
     generateTitle: true,
     observationalMemory: {
-      enabled: true,
-      observer: {
+      observation: {
         model: mockObserverModel,
-        threshold: 20, // Very low threshold for E2E tests
+        messageTokens: 20, // Very low threshold for E2E tests
       },
-      reflector: {
+      reflection: {
         model: mockReflectorModel,
-        threshold: 50, // Low enough that mock observer output (~100 tokens) triggers reflection
+        observationTokens: 50, // Low enough that mock observer output (~100 tokens) triggers reflection
       },
     },
   },
@@ -114,36 +113,34 @@ const omFailMemory = new Memory({
   options: {
     generateTitle: true,
     observationalMemory: {
-      enabled: true,
-      observer: {
+      observation: {
         model: mockFailingObserverModel,
-        threshold: 20,
+        messageTokens: 20,
       },
-      reflector: {
+      reflection: {
         model: mockReflectorModel,
-        threshold: 200,
+        observationTokens: 200,
       },
     },
   },
 });
 
-// Memory with adaptive threshold enabled
+// Memory with shared token budget enabled
 // Using very low thresholds so observations trigger quickly in E2E tests
-// Using mock models for observer/reflector to avoid real API calls
+// Using mock models for observation/reflection to avoid real API calls
 const omAdaptiveMemory = new Memory({
   storage,
   options: {
     generateTitle: true,
     observationalMemory: {
-      enabled: true,
-      adaptiveThreshold: true,
-      observer: {
+      shareTokenBudget: true,
+      observation: {
         model: mockObserverModel,
-        threshold: 20, // Very low threshold for E2E tests
+        messageTokens: 20, // Very low threshold for E2E tests
       },
-      reflector: {
+      reflection: {
         model: mockReflectorModel,
-        threshold: 200, // Low threshold for E2E tests
+        observationTokens: 200, // Low threshold for E2E tests
       },
     },
   },

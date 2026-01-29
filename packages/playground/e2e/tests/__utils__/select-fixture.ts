@@ -7,7 +7,7 @@ export type Fixtures =
   | 'om-observation-success'
   | 'om-observation-failed'
   | 'om-reflection'
-  | 'om-adaptive-threshold';
+  | 'om-shared-budget';
 
 export const selectFixture = async (page: Page, fixture: Fixtures) => {
   await page.addInitScript(browserFixture => {

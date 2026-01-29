@@ -370,11 +370,11 @@ export function MastraRuntimeProvider({
     }
     setStreamProgress({
       pendingTokens: data.pendingTokens,
-      threshold: data.threshold,
-      thresholdPercent: data.thresholdPercent,
+      messageTokens: data.messageTokens,
+      messageTokensPercent: data.messageTokensPercent,
       observationTokens: data.observationTokens,
-      reflectionThreshold: data.reflectionThreshold,
-      reflectionThresholdPercent: data.reflectionThresholdPercent,
+      observationTokensThreshold: data.observationTokensThreshold,
+      observationTokensPercent: data.observationTokensPercent,
       willObserve: data.willObserve,
       recordId: data.recordId,
       threadId: data.threadId,

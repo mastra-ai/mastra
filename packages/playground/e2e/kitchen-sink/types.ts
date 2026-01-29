@@ -5,7 +5,7 @@ export type Fixtures =
   | 'om-observation-success'
   | 'om-observation-failed'
   | 'om-reflection'
-  | 'om-adaptive-threshold';
+  | 'om-shared-budget';
 
 export type FixtureConfig = {
   name: Fixtures;

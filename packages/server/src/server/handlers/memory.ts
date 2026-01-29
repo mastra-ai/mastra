@@ -185,10 +185,10 @@ async function getOMConfigFromAgent(
 ): Promise<{
   enabled: boolean;
   scope?: 'thread' | 'resource';
-  observationThreshold?: number | { min: number; max: number };
-  reflectionThreshold?: number | { min: number; max: number };
-  observerModel?: string;
-  reflectorModel?: string;
+  messageTokens?: number | { min: number; max: number };
+  observationTokens?: number | { min: number; max: number };
+  observationModel?: string;
+  reflectionModel?: string;
 } | null> {
   try {
     const omProcessor = await agent.findProcessor('observational-memory', requestContext);
@@ -205,10 +205,10 @@ async function getOMConfigFromAgent(
       return {
         enabled: true,
         scope: resolvedConfig.scope || 'resource',
-        observationThreshold: resolvedConfig.observer?.observationThreshold,
-        reflectionThreshold: resolvedConfig.reflector?.reflectionThreshold,
-        observerModel: resolvedConfig.observer?.model,
-        reflectorModel: resolvedConfig.reflector?.model,
+        messageTokens: resolvedConfig.observation?.messageTokens,
+        observationTokens: resolvedConfig.reflection?.observationTokens,
+        observationModel: resolvedConfig.observation?.model,
+        reflectionModel: resolvedConfig.reflection?.model,
       };
     }
 
@@ -217,10 +217,10 @@ async function getOMConfigFromAgent(
     return {
       enabled: true,
       scope: processorConfig.scope || 'resource',
-      observationThreshold: processorConfig.observer?.observationThreshold,
-      reflectionThreshold: processorConfig.reflector?.reflectionThreshold,
-      observerModel: undefined,
-      reflectorModel: undefined,
+      messageTokens: processorConfig.observation?.messageTokens,
+      observationTokens: processorConfig.reflection?.observationTokens,
+      observationModel: undefined,
+      reflectionModel: undefined,
     };
   } catch (error) {
     return null;
@@ -368,10 +368,10 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
         | {
             enabled: boolean;
             scope?: 'thread' | 'resource';
-            observationThreshold?: number | { min: number; max: number };
-            reflectionThreshold?: number | { min: number; max: number };
-            observerModel?: string;
-            reflectorModel?: string;
+            messageTokens?: number | { min: number; max: number };
+            observationTokens?: number | { min: number; max: number };
+            observationModel?: string;
+            reflectionModel?: string;
           }
         | undefined;
 

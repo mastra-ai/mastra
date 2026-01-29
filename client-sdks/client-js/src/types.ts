@@ -922,10 +922,10 @@ export interface GetMemoryConfigResponseExtended {
     observationalMemory?: {
       enabled: boolean;
       scope?: 'thread' | 'resource';
-      observationThreshold?: number | { min: number; max: number };
-      reflectionThreshold?: number | { min: number; max: number };
-      observerModel?: string;
-      reflectorModel?: string;
+      messageTokens?: number | { min: number; max: number };
+      observationTokens?: number | { min: number; max: number };
+      observationModel?: string;
+      reflectionModel?: string;
     };
   };
 }

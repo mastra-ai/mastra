@@ -410,25 +410,28 @@ export interface ObservationalMemoryModelSettings {
 }
 
 /**
- * Configuration for the Observer agent in Observational Memory.
+ * Configuration for the observation step in Observational Memory.
  */
-export interface ObservationalMemoryObserverConfig {
+export interface ObservationalMemoryObservationConfig {
   /**
    * Model for the Observer agent.
    * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
    * a function that returns either (for dynamic model selection),
    * or an array of ModelWithRetries for fallback support.
+   *
+   * Cannot be set if a top-level `model` is also provided.
+   *
    * @default 'google/gemini-2.5-flash'
    */
   model?: ObservationalMemoryModelConfig;
 
   /**
-   * Token threshold for message history before triggering observation.
-   * When unobserved messages exceed this, Observer is called.
+   * Token count of unobserved messages that triggers observation.
+   * When unobserved message tokens exceed this, the Observer is called.
    *
-   * @default 10000
+   * @default 30000
    */
-  threshold?: number;
+  messageTokens?: number;
 
   /**
    * Model settings for the Observer agent.
@@ -448,25 +451,28 @@ export interface ObservationalMemoryObserverConfig {
 }
 
 /**
- * Configuration for the Reflector agent in Observational Memory.
+ * Configuration for the reflection step in Observational Memory.
  */
-export interface ObservationalMemoryReflectorConfig {
+export interface ObservationalMemoryReflectionConfig {
   /**
    * Model for the Reflector agent.
    * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
    * a function that returns either (for dynamic model selection),
    * or an array of ModelWithRetries for fallback support.
+   *
+   * Cannot be set if a top-level `model` is also provided.
+   *
    * @default 'google/gemini-2.5-flash'
    */
   model?: ObservationalMemoryModelConfig;
 
   /**
-   * Token threshold for observations before triggering reflection.
-   * When observations exceed this, Reflector is called to condense them.
+   * Token count of observations that triggers reflection.
+   * When observation tokens exceed this, the Reflector is called to condense them.
    *
-   * @default 30000
+   * @default 40000
    */
-  threshold?: number;
+  observationTokens?: number;
 
   /**
    * Model settings for the Reflector agent.
@@ -482,18 +488,22 @@ export interface ObservationalMemoryReflectorConfig {
  * to extract observations from conversations and a Reflector agent to compress them.
  * This enables efficient long-term memory with minimal context usage.
  *
+ * Can be set to `true` to enable with defaults, or an object to customize.
+ *
  * @example
  * ```typescript
+ * // Enable with defaults
+ * observationalMemory: true
+ *
+ * // Custom configuration
  * observationalMemory: {
- *   enabled: true,
- *   scope: 'resource', // Cross-thread memory for the user
- *   observer: {
- *     model: 'google/gemini-2.5-flash',
- *     threshold: 10_000,
+ *   scope: 'resource',
+ *   model: 'google/gemini-2.5-flash',
+ *   observation: {
+ *     messageTokens: 20_000,
  *   },
- *   reflector: {
- *     model: 'google/gemini-2.5-flash',
- *     threshold: 30_000,
+ *   reflection: {
+ *     observationTokens: 90_000,
  *   },
  * }
  * ```
@@ -501,19 +511,31 @@ export interface ObservationalMemoryReflectorConfig {
 export interface ObservationalMemoryOptions {
   /**
    * Enable or disable Observational Memory.
-   * @default false
+   * When omitted, defaults to `true` (enabled).
+   * Only `enabled: false` explicitly disables it.
+   *
+   * @default true
    */
   enabled?: boolean;
 
   /**
-   * Observer configuration for extracting observations from conversations.
+   * Model for both Observer and Reflector agents.
+   * Sets the model for both agents at once. Cannot be used together with
+   * `observation.model` or `reflection.model` — an error will be thrown.
+   *
+   * @default 'google/gemini-2.5-flash'
    */
-  observer?: ObservationalMemoryObserverConfig;
+  model?: ObservationalMemoryModelConfig;
 
   /**
-   * Reflector configuration for compressing observations.
+   * Observation step configuration for extracting observations from conversations.
    */
-  reflector?: ObservationalMemoryReflectorConfig;
+  observation?: ObservationalMemoryObservationConfig;
+
+  /**
+   * Reflection step configuration for compressing observations.
+   */
+  reflection?: ObservationalMemoryReflectionConfig;
 
   /**
    * Memory scope for observations.
@@ -525,17 +547,8 @@ export interface ObservationalMemoryOptions {
   scope?: 'resource' | 'thread';
 
   /**
-   * Only observe messages created after OM is enabled.
-   * When true (default), historical messages are skipped on first observation.
-   * This prevents churning through millions of existing messages.
-   *
-   * @default false
-   */
-  observeFutureOnly?: boolean;
-
-  /**
-   * Enable adaptive threshold that shares budget between messages and observations.
-   * When true, the total budget = observer.threshold + reflector.threshold.
+   * Share the token budget between messages and observations.
+   * When true, the total budget = observation.messageTokens + reflection.observationTokens.
    * - Messages can use more space when observations are small
    * - Observations can use more space when messages are small
    *
@@ -543,7 +556,36 @@ export interface ObservationalMemoryOptions {
    *
    * @default false
    */
-  adaptiveThreshold?: boolean;
+  shareTokenBudget?: boolean;
+}
+
+/**
+ * Check if observational memory is enabled from a `boolean | ObservationalMemoryOptions` value.
+ *
+ * - `true` → enabled
+ * - `false` → disabled
+ * - `{ enabled: false }` → disabled
+ * - `{ ... }` (without `enabled: false`) → enabled
+ * - `undefined` → disabled
+ */
+export function isObservationalMemoryEnabled(
+  config: boolean | ObservationalMemoryOptions | undefined,
+): config is true | ObservationalMemoryOptions {
+  if (config === true) return true;
+  if (config === false || config === undefined) return false;
+  return config.enabled !== false;
+}
+
+/**
+ * Normalize a `boolean | ObservationalMemoryOptions` value to `ObservationalMemoryOptions`.
+ * Returns `undefined` if disabled.
+ */
+export function normalizeObservationalMemoryConfig(
+  config: boolean | ObservationalMemoryOptions | undefined,
+): ObservationalMemoryOptions | undefined {
+  if (!isObservationalMemoryEnabled(config)) return undefined;
+  if (config === true) return {};
+  return config;
 }
 
 /**
@@ -631,23 +673,27 @@ export type MemoryConfig = {
    * to compress them when they grow too large. This enables efficient long-term memory
    * that maintains context across many conversations.
    *
+   * Set to `true` to enable with defaults, `false` to disable, or an object to customize.
+   *
    * @example
    * ```typescript
+   * // Enable with defaults
+   * observationalMemory: true
+   *
+   * // Custom configuration
    * observationalMemory: {
-   *   enabled: true,
-   *   scope: 'resource', // Cross-thread memory for the user
-   *   observer: {
-   *     model: 'google/gemini-2.5-flash',
-   *     observationThreshold: 10_000,
+   *   scope: 'resource',
+   *   model: 'google/gemini-2.5-flash',
+   *   observation: {
+   *     messageTokens: 20_000,
    *   },
-   *   reflector: {
-   *     model: 'google/gemini-2.5-flash',
-   *     reflectionThreshold: 30_000,
+   *   reflection: {
+   *     observationTokens: 90_000,
    *   },
    * }
    * ```
    */
-  observationalMemory?: ObservationalMemoryOptions;
+  observationalMemory?: boolean | ObservationalMemoryOptions;
 
   /**
    * Automatically generate descriptive thread titles based on the first user message.

@@ -5,11 +5,11 @@ import { createContext, useContext, useState, useCallback, ReactNode } from 'rea
 /** Progress data streamed from OM in real-time */
 export interface OmProgressData {
   pendingTokens: number;
-  threshold: number;
-  thresholdPercent: number;
+  messageTokens: number;
+  messageTokensPercent: number;
   observationTokens: number;
-  reflectionThreshold: number;
-  reflectionThresholdPercent: number;
+  observationTokensThreshold: number;
+  observationTokensPercent: number;
   willObserve: boolean;
   recordId: string;
   threadId: string;

@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils';
  * These match the types defined in @mastra/memory.
  */
 export interface ObservationMarkerConfig {
-  observationThreshold: number;
-  reflectionThreshold: number;
+  messageTokens: number;
+  observationTokens: number;
   scope: 'thread' | 'resource';
 }
 

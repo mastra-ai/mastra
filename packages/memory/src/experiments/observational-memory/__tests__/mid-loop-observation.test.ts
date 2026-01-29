@@ -115,14 +115,14 @@ describe('Mid-Loop Observation', () => {
     om = new ObservationalMemory({
       storage,
       scope: 'thread', // Use thread scope for simpler testing
-      observeFutureOnly: false, // Include all messages for testing
-      observer: {
+      
+      observation: {
         model: createMockObserverModel(),
-        observationThreshold: 500, // Low threshold for testing
+        messageTokens: 500, // Low threshold for testing
       },
-      reflector: {
+      reflection: {
         model: createMockObserverModel(),
-        reflectionThreshold: 50000, // High to prevent reflection
+        observationTokens: 50000, // High to prevent reflection
       },
     });
   });

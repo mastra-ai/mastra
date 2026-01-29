@@ -12,7 +12,7 @@ import type {
   WorkingMemoryTemplate,
   MessageDeleteInput,
 } from '@mastra/core/memory';
-import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
+import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags, normalizeObservationalMemoryConfig } from '@mastra/core/memory';
 import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -1575,8 +1575,8 @@ Notes:
     const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
 
     // Add ObservationalMemory processor if configured and not already present
-    const omConfig = effectiveConfig.observationalMemory;
-    if (!omConfig?.enabled || hasObservationalMemory) {
+    const omConfig = normalizeObservationalMemoryConfig(effectiveConfig.observationalMemory);
+    if (!omConfig || hasObservationalMemory) {
       return null;
     }
 
@@ -1610,21 +1610,21 @@ Notes:
     return new ObservationalMemory({
       storage: memoryStore,
       scope: omConfig.scope,
-      observeFutureOnly: omConfig.observeFutureOnly,
-      adaptiveThreshold: omConfig.adaptiveThreshold,
-      observer: omConfig.observer
+      shareTokenBudget: omConfig.shareTokenBudget,
+      model: omConfig.model,
+      observation: omConfig.observation
         ? {
-            model: omConfig.observer.model,
-            observationThreshold: omConfig.observer.threshold,
-            modelSettings: omConfig.observer.modelSettings,
-            maxTokensPerBatch: omConfig.observer.maxTokensPerBatch,
+            model: omConfig.observation.model,
+            messageTokens: omConfig.observation.messageTokens,
+            modelSettings: omConfig.observation.modelSettings,
+            maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
           }
         : undefined,
-      reflector: omConfig.reflector
+      reflection: omConfig.reflection
         ? {
-            model: omConfig.reflector.model,
-            reflectionThreshold: omConfig.reflector.threshold,
-            modelSettings: omConfig.reflector.modelSettings,
+            model: omConfig.reflection.model,
+            observationTokens: omConfig.reflection.observationTokens,
+            modelSettings: omConfig.reflection.modelSettings,
           }
         : undefined,
     });

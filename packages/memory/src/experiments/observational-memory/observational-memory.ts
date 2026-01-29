@@ -75,8 +75,8 @@ import {
 } from './reflector-agent';
 import { TokenCounter } from './token-counter';
 import type {
-  ObserverConfig,
-  ReflectorConfig,
+  ObservationConfig,
+  ReflectionConfig,
   ThresholdRange,
   ModelSettings,
   ProviderOptions,
@@ -388,14 +388,23 @@ export interface ObservationalMemoryConfig {
   storage: MemoryStorage;
 
   /**
-   * Observer configuration
+   * Model for both Observer and Reflector agents.
+   * Sets the model for both agents at once. Cannot be used together with
+   * `observation.model` or `reflection.model` — an error will be thrown.
+   *
+   * @default 'google/gemini-2.5-flash'
    */
-  observer?: ObserverConfig;
+  model?: ObservationalMemoryModelConfig;
 
   /**
-   * Reflector configuration
+   * Observation step configuration.
    */
-  reflector?: ReflectorConfig;
+  observation?: ObservationConfig;
+
+  /**
+   * Reflection step configuration.
+   */
+  reflection?: ReflectionConfig;
 
   /**
    * Memory scope for observations.
@@ -414,17 +423,8 @@ export interface ObservationalMemoryConfig {
   obscureThreadIds?: boolean;
 
   /**
-   * Only observe messages created after OM is enabled.
-   * When true (default), historical messages are skipped on first observation.
-   * This prevents churning through millions of existing messages.
-   *
-   * @default true
-   */
-  observeFutureOnly?: boolean;
-
-  /**
-   * Enable adaptive threshold that shares budget between messages and observations.
-   * When true, the total budget = observer.threshold + reflector.threshold.
+   * Share the token budget between messages and observations.
+   * When true, the total budget = observation.messageTokens + reflection.observationTokens.
    * - Messages can use more space when observations are small
    * - Observations can use more space when messages are small
    *
@@ -432,31 +432,31 @@ export interface ObservationalMemoryConfig {
    *
    * @default false
    */
-  adaptiveThreshold?: boolean;
+  shareTokenBudget?: boolean;
 }
 
 /**
  * Internal resolved config with all defaults applied.
  * Thresholds are stored as ThresholdRange internally for dynamic calculation,
- * even when user provides a simple number (converted based on adaptiveThreshold).
+ * even when user provides a simple number (converted based on shareTokenBudget).
  */
-interface ResolvedObserverConfig {
+interface ResolvedObservationConfig {
   model: ObservationalMemoryModelConfig;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
-  observationThreshold: number | ThresholdRange;
-  /** Whether adaptive threshold is enabled */
-  adaptiveThreshold: boolean;
+  messageTokens: number | ThresholdRange;
+  /** Whether shared token budget is enabled */
+  shareTokenBudget: boolean;
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
   maxTokensPerBatch: number;
 }
 
-interface ResolvedReflectorConfig {
+interface ResolvedReflectionConfig {
   model: ObservationalMemoryModelConfig;
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
-  reflectionThreshold: number | ThresholdRange;
-  /** Whether adaptive threshold is enabled */
-  adaptiveThreshold: boolean;
+  observationTokens: number | ThresholdRange;
+  /** Whether shared token budget is enabled */
+  shareTokenBudget: boolean;
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
 }
@@ -465,9 +465,9 @@ interface ResolvedReflectorConfig {
  * Default configuration values matching the spec
  */
 export const OBSERVATIONAL_MEMORY_DEFAULTS = {
-  observer: {
+  observation: {
     model: 'google/gemini-2.5-flash',
-    observationThreshold: 30_000,
+    messageTokens: 30_000,
     modelSettings: {
       temperature: 0.3,
       maxOutputTokens: 100_000,
@@ -480,9 +480,9 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
       },
     },
   },
-  reflector: {
+  reflection: {
     model: 'google/gemini-2.5-flash',
-    reflectionThreshold: 40_000,
+    observationTokens: 40_000,
     modelSettings: {
       temperature: 0, // Use 0 for maximum consistency in reflections
       maxOutputTokens: 100_000,
@@ -540,16 +540,14 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
  * // Full configuration
  * const om = new ObservationalMemory({
  *   storage,
- *   observer: {
- *     model: 'google/gemini-2.5-flash',
- *     observationThreshold: 10_000, // or { min: 8_000, max: 15_000 }
- *     bufferEvery: 4_000,
+ *   model: 'google/gemini-2.5-flash', // shared model for both agents
+ *   shareTokenBudget: true,
+ *   observation: {
+ *     messageTokens: 30_000,
  *     modelSettings: { temperature: 0.3 },
  *   },
- *   reflector: {
- *     model: 'google/gemini-2.5-flash',
- *     reflectionThreshold: 30_000,
- *     bufferEvery: 15_000,
+ *   reflection: {
+ *     observationTokens: 40_000,
  *   },
  * });
  *
@@ -566,8 +564,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
   private scope: 'resource' | 'thread';
-  private observerConfig: ResolvedObserverConfig;
-  private reflectorConfig: ResolvedReflectorConfig;
+  private observationConfig: ResolvedObservationConfig;
+  private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
 
   /** Internal Observer agent - created lazily */
@@ -604,9 +602,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /** Whether to consolidate patterns in Reflector */
   private reflectorRecognizePatterns: boolean;
-
-  /** Only observe messages created after OM is enabled */
-  private observeFutureOnly: boolean;
 
   /** Internal MessageHistory for message persistence */
   private messageHistory: MessageHistory;
@@ -666,63 +661,77 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   constructor(config: ObservationalMemoryConfig) {
+    // Validate that top-level model is not used together with sub-config models
+    if (config.model && config.observation?.model) {
+      throw new Error(
+        'Cannot set both `model` and `observation.model`. Use `model` to set both agents, or set each individually.',
+      );
+    }
+    if (config.model && config.reflection?.model) {
+      throw new Error(
+        'Cannot set both `model` and `reflection.model`. Use `model` to set both agents, or set each individually.',
+      );
+    }
+
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
     // Pattern recognition is disabled - kept for potential future use
     this.observerRecognizePatterns = false;
     this.reflectorRecognizePatterns = false;
-    this.observeFutureOnly = config.observeFutureOnly ?? false;
 
-    // Get base thresholds first (needed for adaptive calculation)
-    const observerThreshold =
-      config.observer?.observationThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold;
-    const reflectorThreshold =
-      config.reflector?.reflectionThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold;
-    const isAdaptive = config.adaptiveThreshold ?? false;
+    // Resolve model: top-level model takes precedence, then sub-config, then default
+    const observationModel =
+      config.model ?? config.observation?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
+    const reflectionModel =
+      config.model ?? config.reflection?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
 
-    // Total context budget when adaptive is enabled
-    const totalBudget = observerThreshold + reflectorThreshold;
+    // Get base thresholds first (needed for shared budget calculation)
+    const messageTokens =
+      config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens;
+    const observationTokens =
+      config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
+    const isSharedBudget = config.shareTokenBudget ?? false;
 
-    // Debug: log adaptive threshold config
-    omDebug(`[OM] Observer config: threshold=${observerThreshold}, adaptive=${isAdaptive}, totalBudget=${totalBudget}`);
+    // Total context budget when shared budget is enabled
+    const totalBudget = messageTokens + observationTokens;
 
-    // Resolve observer config with defaults
-    this.observerConfig = {
-      model: config.observer?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model,
-      // When adaptive, store as range: min = base threshold, max = total budget
+    // Debug: log threshold config
+    omDebug(`[OM] Observation config: messageTokens=${messageTokens}, sharedBudget=${isSharedBudget}, totalBudget=${totalBudget}`);
+
+    // Resolve observation config with defaults
+    this.observationConfig = {
+      model: observationModel,
+      // When shared budget, store as range: min = base threshold, max = total budget
       // This allows messages to expand into unused observation space
-      observationThreshold: isAdaptive ? { min: observerThreshold, max: totalBudget } : observerThreshold,
-      adaptiveThreshold: isAdaptive,
+      messageTokens: isSharedBudget ? { min: messageTokens, max: totalBudget } : messageTokens,
+      shareTokenBudget: isSharedBudget,
       modelSettings: {
         temperature:
-          config.observer?.modelSettings?.temperature ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.observer.modelSettings.temperature,
+          config.observation?.modelSettings?.temperature ??
+          OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature,
         maxOutputTokens:
-          config.observer?.modelSettings?.maxOutputTokens ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.observer.modelSettings.maxOutputTokens,
+          config.observation?.modelSettings?.maxOutputTokens ??
+          OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens,
       },
-      providerOptions: config.observer?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.providerOptions,
-      maxTokensPerBatch: config.observer?.maxTokensPerBatch ?? 5000,
+      providerOptions: config.observation?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.providerOptions,
+      maxTokensPerBatch: config.observation?.maxTokensPerBatch ?? 5000,
     };
 
-    // Resolve reflector config with defaults
-    // Note: reflector adaptive threshold would work similarly but in reverse
-    // (observation budget expands when message history is small)
-    // For now, reflector just uses fixed threshold
-    this.reflectorConfig = {
-      model: config.reflector?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.model,
-      reflectionThreshold: reflectorThreshold,
-      adaptiveThreshold: isAdaptive,
+    // Resolve reflection config with defaults
+    this.reflectionConfig = {
+      model: reflectionModel,
+      observationTokens: observationTokens,
+      shareTokenBudget: isSharedBudget,
       modelSettings: {
         temperature:
-          config.reflector?.modelSettings?.temperature ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.reflector.modelSettings.temperature,
+          config.reflection?.modelSettings?.temperature ??
+          OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature,
         maxOutputTokens:
-          config.reflector?.modelSettings?.maxOutputTokens ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.reflector.modelSettings.maxOutputTokens,
+          config.reflection?.modelSettings?.maxOutputTokens ??
+          OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens,
       },
-      providerOptions: config.reflector?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.providerOptions,
+      providerOptions: config.reflection?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.providerOptions,
     };
 
     this.tokenCounter = new TokenCounter();
@@ -732,9 +741,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // OM handles message saving itself (in processOutputStep) instead of relying on
     // the Memory class's MessageHistory processor
     this.messageHistory = new MessageHistory({ storage: this.storage });
-
-    // ASYNC BUFFERING DISABLED - validation not needed
-    // this.validateBufferConfig();
   }
 
   /**
@@ -743,20 +749,20 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   get config(): {
     scope: 'resource' | 'thread';
-    observer: {
-      observationThreshold: number | ThresholdRange;
+    observation: {
+      messageTokens: number | ThresholdRange;
     };
-    reflector: {
-      reflectionThreshold: number | ThresholdRange;
+    reflection: {
+      observationTokens: number | ThresholdRange;
     };
   } {
     return {
       scope: this.scope,
-      observer: {
-        observationThreshold: this.observerConfig.observationThreshold,
+      observation: {
+        messageTokens: this.observationConfig.messageTokens,
       },
-      reflector: {
-        reflectionThreshold: this.reflectorConfig.reflectionThreshold,
+      reflection: {
+        observationTokens: this.reflectionConfig.observationTokens,
       },
     };
   }
@@ -767,19 +773,19 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   async getResolvedConfig(requestContext?: RequestContext): Promise<{
     scope: 'resource' | 'thread';
-    observer: {
-      observationThreshold: number | ThresholdRange;
+    observation: {
+      messageTokens: number | ThresholdRange;
       model: string;
     };
-    reflector: {
-      reflectionThreshold: number | ThresholdRange;
+    reflection: {
+      observationTokens: number | ThresholdRange;
       model: string;
     };
   }> {
     // Helper to get the model config to resolve (handles ModelWithRetries[] by taking first)
     const getModelToResolve = (model: ObservationalMemoryModelConfig) => {
       if (Array.isArray(model)) {
-        return model[0]?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model;
+        return model[0]?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
       }
       return model;
     };
@@ -804,20 +810,20 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
     };
 
-    const [observerModelName, reflectorModelName] = await Promise.all([
-      safeResolveModel(this.observerConfig.model),
-      safeResolveModel(this.reflectorConfig.model),
+    const [observationModelName, reflectionModelName] = await Promise.all([
+      safeResolveModel(this.observationConfig.model),
+      safeResolveModel(this.reflectionConfig.model),
     ]);
 
     return {
       scope: this.scope,
-      observer: {
-        observationThreshold: this.observerConfig.observationThreshold,
-        model: observerModelName,
+      observation: {
+        messageTokens: this.observationConfig.messageTokens,
+        model: observationModelName,
       },
-      reflector: {
-        reflectionThreshold: this.reflectorConfig.reflectionThreshold,
-        model: reflectorModelName,
+      reflection: {
+        observationTokens: this.reflectionConfig.observationTokens,
+        model: reflectionModelName,
       },
     };
   }
@@ -836,17 +842,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   //  * Validate that bufferEvery is less than the threshold
   //  */
   // private validateBufferConfig(): void {
-  //   const observerThreshold = this.getMaxThreshold(this.observerConfig.observationThreshold);
-  //   if (this.observerConfig.bufferEvery && this.observerConfig.bufferEvery >= observerThreshold) {
+  //   const observationThreshold = this.getMaxThreshold(this.observationConfig.messageTokens);
+  //   if (this.observationConfig.bufferEvery && this.observationConfig.bufferEvery >= observationThreshold) {
   //     throw new Error(
-  //       `observer.bufferEvery (${this.observerConfig.bufferEvery}) must be less than observationThreshold (${observerThreshold})`,
+  //       `observation.bufferEvery (${this.observationConfig.bufferEvery}) must be less than messageTokens (${observationThreshold})`,
   //     );
   //   }
 
-  //   const reflectorThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
-  //   if (this.reflectorConfig.bufferEvery && this.reflectorConfig.bufferEvery >= reflectorThreshold) {
+  //   const reflectionThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+  //   if (this.reflectionConfig.bufferEvery && this.reflectionConfig.bufferEvery >= reflectionThreshold) {
   //     throw new Error(
-  //       `reflector.bufferEvery (${this.reflectorConfig.bufferEvery}) must be less than reflectionThreshold (${reflectorThreshold})`,
+  //       `reflection.bufferEvery (${this.reflectionConfig.bufferEvery}) must be less than observationTokens (${reflectionThreshold})`,
   //     );
   //   }
   // }
@@ -863,16 +869,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /**
    * Calculate dynamic threshold based on observation space.
-   * When adaptiveThreshold is enabled, the message threshold can expand
+   * When shareTokenBudget is enabled, the message threshold can expand
    * into unused observation space, up to the total context budget.
    *
-   * Total budget = observationThreshold + reflectionThreshold
+   * Total budget = messageTokens + observationTokens
    * Effective threshold = totalBudget - currentObservationTokens
    *
-   * Example with 20k:20k thresholds (40k total):
-   * - 0 observations → messages can use ~40k
-   * - 3k observations → messages can use ~37k
-   * - 20k observations → messages back to ~20k
+   * Example with 30k:40k thresholds (70k total):
+   * - 0 observations → messages can use ~70k
+   * - 10k observations → messages can use ~60k
+   * - 40k observations → messages back to ~30k
    */
   private calculateDynamicThreshold(threshold: number | ThresholdRange, currentObservationTokens: number): number {
     // If not using adaptive threshold (simple number), return as-is
@@ -905,7 +911,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         id: 'observational-memory-observer',
         name: 'Observer',
         instructions: systemPrompt,
-        model: this.observerConfig.model,
+        model: this.observationConfig.model,
       });
     }
     return this.observerAgent;
@@ -923,7 +929,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         id: 'observational-memory-reflector',
         name: 'Reflector',
         instructions: systemPrompt,
-        model: this.reflectorConfig.model,
+        model: this.reflectionConfig.model,
       });
     }
     return this.reflectorAgent;
@@ -953,30 +959,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     let record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
 
     if (!record) {
-      // When observeFutureOnly is true, set lastObservedAt to now so we skip historical messages
-      const initialLastObservedAt = this.observeFutureOnly ? new Date() : undefined;
-
       record = await this.storage.initializeObservationalMemory({
         threadId: ids.threadId,
         resourceId: ids.resourceId,
         scope: this.scope,
         config: {
-          observer: this.observerConfig,
-          reflector: this.reflectorConfig,
+          observation: this.observationConfig,
+          reflection: this.reflectionConfig,
           scope: this.scope,
         },
       });
-
-      // If observeFutureOnly, immediately update the record with the current timestamp
-      if (initialLastObservedAt && record.id) {
-        await this.storage.updateActiveObservations({
-          id: record.id,
-          observations: record.activeObservations || '',
-          tokenCount: 0,
-          lastObservedAt: initialLastObservedAt,
-        });
-        record.lastObservedAt = initialLastObservedAt;
-      }
     }
 
     return record;
@@ -986,7 +978,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Check if we need to trigger reflection.
    */
   private shouldReflect(observationTokens: number): boolean {
-    const threshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
+    const threshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
     return observationTokens > threshold;
   }
 
@@ -1003,7 +995,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   //  * - No buffering is already in progress for this record
   //  */
   // private shouldStartObservationBuffering(recordId: string, messageTokens: number, observationTokens: number): boolean {
-  //   const bufferEvery = this.observerConfig.bufferEvery;
+  //   const bufferEvery = this.observationConfig.bufferEvery;
   //   if (!bufferEvery) return false;
 
   //   // Check if buffering is already in progress
@@ -1014,9 +1006,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   //   // Check if we've crossed bufferEvery but not the main threshold
   //   const mainThreshold = this.calculateDynamicThreshold(
-  //     this.observerConfig.observationThreshold,
+  //     this.observationConfig.messageTokens,
   //     observationTokens,
-  //     this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
+  //     this.getMaxThreshold(this.reflectionConfig.observationTokens),
   //   );
 
   //   return messageTokens >= bufferEvery && messageTokens < mainThreshold;
@@ -1026,14 +1018,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   //  * Check if we should start buffering reflections.
   //  */
   // private shouldStartReflectionBuffering(recordId: string, observationTokens: number): boolean {
-  //   const bufferEvery = this.reflectorConfig.bufferEvery;
+  //   const bufferEvery = this.reflectionConfig.bufferEvery;
   //   if (!bufferEvery) return false;
 
   //   // Check if buffering is already in progress
   //   if (this.reflectionBuffering.has(recordId)) return false;
 
   //   // Check if we've crossed bufferEvery but not the main threshold
-  //   const mainThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
+  //   const mainThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
 
   //   return observationTokens >= bufferEvery && observationTokens < mainThreshold;
   // }
@@ -1165,8 +1157,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getObservationMarkerConfig(): ObservationMarkerConfig {
     return {
-      observationThreshold: this.getMaxThreshold(this.observerConfig.observationThreshold),
-      reflectionThreshold: this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
+      messageTokens: this.getMaxThreshold(this.observationConfig.messageTokens),
+      observationTokens: this.getMaxThreshold(this.reflectionConfig.observationTokens),
       scope: this.scope,
     };
   }
@@ -1509,10 +1501,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       () =>
         agent.generate(prompt, {
           modelSettings: {
-            temperature: this.observerConfig.modelSettings.temperature,
-            maxOutputTokens: this.observerConfig.modelSettings.maxOutputTokens,
+            temperature: this.observationConfig.modelSettings.temperature,
+            maxOutputTokens: this.observationConfig.modelSettings.maxOutputTokens,
           },
-          providerOptions: this.observerConfig.providerOptions as any,
+          providerOptions: this.observationConfig.providerOptions as any,
           abortSignal,
         }),
       abortSignal,
@@ -1567,7 +1559,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const agent = new Agent({
       id: 'multi-thread-observer',
       name: 'multi-thread-observer',
-      model: this.observerConfig.model,
+      model: this.observationConfig.model,
       instructions: buildObserverSystemPrompt(this.observerRecognizePatterns, true),
     });
 
@@ -1619,10 +1611,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       () =>
         agent.generate(prompt, {
           modelSettings: {
-            temperature: this.observerConfig.modelSettings.temperature,
-            maxOutputTokens: this.observerConfig.modelSettings.maxOutputTokens,
+            temperature: this.observationConfig.modelSettings.temperature,
+            maxOutputTokens: this.observationConfig.modelSettings.maxOutputTokens,
           },
-          providerOptions: this.observerConfig.providerOptions as any,
+          providerOptions: this.observationConfig.providerOptions as any,
           abortSignal,
         }),
       abortSignal,
@@ -1691,7 +1683,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       recordId: string;
       threadId: string;
     },
-    reflectionThreshold?: number,
+    observationTokensThreshold?: number,
     abortSignal?: AbortSignal,
   ): Promise<{
     observations: string;
@@ -1726,7 +1718,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const originalTokens = this.tokenCounter.countObservations(observationsWithPatterns);
 
     // Get the target threshold - use provided value or fall back to config
-    const targetThreshold = reflectionThreshold ?? this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
+    const targetThreshold = observationTokensThreshold ?? this.getMaxThreshold(this.reflectionConfig.observationTokens);
 
     // Track total usage across attempts
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -1737,10 +1729,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       () =>
         agent.generate(prompt, {
           modelSettings: {
-            temperature: this.reflectorConfig.modelSettings.temperature,
-            maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
+            temperature: this.reflectionConfig.modelSettings.temperature,
+            maxOutputTokens: this.reflectionConfig.modelSettings.maxOutputTokens,
           },
-          providerOptions: this.reflectorConfig.providerOptions as any,
+          providerOptions: this.reflectionConfig.providerOptions as any,
           abortSignal,
         }),
       abortSignal,
@@ -1799,10 +1791,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         () =>
           agent.generate(prompt, {
             modelSettings: {
-              temperature: this.reflectorConfig.modelSettings.temperature,
-              maxOutputTokens: this.reflectorConfig.modelSettings.maxOutputTokens,
+              temperature: this.reflectionConfig.modelSettings.temperature,
+              maxOutputTokens: this.reflectionConfig.modelSettings.maxOutputTokens,
             },
-            providerOptions: this.reflectorConfig.providerOptions as any,
+            providerOptions: this.reflectionConfig.providerOptions as any,
             abortSignal,
           }),
         abortSignal,
@@ -2078,21 +2070,21 @@ ${suggestedResponse}
       const totalPendingTokens = pendingTokens + currentSessionTokens;
 
       const threshold = this.calculateDynamicThreshold(
-        this.observerConfig.observationThreshold,
+        this.observationConfig.messageTokens,
         currentObservationTokens,
       );
       // Calculate effective reflection threshold for UI display
       // When adaptive threshold is enabled, both thresholds share a budget
       // Reflection threshold = total budget - message threshold (what's left for observations)
-      const baseReflectionThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
-      const isAdaptive = typeof this.observerConfig.observationThreshold !== 'number';
-      const totalBudget = isAdaptive
-        ? (this.observerConfig.observationThreshold as { min: number; max: number }).max
+      const baseReflectionThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+      const isSharedBudget = typeof this.observationConfig.messageTokens !== 'number';
+      const totalBudget = isSharedBudget
+        ? (this.observationConfig.messageTokens as { min: number; max: number }).max
         : 0;
-      const effectiveReflectionThreshold = isAdaptive
+      const effectiveObservationTokensThreshold = isSharedBudget
         ? Math.max(totalBudget - threshold, 1000) // What's left after message threshold
         : baseReflectionThreshold;
-      const reflectionThresholdPercent = Math.round((currentObservationTokens / effectiveReflectionThreshold) * 100);
+      const observationTokensPercent = Math.round((currentObservationTokens / effectiveObservationTokensThreshold) * 100);
 
       omDebug(
         `[OM processInputStep] Token check: ${totalPendingTokens}/${threshold} (${Math.round((totalPendingTokens / threshold) * 100)}%)`,
@@ -2119,11 +2111,11 @@ ${suggestedResponse}
           type: 'data-om-progress',
           data: {
             pendingTokens: totalPendingTokens,
-            threshold,
-            thresholdPercent: Math.round((totalPendingTokens / threshold) * 100),
+            messageTokens: threshold,
+            messageTokensPercent: Math.round((totalPendingTokens / threshold) * 100),
             observationTokens: currentObservationTokens,
-            reflectionThreshold: effectiveReflectionThreshold,
-            reflectionThresholdPercent,
+            observationTokensThreshold: effectiveObservationTokensThreshold,
+            observationTokensPercent: observationTokensPercent,
             willObserve: totalPendingTokens >= threshold,
             recordId: record.id,
             threadId,
@@ -3033,7 +3025,7 @@ ${formattedMessages}
     // - Accumulate until we hit the threshold
     // - This prevents making many small Observer calls for 1-message threads
     // ════════════════════════════════════════════════════════════
-    const threshold = this.getMaxThreshold(this.observerConfig.observationThreshold);
+    const threshold = this.getMaxThreshold(this.observationConfig.messageTokens);
 
     // Calculate tokens per thread and sort by size (largest first)
     const threadTokenCounts = new Map<string, number>();
@@ -3208,7 +3200,7 @@ ${formattedMessages}
       // PARALLEL BATCHING: Chunk threads into batches and process in parallel
       // This combines batching efficiency with parallel execution
       // ════��═══════════════════════════════════════════════════════
-      const maxTokensPerBatch = this.observerConfig.maxTokensPerBatch ?? 5000;
+      const maxTokensPerBatch = this.observationConfig.maxTokensPerBatch ?? 5000;
       const orderedThreadIds = threadOrder.filter(tid => threadsWithMessages.has(tid));
 
       // Chunk threads into batches based on token count
@@ -3550,7 +3542,7 @@ ${formattedMessages}
       writeDebugEntry('maybeReflect:skip', {
         reason: 'below_threshold',
         observationTokens,
-        threshold: this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
+        threshold: this.getMaxThreshold(this.reflectionConfig.observationTokens),
       });
       return;
     }
@@ -3566,7 +3558,7 @@ ${formattedMessages}
       return;
     }
 
-    const reflectThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
+    const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
     omDebug(`[OM] Reflection threshold exceeded (${observationTokens} > ${reflectThreshold}), triggering Reflector`);
 
     // ════════════════════════════════════════════════════════════
@@ -3736,7 +3728,7 @@ ${formattedMessages}
     try {
       // Manual reflect also passes patterns if enabled
       const patternsToReflect = this.reflectorRecognizePatterns ? record.patterns : undefined;
-      const reflectThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
+      const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
       const reflectResult = await this.callReflector(
         record.activeObservations,
         prompt,
@@ -3810,16 +3802,16 @@ ${formattedMessages}
   }
 
   /**
-   * Get current observer configuration
+   * Get current observation configuration
    */
-  getObserverConfig(): ResolvedObserverConfig {
-    return this.observerConfig;
+  getObservationConfig(): ResolvedObservationConfig {
+    return this.observationConfig;
   }
 
   /**
-   * Get current reflector configuration
+   * Get current reflection configuration
    */
-  getReflectorConfig(): ResolvedReflectorConfig {
-    return this.reflectorConfig;
+  getReflectionConfig(): ResolvedReflectionConfig {
+    return this.reflectionConfig;
   }
 }

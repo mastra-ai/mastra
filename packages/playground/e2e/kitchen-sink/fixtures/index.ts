@@ -6,7 +6,7 @@ import {
   omObservationSuccessFixture,
   omObservationFailedFixture,
   omReflectionFixture,
-  omAdaptiveThresholdFixture,
+  omSharedBudgetFixture,
 } from './om-observation.fixture';
 
 export const fixtures: Record<Fixtures, Array<unknown>> = {
@@ -16,5 +16,5 @@ export const fixtures: Record<Fixtures, Array<unknown>> = {
   'om-observation-success': omObservationSuccessFixture,
   'om-observation-failed': omObservationFailedFixture,
   'om-reflection': omReflectionFixture,
-  'om-adaptive-threshold': omAdaptiveThresholdFixture,
+  'om-shared-budget': omSharedBudgetFixture,
 };

@@ -24,8 +24,8 @@ export interface OmMarkerData {
   _state?: 'loading' | 'complete' | 'failed';
   config?: {
     scope?: string;
-    observationThreshold?: number;
-    reflectionThreshold?: number;
+    messageTokens?: number;
+    observationTokens?: number;
   };
 }
 

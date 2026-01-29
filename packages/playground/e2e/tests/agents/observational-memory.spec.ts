@@ -305,7 +305,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
      */
     test('should show adaptive threshold indicator', async ({ page }) => {
       // ARRANGE
-      await selectFixture(page, 'om-adaptive-threshold');
+      await selectFixture(page, 'om-shared-budget');
       await page.goto('/agents/om-adaptive-agent/chat?new=true');
 
       // Wait for page to load

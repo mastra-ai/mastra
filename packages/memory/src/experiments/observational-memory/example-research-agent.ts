@@ -34,12 +34,12 @@ const messageHistory = new MessageHistory({
 const om = new ObservationalMemory({
   storage,
   scope: 'thread', // Single thread for this example
-  observer: {
-    observationThreshold: 200, // Low threshold - research generates lots of tokens
+  observation: {
+    messageTokens: 200, // Low threshold - research generates lots of tokens
     model: 'google/gemini-2.5-flash',
   },
-  reflector: {
-    reflectionThreshold: 2500,
+  reflection: {
+    observationTokens: 2500,
     model: 'google/gemini-2.5-flash',
   },
 });

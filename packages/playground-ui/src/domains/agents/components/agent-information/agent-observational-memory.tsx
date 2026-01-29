@@ -259,25 +259,25 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
       observationalMemory?: {
         enabled: boolean;
         scope?: 'thread' | 'resource';
-        observationThreshold?: number | { min: number; max: number };
-        reflectionThreshold?: number | { min: number; max: number };
-        observerModel?: string;
-        reflectorModel?: string;
+        messageTokens?: number | { min: number; max: number };
+        observationTokens?: number | { min: number; max: number };
+        observationModel?: string;
+        reflectionModel?: string;
       };
     }
   )?.observationalMemory;
   const recordConfig = record?.config as
     | {
-        observationThreshold?: number;
-        reflectionThreshold?: number;
-        observerModel?: string;
-        reflectorModel?: string;
+        messageTokens?: number;
+        observationTokens?: number;
+        observationModel?: string;
+        reflectionModel?: string;
       }
     | undefined;
 
   // Extract model names from config
-  const observerModel = recordConfig?.observerModel ?? omAgentConfig?.observerModel;
-  const reflectorModel = recordConfig?.reflectorModel ?? omAgentConfig?.reflectorModel;
+  const observationModel = recordConfig?.observationModel ?? omAgentConfig?.observationModel;
+  const reflectionModel = recordConfig?.reflectionModel ?? omAgentConfig?.reflectionModel;
 
   const getThresholdValue = (threshold: number | { min: number; max: number } | undefined, defaultValue: number) => {
     if (!threshold) return defaultValue;
@@ -296,31 +296,31 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
 
   // Check if adaptive mode is enabled (threshold is an object with min/max)
   const isAdaptiveMode =
-    omAgentConfig?.observationThreshold !== undefined && typeof omAgentConfig.observationThreshold !== 'number';
+    omAgentConfig?.messageTokens !== undefined && typeof omAgentConfig.messageTokens !== 'number';
 
-  // Get total budget for adaptive mode (stored as max in observation threshold)
-  const totalBudget = isAdaptiveMode ? getThresholdValue(omAgentConfig?.observationThreshold, 10000) : 0;
+  // Get total budget for adaptive mode (stored as max in message tokens threshold)
+  const totalBudget = isAdaptiveMode ? getThresholdValue(omAgentConfig?.messageTokens, 10000) : 0;
 
   // Base thresholds (configured values, before adaptive adjustment)
-  const baseObservationThreshold = isAdaptiveMode
-    ? getBaseThresholdValue(omAgentConfig?.observationThreshold, 10000)
+  const baseMessageTokens = isAdaptiveMode
+    ? getBaseThresholdValue(omAgentConfig?.messageTokens, 10000)
     : undefined;
-  const baseReflectionThreshold = isAdaptiveMode
-    ? getBaseThresholdValue(omAgentConfig?.reflectionThreshold, 30000)
+  const baseObservationTokens = isAdaptiveMode
+    ? getBaseThresholdValue(omAgentConfig?.observationTokens, 30000)
     : undefined;
 
   // Priority: streamProgress > recordConfig > agentConfig > defaults
   // For messages bar: use stream threshold (real-time effective) or total budget (max available)
-  const observationThreshold =
-    streamProgress?.threshold ??
-    recordConfig?.observationThreshold ??
-    getThresholdValue(omAgentConfig?.observationThreshold, 10000);
+  const messageTokensThreshold =
+    streamProgress?.messageTokens ??
+    recordConfig?.messageTokens ??
+    getThresholdValue(omAgentConfig?.messageTokens, 10000);
 
-  // For observations bar: use the configured reflection threshold (not calculated remaining)
+  // For observations bar: use the configured observation tokens threshold (not calculated remaining)
   // The adaptive logic is handled by the backend - UI just shows progress against configured threshold
-  const configReflectionThreshold = getThresholdValue(omAgentConfig?.reflectionThreshold, 30000);
-  const reflectionThreshold =
-    streamProgress?.reflectionThreshold ?? recordConfig?.reflectionThreshold ?? configReflectionThreshold;
+  const configObservationTokens = getThresholdValue(omAgentConfig?.observationTokens, 30000);
+  const observationTokensThreshold =
+    streamProgress?.observationTokensThreshold ?? recordConfig?.observationTokens ?? configObservationTokens;
 
   // Use stream progress token counts when available (real-time), fallback to record
   const pendingMessageTokens = streamProgress?.pendingTokens ?? record?.pendingMessageTokens ?? 0;
@@ -445,20 +445,20 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
         <div className="flex gap-3 mb-3">
           <ProgressBar
             value={pendingMessageTokens}
-            max={observationThreshold}
+            max={messageTokensThreshold}
             label="Messages"
             isActive={isObserving}
-            model={observerModel}
-            baseThreshold={baseObservationThreshold}
+            model={observationModel}
+            baseThreshold={baseMessageTokens}
             totalBudget={totalBudget}
           />
           <ProgressBar
             value={observationTokenCount}
-            max={reflectionThreshold}
+            max={observationTokensThreshold}
             label="Observations"
             isActive={isReflecting}
-            baseThreshold={baseReflectionThreshold}
-            model={reflectorModel}
+            baseThreshold={baseObservationTokens}
+            model={reflectionModel}
             totalBudget={totalBudget}
           />
         </div>

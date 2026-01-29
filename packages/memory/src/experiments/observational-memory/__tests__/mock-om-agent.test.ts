@@ -312,13 +312,13 @@ describe('Mock OM Agent Integration', () => {
       options: {
         observationalMemory: {
           enabled: true,
-          observer: {
+          observation: {
             model: createMockObserverModel() as any,
-            threshold: 20, // Very low threshold to ensure observation triggers
+            messageTokens: 20, // Very low threshold to ensure observation triggers
           },
-          reflector: {
+          reflection: {
             model: createMockReflectorModel() as any,
-            threshold: 50000, // High to prevent reflection
+            observationTokens: 50000, // High to prevent reflection
           },
         },
       },
