@@ -57,9 +57,9 @@ const result = await sandbox.executeCommand('echo', ['hello']);
     {
       name: "workingDirectory",
       type: "string",
-      description: "Directory for command execution",
+      description: "Directory for command execution. Defaults to .sandbox/ in process.cwd() for isolation from seatbelt profiles.",
       isOptional: true,
-      defaultValue: "process.cwd()",
+      defaultValue: "process.cwd()/.sandbox/",
     },
     {
       name: "env",
@@ -116,9 +116,9 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
       isOptional: true,
     },
     {
-      name: "seatbeltProfile",
+      name: "seatbeltProfilePath",
       type: "string",
-      description: "Custom seatbelt profile content (macOS only). Overrides auto-generated profile.",
+      description: "Path to a custom seatbelt profile file (macOS only). If the file exists, it's used; if not, a default profile is generated and written to this path.",
       isOptional: true,
     },
     {
@@ -287,16 +287,18 @@ When isolation is enabled:
 
 ### Sandbox profile location
 
-When using seatbelt isolation on macOS, `LocalSandbox` generates a profile file in a `.sandbox/` folder within the working directory:
+When using seatbelt isolation on macOS, `LocalSandbox` generates a profile file in a `.sandbox-profiles/` folder in `process.cwd()`, separate from the working directory:
 
 ```
-workspace/
-├── .sandbox/
-│   └── local-sandbox-abc123.sb    # Seatbelt profile
-└── ... your files
+project/
+├── .sandbox/                      # Default working directory (sandboxed)
+│   └── ... files created by sandbox
+├── .sandbox-profiles/             # Seatbelt profiles (outside sandbox)
+│   └── local-sandbox-abc123.sb
+└── ... your project files
 ```
 
-The profile is created when the sandbox starts and cleaned up when destroyed. The `.sandbox/` folder is automatically removed if empty after cleanup.
+This separation prevents sandboxed processes from reading or modifying their own security profiles. The profile is created when the sandbox starts and cleaned up when destroyed.
 
 ## Related
 

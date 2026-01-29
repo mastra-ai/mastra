@@ -43,6 +43,8 @@ describe('LocalSandbox', () => {
       expect(defaultSandbox.name).toBe('LocalSandbox');
       expect(defaultSandbox.id).toBeDefined();
       expect(defaultSandbox.status).toBe('stopped');
+      // Default working directory is .sandbox/ in cwd
+      expect(defaultSandbox.workingDirectory).toBe(path.join(process.cwd(), '.sandbox'));
     });
 
     it('should accept custom id', () => {
@@ -442,8 +444,8 @@ describe('LocalSandbox', () => {
 
       await seatbeltSandbox.start();
 
-      // Check that profile file was created in .sandbox folder (uses unique ID-based filename)
-      const profilePath = path.join(tempDir, '.sandbox', `${seatbeltSandbox.id}.sb`);
+      // Check that profile file was created in .sandbox-profiles folder (outside working directory)
+      const profilePath = path.join(process.cwd(), '.sandbox-profiles', `${seatbeltSandbox.id}.sb`);
       const profileExists = await fs
         .access(profilePath)
         .then(() => true)
@@ -596,8 +598,8 @@ describe('LocalSandbox', () => {
       });
 
       await seatbeltSandbox.start();
-      // Profile uses unique ID-based filename in .sandbox folder
-      const profilePath = path.join(tempDir, '.sandbox', `${seatbeltSandbox.id}.sb`);
+      // Profile uses unique ID-based filename in .sandbox-profiles folder (outside working directory)
+      const profilePath = path.join(process.cwd(), '.sandbox-profiles', `${seatbeltSandbox.id}.sb`);
 
       // Profile should exist
       expect(
