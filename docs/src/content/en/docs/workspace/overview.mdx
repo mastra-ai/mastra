@@ -37,29 +37,6 @@ const workspace = new Workspace({
 });
 ```
 
-## Initialization
-
-You can optionally call `init()` to initialize the workspace before use:
-
-```typescript
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-});
-
-await workspace.init();
-```
-
-### What init() does
-
-Initialization runs setup logic for each configured provider:
-
-- **LocalFilesystem**: Creates the base directory if it doesn't exist
-- **LocalSandbox**: Creates working directory
-- **Search**: Indexes files from `autoIndexPaths` (if configured)
-
-External providers may perform additional setup like establishing connections or authenticating.
-
 ## Global Workspace
 
 Set a workspace on the Mastra instance. All agents inherit this workspace unless they define their own:
@@ -96,6 +73,29 @@ export const myAgent = new Agent({
   workspace,
 });
 ```
+
+## Initialization
+
+You can optionally call `init()` to initialize the workspace before use:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+});
+
+await workspace.init();
+```
+
+### What init() does
+
+Initialization runs setup logic for each configured provider:
+
+- **LocalFilesystem**: Creates the base directory if it doesn't exist
+- **LocalSandbox**: Creates working directory
+- **Search**: Indexes files from `autoIndexPaths` (if configured)
+
+External providers may perform additional setup like establishing connections or authenticating.
 
 ## Tool Configuration
 
