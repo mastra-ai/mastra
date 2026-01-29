@@ -5956,23 +5956,42 @@ describe('Agent - network - abort functionality', () => {
       },
     });
 
+    let pullCalls = 0;
+
     // Sub-agent mock that aborts when called
     const subAgentMockModel = new MockLanguageModelV2({
+      // @ts-expect-error - error
       doGenerate: async () => {
-        // Trigger abort when sub-agent is called
+        await new Promise(resolve => setImmediate(resolve));
         abortController.abort();
-        throw new DOMException('The user aborted a request.', 'AbortError');
       },
-      doStream: async () => {
-        // Trigger abort when sub-agent is called
-        abortController.abort();
-        return {
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'error', error: new DOMException('The user aborted a request.', 'AbortError') },
-          ]),
-        };
-      },
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream({
+          pull(controller) {
+            switch (pullCalls++) {
+              case 0:
+                controller.enqueue({
+                  type: 'stream-start',
+                  warnings: [],
+                });
+                break;
+              case 1:
+                controller.enqueue({
+                  type: 'text-start',
+                  id: '1',
+                });
+                break;
+              case 2:
+                // Abort during streaming
+                abortController.abort();
+                controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                break;
+            }
+          },
+        }),
+      }),
     });
 
     const subAgent = new Agent({
@@ -6197,6 +6216,115 @@ describe('Agent - network - abort functionality', () => {
     // Abort chunk should be emitted
     const abortEvents = chunks.filter(c => c.type === 'tool-execution-abort');
     expect(abortEvents.length).toBeGreaterThan(0);
+  });
+
+  it('should call onAbort and emit abort event when abortSignal is triggered during workflow execution', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    // Create a workflow step that simulates some work and allows time for abort
+    const slowStep = createStep({
+      id: 'slow-step',
+      description: 'A step that takes time to execute',
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+      execute: async ({ inputData }) => {
+        // Trigger abort during workflow execution
+        abortController.abort();
+        // Simulate some async work
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return { result: `Researched ${inputData.city}` };
+      },
+    });
+
+    const testWorkflow = createWorkflow({
+      id: 'abort-test-workflow',
+      description: 'A workflow for testing abort functionality',
+      steps: [],
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+    })
+      .then(slowStep)
+      .commit();
+
+    // Routing response selects the workflow
+    const routingResponse = JSON.stringify({
+      primitiveId: 'abort-test-workflow',
+      primitiveType: 'workflow',
+      prompt: JSON.stringify({ city: 'Paris' }),
+      selectionReason: 'Using the workflow to research',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-workflow-test-network',
+      name: 'Abort Workflow Test Network',
+      instructions: 'Execute workflows',
+      model: mockModel,
+      workflows: { 'abort-test-workflow': testWorkflow },
+      memory,
+    });
+
+    let onAbortCalled = false;
+    let abortEventPayload: any = null;
+    const chunks: any[] = [];
+
+    const anStream = await networkAgent.network('Research Paris using the workflow', {
+      abortSignal: abortController.signal,
+      onAbort: event => {
+        onAbortCalled = true;
+        abortEventPayload = event;
+      },
+      memory: {
+        thread: 'abort-workflow-test-thread',
+        resource: 'abort-workflow-test-resource',
+      },
+    });
+
+    try {
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+    } catch {
+      // Abort may throw
+    }
+
+    // Verify onAbort was called
+    expect(onAbortCalled).toBe(true);
+    expect(abortEventPayload).toBeDefined();
+    expect(abortEventPayload.primitiveType).toBe('workflow');
+    expect(abortEventPayload.primitiveId).toBe('abort-test-workflow');
+
+    // Verify workflow-execution-abort event was emitted
+    const abortEvents = chunks.filter(c => c.type === 'workflow-execution-abort');
+    expect(abortEvents.length).toBeGreaterThan(0);
+    expect(abortEvents[0].payload.primitiveType).toBe('workflow');
+    expect(abortEvents[0].payload.primitiveId).toBe('abort-test-workflow');
   });
 
   it('should pass abortSignal to tool execute function', async () => {
