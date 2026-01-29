@@ -144,7 +144,12 @@ Plans:
 6. Mouse wheel events dispatched as CDP mouseWheel with delta normalized across browsers and clamped to prevent extreme jumps
 7. mouseMoved events throttled to max 30/sec using requestAnimationFrame to prevent WebSocket flood
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 12-01-PLAN.md -- TDD: Pure coordinate mapping, wheel normalization, and modifier key functions
+- [ ] 12-02-PLAN.md -- Extend useBrowserStream with viewport parsing and sendMessage
+- [ ] 12-03-PLAN.md -- useMouseInteraction hook and BrowserViewFrame wiring
 
 ---
 
@@ -215,11 +220,11 @@ Plans:
 | 9. Studio UI | v1.1 | 2/2 | Complete | 2026-01-28 |
 | 10. Infrastructure Foundations | v1.2 | 1/1 | Complete | 2026-01-29 |
 | 11. Server Input Routing | v1.2 | 1/1 | Complete | 2026-01-29 |
-| 12. Client Mapping & Click | v1.2 | 0/TBD | Not Started | -- |
+| 12. Client Mapping & Click | v1.2 | 0/3 | Not Started | -- |
 | 13. Focus & Keyboard | v1.2 | 0/TBD | Not Started | -- |
 | 14. Visual Feedback | v1.2 | 0/TBD | Not Started | -- |
 | 15. Input Coordination | v1.2 | 0/TBD | Not Started | -- |
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-29 — Phase 11 complete*
+*Last updated: 2026-01-29 -- Phase 12 planned (3 plans in 2 waves)*
