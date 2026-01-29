@@ -1,4 +1,3 @@
-import type { StorageScorerConfig } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,
@@ -249,6 +248,15 @@ function isVersionNumberConflictError(error: unknown): boolean {
     );
   }
   return false;
+}
+
+export interface StorageScorerConfig {
+  /** Sampling configuration for this scorer */
+  sampling?: {
+    type: 'ratio' | 'count';
+    rate?: number;
+    count?: number;
+  };
 }
 
 /**
