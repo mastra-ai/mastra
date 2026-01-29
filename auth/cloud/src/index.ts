@@ -6,18 +6,21 @@
  * @packageDocumentation
  */
 
+import { decodeJwt } from 'jose';
 import { MastraAuthProvider } from '@mastra/core/server';
-import type {
-  IUserProvider,
-  ISessionProvider,
-  ISSOProvider,
-  IRBACProvider,
-  SSOCallbackResult,
-  SSOLoginConfig,
+import {
+  resolvePermissions,
+  DEFAULT_ROLES,
+  type IUserProvider,
+  type ISessionProvider,
+  type ISSOProvider,
+  type IRBACProvider,
+  type SSOCallbackResult,
+  type SSOLoginConfig,
 } from '@mastra/core/ee';
-import { MastraCloudClient, type CloudUser, type CloudSession } from './client';
+import { MastraCloudClient, CloudApiError, type CloudUser, type CloudSession } from './client';
 
-export { MastraCloudClient, CloudApiError, type CloudUser, type CloudSession } from './client';
+export { MastraCloudClient, CloudApiError, type CloudUser, type CloudSession, type JWTClaims } from './client';
 
 /**
  * Configuration for MastraCloudAuth.
@@ -94,11 +97,22 @@ export class MastraCloudAuth
     const sessionToken = this.extractSessionToken(request);
     if (!sessionToken) return null;
 
-    const session = await this.client.validateSession({ sessionToken });
-    if (!session) return null;
+    try {
+      // sessionToken IS the JWT - decode it locally to get user info (NO API call)
+      const claims = decodeJwt(sessionToken);
 
-    // Token needed for getUser - use session id as auth token
-    return this.client.getUser({ userId: session.userId, token: sessionToken });
+      return {
+        id: claims.sub as string,
+        email: claims.email as string,
+        sessionToken: sessionToken,
+        name: claims.name as string | undefined,
+        avatarUrl: claims.avatar as string | undefined,
+        createdAt: new Date((claims.iat as number) * 1000),
+      };
+    } catch {
+      // Invalid/malformed JWT - user is not authenticated
+      return null;
+    }
   }
 
   async getUser(userId: string, token?: string): Promise<CloudUser | null> {
@@ -118,7 +132,11 @@ export class MastraCloudAuth
   async createSession(_userId: string, _metadata?: Record<string, unknown>): Promise<CloudSession> {
     // Cloud does not support server-side session creation
     // Sessions are created via SSO flow (handleCallback)
-    throw new Error('MastraCloudAuth: createSession not supported. Use SSO flow via handleCallback.');
+    throw new CloudApiError(
+      'MastraCloudAuth does not support createSession(). Use SSO flow via handleCallback() instead.',
+      501,
+      'not_implemented',
+    );
   }
 
   async validateSession(sessionToken: string): Promise<CloudSession | null> {
@@ -160,12 +178,15 @@ export class MastraCloudAuth
   }
 
   async handleCallback(code: string, _state: string): Promise<SSOCallbackResult<CloudUser>> {
-    const { user, session } = await this.client.exchangeCode({ code });
+    const { user, session, jwt } = await this.client.exchangeCode({ code });
+
+    // Validate JWT is decodable (throws if malformed)
+    decodeJwt(jwt);
 
     return {
       user,
       tokens: {
-        accessToken: session.id,
+        accessToken: jwt,
         expiresAt: session.expiresAt,
       },
     };
@@ -188,17 +209,42 @@ export class MastraCloudAuth
   // ============================================
 
   async getRoles(user: CloudUser): Promise<string[]> {
-    return user.roles;
+    try {
+      const claims = decodeJwt(user.sessionToken);
+      const role = claims.role as string | undefined;
+      return role ? [role] : [];
+    } catch {
+      return [];
+    }
   }
 
   async hasRole(user: CloudUser, role: string): Promise<boolean> {
-    return user.roles.includes(role);
+    try {
+      const claims = decodeJwt(user.sessionToken);
+      return claims.role === role;
+    } catch {
+      return false;
+    }
   }
 
-  async getPermissions(user: CloudUser, token?: string): Promise<string[]> {
-    // Without token, cannot make authenticated request
-    if (!token) return [];
-    return this.client.getUserPermissions({ userId: user.id, token });
+  async getPermissions(user: CloudUser): Promise<string[]> {
+    try {
+      const claims = decodeJwt(user.sessionToken);
+      const role = claims.role as string | undefined;
+
+      if (!role) {
+        console.warn('MastraCloudAuth: JWT missing role claim');
+        return [];
+      }
+
+      return resolvePermissions([role], DEFAULT_ROLES);
+    } catch (error) {
+      throw new CloudApiError(
+        `Failed to decode session token: ${error instanceof Error ? error.message : 'unknown error'}`,
+        401,
+        'invalid_token',
+      );
+    }
   }
 
   async hasPermission(user: CloudUser, permission: string): Promise<boolean> {
