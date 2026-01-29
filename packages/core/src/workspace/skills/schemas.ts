@@ -1,9 +1,10 @@
 /**
- * Validation schemas for Skills following the Agent Skills specification.
+ * Validation for Skills following the Agent Skills specification.
  * @see https://agentskills.io/specification
+ *
+ * This module uses plain validation functions instead of Zod to avoid
+ * version compatibility issues between Zod 3 and Zod 4.
  */
-
-import z from 'zod';
 
 // =============================================================================
 // Constants
@@ -26,89 +27,29 @@ export const SKILL_LIMITS = {
 } as const;
 
 // =============================================================================
-// Zod Schemas
+// Types
 // =============================================================================
 
 /**
- * Skill name schema according to spec:
- * - 1-64 characters
- * - Lowercase letters, numbers, hyphens only
- * - Must not start or end with hyphen
- * - Must not contain consecutive hyphens
+ * Skill metadata input type (what users provide)
  */
-export const SkillNameSchema = z
-  .string()
-  .min(1, 'Skill name cannot be empty')
-  .max(SKILL_LIMITS.MAX_NAME_LENGTH, `Skill name must be ${SKILL_LIMITS.MAX_NAME_LENGTH} characters or less`)
-  .regex(/^[a-z0-9-]+$/, 'Skill name must contain only lowercase letters, numbers, and hyphens')
-  .refine(name => !name.startsWith('-') && !name.endsWith('-'), {
-    message: 'Skill name must not start or end with a hyphen',
-  })
-  .refine(name => !name.includes('--'), {
-    message: 'Skill name must not contain consecutive hyphens',
-  })
-  .describe('Skill name (1-64 chars, lowercase letters/numbers/hyphens only, must match directory name)');
+export interface SkillMetadataInput {
+  /** Skill name (1-64 chars, lowercase letters/numbers/hyphens only, must match directory name) */
+  name: string;
+  /** Description of what the skill does and when to use it (1-1024 characters) */
+  description: string;
+  /** License for the skill (e.g., "Apache-2.0", "MIT") */
+  license?: string;
+  /** Environment requirements or compatibility notes (max 500 chars) */
+  compatibility?: string;
+  /** Arbitrary key-value metadata (e.g., author, version) */
+  metadata?: Record<string, string>;
+}
 
 /**
- * Skill description schema according to spec (1-1024 chars, non-empty)
+ * Skill metadata output type (after validation)
  */
-export const SkillDescriptionSchema = z
-  .string()
-  .min(1, 'Skill description cannot be empty')
-  .max(
-    SKILL_LIMITS.MAX_DESCRIPTION_LENGTH,
-    `Skill description must be ${SKILL_LIMITS.MAX_DESCRIPTION_LENGTH} characters or less`,
-  )
-  .refine(desc => desc.trim().length > 0, {
-    message: 'Skill description cannot be only whitespace',
-  })
-  .describe('Description of what the skill does and when to use it (1-1024 characters)');
-
-/**
- * Skill compatibility schema (max 500 chars)
- */
-export const SkillCompatibilitySchema = z
-  .string()
-  .max(
-    SKILL_LIMITS.MAX_COMPATIBILITY_LENGTH,
-    `Compatibility field must be ${SKILL_LIMITS.MAX_COMPATIBILITY_LENGTH} characters or less`,
-  )
-  .optional()
-  .describe('Environment requirements or compatibility notes (max 500 chars)');
-
-/**
- * Skill license schema
- */
-export const SkillLicenseSchema = z.string().optional().describe('License for the skill (e.g., "Apache-2.0", "MIT")');
-
-/**
- * Skill metadata (arbitrary key-value pairs) schema
- */
-export const SkillMetadataFieldSchema = z
-  .record(z.string())
-  .optional()
-  .describe('Arbitrary key-value metadata (e.g., author, version)');
-
-/**
- * Complete skill metadata schema (frontmatter fields)
- */
-export const SkillMetadataSchema = z.object({
-  name: SkillNameSchema,
-  description: SkillDescriptionSchema,
-  license: SkillLicenseSchema,
-  compatibility: SkillCompatibilitySchema,
-  metadata: SkillMetadataFieldSchema,
-});
-
-/**
- * Type inferred from SkillMetadataSchema
- */
-export type SkillMetadataInput = z.input<typeof SkillMetadataSchema>;
-export type SkillMetadataOutput = z.output<typeof SkillMetadataSchema>;
-
-// =============================================================================
-// Validation Helpers
-// =============================================================================
+export type SkillMetadataOutput = SkillMetadataInput;
 
 /**
  * Validation result with warnings
@@ -118,6 +59,185 @@ export interface SkillValidationResult {
   errors: string[];
   warnings: string[];
 }
+
+// =============================================================================
+// Field Validators
+// =============================================================================
+
+/**
+ * Validate skill name according to spec:
+ * - 1-64 characters
+ * - Lowercase letters, numbers, hyphens only
+ * - Must not start or end with hyphen
+ * - Must not contain consecutive hyphens
+ *
+ * @param name - The name to validate
+ * @returns Array of error messages (empty if valid)
+ */
+function validateSkillName(name: unknown): string[] {
+  const errors: string[] = [];
+  const fieldPath = 'name';
+
+  // Check type
+  if (typeof name !== 'string') {
+    errors.push(`${fieldPath}: Expected string, received ${typeof name}`);
+    return errors;
+  }
+
+  // Check not empty
+  if (name.length === 0) {
+    errors.push(`${fieldPath}: Skill name cannot be empty`);
+    return errors;
+  }
+
+  // Check max length
+  if (name.length > SKILL_LIMITS.MAX_NAME_LENGTH) {
+    errors.push(`${fieldPath}: Skill name must be ${SKILL_LIMITS.MAX_NAME_LENGTH} characters or less`);
+  }
+
+  // Check allowed characters (lowercase letters, numbers, hyphens only)
+  if (!/^[a-z0-9-]+$/.test(name)) {
+    errors.push(`${fieldPath}: Skill name must contain only lowercase letters, numbers, and hyphens`);
+  }
+
+  // Check not starting or ending with hyphen
+  if (name.startsWith('-') || name.endsWith('-')) {
+    errors.push(`${fieldPath}: Skill name must not start or end with a hyphen`);
+  }
+
+  // Check no consecutive hyphens
+  if (name.includes('--')) {
+    errors.push(`${fieldPath}: Skill name must not contain consecutive hyphens`);
+  }
+
+  return errors;
+}
+
+/**
+ * Validate skill description according to spec:
+ * - 1-1024 characters
+ * - Cannot be empty or only whitespace
+ *
+ * @param description - The description to validate
+ * @returns Array of error messages (empty if valid)
+ */
+function validateSkillDescription(description: unknown): string[] {
+  const errors: string[] = [];
+  const fieldPath = 'description';
+
+  // Check type
+  if (typeof description !== 'string') {
+    errors.push(`${fieldPath}: Expected string, received ${typeof description}`);
+    return errors;
+  }
+
+  // Check not empty
+  if (description.length === 0) {
+    errors.push(`${fieldPath}: Skill description cannot be empty`);
+    return errors;
+  }
+
+  // Check max length
+  if (description.length > SKILL_LIMITS.MAX_DESCRIPTION_LENGTH) {
+    errors.push(`${fieldPath}: Skill description must be ${SKILL_LIMITS.MAX_DESCRIPTION_LENGTH} characters or less`);
+  }
+
+  // Check not only whitespace
+  if (description.trim().length === 0) {
+    errors.push(`${fieldPath}: Skill description cannot be only whitespace`);
+  }
+
+  return errors;
+}
+
+/**
+ * Validate skill license (optional string).
+ *
+ * @param license - The license to validate
+ * @returns Array of error messages (empty if valid)
+ */
+function validateSkillLicense(license: unknown): string[] {
+  const errors: string[] = [];
+  const fieldPath = 'license';
+
+  // Optional field - undefined/null is valid
+  if (license === undefined || license === null) {
+    return errors;
+  }
+
+  // If provided, must be string
+  if (typeof license !== 'string') {
+    errors.push(`${fieldPath}: Expected string, received ${typeof license}`);
+  }
+
+  return errors;
+}
+
+/**
+ * Validate skill compatibility notes (optional, max 500 chars).
+ *
+ * @param compatibility - The compatibility string to validate
+ * @returns Array of error messages (empty if valid)
+ */
+function validateSkillCompatibility(compatibility: unknown): string[] {
+  const errors: string[] = [];
+  const fieldPath = 'compatibility';
+
+  // Optional field - undefined/null is valid
+  if (compatibility === undefined || compatibility === null) {
+    return errors;
+  }
+
+  // If provided, must be string
+  if (typeof compatibility !== 'string') {
+    errors.push(`${fieldPath}: Expected string, received ${typeof compatibility}`);
+    return errors;
+  }
+
+  // Check max length
+  if (compatibility.length > SKILL_LIMITS.MAX_COMPATIBILITY_LENGTH) {
+    errors.push(
+      `${fieldPath}: Compatibility field must be ${SKILL_LIMITS.MAX_COMPATIBILITY_LENGTH} characters or less`,
+    );
+  }
+
+  return errors;
+}
+
+/**
+ * Validate skill metadata field (optional Record<string, string>).
+ *
+ * @param metadata - The metadata object to validate
+ * @returns Array of error messages (empty if valid)
+ */
+function validateSkillMetadataField(metadata: unknown): string[] {
+  const errors: string[] = [];
+  const fieldPath = 'metadata';
+
+  // Optional field - undefined/null is valid
+  if (metadata === undefined || metadata === null) {
+    return errors;
+  }
+
+  // If provided, must be object
+  if (typeof metadata !== 'object' || Array.isArray(metadata)) {
+    errors.push(`${fieldPath}: Expected object, received ${Array.isArray(metadata) ? 'array' : typeof metadata}`);
+    return errors;
+  }
+
+  // Check all values are strings
+  for (const [key, value] of Object.entries(metadata)) {
+    if (typeof value !== 'string') {
+      errors.push(`${fieldPath}.${key}: Expected string, received ${typeof value}`);
+    }
+  }
+
+  return errors;
+}
+
+// =============================================================================
+// Validation Helpers
+// =============================================================================
 
 /**
  * Rough token estimate (words * 1.3)
@@ -134,6 +254,10 @@ function estimateTokens(text: string): number {
 function countLines(text: string): number {
   return text.split('\n').length;
 }
+
+// =============================================================================
+// Main Validation Function
+// =============================================================================
 
 /**
  * Validate skill metadata with optional content warnings.
@@ -167,15 +291,26 @@ export function validateSkillMetadata(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Validate against schema
-  const result = SkillMetadataSchema.safeParse(metadata);
-  if (!result.success) {
-    errors.push(...result.error.errors.map(err => `${err.path.join('.')}: ${err.message}`));
+  // Check that metadata is an object
+  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+    errors.push(
+      `Expected object, received ${metadata === null ? 'null' : Array.isArray(metadata) ? 'array' : typeof metadata}`,
+    );
+    return { valid: false, errors, warnings };
   }
 
-  // Check directory name match
-  if (dirName && result.success && result.data.name !== dirName) {
-    errors.push(`Skill name "${result.data.name}" must match directory name "${dirName}"`);
+  const data = metadata as Record<string, unknown>;
+
+  // Validate each field
+  errors.push(...validateSkillName(data.name));
+  errors.push(...validateSkillDescription(data.description));
+  errors.push(...validateSkillLicense(data.license));
+  errors.push(...validateSkillCompatibility(data.compatibility));
+  errors.push(...validateSkillMetadataField(data.metadata));
+
+  // Check directory name match (only if no name errors and name is valid)
+  if (dirName && typeof data.name === 'string' && data.name !== dirName) {
+    errors.push(`Skill name "${data.name}" must match directory name "${dirName}"`);
   }
 
   // Check instruction limits (warnings only)
