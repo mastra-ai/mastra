@@ -326,23 +326,28 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
             variant={isActivated ? 'success' : 'default'}
           >
             {skill.name}
+            {isActivated && <span className="sr-only">Active</span>}
           </Badge>
         );
 
         return (
           <AgentMetadataListItem key={skill.name}>
-            <Link href={paths.agentSkillLink(agentId, skill.name, workspaceId)} data-testid="skill-badge">
-              {isActivated ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>{badge}</TooltipTrigger>
-                    <TooltipContent className="bg-surface3 text-icon6 border border-border1">Active</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : (
-                badge
-              )}
-            </Link>
+            {isActivated ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link href={paths.agentSkillLink(agentId, skill.name, workspaceId)} data-testid="skill-badge">
+                      {badge}
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-surface3 text-icon6 border border-border1">Active</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <Link href={paths.agentSkillLink(agentId, skill.name, workspaceId)} data-testid="skill-badge">
+                {badge}
+              </Link>
+            )}
           </AgentMetadataListItem>
         );
       })}
