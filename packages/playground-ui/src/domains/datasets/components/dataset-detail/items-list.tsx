@@ -3,7 +3,6 @@ import { DatasetItem } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { EntryList } from '@/ds/components/EntryList';
-import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Icon } from '@/ds/icons/Icon';
 import { Plus, Upload } from 'lucide-react';
@@ -31,8 +30,6 @@ export interface ItemsListProps {
   items: DatasetItem[];
   isLoading: boolean;
   onAddClick: () => void;
-  onEditItem?: (item: DatasetItem) => void;
-  onDeleteItem?: (itemId: string) => void;
   onImportClick?: () => void;
   onBulkDeleteClick?: (itemIds: string[]) => void;
   onCreateDatasetClick?: (items: DatasetItem[]) => void;
@@ -55,7 +52,6 @@ export function ItemsList({
   items,
   isLoading,
   onAddClick,
-  onDeleteItem,
   onImportClick,
   onBulkDeleteClick,
   onCreateDatasetClick,
@@ -64,7 +60,6 @@ export function ItemsList({
   onItemClick,
   selectedItemId,
 }: ItemsListProps) {
-  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
   const selection = useItemSelection();
 
@@ -113,13 +108,6 @@ export function ItemsList({
   if (items.length === 0) {
     return <EmptyItemsList onAddClick={onAddClick} onImportClick={onImportClick} />;
   }
-
-  const handleDeleteConfirm = () => {
-    if (deleteItemId && onDeleteItem) {
-      onDeleteItem(deleteItemId);
-      setDeleteItemId(null);
-    }
-  };
 
   const isSelectionActive = selectionMode !== 'idle';
   const columns = isSelectionActive ? itemsListColumnsWithCheckbox : itemsListColumns;
@@ -231,22 +219,6 @@ export function ItemsList({
           </EntryList.Entries>
         </EntryList.Trim>
       </EntryList>
-
-      {/* Delete confirmation dialog */}
-      <AlertDialog open={!!deleteItemId} onOpenChange={() => setDeleteItemId(null)}>
-        <AlertDialog.Content>
-          <AlertDialog.Header>
-            <AlertDialog.Title>Delete Item</AlertDialog.Title>
-            <AlertDialog.Description>
-              Are you sure you want to delete this item? This action cannot be undone.
-            </AlertDialog.Description>
-          </AlertDialog.Header>
-          <AlertDialog.Footer>
-            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            <AlertDialog.Action onClick={handleDeleteConfirm}>Delete</AlertDialog.Action>
-          </AlertDialog.Footer>
-        </AlertDialog.Content>
-      </AlertDialog>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useDatasetRuns } from '../../hooks/use-dataset-runs';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { ItemsList } from './items-list';
 import { RunHistory } from './run-history';
+import { ItemDetailDialog } from './item-detail-dialog';
 import { CSVImportDialog } from '../csv-import';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
 import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
@@ -21,8 +22,6 @@ export interface DatasetDetailProps {
   onEditClick?: () => void;
   onDeleteClick?: () => void;
   onAddItemClick?: () => void;
-  onEditItem?: (item: DatasetItem) => void;
-  onDeleteItem?: (itemId: string) => void;
   runTriggerSlot?: React.ReactNode;
   onNavigateToDataset?: (datasetId: string) => void;
 }
@@ -35,8 +34,6 @@ export function DatasetDetail({
   onEditClick,
   onDeleteClick,
   onAddItemClick,
-  onEditItem,
-  onDeleteItem,
   runTriggerSlot,
   onNavigateToDataset,
 }: DatasetDetailProps) {
@@ -47,6 +44,7 @@ export function DatasetDetail({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemIdsToDelete, setItemIdsToDelete] = useState<string[]>([]);
   const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
   const { data: itemsData, isLoading: isItemsLoading } = useDatasetItems(datasetId);
@@ -55,6 +53,22 @@ export function DatasetDetail({
 
   const items = itemsData?.items ?? [];
   const runs = runsData?.runs ?? [];
+
+  // Compute selected item from items array
+  const selectedItem = items.find(item => item.id === selectedItemId) ?? null;
+
+  // Item detail dialog handlers
+  const handleItemClick = (itemId: string) => {
+    setSelectedItemId(itemId);
+  };
+
+  const handleItemDialogClose = () => {
+    setSelectedItemId(null);
+  };
+
+  const handleItemChange = (itemId: string) => {
+    setSelectedItemId(itemId);
+  };
 
   // Handler for Create Dataset action from selection
   const handleCreateDatasetClick = (selectedItems: DatasetItem[]) => {
@@ -172,13 +186,13 @@ export function DatasetDetail({
               items={items}
               isLoading={isItemsLoading}
               onAddClick={onAddItemClick ?? (() => {})}
-              onEditItem={onEditItem}
-              onDeleteItem={onDeleteItem}
               onImportClick={() => setImportDialogOpen(true)}
               onBulkDeleteClick={handleBulkDeleteClick}
               onCreateDatasetClick={handleCreateDatasetClick}
               datasetName={dataset?.name}
               clearSelectionTrigger={clearSelectionTrigger}
+              onItemClick={handleItemClick}
+              selectedItemId={selectedItemId}
             />
           </TabContent>
 
@@ -225,6 +239,16 @@ export function DatasetDetail({
           </AlertDialog.Footer>
         </AlertDialog.Content>
       </AlertDialog>
+
+      {/* Item Detail Dialog */}
+      <ItemDetailDialog
+        datasetId={datasetId}
+        item={selectedItem}
+        items={items}
+        isOpen={selectedItemId !== null}
+        onClose={handleItemDialogClose}
+        onItemChange={handleItemChange}
+      />
     </div>
   );
 }
