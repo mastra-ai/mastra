@@ -65,10 +65,6 @@ export interface ExecuteCommandOptions {
   env?: NodeJS.ProcessEnv;
   /** Working directory */
   cwd?: string;
-  /** Stream output instead of buffering */
-  stream?: boolean;
-  /** Shell to use (default: /bin/sh) */
-  shell?: string | boolean;
   /** Callback for stdout chunks (enables streaming) */
   onStdout?: (data: string) => void;
   /** Callback for stderr chunks (enables streaming) */

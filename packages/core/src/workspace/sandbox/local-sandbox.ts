@@ -10,11 +10,11 @@
  */
 
 import * as childProcess from 'node:child_process';
+import type { SpawnOptions } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { promisify } from 'node:util';
 
 import type { ProviderStatus } from '../lifecycle';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
@@ -22,7 +22,12 @@ import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCom
 import type { WorkspaceSandbox, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
 import { IsolationUnavailableError } from './sandbox';
 
-const execFile = promisify(childProcess.execFile);
+interface ExecStreamingOptions extends Omit<SpawnOptions, 'timeout' | 'stdio'> {
+  /** Timeout in ms - handled manually for custom exit code 124 */
+  timeout?: number;
+  onStdout?: (data: string) => void;
+  onStderr?: (data: string) => void;
+}
 
 /**
  * Execute a command with optional streaming callbacks.
@@ -31,61 +36,57 @@ const execFile = promisify(childProcess.execFile);
 function execWithStreaming(
   command: string,
   args: string[],
-  options: {
-    cwd?: string;
-    timeout?: number;
-    env?: NodeJS.ProcessEnv;
-    onStdout?: (data: string) => void;
-    onStderr?: (data: string) => void;
-  },
+  options: ExecStreamingOptions,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const { timeout, onStdout, onStderr, cwd, env, ...spawnOptions } = options;
   return new Promise((resolve, reject) => {
-    const proc = childProcess.spawn(command, args, {
-      cwd: options.cwd,
-      env: options.env,
-    });
+    const proc = childProcess.spawn(command, args, { cwd, env, ...spawnOptions });
 
     let stdout = '';
     let stderr = '';
     let killed = false;
 
     // Set up timeout
-    const timeoutId = options.timeout
+    const timeoutId = timeout
       ? setTimeout(() => {
           killed = true;
           proc.kill('SIGTERM');
-        }, options.timeout)
+        }, timeout)
       : undefined;
 
     proc.stdout.on('data', (data: Buffer) => {
       const str = data.toString();
       stdout += str;
-      options.onStdout?.(str);
+      onStdout?.(str);
     });
 
     proc.stderr.on('data', (data: Buffer) => {
       const str = data.toString();
       stderr += str;
-      options.onStderr?.(str);
+      onStderr?.(str);
     });
 
     proc.on('error', err => {
       if (timeoutId) clearTimeout(timeoutId);
+      const errorMsg = err.message;
+      stderr += errorMsg;
+      onStderr?.(errorMsg);
       reject(err);
     });
 
     proc.on('close', (code, signal) => {
       if (timeoutId) clearTimeout(timeoutId);
       if (killed) {
-        resolve({ stdout, stderr: stderr + '\nProcess timed out', exitCode: 124 });
-      } else {
+        const timeoutMsg = `\nProcess timed out after ${timeout}ms`;
+        onStderr?.(timeoutMsg);
+        resolve({ stdout, stderr: stderr + timeoutMsg, exitCode: 124 });
+      } else if (signal) {
         // When terminated by signal, code is null but signal contains the signal name
-        const exitCode = code ?? (signal ? 128 : 0);
-        resolve({
-          stdout,
-          stderr: signal ? `${stderr}\nProcess terminated by ${signal}` : stderr,
-          exitCode,
-        });
+        const signalMsg = `\nProcess terminated by ${signal}`;
+        onStderr?.(signalMsg);
+        resolve({ stdout, stderr: stderr + signalMsg, exitCode: 128 });
+      } else {
+        resolve({ stdout, stderr, exitCode: code ?? 0 });
       }
     });
   });
@@ -163,7 +164,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   private _status: ProviderStatus = 'stopped';
   private readonly _workingDirectory: string;
   private readonly env: NodeJS.ProcessEnv;
-  private readonly timeout: number;
+  private readonly timeout?: number;
   private readonly _isolation: IsolationBackend;
   private readonly _nativeSandboxConfig: NativeSandboxConfig;
   private _seatbeltProfile?: string;
@@ -208,7 +209,7 @@ export class LocalSandbox implements WorkspaceSandbox {
     // Default working directory is .sandbox/ in cwd - isolated from seatbelt profiles
     this._workingDirectory = options.workingDirectory ?? path.join(process.cwd(), '.sandbox');
     this.env = options.env ?? {};
-    this.timeout = options.timeout ?? 30000;
+    this.timeout = options.timeout;
     this._nativeSandboxConfig = options.nativeSandbox ?? {};
 
     // Validate and set isolation backend
@@ -391,63 +392,34 @@ export class LocalSandbox implements WorkspaceSandbox {
     }
 
     const startTime = Date.now();
-    const timeout = options.timeout ?? this.timeout;
-    const cwd = options.cwd ? path.resolve(this.workingDirectory, options.cwd) : this.workingDirectory;
 
     // Wrap command with isolation backend if configured
     const wrapped = this.wrapCommandForIsolation(command, args);
 
     // Use streaming execution when callbacks are provided
-    if (options.onStdout || options.onStderr) {
-      try {
-        const result = await execWithStreaming(wrapped.command, wrapped.args, {
-          cwd,
-          timeout,
-          env: this.buildEnv(options.env),
-          onStdout: options.onStdout,
-          onStderr: options.onStderr,
-        });
 
-        return {
-          success: result.exitCode === 0,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-          executionTimeMs: Date.now() - startTime,
-        };
-      } catch (error: unknown) {
-        return {
-          success: false,
-          stdout: '',
-          stderr: error instanceof Error ? error.message : String(error),
-          exitCode: 1,
-          executionTimeMs: Date.now() - startTime,
-        };
-      }
-    }
-
-    // Use execFile for non-streaming (simpler, better error handling)
     try {
-      const { stdout, stderr } = await execFile(wrapped.command, wrapped.args, {
-        cwd,
-        timeout,
+      const result = await execWithStreaming(wrapped.command, wrapped.args, {
+        cwd: options.cwd ?? this.workingDirectory,
+        timeout: this.timeout ?? options.timeout ?? 30000,
         env: this.buildEnv(options.env),
+        onStdout: options.onStdout,
+        onStderr: options.onStderr,
       });
 
       return {
-        success: true,
-        stdout,
-        stderr,
-        exitCode: 0,
+        success: result.exitCode === 0,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
         executionTimeMs: Date.now() - startTime,
       };
     } catch (error: unknown) {
-      const e = error as { stdout?: string; stderr?: string; code?: number };
       return {
         success: false,
-        stdout: e.stdout ?? '',
-        stderr: e.stderr ?? String(error),
-        exitCode: e.code ?? 1,
+        stdout: '',
+        stderr: error instanceof Error ? error.message : String(error),
+        exitCode: 1,
         executionTimeMs: Date.now() - startTime,
       };
     }
