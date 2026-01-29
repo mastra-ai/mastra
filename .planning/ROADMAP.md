@@ -117,11 +117,14 @@ Plans:
 **Success Criteria**:
 1. Server `onMessage` handler parses JSON input messages and switches on type field to route to toolset inject methods
 2. Malformed input messages are silently ignored with no acknowledgment (fire-and-forget pattern)
-3. Mouse input messages call `BrowserToolset.injectMouseEvent()` with complete 3-event sequence (mouseMoved → mousePressed → mouseReleased)
+3. Mouse input messages call `BrowserToolset.injectMouseEvent()` with complete 3-event sequence (mouseMoved -> mousePressed -> mouseReleased)
 4. Keyboard input messages call `BrowserToolset.injectKeyboardEvent()` with appropriate sequences (3-event for printable, 2-event for special keys)
 5. Server validates message structure before routing (required fields present, coordinates in range if available)
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 11-01-PLAN.md -- Input handler module with validation, routing, and onMessage wiring
 
 ---
 
@@ -154,8 +157,8 @@ Plans:
 
 **Success Criteria**:
 1. Live view panel requires explicit click on frame to enter interactive mode (keyboard capture activated)
-2. Printable characters use 3-event CDP sequence (keyDown → char with text → keyUp) to insert text in browser input fields
-3. Non-printable keys (Enter, Escape, Tab, arrows, Backspace) use 2-event sequence (keyDown → keyUp)
+2. Printable characters use 3-event CDP sequence (keyDown -> char with text -> keyUp) to insert text in browser input fields
+3. Non-printable keys (Enter, Escape, Tab, arrows, Backspace) use 2-event sequence (keyDown -> keyUp)
 4. Modifier key state tracked across key events and included in CDP event bitmask
 5. Pressing Escape or clicking outside panel exits interactive mode (keyboard capture released)
 6. Keyboard events do NOT leak to host page (chat input, Studio shortcuts) when panel is focused
@@ -211,12 +214,12 @@ Plans:
 | 8. Transport Layer | v1.1 | 2/2 | Complete | 2026-01-27 |
 | 9. Studio UI | v1.1 | 2/2 | Complete | 2026-01-28 |
 | 10. Infrastructure Foundations | v1.2 | 1/1 | Complete | 2026-01-29 |
-| 11. Server Input Routing | v1.2 | 0/TBD | Not Started | — |
-| 12. Client Mapping & Click | v1.2 | 0/TBD | Not Started | — |
-| 13. Focus & Keyboard | v1.2 | 0/TBD | Not Started | — |
-| 14. Visual Feedback | v1.2 | 0/TBD | Not Started | — |
-| 15. Input Coordination | v1.2 | 0/TBD | Not Started | — |
+| 11. Server Input Routing | v1.2 | 0/1 | Not Started | -- |
+| 12. Client Mapping & Click | v1.2 | 0/TBD | Not Started | -- |
+| 13. Focus & Keyboard | v1.2 | 0/TBD | Not Started | -- |
+| 14. Visual Feedback | v1.2 | 0/TBD | Not Started | -- |
+| 15. Input Coordination | v1.2 | 0/TBD | Not Started | -- |
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-29 — Phase 10 complete*
+*Last updated: 2026-01-29 -- Phase 11 planned*
