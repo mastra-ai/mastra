@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** Agents can browse real websites and users can watch and assist them in real-time
-**Current focus:** v1.2 Browser Input Injection (Phase 12)
+**Current focus:** v1.2 Browser Input Injection (Phase 13+)
 
 ## Current Position
 
 Phase: 12 - Client Coordinate Mapping and Click
-Plan: 02 of 03
-Status: In progress
-Last activity: 2026-01-29 -- Completed 12-02-PLAN.md
+Plan: 03 of 03
+Status: Phase complete
+Last activity: 2026-01-29 -- Completed 12-03-PLAN.md
 
-Progress: [████████░░░░░░░░░░░░] 42% (4/8 plans -- 10-01, 11-01, 12-01, 12-02 of total 8 in v1.2 so far)
+Progress: [██████████░░░░░░░░░░] 50% (5/8 plans -- 10-01, 11-01, 12-01, 12-02, 12-03 of total 8 in v1.2 so far)
 
 ## Performance Metrics
 
@@ -27,7 +27,7 @@ Progress: [████████░░░░░░░░░░░░] 42% (4/
 - Phases: 3 (7, 8, 9)
 
 **v1.2 Milestone:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Phases: 6 (10-15)
 - Requirements: 27
 
@@ -60,6 +60,11 @@ Phase 12 decisions:
 - sendMessage uses empty deps array (wsRef is stable ref identity)
 - viewport reset to null on disconnect to prevent stale dimensions
 - viewport parsing at same level as url check (ViewportMessage has no status field)
+- viewport and sendMessage stored in refs to avoid listener re-attachment
+- rAF throttle at 30fps for mouse move (FRAME_INTERVAL = 1000/30)
+- CDP click sequence: mouseMoved then mousePressed (moved first for hover state)
+- Mouse interaction enabled only when status === 'streaming'
+- No server type imports -- CDP message shape constructed inline as Record<string,unknown>
 
 ### Pending Todos
 
@@ -85,7 +90,7 @@ None.
 ### Phase 12: Client Coordinate Mapping and Click
 **Goal:** User can click and scroll in the live view frame with accurate coordinate mapping
 **Requirements:** CLICK-01 through CLICK-06, SCROLL-01, SCROLL-02, VIS-03 (9 total)
-**Status:** In Progress (Plans 01 and 02 of 03 complete)
+**Status:** Complete (12-01, 12-02, 12-03 SUMMARY.md files)
 **Depends on:** Phases 10 (complete), 11 (complete)
 
 ### Phase 13: Focus Management and Keyboard
@@ -98,7 +103,7 @@ None.
 **Goal:** User receives immediate visual confirmation for input actions despite frame latency
 **Requirements:** VIS-01, VIS-02 (2 total)
 **Status:** Not Started
-**Depends on:** Phase 12
+**Depends on:** Phase 12 (complete)
 
 ### Phase 15: Input Coordination
 **Goal:** User input and agent tool calls coexist without destructive race conditions
@@ -108,19 +113,20 @@ None.
 
 ## Milestone History
 
-- v1.0: SHIPPED 2026-01-27 (6 phases, 10 plans) — archived to milestones/
-- v1.1: SHIPPED 2026-01-28 (3 phases, 5 plans) — archived to milestones/
+- v1.0: SHIPPED 2026-01-27 (6 phases, 10 plans) -- archived to milestones/
+- v1.1: SHIPPED 2026-01-28 (3 phases, 5 plans) -- archived to milestones/
 
 ## Session Continuity
 
-Last session: 2026-01-29T20:44:30Z
-Stopped at: Completed 12-02-PLAN.md
+Last session: 2026-01-29T20:49:48Z
+Stopped at: Completed 12-03-PLAN.md (Phase 12 complete)
 Resume file: None
 
-**Next action:** Execute Phase 12 Plan 03 (useMouseInteraction hook).
+**Next action:** Execute Phase 13 (Focus Management and Keyboard) or Phase 14 (Visual Feedback and Polish).
 
 **Context for next session:**
-- Phase 12 Plan 01 complete: coordinate-mapping.ts exports mapClientToViewport, normalizeWheelDelta, getModifiers
-- Phase 12 Plan 02 complete: useBrowserStream returns viewport state and sendMessage callback
-- Plan 03 creates useMouseInteraction hook that consumes viewport + sendMessage from useBrowserStream and coordinate-mapping utilities
-- Phase 13 can run in parallel (no dependency on Phase 12)
+- Phase 12 fully complete: all mouse input works (click, scroll, right-click, move)
+- Full pipeline: DOM events -> useMouseInteraction -> mapClientToViewport -> sendMessage -> WebSocket -> handleInputMessage -> CDP
+- Phase 13 depends only on Phase 11 (complete) -- can proceed independently
+- Phase 14 depends on Phase 12 (now complete) -- can proceed
+- Phase 15 blocked until Phases 13 and 14 complete
