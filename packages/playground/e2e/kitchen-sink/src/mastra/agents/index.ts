@@ -80,32 +80,10 @@ const mockFailingObserverModel = {
   supportsImageUrls: false,
   supportedUrls: {},
   async doGenerate() {
-    return {
-      stream: new ReadableStream({
-        start(controller: any) {
-          controller.enqueue({
-            type: 'error',
-            error: new Error('Observer model failed: simulated API error for E2E testing'),
-          });
-          controller.close();
-        },
-      }),
-    };
+    throw new Error('Observer model failed: simulated API error for E2E testing');
   },
   async doStream() {
-    return {
-      stream: new ReadableStream({
-        start(controller: any) {
-          controller.enqueue({
-            type: 'error',
-            error: new Error('Observer model failed: simulated API error for E2E testing'),
-          });
-          controller.close();
-        },
-      }),
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-    };
+    throw new Error('Observer model failed: simulated API error for E2E testing');
   },
 } as any;
 

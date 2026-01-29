@@ -35,7 +35,7 @@ import {
   __experimental_updateWorkingMemoryToolVNext,
   deepMergeWorkingMemory,
 } from './tools/working-memory';
-import type { InputProcessor, InputProcessorOrWorkflow } from '@mastra/core/processors';
+import type { InputProcessor, InputProcessorOrWorkflow, OutputProcessor, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { coreFeatures } from '@mastra/core/features';
 
@@ -1496,6 +1496,42 @@ ${
     // Get base processors from parent class
     const processors = await super.getInputProcessors(configuredProcessors, context);
 
+    const om = await this.createOMProcessor(configuredProcessors, context);
+    if (om) {
+      processors.push(om);
+    }
+
+    return processors;
+  }
+
+  /**
+   * Extends the base implementation to add ObservationalMemory as an output processor.
+   * OM needs processOutputResult to save messages at the end of the agent turn,
+   * even when the observation threshold was never reached during the loop.
+   */
+  async getOutputProcessors(
+    configuredProcessors: OutputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<OutputProcessor[]> {
+    const processors = await super.getOutputProcessors(configuredProcessors, context);
+
+    const om = await this.createOMProcessor(configuredProcessors, context);
+    if (om) {
+      processors.push(om as unknown as OutputProcessor);
+    }
+
+    return processors;
+  }
+
+  /**
+   * Creates an ObservationalMemory processor instance if configured and not already present.
+   * A new instance is created per call — processorStates (e.g., sealedIds) are shared
+   * via the ProcessorRunner's state map keyed by processor ID, not by instance identity.
+   */
+  private async createOMProcessor(
+    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[] = [],
+    context?: RequestContext,
+  ): Promise<InputProcessor | null> {
     // Check if ObservationalMemory is already configured by the user
     const hasObservationalMemory = configuredProcessors.some(
       p => !('workflow' in p) && p.id === 'observational-memory',
@@ -1508,60 +1544,58 @@ ${
 
     // Add ObservationalMemory processor if configured and not already present
     const omConfig = effectiveConfig.observationalMemory;
-    if (omConfig?.enabled && !hasObservationalMemory) {
-      const coreSupportsOM = coreFeatures.has('observationalMemory');
+    if (!omConfig?.enabled || hasObservationalMemory) {
+      return null;
+    }
 
-      if (!coreSupportsOM) {
-        throw new Error(
-          'Observational memory is enabled but the installed version of @mastra/core does not support it. ' +
-            'Please upgrade @mastra/core to a version that includes observational memory support.',
-        );
-      }
+    const coreSupportsOM = coreFeatures.has('observationalMemory');
 
-      const memoryStore = await this.storage.getStore('memory');
-      if (!memoryStore) {
-        throw new Error(
-          'Using Mastra Memory observational memory requires a storage adapter but no attached adapter was detected.',
-        );
-      }
-
-      if (!memoryStore.supportsObservationalMemory) {
-        throw new Error(
-          `Observational memory is enabled but the storage adapter (${memoryStore.constructor.name}) does not support it. ` +
-            `Please use a storage adapter that supports observational memory (libsql, pg, mongodb) or disable observational memory.`,
-        );
-      }
-      // Dynamic import to avoid loading OM code when not needed and to prevent
-      // import errors when paired with an older @mastra/core version
-      // @TODO update import path, will be imported from core package
-      const { ObservationalMemory } = await import('./experiments/observational-memory');
-
-      processors.push(
-        new ObservationalMemory({
-          storage: memoryStore,
-          scope: omConfig.scope,
-          observeFutureOnly: omConfig.observeFutureOnly,
-          adaptiveThreshold: omConfig.adaptiveThreshold,
-          observer: omConfig.observer
-            ? {
-                model: omConfig.observer.model,
-                observationThreshold: omConfig.observer.threshold,
-                modelSettings: omConfig.observer.modelSettings,
-                maxTokensPerBatch: omConfig.observer.maxTokensPerBatch,
-              }
-            : undefined,
-          reflector: omConfig.reflector
-            ? {
-                model: omConfig.reflector.model,
-                reflectionThreshold: omConfig.reflector.threshold,
-                modelSettings: omConfig.reflector.modelSettings,
-              }
-            : undefined,
-        }),
+    if (!coreSupportsOM) {
+      throw new Error(
+        'Observational memory is enabled but the installed version of @mastra/core does not support it. ' +
+          'Please upgrade @mastra/core to a version that includes observational memory support.',
       );
     }
 
-    return processors;
+    const memoryStore = await this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new Error(
+        'Using Mastra Memory observational memory requires a storage adapter but no attached adapter was detected.',
+      );
+    }
+
+    if (!memoryStore.supportsObservationalMemory) {
+      throw new Error(
+        `Observational memory is enabled but the storage adapter (${memoryStore.constructor.name}) does not support it. ` +
+          `Please use a storage adapter that supports observational memory (libsql, pg, mongodb) or disable observational memory.`,
+      );
+    }
+    // Dynamic import to avoid loading OM code when not needed and to prevent
+    // import errors when paired with an older @mastra/core version
+    // @TODO update import path, will be imported from core package
+    const { ObservationalMemory } = await import('./experiments/observational-memory');
+
+    return new ObservationalMemory({
+      storage: memoryStore,
+      scope: omConfig.scope,
+      observeFutureOnly: omConfig.observeFutureOnly,
+      adaptiveThreshold: omConfig.adaptiveThreshold,
+      observer: omConfig.observer
+        ? {
+            model: omConfig.observer.model,
+            observationThreshold: omConfig.observer.threshold,
+            modelSettings: omConfig.observer.modelSettings,
+            maxTokensPerBatch: omConfig.observer.maxTokensPerBatch,
+          }
+        : undefined,
+      reflector: omConfig.reflector
+        ? {
+            model: omConfig.reflector.model,
+            reflectionThreshold: omConfig.reflector.threshold,
+            modelSettings: omConfig.reflector.modelSettings,
+          }
+        : undefined,
+    });
   }
 }
 

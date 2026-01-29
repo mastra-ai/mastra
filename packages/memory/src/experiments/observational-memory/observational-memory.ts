@@ -2,7 +2,13 @@ import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
-import type { Processor, ProcessInputArgs, ProcessInputStepArgs, ProcessorStreamWriter } from '@mastra/core/processors';
+import type {
+  Processor,
+  ProcessInputArgs,
+  ProcessInputStepArgs,
+  ProcessOutputResultArgs,
+  ProcessorStreamWriter,
+} from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { MessageHistory } from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
@@ -2231,10 +2237,9 @@ ${suggestedResponse}
         }
 
         // Save messages with markers
-        // When observation succeeded: use .clear to remove observed messages from context
-        // When observation failed: use .get to save messages but keep them in context
-        const newInput = observationSucceeded ? messageList.clear.input.db() : messageList.get.input.db();
-        const newOutput = observationSucceeded ? messageList.clear.response.db() : messageList.get.response.db();
+        // Use .clear to remove observed messages from context - they're now in observations
+        const newInput = observationSucceeded ? messageList.clear.input.db() : [];
+        const newOutput = observationSucceeded ? messageList.clear.response.db() : [];
         const messagesToSave = [...newInput, ...newOutput];
 
         if (messagesToSave.length > 0) {
@@ -2389,6 +2394,63 @@ NOTE: Any messages following this system reminder are newer than your memories.
     }
 
     omDebug(`[OM processInputStep] Agent will see: observations + ${messageList.get.all.db().length} messages`);
+
+    return messageList;
+  }
+
+  /**
+   * Save any unsaved messages at the end of the agent turn.
+   *
+   * This is the "final save" that catches messages that processInputStep didn't save
+   * (e.g., when the observation threshold was never reached, or on single-step execution).
+   * Without this, messages would be lost because MessageHistory is disabled when OM is active.
+   */
+  async processOutputResult(args: ProcessOutputResultArgs): Promise<MessageList | MastraDBMessage[]> {
+    const { messageList, requestContext, state } = args;
+
+    const context = this.getThreadContext(requestContext, messageList);
+    if (!context) {
+      return messageList;
+    }
+
+    const { threadId, resourceId } = context;
+
+    // Check if readOnly
+    const memoryContext = parseMemoryRequestContext(requestContext);
+    const readOnly = memoryContext?.memoryConfig?.readOnly;
+    if (readOnly) {
+      return messageList;
+    }
+
+    // Get unsaved messages from messageList
+    const newInput = messageList.get.input.db();
+    const newOutput = messageList.get.response.db();
+    const messagesToSave = [...newInput, ...newOutput];
+
+    if (messagesToSave.length === 0) {
+      omDebug(`[OM processOutputResult] No unsaved messages to persist`);
+      return messageList;
+    }
+
+    // Regenerate IDs for messages that were already saved with observation markers (sealed)
+    const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
+    let regeneratedIds = 0;
+    for (const msg of messagesToSave) {
+      if (sealedIds.has(msg.id)) {
+        msg.id = crypto.randomUUID();
+        regeneratedIds++;
+      }
+    }
+
+    omDebug(
+      `[OM processOutputResult] Saving ${messagesToSave.length} unsaved messages (${regeneratedIds} with regenerated IDs)`,
+    );
+
+    await this.messageHistory.persistMessages({
+      messages: messagesToSave,
+      threadId,
+      resourceId,
+    });
 
     return messageList;
   }
