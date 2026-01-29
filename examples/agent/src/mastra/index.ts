@@ -10,6 +10,7 @@ import {
   chefAgentResponses,
   dynamicAgent,
   evalAgent,
+  evalAgentWithTemperatures,
   schemaValidatedAgent,
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
@@ -60,6 +61,7 @@ const config = {
     dynamicAgent,
     agentThatHarassesYou,
     evalAgent,
+    evalAgentWithTemperatures,
     schemaValidatedAgent,
     chefModelV2Agent,
     networkAgent,
