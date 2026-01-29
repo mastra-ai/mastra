@@ -124,7 +124,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 11-01-PLAN.md -- Input handler module with validation, routing, and onMessage wiring
+- [x] 11-01: Input handler module with validation, routing, and onMessage wiring
 
 ---
 
@@ -214,7 +214,7 @@ Plans:
 | 8. Transport Layer | v1.1 | 2/2 | Complete | 2026-01-27 |
 | 9. Studio UI | v1.1 | 2/2 | Complete | 2026-01-28 |
 | 10. Infrastructure Foundations | v1.2 | 1/1 | Complete | 2026-01-29 |
-| 11. Server Input Routing | v1.2 | 0/1 | Not Started | -- |
+| 11. Server Input Routing | v1.2 | 1/1 | Complete | 2026-01-29 |
 | 12. Client Mapping & Click | v1.2 | 0/TBD | Not Started | -- |
 | 13. Focus & Keyboard | v1.2 | 0/TBD | Not Started | -- |
 | 14. Visual Feedback | v1.2 | 0/TBD | Not Started | -- |
@@ -222,4 +222,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-29 -- Phase 11 planned*
+*Last updated: 2026-01-29 — Phase 11 complete*

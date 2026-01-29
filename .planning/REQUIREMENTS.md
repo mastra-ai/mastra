@@ -10,9 +10,9 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 
 ## Server Input Routing
 
-- [ ] **ROUTE-01**: Server `onMessage` handler parses JSON input messages and routes to `BrowserToolset.injectMouseEvent()` or `injectKeyboardEvent()` based on message type
-- [ ] **ROUTE-02**: Server validates input message structure before injection (silently ignores malformed messages)
-- [ ] **ROUTE-03**: Input injection is fire-and-forget (no acknowledgment latency)
+- [x] **ROUTE-01**: Server `onMessage` handler parses JSON input messages and routes to `BrowserToolset.injectMouseEvent()` or `injectKeyboardEvent()` based on message type
+- [x] **ROUTE-02**: Server validates input message structure before injection (silently ignores malformed messages)
+- [x] **ROUTE-03**: Input injection is fire-and-forget (no acknowledgment latency)
 
 ## Click Forwarding
 
@@ -60,9 +60,9 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 | INFRA-01 | Phase 10 | Complete |
 | INFRA-02 | Phase 10 | Complete |
 | INFRA-03 | Phase 10 | Complete |
-| ROUTE-01 | Phase 11 | Pending |
-| ROUTE-02 | Phase 11 | Pending |
-| ROUTE-03 | Phase 11 | Pending |
+| ROUTE-01 | Phase 11 | Complete |
+| ROUTE-02 | Phase 11 | Complete |
+| ROUTE-03 | Phase 11 | Complete |
 | CLICK-01 | Phase 12 | Pending |
 | CLICK-02 | Phase 12 | Pending |
 | CLICK-03 | Phase 12 | Pending |
