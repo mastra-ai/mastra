@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-23)
 
 **Core value:** Catch quality regressions before they reach users — when you modify a prompt or model, know immediately if scores dropped.
-**Current focus:** Phase 9 - Dataset Items Detail View
+**Current focus:** Phase 9 - Dataset Items Detail View (COMPLETE)
 
 ## Current Position
 
-Phase: 9 of 9 (Dataset Items Detail View) — In progress
-Plan: 4 of 5 in phase 9
-Status: Executing phase 9
-Last activity: 2026-01-29 — Completed 09-04-PLAN.md (Delete Confirmation Flow)
+Phase: 9 of 9 (Dataset Items Detail View) — Complete
+Plan: 5 of 5 in phase 9
+Status: Phase 9 complete
+Last activity: 2026-01-29 — Completed 09-05-PLAN.md (ItemsList and Dialog Integration)
 
-Progress: [█████████░] 97%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 36
+- Total plans completed: 37
 - Average duration: 4 min
-- Total execution time: 2.0 hours
+- Total execution time: 2.1 hours
 
 **By Phase:**
 
@@ -35,10 +35,10 @@ Progress: [█████████░] 97%
 | 06-playground-integration | 12 | 48 min | 4 min |
 | 07-csv-import | 5 | 10 min | 2 min |
 | 08-item-selection-actions | 4 | 13 min | 3.25 min |
-| 09-dataset-items-detail-view | 4 | 12 min | 3 min |
+| 09-dataset-items-detail-view | 5 | 16 min | 3.2 min |
 
 **Recent Trend:**
-- Last 5 plans: 09-01 (3 min), 09-02 (3 min), 09-03 (3 min), 09-04 (3 min)
+- Last 5 plans: 09-01 (3 min), 09-02 (3 min), 09-03 (3 min), 09-04 (3 min), 09-05 (4 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -105,6 +105,8 @@ Recent decisions affecting current work:
 - Form state reset on item change via useEffect([item?.id])
 - AlertDialog nested inside SideDialog uses portal to render above
 - Delete confirmation state resets on item navigation
+- Selection state owned by DatasetDetail parent, passes to children for synchronization
+- Legacy callback props removed when functionality consolidates into child component
 
 ### Pending Todos
 
@@ -113,6 +115,7 @@ None yet.
 ### Roadmap Evolution
 
 - Phase 9 added: Dataset Items Detail View (EntryList, SideDialog, edit/delete flows)
+- Phase 9 complete: Full click-to-view-details flow implemented
 
 ### Blockers/Concerns
 
@@ -121,5 +124,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-29
-Stopped at: Completed 09-04-PLAN.md (Delete Confirmation Flow)
+Stopped at: Completed 09-05-PLAN.md (ItemsList and Dialog Integration)
 Resume file: None
