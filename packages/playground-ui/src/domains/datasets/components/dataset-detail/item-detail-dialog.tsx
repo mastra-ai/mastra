@@ -1,11 +1,18 @@
+import { useState, useEffect } from 'react';
 import { DatasetItem } from '@mastra/client-js';
 import { SideDialog, type SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { KeyValueList } from '@/ds/components/KeyValueList';
 import { Sections } from '@/ds/components/Sections';
+import { Button } from '@/ds/components/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Label } from '@/ds/components/Label';
+import { Icon } from '@/ds/icons/Icon';
 import { useLinkComponent } from '@/lib/framework';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon } from 'lucide-react';
+import { toast } from '@/lib/toast';
+import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, Pencil } from 'lucide-react';
 import { format } from 'date-fns/format';
+import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 
 export interface ItemDetailDialogProps {
   datasetId: string;
@@ -31,6 +38,23 @@ export function ItemDetailDialog({
   dialogLevel = 1,
 }: ItemDetailDialogProps) {
   const { Link } = useLinkComponent();
+  const { updateItem } = useDatasetMutations();
+
+  // Edit mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const [expectedOutputValue, setExpectedOutputValue] = useState('');
+  const [metadataValue, setMetadataValue] = useState('');
+
+  // Reset form state when item changes (navigation or prop update)
+  useEffect(() => {
+    if (item) {
+      setInputValue(JSON.stringify(item.input, null, 2));
+      setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
+      setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+      setIsEditing(false); // Exit edit mode on item change
+    }
+  }, [item?.id]);
 
   if (!item) return null;
 
@@ -51,8 +75,66 @@ export function ItemDetailDialog({
     return undefined;
   };
 
-  // Format metadata for display
-  const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
+  // Form handlers
+  const handleSave = async () => {
+    // Validate input JSON
+    let parsedInput: unknown;
+    try {
+      parsedInput = JSON.parse(inputValue);
+    } catch {
+      toast.error('Input must be valid JSON');
+      return;
+    }
+
+    // Parse expectedOutput if provided
+    let parsedExpectedOutput: unknown | undefined;
+    if (expectedOutputValue.trim()) {
+      try {
+        parsedExpectedOutput = JSON.parse(expectedOutputValue);
+      } catch {
+        toast.error('Expected Output must be valid JSON');
+        return;
+      }
+    }
+
+    // Parse metadata if provided
+    let parsedMetadata: Record<string, unknown> | undefined;
+    if (metadataValue.trim()) {
+      try {
+        parsedMetadata = JSON.parse(metadataValue);
+      } catch {
+        toast.error('Metadata must be valid JSON');
+        return;
+      }
+    }
+
+    try {
+      await updateItem.mutateAsync({
+        datasetId,
+        itemId: item.id,
+        input: parsedInput,
+        expectedOutput: parsedExpectedOutput,
+        metadata: parsedMetadata,
+      });
+
+      toast.success('Item updated successfully');
+      setIsEditing(false);
+    } catch (error) {
+      toast.error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleCancel = () => {
+    // Reset to original values
+    setInputValue(JSON.stringify(item.input, null, 2));
+    setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
+    setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+    setIsEditing(false);
+  };
+
+  const handleEdit = () => {
+    setIsEditing(true);
+  };
 
   return (
     <SideDialog
@@ -68,58 +150,169 @@ export function ItemDetailDialog({
         </TextAndIcon>
         |
         <SideDialog.Nav onNext={toNextItem()} onPrevious={toPreviousItem()} />
-        {/* Edit and Delete buttons - placeholders for Plans 09-03 and 09-04 */}
-        <div className="ml-auto flex items-center gap-2">{/* Edit button will be added in Plan 09-03 */}</div>
+        {!isEditing && (
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleEdit}>
+              <Icon>
+                <Pencil />
+              </Icon>
+              Edit
+            </Button>
+            {/* Delete button will be added in Plan 09-04 */}
+          </div>
+        )}
       </SideDialog.Top>
 
       <SideDialog.Content>
-        <SideDialog.Header>
-          <SideDialog.Heading>
-            <FileInputIcon /> Dataset Item
-          </SideDialog.Heading>
-          <TextAndIcon>
-            <HashIcon /> {item.id}
-          </TextAndIcon>
-        </SideDialog.Header>
-
-        <Sections>
-          {/* Metadata section */}
-          <KeyValueList
-            data={[
-              {
-                label: 'Created',
-                value: format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa'),
-                key: 'createdAt',
-              },
-              ...(item.version
-                ? [
-                    {
-                      label: 'Version',
-                      value: format(new Date(item.version), 'MMM d, yyyy h:mm aaa'),
-                      key: 'version',
-                    },
-                  ]
-                : []),
-            ]}
-            LinkComponent={Link}
+        {isEditing ? (
+          <EditModeContent
+            inputValue={inputValue}
+            setInputValue={setInputValue}
+            expectedOutputValue={expectedOutputValue}
+            setExpectedOutputValue={setExpectedOutputValue}
+            metadataValue={metadataValue}
+            setMetadataValue={setMetadataValue}
+            onSave={handleSave}
+            onCancel={handleCancel}
+            isSaving={updateItem.isPending}
           />
-
-          {/* Input section */}
-          <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={JSON.stringify(item.input, null, 2)} />
-
-          {/* Expected Output section */}
-          {item.expectedOutput !== null && item.expectedOutput !== undefined && (
-            <SideDialog.CodeSection
-              title="Expected Output"
-              icon={<FileOutputIcon />}
-              codeStr={JSON.stringify(item.expectedOutput, null, 2)}
-            />
-          )}
-
-          {/* Metadata section */}
-          {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
-        </Sections>
+        ) : (
+          <ReadOnlyContent item={item} Link={Link} />
+        )}
       </SideDialog.Content>
     </SideDialog>
+  );
+}
+
+/**
+ * Read-only view of the dataset item details
+ */
+function ReadOnlyContent({
+  item,
+  Link,
+}: {
+  item: DatasetItem;
+  Link: ReturnType<typeof useLinkComponent>['Link'];
+}) {
+  const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
+
+  return (
+    <>
+      <SideDialog.Header>
+        <SideDialog.Heading>
+          <FileInputIcon /> Dataset Item
+        </SideDialog.Heading>
+        <TextAndIcon>
+          <HashIcon /> {item.id}
+        </TextAndIcon>
+      </SideDialog.Header>
+
+      <Sections>
+        <KeyValueList
+          data={[
+            {
+              label: 'Created',
+              value: format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa'),
+              key: 'createdAt',
+            },
+            ...(item.version
+              ? [
+                  {
+                    label: 'Version',
+                    value: format(new Date(item.version), 'MMM d, yyyy h:mm aaa'),
+                    key: 'version',
+                  },
+                ]
+              : []),
+          ]}
+          LinkComponent={Link}
+        />
+
+        <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={JSON.stringify(item.input, null, 2)} />
+
+        {item.expectedOutput !== null && item.expectedOutput !== undefined && (
+          <SideDialog.CodeSection
+            title="Expected Output"
+            icon={<FileOutputIcon />}
+            codeStr={JSON.stringify(item.expectedOutput, null, 2)}
+          />
+        )}
+
+        {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
+      </Sections>
+    </>
+  );
+}
+
+/**
+ * Editable form view for updating dataset item
+ */
+interface EditModeContentProps {
+  inputValue: string;
+  setInputValue: (value: string) => void;
+  expectedOutputValue: string;
+  setExpectedOutputValue: (value: string) => void;
+  metadataValue: string;
+  setMetadataValue: (value: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  isSaving: boolean;
+}
+
+function EditModeContent({
+  inputValue,
+  setInputValue,
+  expectedOutputValue,
+  setExpectedOutputValue,
+  metadataValue,
+  setMetadataValue,
+  onSave,
+  onCancel,
+  isSaving,
+}: EditModeContentProps) {
+  return (
+    <>
+      <SideDialog.Header>
+        <SideDialog.Heading>
+          <Pencil /> Edit Item
+        </SideDialog.Heading>
+      </SideDialog.Header>
+
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Label>Input (JSON) *</Label>
+          <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-[120px]" />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Expected Output (JSON, optional)</Label>
+          <CodeEditor
+            value={expectedOutputValue}
+            onChange={setExpectedOutputValue}
+            showCopyButton={false}
+            className="min-h-[100px]"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Metadata (JSON, optional)</Label>
+          <CodeEditor
+            value={metadataValue}
+            onChange={setMetadataValue}
+            showCopyButton={false}
+            className="min-h-[80px]"
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-4">
+          <Button variant="outline" onClick={onCancel} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button variant="light" onClick={onSave} disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+      </div>
+    </>
   );
 }
