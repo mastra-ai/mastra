@@ -97,6 +97,7 @@ const CLASS_PATTERNS_TO_REMOVE = [
   /theme-doc-version-badge/,
   /clean-btn/,
   /copyButton/,
+  /copy-openin-button/,
   /hash-link/,
   /sr-only/,
   /codeBlockTitle/,
