@@ -24,6 +24,8 @@ interface UseBrowserStreamReturn {
   status: StreamStatus;
   error: string | null;
   currentUrl: string | null;
+  viewport: { width: number; height: number } | null;
+  sendMessage: (data: string) => void;
   connect: () => void;
   disconnect: () => void;
   isActive: boolean;
@@ -43,6 +45,7 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
   const [status, setStatus] = useState<StreamStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
+  const [viewport, setViewport] = useState<{ width: number; height: number } | null>(null);
 
   // Store WebSocket in ref to avoid creating new connections on render
   const wsRef = useRef<WebSocket | null>(null);
@@ -70,7 +73,14 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
     }
     setStatus('idle');
     setError(null);
+    setViewport(null);
   }, [clearReconnectTimeout]);
+
+  const sendMessage = useCallback((data: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(data);
+    }
+  }, []);
 
   const connect = useCallback(() => {
     // Don't connect if already connecting or connected
@@ -113,6 +123,7 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
               status?: string;
               error?: string;
               url?: string;
+              viewport?: { width: number; height: number };
             };
 
             if (parsed.status) {
@@ -143,6 +154,10 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
 
             if (parsed.url !== undefined) {
               setCurrentUrl(parsed.url);
+            }
+
+            if (parsed.viewport) {
+              setViewport(parsed.viewport);
             }
           } catch {
             // If JSON parsing fails, treat as frame data
@@ -221,6 +236,8 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
     status,
     error,
     currentUrl,
+    viewport,
+    sendMessage,
     connect,
     disconnect,
     isActive,
