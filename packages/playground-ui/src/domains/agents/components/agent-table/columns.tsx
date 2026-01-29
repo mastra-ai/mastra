@@ -77,6 +77,7 @@ const baseColumns: ColumnDef<AgentTableColumn>[] = [
   {
     header: 'Model',
     accessorKey: 'model',
+    size: 200,
     cell: ({ row }) => {
       return (
         <Cell>
@@ -115,6 +116,7 @@ const baseColumns: ColumnDef<AgentTableColumn>[] = [
   {
     header: 'Attached entities',
     accessorKey: 'attachedEntities',
+    size: 350,
     cell: ({ row }) => {
       const agent = row.original;
 
