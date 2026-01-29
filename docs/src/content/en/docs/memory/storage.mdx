@@ -221,9 +221,7 @@ Some storage providers enforce record size limits that base64-encoded file attac
 
 PostgreSQL, MongoDB, and libSQL have higher limits and are generally unaffected.
 
-### Solution
-
-Use an input processor to upload attachments to external storage (S3, R2, GCS, [Convex file storage](https://docs.convex.dev/file-storage), etc.) and replace them with URL references before persistence.
+To avoid this, use an input processor to upload attachments to external storage (S3, R2, GCS, [Convex file storage](https://docs.convex.dev/file-storage), etc.) and replace them with URL references before persistence.
 
 ```typescript title="src/mastra/processors/attachment-uploader.ts"
 import type { Processor } from "@mastra/core/processors";
