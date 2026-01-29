@@ -60,6 +60,7 @@ describe('checkMastraPeerDeps', () => {
     expect(mismatches).toHaveLength(1);
     expect(mismatches[0]).toEqual({
       package: '@mastra/memory',
+      packageVersion: '1.0.0',
       peerDep: '@mastra/core',
       requiredRange: '>=1.0.0-0 <2.0.0-0',
       installedVersion: '0.5.0',
@@ -128,6 +129,7 @@ describe('logPeerDepWarnings', () => {
     const result = logPeerDepWarnings([
       {
         package: '@mastra/memory',
+        packageVersion: '1.0.0',
         peerDep: '@mastra/core',
         requiredRange: '>=1.0.0',
         installedVersion: '0.5.0',

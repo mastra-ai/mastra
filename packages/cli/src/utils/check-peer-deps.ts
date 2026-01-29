@@ -6,6 +6,7 @@ import type { MastraPackageInfo } from './mastra-packages.js';
 
 interface PeerDepMismatch {
   package: string;
+  packageVersion: string;
   peerDep: string;
   requiredRange: string;
   installedVersion: string;
@@ -50,6 +51,7 @@ export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promis
         if (!satisfies(installedVersion, requiredRange)) {
           mismatches.push({
             package: pkg.name,
+            packageVersion: pkg.version,
             peerDep: peerDepName,
             requiredRange,
             installedVersion,
@@ -80,12 +82,12 @@ export function logPeerDepWarnings(mismatches: PeerDepMismatch[]): boolean {
   for (const mismatch of mismatches) {
     console.warn(
       pc.dim('  •'),
-      pc.cyan(mismatch.package),
+      pc.cyan(`${mismatch.package}@${mismatch.packageVersion}`),
       'requires',
       pc.cyan(mismatch.peerDep),
       pc.green(mismatch.requiredRange),
     );
-    console.warn(pc.dim('    but found'), pc.red(`v${mismatch.installedVersion}`));
+    console.warn(pc.dim('    but found'), pc.red(`${mismatch.peerDep}@${mismatch.installedVersion}`));
   }
 
   console.warn();
