@@ -5960,10 +5960,10 @@ describe('Agent - network - abort functionality', () => {
 
     // Sub-agent mock that aborts when called
     const subAgentMockModel = new MockLanguageModelV2({
-      // @ts-expect-error - error
       doGenerate: async () => {
         await new Promise(resolve => setImmediate(resolve));
         abortController.abort();
+        throw new DOMException('The user aborted a request.', 'AbortError');
       },
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
