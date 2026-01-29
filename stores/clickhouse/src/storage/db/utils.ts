@@ -1,4 +1,5 @@
 import type { TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
+import * as coreStorage from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -6,10 +7,13 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_AGENT_VERSIONS,
   safelyParseJSON,
   TABLE_SPANS,
 } from '@mastra/core/storage';
+
+// Use core's constant if available, otherwise fall back to local value for backwards compatibility
+const TABLE_AGENT_VERSIONS = ((coreStorage as Record<string, unknown>).TABLE_AGENT_VERSIONS ??
+  'mastra_agent_versions') as 'mastra_agent_versions';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
