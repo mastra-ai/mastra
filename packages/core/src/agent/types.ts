@@ -97,6 +97,33 @@ export interface BrowserToolsetLike {
 
   /** Close browser and release resources */
   close(): Promise<void>;
+
+  /**
+   * Inject a mouse event into the browser via CDP.
+   * Used by server to forward user mouse interactions from live view.
+   */
+  injectMouseEvent(event: {
+    type: 'mousePressed' | 'mouseReleased' | 'mouseMoved' | 'mouseWheel';
+    x: number;
+    y: number;
+    button?: 'left' | 'right' | 'middle' | 'none';
+    clickCount?: number;
+    deltaX?: number;
+    deltaY?: number;
+    modifiers?: number;
+  }): Promise<void>;
+
+  /**
+   * Inject a keyboard event into the browser via CDP.
+   * Used by server to forward user keyboard interactions from live view.
+   */
+  injectKeyboardEvent(event: {
+    type: 'keyDown' | 'keyUp' | 'char';
+    key?: string;
+    code?: string;
+    text?: string;
+    modifiers?: number;
+  }): Promise<void>;
 }
 
 export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
