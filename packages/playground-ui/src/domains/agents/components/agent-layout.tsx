@@ -8,12 +8,11 @@ export interface AgentLayoutProps {
   children: React.ReactNode;
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
-  browserSlot?: React.ReactNode;
 }
 
-export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserSlot }: AgentLayoutProps) => {
+export const AgentLayout = ({ agentId, children, leftSlot, rightSlot }: AgentLayoutProps) => {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `agent-layout-${agentId}${browserSlot ? '-browser' : ''}`,
+    id: `agent-layout-${agentId}`,
     storage: localStorage,
   });
 
@@ -57,22 +56,6 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserSlo
             collapsible={true}
           >
             {rightSlot}
-          </CollapsiblePanel>
-        </>
-      )}
-      {browserSlot && (
-        <>
-          <PanelSeparator />
-          <CollapsiblePanel
-            direction="right"
-            id="browser-slot"
-            minSize={300}
-            maxSize={'50%'}
-            defaultSize={400}
-            collapsedSize={60}
-            collapsible={true}
-          >
-            {browserSlot}
           </CollapsiblePanel>
         </>
       )}

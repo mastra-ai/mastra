@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { ToolCallMessagePartProps } from '@assistant-ui/react';
 
 import { ToolBadge } from './badges/tool-badge';
@@ -5,6 +6,7 @@ import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { isBrowserTool, useBrowserToolCallsSafe } from '@/domains/agents/context/browser-tool-calls-context';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
   metadata?: MastraUIMessage['metadata'];
@@ -19,6 +21,29 @@ export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackP
 };
 
 const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
+  // All hooks must be called unconditionally before any conditional returns
+  const browserCtx = useBrowserToolCallsSafe();
+  const isBrowser = isBrowserTool(toolName);
+
+  useEffect(() => {
+    if (!isBrowser || !browserCtx) return;
+    browserCtx.registerToolCall({
+      toolCallId,
+      toolName,
+      args: typeof args === 'object' ? args : {},
+      result,
+      status: result !== undefined ? 'complete' : 'pending',
+      timestamp: Date.now(),
+    });
+  }, [isBrowser, toolCallId, toolName, args, result, browserCtx]);
+
+  useWorkflowStream(result);
+
+  // Hide browser tools from chat when context is available
+  if (isBrowser && browserCtx) {
+    return null;
+  }
+
   // We need to handle the stream data even if the workflow is not resolved yet
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event
@@ -45,8 +70,6 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const suspendedToolMetadata = suspendedTools ? suspendedTools?.[toolName] : undefined;
 
   const toolCalled = metadata?.mode === 'network' && metadata?.hasMoreMessages ? true : undefined;
-
-  useWorkflowStream(result);
 
   if (isAgent) {
     return (

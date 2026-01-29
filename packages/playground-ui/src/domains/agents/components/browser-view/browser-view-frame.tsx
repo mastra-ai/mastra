@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { useBrowserStream, type StreamStatus } from '../../hooks/use-browser-stream';
@@ -16,13 +16,16 @@ interface BrowserViewFrameProps {
  */
 export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChange }: BrowserViewFrameProps) {
   const imgRef = useRef<HTMLImageElement>(null);
-  const hasFrameRef = useRef<boolean>(false);
+  const [hasFrame, setHasFrame] = useState(false);
 
   // Memoize onFrame to avoid recreation
   const handleFrame = useCallback((data: string) => {
     if (imgRef.current) {
       imgRef.current.src = `data:image/jpeg;base64,${data}`;
-      hasFrameRef.current = true;
+      if (!imgRef.current.dataset.loaded) {
+        imgRef.current.dataset.loaded = '1';
+        setHasFrame(true);
+      }
     }
   }, []);
 
@@ -47,21 +50,20 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
     connect();
   }, [connect]);
 
-  const isLoading = status === 'connecting' || status === 'browser_starting';
-  const isReconnecting = status === 'disconnected' && hasFrameRef.current;
+  const isLoading = (status === 'connecting' || status === 'browser_starting' || status === 'streaming') && !hasFrame;
+  const isReconnecting = status === 'disconnected' && hasFrame;
   const hasError = status === 'error';
-  const showImage = hasFrameRef.current || status === 'streaming';
 
   return (
     <div className={cn('relative w-full aspect-video bg-surface2 rounded-md overflow-hidden', className)}>
-      {/* Image element - always rendered but hidden until first frame */}
+      {/* Image element - always rendered, hidden via opacity until first frame loads */}
       <img
         ref={imgRef}
         alt="Browser screencast"
-        className={cn('absolute inset-0 w-full h-full object-contain', showImage ? 'opacity-100' : 'opacity-0')}
+        className={cn('absolute inset-0 w-full h-full object-contain', hasFrame ? 'opacity-100' : 'opacity-0')}
       />
 
-      {/* Loading state */}
+      {/* Loading skeleton - shown until first frame arrives */}
       {isLoading && <Skeleton className="absolute inset-0" />}
 
       {/* Reconnecting overlay - shown over last frame */}

@@ -1,3 +1,4 @@
+import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/ds/components/StatusBadge';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
@@ -5,7 +6,10 @@ import type { StreamStatus } from '../../hooks/use-browser-stream';
 interface BrowserViewHeaderProps {
   url: string | null;
   status: StreamStatus;
+  isCollapsed?: boolean;
   className?: string;
+  onClose?: () => void;
+  onToggleCollapse?: () => void;
 }
 
 /**
@@ -27,6 +31,8 @@ function getStatusBadgeConfig(status: StreamStatus): {
       return { variant: 'warning', pulse: true, label: 'Starting' };
     case 'streaming':
       return { variant: 'success', pulse: false, label: 'Live' };
+    case 'browser_closed':
+      return { variant: 'neutral', pulse: false, label: 'Closed' };
     case 'disconnected':
       return { variant: 'error', pulse: true, label: 'Disconnected' };
     case 'error':
@@ -37,15 +43,23 @@ function getStatusBadgeConfig(status: StreamStatus): {
 }
 
 /**
- * Browser view header component with URL bar and status indicator.
+ * Browser view header component with URL bar, status indicator, and close button.
  */
-export function BrowserViewHeader({ url, status, className }: BrowserViewHeaderProps) {
+export function BrowserViewHeader({
+  url,
+  status,
+  isCollapsed,
+  className,
+  onClose,
+  onToggleCollapse,
+}: BrowserViewHeaderProps) {
   const { variant, pulse, label } = getStatusBadgeConfig(status);
 
   return (
     <div
       className={cn(
-        'flex items-center justify-between px-3 py-2 border-b border-border1 bg-surface1 rounded-t-md',
+        'flex items-center justify-between px-3 py-2 border-b border-border1 bg-surface1',
+        isCollapsed ? 'rounded-md' : 'rounded-t-md',
         className,
       )}
     >
@@ -56,10 +70,34 @@ export function BrowserViewHeader({ url, status, className }: BrowserViewHeaderP
         </span>
       </div>
 
-      {/* Status badge */}
-      <StatusBadge variant={variant} size="sm" withDot pulse={pulse}>
-        {label}
-      </StatusBadge>
+      <div className="flex items-center gap-2">
+        {/* Status badge */}
+        <StatusBadge variant={variant} size="sm" withDot pulse={pulse}>
+          {label}
+        </StatusBadge>
+
+        {/* Collapse/expand toggle */}
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
+            title={isCollapsed ? 'Expand browser view' : 'Collapse browser view'}
+          >
+            {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+          </button>
+        )}
+
+        {/* Close button */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
+            title="Close browser session"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }

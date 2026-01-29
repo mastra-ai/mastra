@@ -9,6 +9,7 @@ export type StreamStatus =
   | 'connected' // WebSocket open, waiting for stream
   | 'browser_starting' // Browser launching
   | 'streaming' // Receiving frames
+  | 'browser_closed' // Browser session closed explicitly
   | 'disconnected' // Connection lost
   | 'error'; // Error state
 
@@ -122,6 +123,9 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
                   break;
                 case 'streaming':
                   setStatus('streaming');
+                  break;
+                case 'browser_closed':
+                  setStatus('browser_closed');
                   break;
                 case 'stopped':
                   setStatus('disconnected');
