@@ -86,7 +86,8 @@ export const getStockPrice = createTool({
 
 export const translateText = createTool({
   id: 'translate_text',
-  description: 'Translate text from one language to another. Supports common languages like Spanish, French, German, Japanese.',
+  description:
+    'Translate text from one language to another. Supports common languages like Spanish, French, German, Japanese.',
   inputSchema: z.object({
     text: z.string().describe('Text to translate'),
     targetLanguage: z.string().describe('Target language (e.g., spanish, french, german)'),
