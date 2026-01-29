@@ -1,12 +1,9 @@
 import { join } from 'node:path';
-
 import { getDeployer } from '@mastra/deployer';
-
 import { FileService } from '../../services/service.file';
 import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps';
 import { createLogger } from '../../utils/logger';
 import { getMastraPackages } from '../../utils/mastra-packages';
-
 import { BuildBundler } from './BuildBundler';
 
 export async function build({
