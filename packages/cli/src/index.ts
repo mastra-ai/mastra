@@ -156,6 +156,7 @@ program
   .option('-s, --server-port <serverPort>', 'Port of the Mastra API server (default: 4111)')
   .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')
   .option('--server-api-prefix <serverApiPrefix>', 'API route prefix of the Mastra server (default: /api)')
+  .option('--request-context-presets <file>', 'Path to request context presets JSON file')
   .action(studio);
 
 program

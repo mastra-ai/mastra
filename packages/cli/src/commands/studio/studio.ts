@@ -13,6 +13,7 @@ interface StudioOptions {
   serverPort?: string | number;
   serverProtocol?: string;
   serverApiPrefix?: string;
+  requestContextPresets?: string;
 }
 
 const __filename = fileURLToPath(import.meta.url);
