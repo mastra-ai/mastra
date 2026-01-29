@@ -317,8 +317,6 @@ export default function Workspace() {
                         <div className="text-sm font-medium text-icon6 truncate">{workspace.name}</div>
                         <div className="text-xs text-icon4 truncate">
                           {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
-                          {' · '}
-                          {workspace.status}
                         </div>
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
@@ -356,8 +354,6 @@ export default function Workspace() {
               {selectedWorkspace.source === 'agent' && selectedWorkspace.agentName && (
                 <span className="text-icon3">({selectedWorkspace.agentName})</span>
               )}
-              <span className="text-icon3">·</span>
-              <span className="text-icon3">{selectedWorkspace.status}</span>
               {isReadOnly && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">Read-only</span>
               )}
