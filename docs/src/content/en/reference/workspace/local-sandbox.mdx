@@ -176,21 +176,19 @@ When you use a relative path for `workingDirectory`, it resolves from `process.c
 
 This can cause confusion when the same relative path resolves to different locations.
 
-### Recommended: Use getProjectRoot()
+### Recommended: Use absolute paths
 
-For consistent paths across all execution contexts, use `getProjectRoot()` from `@mastra/core`:
+For consistent paths across all execution contexts, use an environment variable with an absolute path:
 
 ```typescript
-import { join } from 'node:path';
-import { getProjectRoot } from '@mastra/core/utils';
 import { LocalSandbox } from '@mastra/core/workspace';
 
 const sandbox = new LocalSandbox({
-  workingDirectory: join(getProjectRoot(), 'workspace'),
+  workingDirectory: process.env.WORKSPACE_PATH!,
 });
 ```
 
-This ensures commands run from your project's `workspace/` directory, regardless of how you run your code.
+Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. This ensures commands run from a consistent directory regardless of how you run your code.
 
 ## Static Methods
 

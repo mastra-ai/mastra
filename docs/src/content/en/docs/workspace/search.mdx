@@ -7,6 +7,15 @@ packages:
 
 # Search and Indexing
 
+Search lets agents find relevant content in indexed workspace files. When an agent needs to answer a question or find information, it can search the indexed content instead of reading every file.
+
+## How it works
+
+1. **Indexing** - Content is processed and stored in a searchable format (BM25 index, vector embeddings, or both)
+2. **Querying** - The agent sends a search query
+3. **Ranking** - Results are scored and ranked by relevance
+4. **Results** - The agent receives the most relevant content with file paths and scores
+
 Workspaces support three search modes: BM25 keyword search, vector semantic search, and hybrid search that combines both.
 
 ## BM25 keyword search
@@ -83,7 +92,7 @@ await workspace.index('/docs/guide.md', 'Content of the guide...');
 
 ### Auto-indexing
 
-Configure `autoIndexPaths` to index files when the workspace initializes:
+Configure `autoIndexPaths` to automatically index files when the workspace initializes. Each path specifies a directory to index recursively.
 
 ```typescript
 const workspace = new Workspace({
@@ -91,9 +100,13 @@ const workspace = new Workspace({
   bm25: true,
   autoIndexPaths: ['/docs', '/support/faq'],
 });
-
-await workspace.init(); // Indexes all files in specified paths
 ```
+
+When `init()` is called (either explicitly or automatically when an agent uses the workspace), all files in the specified directories are read and indexed for search.
+
+:::note
+Paths must be directories, not glob patterns. Use `/docs` to index all files in the docs directory recursively. Glob patterns like `**/*.md` are not supported.
+:::
 
 ## Searching
 

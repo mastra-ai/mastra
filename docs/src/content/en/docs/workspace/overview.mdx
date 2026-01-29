@@ -35,11 +35,22 @@ const workspace = new Workspace({
   }),
   skills: ['/skills'],
 });
+```
 
+## Initialization
+
+Call `init()` to initialize the workspace:
+
+```typescript
 await workspace.init();
 ```
 
-The `init()` call starts the sandbox and indexes any files in `autoIndexPaths` if search is configured.
+Initialization runs setup logic for each configured provider:
+- **LocalFilesystem**: Creates the base directory if it doesn't exist
+- **LocalSandbox**: Creates working directory and sets up OS-level sandboxing (seatbelt profile on macOS)
+- **Search**: Indexes files from `autoIndexPaths` (if configured)
+
+External providers may perform additional setup like establishing connections or authenticating.
 
 ## Global Workspace
 
@@ -47,6 +58,11 @@ Set a workspace on the Mastra instance. All agents inherit this workspace unless
 
 ```typescript
 import { Mastra } from '@mastra/core';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+});
 
 const mastra = new Mastra({
   workspace,
@@ -60,6 +76,11 @@ Assign a workspace directly to an agent to override the global workspace:
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './agent-workspace' }),
+});
 
 export const myAgent = new Agent({
   id: 'my-agent',
@@ -73,7 +94,7 @@ export const myAgent = new Agent({
 Configure tool behavior through the `tools` option on the Workspace. This controls which tools are enabled and their safety settings.
 
 ```typescript
-import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),

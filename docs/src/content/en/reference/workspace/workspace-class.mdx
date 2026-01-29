@@ -12,7 +12,7 @@ The `Workspace` class combines a filesystem and sandbox to provide agents with f
 ## Usage Example
 
 ```typescript
-import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
   id: 'my-workspace',
@@ -25,18 +25,7 @@ const workspace = new Workspace({
   }),
   bm25: true,
   autoIndexPaths: ['/docs'],
-  tools: {
-    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
-      requireApproval: true,
-      requireReadBeforeWrite: true,
-    },
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      requireApproval: true,
-    },
-  },
 });
-
-await workspace.init();
 ```
 
 ## Constructor Parameters
@@ -117,9 +106,30 @@ await workspace.init();
 
 ## Tool Configuration
 
-The `tools` option controls which workspace tools are enabled and their safety settings. See [Workspace Overview](/docs/workspace/overview#tool-configuration) for usage examples.
+The `tools` option accepts a `WorkspaceToolsConfig` object that controls which workspace tools are enabled and their safety settings.
 
-### WorkspaceToolConfig
+```typescript
+tools: {
+  // Global defaults (apply to all tools)
+  enabled: true,
+  requireApproval: false,
+
+  // Per-tool overrides using WORKSPACE_TOOLS constants
+  [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+    requireApproval: true,
+  },
+}
+```
+
+The config object has two parts:
+- **Global defaults** (`enabled`, `requireApproval`) - Apply to all tools unless overridden
+- **Per-tool overrides** - Use `WORKSPACE_TOOLS` constants as keys to configure individual tools
+
+See [Workspace Overview](/docs/workspace/overview#tool-configuration) for more examples.
+
+### Per-tool Options
+
+Each tool can be configured with these options:
 
 <PropertiesTable
   content={[

@@ -50,13 +50,6 @@ const filesystem = new LocalFilesystem({
       defaultValue: "Auto-generated",
     },
     {
-      name: "contained",
-      type: "boolean",
-      description: "When true, all file operations are restricted to stay within basePath. Prevents path traversal attacks and symlink escapes.",
-      isOptional: true,
-      defaultValue: "true",
-    },
-    {
       name: "readOnly",
       type: "boolean",
       description: "When true, all write operations are blocked. Read operations are still allowed.",
@@ -130,33 +123,19 @@ When you use a relative path for `basePath`, it resolves from `process.cwd()`. I
 
 This can cause confusion when the same relative path resolves to different locations.
 
-### Recommended: Use getProjectRoot()
+### Recommended: Use absolute paths
 
-For consistent paths across all execution contexts, use `getProjectRoot()` from `@mastra/core`:
+For consistent paths across all execution contexts, use an environment variable with an absolute path:
 
 ```typescript
-import { join } from 'node:path';
-import { getProjectRoot } from '@mastra/core/utils';
 import { LocalFilesystem } from '@mastra/core/workspace';
 
 const filesystem = new LocalFilesystem({
-  basePath: join(getProjectRoot(), 'workspace'),
+  basePath: process.env.WORKSPACE_PATH!,
 });
 ```
 
-This ensures `workspace/` is always at your project root, regardless of how you run your code.
-
-### Path containment
-
-When `contained: true` (the default), any path that would escape basePath throws a `PermissionError`:
-
-```typescript
-// Throws PermissionError - path traversal blocked
-await filesystem.readFile('../secrets/config.json');
-await filesystem.readFile('/docs/../../secrets/config.json');
-```
-
-Symlinks pointing outside basePath are also blocked when `contained` is enabled.
+Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. This ensures the workspace path is consistent regardless of how you run your code.
 
 ## Related
 
