@@ -1,6 +1,6 @@
 import { TransformStream } from 'node:stream/web';
 import type { LLMStepResult } from '@mastra/core/agent';
-import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { AgentChunkType, ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus, WorkflowStreamEvent } from '@mastra/core/workflows';
 import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
@@ -899,7 +899,7 @@ export function transformNetwork(
       }
 
       if (payload.type.startsWith('agent-execution-event-')) {
-        const stepId = payload.payload.runId;
+        const stepId = (payload.payload as AgentChunkType).runId;
         const current = bufferedNetworks.get(payload.runId!);
         if (!current) return null;
 
@@ -927,7 +927,7 @@ export function transformNetwork(
       }
 
       if (payload.type.startsWith('workflow-execution-event-')) {
-        const stepId = payload.payload.runId;
+        const stepId = (payload.payload as WorkflowStreamEvent).runId;
         const current = bufferedNetworks.get(payload.runId!);
         if (!current) return null;
 

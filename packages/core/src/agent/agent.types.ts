@@ -133,6 +133,14 @@ export type NetworkOptions<OUTPUT = undefined> = {
    * ```
    */
   structuredOutput?: StructuredOutputOptions<OUTPUT extends {} ? OUTPUT : never>;
+
+  /** Callback fired when streaming is aborted */
+  onAbort?: LoopConfig<OUTPUT>['onAbort'];
+
+  /**
+   * Signal to abort the streaming operation
+   */
+  abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
 };
 
 /**
