@@ -50,4 +50,13 @@ describe('formatUsageMetrics', () => {
     const result = formatUsageMetrics(undefined);
     expect(result).toEqual({});
   });
+
+  it('should clamp input tokens to zero if cache exceeds total', () => {
+    // Edge case: if cache tokens somehow exceed inputTokens, don't go negative
+    const usage: UsageStats = { inputTokens: 100, outputTokens: 50, inputDetails: { cacheRead: 150 } };
+    const result = formatUsageMetrics(usage);
+    expect(result.$ai_cache_read_input_tokens).toBe(150);
+    expect(result.$ai_input_tokens).toBe(0); // Clamped to 0, not -50
+    expect(result.$ai_output_tokens).toBe(50);
+  });
 });

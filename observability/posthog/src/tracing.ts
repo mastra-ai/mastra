@@ -45,6 +45,9 @@ export function formatUsageMetrics(usage?: UsageStats): PostHogUsageMetrics {
       props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
       props.$ai_input_tokens -= props.$ai_cache_creation_input_tokens;
     }
+
+    // Defensive clamp: ensure input tokens is never negative
+    if (props.$ai_input_tokens < 0) props.$ai_input_tokens = 0;
   }
 
   if (usage.outputTokens !== undefined) props.$ai_output_tokens = usage.outputTokens;

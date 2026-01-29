@@ -36,6 +36,9 @@ export function formatUsageMetrics(usage?: UsageStats): LangfuseUsageMetrics {
       metrics.cache_write_input_tokens = usage.inputDetails.cacheWrite;
       metrics.input -= metrics.cache_write_input_tokens;
     }
+
+    // Defensive clamp: ensure input tokens is never negative
+    if (metrics.input < 0) metrics.input = 0;
   }
 
   if (usage.outputTokens !== undefined) {
