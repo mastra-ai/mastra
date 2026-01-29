@@ -7,8 +7,9 @@ import { FileService } from '@mastra/deployer';
 import { getServerOptions, normalizeStudioBase } from '@mastra/deployer/build';
 import { execa } from 'execa';
 import getPort from 'get-port';
-
-import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps.js';
+import pc from 'picocolors';
+import { checkMastraPeerDeps, getUpdateCommand, logPeerDepWarnings } from '../../utils/check-peer-deps.js';
+import type { PeerDepMismatch } from '../../utils/check-peer-deps.js';
 import { devLogger } from '../../utils/dev-logger.js';
 import { createLogger } from '../../utils/logger.js';
 import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
@@ -34,6 +35,7 @@ interface StartOptions {
   customArgs?: string[];
   https?: HTTPSOptions;
   mastraPackages?: MastraPackageInfo[];
+  peerDepMismatches?: PeerDepMismatch[];
 }
 
 type ProcessOptions = {
@@ -166,6 +168,19 @@ const startServer = async (
       }
     });
 
+    // Show hint about updating packages when server exits with error
+    currentServerProcess.on('exit', (code: number | null) => {
+      if (code !== null && code !== 0) {
+        const updateCommand = getUpdateCommand(startOptions.peerDepMismatches ?? []);
+        if (updateCommand) {
+          console.warn();
+          devLogger.warn(`This error may be caused by mismatched package versions. Try running:`);
+          console.warn(`  ${pc.cyan(updateCommand)}`);
+          console.warn();
+        }
+      }
+    });
+
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
@@ -205,6 +220,12 @@ const startServer = async (
       devLogger.debug(`Server error output: ${execaError.stderr}`);
     }
     if (execaError.stdout) devLogger.debug(`Server output: ${execaError.stdout}`);
+
+    // Show hint about updating packages if there are peer dep mismatches
+    const updateCommand = getUpdateCommand(startOptions.peerDepMismatches ?? []);
+    if (updateCommand) {
+      devLogger.warn(`This error may be caused by mismatched package versions. Try running: ${updateCommand}`);
+    }
 
     if (!serverIsReady) {
       throw err;
@@ -411,7 +432,14 @@ export async function dev({
   const peerDepMismatches = await checkMastraPeerDeps(mastraPackages);
   logPeerDepWarnings(peerDepMismatches);
 
-  const startOptions: StartOptions = { inspect, inspectBrk, customArgs, https: httpsOptions, mastraPackages };
+  const startOptions: StartOptions = {
+    inspect,
+    inspectBrk,
+    customArgs,
+    https: httpsOptions,
+    mastraPackages,
+    peerDepMismatches,
+  };
 
   await bundler.prepare(dotMastraPath);
 
