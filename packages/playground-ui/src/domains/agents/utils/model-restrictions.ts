@@ -1,4 +1,4 @@
-import { cleanProviderId } from '../components/agent-metadata/utils';
+import { cleanProviderId } from '@/domains/llm';
 
 /**
  * Check if the model is a newer Claude model (4.5+) that doesn't allow

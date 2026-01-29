@@ -12,8 +12,7 @@ import { usePromptEnhancer } from '../../hooks/use-prompt-enhancer';
 import { Spinner } from '@/ds/components/Spinner';
 import { Input } from '@/ds/components/Input';
 import { useAgent } from '../../hooks/use-agent';
-import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers';
-import { cleanProviderId } from '../agent-metadata/utils';
+import { useLLMProviders, cleanProviderId } from '@/domains/llm';
 
 export const PromptEnhancer = ({ agentId }: { agentId: string }) => {
   const { isDirty, prompt, setPrompt, resetPrompt } = useAgentPromptExperiment();
@@ -67,7 +66,7 @@ const PromptEnhancerTextarea = ({ agentId }: { agentId: string }) => {
   const { prompt, setPrompt } = useAgentPromptExperiment();
   const { mutateAsync: enhancePrompt, isPending } = usePromptEnhancer({ agentId });
   const { data: agent, isLoading: isAgentLoading, isError: isAgentError } = useAgent(agentId);
-  const { data: providersData, isLoading: isProvidersLoading } = useAgentsModelProviders();
+  const { data: providersData, isLoading: isProvidersLoading } = useLLMProviders();
 
   const providers = providersData?.providers || [];
 

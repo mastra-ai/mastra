@@ -1,13 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Spinner } from '@/ds/components/Spinner';
-import { ProviderLogo } from './agent-metadata/provider-logo';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { UpdateModelParams } from '@mastra/client-js';
-import { cleanProviderId } from './agent-metadata/utils';
-import { useAgentsModelProviders } from '../hooks/use-agents-model-providers';
+import { Spinner } from '@/ds/components/Spinner';
 import { useAgent } from '../hooks/use-agent';
 import { useUpdateAgentModel } from '../hooks/use-agents';
-import { Combobox, ComboboxOption } from '@/ds/components/Combobox';
-import { TriangleAlert } from 'lucide-react';
+import {
+  LLMProviderPicker,
+  LLMModelPicker,
+  ProviderWarning,
+  useLLMProviders,
+  useAllModels,
+  cleanProviderId,
+  findProvider,
+} from '@/domains/llm';
 
 export interface ComposerModelSwitcherProps {
   agentId: string;
@@ -16,7 +20,7 @@ export interface ComposerModelSwitcherProps {
 export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) => {
   const { data: agent } = useAgent(agentId);
   const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
-  const { data: dataProviders, isLoading: providersLoading } = useAgentsModelProviders();
+  const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
 
   const defaultProvider = agent?.provider || '';
   const defaultModel = agent?.modelId || '';
@@ -26,6 +30,7 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
   const [modelOpen, setModelOpen] = useState(false);
 
   const providers = dataProviders?.providers || [];
+  const allModels = useAllModels(providers);
 
   // Update local state when agent data changes
   useEffect(() => {
@@ -34,106 +39,46 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
   }, [defaultModel, defaultProvider]);
 
   const currentModelProvider = cleanProviderId(selectedProvider);
-
-  // Get all models with their provider info
-  const allModels = useMemo(() => {
-    return providers.flatMap(provider =>
-      provider.models.map(model => ({
-        provider: provider.id,
-        providerName: provider.name,
-        model: model,
-      })),
-    );
-  }, [providers]);
-
-  // Filter and sort providers based on connection status and popularity
-  const sortedProviders = useMemo(() => {
-    const popularProviders = ['openai', 'anthropic', 'google', 'openrouter', 'netlify'];
-
-    const getPopularityIndex = (providerId: string) => {
-      const cleanId = providerId.toLowerCase().split('.')[0];
-      const index = popularProviders.indexOf(cleanId);
-      return index === -1 ? popularProviders.length : index;
-    };
-
-    return [...providers].sort((a, b) => {
-      if (a.connected && !b.connected) return -1;
-      if (!a.connected && b.connected) return 1;
-
-      const aPopularity = getPopularityIndex(a.id);
-      const bPopularity = getPopularityIndex(b.id);
-      if (aPopularity !== bPopularity) {
-        return aPopularity - bPopularity;
-      }
-
-      return a.name.localeCompare(b.name);
-    });
-  }, [providers]);
-
-  // Create provider options with icons
-  const providerOptions: ComboboxOption[] = useMemo(() => {
-    return sortedProviders.map(provider => ({
-      label: provider.name,
-      value: provider.id,
-      start: (
-        <div className="relative">
-          <ProviderLogo providerId={provider.id} size={14} />
-          <div
-            className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
-              provider.connected ? 'bg-accent1' : 'bg-accent2'
-            }`}
-            title={provider.connected ? 'Connected' : 'Not connected'}
-          />
-        </div>
-      ),
-    }));
-  }, [sortedProviders]);
-
-  // Filter models based on selected provider
-  const filteredModels = useMemo(() => {
-    if (!currentModelProvider) return [];
-    return allModels.filter(m => m.provider === currentModelProvider).sort((a, b) => a.model.localeCompare(b.model));
-  }, [allModels, currentModelProvider]);
-
-  // Create model options
-  const modelOptions: ComboboxOption[] = useMemo(() => {
-    return filteredModels.map(m => ({
-      label: m.model,
-      value: m.model,
-    }));
-  }, [filteredModels]);
+  const currentProvider = useMemo(
+    () => findProvider(providers, selectedProvider),
+    [providers, selectedProvider],
+  );
 
   // Auto-save when model changes
-  const handleModelSelect = async (modelId: string) => {
-    setSelectedModel(modelId);
+  const handleModelSelect = useCallback(
+    async (modelId: string) => {
+      setSelectedModel(modelId);
 
-    const providerToUse = currentModelProvider || selectedProvider;
+      const providerToUse = currentModelProvider || selectedProvider;
 
-    if (modelId && providerToUse) {
-      try {
-        await updateModel({
-          provider: providerToUse as UpdateModelParams['provider'],
-          modelId,
-        });
-      } catch (error) {
-        console.error('Failed to update model:', error);
+      if (modelId && providerToUse) {
+        try {
+          await updateModel({
+            provider: providerToUse as UpdateModelParams['provider'],
+            modelId,
+          });
+        } catch (error) {
+          console.error('Failed to update model:', error);
+        }
       }
-    }
-  };
+    },
+    [currentModelProvider, selectedProvider, updateModel],
+  );
 
   // Handle provider selection
-  const handleProviderSelect = (providerId: string) => {
-    const cleanedId = cleanProviderId(providerId);
-    setSelectedProvider(cleanedId);
+  const handleProviderSelect = useCallback(
+    (providerId: string) => {
+      const cleanedId = cleanProviderId(providerId);
+      setSelectedProvider(cleanedId);
 
-    // Only clear model selection and open model combobox when switching to a different provider
-    if (cleanedId !== currentModelProvider) {
-      setSelectedModel('');
-      setModelOpen(true);
-    }
-  };
-
-  const currentProvider = providers.find(p => p.id === currentModelProvider);
+      // Only clear model selection and open model combobox when switching to a different provider
+      if (cleanedId !== currentModelProvider) {
+        setSelectedModel('');
+        setModelOpen(true);
+      }
+    },
+    [currentModelProvider],
+  );
 
   if (providersLoading) {
     return (
@@ -143,46 +88,36 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
     );
   }
 
-  const showWarning = currentProvider && !currentProvider.connected;
-
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
-        <Combobox
-          options={providerOptions}
+        <LLMProviderPicker
+          providers={providers}
           value={currentModelProvider}
           onValueChange={handleProviderSelect}
           placeholder="Provider..."
           searchPlaceholder="Search providers..."
           emptyText="No providers found"
           variant="light"
+          logoSize={14}
         />
 
-        <Combobox
-          options={modelOptions}
+        <LLMModelPicker
+          models={allModels}
+          provider={currentModelProvider}
           value={selectedModel}
           onValueChange={handleModelSelect}
           placeholder="Model..."
           searchPlaceholder="Search models..."
           emptyText="No models found"
           variant="light"
+          className="min-w-48"
           open={modelOpen}
           onOpenChange={setModelOpen}
-          className="min-w-48"
         />
       </div>
-      {showWarning && (
-        <div className="flex items-center gap-1 text-accent6 text-xs">
-          <TriangleAlert className="w-3 h-3 shrink-0" />
-          <span>
-            Set{' '}
-            <code className="px-1 py-0.5 bg-accent6Dark rounded text-accent6">
-              {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
-            </code>{' '}
-            to use this provider
-          </span>
-        </div>
-      )}
+
+      <ProviderWarning provider={currentProvider} variant="inline" />
     </div>
   );
 };

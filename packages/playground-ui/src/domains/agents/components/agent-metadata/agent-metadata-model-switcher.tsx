@@ -1,14 +1,18 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Spinner } from '@/ds/components/Spinner';
-import { Info, RotateCcw } from 'lucide-react';
-import { ProviderLogo } from './provider-logo';
-import { UpdateModelParams } from '@mastra/client-js';
-import { useModelReset } from '../../context/model-reset-context';
-import { cleanProviderId } from './utils';
-import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
+import { useState, useEffect, useCallback } from 'react';
+import { Provider, UpdateModelParams } from '@mastra/client-js';
+import { RotateCcw } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
-import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers';
-import { Combobox, ComboboxOption } from '@/ds/components/Combobox';
+import { Spinner } from '@/ds/components/Spinner';
+import { useModelReset } from '../../context/model-reset-context';
+import {
+  LLMProviderPicker,
+  LLMModelPicker,
+  ProviderWarning,
+  useLLMProviders,
+  useAllModels,
+  cleanProviderId,
+  findProvider,
+} from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -35,8 +39,7 @@ export const AgentMetadataModelSwitcher = ({
   const [providerOpen, setProviderOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
 
-  const { data: dataProviders, isLoading: providersLoading } = useAgentsModelProviders();
-
+  const { data: dataProviders } = useLLMProviders();
   const providers = dataProviders?.providers || [];
 
   // Update local state when default props change (e.g., after reset)
@@ -46,122 +49,47 @@ export const AgentMetadataModelSwitcher = ({
   }, [defaultModel, defaultProvider]);
 
   const currentModelProvider = cleanProviderId(selectedProvider);
-
-  // Get all models with their provider info
-  const allModels = useMemo(() => {
-    return providers.flatMap(provider =>
-      provider.models.map(model => ({
-        provider: provider.id,
-        providerName: provider.name,
-        model: model,
-      })),
-    );
-  }, [providers]);
-
-  // Filter and sort providers based on connection status and popularity
-  const sortedProviders = useMemo(() => {
-    // Define popular providers in order
-    const popularProviders = ['openai', 'anthropic', 'google', 'openrouter', 'netlify'];
-
-    const getPopularityIndex = (providerId: string) => {
-      const cleanId = providerId.toLowerCase().split('.')[0];
-      const index = popularProviders.indexOf(cleanId);
-      return index === -1 ? popularProviders.length : index;
-    };
-
-    // Sort by: 1) connection status, 2) popularity, 3) alphabetically
-    return [...providers].sort((a, b) => {
-      // First, sort by connection status - connected providers first
-      if (a.connected && !b.connected) return -1;
-      if (!a.connected && b.connected) return 1;
-
-      // Then by popularity
-      const aPopularity = getPopularityIndex(a.id);
-      const bPopularity = getPopularityIndex(b.id);
-      if (aPopularity !== bPopularity) {
-        return aPopularity - bPopularity;
-      }
-
-      // Finally, alphabetically by name
-      return a.name.localeCompare(b.name);
-    });
-  }, [providers]);
-
-  // Create provider options with icons
-  const providerOptions: ComboboxOption[] = useMemo(() => {
-    return sortedProviders.map(provider => ({
-      label: provider.name,
-      value: provider.id,
-      start: (
-        <div className="relative">
-          <ProviderLogo providerId={provider.id} size={16} />
-          <div
-            className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
-              provider.connected ? 'bg-accent1' : 'bg-accent2'
-            }`}
-            title={provider.connected ? 'Connected' : 'Not connected'}
-          />
-        </div>
-      ),
-      end: provider.docUrl ? (
-        <Info
-          className="w-4 h-4 text-gray-500 hover:text-gray-700 cursor-pointer"
-          onClick={e => {
-            e.stopPropagation();
-            window.open(provider.docUrl, '_blank', 'noopener,noreferrer');
-          }}
-        />
-      ) : null,
-    }));
-  }, [sortedProviders]);
-
-  // Filter models based on selected provider
-  const filteredModels = useMemo(() => {
-    if (!currentModelProvider) return [];
-    return allModels.filter(m => m.provider === currentModelProvider).sort((a, b) => a.model.localeCompare(b.model));
-  }, [allModels, currentModelProvider]);
-
-  // Create model options
-  const modelOptions: ComboboxOption[] = useMemo(() => {
-    return filteredModels.map(m => ({
-      label: m.model,
-      value: m.model,
-    }));
-  }, [filteredModels]);
-
-  // Auto-save when model changes
-  const handleModelSelect = async (modelId: string) => {
-    setSelectedModel(modelId);
-
-    const providerToUse = currentModelProvider || selectedProvider;
-
-    if (modelId && providerToUse) {
-      setLoading(true);
-      try {
-        const result = await updateModel({
-          provider: providerToUse as UpdateModelParams['provider'],
-          modelId,
-        });
-        console.log('Model updated:', result);
-      } catch (error) {
-        console.error('Failed to update model:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
+  const currentProvider = findProvider(providers, selectedProvider);
 
   // Handle provider selection
-  const handleProviderSelect = (providerId: string) => {
-    const cleanedId = cleanProviderId(providerId);
-    setSelectedProvider(cleanedId);
+  const handleProviderSelect = useCallback(
+    (providerId: string) => {
+      const cleanedId = cleanProviderId(providerId);
+      setSelectedProvider(cleanedId);
 
-    // Only clear model selection and open model combobox when switching to a different provider
-    if (cleanedId !== currentModelProvider) {
-      setSelectedModel('');
-      setModelOpen(true);
-    }
-  };
+      // Only clear model selection and open model combobox when switching to a different provider
+      if (cleanedId !== currentModelProvider) {
+        setSelectedModel('');
+        setModelOpen(true);
+      }
+    },
+    [currentModelProvider],
+  );
+
+  // Auto-save when model changes
+  const handleModelSelect = useCallback(
+    async (selected: { provider: string; modelId: string }) => {
+      setSelectedModel(selected.modelId);
+
+      const providerToUse = currentModelProvider || selectedProvider;
+
+      if (selected.modelId && providerToUse) {
+        setLoading(true);
+        try {
+          const result = await updateModel({
+            provider: providerToUse as UpdateModelParams['provider'],
+            modelId: selected.modelId,
+          });
+          console.log('Model updated:', result);
+        } catch (error) {
+          console.error('Failed to update model:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    },
+    [currentModelProvider, selectedProvider, updateModel],
+  );
 
   // Get the model reset context
   const { registerResetFn } = useModelReset();
@@ -212,17 +140,8 @@ export const AgentMetadataModelSwitcher = ({
     modelOpen,
   ]);
 
-  if (providersLoading) {
-    return (
-      <div className="flex items-center gap-2">
-        <Spinner />
-        <span className="text-sm text-gray-500">Loading providers...</span>
-      </div>
-    );
-  }
-
   // Handle reset button click - resets to the ORIGINAL model
-  const handleReset = async () => {
+  const handleReset = useCallback(async () => {
     if (!resetModel) {
       console.warn('Reset model function not provided');
       return;
@@ -239,72 +158,159 @@ export const AgentMetadataModelSwitcher = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [resetModel]);
 
-  const currentProvider = providers.find(p => p.id === currentModelProvider);
+  // Need to use controlled open state to track when pickers are open
+  const handleProviderOpenChange = useCallback((open: boolean) => {
+    setProviderOpen(open);
+  }, []);
+
+  const handleModelOpenChange = useCallback((open: boolean) => {
+    setModelOpen(open);
+  }, []);
 
   return (
     <div className="@container">
       <div className="flex flex-col @xs:flex-row items-stretch @xs:items-center gap-2 w-full">
         <div className="w-full @xs:w-2/5">
-          <Combobox
-            options={providerOptions}
+          <LLMProviderModelPickerProvider
+            providers={providers}
             value={currentModelProvider}
             onValueChange={handleProviderSelect}
-            placeholder="Select provider..."
-            searchPlaceholder="Search providers..."
-            emptyText="No providers found"
             variant="default"
             size="md"
             open={providerOpen}
-            onOpenChange={setProviderOpen}
+            onOpenChange={handleProviderOpenChange}
           />
         </div>
 
         <div className="w-full @xs:w-3/5">
-          <Combobox
-            options={modelOptions}
+          <LLMProviderModelPickerModel
+            providers={providers}
+            provider={currentModelProvider}
             value={selectedModel}
             onValueChange={handleModelSelect}
-            placeholder="Select model..."
-            searchPlaceholder="Search or enter custom model..."
-            emptyText="No models found"
             variant="default"
             size="md"
             open={modelOpen}
-            onOpenChange={setModelOpen}
+            onOpenChange={handleModelOpenChange}
           />
         </div>
 
-        <Button
-          variant="light"
-          size="md"
-          onClick={handleReset}
-          disabled={loading}
-          className="flex items-center gap-1.5 text-xs whitespace-nowrap !border-0"
-          title="Reset to original model"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </Button>
+        <ResetButton
+          onReset={handleReset}
+          loading={loading}
+          disabled={!resetModel}
+        />
       </div>
 
-      {/* Show warning if selected provider is not connected */}
-      {currentProvider && !currentProvider.connected && (
-        <div className="pt-2 p-2">
-          <Alert variant="warning">
-            <AlertTitle as="h5">Provider not connected</AlertTitle>
-            <AlertDescription as="p">
-              Set the{' '}
-              <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
-                {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
-              </code>{' '}
-              environment{' '}
-              {Array.isArray(currentProvider.envVar) && currentProvider.envVar.length > 1 ? 'variables' : 'variable'} to
-              use this provider.
-            </AlertDescription>
-          </Alert>
-        </div>
-      )}
+      <ProviderWarningSection provider={currentProvider} />
     </div>
   );
 };
+
+// Internal components to simplify the main component
+
+interface ResetButtonProps {
+  onReset: () => Promise<void>;
+  loading: boolean;
+  disabled: boolean;
+}
+
+const ResetButton = ({ onReset, loading, disabled }: ResetButtonProps) => (
+  <Button
+    variant="light"
+    size="md"
+    onClick={onReset}
+    disabled={loading || disabled}
+    className="flex items-center gap-1.5 text-xs whitespace-nowrap !border-0"
+    title="Reset to original model"
+  >
+    {loading ? <Spinner className="w-3.5 h-3.5" /> : <RotateCcw className="w-3.5 h-3.5" />}
+  </Button>
+);
+
+interface LLMProviderModelPickerProviderProps {
+  providers: Provider[];
+  value: string;
+  onValueChange: (providerId: string) => void;
+  variant: 'default' | 'light' | 'outline' | 'ghost';
+  size: 'sm' | 'md' | 'lg';
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+const LLMProviderModelPickerProvider = ({
+  providers,
+  value,
+  onValueChange,
+  variant,
+  size,
+  open,
+  onOpenChange,
+}: LLMProviderModelPickerProviderProps) => (
+  <LLMProviderPicker
+    providers={providers}
+    value={value}
+    onValueChange={onValueChange}
+    placeholder="Select provider..."
+    searchPlaceholder="Search providers..."
+    emptyText="No providers found"
+    variant={variant}
+    size={size}
+    open={open}
+    onOpenChange={onOpenChange}
+  />
+);
+
+interface LLMProviderModelPickerModelProps {
+  providers: Provider[];
+  provider: string;
+  value: string;
+  onValueChange: (selected: { provider: string; modelId: string }) => void;
+  variant: 'default' | 'light' | 'outline' | 'ghost';
+  size: 'sm' | 'md' | 'lg';
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+const LLMProviderModelPickerModel = ({
+  providers,
+  provider,
+  value,
+  onValueChange,
+  variant,
+  size,
+  open,
+  onOpenChange,
+}: LLMProviderModelPickerModelProps) => {
+  const allModels = useAllModels(providers);
+
+  const handleModelChange = (modelId: string) => {
+    onValueChange({ provider, modelId });
+  };
+
+  return (
+    <LLMModelPicker
+      models={allModels}
+      provider={provider}
+      value={value}
+      onValueChange={handleModelChange}
+      placeholder="Select model..."
+      searchPlaceholder="Search or enter custom model..."
+      emptyText="No models found"
+      variant={variant}
+      size={size}
+      open={open}
+      onOpenChange={onOpenChange}
+    />
+  );
+};
+
+interface ProviderWarningSectionProps {
+  provider: Provider | undefined;
+}
+
+const ProviderWarningSection = ({ provider }: ProviderWarningSectionProps) => (
+  <ProviderWarning provider={provider} variant="alert" />
+);

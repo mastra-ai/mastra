@@ -6,7 +6,7 @@ import { IconButton } from '@/ds/components/IconButton';
 import { ToolFallback } from '../tools/tool-fallback';
 import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
-import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
+import { ProviderLogo } from '@/domains/llm';
 
 /**
  * Content item type for assistant message content parts.

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Provider } from '@mastra/client-js';
-import { cleanProviderId } from '../agent-metadata/utils';
+import { cleanProviderId } from '@/domains/llm';
 
 const scoringSamplingConfigSchema = z.object({
   type: z.enum(['ratio', 'count']),

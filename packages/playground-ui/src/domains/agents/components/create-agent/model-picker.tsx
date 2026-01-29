@@ -1,15 +1,6 @@
-import { useRef, useCallback } from 'react';
-import { Spinner } from '@/ds/components/Spinner';
+import { useState, useEffect, useCallback } from 'react';
 import { Alert, AlertDescription } from '@/ds/components/Alert';
-import { cleanProviderId } from '../agent-metadata/utils';
-import { Provider } from '@mastra/client-js';
-import {
-  ProviderSelect,
-  ModelSelect,
-  ModelSelectHandle,
-  ProviderNotConnectedAlert,
-  useModelPickerData,
-} from '../model-picker';
+import { LLMProviderModelPicker, cleanProviderId } from '@/domains/llm';
 
 export interface ModelPickerProps {
   value: { provider: string; name: string };
@@ -18,71 +9,51 @@ export interface ModelPickerProps {
 }
 
 export const ModelPicker = ({ value, onChange, error }: ModelPickerProps) => {
-  const modelSelectRef = useRef<ModelSelectHandle>(null);
-  const providerInputRef = useRef<HTMLInputElement>(null);
+  const [provider, setProvider] = useState(value.provider);
+  const [model, setModel] = useState(value.name);
 
-  const { providers, providersLoading, allModels, currentModelProvider, currentProvider } = useModelPickerData(
-    value.provider,
-  );
+  // Sync state when value prop changes
+  useEffect(() => {
+    setProvider(value.provider);
+    setModel(value.name);
+  }, [value.provider, value.name]);
 
-  const handleProviderSelect = useCallback(
-    (provider: Provider) => {
-      const cleanedProvider = cleanProviderId(provider.id);
+  const handleProviderChange = useCallback(
+    (providerId: string) => {
+      const cleanedProvider = cleanProviderId(providerId);
+      setProvider(cleanedProvider);
 
       // Clear model when switching providers
-      if (provider.id !== currentModelProvider) {
+      if (cleanedProvider !== cleanProviderId(provider)) {
+        setModel('');
         onChange({ provider: cleanedProvider, name: '' });
       }
-
-      // Auto-focus model input if provider is connected
-      if (provider.connected) {
-        setTimeout(() => {
-          modelSelectRef.current?.focus();
-        }, 100);
-      }
     },
-    [currentModelProvider, onChange],
+    [provider, onChange],
   );
 
-  const handleModelSelect = useCallback(
-    (modelId: string) => {
-      const providerToUse = currentModelProvider || value.provider;
-      if (modelId && providerToUse) {
-        onChange({ provider: providerToUse, name: modelId });
-      }
+  const handleModelChange = useCallback(
+    (selected: { provider: string; modelId: string }) => {
+      setModel(selected.modelId);
+      onChange({ provider: selected.provider, name: selected.modelId });
     },
-    [currentModelProvider, value.provider, onChange],
+    [onChange],
   );
-
-  const handleShiftTab = useCallback(() => {
-    providerInputRef.current?.focus();
-  }, []);
-
-  if (providersLoading) {
-    return (
-      <div className="flex items-center gap-2">
-        <Spinner />
-        <span className="text-sm text-icon3">Loading providers...</span>
-      </div>
-    );
-  }
 
   return (
-    <div className="@container">
-      <div className="flex flex-col @xs:flex-row items-stretch @xs:items-center gap-2 w-full">
-        <ProviderSelect providers={providers} selectedProvider={value.provider} onSelect={handleProviderSelect} />
-
-        <ModelSelect
-          ref={modelSelectRef}
-          allModels={allModels}
-          currentProvider={currentModelProvider}
-          selectedModel={value.name}
-          onSelect={handleModelSelect}
-          onShiftTab={handleShiftTab}
-        />
-      </div>
-
-      {currentProvider && <ProviderNotConnectedAlert provider={currentProvider} />}
+    <>
+      <LLMProviderModelPicker
+        provider={provider}
+        model={model}
+        onProviderChange={handleProviderChange}
+        onModelChange={handleModelChange}
+        layout="horizontal"
+        variant="default"
+        size="md"
+        warningVariant="alert"
+        showDocLink={true}
+        showStatusIndicator={true}
+      />
 
       {error && (
         <div className="pt-2 p-2">
@@ -91,6 +62,6 @@ export const ModelPicker = ({ value, onChange, error }: ModelPickerProps) => {
           </Alert>
         </div>
       )}
-    </div>
+    </>
   );
 };

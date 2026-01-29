@@ -1,4 +1,4 @@
-import { SelectField } from '@/ds/components/FormFields';
+import { Combobox } from '@/ds/components/Combobox';
 import { DateTimePicker } from '@/ds/components/DateTimePicker';
 import { Button } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
@@ -36,21 +36,23 @@ export function TracesTools({
 }: TracesToolsProps) {
   return (
     <div className={cn('flex flex-wrap gap-x-8 gap-y-4')}>
-      <SelectField
-        label="Filter by Entity"
-        name={'select-entity'}
-        placeholder="Select..."
-        options={entityOptions || []}
-        onValueChange={val => {
-          const entity = entityOptions?.find(entity => entity.value === val);
-          if (entity) {
-            onEntityChange(entity);
-          }
-        }}
-        value={selectedEntity?.value || ''}
-        className="min-w-[20rem]"
-        disabled={isLoading}
-      />
+      <div className="flex gap-2 items-center">
+        <label className="text-ui-sm text-neutral3 shrink-0">Filter by Entity</label>
+        <Combobox
+          placeholder="Select..."
+          options={entityOptions || []}
+          onValueChange={val => {
+            const entity = entityOptions?.find(entity => entity.value === val);
+            if (entity) {
+              onEntityChange(entity);
+            }
+          }}
+          value={selectedEntity?.value || ''}
+          className="min-w-[20rem]"
+          disabled={isLoading}
+          size="lg"
+        />
+      </div>
       <div className={cn('flex gap-4 items-center flex-wrap')}>
         <span className={cn('shrink-0 text-ui-md text-neutral3')}>Filter by Date & time range</span>
         <DateTimePicker
