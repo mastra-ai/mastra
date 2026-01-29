@@ -3405,14 +3405,12 @@ export class Agent<
       structuredOutput: StructuredOutputOptions<OUTPUT>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
-  // Catch-all for generics
   async stream<OUTPUT>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<any> & {
       structuredOutput?: StructuredOutputOptions<any>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
-  // Default (backward compatible)
   async stream(messages: MessageListInput, streamOptions?: AgentExecutionOptions): Promise<MastraModelOutput>;
   async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
