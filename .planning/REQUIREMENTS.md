@@ -4,9 +4,9 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 
 ## Infrastructure
 
-- [ ] **INFRA-01**: `BrowserToolsetLike` interface includes `injectMouseEvent()` and `injectKeyboardEvent()` signatures matching concrete `BrowserToolset` implementation
-- [ ] **INFRA-02**: Server broadcasts viewport metadata (width, height) to connected clients on stream start and dimension changes
-- [ ] **INFRA-03**: `ClientInputMessage` union type defined for client-to-server WebSocket messages (MouseInputMessage | KeyboardInputMessage)
+- [x] **INFRA-01**: `BrowserToolsetLike` interface includes `injectMouseEvent()` and `injectKeyboardEvent()` signatures matching concrete `BrowserToolset` implementation
+- [x] **INFRA-02**: Server broadcasts viewport metadata (width, height) to connected clients on stream start and dimension changes
+- [x] **INFRA-03**: `ClientInputMessage` union type defined for client-to-server WebSocket messages (MouseInputMessage | KeyboardInputMessage)
 
 ## Server Input Routing
 
@@ -57,9 +57,9 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 10 | Pending |
-| INFRA-02 | Phase 10 | Pending |
-| INFRA-03 | Phase 10 | Pending |
+| INFRA-01 | Phase 10 | Complete |
+| INFRA-02 | Phase 10 | Complete |
+| INFRA-03 | Phase 10 | Complete |
 | ROUTE-01 | Phase 11 | Pending |
 | ROUTE-02 | Phase 11 | Pending |
 | ROUTE-03 | Phase 11 | Pending |
