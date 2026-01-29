@@ -12,7 +12,7 @@ Align the `@mastra/auth-cloud` plugin with Cloud's API specification through fou
 
 - [x] **Phase 1: Transport Layer** - Build request/response foundation with Authorization header and envelope unwrapping
 - [x] **Phase 2: API Paths + Methods** - Update all endpoints to `/api/v1/` and add token parameters
-- [ ] **Phase 3: Provider Integration** - Wire `MastraCloudAuth` to use updated client signatures
+- [x] **Phase 3: Provider Integration** - Wire `MastraCloudAuth` to use updated client signatures
 - [ ] **Phase 4: Testing + Validation** - Verify TypeScript compiles and test against mocked API
 
 ## Phase Details
@@ -73,7 +73,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 03-01-PLAN.md — Provider integration and sessionToken flow
+- [x] 03-01-PLAN.md — Provider integration and sessionToken flow
 
 ### Phase 4: Testing + Validation
 **Goal**: Verify TypeScript compiles and all changes work against mocked API
@@ -101,5 +101,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Transport Layer | 1/1 | ✓ Complete | 2026-01-28 |
 | 2. API Paths + Methods | 1/1 | ✓ Complete | 2026-01-29 |
-| 3. Provider Integration | 0/1 | Ready | - |
-| 4. Testing + Validation | 0/1 | Not started | - |
+| 3. Provider Integration | 1/1 | ✓ Complete | 2026-01-29 |
+| 4. Testing + Validation | 0/1 | Ready | - |
