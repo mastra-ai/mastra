@@ -1,0 +1,164 @@
+---
+title: "Reference: LocalFilesystem | Workspace"
+description: "Documentation for the LocalFilesystem provider for local disk storage."
+packages:
+  - "@mastra/core"
+---
+
+# LocalFilesystem
+
+Stores files in a directory on the local filesystem.
+
+:::info
+
+For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
+
+:::
+
+## Installation
+
+`LocalFilesystem` is included in `@mastra/core`:
+
+```bash npm2yarn
+npm install @mastra/core@latest
+```
+
+## Usage
+
+```typescript
+import { LocalFilesystem } from '@mastra/core/workspace';
+
+const filesystem = new LocalFilesystem({
+  basePath: './workspace',
+});
+```
+
+## Constructor Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "basePath",
+      type: "string",
+      description: "Base directory path on disk. All file paths are resolved relative to this directory.",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this filesystem instance",
+      isOptional: true,
+      defaultValue: "Auto-generated",
+    },
+    {
+      name: "readOnly",
+      type: "boolean",
+      description: "When true, all write operations are blocked. Read operations are still allowed.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Filesystem instance identifier",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Provider name ('LocalFilesystem')",
+    },
+    {
+      name: "provider",
+      type: "string",
+      description: "Provider identifier ('local')",
+    },
+    {
+      name: "basePath",
+      type: "string",
+      description: "The absolute base path on disk",
+    },
+    {
+      name: "readOnly",
+      type: "boolean | undefined",
+      description: "Whether the filesystem is in read-only mode",
+    },
+  ]}
+/>
+
+## Methods
+
+### `getInfo()`
+
+Returns metadata about this filesystem instance.
+
+```typescript
+const info = filesystem.getInfo();
+// { id: '...', name: 'LocalFilesystem', provider: 'local', basePath: '/workspace', readOnly: false }
+```
+
+### `getInstructions()`
+
+Returns a description of how paths work in this filesystem. Used in tool descriptions.
+
+```typescript
+const instructions = filesystem.getInstructions();
+// 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
+```
+
+## Path Resolution
+
+### How basePath works
+
+The `basePath` option sets the root directory for all file operations. File paths passed to methods like `readFile()` are resolved relative to this base:
+
+- Leading slashes are stripped: `/docs/guide.md` → `docs/guide.md`
+- The path is normalized and joined with basePath
+- Result: `./workspace` + `docs/guide.md` → `./workspace/docs/guide.md`
+
+```typescript
+const filesystem = new LocalFilesystem({
+  basePath: './workspace',
+});
+
+// These all resolve to ./workspace/docs/guide.md
+await filesystem.readFile('/docs/guide.md');
+await filesystem.readFile('docs/guide.md');
+```
+
+### Relative paths and execution context
+
+When you use a relative path for `basePath`, it resolves from `process.cwd()`. In Mastra projects, cwd varies depending on how you run your code:
+
+| Context | Working directory | `./workspace` resolves to |
+|---------|------------------|---------------------------|
+| `mastra dev` | `./src/mastra/public/` | `./src/mastra/public/workspace` |
+| `mastra start` | `./.mastra/output/` | `./.mastra/output/workspace` |
+| Direct script | Where you ran the command | Relative to that location |
+
+This can cause confusion when the same relative path resolves to different locations.
+
+### Recommended: Use absolute paths
+
+For consistent paths across all execution contexts, use an environment variable with an absolute path:
+
+```typescript
+import { LocalFilesystem } from '@mastra/core/workspace';
+
+const filesystem = new LocalFilesystem({
+  basePath: process.env.WORKSPACE_PATH!,
+});
+```
+
+Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. This ensures the workspace path is consistent regardless of how you run your code.
+
+## Related
+
+- [WorkspaceFilesystem Interface](/reference/workspace/filesystem)
+- [Workspace Class](/reference/workspace/workspace-class)
+- [Workspace Overview](/docs/workspace/overview)
