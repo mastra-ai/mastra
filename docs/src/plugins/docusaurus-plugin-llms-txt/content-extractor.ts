@@ -3,72 +3,7 @@
  */
 
 import type { Root, Element, Text } from 'hast'
-import { select, selectAll } from 'hast-util-select'
-
-/**
- * Selectors for elements to remove before processing
- */
-const SELECTORS_TO_REMOVE = [
-  // Navigation and sidebars
-  'nav',
-  '.navbar',
-  '.theme-doc-sidebar-container',
-  '.theme-doc-sidebar-menu',
-
-  // Table of contents
-  '.theme-doc-toc-desktop',
-  '.theme-doc-toc-mobile',
-  '.table-of-contents',
-
-  // Footer and pagination
-  '.theme-doc-footer',
-  '.footer',
-  '.pagination-nav',
-
-  // Breadcrumbs
-  '.theme-doc-breadcrumbs',
-  '[aria-label="breadcrumbs"]',
-
-  // Skip links and accessibility helpers
-  '.skipToContent_fXgn',
-  '[class*="skipToContent"]',
-
-  // Scripts and styles
-  'script',
-  'style',
-  'noscript',
-
-  // Edit page links
-  '.theme-edit-this-page',
-
-  // Version badges
-  '.theme-doc-version-badge',
-
-  // Code block copy buttons
-  '.clean-btn',
-  'button[class*="copyButton"]',
-
-  // Heading anchor links (Direct link to...)
-  '.hash-link',
-  'a[aria-label^="Direct link to"]',
-  '.sr-only',
-
-  // Code block titles
-  '[class*="codeBlockTitle"]',
-
-  // Tab navigation (keep only active tab content)
-  '[role="tablist"]',
-  '.tabs',
-  '[role="tab"]',
-  '[class*="tabs__item"]',
-
-  // Admonition type labels and icons
-  '[class*="font-mono"][class*="font-bold"][class*="capitalize"]',
-  'svg',
-
-  // Video elements (fallback text appears as links)
-  'video',
-]
+import { select } from 'hast-util-select'
 
 export interface PageMetadata {
   title: string
@@ -142,59 +77,125 @@ export function selectContent(hast: Root, selectors: string[]): Element | null {
   return select('body', hast) as Element | null
 }
 
-/**
- * Remove unwanted elements from the content
- */
-export function removeUnwantedElements(node: Element | null): void {
-  if (!node) return
+// Pre-compiled set of tag names to remove (faster than selector matching)
+const TAGS_TO_REMOVE = new Set(['nav', 'script', 'style', 'noscript', 'video', 'svg'])
 
-  for (const selector of SELECTORS_TO_REMOVE) {
-    const elements = selectAll(selector, node)
-    for (const el of elements) {
-      removeFromParent(el, node)
-    }
+// Pre-compiled class patterns to match for removal
+// These are checked against individual class names AND the full className string
+const CLASS_PATTERNS_TO_REMOVE = [
+  /^navbar$/,
+  /theme-doc-sidebar/,
+  /theme-doc-toc/,
+  /table-of-contents/,
+  /theme-doc-footer/,
+  /^footer$/,
+  /pagination-nav/,
+  /theme-doc-breadcrumbs/,
+  /skipToContent/,
+  /theme-edit-this-page/,
+  /editMetaRow/,
+  /theme-doc-version-badge/,
+  /clean-btn/,
+  /copyButton/,
+  /hash-link/,
+  /sr-only/,
+  /codeBlockTitle/,
+  /^tabs$/,
+  /tabs__item/,
+  /font-mono.*font-bold.*capitalize/,
+  /tocCollapsible/,
+]
+
+// Pre-compiled aria-label patterns
+const ARIA_LABEL_PATTERNS_TO_REMOVE = [/^breadcrumbs$/, /^Direct link to/]
+
+// Pre-compiled role patterns
+const ROLES_TO_REMOVE = new Set(['tablist', 'tab'])
+
+/**
+ * Check if an element should be removed based on its properties
+ */
+function shouldRemoveElement(el: Element): boolean {
+  // Check tag name
+  if (TAGS_TO_REMOVE.has(el.tagName)) {
+    return true
   }
 
-  // Remove HTML comment nodes
-  removeCommentNodes(node)
-}
+  const props = el.properties
+  if (!props) return false
 
-/**
- * Recursively remove comment nodes from the tree
- */
-function removeCommentNodes(node: Element): void {
-  node.children = node.children.filter(child => child.type !== 'comment')
+  // Check className - test each class individually AND the full string
+  const className = props.className
+  if (className) {
+    const classes = Array.isArray(className) ? className : [String(className)]
+    const classStr = classes.join(' ')
 
-  for (const child of node.children) {
-    if (child.type === 'element') {
-      removeCommentNodes(child)
-    }
-  }
-}
-
-/**
- * Remove an element from its parent
- */
-function removeFromParent(element: Element, root: Element): void {
-  function traverse(parent: Element): boolean {
-    const index = parent.children.indexOf(element)
-    if (index !== -1) {
-      parent.children.splice(index, 1)
-      return true
-    }
-
-    for (const child of parent.children) {
-      if (child.type === 'element') {
-        if (traverse(child)) {
+    // Test each individual class name
+    for (const cls of classes) {
+      const clsStr = String(cls)
+      for (const pattern of CLASS_PATTERNS_TO_REMOVE) {
+        if (pattern.test(clsStr)) {
           return true
         }
       }
     }
 
-    return false
+    // Also test the combined string for patterns that span multiple classes
+    for (const pattern of CLASS_PATTERNS_TO_REMOVE) {
+      if (pattern.test(classStr)) {
+        return true
+      }
+    }
   }
 
-  traverse(root)
+  // Check aria-label
+  const ariaLabel = props.ariaLabel || props['aria-label']
+  if (ariaLabel) {
+    const labelStr = String(ariaLabel)
+    for (const pattern of ARIA_LABEL_PATTERNS_TO_REMOVE) {
+      if (pattern.test(labelStr)) {
+        return true
+      }
+    }
+  }
+
+  // Check role
+  const role = props.role
+  if (role && ROLES_TO_REMOVE.has(String(role))) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Remove unwanted elements from the content in a single pass
+ */
+export function removeUnwantedElements(node: Element | null): void {
+  if (!node) return
+
+  // Single-pass recursive filter that removes unwanted elements and comments
+  function filterChildren(el: Element): void {
+    el.children = el.children.filter(child => {
+      // Remove comments
+      if (child.type === 'comment') {
+        return false
+      }
+
+      // Check elements
+      if (child.type === 'element') {
+        if (shouldRemoveElement(child)) {
+          return false
+        }
+        // Recursively filter children
+        filterChildren(child)
+      }
+
+      return true
+    })
+  }
+
+  filterChildren(node)
 }
 
 /**
