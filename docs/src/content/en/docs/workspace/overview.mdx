@@ -11,15 +11,16 @@ A workspace gives agents a persistent environment for storing files and executin
 
 ## How Workspaces Work
 
-A workspace combines up to three components:
+A workspace supports the following features:
 
-- **[Filesystem provider](/docs/workspace/filesystem)** - Handles file storage (read, write, list, delete)
-- **[Sandbox provider](/docs/workspace/sandbox)** - Handles command execution (shell commands)
+- **[Filesystem](/docs/workspace/filesystem)** - File storage (read, write, list, delete)
+- **[Sandbox](/docs/workspace/sandbox)** - Command execution (shell commands)
+- **[Search](/docs/workspace/search)** - BM25, vector, or hybrid search over indexed content
 - **[Skills](/docs/workspace/skills)** - Reusable instructions for agents
 
 When you assign a workspace to an agent, Mastra includes the corresponding tools in the agent's toolset. The agent can then use these tools to interact with files and execute commands as part of its task.
 
-You can create a workspace with any combination of these components. The agent receives only the tools relevant to what's configured.
+You can create a workspace with any combination of these features. The agent receives only the tools relevant to what's configured.
 
 ## Creating a Workspace
 
