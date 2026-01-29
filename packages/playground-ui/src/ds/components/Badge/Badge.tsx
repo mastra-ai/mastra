@@ -13,7 +13,7 @@ export interface BadgeProps {
 
 const variantClasses = {
   default: 'text-neutral3 bg-surface4',
-  success: 'text-accent1 bg-accent1Dark',
+  success: 'text-accent1 bg-primary/10',
   error: 'text-accent2 bg-accent2Dark',
   info: 'text-accent5 bg-accent5Dark',
   warning: 'text-accent6 bg-accent6Dark',

@@ -63,10 +63,10 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
         data-testid="workflow-condition-node"
         className={cn(
           'bg-surface3 rounded-lg w-[300px] border border-border1',
-          previousDisplayStatus === 'success' && nextStep && 'bg-accent1Darker',
+          previousDisplayStatus === 'success' && nextStep && 'bg-primary/5',
           previousDisplayStatus === 'failed' && nextStep && 'bg-accent2Darker',
           previousDisplayStatus === 'tripwire' && nextStep && 'bg-amber-950/40 border-amber-500/30',
-          !previousStep && Boolean(nextStep?.status) && 'bg-accent1Darker',
+          !previousStep && Boolean(nextStep?.status) && 'bg-primary/5',
         )}
       >
         <Collapsible
@@ -128,7 +128,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                           className={cn(
                             'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs !bg-surface4 whitespace-pre-wrap break-words',
                             className,
-                            previousDisplayStatus === 'success' && nextStep && '!bg-accent1Dark',
+                            previousDisplayStatus === 'success' && nextStep && '!bg-primary/10',
                             previousDisplayStatus === 'failed' && nextStep && '!bg-accent2Dark',
                             previousDisplayStatus === 'tripwire' && nextStep && '!bg-amber-900/40',
                           )}

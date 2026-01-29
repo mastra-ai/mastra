@@ -81,7 +81,7 @@ export function WorkflowDefaultNode({
         className={cn(
           'bg-surface3 rounded-lg w-[274px] border border-border1',
           hasSpecialBadge ? 'pt-0' : 'pt-2',
-          displayStatus === 'success' && 'bg-accent1Darker',
+          displayStatus === 'success' && 'bg-primary/5',
           displayStatus === 'failed' && 'bg-accent2Darker',
           displayStatus === 'tripwire' && 'bg-amber-950/40 border-amber-500/30',
           displayStatus === 'suspended' && 'bg-accent3Darker',

@@ -6,7 +6,7 @@
   --color-surface4: 33 33 36;
   --color-surface5: 39 39 42;
 
-  /* Accents */
+  /* Accents (unified base colors between themes) */
   --color-accent1: 34 197 94;
   --color-accent2: 239 68 68;
   --color-accent3: 59 130 246;
@@ -26,6 +26,17 @@
   --color-accent3Darker: 15 21 32;
   --color-accent5Darker: 15 21 26;
   --color-accent6Darker: 26 20 10;
+
+  /* Primary (theme-specific semantic color) */
+  --color-primary: 34 197 94;
+
+  /* Sidebar */
+  --color-sidebar-item-hover: 39 39 42;
+  --color-sidebar-item-active: 33 33 36;
+  --color-sidebar-item-selected: 24 24 27;
+
+  /* Table */
+  --color-table-selected-row: 33 33 36;
 
   /* Neutrals */
   --color-neutral1: 82 82 91;
@@ -58,6 +69,7 @@
   /* Glows */
   --glow-accent1: 0 0 20px rgba(34, 197, 94, 0.25);
   --glow-accent2: 0 0 20px rgba(239, 68, 68, 0.25);
+  --glow-primary: 0 0 20px rgba(34, 197, 94, 0.25);
   --glow-focus-ring: 0 0 0 3px rgba(34, 197, 94, 0.12);
 }
 
@@ -69,26 +81,37 @@
   --color-surface4: 244 244 246;
   --color-surface5: 237 237 240;
 
-  /* Accents */
-  --color-accent1: 22 163 74;
-  --color-accent2: 220 38 38;
-  --color-accent3: 37 99 235;
-  --color-accent5: 59 130 246;
-  --color-accent6: 217 119 6;
+  /* Accents (unified base colors between themes) */
+  --color-accent1: 34 197 94;
+  --color-accent2: 239 68 68;
+  --color-accent3: 59 130 246;
+  --color-accent5: 96 165 250;
+  --color-accent6: 245 158 11;
 
-  /* Accent dark */
+  /* Accent dark (inverted for light backgrounds) */
   --color-accent1Dark: 220 252 231;
   --color-accent2Dark: 254 226 226;
   --color-accent3Dark: 219 234 254;
   --color-accent5Dark: 219 234 254;
   --color-accent6Dark: 254 243 199;
 
-  /* Accent darker */
+  /* Accent darker (inverted for light backgrounds) */
   --color-accent1Darker: 240 253 244;
   --color-accent2Darker: 254 242 242;
   --color-accent3Darker: 239 246 255;
   --color-accent5Darker: 239 246 255;
   --color-accent6Darker: 255 251 235;
+
+  /* Primary (theme-specific semantic color) */
+  --color-primary: 59 130 246;
+
+  /* Sidebar (darker than bg for light theme) */
+  --color-sidebar-item-hover: 237 237 240;
+  --color-sidebar-item-active: 229 229 232;
+  --color-sidebar-item-selected: 237 237 240;
+
+  /* Table */
+  --color-table-selected-row: 240 240 243;
 
   /* Neutrals */
   --color-neutral1: 212 212 216;
@@ -119,7 +142,8 @@
   --shadow-dialog: 0 16px 48px rgba(0, 0, 0, 0.16);
 
   /* Glows */
-  --glow-accent1: 0 0 20px rgba(22, 163, 74, 0.2);
-  --glow-accent2: 0 0 20px rgba(220, 38, 38, 0.2);
-  --glow-focus-ring: 0 0 0 3px rgba(22, 163, 74, 0.1);
+  --glow-accent1: 0 0 20px rgba(34, 197, 94, 0.2);
+  --glow-accent2: 0 0 20px rgba(239, 68, 68, 0.2);
+  --glow-primary: 0 0 20px rgba(59, 130, 246, 0.2);
+  --glow-focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }

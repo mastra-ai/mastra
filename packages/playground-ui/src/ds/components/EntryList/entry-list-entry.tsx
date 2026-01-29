@@ -25,7 +25,7 @@ export function EntryListEntry({ entry, isSelected, onClick, children, columns }
         '[&:last-child>button]:rounded-b-lg',
         transitions.colors,
         {
-          'bg-accent1Dark': isSelected,
+          'bg-table-selected-row': isSelected,
         },
       )}
     >

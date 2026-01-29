@@ -56,7 +56,7 @@ export function Notification({
   const typeStyles = {
     info: 'bg-surface4 border-border1',
     error: 'bg-accent2Darker border-accent2/30',
-    success: 'bg-accent1Darker border-accent1/30',
+    success: 'bg-primary/5 border-primary/30',
     warning: 'bg-accent6Darker border-accent6/30',
   };
 

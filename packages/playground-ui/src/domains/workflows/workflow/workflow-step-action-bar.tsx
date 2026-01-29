@@ -178,7 +178,7 @@ export const WorkflowStepActionBar = ({
         <div
           className={cn(
             'flex flex-wrap items-center bg-surface4 border-t border-border1 px-2 py-1 gap-2 rounded-b-lg',
-            status === 'success' && 'bg-accent1Dark',
+            status === 'success' && 'bg-primary/10',
             status === 'failed' && 'bg-accent2Dark',
             status === 'tripwire' && 'bg-amber-900/40 border-amber-500/20',
             status === 'suspended' && 'bg-accent3Dark',

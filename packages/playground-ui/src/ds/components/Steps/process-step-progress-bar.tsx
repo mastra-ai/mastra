@@ -19,7 +19,7 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
             <div
               key={step.id}
               className={cn('flex justify-end items-center relative h-[2rem]', transitions.colors, {
-                'bg-accent1Dark': step.status === 'success' && steps?.[idx - 1]?.status === 'success',
+                'bg-primary/10': step.status === 'success' && steps?.[idx - 1]?.status === 'success',
               })}
             >
               <div
@@ -29,7 +29,7 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
                   {
                     'border border-neutral2 border-dashed': step.status === 'pending',
                     '[&>svg]:text-surface1 [&>svg]:w-[1.1rem] [&>svg]:h-[1.1rem]': step.status !== 'running',
-                    'bg-accent1Dark text-neutral6 shadow-glow-accent1 scale-110': step.status === 'success',
+                    'bg-primary/10 text-neutral6 shadow-glow-primary scale-110': step.status === 'success',
                     'bg-accent2Dark text-neutral6 shadow-glow-accent2 scale-110': step.status === 'failed',
                   },
                 )}

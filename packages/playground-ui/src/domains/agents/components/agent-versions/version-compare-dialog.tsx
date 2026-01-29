@@ -90,7 +90,7 @@ function DiffRow({ diff }: { diff: AgentVersionDiff }) {
           <span
             className={cn(
               'text-xs px-1.5 py-0.5 rounded font-medium',
-              changeType === 'added' && 'bg-accent1Dark text-accent1',
+              changeType === 'added' && 'bg-primary/10 text-accent1',
               changeType === 'removed' && 'bg-accent2Dark text-accent2',
               changeType === 'modified' && 'bg-accent6Dark text-accent6',
             )}
@@ -129,7 +129,7 @@ function DiffRow({ diff }: { diff: AgentVersionDiff }) {
             className={cn(
               'text-sm p-3 rounded-md bg-surface3 overflow-x-auto whitespace-pre-wrap break-words font-mono',
               changeType === 'removed' && 'opacity-50',
-              changeType === 'added' && 'border border-accent1 bg-accent1Dark',
+              changeType === 'added' && 'border border-primary bg-primary/10',
               changeType === 'modified' && 'border border-accent6 bg-accent6Dark',
             )}
           >
