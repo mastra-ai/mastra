@@ -93,6 +93,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/302ai',
+          label: '302.AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/abacus',
           label: 'Abacus',
         },

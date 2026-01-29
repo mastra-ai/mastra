@@ -12,8 +12,10 @@ import {
   LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_WRITE,
   LLM_TOKEN_COUNT_TOTAL,
   METADATA,
+  OpenInferenceSpanKind,
   OUTPUT_MIME_TYPE,
   OUTPUT_VALUE,
+  SemanticConventions,
   SESSION_ID,
   TAG_TAGS,
   USER_ID,
@@ -42,6 +44,24 @@ const MASTRA_METADATA_PREFIX = 'mastra.metadata.';
 const MASTRA_MODEL_STEP_INPUT = 'mastra.model_step.input';
 const MASTRA_MODEL_STEP_OUTPUT = 'mastra.model_step.output';
 const MASTRA_MODEL_CHUNK_OUTPUT = 'mastra.model_chunk.output';
+const MASTRA_SPAN_TYPE = 'mastra.span.type';
+
+/**
+ * Maps Mastra span types to OpenInference span kinds for proper trace categorization.
+ *
+ * Only non-CHAIN types are mapped here - all other span types default to CHAIN.
+ */
+const SPAN_TYPE_TO_KIND: Record<string, OpenInferenceSpanKind> = {
+  // Model spans -> LLM
+  model_generation: OpenInferenceSpanKind.LLM,
+  model_step: OpenInferenceSpanKind.LLM,
+  model_chunk: OpenInferenceSpanKind.LLM,
+  // Tool spans -> TOOL
+  tool_call: OpenInferenceSpanKind.TOOL,
+  mcp_tool_call: OpenInferenceSpanKind.TOOL,
+  // Agent spans -> AGENT
+  agent_run: OpenInferenceSpanKind.AGENT,
+};
 
 /**
  * Converts GenAI usage metrics to OpenInference LLM token count attributes.
@@ -213,6 +233,13 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
         Object.assign(processedAttributes, usageMetrics);
 
         mutableSpan.attributes = { ...processedAttributes, ...mastraOther };
+
+        // Set span kind based on mastra.span.type for proper trace categorization
+        const spanType = mastraOther[MASTRA_SPAN_TYPE];
+        if (typeof spanType === 'string') {
+          mutableSpan.attributes[SemanticConventions.OPENINFERENCE_SPAN_KIND] =
+            SPAN_TYPE_TO_KIND[spanType] ?? OpenInferenceSpanKind.CHAIN;
+        }
       }
 
       return mutableSpan;
