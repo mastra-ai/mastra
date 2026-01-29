@@ -80,8 +80,9 @@ export const snapshotInputSchema = z.object({
     .boolean()
     .optional()
     .default(true)
-    .describe('Only show interactive elements (buttons, links, inputs). Set false for forms with radio/checkboxes.'),
+    .describe('Only show interactive elements (buttons, links, inputs). Set to false to see ALL page text content — required for reading articles, paragraphs, or any non-interactive text.'),
   maxElements: z.number().optional().default(50).describe('Maximum elements to include in output'),
+  offset: z.number().optional().default(0).describe('Skip first N elements (for pagination). Use offset:50 to see elements 51-100.'),
 });
 
 /**

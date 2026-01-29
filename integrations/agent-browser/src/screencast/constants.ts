@@ -6,10 +6,10 @@ import type { ScreencastOptions } from './types.js';
  */
 export const SCREENCAST_DEFAULTS: Required<ScreencastOptions> = {
   format: 'jpeg',
-  quality: 70,
+  quality: 80,
   maxWidth: 1280,
   maxHeight: 720,
-  everyNthFrame: 2,
+  everyNthFrame: 1,
 };
 
 /**

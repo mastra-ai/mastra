@@ -23,7 +23,7 @@ export function createSnapshotTool(getBrowser: () => Promise<BrowserManager>) {
   return createTool({
     id: 'browser_snapshot',
     description:
-      'Capture accessibility snapshot of the page. Returns element refs (@e1, @e2) for use with click and type tools.',
+      'Capture accessibility snapshot of the page. Returns element refs (@e1, @e2) for use with click and type tools. By default shows only interactive elements — set interactiveOnly:false to see all page text content (required for reading/summarizing). Use offset to paginate (offset:50 shows elements 51-100).',
     inputSchema: snapshotInputSchema,
     outputSchema: snapshotOutputSchema,
     execute: async input => {
@@ -56,56 +56,72 @@ export function createSnapshotTool(getBrowser: () => Promise<BrowserManager>) {
           atBottom: boolean;
         };
 
-        // Count refs from snapshot
-        const elementCount = Object.keys(snapshot.refs).length;
+        // Count refs from snapshot (before filtering)
+        const totalElementCount = Object.keys(snapshot.refs).length;
         const maxElements = input.maxElements ?? 50;
-        const truncated = elementCount > maxElements;
+        const offset = input.offset ?? 0;
 
         // Transform tree refs from [ref=e1] format to @e1 format
         let formattedTree = snapshot.tree.replace(/\[ref=(\w+)\]/g, '@$1');
 
-        // Actually filter tree to only include first maxElements refs
-        // Find all ref patterns and only keep lines with refs up to maxElements
-        if (truncated) {
-          const refPattern = /@e(\d+)/g;
-          const lines = formattedTree.split('\n');
-          const filteredLines: string[] = [];
-          const seenRefs = new Set<number>();
+        // Filter out elements that clutter the output:
+        // 1. "option" elements - agent uses browser_select anyway
+        // 2. Keyboard shortcut helper links (e.g., "Add to cart, shift, option, K")
+        const treeLines = formattedTree.split('\n');
+        const filteredTreeLines = treeLines.filter(line => {
+          const trimmed = line.trim();
+          // Filter out option lines (e.g., "- option "All Departments" @e10")
+          if (trimmed.startsWith('- option ')) return false;
+          // Filter out keyboard shortcut helper links (Amazon-style: "Action, shift, option, X" or "Action, option, X")
+          if (/, (shift, )?option, \w"/.test(line)) return false;
+          return true;
+        });
+        formattedTree = filteredTreeLines.join('\n');
 
-          for (const line of lines) {
-            const matches = line.match(refPattern);
-            if (matches) {
-              // Check if any ref in this line exceeds maxElements
-              let includeLineForRefs = true;
-              for (const match of matches) {
-                const refNum = parseInt(match.slice(2), 10);
-                if (refNum > maxElements) {
-                  includeLineForRefs = false;
-                  break;
-                }
-                seenRefs.add(refNum);
-              }
-              if (includeLineForRefs) {
-                filteredLines.push(line);
-              }
-            } else {
-              // Lines without refs (headers, structure) - include if we haven't exceeded limit
-              if (seenRefs.size <= maxElements) {
-                filteredLines.push(line);
-              }
+        // Recalculate element count after filtering options
+        const remainingRefs = formattedTree.match(/@e\d+/g) || [];
+        const filteredElementCount = new Set(remainingRefs).size;
+
+        // Filter tree to include elements from offset to offset+maxElements
+        // This enables pagination: offset:0 shows 1-50, offset:50 shows 51-100, etc.
+        const refPattern = /@e(\d+)/g;
+        const lines = formattedTree.split('\n');
+        const filteredLines: string[] = [];
+        let seenCount = 0;
+        let includedCount = 0;
+
+        for (const line of lines) {
+          const matches = line.match(refPattern);
+          if (matches) {
+            // Get the first ref number on this line to determine if we should include it
+            const firstRefNum = parseInt(matches[0].slice(2), 10);
+
+            // Skip elements before offset, include elements from offset to offset+maxElements
+            if (seenCount >= offset && includedCount < maxElements) {
+              filteredLines.push(line);
+              includedCount++;
             }
-
-            // Stop if we've seen enough refs
-            if (seenRefs.size >= maxElements) {
-              break;
+            seenCount++;
+          } else {
+            // Lines without refs (structural) - include if we're in the display range
+            if (seenCount >= offset && includedCount < maxElements) {
+              filteredLines.push(line);
             }
           }
 
-          formattedTree = filteredLines.join('\n');
+          // Stop if we've included enough
+          if (includedCount >= maxElements) {
+            break;
+          }
         }
 
+        formattedTree = filteredLines.join('\n');
+        const hasMore = seenCount > offset + maxElements || filteredElementCount > offset + maxElements;
+
         // Build header with page context and scroll info
-        const headerParts = [`Page: ${title}`, `URL: ${url}`, `Elements: ${Math.min(elementCount, maxElements)} of ${elementCount}`];
+        const startElement = offset + 1;
+        const endElement = Math.min(offset + includedCount, filteredElementCount);
+        const headerParts = [`Page: ${title}`, `URL: ${url}`, `Elements: ${startElement}-${endElement} of ${filteredElementCount} (options filtered)`];
 
         // Add scroll position info
         const scrollPercent = Math.round((scrollInfo.scrollY / (scrollInfo.scrollHeight - scrollInfo.viewportHeight)) * 100) || 0;
@@ -117,8 +133,8 @@ export function createSnapshotTool(getBrowser: () => Promise<BrowserManager>) {
           headerParts.push(`Scroll: ${scrollPercent}% down`);
         }
 
-        if (truncated) {
-          headerParts.push(`[Showing first ${maxElements} elements - use interactiveOnly:true to filter]`);
+        if (hasMore) {
+          headerParts.push(`[More elements available - use offset:${offset + maxElements} to see next batch]`);
         }
 
         const header = headerParts.join('\n') + '\n\n';
@@ -134,8 +150,8 @@ export function createSnapshotTool(getBrowser: () => Promise<BrowserManager>) {
         return {
           success: true,
           tree: finalTree,
-          elementCount,
-          truncated: truncated || charTruncated,
+          elementCount: filteredElementCount,
+          truncated: hasMore || charTruncated,
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
