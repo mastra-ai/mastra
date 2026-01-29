@@ -48,15 +48,16 @@ export function Combobox({
 
   return (
     <BaseCombobox.Root items={options} value={selectedOption} onValueChange={handleSelect} disabled={disabled}>
-      <BaseCombobox.Trigger className={cn(buttonVariants({ variant, size }), 'w-full justify-between', className)}>
-        <span className="truncate">
+      <BaseCombobox.Trigger className={cn(buttonVariants({ variant, size }), 'w-full min-w-32 justify-between', className)}>
+        <span className="truncate flex items-center gap-2">
+          {selectedOption?.start}
           <BaseCombobox.Value placeholder={placeholder} />
         </span>
         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </BaseCombobox.Trigger>
 
       <BaseCombobox.Portal>
-        <BaseCombobox.Positioner align="start" sideOffset={4}>
+        <BaseCombobox.Positioner align="start" sideOffset={4} className="z-50">
           <BaseCombobox.Popup
             className={cn(
               'min-w-[var(--anchor-width)] w-max rounded-md bg-surface3 text-neutral5',
