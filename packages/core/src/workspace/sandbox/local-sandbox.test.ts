@@ -123,6 +123,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should execute command successfully', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       const result = await sandbox.executeCommand('echo', ['Hello, World!']);
 
       expect(result.success).toBe(true);
@@ -132,6 +133,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should handle command failure', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       const result = await sandbox.executeCommand('ls', ['nonexistent-directory-12345']);
 
       expect(result.success).toBe(false);
@@ -139,6 +141,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should use working directory', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       // Create a file in tempDir
       await fs.writeFile(path.join(tempDir, 'test-file.txt'), 'content');
 
@@ -149,6 +152,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should support custom cwd option', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       // Create a subdirectory with a file
       const subDir = path.join(tempDir, 'subdir');
       await fs.mkdir(subDir);
@@ -161,6 +165,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should pass environment variables', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       const result = await sandbox.executeCommand('printenv', ['MY_CMD_VAR'], {
         env: { MY_CMD_VAR: 'cmd-value' },
       });
@@ -170,6 +175,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should auto-start when executeCommand is called without start()', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       const newSandbox = new LocalSandbox({ workingDirectory: tempDir });
 
       // Should auto-start and execute successfully
@@ -191,6 +197,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should respect custom timeout for command execution', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       // This should timeout quickly
       const result = await sandbox.executeCommand('sleep', ['5'], {
         timeout: 100, // Very short timeout
@@ -218,6 +225,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should execute command in working directory', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       await sandbox.start();
 
       // Create a file in the working directory
@@ -236,6 +244,7 @@ describe('LocalSandbox', () => {
   // ===========================================================================
   describe('environment variables', () => {
     it('should use configured env vars', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       const envSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         env: { PATH: process.env.PATH!, CONFIGURED_VAR: 'configured-value' },
@@ -252,6 +261,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should override configured env with execution env', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       const envSandbox = new LocalSandbox({
         workingDirectory: tempDir,
         env: { PATH: process.env.PATH!, OVERRIDE_VAR: 'original' },
@@ -270,6 +280,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should not inherit process.env by default', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       // Set a test env var in the current process
       const testVarName = `MASTRA_TEST_VAR_${Date.now()}`;
       process.env[testVarName] = 'should-not-be-inherited';
@@ -296,6 +307,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should include process.env when explicitly spread', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
       // Set a test env var in the current process
       const testVarName = `MASTRA_TEST_VAR_${Date.now()}`;
       process.env[testVarName] = 'should-be-included';
