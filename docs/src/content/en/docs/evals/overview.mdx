@@ -59,6 +59,27 @@ export const evaluatedAgent = new Agent({
 });
 ```
 
+### Running scorers with different temperatures
+
+For LLM-based scorers, you can run the same scorer multiple times with different temperature values to get varied opinions from the LLM judge. Each temperature run creates a separate score entry:
+
+```typescript title="src/mastra/agents/multi-temp-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
+
+export const agentWithTempVariation = new Agent({
+  scorers: {
+    relevancy: {
+      scorer: createAnswerRelevancyScorer({ model: "openai/gpt-4.1-nano" }),
+      temperatures: [0.3, 0.5, 0.7], // Run 3 times with different temps
+      modelSettings: { maxTokens: 500 }, // Optional: other model settings
+    },
+  },
+});
+```
+
+When `temperatures` is specified, the scorer runs once for each temperature value. Results are stored with keys like `relevancy@0.3`, `relevancy@0.5`, and `relevancy@0.7`. This is useful for understanding how stable the LLM judge's opinion is across different temperature settings.
+
 ### Adding scorers to workflow steps
 
 You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process:

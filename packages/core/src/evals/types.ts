@@ -86,11 +86,15 @@ export const scoringHookInputSchema = z.object({
   spanId: z.string().optional(),
   resourceId: z.string().optional(),
   threadId: z.string().optional(),
-  // Note: tracingContext is not serializable, so we don't include it in the schema
+  temperature: z.number().optional(),
+  // Note: tracingContext and modelSettings are not serializable, so we don't include them in the schema
+  // They're added at runtime when needed
 });
 
 export type ScoringHookInput = z.infer<typeof scoringHookInputSchema> & {
   tracingContext?: TracingContext;
+  /** Model settings for LLM judge calls (e.g., temperature, maxTokens) */
+  modelSettings?: Record<string, unknown>;
 };
 
 // ============================================================================
@@ -201,6 +205,9 @@ export const scoreRowDataSchema = z.object({
   preprocessPrompt: z.string().optional(),
   generateScorePrompt: z.string().optional(),
   generateReasonPrompt: z.string().optional(),
+
+  // Temperature used for LLM scorer runs
+  temperature: z.number().optional(),
 
   // Timestamps
   ...dbTimestamps,

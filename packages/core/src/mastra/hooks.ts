@@ -124,7 +124,18 @@ export async function validateAndSaveScore(storage: MastraStorage, payload: unkn
       text: 'Scores storage domain is not available',
     });
   }
-  const payloadToSave = saveScorePayloadSchema.parse(payload);
+  const parsedPayload = saveScorePayloadSchema.parse(payload);
+
+  // Move temperature from top-level to metadata (stored in metadata, not a separate column)
+  const { temperature, metadata, ...rest } = parsedPayload;
+  const payloadToSave = {
+    ...rest,
+    metadata: {
+      ...metadata,
+      ...(temperature !== undefined ? { temperature } : {}),
+    },
+  };
+
   await scoresStore.saveScore(payloadToSave);
 }
 
