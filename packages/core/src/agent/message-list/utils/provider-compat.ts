@@ -154,9 +154,14 @@ export function getOpenAIReasoningItemId(part: unknown): string | undefined {
  * Searches through messages in reverse order (most recent first) for better performance.
  * Checks both content.parts (v2 format) and toolInvocations (legacy AIV4 format).
  *
+ * Handles cases where tool call arguments are split across multiple messages by skipping
+ * empty, null, undefined, or invalid args and continuing to search.
+ *
  * @param messages - Array of MastraDB messages to search through
  * @param toolCallId - The ID of the tool call to find args for
  * @returns The args object from the matching tool call, or an empty object if not found
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/12405 - Tool call args lost when invocation split across messages
  */
 export function findToolCallArgs(messages: MastraDBMessage[], toolCallId: string): Record<string, unknown> {
   // Search through all messages in reverse order (most recent first) for better performance
@@ -174,10 +179,13 @@ export function findToolCallArgs(messages: MastraDBMessage[], toolCallId: string
       );
 
       if (toolCallPart && toolCallPart.type === 'tool-invocation') {
-        const args = toolCallPart.toolInvocation.args || {};
-        if (typeof args === 'object' && Object.keys(args).length > 0) {
+        const args = toolCallPart.toolInvocation.args;
+
+        // Skip empty, null, undefined, or invalid args and continue searching
+        if (args && typeof args === 'object' && !Array.isArray(args) && Object.keys(args).length > 0) {
           return args;
         }
+        // Continue to next message if args are invalid
       }
     }
 
@@ -186,10 +194,13 @@ export function findToolCallArgs(messages: MastraDBMessage[], toolCallId: string
       const toolInvocation = msg.content.toolInvocations.find(inv => inv.toolCallId === toolCallId);
 
       if (toolInvocation) {
-        const args = toolInvocation.args || {};
-        if (typeof args === 'object' && Object.keys(args).length > 0) {
+        const args = toolInvocation.args;
+
+        // Skip empty, null, undefined, or invalid args and continue searching
+        if (args && typeof args === 'object' && !Array.isArray(args) && Object.keys(args).length > 0) {
           return args;
         }
+        // Continue to next message if args are invalid
       }
     }
   }
