@@ -101,7 +101,7 @@ function ProviderModelsTable({ models, totalCount }: ProviderModelsTableProps) {
       <TableBody>
         {models.map((model, index) => (
           <TableRow key={index}>
-            <TableCell>
+            <TableCell className="whitespace-nowrap">
               <code>{model.model}</code>
             </TableCell>
             {hasExtendedData && <TableCell>{formatTokens(model.contextWindow)}</TableCell>}
