@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { useBrowserStream, type StreamStatus } from '../../hooks/use-browser-stream';
+import { useMouseInteraction } from '../../hooks/use-mouse-interaction';
 
 interface BrowserViewFrameProps {
   agentId: string;
@@ -29,10 +30,17 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
     }
   }, []);
 
-  const { status, error, currentUrl, connect } = useBrowserStream({
+  const { status, error, currentUrl, viewport, sendMessage, connect } = useBrowserStream({
     agentId,
     enabled: true,
     onFrame: handleFrame,
+  });
+
+  useMouseInteraction({
+    imgRef,
+    viewport,
+    sendMessage,
+    enabled: status === 'streaming',
   });
 
   // Notify parent of status changes
@@ -60,7 +68,11 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
       <img
         ref={imgRef}
         alt="Browser screencast"
-        className={cn('absolute inset-0 w-full h-full object-contain', hasFrame ? 'opacity-100' : 'opacity-0')}
+        className={cn(
+          'absolute inset-0 w-full h-full object-contain',
+          hasFrame ? 'opacity-100' : 'opacity-0',
+          status === 'streaming' && 'cursor-pointer',
+        )}
       />
 
       {/* Loading skeleton - shown until first frame arrives */}
