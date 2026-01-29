@@ -10,6 +10,7 @@
  *   workspace   - Workspace API (init, info, search/index)
  *   agents      - Agents with workspaces (inheritance, capabilities)
  *   safety      - Safety features (readonly, requireReadBeforeWrite, approval)
+ *   dynamic     - Dynamic skills (context-based skill resolution)
  *   all         - Run all demos (default)
  */
 
@@ -20,6 +21,7 @@ import {
   readonlyWorkspace,
   safeWriteWorkspace,
   skillsOnlyWorkspace,
+  dynamicSkillsWorkspace,
 } from '../mastra/workspaces';
 
 // Parse CLI args
@@ -289,6 +291,50 @@ async function demoSafety() {
 }
 
 // =============================================================================
+// DYNAMIC SKILLS DEMO
+// =============================================================================
+async function demoDynamicSkills() {
+  header('DYNAMIC SKILLS DEMO');
+
+  // Initialize workspace
+  await dynamicSkillsWorkspace.init();
+
+  // Test 1: Default context (no userRole)
+  section('Default Context (no userRole)');
+  console.log('  Refreshing skills with no context...');
+  await dynamicSkillsWorkspace.skills?.maybeRefresh();
+  const defaultSkills = await dynamicSkillsWorkspace.skills?.list();
+  console.log(`  Skills count: ${defaultSkills?.length || 0}`);
+  for (const skill of defaultSkills || []) {
+    console.log(`    - ${skill.name}`);
+  }
+  console.log();
+
+  // Test 2: Developer context
+  section('Developer Context (userRole=developer)');
+  console.log('  Refreshing skills with developer context...');
+  const devContext = new Map([['userRole', 'developer']]);
+  await dynamicSkillsWorkspace.skills?.maybeRefresh({ requestContext: devContext });
+  const devSkills = await dynamicSkillsWorkspace.skills?.list();
+  console.log(`  Skills count: ${devSkills?.length || 0}`);
+  for (const skill of devSkills || []) {
+    const isExtra = skill.name === 'brand-guidelines';
+    console.log(`    - ${skill.name}${isExtra ? ' (developer-only)' : ''}`);
+  }
+  console.log();
+
+  // Test 3: Path context (provider-supplied instructions)
+  section('Path Context (Provider Instructions)');
+  const ctx = dynamicSkillsWorkspace.getPathContext();
+  console.log(`  filesystem.provider: ${ctx.filesystem?.provider}`);
+  console.log(`  sandbox: ${ctx.sandbox ? 'configured' : 'not configured'}`);
+  console.log(`  instructions: ${ctx.instructions.slice(0, 70)}...`);
+  console.log();
+
+  await dynamicSkillsWorkspace.destroy();
+}
+
+// =============================================================================
 // MAIN
 // =============================================================================
 async function main() {
@@ -303,6 +349,7 @@ async function main() {
     workspace: demoWorkspace,
     agents: demoAgents,
     safety: demoSafety,
+    dynamic: demoDynamicSkills,
   };
 
   if (demoType === 'all') {

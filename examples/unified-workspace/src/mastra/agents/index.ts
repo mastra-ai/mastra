@@ -1,10 +1,8 @@
 export { developerAgent } from './developer-agent';
 export { docsAgent } from './docs-agent';
-export { supportAgent } from './support-agent';
 export { researchAgent } from './research-agent';
 export { editorAgent } from './editor-agent';
 export { automationAgent } from './automation-agent';
-export { fsWriteApprovalAgent } from './fs-write-approval-agent';
-export { fsAllApprovalAgent } from './fs-all-approval-agent';
 export { testAgent } from './test-agent';
 export { skillsOnlyAgent } from './skills-only-agent';
+export { dynamicSkillsAgent } from './dynamic-skills-agent';

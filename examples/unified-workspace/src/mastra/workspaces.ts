@@ -88,35 +88,6 @@ export const docsAgentWorkspace = new Workspace({
 });
 
 /**
- * Example: Agent-only workspace (no inheritance from global).
- *
- * This demonstrates an agent that ONLY has its own skills,
- * without inheriting from the global workspace.
- */
-export const isolatedDocsWorkspace = new Workspace({
-  id: 'isolated-docs-workspace',
-  name: 'Isolated Docs Workspace',
-  filesystem: new LocalFilesystem({
-    basePath: PROJECT_ROOT,
-  }),
-  // Enable sandbox for command execution
-  // Spread process.env to inherit all environment variables
-  sandbox: new LocalSandbox({
-    workingDirectory: PROJECT_ROOT,
-    env: { ...process.env },
-  }),
-  // Tool configuration - full access
-  tools: {
-    requireApproval: false,
-  },
-  bm25: true,
-  // Auto-index FAQ content for search
-  autoIndexPaths: ['/content'],
-  // Only agent-specific skills, no global skills
-  skills: ['/docs-skills'],
-});
-
-/**
  * Readonly workspace - blocks all write operations.
  *
  * Safety feature: readOnly: true
@@ -166,81 +137,25 @@ export const safeWriteWorkspace = new Workspace({
 });
 
 /**
- * Supervised sandbox workspace - requires approval for all sandbox operations.
+ * Supervised workspace - requires approval for all operations.
  *
- * Safety feature: requireApproval on execute_command tool
- * - execute_command requires approval before execution
- * - Uses tools config for per-tool approval settings
+ * Safety feature: requireApproval: true (top-level default)
+ * - All filesystem operations require approval
+ * - All sandbox operations require approval
+ * - Demonstrates the most restrictive safety configuration
  */
 export const supervisedSandboxWorkspace = new Workspace({
   id: 'supervised-sandbox-workspace',
-  name: 'Supervised Sandbox Workspace',
+  name: 'Supervised Workspace',
   filesystem: new LocalFilesystem({
     basePath: PROJECT_ROOT,
   }),
   sandbox: new LocalSandbox({
     workingDirectory: PROJECT_ROOT,
   }),
-  // Tool configuration - require approval for sandbox commands
+  // Tool configuration - require approval for all tools
   tools: {
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      requireApproval: true,
-    },
-  },
-  bm25: true,
-  skills: ['/skills'],
-});
-
-/**
- * Filesystem write approval workspace - requires approval for write operations.
- *
- * Safety feature: requireApproval on write tools
- * - Read operations (read_file, list_files, file_exists, search) run without approval
- * - Write operations (write_file, edit_file, delete_file, mkdir, index) require approval
- */
-export const fsWriteApprovalWorkspace = new Workspace({
-  id: 'fs-write-approval-workspace',
-  name: 'Filesystem Write Approval Workspace',
-  filesystem: new LocalFilesystem({
-    basePath: PROJECT_ROOT,
-  }),
-  sandbox: new LocalSandbox({
-    workingDirectory: PROJECT_ROOT,
-  }),
-  // Tool configuration - require approval for write operations
-  tools: {
-    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireApproval: true },
-    [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireApproval: true },
-    [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: { requireApproval: true },
-    [WORKSPACE_TOOLS.FILESYSTEM.MKDIR]: { requireApproval: true },
-    [WORKSPACE_TOOLS.SEARCH.INDEX]: { requireApproval: true },
-  },
-  bm25: true,
-  skills: ['/skills'],
-});
-
-/**
- * Filesystem all approval workspace - requires approval for all filesystem operations.
- *
- * Safety feature: requireApproval: true on all tools (top-level default)
- * - All filesystem operations require approval (read and write)
- * - Sandbox ops don't need approval (per-tool override)
- */
-export const fsAllApprovalWorkspace = new Workspace({
-  id: 'fs-all-approval-workspace',
-  name: 'Filesystem All Approval Workspace',
-  filesystem: new LocalFilesystem({
-    basePath: PROJECT_ROOT,
-  }),
-  sandbox: new LocalSandbox({
-    workingDirectory: PROJECT_ROOT,
-  }),
-  // Tool configuration - require approval for all tools, except sandbox
-  tools: {
-    // Top-level default: all tools require approval
     requireApproval: true,
-    // Override: sandbox commands don't require approval (testing FS approval only)
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { requireApproval: false },
   },
   bm25: true,
   skills: ['/skills'],
@@ -305,18 +220,9 @@ export const dynamicSkillsWorkspace = new Workspace({
   bm25: true,
   // Dynamic skills resolver - returns different paths based on context
   skills: context => {
-    const paths = ['/skills']; // Base skills for everyone
-
-    // Check user role from request context
-    // In real usage, this would come from authentication/session
-    const userRole = context.requestContext?.get?.('userRole');
-
-    if (userRole === 'developer') {
-      // Developers get additional docs-skills
-      paths.push('/docs-skills');
-    }
-
-    return paths;
+    // Only include docs-skills (brand-guidelines) - excludes base skills
+    // This demonstrates that the filter is working differently than static workspaces
+    return ['/docs-skills'];
   },
 });
 
@@ -326,12 +232,9 @@ export const dynamicSkillsWorkspace = new Workspace({
 export const allWorkspaces = [
   globalWorkspace,
   docsAgentWorkspace,
-  isolatedDocsWorkspace,
   readonlyWorkspace,
   safeWriteWorkspace,
   supervisedSandboxWorkspace,
-  fsWriteApprovalWorkspace,
-  fsAllApprovalWorkspace,
   testAgentWorkspace,
   skillsOnlyWorkspace,
   dynamicSkillsWorkspace,
