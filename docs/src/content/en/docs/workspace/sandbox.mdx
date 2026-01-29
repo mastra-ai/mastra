@@ -55,9 +55,11 @@ const agent = new Agent({
 const response = await agent.generate('List all files in the workspace');
 ```
 
-When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands. See [Workspace Class Reference](/reference/workspace/workspace-class#sandbox-tools) for details.
-
 See [LocalSandbox Reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
+
+## Agent tools
+
+When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands. See [Workspace Class Reference](/reference/workspace/workspace-class#sandbox-tools) for details.
 
 ## Related
 

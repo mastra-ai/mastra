@@ -25,12 +25,26 @@ npm install @mastra/core@latest
 
 ## Usage
 
-```typescript
-import { LocalFilesystem } from '@mastra/core/workspace';
+Add a `LocalFilesystem` to a workspace and assign it to an agent. The agent can then read, write, and manage files as part of its tasks:
 
-const filesystem = new LocalFilesystem({
-  basePath: './workspace',
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
 });
+
+const agent = new Agent({
+  id: 'file-agent',
+  model: 'openai/gpt-4o',
+  workspace,
+});
+
+// The agent now has filesystem tools available
+const response = await agent.generate('List all files in the workspace');
 ```
 
 ## Constructor Parameters
