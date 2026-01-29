@@ -1,16 +1,23 @@
 // To setup an ElasticSearch server, run the docker compose file in the elasticsearch directory
 import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import dotenv from 'dotenv';
 
 import { ElasticSearchVector } from './index';
 
+dotenv.config();
+
 describe('ElasticSearchVector', () => {
   let vectorDB: ElasticSearchVector;
-  const url = 'http://localhost:9200';
+  const url = process.env.ELASTICSEARCH_URL || 'http://localhost:9200';
+  const api_key = process.env.ELASTICSEARCH_API_KEY || '';
 
   beforeAll(async () => {
     // Initialize ElasticSearchVector
-    vectorDB = new ElasticSearchVector({ url, id: 'elasticsearch-test' });
+    console.log(`🚀 Running tests against Elasticsearch: ${url}`);
+    console.log(`Using API Key: ${api_key ? '****' + api_key.slice(-4) : 'None'}`);
+
+    vectorDB = new ElasticSearchVector({ url, id: 'elasticsearch-test', auth: { apiKey: api_key || undefined } });
   });
 
   describe('Error Handling', () => {
@@ -73,8 +80,9 @@ describe('ElasticSearchVector', () => {
 
 // Shared vector store test suite
 const elasticSearchVector = new ElasticSearchVector({
-  url: 'http://localhost:9200',
+  url: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
   id: 'elasticsearch-shared-test',
+  auth: { apiKey: process.env.ELASTICSEARCH_API_KEY || undefined },
 });
 
 createVectorTestSuite({
@@ -92,10 +100,10 @@ createVectorTestSuite({
   },
   supportsRegex: false,
   supportsContains: false,
-  supportsNorOperator: false,
+  supportsNorOperator: true,
   supportsElemMatch: false,
   supportsSize: false,
-  supportsEmptyLogicalOperators: false,
+  supportsEmptyLogicalOperators: true,
   // Elasticsearch doesn't support advanced $not patterns like field-level $not
   supportsAdvancedNotSyntax: false,
   // Cosine similarity doesn't support zero magnitude vectors (division by zero)

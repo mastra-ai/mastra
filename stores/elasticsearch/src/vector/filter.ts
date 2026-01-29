@@ -30,7 +30,7 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
-      logical: ['$and', '$or', '$not'],
+      logical: ['$and', '$or', '$not', '$nor'],
       array: ['$in', '$nin', '$all'],
       regex: ['$regex'],
       custom: [],
@@ -188,6 +188,7 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
           },
         };
       case '$not':
+      case '$nor':
         return {
           bool: {
             must_not: conditions,
@@ -340,13 +341,13 @@ export class ElasticSearchFilterTranslator extends BaseFilterTranslator<ElasticS
         wildcardPattern = wildcardPattern + '*';
       }
 
-      return { wildcard: { [field]: wildcardPattern } };
+      return { wildcard: { [field]: { value: wildcardPattern } } };
     }
 
     // Use regexp for other regex patterns
     // Pass the original regex pattern through unchanged to preserve regex semantics
     // ElasticSearch regexp queries accept valid regex patterns directly
-    return { regexp: { [field]: regexValue } };
+    return { regexp: { [field]: { value: regexValue } } };
   }
 
   private addKeywordIfNeeded(field: string, value: any): string {
