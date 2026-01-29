@@ -3416,6 +3416,8 @@ export class Agent<
       autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
       mastra: this.#mastra,
       structuredOutput: mergedOptions?.structuredOutput as OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never,
+      onAbort: mergedOptions?.onAbort,
+      abortSignal: mergedOptions?.abortSignal,
     });
   }
 
@@ -3488,6 +3490,8 @@ export class Agent<
       onIterationComplete: mergedOptions?.onIterationComplete,
       autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
       mastra: this.#mastra,
+      onAbort: mergedOptions?.onAbort,
+      abortSignal: mergedOptions?.abortSignal,
     });
   }
 

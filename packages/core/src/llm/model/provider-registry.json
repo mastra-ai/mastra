@@ -158,7 +158,16 @@
       "apiKeyEnvVar": "ZHIPU_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Z.AI Coding Plan",
-      "models": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6", "glm-4.6v", "glm-4.7"],
+      "models": [
+        "glm-4.5",
+        "glm-4.5-air",
+        "glm-4.5-flash",
+        "glm-4.5v",
+        "glm-4.6",
+        "glm-4.6v",
+        "glm-4.7",
+        "glm-4.7-flash"
+      ],
       "docUrl": "https://docs.z.ai/devpack/overview",
       "gateway": "models.dev"
     },
@@ -380,7 +389,6 @@
         "qwen/qwen3-next-80b-a3b-instruct",
         "qwen/qwen3-next-80b-a3b-thinking",
         "qwen/qwq-32b",
-        "z-ai/glm-4.7",
         "z-ai/glm4.7"
       ],
       "docUrl": "https://docs.api.nvidia.com/nim/",
@@ -1187,17 +1195,22 @@
       "apiKeyEnvVar": "TOGETHER_API_KEY",
       "name": "Together AI",
       "models": [
+        "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
         "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+        "Qwen/Qwen3-Next-80B-A3B-Instruct",
         "deepseek-ai/DeepSeek-R1",
         "deepseek-ai/DeepSeek-V3",
         "deepseek-ai/DeepSeek-V3-1",
         "essentialai/Rnj-1-Instruct",
         "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "moonshotai/Kimi-K2-5",
         "moonshotai/Kimi-K2-Instruct",
+        "moonshotai/Kimi-K2-Instruct-0905",
         "moonshotai/Kimi-K2-Thinking",
         "moonshotai/Kimi-K2.5",
         "openai/gpt-oss-120b",
-        "zai-org/GLM-4.6"
+        "zai-org/GLM-4.6",
+        "zai-org/GLM-4.7"
       ],
       "docUrl": "https://docs.together.ai/docs/serverless-models",
       "gateway": "models.dev",
@@ -1456,6 +1469,7 @@
         "gemini-3-pro",
         "glm-4.6",
         "glm-4.7",
+        "glm-4.7-free",
         "gpt-5",
         "gpt-5-codex",
         "gpt-5-nano",
@@ -1469,6 +1483,7 @@
         "kimi-k2-thinking",
         "kimi-k2.5",
         "minimax-m2.1",
+        "minimax-m2.1-free",
         "qwen3-coder"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
@@ -1772,10 +1787,14 @@
         "google/gemini-2.5-pro-preview-06-05",
         "google/gemini-3-flash-preview",
         "google/gemini-3-pro-preview",
-        "google/gemma-2-9b-it:free",
+        "google/gemma-2-9b-it",
         "google/gemma-3-12b-it",
+        "google/gemma-3-12b-it:free",
         "google/gemma-3-27b-it",
         "google/gemma-3-27b-it:free",
+        "google/gemma-3-4b-it",
+        "google/gemma-3-4b-it:free",
+        "google/gemma-3n-e2b-it:free",
         "google/gemma-3n-e4b-it",
         "google/gemma-3n-e4b-it:free",
         "kwaipilot/kat-coder-pro:free",
@@ -1916,6 +1935,7 @@
         "moonshotai/kimi-k2-0905",
         "moonshotai/kimi-k2-thinking",
         "moonshotai/kimi-k2-thinking-turbo",
+        "moonshotai/kimi-k2.5",
         "openai/gpt-5",
         "openai/gpt-5-codex",
         "openai/gpt-5.1",
@@ -1923,7 +1943,9 @@
         "openai/gpt-5.1-codex",
         "openai/gpt-5.1-codex-mini",
         "openai/gpt-5.2",
+        "openai/gpt-5.2-codex",
         "qwen/qwen3-coder-plus",
+        "qwen/qwen3-max-thinking",
         "stepfun/step-3",
         "volcengine/doubao-seed-1.8",
         "volcengine/doubao-seed-code",
@@ -1940,7 +1962,8 @@
         "z-ai/glm-4.6v",
         "z-ai/glm-4.6v-flash",
         "z-ai/glm-4.6v-flash-free",
-        "z-ai/glm-4.7"
+        "z-ai/glm-4.7",
+        "z-ai/glm-4.7-flashx"
       ],
       "docUrl": "https://docs.zenmux.ai",
       "gateway": "models.dev"
@@ -2217,15 +2240,11 @@
       "models": [
         "LGAI-EXAONE/EXAONE-4.0.1-32B",
         "LGAI-EXAONE/K-EXAONE-236B-A23B",
+        "MiniMaxAI/MiniMax-M2.1",
         "Qwen/Qwen3-235B-A22B-Instruct-2507",
-        "Qwen/Qwen3-235B-A22B-Thinking-2507",
-        "Qwen/Qwen3-30B-A3B",
-        "Qwen/Qwen3-32B",
-        "meta-llama-3.1-8b-instruct",
-        "meta-llama-3.3-70b-instruct",
-        "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
-        "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-        "zai-org/GLM-4.6"
+        "meta-llama/Llama-3.1-8B-Instruct",
+        "meta-llama/Llama-3.3-70B-Instruct",
+        "zai-org/GLM-4.7"
       ],
       "docUrl": "https://friendli.ai/docs/guides/serverless_endpoints/introduction",
       "gateway": "models.dev"
@@ -2730,7 +2749,16 @@
       "qwen3-coder-480b-a35b-instruct",
       "qwen3-max-2025-09-23"
     ],
-    "zai-coding-plan": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6", "glm-4.6v", "glm-4.7"],
+    "zai-coding-plan": [
+      "glm-4.5",
+      "glm-4.5-air",
+      "glm-4.5-flash",
+      "glm-4.5v",
+      "glm-4.6",
+      "glm-4.6v",
+      "glm-4.7",
+      "glm-4.7-flash"
+    ],
     "ollama-cloud": [
       "cogito-2.1:671b",
       "deepseek-v3.1:671b",
@@ -2905,7 +2933,6 @@
       "qwen/qwen3-next-80b-a3b-instruct",
       "qwen/qwen3-next-80b-a3b-thinking",
       "qwen/qwq-32b",
-      "z-ai/glm-4.7",
       "z-ai/glm4.7"
     ],
     "upstage": ["solar-mini", "solar-pro2", "solar-pro3"],
@@ -3576,17 +3603,22 @@
       "xai/grok-3-mini"
     ],
     "togetherai": [
+      "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+      "Qwen/Qwen3-Next-80B-A3B-Instruct",
       "deepseek-ai/DeepSeek-R1",
       "deepseek-ai/DeepSeek-V3",
       "deepseek-ai/DeepSeek-V3-1",
       "essentialai/Rnj-1-Instruct",
       "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "moonshotai/Kimi-K2-5",
       "moonshotai/Kimi-K2-Instruct",
+      "moonshotai/Kimi-K2-Instruct-0905",
       "moonshotai/Kimi-K2-Thinking",
       "moonshotai/Kimi-K2.5",
       "openai/gpt-oss-120b",
-      "zai-org/GLM-4.6"
+      "zai-org/GLM-4.6",
+      "zai-org/GLM-4.7"
     ],
     "baseten": [
       "Qwen/Qwen3-Coder-480B-A35B-Instruct",
@@ -3796,6 +3828,7 @@
       "gemini-3-pro",
       "glm-4.6",
       "glm-4.7",
+      "glm-4.7-free",
       "gpt-5",
       "gpt-5-codex",
       "gpt-5-nano",
@@ -3809,6 +3842,7 @@
       "kimi-k2-thinking",
       "kimi-k2.5",
       "minimax-m2.1",
+      "minimax-m2.1-free",
       "qwen3-coder"
     ],
     "fastrouter": [
@@ -4026,10 +4060,14 @@
       "google/gemini-2.5-pro-preview-06-05",
       "google/gemini-3-flash-preview",
       "google/gemini-3-pro-preview",
-      "google/gemma-2-9b-it:free",
+      "google/gemma-2-9b-it",
       "google/gemma-3-12b-it",
+      "google/gemma-3-12b-it:free",
       "google/gemma-3-27b-it",
       "google/gemma-3-27b-it:free",
+      "google/gemma-3-4b-it",
+      "google/gemma-3-4b-it:free",
+      "google/gemma-3n-e2b-it:free",
       "google/gemma-3n-e4b-it",
       "google/gemma-3n-e4b-it:free",
       "kwaipilot/kat-coder-pro:free",
@@ -4162,6 +4200,7 @@
       "moonshotai/kimi-k2-0905",
       "moonshotai/kimi-k2-thinking",
       "moonshotai/kimi-k2-thinking-turbo",
+      "moonshotai/kimi-k2.5",
       "openai/gpt-5",
       "openai/gpt-5-codex",
       "openai/gpt-5.1",
@@ -4169,7 +4208,9 @@
       "openai/gpt-5.1-codex",
       "openai/gpt-5.1-codex-mini",
       "openai/gpt-5.2",
+      "openai/gpt-5.2-codex",
       "qwen/qwen3-coder-plus",
+      "qwen/qwen3-max-thinking",
       "stepfun/step-3",
       "volcengine/doubao-seed-1.8",
       "volcengine/doubao-seed-code",
@@ -4186,7 +4227,8 @@
       "z-ai/glm-4.6v",
       "z-ai/glm-4.6v-flash",
       "z-ai/glm-4.6v-flash-free",
-      "z-ai/glm-4.7"
+      "z-ai/glm-4.7",
+      "z-ai/glm-4.7-flashx"
     ],
     "minimax-coding-plan": ["MiniMax-M2", "MiniMax-M2.1"],
     "ovhcloud": [
@@ -4342,15 +4384,11 @@
     "friendli": [
       "LGAI-EXAONE/EXAONE-4.0.1-32B",
       "LGAI-EXAONE/K-EXAONE-236B-A23B",
+      "MiniMaxAI/MiniMax-M2.1",
       "Qwen/Qwen3-235B-A22B-Instruct-2507",
-      "Qwen/Qwen3-235B-A22B-Thinking-2507",
-      "Qwen/Qwen3-30B-A3B",
-      "Qwen/Qwen3-32B",
-      "meta-llama-3.1-8b-instruct",
-      "meta-llama-3.3-70b-instruct",
-      "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
-      "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-      "zai-org/GLM-4.6"
+      "meta-llama/Llama-3.1-8B-Instruct",
+      "meta-llama/Llama-3.3-70B-Instruct",
+      "zai-org/GLM-4.7"
     ],
     "anthropic": [
       "claude-3-5-haiku-20241022",

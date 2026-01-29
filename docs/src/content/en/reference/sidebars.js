@@ -476,6 +476,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'processors/message-history-processor',
+          label: 'MessageHistory',
+        },
+        {
+          type: 'doc',
           id: 'processors/moderation-processor',
           label: 'ModerationProcessor',
         },
@@ -496,6 +501,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'processors/semantic-recall-processor',
+          label: 'SemanticRecall',
+        },
+        {
+          type: 'doc',
           id: 'processors/system-prompt-scrubber',
           label: 'SystemPromptScrubber',
         },
@@ -506,8 +516,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'processors/tool-call-filter',
+          label: 'ToolCallFilter',
+        },
+        {
+          type: 'doc',
           id: 'processors/unicode-normalizer',
           label: 'UnicodeNormalizer',
+        },
+        {
+          type: 'doc',
+          id: 'processors/working-memory-processor',
+          label: 'WorkingMemory',
         },
       ],
     },

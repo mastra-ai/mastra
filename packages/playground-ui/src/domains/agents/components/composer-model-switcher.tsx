@@ -23,6 +23,7 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
 
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [selectedProvider, setSelectedProvider] = useState(defaultProvider);
+  const [modelOpen, setModelOpen] = useState(false);
 
   const providers = dataProviders?.providers || [];
 
@@ -125,8 +126,10 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
     const cleanedId = cleanProviderId(providerId);
     setSelectedProvider(cleanedId);
 
+    // Only clear model selection and open model combobox when switching to a different provider
     if (cleanedId !== currentModelProvider) {
       setSelectedModel('');
+      setModelOpen(true);
     }
   };
 
@@ -163,6 +166,9 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
           searchPlaceholder="Search models..."
           emptyText="No models found"
           variant="light"
+          open={modelOpen}
+          onOpenChange={setModelOpen}
+          className="min-w-48"
         />
       </div>
       {showWarning && (
