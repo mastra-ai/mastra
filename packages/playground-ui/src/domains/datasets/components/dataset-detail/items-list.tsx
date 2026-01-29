@@ -2,19 +2,30 @@ import { useState, useEffect } from 'react';
 import { DatasetItem } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { EntryList } from '@/ds/components/EntryList';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Icon } from '@/ds/icons/Icon';
-import { Plus, Pencil, Trash2, Upload } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 import { useItemSelection } from '../../hooks/use-item-selection';
 import { exportItemsToCSV } from '../../utils/csv-export';
 import { ActionsMenu } from './items-list-actions';
 import { toast } from '@/lib/toast';
+import { format, isToday } from 'date-fns';
 
 type SelectionMode = 'idle' | 'export' | 'create-dataset' | 'delete';
+
+const itemsListColumns = [
+  { name: 'input', label: 'Input', size: '1fr' },
+  { name: 'expectedOutput', label: 'Expected Output', size: '1fr' },
+  { name: 'metadata', label: 'Metadata', size: '8rem' },
+  { name: 'date', label: 'Created', size: '5rem' },
+];
+
+const itemsListColumnsWithCheckbox = [
+  { name: 'checkbox', label: '', size: '2.5rem' },
+  ...itemsListColumns,
+];
 
 export interface ItemsListProps {
   items: DatasetItem[];
@@ -27,6 +38,8 @@ export interface ItemsListProps {
   onCreateDatasetClick?: (items: DatasetItem[]) => void;
   datasetName?: string;
   clearSelectionTrigger?: number;
+  onItemClick?: (itemId: string) => void;
+  selectedItemId?: string | null;
 }
 
 /**
@@ -38,29 +51,18 @@ function truncateValue(value: unknown, maxLength = 100): string {
   return str.slice(0, maxLength) + '...';
 }
 
-/**
- * Format a date for display
- */
-function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
 export function ItemsList({
   items,
   isLoading,
   onAddClick,
-  onEditItem,
   onDeleteItem,
   onImportClick,
   onBulkDeleteClick,
   onCreateDatasetClick,
   datasetName,
   clearSelectionTrigger,
+  onItemClick,
+  selectedItemId,
 }: ItemsListProps) {
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
@@ -119,11 +121,24 @@ export function ItemsList({
     }
   };
 
+  const isSelectionActive = selectionMode !== 'idle';
+  const columns = isSelectionActive ? itemsListColumnsWithCheckbox : itemsListColumns;
+
+  const handleEntryClick = (itemId: string) => {
+    if (isSelectionActive) {
+      // In selection mode, clicking toggles selection
+      selection.toggle(itemId, false, allIds);
+    } else {
+      // In normal mode, trigger item click callback
+      onItemClick?.(itemId);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
-      {/* Action buttons above table */}
+      {/* Action buttons above list */}
       <div className="flex justify-end px-4 py-2 gap-2">
-        {selectionMode !== 'idle' ? (
+        {isSelectionActive ? (
           <>
             <span className="text-sm text-neutral3 flex items-center">
               {selection.selectedCount} selected
@@ -169,84 +184,53 @@ export function ItemsList({
         )}
       </div>
 
-      <ScrollableContainer>
-        <Table>
-          <Thead>
-            {selectionMode !== 'idle' && (
-              <Th style={{ width: 40 }}>
-                <Checkbox
-                  checked={selection.selectedCount === items.length && items.length > 0}
-                  onCheckedChange={checked => {
-                    if (checked) selection.selectAll(allIds);
-                    else selection.clearSelection();
-                  }}
-                  aria-label="Select all items"
-                />
-              </Th>
-            )}
-            <Th>Input</Th>
-            <Th style={{ width: 200 }}>Expected Output</Th>
-            <Th style={{ width: 120 }}>Created</Th>
-            <Th style={{ width: 100 }}>Actions</Th>
-          </Thead>
-          <Tbody>
-            {items.map(item => (
-              <Row key={item.id}>
-                {selectionMode !== 'idle' && (
-                  <Cell>
-                    <Checkbox
-                      checked={selection.selectedIds.has(item.id)}
-                      onCheckedChange={() => {}}
-                      onClick={e => {
-                        e.stopPropagation();
-                        selection.toggle(item.id, e.shiftKey, allIds);
-                      }}
-                      aria-label={`Select item ${item.id}`}
-                    />
-                  </Cell>
-                )}
-                <Cell className="font-mono text-ui-sm text-neutral4">
-                  {truncateValue(item.input)}
-                </Cell>
-                <Cell className="font-mono text-ui-sm text-neutral3">
-                  {item.expectedOutput ? truncateValue(item.expectedOutput) : '-'}
-                </Cell>
-                <Cell className="text-ui-sm text-neutral3">
-                  {formatDate(item.createdAt)}
-                </Cell>
-                <Cell>
-                  <div className="flex items-center gap-1">
-                    {onEditItem && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onEditItem(item)}
-                        aria-label="Edit item"
-                      >
-                        <Icon>
-                          <Pencil className="w-4 h-4" />
-                        </Icon>
-                      </Button>
-                    )}
-                    {onDeleteItem && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeleteItemId(item.id)}
-                        aria-label="Delete item"
-                      >
-                        <Icon>
-                          <Trash2 className="w-4 h-4" />
-                        </Icon>
-                      </Button>
-                    )}
-                  </div>
-                </Cell>
-              </Row>
-            ))}
-          </Tbody>
-        </Table>
-      </ScrollableContainer>
+      <EntryList>
+        <EntryList.Trim>
+          <EntryList.Header columns={columns} />
+          <EntryList.Entries>
+            {items.map(item => {
+              const createdAtDate = new Date(item.createdAt);
+              const isTodayDate = isToday(createdAtDate);
+
+              const entry = {
+                id: item.id,
+                input: truncateValue(item.input, 60),
+                expectedOutput: item.expectedOutput ? truncateValue(item.expectedOutput, 40) : '-',
+                metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
+                date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
+              };
+
+              return (
+                <EntryList.Entry
+                  key={item.id}
+                  entry={entry}
+                  isSelected={selectedItemId === item.id}
+                  columns={columns}
+                  onClick={handleEntryClick}
+                >
+                  {isSelectionActive && (
+                    <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selection.selectedIds.has(item.id)}
+                        onCheckedChange={() => {}}
+                        onClick={e => {
+                          e.stopPropagation();
+                          selection.toggle(item.id, e.shiftKey, allIds);
+                        }}
+                        aria-label={`Select item ${item.id}`}
+                      />
+                    </div>
+                  )}
+                  <EntryList.EntryText>{entry.input}</EntryList.EntryText>
+                  <EntryList.EntryText>{entry.expectedOutput}</EntryList.EntryText>
+                  <EntryList.EntryText>{entry.metadata}</EntryList.EntryText>
+                  <EntryList.EntryText>{entry.date}</EntryList.EntryText>
+                </EntryList.Entry>
+              );
+            })}
+          </EntryList.Entries>
+        </EntryList.Trim>
+      </EntryList>
 
       {/* Delete confirmation dialog */}
       <AlertDialog open={!!deleteItemId} onOpenChange={() => setDeleteItemId(null)}>
@@ -269,32 +253,22 @@ export function ItemsList({
 
 function ItemsListSkeleton() {
   return (
-    <Table>
-      <Thead>
-        <Th>Input</Th>
-        <Th style={{ width: 200 }}>Expected Output</Th>
-        <Th style={{ width: 120 }}>Created</Th>
-        <Th style={{ width: 100 }}>Actions</Th>
-      </Thead>
-      <Tbody>
-        {Array.from({ length: 5 }).map((_, index) => (
-          <Row key={index}>
-            <Cell>
-              <Skeleton className="h-4 w-3/4" />
-            </Cell>
-            <Cell>
-              <Skeleton className="h-4 w-1/2" />
-            </Cell>
-            <Cell>
-              <Skeleton className="h-4 w-20" />
-            </Cell>
-            <Cell>
-              <Skeleton className="h-4 w-12" />
-            </Cell>
-          </Row>
-        ))}
-      </Tbody>
-    </Table>
+    <EntryList>
+      <EntryList.Trim>
+        <EntryList.Header columns={itemsListColumns} />
+        <EntryList.Entries>
+          {Array.from({ length: 5 }).map((_, index) => (
+            <EntryList.Entry key={index} columns={itemsListColumns} isLoading>
+              {itemsListColumns.map((col, colIndex) => (
+                <EntryList.EntryText key={colIndex} isLoading>
+                  Loading...
+                </EntryList.EntryText>
+              ))}
+            </EntryList.Entry>
+          ))}
+        </EntryList.Entries>
+      </EntryList.Trim>
+    </EntryList>
   );
 }
 
