@@ -87,10 +87,10 @@ Plans:
 3. Error paths return appropriate errors (not swallowed)
 4. No regressions in existing interface implementations
 
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 04-01: TypeScript validation and mock tests
+- [ ] 04-01-PLAN.md — Vitest setup and unit tests for transport + provider layers
 
 ## Progress
 
