@@ -4,6 +4,7 @@ import * as React from 'react'
 import { ChevronDownIcon, CopyPageIcon, ExternalLinkIcon } from './copy-page-icons'
 import { cn } from '@site/src/lib/utils'
 import { Button } from './ui/button'
+import { useLocation } from '@docusaurus/router'
 
 type UseEffectEvent = <F extends (...params: never[]) => unknown>(callback: F) => F
 
@@ -249,10 +250,8 @@ function ViewOptions({ url }: { url: string }) {
 }
 
 export const CopyOpenInButton = () => {
-  const url =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}/llms.txt`
-      : '/llms.txt'
+  const location = useLocation()
+  const url = `${location.pathname.replace(/\/$/, '')}/llms.txt`
 
   return (
     <div className="copy-openin-button flex items-center">
