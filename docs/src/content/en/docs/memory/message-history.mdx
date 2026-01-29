@@ -17,7 +17,6 @@ You can also retrieve message history to display past conversations in your UI.
 Each message belongs to a thread (the conversation) and a resource (the user or entity it's associated with). See [Threads and resources](/docs/memory/storage#threads-and-resources) for more detail.
 :::
 
-
 ## Getting started
 
 Install the Mastra memory module along with a [storage adapter](/docs/memory/storage#supported-providers) for your database. The examples below use `@mastra/libsql`, which stores data locally in a `mastra.db` file.
@@ -95,7 +94,7 @@ await agent.stream("Hello", {
 
 :::info
 
-Threads and messages are created automatically when you call `agent.generate()` or `agent.stream()`, but you can also create them manually  with [`createThread()`](/reference/memory/createThread) and [`saveMessages()`](/reference/memory/memory-class#savemessages). 
+Threads and messages are created automatically when you call `agent.generate()` or `agent.stream()`, but you can also create them manually  with [`createThread()`](/reference/memory/createThread) and [`saveMessages()`](/reference/memory/memory-class). 
 
 :::
 
@@ -103,7 +102,6 @@ There are two ways to use this history:
 
 - **Automatic inclusion** - Mastra automatically fetches and includes recent messages in the context window. By default, it includes the last 10 messages, keeping agents grounded in the conversation. You can adjust this number with `lastMessages`, but in most cases you don't need to think about it.
 - [**Manual querying**](#querying) - For more control, use the `recall()` function to query threads and messages directly. This lets you choose exactly which memories are included in the context window, or fetch messages to render conversation history in your UI.
-
 
 ## Accessing Memory
 
@@ -136,7 +134,6 @@ const result = await memory.listThreads({
 ```
 
 Paginate through threads:
-
 
 ```typescript
 const result = await memory.listThreads({
@@ -228,6 +225,7 @@ const { messages } = await memory.recall({
   ],
 });
 ```
+
 Search by meaning (see [Semantic recall](/docs/memory/semantic-recall) for setup):
 
 ```typescript
