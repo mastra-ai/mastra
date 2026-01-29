@@ -55,7 +55,7 @@ await workspace.init();
 Initialization runs setup logic for each configured provider:
 
 - **LocalFilesystem**: Creates the base directory if it doesn't exist
-- **LocalSandbox**: Creates working directory. On macOS with seatbelt isolation, this also generates the sandbox profile in a `.sandbox/` folder.
+- **LocalSandbox**: Creates working directory
 - **Search**: Indexes files from `autoIndexPaths` (if configured)
 
 External providers may perform additional setup like establishing connections or authenticating.
