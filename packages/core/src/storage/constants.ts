@@ -11,6 +11,8 @@ export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
+export const TABLE_INTEGRATIONS = 'mastra_integrations';
+export const TABLE_CACHED_TOOLS = 'mastra_cached_tools';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -21,7 +23,9 @@ export type TABLE_NAMES =
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
-  | typeof TABLE_AGENT_VERSIONS;
+  | typeof TABLE_AGENT_VERSIONS
+  | typeof TABLE_INTEGRATIONS
+  | typeof TABLE_CACHED_TOOLS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -121,6 +125,34 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false },
 };
 
+export const INTEGRATIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true }, // UUID
+  provider: { type: 'text', nullable: false }, // 'composio' | 'arcade'
+  name: { type: 'text', nullable: false }, // Display name for the integration
+  enabled: { type: 'boolean', nullable: false }, // Whether integration is active
+  selectedToolkits: { type: 'jsonb', nullable: false }, // Array of toolkit slugs
+  metadata: { type: 'jsonb', nullable: true }, // Provider-specific settings
+  ownerId: { type: 'text', nullable: true }, // Multi-tenant support
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const CACHED_TOOLS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true }, // UUID
+  integrationId: { type: 'text', nullable: false }, // FK to integrations.id
+  provider: { type: 'text', nullable: false }, // 'composio' | 'arcade'
+  toolkitSlug: { type: 'text', nullable: false }, // Toolkit identifier
+  toolSlug: { type: 'text', nullable: false }, // Tool identifier
+  name: { type: 'text', nullable: false }, // Display name for the tool
+  description: { type: 'text', nullable: true }, // Tool description
+  inputSchema: { type: 'jsonb', nullable: false }, // JSON schema for input
+  outputSchema: { type: 'jsonb', nullable: true }, // JSON schema for output
+  rawDefinition: { type: 'jsonb', nullable: false }, // Full tool definition from provider
+  createdAt: { type: 'timestamp', nullable: false }, // When tool was first cached (same as cachedAt for compatibility)
+  cachedAt: { type: 'timestamp', nullable: false }, // When tool was cached
+  updatedAt: { type: 'timestamp', nullable: false }, // When tool cache was last updated
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -184,4 +216,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+  [TABLE_INTEGRATIONS]: INTEGRATIONS_SCHEMA,
+  [TABLE_CACHED_TOOLS]: CACHED_TOOLS_SCHEMA,
 };

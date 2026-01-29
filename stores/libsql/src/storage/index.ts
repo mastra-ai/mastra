@@ -4,13 +4,14 @@ import type { StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { AgentsLibSQL } from './domains/agents';
+import { IntegrationsLibSQL } from './domains/integrations';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { ScoresLibSQL } from './domains/scores';
 import { WorkflowsLibSQL } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { AgentsLibSQL, MemoryLibSQL, ObservabilityLibSQL, ScoresLibSQL, WorkflowsLibSQL };
+export { AgentsLibSQL, IntegrationsLibSQL, MemoryLibSQL, ObservabilityLibSQL, ScoresLibSQL, WorkflowsLibSQL };
 export type { LibSQLDomainConfig } from './db';
 
 /**
@@ -131,6 +132,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const memory = new MemoryLibSQL(domainConfig);
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
+    const integrations = new IntegrationsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -138,6 +140,7 @@ export class LibSQLStore extends MastraCompositeStore {
       memory,
       observability,
       agents,
+      integrations,
     };
   }
 }

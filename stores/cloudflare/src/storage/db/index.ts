@@ -8,6 +8,8 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_INTEGRATIONS,
+  TABLE_CACHED_TOOLS,
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
@@ -99,6 +101,12 @@ export class CloudflareKVDB extends MastraBase {
         return `${prefix}${tableName}:${record.id}`;
       case TABLE_SCORERS:
         if (!record.id) throw new Error('Score ID is required');
+        return `${prefix}${tableName}:${record.id}`;
+      case TABLE_INTEGRATIONS:
+        if (!record.id) throw new Error('Integration ID is required');
+        return `${prefix}${tableName}:${record.id}`;
+      case TABLE_CACHED_TOOLS:
+        if (!record.id) throw new Error('Cached Tool ID is required');
         return `${prefix}${tableName}:${record.id}`;
       default:
         throw new Error(`Unsupported table: ${tableName}`);

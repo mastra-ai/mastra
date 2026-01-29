@@ -66,8 +66,23 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     // Test non-deprecated routes with full test suite
     // Skip MCP transport routes (mcp-http, mcp-sse) - they require MCP protocol handling
     // and are tested separately via mcp-transport-test-suite
+    // Skip external OAuth/API routes (arcade, composio, smithery) - they require real external API calls
+    // Skip :provider routes - they make external API calls to tool providers
+    // Skip routes that require provider connections (create/refresh integration requires connecting to MCP/Composio/Arcade)
+    const routesRequiringProviderConnection = [
+      'POST /api/integrations',
+      'POST /api/integrations/:integrationId/refresh',
+    ];
     const activeRoutes = SERVER_ROUTES.filter(
-      r => !r.deprecated && r.responseType !== 'mcp-http' && r.responseType !== 'mcp-sse',
+      r =>
+        !r.deprecated &&
+        r.responseType !== 'mcp-http' &&
+        r.responseType !== 'mcp-sse' &&
+        !r.path.includes('/arcade/') &&
+        !r.path.includes('/composio/') &&
+        !r.path.includes('/smithery/') &&
+        !r.path.includes(':provider') &&
+        !routesRequiringProviderConnection.includes(`${r.method} ${r.path}`),
     );
     activeRoutes.forEach(route => {
       const testName = `${route.method} ${route.path}`;
@@ -360,8 +375,15 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
     // Additional cross-route tests
     describe('Cross-Route Tests', () => {
-      // Test array query parameters for ALL GET routes
-      const getRoutes = SERVER_ROUTES.filter(r => r.method === 'GET' && !r.deprecated);
+      // Test array query parameters for ALL GET routes (excluding external API routes)
+      const getRoutes = SERVER_ROUTES.filter(
+        r =>
+          r.method === 'GET' &&
+          !r.deprecated &&
+          !r.path.includes('/arcade/') &&
+          !r.path.includes('/composio/') &&
+          !r.path.includes('/smithery/'),
+      );
       getRoutes.forEach(route => {
         it(`should handle array query parameters for ${route.method} ${route.path}`, async () => {
           const request = buildRouteRequest(route);
