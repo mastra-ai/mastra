@@ -30,10 +30,7 @@ function createMockArgs(threadId?: string, tools?: Record<string, Tool<any, any>
 }
 
 describe('ToolSearchProcessor', () => {
-  beforeEach(() => {
-    // Clear all thread state before each test
-    ToolSearchProcessor.clearAllState();
-  });
+  // Note: No beforeEach cleanup needed - each processor instance has its own isolated state
 
   describe('initialization', () => {
     it('should create processor with tools', () => {
@@ -409,8 +406,8 @@ describe('ToolSearchProcessor', () => {
       const result2 = await processor.processInputStep(args2);
       await result2.tools?.load_tool!.execute?.({ toolName: 'calendar' }, undefined);
 
-      // Clear all state
-      ToolSearchProcessor.clearAllState();
+      // Clear all state for this processor instance
+      processor.clearAllState();
 
       // Both threads should be cleared
       const args1_next = createMockArgs('thread-1');

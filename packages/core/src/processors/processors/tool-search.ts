@@ -13,12 +13,6 @@ interface ThreadState {
 }
 
 /**
- * Thread-scoped state management for loaded tools with TTL support.
- * Maps threadId -> ThreadState (tools + timestamp)
- */
-const threadLoadedTools = new Map<string, ThreadState>();
-
-/**
  * Configuration options for ToolSearchProcessor
  */
 export interface ToolSearchProcessorOptions {
@@ -124,6 +118,13 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   private toolEntries: ToolEntry[] = [];
   private ttl: number;
 
+  /**
+   * Thread-scoped state management for loaded tools with TTL support.
+   * Instance-scoped to prevent cross-processor interference.
+   * Maps threadId -> ThreadState (tools + timestamp)
+   */
+  private threadLoadedTools = new Map<string, ThreadState>();
+
   // BM25 parameters
   private readonly k1 = 1.5; // Term frequency saturation
   private readonly b = 0.75; // Length normalization factor
@@ -157,13 +158,13 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    * Updates the lastAccessed timestamp for TTL management.
    */
   private getLoadedToolNames(threadId: string): Set<string> {
-    if (!threadLoadedTools.has(threadId)) {
-      threadLoadedTools.set(threadId, {
+    if (!this.threadLoadedTools.has(threadId)) {
+      this.threadLoadedTools.set(threadId, {
         tools: new Set(),
         lastAccessed: Date.now(),
       });
     }
-    const state = threadLoadedTools.get(threadId)!;
+    const state = this.threadLoadedTools.get(threadId)!;
     state.lastAccessed = Date.now(); // Update timestamp on access
     return state.tools;
   }
@@ -191,14 +192,14 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    * @param threadId - The thread ID to clear, or 'default' if not provided
    */
   public clearState(threadId: string = 'default'): void {
-    threadLoadedTools.delete(threadId);
+    this.threadLoadedTools.delete(threadId);
   }
 
   /**
-   * Clear all thread state (useful for testing).
+   * Clear all thread state for this processor instance (useful for testing).
    */
-  public static clearAllState(): void {
-    threadLoadedTools.clear();
+  public clearAllState(): void {
+    this.threadLoadedTools.clear();
   }
 
   /**
@@ -213,9 +214,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     const now = Date.now();
     let cleanedCount = 0;
 
-    for (const [threadId, state] of threadLoadedTools.entries()) {
+    for (const [threadId, state] of this.threadLoadedTools.entries()) {
       if (now - state.lastAccessed > this.ttl) {
-        threadLoadedTools.delete(threadId);
+        this.threadLoadedTools.delete(threadId);
         cleanedCount++;
       }
     }
@@ -248,19 +249,19 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    * @returns Object with thread count and oldest access time
    */
   public getStateStats(): { threadCount: number; oldestAccessTime: number | null } {
-    if (threadLoadedTools.size === 0) {
+    if (this.threadLoadedTools.size === 0) {
       return { threadCount: 0, oldestAccessTime: null };
     }
 
     let oldest = Date.now();
-    for (const state of threadLoadedTools.values()) {
+    for (const state of this.threadLoadedTools.values()) {
       if (state.lastAccessed < oldest) {
         oldest = state.lastAccessed;
       }
     }
 
     return {
-      threadCount: threadLoadedTools.size,
+      threadCount: this.threadLoadedTools.size,
       oldestAccessTime: oldest,
     };
   }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../../agent';
@@ -13,10 +13,7 @@ import { ToolSearchProcessor } from './tool-search';
  * Tests the full workflow: search -> load -> use tools dynamically.
  */
 describe('ToolSearchProcessor Integration with Agent', () => {
-  beforeEach(() => {
-    // Clear all thread state before each test
-    ToolSearchProcessor.clearAllState();
-  });
+  // Note: No beforeEach cleanup needed - each processor instance has its own isolated state
 
   it('should allow agent to discover and load tools dynamically', async () => {
     // Create a set of tools to search from
