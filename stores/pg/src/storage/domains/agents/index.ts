@@ -5,8 +5,6 @@ import {
   normalizePerPage,
   calculatePagination,
   TABLE_AGENTS,
-  TABLE_AGENT_VERSIONS,
-  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageAgentType,
@@ -25,6 +23,9 @@ import type {
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
+
+// Local constant for agent versions table - avoids import issues with older core versions
+const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
 
 export class AgentsPG extends AgentsStorage {
   #db: PgDB;
@@ -65,8 +66,17 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async init(): Promise<void> {
-    await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
-    await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
+    // Use getSchema() for backwards compatibility - schemas may not exist in older core versions
+    const agentsSchema = this.getSchema(TABLE_AGENTS);
+    if (agentsSchema) {
+      await this.#db.createTable({ tableName: TABLE_AGENTS, schema: agentsSchema });
+    }
+
+    const agentVersionsSchema = this.getSchema(TABLE_AGENT_VERSIONS);
+    if (agentVersionsSchema) {
+      await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: agentVersionsSchema });
+    }
+
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }

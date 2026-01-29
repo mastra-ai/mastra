@@ -5,9 +5,6 @@ import {
   normalizePerPage,
   calculatePagination,
   TABLE_AGENTS,
-  TABLE_AGENT_VERSIONS,
-  AGENTS_SCHEMA,
-  AGENT_VERSIONS_SCHEMA,
 } from '@mastra/core/storage';
 import type {
   StorageAgentType,
@@ -23,6 +20,9 @@ import type {
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 
+// Local constant for agent versions table - avoids import issues with older core versions
+const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
+
 export class AgentsLibSQL extends AgentsStorage {
   #db: LibSQLDB;
 
@@ -33,8 +33,16 @@ export class AgentsLibSQL extends AgentsStorage {
   }
 
   async init(): Promise<void> {
-    await this.#db.createTable({ tableName: TABLE_AGENTS, schema: AGENTS_SCHEMA });
-    await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: AGENT_VERSIONS_SCHEMA });
+    // Use getSchema() for backwards compatibility - schemas may not exist in older core versions
+    const agentsSchema = this.getSchema(TABLE_AGENTS);
+    if (agentsSchema) {
+      await this.#db.createTable({ tableName: TABLE_AGENTS, schema: agentsSchema });
+    }
+
+    const agentVersionsSchema = this.getSchema(TABLE_AGENT_VERSIONS);
+    if (agentVersionsSchema) {
+      await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: agentVersionsSchema });
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
