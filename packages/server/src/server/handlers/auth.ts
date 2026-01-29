@@ -8,17 +8,17 @@
  * - Logout users
  */
 
-import { MastraAuthProvider } from '@mastra/core/server';
-import {
-  buildCapabilities,
-  type IUserProvider,
-  type ISessionProvider,
-  type ISSOProvider,
-  type ICredentialsProvider,
-  type IRBACProvider,
-  type EEUser,
-  type SSOCallbackResult,
+import { buildCapabilities } from '@mastra/core/ee';
+import type {
+  IUserProvider,
+  ISessionProvider,
+  ISSOProvider,
+  ICredentialsProvider,
+  IRBACProvider,
+  EEUser,
+  SSOCallbackResult,
 } from '@mastra/core/ee';
+import type { MastraAuthProvider } from '@mastra/core/server';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -26,12 +26,9 @@ import {
   ssoLoginQuerySchema,
   ssoCallbackQuerySchema,
   ssoLoginResponseSchema,
-  ssoCallbackResponseSchema,
-  logoutResponseSchema,
   currentUserResponseSchema,
   credentialsSignInBodySchema,
   credentialsSignUpBodySchema,
-  credentialsResponseSchema,
 } from '../schemas/auth';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -68,12 +65,12 @@ function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
 }
 
 // ============================================================================
-// GET /api/auth/capabilities
+// GET /auth/capabilities
 // ============================================================================
 
 export const GET_AUTH_CAPABILITIES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/auth/capabilities',
+  path: '/auth/capabilities',
   responseType: 'json',
   responseSchema: capabilitiesResponseSchema,
   summary: 'Get auth capabilities',
@@ -97,12 +94,12 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createRoute({
 });
 
 // ============================================================================
-// GET /api/auth/me
+// GET /auth/me
 // ============================================================================
 
 export const GET_CURRENT_USER_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/auth/me',
+  path: '/auth/me',
   responseType: 'json',
   responseSchema: currentUserResponseSchema,
   summary: 'Get current user',
@@ -149,12 +146,12 @@ export const GET_CURRENT_USER_ROUTE = createRoute({
 });
 
 // ============================================================================
-// GET /api/auth/sso/login
+// GET /auth/sso/login
 // ============================================================================
 
 export const GET_SSO_LOGIN_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/auth/sso/login',
+  path: '/auth/sso/login',
   responseType: 'json',
   queryParamSchema: ssoLoginQuerySchema,
   responseSchema: ssoLoginResponseSchema,
@@ -190,12 +187,12 @@ export const GET_SSO_LOGIN_ROUTE = createRoute({
 });
 
 // ============================================================================
-// GET /api/auth/sso/callback
+// GET /auth/sso/callback
 // ============================================================================
 
 export const GET_SSO_CALLBACK_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/auth/sso/callback',
+  path: '/auth/sso/callback',
   responseType: 'datastream-response',
   queryParamSchema: ssoCallbackQuerySchema,
   summary: 'Handle SSO callback',
@@ -263,12 +260,12 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
 });
 
 // ============================================================================
-// POST /api/auth/logout
+// POST /auth/logout
 // ============================================================================
 
 export const POST_LOGOUT_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/auth/logout',
+  path: '/auth/logout',
   responseType: 'datastream-response',
   summary: 'Logout',
   description: 'Destroys the current session and returns logout redirect URL if available.',
@@ -325,12 +322,12 @@ export const POST_LOGOUT_ROUTE = createRoute({
 });
 
 // ============================================================================
-// POST /api/auth/credentials/sign-in
+// POST /auth/credentials/sign-in
 // ============================================================================
 
 export const POST_CREDENTIALS_SIGN_IN_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/auth/credentials/sign-in',
+  path: '/auth/credentials/sign-in',
   responseType: 'datastream-response',
   bodySchema: credentialsSignInBodySchema,
   summary: 'Sign in with credentials',
@@ -381,12 +378,12 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createRoute({
 });
 
 // ============================================================================
-// POST /api/auth/credentials/sign-up
+// POST /auth/credentials/sign-up
 // ============================================================================
 
 export const POST_CREDENTIALS_SIGN_UP_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/auth/credentials/sign-up',
+  path: '/auth/credentials/sign-up',
   responseType: 'datastream-response',
   bodySchema: credentialsSignUpBodySchema,
   summary: 'Sign up with credentials',
