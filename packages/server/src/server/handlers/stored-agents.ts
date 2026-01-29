@@ -87,7 +87,11 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       }
 
       // Use getAgentByIdResolved to automatically resolve from active version
-      const agent = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
+      // Fall back to getAgentById for backwards compatibility with older core versions
+      const agent =
+        typeof agentsStore.getAgentByIdResolved === 'function'
+          ? await agentsStore.getAgentByIdResolved({ id: storedAgentId })
+          : await agentsStore.getAgentById({ id: storedAgentId });
 
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
@@ -261,7 +265,10 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       const { agent } = await handleAutoVersioning(agentsStore, storedAgentId, existing, updatedAgent);
 
       // Clear the cached agent instance so the next request gets the updated config
-      mastra.clearStoredAgentCache(storedAgentId);
+      // Check if method exists for backwards compatibility with older core versions
+      if (typeof mastra.clearStoredAgentCache === 'function') {
+        mastra.clearStoredAgentCache(storedAgentId);
+      }
 
       return agent;
     } catch (error) {
@@ -305,7 +312,10 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       await agentsStore.deleteAgent({ id: storedAgentId });
 
       // Clear the cached agent instance
-      mastra.clearStoredAgentCache(storedAgentId);
+      // Check if method exists for backwards compatibility with older core versions
+      if (typeof mastra.clearStoredAgentCache === 'function') {
+        mastra.clearStoredAgentCache(storedAgentId);
+      }
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {

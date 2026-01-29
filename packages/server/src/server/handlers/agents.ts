@@ -380,7 +380,8 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   }
 
   // If still not found, try to get stored agent
-  if (!agent) {
+  // Check if method exists for backwards compatibility with older core versions
+  if (!agent && typeof mastra.getStoredAgentById === 'function') {
     logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
     try {
       agent = await mastra.getStoredAgentById(agentId);
@@ -568,7 +569,11 @@ export const LIST_AGENTS_ROUTE = createRoute({
       );
 
       // Also fetch and include stored agents
+      // Check if method exists for backwards compatibility with older core versions
       try {
+        if (typeof mastra.listStoredAgents !== 'function') {
+          return serializedAgents;
+        }
         const storedAgentsResult = await mastra.listStoredAgents();
         if (storedAgentsResult?.agents) {
           // Process each agent individually to avoid one bad agent breaking the whole list

@@ -1,13 +1,14 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
+import * as coreStorage from '@mastra/core/storage';
+
+const {
   AgentsStorage,
   createStorageErrorId,
   normalizePerPage,
   calculatePagination,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
-  TABLE_SCHEMAS,
-} from '@mastra/core/storage';
+} = coreStorage;
 import type {
   StorageAgentType,
   StorageCreateAgentInput,
@@ -65,8 +66,16 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async init(): Promise<void> {
-    await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
-    await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
+    const agentsSchema = this.getSchema(TABLE_AGENTS);
+    if (agentsSchema) {
+      await this.#db.createTable({ tableName: TABLE_AGENTS, schema: agentsSchema });
+    }
+
+    const agentVersionsSchema = this.getSchema(TABLE_AGENT_VERSIONS);
+    if (agentVersionsSchema) {
+      await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: agentVersionsSchema });
+    }
+
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }

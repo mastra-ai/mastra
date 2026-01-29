@@ -1,3 +1,5 @@
+import deepEqual from 'fast-deep-equal';
+
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,
@@ -20,51 +22,25 @@ import { handleError } from './error';
 // Default maximum versions per agent (can be made configurable in the future)
 export const DEFAULT_MAX_VERSIONS_PER_AGENT = 50;
 
+/**
+ * Checks if the agents store supports versioning methods.
+ * Used for backwards compatibility with older core versions that don't have versioning.
+ * @throws HTTPException 501 if versioning is not supported
+ */
+function assertVersioningSupported(agentsStore: any): void {
+  const requiredMethods = ['listVersions', 'createVersion', 'getVersion', 'deleteVersion', 'getLatestVersion'];
+  const missingMethods = requiredMethods.filter(method => typeof agentsStore[method] !== 'function');
+
+  if (missingMethods.length > 0) {
+    throw new HTTPException(501, {
+      message: 'Agent versioning is not supported by this core version. Please upgrade @mastra/core to 1.1.0 or later.',
+    });
+  }
+}
+
 // ============================================================================
 // Helper Functions (exported for use in stored-agents.ts)
 // ============================================================================
-
-/**
- * Deep equality comparison for comparing two values.
- * Handles primitives, arrays, objects, and Date instances.
- * TODO: Move to a shared utils package that gets bundled into each package
- */
-function deepEqual(a: unknown, b: unknown): boolean {
-  // Handle identical references and primitives
-  if (a === b) return true;
-
-  // Handle null/undefined
-  if (a == null || b == null) return a === b;
-
-  // Handle different types
-  if (typeof a !== typeof b) return false;
-
-  // Handle arrays
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false;
-    return a.every((item, index) => deepEqual(item, b[index]));
-  }
-
-  // Handle dates (must check before generic objects since Date is also an object)
-  if (a instanceof Date && b instanceof Date) {
-    return a.getTime() === b.getTime();
-  }
-
-  // Handle objects (after Date check to avoid treating Dates as plain objects)
-  if (typeof a === 'object' && typeof b === 'object') {
-    const aObj = a as Record<string, unknown>;
-    const bObj = b as Record<string, unknown>;
-    const aKeys = Object.keys(aObj);
-    const bKeys = Object.keys(bObj);
-
-    if (aKeys.length !== bKeys.length) return false;
-
-    // Verify that bObj has the same keys as aObj before comparing values
-    return aKeys.every(key => Object.prototype.hasOwnProperty.call(bObj, key) && deepEqual(aObj[key], bObj[key]));
-  }
-
-  return false;
-}
 
 /**
  * Generates a unique ID for a version using crypto.randomUUID()
@@ -330,6 +306,16 @@ export async function handleAutoVersioning<TAgent>(
   existingAgent: TAgent,
   updatedAgent: TAgent,
 ): Promise<{ agent: TAgent; versionCreated: boolean }> {
+  // Check for versioning support (backwards compatibility with older core)
+  // If versioning methods don't exist, skip versioning entirely
+  const requiredMethods = ['createVersion', 'getLatestVersion', 'listVersions', 'deleteVersion'];
+  const hasVersioningSupport = requiredMethods.every(method => typeof (agentsStore as any)[method] === 'function');
+
+  if (!hasVersioningSupport) {
+    // Gracefully degrade: just return the updated agent without versioning
+    return { agent: updatedAgent, versionCreated: false };
+  }
+
   // Calculate what fields changed
   const changedFields = calculateChangedFields(
     existingAgent as unknown as Record<string, unknown>,
@@ -388,6 +374,9 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
+
       // Verify agent exists
       const agent = await agentsStore.getAgentById({ id: agentId });
       if (!agent) {
@@ -433,6 +422,9 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
       if (!agentsStore) {
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
+
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
 
       // Get the current agent configuration
       const agent = await agentsStore.getAgentById({ id: agentId });
@@ -497,6 +489,9 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
+
       const version = await agentsStore.getVersion(versionId);
 
       if (!version) {
@@ -539,6 +534,9 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       if (!agentsStore) {
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
+
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
 
       // Verify agent exists
       const agent = await agentsStore.getAgentById({ id: agentId });
@@ -596,6 +594,9 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       if (!agentsStore) {
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
+
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
 
       // Verify agent exists
       const agent = await agentsStore.getAgentById({ id: agentId });
@@ -699,6 +700,9 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
+
       // Verify agent exists
       const agent = await agentsStore.getAgentById({ id: agentId });
       if (!agent) {
@@ -758,6 +762,9 @@ export const COMPARE_AGENT_VERSIONS_ROUTE = createRoute({
       if (!agentsStore) {
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
+
+      // Check for versioning support (backwards compatibility with older core)
+      assertVersioningSupported(agentsStore);
 
       // Get both versions
       const fromVersion = await agentsStore.getVersion(from);

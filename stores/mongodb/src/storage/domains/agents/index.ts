@@ -1,12 +1,14 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
+import * as coreStorage from '@mastra/core/storage';
+
+const {
   AgentsStorage,
   createStorageErrorId,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
   normalizePerPage,
   calculatePagination,
-} from '@mastra/core/storage';
+} = coreStorage;
 import type {
   StorageAgentType,
   StorageCreateAgentInput,
