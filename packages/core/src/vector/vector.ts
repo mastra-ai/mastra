@@ -18,6 +18,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { VectorFilter } from './filter';
 import type {
   CreateIndexParams,
+  CreateMetadataIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
   IndexStats,
@@ -140,6 +141,42 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
    * ```
    */
   abstract deleteVectors(params: DeleteVectorsParams<Filter>): Promise<void>;
+
+  /**
+   * Create an index on a metadata field to improve query performance.
+   *
+   * This method is idempotent - calling it multiple times with the same
+   * parameters will not create duplicate indexes.
+   *
+   * Not all vector stores support metadata indexing. Stores that don't
+   * support it will log a warning and return without error.
+   *
+   * @param params - Parameters including indexName and field to index
+   *
+   * @example
+   * ```ts
+   * // Create an index on thread_id for faster filtering
+   * await vectorStore.createMetadataIndex({
+   *   indexName: 'memory_messages',
+   *   field: 'thread_id',
+   * });
+   *
+   * // Create an index with explicit type
+   * await vectorStore.createMetadataIndex({
+   *   indexName: 'documents',
+   *   field: 'page_number',
+   *   type: 'number',
+   * });
+   * ```
+   */
+  async createMetadataIndex(params: CreateMetadataIndexParams): Promise<void> {
+    // Default implementation logs a warning for stores that don't support metadata indexing
+    this.logger?.warn(
+      `${this.constructor.name} does not support metadata indexing. ` +
+        `Skipping index creation for field "${params.field}" on "${params.indexName}". ` +
+        `Queries filtering on this field will scan all records.`,
+    );
+  }
 
   protected async validateExistingIndex(indexName: string, dimension: number, metric: string) {
     let info: IndexStats;
