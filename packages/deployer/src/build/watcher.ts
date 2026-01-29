@@ -9,8 +9,8 @@ import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
-import { getPackageName, slash  } from './utils';
-import type {BundlerPlatform} from './utils';
+import { getPackageName, slash } from './utils';
+import type { BundlerPlatform } from './utils';
 
 export async function getInputOptions(
   entryFile: string,
