@@ -43,11 +43,12 @@ export interface NativeSandboxConfig {
   allowSystemBinaries?: boolean;
 
   /**
-   * Custom seatbelt profile content (macOS only).
-   * When provided, this overrides the default generated profile.
-   * Must be valid SBPL (Sandbox Profile Language).
+   * Path to a custom seatbelt profile file (macOS only).
+   * If the file exists, its contents are used as the sandbox profile.
+   * If the file doesn't exist, a default profile is generated and written to this path.
+   * Must contain valid SBPL (Sandbox Profile Language) if provided.
    */
-  seatbeltProfile?: string;
+  seatbeltProfilePath?: string;
 
   /**
    * Custom bwrap arguments (Linux only).

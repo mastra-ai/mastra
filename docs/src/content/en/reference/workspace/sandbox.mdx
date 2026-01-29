@@ -13,11 +13,13 @@ The `WorkspaceSandbox` interface defines how workspaces execute commands.
 
 ### `start()`
 
-Start the sandbox. Called by `workspace.init()`.
+Start the sandbox. Called automatically by `workspace.init()` or on first `executeCommand()` call.
 
 ```typescript
 await sandbox.start();
 ```
+
+This method prepares the sandbox for command execution.
 
 ### `stop()`
 

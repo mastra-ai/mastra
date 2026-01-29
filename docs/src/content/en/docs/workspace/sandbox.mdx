@@ -29,6 +29,8 @@ Each provider page includes configuration options and usage examples:
 
 ## Basic usage
 
+Create a workspace with a sandbox and execute commands:
+
 ```typescript
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 
@@ -41,53 +43,12 @@ const workspace = new Workspace({
   }),
 });
 
-await workspace.init();
+// Execute a command
+const result = await workspace.sandbox.executeCommand('ls', ['-la']);
+console.log(result.stdout);
 ```
 
-## Environment isolation
-
-By default, LocalSandbox only includes `PATH` in the environment. This allows commands to run while preventing accidental exposure of API keys and secrets from the host environment.
-
-```typescript
-// Default: only PATH is available
-const sandbox = new LocalSandbox({
-  workingDirectory: './workspace',
-});
-
-// Explicit: pass specific variables
-const sandbox = new LocalSandbox({
-  workingDirectory: './workspace',
-  env: {
-    NODE_ENV: 'development',
-    API_URL: 'https://api.example.com',
-  },
-});
-```
-
-## Native OS sandboxing
-
-LocalSandbox supports OS-level sandboxing for additional security:
-
-- **macOS** - Uses Seatbelt (`sandbox-exec`) for filesystem and network isolation
-- **Linux** - Uses Bubblewrap (`bwrap`) for namespace isolation
-
-```typescript
-const sandbox = new LocalSandbox({
-  workingDirectory: './workspace',
-  isolation: 'seatbelt', // or 'bwrap' on Linux
-  nativeSandbox: {
-    allowNetwork: false,
-    readWritePaths: ['/tmp/extra'],
-  },
-});
-```
-
-When isolation is enabled:
-- File writes are restricted to the workspace directory
-- Network access is blocked by default
-- Process isolation prevents affecting the host system
-
-See [LocalSandbox Reference](/reference/workspace/local-sandbox) for all isolation options.
+See [LocalSandbox Reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
 
 ## Agent tools
 

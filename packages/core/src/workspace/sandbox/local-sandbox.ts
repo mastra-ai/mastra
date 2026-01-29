@@ -19,7 +19,7 @@ import type { ProviderStatus } from '../lifecycle';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
 import type { WorkspaceSandbox, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
-import { SandboxNotReadyError, IsolationUnavailableError } from './sandbox';
+import { IsolationUnavailableError } from './sandbox';
 
 const execFile = promisify(childProcess.execFile);
 
@@ -161,6 +161,8 @@ export class LocalSandbox implements WorkspaceSandbox {
   private readonly _nativeSandboxConfig: NativeSandboxConfig;
   private _seatbeltProfile?: string;
   private _seatbeltProfilePath?: string;
+  private _sandboxFolderPath?: string;
+  private _userProvidedProfilePath = false;
   private readonly _createdAt: Date;
 
   /**
@@ -196,7 +198,8 @@ export class LocalSandbox implements WorkspaceSandbox {
   constructor(options: LocalSandboxOptions = {}) {
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
-    this._workingDirectory = options.workingDirectory ?? process.cwd();
+    // Default working directory is .sandbox/ in cwd - isolated from seatbelt profiles
+    this._workingDirectory = options.workingDirectory ?? path.join(process.cwd(), '.sandbox');
     this.env = options.env ?? {};
     this.timeout = options.timeout ?? 30000;
     this._nativeSandboxConfig = options.nativeSandbox ?? {};
@@ -239,14 +242,34 @@ export class LocalSandbox implements WorkspaceSandbox {
 
       // Set up seatbelt profile for macOS sandboxing
       if (this._isolation === 'seatbelt') {
-        this._seatbeltProfile =
-          this._nativeSandboxConfig.seatbeltProfile ??
-          generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+        const userProvidedPath = this._nativeSandboxConfig.seatbeltProfilePath;
 
-        // Write profile to file for debugging/inspection purposes
-        // Use unique filename to prevent potential profile replacement attacks
-        this._seatbeltProfilePath = path.join(this.workingDirectory, `.sandbox-${this.id}.sb`);
-        await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
+        if (userProvidedPath) {
+          // User provided a custom path
+          this._seatbeltProfilePath = userProvidedPath;
+          this._userProvidedProfilePath = true;
+
+          // Check if file exists at user's path
+          try {
+            this._seatbeltProfile = await fs.readFile(userProvidedPath, 'utf-8');
+          } catch {
+            // File doesn't exist, generate default and write to user's path
+            this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+            // Ensure parent directory exists
+            await fs.mkdir(path.dirname(userProvidedPath), { recursive: true });
+            await fs.writeFile(userProvidedPath, this._seatbeltProfile, 'utf-8');
+          }
+        } else {
+          // No custom path, use default location
+          this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+
+          // Write profile to .sandbox-profiles/ in cwd (outside working directory)
+          // This prevents sandboxed processes from reading/modifying their own security profile
+          this._sandboxFolderPath = path.join(process.cwd(), '.sandbox-profiles');
+          await fs.mkdir(this._sandboxFolderPath, { recursive: true });
+          this._seatbeltProfilePath = path.join(this._sandboxFolderPath, 'local-sandbox.sb');
+          await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
+        }
       }
 
       this._status = 'running';
@@ -261,15 +284,26 @@ export class LocalSandbox implements WorkspaceSandbox {
   }
 
   async destroy(): Promise<void> {
-    // Clean up seatbelt profile if it exists
-    if (this._seatbeltProfilePath) {
+    // Clean up seatbelt profile only if it was auto-generated (not user-provided)
+    if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {
       try {
         await fs.unlink(this._seatbeltProfilePath);
       } catch {
         // Ignore errors if file doesn't exist
       }
-      this._seatbeltProfilePath = undefined;
-      this._seatbeltProfile = undefined;
+    }
+    this._seatbeltProfilePath = undefined;
+    this._seatbeltProfile = undefined;
+    this._userProvidedProfilePath = false;
+
+    // Try to remove .sandbox folder if empty
+    if (this._sandboxFolderPath) {
+      try {
+        await fs.rmdir(this._sandboxFolderPath);
+      } catch {
+        // Ignore errors - folder may not be empty or may not exist
+      }
+      this._sandboxFolderPath = undefined;
     }
 
     await this.stop();
@@ -335,8 +369,9 @@ export class LocalSandbox implements WorkspaceSandbox {
     args: string[] = [],
     options: ExecuteCommandOptions = {},
   ): Promise<CommandResult> {
+    // Auto-start if not running (lazy initialization)
     if (this._status !== 'running') {
-      throw new SandboxNotReadyError(this.id);
+      await this.start();
     }
 
     const startTime = Date.now();

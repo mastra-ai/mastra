@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { LocalSandbox } from './local-sandbox';
 import { detectIsolation, isIsolationAvailable, isSeatbeltAvailable, isBwrapAvailable } from './native-sandbox';
-import { SandboxNotReadyError, IsolationUnavailableError } from './sandbox';
+import { IsolationUnavailableError } from './sandbox';
 
 describe('LocalSandbox', () => {
   let tempDir: string;
@@ -43,6 +43,8 @@ describe('LocalSandbox', () => {
       expect(defaultSandbox.name).toBe('LocalSandbox');
       expect(defaultSandbox.id).toBeDefined();
       expect(defaultSandbox.status).toBe('stopped');
+      // Default working directory is .sandbox/ in cwd
+      expect(defaultSandbox.workingDirectory).toBe(path.join(process.cwd(), '.sandbox'));
     });
 
     it('should accept custom id', () => {
@@ -167,10 +169,16 @@ describe('LocalSandbox', () => {
       expect(result.stdout.trim()).toBe('cmd-value');
     });
 
-    it('should throw SandboxNotReadyError when not started', async () => {
+    it('should auto-start when executeCommand is called without start()', async () => {
       const newSandbox = new LocalSandbox({ workingDirectory: tempDir });
 
-      await expect(newSandbox.executeCommand('echo', ['test'])).rejects.toThrow(SandboxNotReadyError);
+      // Should auto-start and execute successfully
+      const result = await newSandbox.executeCommand('echo', ['test']);
+      expect(result.success).toBe(true);
+      expect(result.stdout.trim()).toBe('test');
+      expect(newSandbox.status).toBe('running');
+
+      await newSandbox.destroy();
     });
   });
 
@@ -436,8 +444,8 @@ describe('LocalSandbox', () => {
 
       await seatbeltSandbox.start();
 
-      // Check that profile file was created (uses unique ID-based filename)
-      const profilePath = path.join(tempDir, `.sandbox-${seatbeltSandbox.id}.sb`);
+      // Check that profile file was created in .sandbox-profiles folder (outside working directory)
+      const profilePath = path.join(process.cwd(), '.sandbox-profiles', 'local-sandbox.sb');
       const profileExists = await fs
         .access(profilePath)
         .then(() => true)
@@ -590,8 +598,8 @@ describe('LocalSandbox', () => {
       });
 
       await seatbeltSandbox.start();
-      // Profile uses unique ID-based filename
-      const profilePath = path.join(tempDir, `.sandbox-${seatbeltSandbox.id}.sb`);
+      // Profile uses unique ID-based filename in .sandbox-profiles folder (outside working directory)
+      const profilePath = path.join(process.cwd(), '.sandbox-profiles', 'local-sandbox.sb');
 
       // Profile should exist
       expect(
