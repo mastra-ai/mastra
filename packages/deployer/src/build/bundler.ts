@@ -1,20 +1,21 @@
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
-import { esmShim } from './plugins/esm-shim';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'rollup';
+import { rollup } from 'rollup';
+import type { InputOptions, OutputOptions, Plugin } from 'rollup';
+import type { analyzeBundle } from './analyze';
 import { esbuild } from './plugins/esbuild';
-import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import { analyzeBundle } from './analyze';
-import { removeAllOptionsFromMastraExceptPlugin } from './plugins/remove-all-except';
-import { tsConfigPaths } from './plugins/tsconfig-paths';
-import { join } from 'node:path';
-import { slash, type BundlerPlatform } from './utils';
-import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
+import { esmShim } from './plugins/esm-shim';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
+import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
+import { tsConfigPaths } from './plugins/tsconfig-paths';
+import { slash } from './utils';
+import type { BundlerPlatform } from './utils';
 
 export async function getInputOptions(
   entryFile: string,
