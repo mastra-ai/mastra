@@ -20,7 +20,7 @@ import type {
   TracingStorageStrategy,
   UpdateSpanArgs,
 } from './types';
-import { listTracesArgsSchema, toTraceSpans, TraceStatus } from './types';
+import { listTracesArgsSchema, TraceStatus } from './types';
 
 /**
  * Internal structure for storing a trace with computed properties for efficient filtering
@@ -251,7 +251,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const paged = matchingRootSpans.slice(start, end);
 
     return {
-      spans: toTraceSpans(paged),
+      spans: this.toTraceSpans(paged),
       pagination: { total, page, perPage, hasMore: end < total },
     };
   }

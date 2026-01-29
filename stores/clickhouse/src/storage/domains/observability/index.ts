@@ -6,7 +6,6 @@ import {
   ObservabilityStorage,
   SPAN_SCHEMA,
   TABLE_SPANS,
-  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
@@ -661,6 +660,15 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         error: span.error === '' ? null : span.error,
       }));
 
+      const spansTransformed = this?.toTraceSpans
+        ? this?.toTraceSpans(spans)
+        : spans.map(s => {
+            return {
+              ...s,
+              status: s.error ? TraceStatus.ERROR : s.endedAt ? TraceStatus.SUCCESS : TraceStatus.RUNNING,
+            };
+          });
+
       return {
         pagination: {
           total,
@@ -668,7 +676,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < total,
         },
-        spans: toTraceSpans(spans),
+        spans: spansTransformed,
       };
     } catch (error) {
       if (error instanceof MastraError) throw error;

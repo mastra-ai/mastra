@@ -5,7 +5,6 @@ import {
   ObservabilityStorage,
   TABLE_SCHEMAS,
   TABLE_SPANS,
-  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
@@ -621,6 +620,14 @@ export class ObservabilityPG extends ObservabilityStorage {
         [...params, perPage, page * perPage],
       );
 
+      const mapped = spans.map(span => transformFromSqlRow<SpanRecord>({ tableName: TABLE_SPANS, sqlRow: span }));
+      const spansTransformed = this?.toTraceSpans
+        ? this.toTraceSpans(mapped)
+        : mapped.map(s => ({
+            ...s,
+            status: s.error ? TraceStatus.ERROR : s.endedAt ? TraceStatus.SUCCESS : TraceStatus.RUNNING,
+          }));
+
       return {
         pagination: {
           total: count,
@@ -628,14 +635,7 @@ export class ObservabilityPG extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < count,
         },
-        spans: toTraceSpans(
-          spans.map(span =>
-            transformFromSqlRow<SpanRecord>({
-              tableName: TABLE_SPANS,
-              sqlRow: span,
-            }),
-          ),
-        ),
+        spans: spansTransformed,
       };
     } catch (error) {
       throw new MastraError(

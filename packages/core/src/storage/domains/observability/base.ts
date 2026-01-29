@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { StorageDomain } from '../base';
+import { toTraceSpans } from './types';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -13,6 +14,8 @@ import type {
   GetTraceResponse,
   ListTracesArgs,
   ListTracesResponse,
+  SpanRecord,
+  TraceSpan,
   TracingStorageStrategy,
   UpdateSpanArgs,
 } from './types';
@@ -45,6 +48,10 @@ export class ObservabilityStorage extends StorageDomain {
       preferred: 'batch-with-updates', // Default for most SQL stores
       supported: ['realtime', 'batch-with-updates', 'insert-only'],
     };
+  }
+
+  toTraceSpans(spans: SpanRecord[]): TraceSpan[] {
+    return toTraceSpans(spans);
   }
 
   /**
