@@ -29,7 +29,6 @@ export const calculatorAdd = createTool({
     b: z.number().describe('Second number'),
   }),
   execute: async ({ a, b }) => {
-    console.log(`[calculator_add] Adding ${a} + ${b}`);
     return { result: a + b, operation: 'addition' };
   },
 });
@@ -42,7 +41,6 @@ export const calculatorMultiply = createTool({
     b: z.number().describe('Second number'),
   }),
   execute: async ({ a, b }) => {
-    console.log(`[calculator_multiply] Multiplying ${a} * ${b}`);
     return { result: a * b, operation: 'multiplication' };
   },
 });
@@ -55,7 +53,6 @@ export const calculatorDivide = createTool({
     divisor: z.number().describe('The number to divide by'),
   }),
   execute: async ({ dividend, divisor }) => {
-    console.log(`[calculator_divide] Dividing ${dividend} / ${divisor}`);
     if (divisor === 0) {
       return { error: 'Cannot divide by zero' };
     }
@@ -70,7 +67,6 @@ export const getStockPrice = createTool({
     ticker: z.string().describe('Stock ticker symbol (e.g., AAPL, GOOGL)'),
   }),
   execute: async ({ ticker }) => {
-    console.log(`[get_stock_price] Fetching price for ${ticker}`);
     // Mock stock prices
     const prices: Record<string, number> = {
       AAPL: 178.5,
@@ -93,7 +89,6 @@ export const translateText = createTool({
     targetLanguage: z.string().describe('Target language (e.g., spanish, french, german)'),
   }),
   execute: async ({ text, targetLanguage }) => {
-    console.log(`[translate_text] Translating to ${targetLanguage}: "${text}"`);
     // Mock translation - just returns a message
     return {
       original: text,
@@ -112,7 +107,6 @@ export const sendNotification = createTool({
     priority: z.enum(['low', 'medium', 'high']).optional().describe('Priority level'),
   }),
   execute: async ({ recipient, message, priority = 'medium' }) => {
-    console.log(`[send_notification] Sending ${priority} priority notification to ${recipient}: "${message}"`);
     return { sent: true, recipient, priority, timestamp: new Date().toISOString() };
   },
 });
@@ -125,7 +119,6 @@ export const searchDatabase = createTool({
     limit: z.number().optional().describe('Maximum number of results'),
   }),
   execute: async ({ query, limit = 10 }) => {
-    console.log(`[search_database] Searching for: "${query}" (limit: ${limit})`);
     // Mock database results
     return {
       query,
@@ -146,7 +139,6 @@ export const generateReport = createTool({
     dateRange: z.string().optional().describe('Date range for the report'),
   }),
   execute: async ({ reportType, dateRange = 'last 30 days' }) => {
-    console.log(`[generate_report] Generating ${reportType} report for ${dateRange}`);
     return {
       reportType,
       dateRange,
@@ -164,7 +156,6 @@ export const scheduleReminder = createTool({
     time: z.string().describe('When to remind (e.g., "in 1 hour", "tomorrow at 9am")'),
   }),
   execute: async ({ title, time }) => {
-    console.log(`[schedule_reminder] Scheduling reminder: "${title}" for ${time}`);
     return {
       scheduled: true,
       title,
@@ -183,7 +174,6 @@ export const convertUnits = createTool({
     toUnit: z.string().describe('Target unit (e.g., km, lbs, fahrenheit)'),
   }),
   execute: async ({ value, fromUnit, toUnit }) => {
-    console.log(`[convert_units] Converting ${value} ${fromUnit} to ${toUnit}`);
     // Simple mock conversions
     let result = value;
     if (fromUnit === 'miles' && toUnit === 'km') result = value * 1.60934;
