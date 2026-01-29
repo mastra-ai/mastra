@@ -669,7 +669,7 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   summary: 'List all skills',
   description: 'Returns a list of all discovered skills with their metadata',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, workspaceId }) => {
+  handler: async ({ mastra, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -677,6 +677,9 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
       if (!skills) {
         return { skills: [], isSkillsConfigured: false };
       }
+
+      // Refresh skills with request context (handles dynamic skill resolvers)
+      await skills.maybeRefresh({ requestContext });
 
       const skillsList = await skills.list();
 
@@ -705,7 +708,7 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   summary: 'Get skill details',
   description: 'Returns the full details of a specific skill including instructions and file lists',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillName, workspaceId }) => {
+  handler: async ({ mastra, skillName, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -717,6 +720,9 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
       if (!skills) {
         throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
+
+      // Refresh skills with request context (handles dynamic skill resolvers)
+      await skills.maybeRefresh({ requestContext });
 
       const skill = await skills.get(skillName);
       if (!skill) {
@@ -751,7 +757,7 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   summary: 'List skill references',
   description: 'Returns a list of all reference file paths for a skill',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillName, workspaceId }) => {
+  handler: async ({ mastra, skillName, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -763,6 +769,9 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
       if (!skills) {
         throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
+
+      // Refresh skills with request context (handles dynamic skill resolvers)
+      await skills.maybeRefresh({ requestContext });
 
       const hasSkill = await skills.has(skillName);
       if (!hasSkill) {
@@ -790,7 +799,7 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   summary: 'Get skill reference content',
   description: 'Returns the content of a specific reference file from a skill',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, skillName, referencePath, workspaceId }) => {
+  handler: async ({ mastra, skillName, referencePath, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -802,6 +811,9 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
       if (!skills) {
         throw new HTTPException(404, { message: 'No workspace with skills configured' });
       }
+
+      // Refresh skills with request context (handles dynamic skill resolvers)
+      await skills.maybeRefresh({ requestContext });
 
       // Decode the reference path (it may be URL encoded)
       const decodedPath = decodeURIComponent(referencePath);
@@ -832,7 +844,7 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   summary: 'Search skills',
   description: 'Searches across all skills content using BM25 keyword search',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, query, topK, minScore, skillNames, includeReferences, workspaceId }) => {
+  handler: async ({ mastra, query, topK, minScore, skillNames, includeReferences, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -847,6 +859,9 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
           query,
         };
       }
+
+      // Refresh skills with request context (handles dynamic skill resolvers)
+      await skills.maybeRefresh({ requestContext });
 
       // Parse comma-separated skill names if provided
       const skillNamesList = skillNames ? skillNames.split(',').map((s: string) => s.trim()) : undefined;

@@ -69,6 +69,7 @@ function createMockSkills(skillsData: Map<string, any> = new Map()) {
     getReference: vi.fn().mockResolvedValue('Reference content'),
     listScripts: vi.fn().mockResolvedValue([]),
     listAssets: vi.fn().mockResolvedValue([]),
+    maybeRefresh: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -817,6 +818,121 @@ describe('Workspace Handlers', () => {
           skillNames: ['skill1', 'skill2'],
         }),
       );
+    });
+  });
+
+  // ===========================================================================
+  // Dynamic Skills Context
+  // ===========================================================================
+  describe('Dynamic Skills Context', () => {
+    it('WORKSPACE_LIST_SKILLS_ROUTE should call maybeRefresh with requestContext', async () => {
+      const skillsData = new Map([['skill1', { name: 'skill1', description: 'Skill 1' }]]);
+      const skills = createMockSkills(skillsData);
+      const workspace = createMockWorkspace({ skills });
+      const mastra = createMockMastra(workspace);
+      const mockRequestContext = new Map([['userRole', 'developer']]);
+
+      await WORKSPACE_LIST_SKILLS_ROUTE.handler({
+        mastra,
+        requestContext: mockRequestContext,
+      });
+
+      expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: mockRequestContext });
+      expect(skills.list).toHaveBeenCalled();
+    });
+
+    it('WORKSPACE_GET_SKILL_ROUTE should call maybeRefresh with requestContext', async () => {
+      const skill = {
+        name: 'my-skill',
+        description: 'My skill',
+        instructions: 'Do things',
+        path: '/skills/my-skill',
+        source: { type: 'local', path: '/skills/my-skill' },
+        references: [],
+        scripts: [],
+        assets: [],
+      };
+      const skillsData = new Map([['my-skill', skill]]);
+      const skills = createMockSkills(skillsData);
+      const workspace = createMockWorkspace({ skills });
+      const mastra = createMockMastra(workspace);
+      const mockRequestContext = new Map([['userRole', 'admin']]);
+
+      await WORKSPACE_GET_SKILL_ROUTE.handler({
+        mastra,
+        skillName: 'my-skill',
+        requestContext: mockRequestContext,
+      });
+
+      expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: mockRequestContext });
+      expect(skills.get).toHaveBeenCalledWith('my-skill');
+    });
+
+    it('WORKSPACE_LIST_SKILL_REFERENCES_ROUTE should call maybeRefresh with requestContext', async () => {
+      const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
+      const skills = createMockSkills(skillsData);
+      const workspace = createMockWorkspace({ skills });
+      const mastra = createMockMastra(workspace);
+      const mockRequestContext = new Map([['tenantId', 'tenant-123']]);
+
+      await WORKSPACE_LIST_SKILL_REFERENCES_ROUTE.handler({
+        mastra,
+        skillName: 'my-skill',
+        requestContext: mockRequestContext,
+      });
+
+      expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: mockRequestContext });
+      expect(skills.has).toHaveBeenCalledWith('my-skill');
+    });
+
+    it('WORKSPACE_GET_SKILL_REFERENCE_ROUTE should call maybeRefresh with requestContext', async () => {
+      const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
+      const skills = createMockSkills(skillsData);
+      const workspace = createMockWorkspace({ skills });
+      const mastra = createMockMastra(workspace);
+      const mockRequestContext = new Map([['feature', 'beta']]);
+
+      await WORKSPACE_GET_SKILL_REFERENCE_ROUTE.handler({
+        mastra,
+        skillName: 'my-skill',
+        referencePath: 'api.md',
+        requestContext: mockRequestContext,
+      });
+
+      expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: mockRequestContext });
+      expect(skills.getReference).toHaveBeenCalledWith('my-skill', 'api.md');
+    });
+
+    it('WORKSPACE_SEARCH_SKILLS_ROUTE should call maybeRefresh with requestContext', async () => {
+      const skills = createMockSkills();
+      skills.search = vi.fn().mockResolvedValue([]);
+      const workspace = createMockWorkspace({ skills });
+      const mastra = createMockMastra(workspace);
+      const mockRequestContext = new Map([['locale', 'en-US']]);
+
+      await WORKSPACE_SEARCH_SKILLS_ROUTE.handler({
+        mastra,
+        query: 'test',
+        requestContext: mockRequestContext,
+      });
+
+      expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: mockRequestContext });
+      expect(skills.search).toHaveBeenCalled();
+    });
+
+    it('should handle undefined requestContext gracefully', async () => {
+      const skillsData = new Map([['skill1', { name: 'skill1', description: 'Skill 1' }]]);
+      const skills = createMockSkills(skillsData);
+      const workspace = createMockWorkspace({ skills });
+      const mastra = createMockMastra(workspace);
+
+      await WORKSPACE_LIST_SKILLS_ROUTE.handler({
+        mastra,
+        requestContext: undefined,
+      });
+
+      expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: undefined });
+      expect(skills.list).toHaveBeenCalled();
     });
   });
 });

@@ -287,6 +287,40 @@ export const skillsOnlyWorkspace = new Workspace({
 });
 
 /**
+ * Dynamic skills workspace - skills paths resolved based on request context.
+ *
+ * This demonstrates dynamic skill resolution:
+ * - Skills are resolved at runtime based on the request context
+ * - Different users/roles can see different skills
+ * - The resolver function receives SkillsContext with requestContext
+ *
+ * Example: Premium users get additional skills beyond the base set.
+ */
+export const dynamicSkillsWorkspace = new Workspace({
+  id: 'dynamic-skills-workspace',
+  name: 'Dynamic Skills Workspace',
+  filesystem: new LocalFilesystem({
+    basePath: PROJECT_ROOT,
+  }),
+  bm25: true,
+  // Dynamic skills resolver - returns different paths based on context
+  skills: context => {
+    const paths = ['/skills']; // Base skills for everyone
+
+    // Check user role from request context
+    // In real usage, this would come from authentication/session
+    const userRole = context.requestContext?.get?.('userRole');
+
+    if (userRole === 'developer') {
+      // Developers get additional docs-skills
+      paths.push('/docs-skills');
+    }
+
+    return paths;
+  },
+});
+
+/**
  * All workspaces in this example.
  */
 export const allWorkspaces = [
@@ -300,6 +334,7 @@ export const allWorkspaces = [
   fsAllApprovalWorkspace,
   testAgentWorkspace,
   skillsOnlyWorkspace,
+  dynamicSkillsWorkspace,
 ];
 
 /**
