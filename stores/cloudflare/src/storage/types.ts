@@ -12,15 +12,13 @@ import type {
   TABLE_SCORERS,
   TABLE_SPANS,
   TABLE_AGENTS,
+  TABLE_AGENT_VERSIONS,
   SpanRecord,
   StorageAgentType,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type Cloudflare from 'cloudflare';
-
-// Local constant for agent versions table - avoids import issues with older core versions
-const TABLE_AGENT_VERSIONS = 'mastra_agent_versions' as const;
 
 /**
  * Base configuration options shared across Cloudflare configurations

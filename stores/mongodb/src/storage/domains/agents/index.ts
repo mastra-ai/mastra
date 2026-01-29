@@ -3,6 +3,7 @@ import {
   AgentsStorage,
   createStorageErrorId,
   TABLE_AGENTS,
+  TABLE_AGENT_VERSIONS,
   normalizePerPage,
   calculatePagination,
 } from '@mastra/core/storage';
@@ -22,9 +23,6 @@ import type {
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
-
-// Local constant for agent versions table - avoids import issues with older core versions
-const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
 
 export class MongoDBAgentsStorage extends AgentsStorage {
   #connector: MongoDBConnector;

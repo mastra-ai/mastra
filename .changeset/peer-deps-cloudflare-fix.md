@@ -12,11 +12,7 @@ Fix peer dependency compatibility issues and standardize on `fast-deep-equal`:
 
 - Update @mastra/cloudflare peer dependency from >=1.0.0-0 to >=1.1.0-0 to ensure compatibility with new agent versioning exports.
 
-- Add `getSchemas()`, `getSchema(tableName)`, and `hasSchema(tableName)` methods to `StorageDomain` base class. These provide a backwards-compatible way to access table schemas - packages can check for schema availability before using them, ensuring compatibility across different core versions.
-
-- Update storage adapters (pg, libsql, mongodb, cloudflare, clickhouse) to use local constants for `TABLE_AGENT_VERSIONS` instead of importing from core, avoiding import failures with older core versions.
-
-- Update storage adapters to use `#safeGetSchema()` helper in `init()` for backwards-compatible table creation that checks if `getSchema` method exists.
+- Add `getSchemas()`, `getSchema(tableName)`, and `hasSchema(tableName)` methods to `StorageDomain` base class. These provide a way to access table schemas dynamically.
 
 - Update server handlers to check if new Mastra methods exist before calling them:
   - `mastra.getStoredAgentById()` - check before calling in agent lookup
@@ -28,4 +24,4 @@ Fix peer dependency compatibility issues and standardize on `fast-deep-equal`:
 
 - Add graceful degradation in `handleAutoVersioning()` to skip versioning entirely when core version doesn't support versioning methods.
 
-- Standardize on `fast-deep-equal` package for deep equality comparisons instead of custom implementation. Remove custom `deepEqual` from core utils.ts and use `fast-deep-equal` in both core and server. This avoids backwards-compatibility issues and uses a well-tested library.
+- Standardize on `fast-deep-equal` package for deep equality comparisons instead of custom implementation. Remove custom `deepEqual` from core utils.ts and use `fast-deep-equal` in both core and server.

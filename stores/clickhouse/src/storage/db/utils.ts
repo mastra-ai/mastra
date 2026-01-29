@@ -6,12 +6,10 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_AGENT_VERSIONS,
   safelyParseJSON,
   TABLE_SPANS,
 } from '@mastra/core/storage';
-
-// Local constant for agent versions table - avoids import issues with older core versions
-const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
