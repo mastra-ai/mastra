@@ -13,6 +13,7 @@ import {
   agentWithBranchingModeration,
   agentWithSequentialModeration,
 } from './agents/model-v2-agent';
+import { browserAgent } from './agents/browser-agent';
 import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
 import { moderationProcessor } from './agents/model-v2-agent';
@@ -62,6 +63,8 @@ const config = {
     agentWithAdvancedModeration,
     agentWithBranchingModeration,
     agentWithSequentialModeration,
+    // Browser automation agent
+    browserAgent,
   },
   processors: {
     moderationProcessor,
