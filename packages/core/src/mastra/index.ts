@@ -20,7 +20,7 @@ import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraCompositeStore, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
+import type { MastraCompositeStore, WorkflowRuns, StorageResolvedAgentType, StorageScorerConfig } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
@@ -785,11 +785,11 @@ export class Mastra<
   public async getStoredAgentById(
     id: string,
     options: { raw: true; versionId?: string; versionNumber?: number },
-  ): Promise<StorageAgentType | null>;
+  ): Promise<StorageResolvedAgentType | null>;
   public async getStoredAgentById(
     id: string,
     options?: { raw?: boolean; versionId?: string; versionNumber?: number },
-  ): Promise<Agent | StorageAgentType | null> {
+  ): Promise<Agent | StorageResolvedAgentType | null> {
     const storage = this.#storage;
 
     if (!storage) {
@@ -832,10 +832,28 @@ export class Mastra<
       if (version.agentId !== id) {
         return null;
       }
-      if (options?.raw) {
-        return version.snapshot;
+      // Extract snapshot config fields from the version (strip version-specific metadata)
+      const {
+        id: _versionId,
+        agentId: _agentId,
+        versionNumber: _versionNumber,
+        changedFields: _changedFields,
+        changeMessage: _changeMessage,
+        createdAt: _createdAt,
+        ...snapshotConfig
+      } = version;
+
+      // Fetch the thin agent record to build a resolved agent
+      const agentRecord = await agentsStore.getAgentById({ id });
+      if (!agentRecord) {
+        return null;
       }
-      return this.#createAgentFromStoredConfig(version.snapshot);
+
+      const resolvedAgent: StorageResolvedAgentType = { ...agentRecord, ...snapshotConfig };
+      if (options?.raw) {
+        return resolvedAgent;
+      }
+      return this.#createAgentFromStoredConfig(resolvedAgent);
     }
 
     if (options?.versionNumber !== undefined) {
@@ -844,10 +862,28 @@ export class Mastra<
       if (!version) {
         return null;
       }
-      if (options?.raw) {
-        return version.snapshot;
+      // Extract snapshot config fields from the version (strip version-specific metadata)
+      const {
+        id: _versionId,
+        agentId: _agentId,
+        versionNumber: _versionNumber,
+        changedFields: _changedFields,
+        changeMessage: _changeMessage,
+        createdAt: _createdAt,
+        ...snapshotConfig
+      } = version;
+
+      // Fetch the thin agent record to build a resolved agent
+      const agentRecord = await agentsStore.getAgentById({ id });
+      if (!agentRecord) {
+        return null;
       }
-      return this.#createAgentFromStoredConfig(version.snapshot);
+
+      const resolvedAgent: StorageResolvedAgentType = { ...agentRecord, ...snapshotConfig };
+      if (options?.raw) {
+        return resolvedAgent;
+      }
+      return this.#createAgentFromStoredConfig(resolvedAgent);
     }
 
     // Default behavior: get the current agent config with version resolution
@@ -946,7 +982,7 @@ export class Mastra<
     orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
     raw: true;
   }): Promise<{
-    agents: StorageAgentType[];
+    agents: StorageResolvedAgentType[];
     total: number;
     page: number;
     perPage: number | false;
@@ -958,7 +994,7 @@ export class Mastra<
     orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
     raw?: boolean;
   }): Promise<{
-    agents: Agent[] | StorageAgentType[];
+    agents: Agent[] | StorageResolvedAgentType[];
     total: number;
     page: number;
     perPage: number | false;
@@ -1018,7 +1054,7 @@ export class Mastra<
    * Creates an Agent instance from a stored agent configuration.
    * @private
    */
-  #createAgentFromStoredConfig(storedAgent: StorageAgentType): Agent {
+  #createAgentFromStoredConfig(storedAgent: StorageResolvedAgentType): Agent {
     // Build model config from stored data
     // The model field stores { provider, name, ...otherConfig }
     const modelConfig = storedAgent.model as { provider?: string; name?: string; [key: string]: unknown };
@@ -1173,20 +1209,27 @@ export class Mastra<
    * Resolves memory reference from stored configuration to actual memory instance.
    * @private
    */
-  #resolveStoredMemory(storedMemory?: string): MastraMemory | undefined {
-    if (!storedMemory) {
+  #resolveStoredMemory(memoryConfig?: Record<string, unknown>): MastraMemory | undefined {
+    if (!memoryConfig) {
+      return undefined;
+    }
+
+    // Extract the memory key from the config object
+    const memoryKey = memoryConfig.key as string | undefined;
+    if (!memoryKey) {
+      this.#logger?.warn(`Stored agent memory config missing "key" field: ${JSON.stringify(memoryConfig)}`);
       return undefined;
     }
 
     // Try by key first
     try {
-      return this.getMemory(storedMemory as keyof TMemory);
+      return this.getMemory(memoryKey as keyof TMemory);
     } catch {
       // Try by id
       try {
-        return this.getMemoryById(storedMemory);
+        return this.getMemoryById(memoryKey);
       } catch {
-        this.#logger?.warn(`Memory "${storedMemory}" referenced in stored agent but not registered in Mastra`);
+        this.#logger?.warn(`Memory "${memoryKey}" referenced in stored agent but not registered in Mastra`);
       }
     }
 
