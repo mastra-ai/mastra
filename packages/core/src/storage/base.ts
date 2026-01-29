@@ -1,6 +1,13 @@
 import { MastraBase } from '../base';
 
-import type { AgentsStorage, ScoresStorage, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
+import type {
+  AgentsStorage,
+  ScoresStorage,
+  WorkflowsStorage,
+  MemoryStorage,
+  ObservabilityStorage,
+  StoredScorersStorage,
+} from './domains';
 
 export type StorageDomains = {
   workflows: WorkflowsStorage;
@@ -8,6 +15,7 @@ export type StorageDomains = {
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
+  storedScorers?: StoredScorersStorage;
 };
 
 /**
@@ -198,6 +206,7 @@ export class MastraCompositeStore extends MastraBase {
         scores: domainOverrides.scores ?? defaultStores?.scores,
         observability: domainOverrides.observability ?? defaultStores?.observability,
         agents: domainOverrides.agents ?? defaultStores?.agents,
+        storedScorers: domainOverrides.storedScorers ?? defaultStores?.storedScorers,
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -206,7 +215,7 @@ export class MastraCompositeStore extends MastraBase {
   /**
    * Get a domain-specific storage interface.
    *
-   * @param storeName - The name of the domain to access ('memory', 'workflows', 'scores', 'observability', 'agents')
+   * @param storeName - The name of the domain to access ('memory', 'workflows', 'scores', 'observability', 'agents', 'storedScorers')
    * @returns The domain storage interface, or undefined if not available
    *
    * @example
@@ -214,6 +223,11 @@ export class MastraCompositeStore extends MastraBase {
    * const memory = await storage.getStore('memory');
    * if (memory) {
    *   await memory.saveThread({ thread });
+   * }
+   *
+   * const storedScorers = await storage.getStore('storedScorers');
+   * if (storedScorers) {
+   *   const scorer = await storedScorers.getScorerById({ id: 'my-scorer' });
    * }
    * ```
    */
@@ -252,6 +266,10 @@ export class MastraCompositeStore extends MastraBase {
 
     if (this.stores?.agents) {
       initTasks.push(this.stores.agents.init());
+    }
+
+    if (this.stores?.storedScorers) {
+      initTasks.push(this.stores.storedScorers.init());
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);

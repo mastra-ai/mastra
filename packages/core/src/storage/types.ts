@@ -350,6 +350,111 @@ export type StorageListAgentsOutput = PaginationInfo & {
   agents: StorageAgentType[];
 };
 
+// Scorer Storage Types
+
+/**
+ * Stored scorer definition for dynamic LLM-as-judge scorers.
+ * Uses a simplified single-step approach with just generateScore.
+ */
+export interface StoredScorerType {
+  /** Unique identifier (UUID) */
+  id: string;
+  /** Display name for the scorer */
+  name: string;
+  /** Optional description of what this scorer evaluates */
+  description?: string;
+  /** Judge model configuration */
+  model: {
+    provider: string;
+    name: string;
+    toolChoice?: string;
+    reasoningEffort?: string;
+  };
+  /** Judge prompt/instructions for evaluation */
+  prompt: string;
+  /** Score range configuration */
+  scoreRange: {
+    /** Minimum score value (default: 0) */
+    min: number;
+    /** Maximum score value (default: 1) */
+    max: number;
+  };
+  /** Additional metadata for the scorer */
+  metadata?: Record<string, unknown>;
+  /** Owner identifier for multi-tenant filtering */
+  ownerId?: string;
+  /** FK to scorer_versions.id - the currently active version */
+  activeVersionId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Represents a versioned snapshot of a scorer's configuration.
+ * Used for tracking changes and enabling rollback capabilities.
+ */
+export interface StoredScorerVersionType {
+  /** Unique identifier (UUID) */
+  id: string;
+  /** Reference to the parent scorer */
+  scorerId: string;
+  /** Sequential version number */
+  versionNumber: number;
+  /** Optional vanity name for this version */
+  name?: string;
+  /** Full scorer configuration snapshot */
+  snapshot: Record<string, unknown>;
+  /** Array of field names that changed in this version */
+  changedFields?: string[];
+  /** Optional message describing the changes */
+  changeMessage?: string;
+  createdAt: Date;
+}
+
+export type StorageCreateScorerInput = Omit<StoredScorerType, 'createdAt' | 'updatedAt' | 'activeVersionId'>;
+
+export type StorageUpdateScorerInput = {
+  id: string;
+  name?: string;
+  description?: string;
+  model?: StoredScorerType['model'];
+  prompt?: string;
+  scoreRange?: StoredScorerType['scoreRange'];
+  metadata?: Record<string, unknown>;
+  ownerId?: string;
+  activeVersionId?: string;
+};
+
+export type StorageCreateScorerVersionInput = Omit<StoredScorerVersionType, 'createdAt'>;
+
+export type StorageListScorersInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter scorers by owner identifier (indexed for fast lookups).
+   * Only scorers with matching ownerId will be returned.
+   */
+  ownerId?: string;
+  /**
+   * Filter scorers by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+};
+
+export type StorageListScorersOutput = PaginationInfo & {
+  scorers: StoredScorerType[];
+};
+
 // Basic Index Management Types
 export interface CreateIndexOptions {
   name: string;
