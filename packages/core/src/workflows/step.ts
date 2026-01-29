@@ -7,7 +7,7 @@ import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/sc
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
-import type { StepResult } from './types';
+import type { StepMetadata, StepResult } from './types';
 import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
@@ -167,6 +167,7 @@ export interface Step<
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
   component?: string;
+  metadata?: StepMetadata;
 }
 
 export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {

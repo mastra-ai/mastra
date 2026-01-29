@@ -210,6 +210,7 @@ export interface GetWorkflowResponse {
       resumeSchema: string;
       suspendSchema: string;
       stateSchema: string;
+      metadata: Record<string, unknown>;
     };
   };
   allSteps: {
@@ -222,6 +223,7 @@ export interface GetWorkflowResponse {
       suspendSchema: string;
       stateSchema: string;
       isWorkflow: boolean;
+      metadata: Record<string, unknown>;
     };
   };
   stepGraph: Workflow['serializedStepGraph'];

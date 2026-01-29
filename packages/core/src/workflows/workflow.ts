@@ -71,6 +71,7 @@ import type {
   ToolStep,
   StepParams,
   OutputWriter,
+  StepMetadata,
 } from './types';
 import { createTimeTravelExecutionParams, getZodErrors } from './utils';
 
@@ -202,6 +203,7 @@ export function createStep<TStepId extends string, TStepOutput>(
     structuredOutput: { schema: OutputSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
   },
 ): Step<TStepId, unknown, { prompt: string }, TStepOutput, unknown, unknown, DefaultEngineType>;
 
@@ -218,7 +220,7 @@ export function createStep<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
+  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
 ): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /**
@@ -338,6 +340,7 @@ function createStepFromParams<
     requestContextSchema: params.requestContextSchema,
     scorers: params.scorers,
     retries: params.retries,
+    metadata: params.metadata,
     execute: params.execute.bind(params),
   };
 }
@@ -348,16 +351,26 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     structuredOutput: { schema: OutputSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
   },
 ): Step<TStepId, unknown, any, TStepOutput, unknown, unknown, DefaultEngineType> {
   const options = (agentOrToolOptions ?? {}) as
-    | (AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
+    | (AgentStepOptions<TStepOutput> & {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+        metadata?: StepMetadata;
+      })
     | undefined;
   // Determine output schema based on structuredOutput option
   const outputSchema = (options?.structuredOutput?.schema ??
     z.object({ text: z.string() })) as unknown as SchemaWithValidation<TStepOutput>;
-  const { retries, scorers, ...agentOptions } =
-    options ?? ({} as AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> });
+  const { retries, scorers, metadata, ...agentOptions } =
+    options ??
+    ({} as AgentStepOptions<TStepOutput> & {
+      retries?: number;
+      scorers?: DynamicArgument<MastraScorers>;
+      metadata?: StepMetadata;
+    });
 
   return {
     id: params.id,
@@ -368,6 +381,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     outputSchema,
     retries,
     scorers,
+    metadata,
     execute: async ({
       inputData,
       runId,
@@ -505,7 +519,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
 function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   params: ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
-  toolOpts?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
+  toolOpts?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
 ): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
   if (!params.inputSchema || !params.outputSchema) {
     throw new Error('Tool must have input and output schemas defined');
@@ -520,6 +534,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
     suspendSchema: params.suspendSchema,
     retries: toolOpts?.retries,
     scorers: toolOpts?.scorers,
+    metadata: toolOpts?.metadata,
     execute: async ({
       inputData,
       mastra,
@@ -1136,6 +1151,7 @@ export function cloneStep<TStepId extends string>(
     retries: step.retries,
     scorers: step.scorers,
     component: step.component,
+    metadata: step.metadata,
   };
 }
 
@@ -1360,6 +1376,7 @@ export class Workflow<
       step: {
         id: step.id,
         description: step.description,
+        metadata: step.metadata,
         component: (step as SerializedStep).component,
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
@@ -1665,6 +1682,7 @@ export class Workflow<
         step: {
           id: step.id,
           description: step.description,
+          metadata: step.metadata,
           component: (step as SerializedStep).component,
           serializedStepFlow: (step as SerializedStep).serializedStepFlow,
           canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
@@ -1711,6 +1729,7 @@ export class Workflow<
         step: {
           id: step.id,
           description: step.description,
+          metadata: step.metadata,
           component: (step as SerializedStep).component,
           serializedStepFlow: (step as SerializedStep).serializedStepFlow,
           canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
@@ -1761,6 +1780,7 @@ export class Workflow<
       step: {
         id: step.id,
         description: step.description,
+        metadata: step.metadata,
         component: (step as SerializedStep).component,
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
@@ -1797,6 +1817,7 @@ export class Workflow<
       step: {
         id: step.id,
         description: step.description,
+        metadata: step.metadata,
         component: (step as SerializedStep).component,
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
@@ -1838,6 +1859,7 @@ export class Workflow<
       step: {
         id: (step as SerializedStep).id,
         description: (step as SerializedStep).description,
+        metadata: (step as SerializedStep).metadata,
         component: (step as SerializedStep).component,
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         canSuspend: Boolean(actualStep.suspendSchema || actualStep.resumeSchema),
