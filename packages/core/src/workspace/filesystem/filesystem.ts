@@ -166,6 +166,14 @@ export interface WorkspaceFilesystem extends Lifecycle<FilesystemInfo> {
    */
   readonly basePath?: string;
 
+  /**
+   * Get instructions describing how this filesystem works.
+   * Used in tool descriptions to help agents understand path semantics.
+   *
+   * @returns A string describing how to use this filesystem
+   */
+  getInstructions?(): string;
+
   // ---------------------------------------------------------------------------
   // File Operations
   // ---------------------------------------------------------------------------

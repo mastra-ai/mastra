@@ -610,21 +610,8 @@ Examples:
     // Get path context for dynamic descriptions
     const pathContext = workspace.getPathContext();
 
-    // Build path context description for sandbox tools
-    let pathInfo = '';
-    if (pathContext.type === 'same-context' && pathContext.filesystem?.basePath) {
-      pathInfo = ` Workspace filesystem basePath: "${pathContext.filesystem.basePath}" (files at workspace path "/foo" are at "${pathContext.filesystem.basePath}/foo" on disk).`;
-      if (pathContext.sandbox?.workingDirectory) {
-        pathInfo += ` Working directory (process.cwd()): "${pathContext.sandbox.workingDirectory}".`;
-      }
-    } else if (pathContext.type === 'cross-context') {
-      pathInfo =
-        ' Filesystem and sandbox are in different environments. Read file contents using workspace_read_file and pass them as variables to your commands.';
-    } else if (pathContext.type === 'sandbox-only') {
-      if (pathContext.sandbox?.workingDirectory) {
-        pathInfo = ` Working directory: "${pathContext.sandbox.workingDirectory}".`;
-      }
-    }
+    // Use provider-supplied instructions
+    const pathInfo = pathContext.instructions ? ` ${pathContext.instructions}` : '';
 
     // Execute command tool (only if sandbox implements it)
     const executeCommandConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);

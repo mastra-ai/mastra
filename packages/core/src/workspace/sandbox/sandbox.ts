@@ -115,6 +115,14 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
    */
   readonly workingDirectory?: string;
 
+  /**
+   * Get instructions describing how this sandbox works.
+   * Used in tool descriptions to help agents understand execution context.
+   *
+   * @returns A string describing how to use this sandbox
+   */
+  getInstructions?(): string;
+
   // ---------------------------------------------------------------------------
   // Command Execution
   // ---------------------------------------------------------------------------

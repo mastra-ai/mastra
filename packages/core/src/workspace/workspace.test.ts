@@ -380,7 +380,7 @@ Line 3 conclusion`;
   // Path Context
   // ===========================================================================
   describe('getPathContext', () => {
-    it('should return same-context for local filesystem + local sandbox with same path', () => {
+    it('should combine instructions from both filesystem and sandbox', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
 
@@ -388,13 +388,15 @@ Line 3 conclusion`;
 
       const context = workspace.getPathContext();
 
-      expect(context.type).toBe('same-context');
-      expect(context.requiresSync).toBe(false);
       expect(context.filesystem?.provider).toBe('local');
+      expect(context.filesystem?.basePath).toBe(tempDir);
       expect(context.sandbox?.provider).toBe('local');
+      expect(context.sandbox?.workingDirectory).toBe(tempDir);
+      expect(context.instructions).toContain('Local filesystem');
+      expect(context.instructions).toContain('Local command execution');
     });
 
-    it('should return filesystem-only when no sandbox configured', () => {
+    it('should return only filesystem instructions when no sandbox configured', () => {
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
       });
@@ -402,22 +404,21 @@ Line 3 conclusion`;
 
       const context = workspace.getPathContext();
 
-      expect(context.type).toBe('filesystem-only');
-      expect(context.requiresSync).toBe(false);
       expect(context.filesystem?.provider).toBe('local');
       expect(context.sandbox).toBeUndefined();
+      expect(context.instructions).toContain('Local filesystem');
+      expect(context.instructions).not.toContain('command execution');
     });
 
-    it('should return sandbox-only when no filesystem configured', () => {
+    it('should return only sandbox instructions when no filesystem configured', () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({ sandbox });
 
       const context = workspace.getPathContext();
 
-      expect(context.type).toBe('sandbox-only');
-      expect(context.requiresSync).toBe(false);
       expect(context.filesystem).toBeUndefined();
       expect(context.sandbox?.provider).toBe('local');
+      expect(context.instructions).toContain('Local command execution');
     });
   });
 

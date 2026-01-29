@@ -20,6 +20,7 @@ import {
 } from '../errors';
 import type {
   WorkspaceFilesystem,
+  FilesystemInfo,
   FileContent,
   FileStat,
   FileEntry,
@@ -537,5 +538,19 @@ export class LocalFilesystem implements WorkspaceFilesystem {
 
   async destroy(): Promise<void> {
     // LocalFilesystem doesn't clean up on destroy by default
+  }
+
+  getInfo(): FilesystemInfo {
+    return {
+      id: this.id,
+      name: this.name,
+      provider: this.provider,
+      readOnly: this.readOnly,
+      basePath: this.basePath,
+    };
+  }
+
+  getInstructions(): string {
+    return `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.`;
   }
 }

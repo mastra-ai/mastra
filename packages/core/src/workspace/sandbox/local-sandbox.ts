@@ -307,6 +307,13 @@ export class LocalSandbox implements WorkspaceSandbox {
     };
   }
 
+  getInstructions(): string {
+    if (this.workingDirectory) {
+      return `Local command execution. Working directory: "${this.workingDirectory}".`;
+    }
+    return 'Local command execution on the host machine.';
+  }
+
   /**
    * Wrap a command with the configured isolation backend.
    */

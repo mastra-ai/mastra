@@ -173,22 +173,10 @@ export type { WorkspaceStatus } from './types';
 // =============================================================================
 
 /**
- * Describes the relationship between filesystem and sandbox.
- */
-export type PathContextType =
-  | 'same-context' // Filesystem and sandbox share the same environment (e.g., LocalFilesystem + LocalSandbox)
-  | 'cross-context' // Filesystem and sandbox are in different environments (requires sync)
-  | 'sandbox-only' // Only sandbox is configured
-  | 'filesystem-only'; // Only filesystem is configured
-
-/**
  * Information about how filesystem and sandbox paths relate.
  * Used by agents to understand how to access workspace files from sandbox code.
  */
 export interface PathContext {
-  /** The type of context relationship */
-  type: PathContextType;
-
   /** Filesystem details (if available) */
   filesystem?: {
     provider: string;
@@ -204,13 +192,8 @@ export interface PathContext {
   };
 
   /**
-   * Whether files need to be synced between filesystem and sandbox.
-   * True for cross-context combinations (e.g., AgentFS + LocalSandbox).
-   */
-  requiresSync: boolean;
-
-  /**
    * Human-readable instructions for how to access filesystem files from sandbox code.
+   * Combined from filesystem and sandbox provider instructions.
    */
   instructions: string;
 }
@@ -225,6 +208,14 @@ export interface WorkspaceInfo {
   /** Filesystem info (if available) */
   filesystem?: {
     provider: string;
+    basePath?: string;
+    readOnly?: boolean;
+    status?: string;
+    storage?: {
+      totalBytes?: number;
+      usedBytes?: number;
+      availableBytes?: number;
+    };
     totalFiles?: number;
     totalSize?: number;
   };
@@ -597,8 +588,13 @@ export class Workspace {
     };
 
     if (this._fs) {
+      const fsInfo = await this._fs.getInfo?.();
       info.filesystem = {
         provider: this._fs.provider,
+        basePath: fsInfo?.basePath ?? this._fs.basePath,
+        readOnly: fsInfo?.readOnly ?? this._fs.readOnly,
+        status: fsInfo?.status,
+        storage: fsInfo?.storage,
       };
 
       if (options?.includeFileCount) {
@@ -627,87 +623,30 @@ export class Workspace {
    * Get information about how filesystem and sandbox paths relate.
    * Useful for understanding how to access workspace files from sandbox code.
    *
-   * @returns PathContext with type, paths, and instructions
+   * @returns PathContext with paths and instructions from providers
    */
   getPathContext(): PathContext {
-    const hasFs = !!this._fs;
-    const hasSandbox = !!this._sandbox;
+    // Get instructions from providers
+    const fsInstructions = this._fs?.getInstructions?.();
+    const sandboxInstructions = this._sandbox?.getInstructions?.();
 
-    // Filesystem only
-    if (hasFs && !hasSandbox) {
-      return {
-        type: 'filesystem-only',
-        filesystem: {
-          provider: this._fs!.provider,
-          basePath: this._fs!.basePath,
-        },
-        requiresSync: false,
-        instructions: 'No sandbox configured. Files can only be accessed via workspace filesystem tools.',
-      };
-    }
+    // Combine instructions from both providers
+    const instructions = [fsInstructions, sandboxInstructions].filter(Boolean).join(' ');
 
-    // Sandbox only
-    if (!hasFs && hasSandbox) {
-      return {
-        type: 'sandbox-only',
-        sandbox: {
-          provider: this._sandbox!.provider,
-          workingDirectory: this._sandbox!.workingDirectory,
-        },
-        requiresSync: false,
-        instructions: 'No filesystem configured. Command execution is available but files are ephemeral.',
-      };
-    }
-
-    // Both configured - determine context type
-    const fsProvider = this._fs!.provider;
-    const sandboxProvider = this._sandbox!.provider;
-
-    // Same-context combinations
-    const isSameContext =
-      (fsProvider === 'local' && sandboxProvider === 'local') || (fsProvider === 'e2b' && sandboxProvider === 'e2b');
-
-    if (isSameContext) {
-      const basePath = this._fs!.basePath;
-      const workingDirectory = this._sandbox!.workingDirectory;
-
-      let instructions: string;
-      if (basePath) {
-        instructions = `Filesystem and sandbox share the same environment. Files written to workspace path "/foo" are accessible at "${basePath}/foo" in executed commands. Working directory for commands: ${workingDirectory ?? 'process.cwd()'}.`;
-      } else {
-        instructions =
-          'Filesystem and sandbox share the same environment. Use workspace_read_file to get file contents.';
-      }
-
-      return {
-        type: 'same-context',
-        filesystem: {
-          provider: fsProvider,
-          basePath,
-        },
-        sandbox: {
-          provider: sandboxProvider,
-          workingDirectory,
-        },
-        requiresSync: false,
-        instructions,
-      };
-    }
-
-    // Cross-context - requires sync
     return {
-      type: 'cross-context',
-      filesystem: {
-        provider: fsProvider,
-        basePath: this._fs!.basePath,
-      },
-      sandbox: {
-        provider: sandboxProvider,
-        workingDirectory: this._sandbox!.workingDirectory,
-      },
-      requiresSync: true,
-      instructions:
-        'Filesystem and sandbox are in different environments. To use workspace files in commands: 1) Read file contents using workspace_read_file, 2) Pass contents to commands as needed.',
+      filesystem: this._fs
+        ? {
+            provider: this._fs.provider,
+            basePath: this._fs.basePath,
+          }
+        : undefined,
+      sandbox: this._sandbox
+        ? {
+            provider: this._sandbox.provider,
+            workingDirectory: this._sandbox.workingDirectory,
+          }
+        : undefined,
+      instructions,
     };
   }
 }
