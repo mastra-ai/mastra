@@ -3,7 +3,7 @@
 ## Milestones
 
 - [x] **v1.0 Browser Toolset** - Phases 1-6 (shipped 2026-01-27)
-- [ ] **v1.1 Browser Live View** - Phases 7-9 (in progress)
+- [x] **v1.1 Browser Live View** - Phases 7-9 (shipped 2026-01-28)
 
 ## Phases
 
@@ -58,13 +58,13 @@ Plans:
 
 </details>
 
-### v1.1 Browser Live View (In Progress)
+### v1.1 Browser Live View (Shipped 2026-01-28)
 
 **Milestone Goal:** Users can watch browser agents work in real-time from within Mastra Studio
 
 - [x] **Phase 7: Screencast API** - Extend BrowserToolset with CDP screencast controls
 - [x] **Phase 8: Transport Layer** - WebSocket endpoint for frame delivery to Studio
-- [ ] **Phase 9: Studio UI** - Browser view panel rendering inline with agent chat
+- [x] **Phase 9: Studio UI** - Browser view panel rendering inline with agent chat
 
 ## Phase Details
 
@@ -110,8 +110,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — useBrowserStream hook with BrowserViewFrame and BrowserViewHeader components
-- [ ] 09-02-PLAN.md — BrowserViewPanel assembly and AgentLayout browserSlot integration
+- [x] 09-01-PLAN.md — useBrowserStream hook with BrowserViewFrame and BrowserViewHeader components
+- [x] 09-02-PLAN.md — BrowserViewPanel assembly and AgentLayout browserSlot integration
 
 ## Progress
 
@@ -127,8 +127,8 @@ Plans:
 | 6. Lifecycle Locking | v1.0 | 1/1 | Complete | 2026-01-27 |
 | 7. Screencast API | v1.1 | 1/1 | Complete | 2026-01-27 |
 | 8. Transport Layer | v1.1 | 2/2 | Complete | 2026-01-27 |
-| 9. Studio UI | v1.1 | 0/2 | Not started | - |
+| 9. Studio UI | v1.1 | 2/2 | Complete | 2026-01-28 |
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-27 after Phase 9 planning*
+*Last updated: 2026-01-28 — v1.1 milestone complete*
