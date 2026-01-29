@@ -107,6 +107,14 @@ export const agent = new Agent({
         "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
     },
     {
+      name: "observationalMemory",
+      type: "boolean | ObservationalMemoryOptions",
+      description:
+        "Enable Observational Memory for long-term memory across conversations. Set to `true` for defaults, or pass a config object to customize thresholds, models, and scope. See [Observational Memory reference](/reference/memory/observational-memory) for configuration details.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
       name: "generateTitle",
       type: "boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }",
       description:
@@ -213,6 +221,7 @@ export const agent = new Agent({
 - [Getting Started with Memory](/docs/memory/overview)
 - [Semantic Recall](/docs/memory/semantic-recall)
 - [Working Memory](/docs/memory/working-memory)
+- [Observational Memory](/docs/memory/observational-memory)
 - [Memory Processors](/docs/memory/memory-processors)
 - [createThread](/reference/memory/createThread)
 - [recall](/reference/memory/recall)
