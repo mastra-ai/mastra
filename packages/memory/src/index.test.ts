@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Memory } from './index';
 
 // Expose protected method for testing
@@ -926,6 +926,53 @@ describe('Memory', () => {
         const page1Ids = page1.threads.map(t => t.id);
         const page2Ids = page2.threads.map(t => t.id);
         expect(page1Ids).not.toEqual(page2Ids);
+      });
+    });
+  });
+
+  describe('Vector Deletion', () => {
+    class MemoryWithMockVector extends Memory {
+      public mockVector = {
+        deleteVectors: vi.fn(),
+        listIndexes: vi.fn().mockResolvedValue(['memory_messages_index']),
+        query: vi.fn(),
+        upsert: vi.fn(),
+        createIndex: vi.fn(),
+        describeIndex: vi.fn(),
+        listCollections: vi.fn(),
+        createCollection: vi.fn(),
+        describeCollection: vi.fn(),
+        deleteCollection: vi.fn(),
+      };
+
+      constructor() {
+        super({ storage: new InMemoryStore() });
+        // @ts-ignore - injecting mock vector
+        this.vector = this.mockVector;
+      }
+    }
+
+    it('should delete message vector', async () => {
+      const memory = new MemoryWithMockVector();
+      const messageId = 'msg-123';
+
+      await memory.deleteMessages([messageId]);
+
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages_index',
+        filter: { message_id: messageId },
+      });
+    });
+
+    it('should delete thread vector', async () => {
+      const memory = new MemoryWithMockVector();
+      const threadId = 'thread-123';
+
+      await memory.deleteThread(threadId);
+
+      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+        indexName: 'memory_messages_index',
+        filter: { thread_id: threadId },
       });
     });
   });
