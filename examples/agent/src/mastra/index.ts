@@ -10,6 +10,7 @@ import {
   chefAgentResponses,
   dynamicAgent,
   evalAgent,
+  dynamicToolsAgent,
   schemaValidatedAgent,
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
@@ -58,6 +59,7 @@ const config = {
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
+    dynamicToolsAgent, // Dynamic tool search example
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
