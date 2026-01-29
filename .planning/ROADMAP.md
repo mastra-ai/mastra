@@ -58,64 +58,35 @@ Plans:
 
 </details>
 
-### v1.1 Browser Live View (Shipped 2026-01-28)
-
-**Milestone Goal:** Users can watch browser agents work in real-time from within Mastra Studio
-
-- [x] **Phase 7: Screencast API** - Extend BrowserToolset with CDP screencast controls
-- [x] **Phase 8: Transport Layer** - WebSocket endpoint for frame delivery to Studio
-- [x] **Phase 9: Studio UI** - Browser view panel rendering inline with agent chat
-
-## Phase Details
+<details>
+<summary>v1.1 Browser Live View (Phases 7-9) - SHIPPED 2026-01-28</summary>
 
 ### Phase 7: Screencast API
 **Goal**: BrowserToolset exposes methods to control CDP screencast capture and input injection
-**Depends on**: Phase 6 (browser lifecycle must be stable)
-**Requirements**: CAST-01, CAST-02, CAST-03, CAST-04, CAST-05
-**Success Criteria** (what must be TRUE):
-  1. Calling `startScreencast()` on BrowserToolset begins receiving CDP frames
-  2. Calling `stopScreencast()` stops frame delivery and releases resources
-  3. Each received frame triggers CDP `screencastFrameAck` to prevent memory exhaustion
-  4. Input injection methods exist (passthrough for future use)
 **Plans**: 1 plan
 
 Plans:
-- [x] 07-01-PLAN.md — Screencast types, ScreencastStream class, and BrowserToolset integration
+- [x] 07-01: Screencast types, ScreencastStream class, and BrowserToolset integration
 
 ### Phase 8: Transport Layer
 **Goal**: WebSocket server endpoint relays screencast frames to connected Studio clients
-**Depends on**: Phase 7 (needs screencast API)
-**Requirements**: XPORT-01, XPORT-02, XPORT-03, XPORT-04
-**Success Criteria** (what must be TRUE):
-  1. WebSocket connection can be established at `/browser/:agentId/stream`
-  2. Connected clients receive CDP frames as they are captured
-  3. Disconnecting clients are cleaned up without memory leaks
-  4. Screencast only runs when at least one viewer is connected (no wasted CPU)
 **Plans**: 2 plans
 
 Plans:
-- [x] 08-01-PLAN.md — Browser-stream module with types, ViewerRegistry, and WebSocket route setup
-- [x] 08-02-PLAN.md — Server integration with deployer createNodeServer
+- [x] 08-01: Browser-stream module with types, ViewerRegistry, and WebSocket route setup
+- [x] 08-02: Server integration with deployer createNodeServer
 
 ### Phase 9: Studio UI
 **Goal**: BrowserViewPanel component renders live screencast inline with agent chat
-**Depends on**: Phase 8 (needs working WebSocket endpoint)
-**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05
-**Success Criteria** (what must be TRUE):
-  1. Browser panel renders screencast frames inline with agent chat
-  2. Frame updates do not cause visible UI lag or freezing
-  3. Connection status indicator shows connected/connecting/disconnected states
-  4. Empty state displays when no browser is active for the agent
-  5. Loading state displays during browser initialization
 **Plans**: 2 plans
 
 Plans:
-- [x] 09-01-PLAN.md — useBrowserStream hook with BrowserViewFrame and BrowserViewHeader components
-- [x] 09-02-PLAN.md — BrowserViewPanel assembly and AgentLayout browserSlot integration
+- [x] 09-01: useBrowserStream hook with BrowserViewFrame and BrowserViewHeader components
+- [x] 09-02: BrowserViewPanel assembly and AgentLayout browserSlot integration
+
+</details>
 
 ## Progress
-
-**Execution Order:** Phases 7 -> 8 -> 9
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -131,4 +102,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-28 — v1.1 milestone complete*
+*Last updated: 2026-01-28 — v1.1 milestone archived*

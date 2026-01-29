@@ -2,17 +2,18 @@
 
 ## What This Is
 
-A browser toolset integration for Mastra agents that enables web page navigation and interaction using the agent-browser library. Agents can navigate to URLs, capture accessibility snapshots, interact with elements via refs, and take screenshots — enabling research and data gathering from dynamic websites.
+A browser toolset integration for Mastra agents that enables web page navigation, interaction, and real-time live view using the agent-browser library. Agents can navigate to URLs, capture accessibility snapshots, interact with elements via refs, take screenshots, and stream their browser session live to Mastra Studio.
 
 ## Core Value
 
-Agents can browse and interact with real websites to gather information that requires JavaScript rendering or user interaction.
+Agents can browse and interact with real websites to gather information, and users can watch them work in real-time from within Studio.
 
-## Current State (v1.0 shipped)
+## Current State (v1.1 shipped)
 
-**Package:** `integrations/agent-browser/`
-**Lines of code:** 1,446 TypeScript
+**Package:** `integrations/agent-browser/` + `packages/deployer/` (transport) + `packages/playground-ui/` (UI)
+**Lines of code:** ~4,500 TypeScript across 3 packages
 **Tools:** 7 (navigate, snapshot, click, type, select, scroll, screenshot)
+**Live View:** CDP screencast → WebSocket → React panel with tool call history
 **Build:** ESM + CJS with TypeScript declarations
 
 ## Requirements
@@ -25,12 +26,13 @@ Agents can browse and interact with real websites to gather information that req
 - [x] Follows Mastra integration patterns (lives in integrations/agent-browser) — v1.0
 - [x] Browser lifecycle managed within toolset (launch on first use, cleanup) — v1.0
 - [x] Accessibility snapshots return element refs for LLM-friendly targeting — v1.0
+- [x] Live browser screencast streams to Studio during tool execution — v1.1
+- [x] Browser view renders inline with agent chat in Studio — v1.1
+- [x] Tool call history displayed in browser panel — v1.1
 
 ### Active
 
-- [ ] Live browser screencast streams to Studio during tool execution — v1.1
-- [ ] Snapshot history captured for session replay — v1.1
-- [ ] Browser view renders inline with agent chat in Studio — v1.1
+(None — next milestone will define new requirements)
 
 ### Out of Scope
 
@@ -41,16 +43,9 @@ Agents can browse and interact with real websites to gather information that req
 - Multi-tab support — v2
 - PDF capture — v2
 - Testing/QA use cases — research focus for v1
-
-## Current Milestone: v1.1 Browser Live View
-
-**Goal:** Enable users to watch browser agents work in real-time from within Mastra Studio.
-
-**Target features:**
-- Live screencast of browser viewport streaming to Studio
-- Snapshot history for session replay
-- Browser view inline with agent chat panel
-- View-only (no user interaction with browser from UI)
+- User interaction through browser view (click/type/scroll from UI) — v2
+- Session recording/playback — v2
+- Multi-viewer sync — v2
 
 ## Context
 
@@ -91,6 +86,17 @@ Agents can browse and interact with real websites to gather information that req
 | Types.ts as single source of truth | Eliminates schema duplication, prevents drift | Good |
 | @e ref format from agent-browser | LLM-friendly element targeting, deterministic | Good |
 | BrowserToolError unified interface | Consistent error handling with recovery hints | Good |
+| WebSocket over SSE | Bidirectional capability for future input injection | Good |
+| useRef for frame display | Bypasses React virtual DOM, prevents re-renders per frame | Good |
+| typed-emitter for events | Type-safe event emitter pattern for screencast stream | Good |
+| @hono/node-ws for WebSocket | Native WebSocket support in Hono server | Good |
+| ViewerRegistry reference counting | Start screencast on first viewer, stop on last | Good |
+| setupBrowserStream before CORS | Prevents WebSocket upgrade header conflicts | Good |
+| Single BrowserViewFrame instance | CSS-only visibility toggling prevents WebSocket churn | Good |
+| Panel outside ThreadPrimitive.Viewport | Survives message re-renders without state loss | Good |
+| Panel hides on user X click only | No auto-hide on browser_closed preserves last frame | Good |
+| everyNthFrame: 1 for headless | Chrome generates fewer frames without display cycle | Good |
+| BrowserToolCallsContext bridge | React Context bridges ToolFallback and BrowserViewPanel | Good |
 
 ---
-*Last updated: 2026-01-27 after v1.1 milestone start*
+*Last updated: 2026-01-28 after v1.1 milestone completion*

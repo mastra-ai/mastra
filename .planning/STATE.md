@@ -2,17 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-01-27)
+See: .planning/PROJECT.md (updated 2026-01-28)
 
-**Core value:** Users can watch browser agents work in real-time from within Mastra Studio
-**Current focus:** v1.1 Browser Live View — COMPLETE
+**Core value:** Agents can browse real websites and users can watch them work in real-time
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 9 of 9 (Studio UI)
-Plan: 2 of 2 in current phase
-Status: Complete
-Last activity: 2026-01-28 — v1.1 milestone shipped
+Phase: 9 of 9 — all milestones complete
+Plan: N/A
+Status: Ready for next milestone
+Last activity: 2026-01-28 — v1.1 milestone archived
 
 Progress: [####################] 100% (6/6 v1.0 phases + 3/3 v1.1 phases)
 
@@ -38,23 +38,7 @@ Progress: [####################] 100% (6/6 v1.0 phases + 3/3 v1.1 phases)
 
 ### Decisions
 
-All v1.0 decisions documented in PROJECT.md Key Decisions table.
-
-v1.1 decisions:
-- WebSocket over SSE for bidirectional capability (future input injection)
-- useRef pattern for frame display to avoid virtual DOM thrashing
-- CDP frame ack required to prevent memory exhaustion
-- typed-emitter for type-safe event emitter pattern
-- @hono/node-ws for WebSocket support in Hono
-- ViewerRegistry pattern: start on first viewer, stop on last viewer
-- setupBrowserStream called BEFORE CORS middleware
-- Exponential backoff for reconnect capped at 30s max delay
-- Single BrowserViewFrame instance with CSS-only visibility toggling (prevents WebSocket churn)
-- Panel rendered outside ThreadPrimitive.Viewport (survives message re-renders)
-- Panel hides only on explicit user close (X button), not on browser_closed status
-- everyNthFrame: 1 for headless (Chrome generates fewer frames without display cycle)
-- BrowserToolCallsContext bridges ToolFallback and BrowserViewPanel
-- Browser tools hidden from chat, shown in collapsible panel history
+All decisions documented in PROJECT.md Key Decisions table (19 entries across v1.0 and v1.1).
 
 ### Pending Todos
 
@@ -66,5 +50,5 @@ None.
 
 ## Milestone History
 
-- v1.0: SHIPPED 2026-01-27 (6 phases, 10 plans)
-- v1.1: SHIPPED 2026-01-28 (3 phases, 5 plans)
+- v1.0: SHIPPED 2026-01-27 (6 phases, 10 plans) — archived to milestones/
+- v1.1: SHIPPED 2026-01-28 (3 phases, 5 plans) — archived to milestones/
