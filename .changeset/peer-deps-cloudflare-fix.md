@@ -8,7 +8,7 @@
 '@mastra/server': patch
 ---
 
-Fix peer dependency compatibility issues:
+Fix peer dependency compatibility issues and standardize on `fast-deep-equal`:
 
 - Update @mastra/cloudflare peer dependency from >=1.0.0-0 to >=1.1.0-0 to ensure compatibility with new agent versioning exports.
 
@@ -27,3 +27,5 @@ Fix peer dependency compatibility issues:
 - Add `assertVersioningSupported()` helper to agent version routes that returns a 501 Not Implemented error with helpful message if versioning methods don't exist on the agents store.
 
 - Add graceful degradation in `handleAutoVersioning()` to skip versioning entirely when core version doesn't support versioning methods.
+
+- Standardize on `fast-deep-equal` package for deep equality comparisons instead of custom implementation. Remove custom `deepEqual` from core utils.ts and use `fast-deep-equal` in both core and server. This avoids backwards-compatibility issues and uses a well-tested library.
