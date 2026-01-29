@@ -67,7 +67,8 @@ Plans:
 2. `handleCallback()` decodes JWT locally and stores token on returned user
 3. `getPermissions(user)` extracts role from JWT, uses `resolvePermissions()` from core
 4. `createSession()` throws CloudApiError with 501 status
-5. TypeScript compiles without errors
+5. `getCurrentUser()` decodes sessionToken JWT locally to get user info (NO API call)
+6. TypeScript compiles without errors
 
 **Plans**: 1 plan
 
