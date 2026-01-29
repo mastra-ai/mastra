@@ -24,6 +24,8 @@ export type ComboboxProps = {
   disabled?: boolean;
   variant?: 'default' | 'light' | 'outline' | 'ghost';
   size?: FormElementSize;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function Combobox({
@@ -37,6 +39,8 @@ export function Combobox({
   disabled = false,
   variant = 'default',
   size = 'md',
+  open,
+  onOpenChange,
 }: ComboboxProps) {
   const selectedOption = options.find(option => option.value === value) ?? null;
 
@@ -47,7 +51,14 @@ export function Combobox({
   };
 
   return (
-    <BaseCombobox.Root items={options} value={selectedOption} onValueChange={handleSelect} disabled={disabled}>
+    <BaseCombobox.Root
+      items={options}
+      value={selectedOption}
+      onValueChange={handleSelect}
+      disabled={disabled}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
       <BaseCombobox.Trigger className={cn(buttonVariants({ variant, size }), 'w-full min-w-32 justify-between', className)}>
         <span className="truncate flex items-center gap-2">
           {selectedOption?.start}
