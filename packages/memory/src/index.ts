@@ -853,7 +853,7 @@ ${workingMemory}`;
     }
 
     // In readOnly mode, provide context without tool instructions
-    if (memoryConfig?.readOnly) {
+    if (config?.readOnly) {
       return this.getReadOnlyWorkingMemoryInstruction({
         template: workingMemoryTemplate,
         data: workingMemoryData,
@@ -1016,7 +1016,7 @@ Notes:
   public listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     // Don't provide update tools in readOnly mode
-    if (mergedConfig.workingMemory?.enabled && !config?.readOnly) {
+    if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
       return {
         updateWorkingMemory: this.isVNextWorkingMemoryConfig(mergedConfig)
           ? // use the new experimental tool
