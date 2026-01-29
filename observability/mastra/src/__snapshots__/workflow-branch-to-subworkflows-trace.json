@@ -1,0 +1,609 @@
+{
+  "__structure__": [
+    "workflow_run: \"workflow run: 'inbound-email-workflow'\"",
+    "├── workflow_step: \"workflow step: 'create-record'\"",
+    "├── workflow_step: \"workflow step: 'security-check'\"",
+    "└── workflow_conditional: \"conditional: '2 conditions'\"",
+    "    ├── workflow_conditional_eval: \"condition '0'\"",
+    "    ├── workflow_conditional_eval: \"condition '1'\"",
+    "    └── workflow_step: \"workflow step: 'issue-processing-workflow'\"",
+    "        └── workflow_run: \"workflow run: 'issue-processing-workflow'\"",
+    "            ├── workflow_parallel: \"parallel: '3 branches'\"",
+    "            │   ├── workflow_step: \"workflow step: 'parse-data'\"",
+    "            │   ├── workflow_step: \"workflow step: 'analyze-content'\"",
+    "            │   └── workflow_step: \"workflow step: 'identify-entities'\"",
+    "            ├── workflow_step: \"workflow step: 'merge-parallel-results'\"",
+    "            ├── workflow_step: \"workflow step: 'identify-issue'\"",
+    "            └── workflow_conditional: \"conditional: '2 conditions'\"",
+    "                ├── workflow_conditional_eval: \"condition '0'\"",
+    "                ├── workflow_conditional_eval: \"condition '1'\"",
+    "                └── workflow_step: \"workflow step: 'financial-agent-workflow'\"",
+    "                    └── workflow_run: \"workflow run: 'financial-agent-workflow'\"",
+    "                        ├── workflow_step: \"workflow step: 'financial-validation'\"",
+    "                        └── workflow_step: \"workflow step: 'financial-processing'\""
+  ],
+  "spans": [
+    {
+      "span": {
+        "id": "<span-1>",
+        "traceId": "<trace-1>",
+        "name": "workflow run: 'inbound-email-workflow'",
+        "type": "workflow_run",
+        "completed": true,
+        "isEvent": false,
+        "isRootSpan": true,
+        "entityType": "workflow_run",
+        "entityId": "inbound-email-workflow",
+        "attributes": {
+          "status": "success"
+        },
+        "metadata": {
+          "runId": "<runId-1>"
+        },
+        "input": {
+          "content": "Issue about money transfer problem"
+        },
+        "output": {
+          "issue-processing-workflow": {
+            "financial-agent-workflow": {
+              "result": "Financial issue processed: validated=true",
+              "recommendation": "Review with finance team"
+            }
+          }
+        }
+      },
+      "children": [
+        {
+          "span": {
+            "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "workflow step: 'create-record'",
+            "type": "workflow_step",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "workflow_step",
+            "entityId": "create-record",
+            "attributes": {
+              "status": "success"
+            },
+            "input": {
+              "content": "Issue about money transfer problem"
+            },
+            "output": {
+              "content": "Issue about money transfer problem",
+              "recordId": "REC-001"
+            }
+          }
+        },
+        {
+          "span": {
+            "id": "<span-3>",
+            "traceId": "<trace-1>",
+            "name": "workflow step: 'security-check'",
+            "type": "workflow_step",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "workflow_step",
+            "entityId": "security-check",
+            "attributes": {
+              "status": "success"
+            },
+            "input": {
+              "content": "Issue about money transfer problem",
+              "recordId": "REC-001"
+            },
+            "output": {
+              "content": "Issue about money transfer problem",
+              "isMalicious": false
+            }
+          }
+        },
+        {
+          "span": {
+            "id": "<span-4>",
+            "traceId": "<trace-1>",
+            "name": "conditional: '2 conditions'",
+            "type": "workflow_conditional",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "workflow_run",
+            "entityId": "inbound-email-workflow",
+            "attributes": {
+              "conditionCount": 2,
+              "truthyIndexes": [1],
+              "selectedSteps": ["issue-processing-workflow"]
+            },
+            "input": {
+              "content": "Issue about money transfer problem",
+              "isMalicious": false
+            },
+            "output": {
+              "issue-processing-workflow": {
+                "financial-agent-workflow": {
+                  "result": "Financial issue processed: validated=true",
+                  "recommendation": "Review with finance team"
+                }
+              }
+            }
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-5>",
+                "traceId": "<trace-1>",
+                "name": "condition '0'",
+                "type": "workflow_conditional_eval",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-4>",
+                "entityType": "workflow_run",
+                "entityId": "inbound-email-workflow",
+                "attributes": {
+                  "conditionIndex": 0,
+                  "result": false
+                },
+                "input": {
+                  "content": "Issue about money transfer problem",
+                  "isMalicious": false
+                },
+                "output": false
+              }
+            },
+            {
+              "span": {
+                "id": "<span-6>",
+                "traceId": "<trace-1>",
+                "name": "condition '1'",
+                "type": "workflow_conditional_eval",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-4>",
+                "entityType": "workflow_run",
+                "entityId": "inbound-email-workflow",
+                "attributes": {
+                  "conditionIndex": 1,
+                  "result": true
+                },
+                "input": {
+                  "content": "Issue about money transfer problem",
+                  "isMalicious": false
+                },
+                "output": true
+              }
+            },
+            {
+              "span": {
+                "id": "<span-7>",
+                "traceId": "<trace-1>",
+                "name": "workflow step: 'issue-processing-workflow'",
+                "type": "workflow_step",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-4>",
+                "entityType": "workflow_step",
+                "entityId": "issue-processing-workflow",
+                "attributes": {
+                  "status": "success"
+                },
+                "input": {
+                  "content": "Issue about money transfer problem",
+                  "isMalicious": false
+                },
+                "output": {
+                  "financial-agent-workflow": {
+                    "result": "Financial issue processed: validated=true",
+                    "recommendation": "Review with finance team"
+                  }
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-8>",
+                    "traceId": "<trace-1>",
+                    "name": "workflow run: 'issue-processing-workflow'",
+                    "type": "workflow_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-7>",
+                    "entityType": "workflow_run",
+                    "entityId": "issue-processing-workflow",
+                    "attributes": {
+                      "status": "success"
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>"
+                    },
+                    "input": {
+                      "content": "Issue about money transfer problem",
+                      "isMalicious": false
+                    },
+                    "output": {
+                      "financial-agent-workflow": {
+                        "result": "Financial issue processed: validated=true",
+                        "recommendation": "Review with finance team"
+                      }
+                    }
+                  },
+                  "children": [
+                    {
+                      "span": {
+                        "id": "<span-9>",
+                        "traceId": "<trace-1>",
+                        "name": "parallel: '3 branches'",
+                        "type": "workflow_parallel",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-8>",
+                        "entityType": "workflow_run",
+                        "entityId": "issue-processing-workflow",
+                        "attributes": {
+                          "branchCount": 3,
+                          "parallelSteps": ["parse-data", "analyze-content", "identify-entities"]
+                        },
+                        "input": {
+                          "content": "Issue about money transfer problem",
+                          "isMalicious": false
+                        },
+                        "output": {
+                          "parse-data": {
+                            "parsed": "Parsed: Issue about money tr"
+                          },
+                          "analyze-content": {
+                            "category": "financial"
+                          },
+                          "identify-entities": {
+                            "entities": ["user@example.com", "Account #12345"]
+                          }
+                        }
+                      },
+                      "children": [
+                        {
+                          "span": {
+                            "id": "<span-10>",
+                            "traceId": "<trace-1>",
+                            "name": "workflow step: 'parse-data'",
+                            "type": "workflow_step",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-9>",
+                            "entityType": "workflow_step",
+                            "entityId": "parse-data",
+                            "attributes": {
+                              "status": "success"
+                            },
+                            "input": {
+                              "content": "Issue about money transfer problem",
+                              "isMalicious": false
+                            },
+                            "output": {
+                              "parsed": "Parsed: Issue about money tr"
+                            }
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-11>",
+                            "traceId": "<trace-1>",
+                            "name": "workflow step: 'analyze-content'",
+                            "type": "workflow_step",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-9>",
+                            "entityType": "workflow_step",
+                            "entityId": "analyze-content",
+                            "attributes": {
+                              "status": "success"
+                            },
+                            "input": {
+                              "content": "Issue about money transfer problem",
+                              "isMalicious": false
+                            },
+                            "output": {
+                              "category": "financial"
+                            }
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-12>",
+                            "traceId": "<trace-1>",
+                            "name": "workflow step: 'identify-entities'",
+                            "type": "workflow_step",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-9>",
+                            "entityType": "workflow_step",
+                            "entityId": "identify-entities",
+                            "attributes": {
+                              "status": "success"
+                            },
+                            "input": {
+                              "content": "Issue about money transfer problem",
+                              "isMalicious": false
+                            },
+                            "output": {
+                              "entities": ["user@example.com", "Account #12345"]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "span": {
+                        "id": "<span-13>",
+                        "traceId": "<trace-1>",
+                        "name": "workflow step: 'merge-parallel-results'",
+                        "type": "workflow_step",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-8>",
+                        "entityType": "workflow_step",
+                        "entityId": "merge-parallel-results",
+                        "attributes": {
+                          "status": "success"
+                        },
+                        "input": {
+                          "parse-data": {
+                            "parsed": "Parsed: Issue about money tr"
+                          },
+                          "analyze-content": {
+                            "category": "financial"
+                          },
+                          "identify-entities": {
+                            "entities": ["user@example.com", "Account #12345"]
+                          }
+                        },
+                        "output": {
+                          "category": "financial",
+                          "issue": "Parsed: Issue about money tr",
+                          "entities": ["user@example.com", "Account #12345"]
+                        }
+                      }
+                    },
+                    {
+                      "span": {
+                        "id": "<span-14>",
+                        "traceId": "<trace-1>",
+                        "name": "workflow step: 'identify-issue'",
+                        "type": "workflow_step",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-8>",
+                        "entityType": "workflow_step",
+                        "entityId": "identify-issue",
+                        "attributes": {
+                          "status": "success"
+                        },
+                        "input": {
+                          "category": "financial",
+                          "issue": "Parsed: Issue about money tr",
+                          "entities": ["user@example.com", "Account #12345"]
+                        },
+                        "output": {
+                          "category": "financial",
+                          "issue": "Parsed: Issue about money tr",
+                          "entities": ["user@example.com", "Account #12345"],
+                          "issueId": "ISSUE-001"
+                        }
+                      }
+                    },
+                    {
+                      "span": {
+                        "id": "<span-15>",
+                        "traceId": "<trace-1>",
+                        "name": "conditional: '2 conditions'",
+                        "type": "workflow_conditional",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-8>",
+                        "entityType": "workflow_run",
+                        "entityId": "issue-processing-workflow",
+                        "attributes": {
+                          "conditionCount": 2,
+                          "truthyIndexes": [1],
+                          "selectedSteps": ["financial-agent-workflow"]
+                        },
+                        "input": {
+                          "category": "financial",
+                          "issue": "Parsed: Issue about money tr",
+                          "entities": ["user@example.com", "Account #12345"],
+                          "issueId": "ISSUE-001"
+                        },
+                        "output": {
+                          "financial-agent-workflow": {
+                            "result": "Financial issue processed: validated=true",
+                            "recommendation": "Review with finance team"
+                          }
+                        }
+                      },
+                      "children": [
+                        {
+                          "span": {
+                            "id": "<span-16>",
+                            "traceId": "<trace-1>",
+                            "name": "condition '0'",
+                            "type": "workflow_conditional_eval",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-15>",
+                            "entityType": "workflow_run",
+                            "entityId": "issue-processing-workflow",
+                            "attributes": {
+                              "conditionIndex": 0,
+                              "result": false
+                            },
+                            "input": {
+                              "category": "financial",
+                              "issue": "Parsed: Issue about money tr",
+                              "entities": ["user@example.com", "Account #12345"],
+                              "issueId": "ISSUE-001"
+                            },
+                            "output": false
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-17>",
+                            "traceId": "<trace-1>",
+                            "name": "condition '1'",
+                            "type": "workflow_conditional_eval",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-15>",
+                            "entityType": "workflow_run",
+                            "entityId": "issue-processing-workflow",
+                            "attributes": {
+                              "conditionIndex": 1,
+                              "result": true
+                            },
+                            "input": {
+                              "category": "financial",
+                              "issue": "Parsed: Issue about money tr",
+                              "entities": ["user@example.com", "Account #12345"],
+                              "issueId": "ISSUE-001"
+                            },
+                            "output": true
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-18>",
+                            "traceId": "<trace-1>",
+                            "name": "workflow step: 'financial-agent-workflow'",
+                            "type": "workflow_step",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-15>",
+                            "entityType": "workflow_step",
+                            "entityId": "financial-agent-workflow",
+                            "attributes": {
+                              "status": "success"
+                            },
+                            "input": {
+                              "category": "financial",
+                              "issue": "Parsed: Issue about money tr",
+                              "entities": ["user@example.com", "Account #12345"]
+                            },
+                            "output": {
+                              "result": "Financial issue processed: validated=true",
+                              "recommendation": "Review with finance team"
+                            }
+                          },
+                          "children": [
+                            {
+                              "span": {
+                                "id": "<span-19>",
+                                "traceId": "<trace-1>",
+                                "name": "workflow run: 'financial-agent-workflow'",
+                                "type": "workflow_run",
+                                "completed": true,
+                                "isEvent": false,
+                                "isRootSpan": false,
+                                "parentId": "<span-18>",
+                                "entityType": "workflow_run",
+                                "entityId": "financial-agent-workflow",
+                                "attributes": {
+                                  "status": "success"
+                                },
+                                "metadata": {
+                                  "runId": "<runId-1>"
+                                },
+                                "input": {
+                                  "category": "financial",
+                                  "issue": "Parsed: Issue about money tr",
+                                  "entities": ["user@example.com", "Account #12345"]
+                                },
+                                "output": {
+                                  "result": "Financial issue processed: validated=true",
+                                  "recommendation": "Review with finance team"
+                                }
+                              },
+                              "children": [
+                                {
+                                  "span": {
+                                    "id": "<span-20>",
+                                    "traceId": "<trace-1>",
+                                    "name": "workflow step: 'financial-validation'",
+                                    "type": "workflow_step",
+                                    "completed": true,
+                                    "isEvent": false,
+                                    "isRootSpan": false,
+                                    "parentId": "<span-19>",
+                                    "entityType": "workflow_step",
+                                    "entityId": "financial-validation",
+                                    "attributes": {
+                                      "status": "success"
+                                    },
+                                    "input": {
+                                      "category": "financial",
+                                      "issue": "Parsed: Issue about money tr",
+                                      "entities": ["user@example.com", "Account #12345"]
+                                    },
+                                    "output": {
+                                      "validated": true,
+                                      "category": "financial"
+                                    }
+                                  }
+                                },
+                                {
+                                  "span": {
+                                    "id": "<span-21>",
+                                    "traceId": "<trace-1>",
+                                    "name": "workflow step: 'financial-processing'",
+                                    "type": "workflow_step",
+                                    "completed": true,
+                                    "isEvent": false,
+                                    "isRootSpan": false,
+                                    "parentId": "<span-19>",
+                                    "entityType": "workflow_step",
+                                    "entityId": "financial-processing",
+                                    "attributes": {
+                                      "status": "success"
+                                    },
+                                    "input": {
+                                      "validated": true,
+                                      "category": "financial"
+                                    },
+                                    "output": {
+                                      "result": "Financial issue processed: validated=true",
+                                      "recommendation": "Review with finance team"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

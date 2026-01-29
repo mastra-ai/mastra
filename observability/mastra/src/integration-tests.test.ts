@@ -567,6 +567,238 @@ describe('Tracing Integration Tests', () => {
     await testExporter.assertMatchesSnapshot('workflow-branching-trace.json');
   });
 
+  it('should trace deeply nested workflows (3+ levels) with parallel steps', async () => {
+    // This test replicates the Discord user scenario where:
+    // 1. Main workflow (inboundEmailWorkflow) has initial steps then branches to sub-workflows
+    // 2. Sub-workflow (issueProcessingWorkflow) has parallel steps, regular steps, then branches to more sub-workflows
+    // 3. Specialty workflows (complaintAgentWorkflow, etc.) have their own steps
+    // User reports that sub-workflow steps are not visible in traces
+
+    // ============ LEVEL 3: Specialty Agent Workflows ============
+    // These are the deepest level - called by the processing workflow
+
+    const complaintStep1 = createStep({
+      id: 'complaint-analysis',
+      inputSchema: z.object({ category: z.string(), issue: z.string(), entities: z.array(z.string()) }),
+      outputSchema: z.object({ severity: z.string(), category: z.string() }),
+      execute: async ({ inputData }) => ({
+        severity: 'high',
+        category: inputData.category,
+      }),
+    });
+
+    const complaintStep2 = createStep({
+      id: 'complaint-response',
+      inputSchema: z.object({ severity: z.string(), category: z.string() }),
+      outputSchema: z.object({ result: z.string(), recommendation: z.string() }),
+      execute: async ({ inputData }) => ({
+        result: `Complaint handled: ${inputData.severity} severity`,
+        recommendation: 'Escalate to manager',
+      }),
+    });
+
+    const complaintWorkflow = createWorkflow({
+      id: 'complaint-agent-workflow',
+      inputSchema: z.object({ category: z.string(), issue: z.string(), entities: z.array(z.string()) }),
+      outputSchema: z.object({ result: z.string(), recommendation: z.string() }),
+      steps: [complaintStep1, complaintStep2],
+    })
+      .then(complaintStep1)
+      .then(complaintStep2)
+      .commit();
+
+    const financialStep1 = createStep({
+      id: 'financial-validation',
+      inputSchema: z.object({ category: z.string(), issue: z.string(), entities: z.array(z.string()) }),
+      outputSchema: z.object({ validated: z.boolean(), category: z.string() }),
+      execute: async ({ inputData }) => ({
+        validated: true,
+        category: inputData.category,
+      }),
+    });
+
+    const financialStep2 = createStep({
+      id: 'financial-processing',
+      inputSchema: z.object({ validated: z.boolean(), category: z.string() }),
+      outputSchema: z.object({ result: z.string(), recommendation: z.string() }),
+      execute: async ({ inputData }) => ({
+        result: `Financial issue processed: validated=${inputData.validated}`,
+        recommendation: 'Review with finance team',
+      }),
+    });
+
+    const financialWorkflow = createWorkflow({
+      id: 'financial-agent-workflow',
+      inputSchema: z.object({ category: z.string(), issue: z.string(), entities: z.array(z.string()) }),
+      outputSchema: z.object({ result: z.string(), recommendation: z.string() }),
+      steps: [financialStep1, financialStep2],
+    })
+      .then(financialStep1)
+      .then(financialStep2)
+      .commit();
+
+    // ============ LEVEL 2: Issue Processing Workflow ============
+    // This workflow has: parallel steps -> regular steps -> branches to specialty workflows
+
+    // Parallel processing steps (like parseThread, analyseEmail, identifyEntities)
+    const parseDataStep = createStep({
+      id: 'parse-data',
+      inputSchema: z.object({ content: z.string(), isMalicious: z.boolean() }),
+      outputSchema: z.object({ parsed: z.string() }),
+      execute: async ({ inputData }) => ({
+        parsed: `Parsed: ${inputData.content.substring(0, 20)}`,
+      }),
+    });
+
+    const analyzeContentStep = createStep({
+      id: 'analyze-content',
+      inputSchema: z.object({ content: z.string(), isMalicious: z.boolean() }),
+      outputSchema: z.object({ category: z.string() }),
+      execute: async ({ inputData }) => ({
+        // Determine category based on content
+        category: inputData.content.includes('money') ? 'financial' : 'complaint',
+      }),
+    });
+
+    const identifyEntitiesStep = createStep({
+      id: 'identify-entities',
+      inputSchema: z.object({ content: z.string(), isMalicious: z.boolean() }),
+      outputSchema: z.object({ entities: z.array(z.string()) }),
+      execute: async () => ({
+        entities: ['user@example.com', 'Account #12345'],
+      }),
+    });
+
+    // Merge parallel results step
+    const mergeResultsStep = createStep({
+      id: 'merge-parallel-results',
+      inputSchema: z.object({
+        'parse-data': z.object({ parsed: z.string() }),
+        'analyze-content': z.object({ category: z.string() }),
+        'identify-entities': z.object({ entities: z.array(z.string()) }),
+      }),
+      outputSchema: z.object({ category: z.string(), issue: z.string(), entities: z.array(z.string()) }),
+      execute: async ({ inputData }) => ({
+        category: inputData['analyze-content'].category,
+        issue: inputData['parse-data'].parsed,
+        entities: inputData['identify-entities'].entities,
+      }),
+    });
+
+    // Identify issue step
+    const identifyIssueStep = createStep({
+      id: 'identify-issue',
+      inputSchema: z.object({ category: z.string(), issue: z.string(), entities: z.array(z.string()) }),
+      outputSchema: z.object({
+        category: z.string(),
+        issue: z.string(),
+        entities: z.array(z.string()),
+        issueId: z.string(),
+      }),
+      execute: async ({ inputData }) => ({
+        ...inputData,
+        issueId: 'ISSUE-001',
+      }),
+    });
+
+    const processingWorkflow = createWorkflow({
+      id: 'issue-processing-workflow',
+      inputSchema: z.object({ content: z.string(), isMalicious: z.boolean() }),
+      outputSchema: z.object({ result: z.string(), recommendation: z.string() }),
+      steps: [parseDataStep, analyzeContentStep, identifyEntitiesStep, mergeResultsStep, identifyIssueStep],
+    })
+      // Parallel processing (like the user's parseThread, analyseEmail, identifyEntities)
+      .parallel([parseDataStep, analyzeContentStep, identifyEntitiesStep])
+      // Merge and process
+      .then(mergeResultsStep)
+      .then(identifyIssueStep)
+      // Branch to specialty agent workflows (3rd level)
+      .branch([
+        [async ({ inputData }) => inputData.category === 'complaint', complaintWorkflow],
+        [async ({ inputData }) => inputData.category === 'financial', financialWorkflow],
+      ])
+      .commit();
+
+    // ============ LEVEL 1: Main Inbound Workflow ============
+    // Initial steps then branches to processing workflow or quarantine
+
+    const createRecordStep = createStep({
+      id: 'create-record',
+      inputSchema: z.object({ content: z.string() }),
+      outputSchema: z.object({ content: z.string(), recordId: z.string() }),
+      execute: async ({ inputData }) => ({
+        content: inputData.content,
+        recordId: 'REC-001',
+      }),
+    });
+
+    const securityCheckStep = createStep({
+      id: 'security-check',
+      inputSchema: z.object({ content: z.string(), recordId: z.string() }),
+      outputSchema: z.object({ content: z.string(), isMalicious: z.boolean() }),
+      execute: async ({ inputData }) => ({
+        content: inputData.content,
+        isMalicious: inputData.content.includes('malicious'),
+      }),
+    });
+
+    // Quarantine workflow (for malicious content)
+    const quarantineStep = createStep({
+      id: 'quarantine-content',
+      inputSchema: z.object({ content: z.string(), isMalicious: z.boolean() }),
+      outputSchema: z.object({ result: z.string(), recommendation: z.string() }),
+      execute: async () => ({
+        result: 'Content quarantined',
+        recommendation: 'Review by security team',
+      }),
+    });
+
+    const quarantineWorkflow = createWorkflow({
+      id: 'quarantine-workflow',
+      inputSchema: z.object({ content: z.string(), isMalicious: z.boolean() }),
+      outputSchema: z.object({ result: z.string(), recommendation: z.string() }),
+      steps: [quarantineStep],
+    })
+      .then(quarantineStep)
+      .commit();
+
+    const mainWorkflow = createWorkflow({
+      id: 'inbound-email-workflow',
+      inputSchema: z.object({ content: z.string() }),
+      outputSchema: z.object({ result: z.string(), recommendation: z.string() }),
+      steps: [createRecordStep, securityCheckStep],
+    })
+      .then(createRecordStep)
+      .then(securityCheckStep)
+      .branch([
+        [async ({ inputData }) => inputData.isMalicious === true, quarantineWorkflow],
+        [async ({ inputData }) => inputData.isMalicious === false, processingWorkflow],
+      ])
+      .commit();
+
+    const mastra = new Mastra({
+      ...getBaseMastraConfig(testExporter),
+      workflows: {
+        mainWorkflow,
+        processingWorkflow,
+        quarantineWorkflow,
+        complaintWorkflow,
+        financialWorkflow,
+      },
+    });
+
+    const workflow = mastra.getWorkflow('mainWorkflow');
+    const run = await workflow.createRun();
+    // Use "money" in content to trigger financial branch (3 levels deep)
+    const result = await run.start({ inputData: { content: 'Issue about money transfer problem' } });
+
+    expect(result.status).toBe('success');
+    expect(result.traceId).toBeDefined();
+
+    // Validate trace structure - ensures all 3 levels of sub-workflow steps are visible
+    await testExporter.assertMatchesSnapshot('workflow-branch-to-subworkflows-trace.json');
+  });
+
   it('should trace unregistered workflow used directly as step in workflow', async () => {
     // Create an unregistered workflow (not in Mastra registry)
     const unregisteredWorkflow = createSimpleWorkflow();
