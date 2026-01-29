@@ -126,7 +126,9 @@ export class ModelsDevGateway extends MastraModelGateway {
           gateway: `models.dev`,
           // Only store npm when it's a non-default SDK (not openai-compatible/gateway) to keep the registry small
           npm:
-            providerInfo.npm && providerInfo.npm !== '@ai-sdk/openai-compatible' && providerInfo.npm !== '@ai-sdk/gateway'
+            providerInfo.npm &&
+            providerInfo.npm !== '@ai-sdk/openai-compatible' &&
+            providerInfo.npm !== '@ai-sdk/gateway'
               ? providerInfo.npm
               : undefined,
         };
