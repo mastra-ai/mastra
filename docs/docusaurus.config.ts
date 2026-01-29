@@ -81,6 +81,16 @@ const config: Config = {
         remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
       },
     ],
+    [
+      require.resolve('./src/plugins/docusaurus-plugin-llms-txt'),
+      {
+        siteUrl: 'https://mastra.ai',
+        siteTitle: 'Mastra',
+        siteDescription:
+          'Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server.',
+        excludeRoutes: ['/404', '/search'],
+      },
+    ],
   ],
   presets: [
     [
