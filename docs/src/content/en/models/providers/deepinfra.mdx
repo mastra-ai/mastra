@@ -35,12 +35,6 @@ for await (const chunk of stream) {
 }
 ```
 
-:::info
-
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Deep Infra documentation](https://deepinfra.com/models) for details.
-
-:::
-
 ## Models
 
 <ProviderModelsTable
@@ -142,18 +136,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "deepinfra/zai-org/GLM-4.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": 0.6,
-    "outputCost": 2.2
-  },
-  {
     "model": "deepinfra/zai-org/GLM-4.7",
     "imageInput": false,
     "audioInput": false,
@@ -177,7 +159,6 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.deepinfra.com/v1/openai",
     id: "deepinfra/MiniMaxAI/MiniMax-M2",
     apiKey: process.env.DEEPINFRA_API_KEY,
     headers: {
