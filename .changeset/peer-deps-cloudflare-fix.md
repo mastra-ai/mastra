@@ -22,3 +22,8 @@ Fix peer dependency compatibility issues:
   - `mastra.getStoredAgentById()` - check before calling in agent lookup
   - `mastra.listStoredAgents()` - check before calling in agent list and scorers
   - `agentsStore.getAgentByIdResolved()` - fall back to `getAgentById()` if not available
+  - `mastra.clearStoredAgentCache()` - check before calling in stored agent update/delete
+
+- Add `assertVersioningSupported()` helper to agent version routes that returns a 501 Not Implemented error with helpful message if versioning methods don't exist on the agents store.
+
+- Add graceful degradation in `handleAutoVersioning()` to skip versioning entirely when core version doesn't support versioning methods.
