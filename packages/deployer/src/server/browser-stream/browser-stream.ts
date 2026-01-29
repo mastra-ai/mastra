@@ -1,6 +1,7 @@
 import { createNodeWebSocket } from '@hono/node-ws';
 import type { Env, Hono, Schema } from 'hono';
 
+import { handleInputMessage } from './input-handler.js';
 import type { BrowserStreamConfig } from './types.js';
 import { ViewerRegistry } from './viewer-registry.js';
 
@@ -51,8 +52,11 @@ export function setupBrowserStream<E extends Env, S extends Schema, B extends st
           void registry.addViewer(agentId, ws, config.getToolset);
         },
 
-        onMessage(_event, _ws) {
-          // Future: handle input events for Phase 10+ (mouse/keyboard injection)
+        onMessage(event, _ws) {
+          const data = typeof event.data === 'string' ? event.data : null;
+          if (data) {
+            handleInputMessage(data, config.getToolset, agentId);
+          }
         },
 
         onClose(_event, ws) {
