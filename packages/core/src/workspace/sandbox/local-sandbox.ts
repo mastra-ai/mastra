@@ -73,12 +73,18 @@ function execWithStreaming(
       reject(err);
     });
 
-    proc.on('close', code => {
+    proc.on('close', (code, signal) => {
       if (timeoutId) clearTimeout(timeoutId);
       if (killed) {
         resolve({ stdout, stderr: stderr + '\nProcess timed out', exitCode: 124 });
       } else {
-        resolve({ stdout, stderr, exitCode: code ?? 0 });
+        // When terminated by signal, code is null but signal contains the signal name
+        const exitCode = code ?? (signal ? 128 : 0);
+        resolve({
+          stdout,
+          stderr: signal ? `${stderr}\nProcess terminated by ${signal}` : stderr,
+          exitCode,
+        });
       }
     });
   });

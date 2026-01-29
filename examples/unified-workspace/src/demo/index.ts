@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env -S npx tsx
 /**
  * Unified Workspace Demo
  *
@@ -360,7 +360,7 @@ async function main() {
     await demos[demoType]();
   } else {
     console.error(`Unknown demo type: ${demoType}`);
-    console.error('Available: filesystem, skills, workspace, agents, safety, all');
+    console.error('Available: filesystem, skills, workspace, agents, safety, dynamic, all');
     process.exit(1);
   }
 

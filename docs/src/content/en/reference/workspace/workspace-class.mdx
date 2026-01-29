@@ -109,6 +109,8 @@ const workspace = new Workspace({
 The `tools` option accepts a `WorkspaceToolsConfig` object that controls which workspace tools are enabled and their safety settings.
 
 ```typescript
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
 tools: {
   // Global defaults (apply to all tools)
   enabled: true,

@@ -490,8 +490,13 @@ Examples:
               size: stat.size,
               modifiedAt: stat.modifiedAt.toISOString(),
             };
-          } catch {
-            return { exists: false, type: 'none' as const };
+          } catch (error) {
+            // FileNotFoundError indicates the path doesn't exist
+            // Other errors (permissions, I/O) are propagated
+            if (error instanceof FileNotFoundError) {
+              return { exists: false, type: 'none' as const };
+            }
+            throw error;
           }
         },
       });

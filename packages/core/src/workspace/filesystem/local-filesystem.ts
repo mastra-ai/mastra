@@ -342,16 +342,15 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     await this.assertPathContained(destPath);
 
     try {
-      if (options?.overwrite === false) {
-        try {
-          await fs.access(destPath);
-          throw new FileExistsError(dest);
-        } catch (error: unknown) {
-          if (error instanceof FileExistsError) throw error;
-        }
-      }
-
       await fs.mkdir(nodePath.dirname(destPath), { recursive: true });
+
+      // When overwrite: false, use copy+delete to avoid TOCTOU race condition.
+      // copyFile uses COPYFILE_EXCL which atomically checks and writes.
+      if (options?.overwrite === false) {
+        await this.copyFile(src, dest, { ...options, overwrite: false });
+        await fs.rm(srcPath, { recursive: true, force: true });
+        return;
+      }
 
       try {
         await fs.rename(srcPath, destPath);
