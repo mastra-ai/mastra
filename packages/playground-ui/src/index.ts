@@ -29,6 +29,7 @@ export * from './ds/components/AlertDialog';
 export * from './ds/components/Checkbox';
 export * from './ds/components/Collapsible';
 export * from './ds/components/Combobox';
+export * from './ds/components/Command';
 export * from './ds/components/CopyButton';
 export * from './ds/components/Dialog';
 export * from './ds/components/Entry';
@@ -47,6 +48,7 @@ export * from './ds/components/Slider';
 export * from './ds/components/Spinner';
 export * from './ds/components/Switch';
 export * from './ds/components/Tooltip';
+export * from './ds/components/Truncate';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';
@@ -91,5 +93,7 @@ export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
 export * from './lib/toast';
 export * from './domains/configuration/index';
+export * from './domains/request-context/index';
 export * from './lib/mastra-platform';
 export * from './lib/experimental-features';
+export * from './lib/command';

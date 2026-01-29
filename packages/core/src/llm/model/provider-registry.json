@@ -19,7 +19,8 @@
         "kimi-k2-0905-preview",
         "kimi-k2-thinking",
         "kimi-k2-thinking-turbo",
-        "kimi-k2-turbo-preview"
+        "kimi-k2-turbo-preview",
+        "kimi-k2.5"
       ],
       "docUrl": "https://platform.moonshot.cn/docs/api/chat",
       "gateway": "models.dev"
@@ -72,9 +73,84 @@
         "kimi-k2-0905-preview",
         "kimi-k2-thinking",
         "kimi-k2-thinking-turbo",
-        "kimi-k2-turbo-preview"
+        "kimi-k2-turbo-preview",
+        "kimi-k2.5"
       ],
       "docUrl": "https://platform.moonshot.ai/docs/api/chat",
+      "gateway": "models.dev"
+    },
+    "302ai": {
+      "url": "https://api.302.ai/v1",
+      "apiKeyEnvVar": "302AI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "302.AI",
+      "models": [
+        "MiniMax-M1",
+        "MiniMax-M2",
+        "MiniMax-M2.1",
+        "chatgpt-4o-latest",
+        "claude-haiku-4-5-20251001",
+        "claude-opus-4-1-20250805",
+        "claude-opus-4-1-20250805-thinking",
+        "claude-opus-4-5-20251101",
+        "claude-opus-4-5-20251101-thinking",
+        "claude-sonnet-4-5-20250929",
+        "claude-sonnet-4-5-20250929-thinking",
+        "deepseek-chat",
+        "deepseek-reasoner",
+        "deepseek-v3.2",
+        "deepseek-v3.2-thinking",
+        "doubao-seed-1-6-thinking-250715",
+        "doubao-seed-1-6-vision-250815",
+        "doubao-seed-1-8-251215",
+        "doubao-seed-code-preview-251028",
+        "gemini-2.0-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-image",
+        "gemini-2.5-flash-lite-preview-09-2025",
+        "gemini-2.5-flash-nothink",
+        "gemini-2.5-flash-preview-09-2025",
+        "gemini-2.5-pro",
+        "gemini-3-flash-preview",
+        "gemini-3-pro-image-preview",
+        "gemini-3-pro-preview",
+        "glm-4.5",
+        "glm-4.5v",
+        "glm-4.6",
+        "glm-4.6v",
+        "glm-4.7",
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+        "gpt-4o",
+        "gpt-5",
+        "gpt-5-mini",
+        "gpt-5-pro",
+        "gpt-5-thinking",
+        "gpt-5.1",
+        "gpt-5.1-chat-latest",
+        "gpt-5.2",
+        "gpt-5.2-chat-latest",
+        "grok-4-1-fast-non-reasoning",
+        "grok-4-1-fast-reasoning",
+        "grok-4-fast-non-reasoning",
+        "grok-4-fast-reasoning",
+        "grok-4.1",
+        "kimi-k2-0905-preview",
+        "kimi-k2-thinking",
+        "kimi-k2-thinking-turbo",
+        "ministral-14b-2512",
+        "mistral-large-2512",
+        "qwen-flash",
+        "qwen-max-latest",
+        "qwen-plus",
+        "qwen3-235b-a22b",
+        "qwen3-235b-a22b-instruct-2507",
+        "qwen3-30b-a3b",
+        "qwen3-coder-480b-a35b-instruct",
+        "qwen3-max-2025-09-23"
+      ],
+      "docUrl": "https://doc.302.ai",
       "gateway": "models.dev"
     },
     "zai-coding-plan": {
@@ -116,6 +192,7 @@
         "gpt-oss:120b",
         "gpt-oss:20b",
         "kimi-k2-thinking",
+        "kimi-k2.5",
         "kimi-k2:1t",
         "minimax-m2",
         "minimax-m2.1",
@@ -219,7 +296,8 @@
         "grok-vision-beta"
       ],
       "docUrl": "https://docs.x.ai/docs/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/xai"
     },
     "vultr": {
       "url": "https://api.vultrinference.com/v1",
@@ -288,6 +366,7 @@
         "moonshotai/kimi-k2-instruct",
         "moonshotai/kimi-k2-instruct-0905",
         "moonshotai/kimi-k2-thinking",
+        "moonshotai/kimi-k2.5",
         "nvidia/cosmos-nemotron-34b",
         "nvidia/llama-3.1-nemotron-51b-instruct",
         "nvidia/llama-3.1-nemotron-70b-instruct",
@@ -310,6 +389,7 @@
         "qwen/qwen3-next-80b-a3b-instruct",
         "qwen/qwen3-next-80b-a3b-thinking",
         "qwen/qwq-32b",
+        "z-ai/glm-4.7",
         "z-ai/glm4.7"
       ],
       "docUrl": "https://docs.api.nvidia.com/nim/",
@@ -341,7 +421,8 @@
         "qwen/qwen3-32b"
       ],
       "docUrl": "https://console.groq.com/docs/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/groq"
     },
     "bailing": {
       "url": "https://api.tbox.cn/api/llm/v1/chat/completions",
@@ -385,7 +466,8 @@
         "pixtral-large-latest"
       ],
       "docUrl": "https://docs.mistral.ai/getting-started/models/",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/mistral"
     },
     "abacus": {
       "url": "https://routellm.abacus.ai/v1",
@@ -565,6 +647,7 @@
         "moonshotai/kimi-k2-thinking",
         "moonshotai/kimi-k2-thinking-turbo",
         "moonshotai/kimi-k2-turbo",
+        "moonshotai/kimi-k2.5",
         "morph/morph-v3-fast",
         "morph/morph-v3-large",
         "nvidia/nemotron-3-nano-30b-a3b",
@@ -792,6 +875,7 @@
         "moonshotai/kimi-k2-0905",
         "moonshotai/kimi-k2-instruct",
         "moonshotai/kimi-k2-thinking",
+        "moonshotai/kimi-k2.5",
         "nousresearch/hermes-2-pro-llama-3-8b",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
@@ -831,7 +915,8 @@
         "zai-org/glm-4.5v",
         "zai-org/glm-4.6",
         "zai-org/glm-4.6v",
-        "zai-org/glm-4.7"
+        "zai-org/glm-4.7",
+        "zai-org/glm-4.7-flash"
       ],
       "docUrl": "https://novita.ai/docs/guides/introduction",
       "gateway": "models.dev"
@@ -931,7 +1016,8 @@
         "gpt-5.2-codex"
       ],
       "docUrl": "https://docs.vivgrid.com/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/openai"
     },
     "chutes": {
       "url": "https://llm.chutes.ai/v1",
@@ -974,10 +1060,10 @@
         "deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
         "deepseek-ai/DeepSeek-V3.2-TEE",
         "miromind-ai/MiroThinker-v1.5-235B",
-        "mistralai/Devstral-2-123B-Instruct-2512",
         "mistralai/Devstral-2-123B-Instruct-2512-TEE",
         "moonshotai/Kimi-K2-Instruct-0905",
         "moonshotai/Kimi-K2-Thinking-TEE",
+        "moonshotai/Kimi-K2.5-TEE",
         "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
         "openai/gpt-oss-120b-TEE",
         "openai/gpt-oss-20b",
@@ -985,15 +1071,21 @@
         "tngtech/DeepSeek-R1T-Chimera",
         "tngtech/DeepSeek-TNG-R1T2-Chimera",
         "tngtech/TNG-R1T-Chimera-TEE",
+        "tngtech/TNG-R1T-Chimera-Turbo",
+        "unsloth/Llama-3.2-1B-Instruct",
         "unsloth/Mistral-Nemo-Instruct-2407",
         "unsloth/Mistral-Small-24B-Instruct-2501",
         "unsloth/gemma-3-12b-it",
         "unsloth/gemma-3-27b-it",
         "unsloth/gemma-3-4b-it",
         "zai-org/GLM-4.5-Air",
+        "zai-org/GLM-4.5-FP8",
         "zai-org/GLM-4.5-TEE",
+        "zai-org/GLM-4.6-FP8",
         "zai-org/GLM-4.6-TEE",
         "zai-org/GLM-4.6V",
+        "zai-org/GLM-4.7-FP8",
+        "zai-org/GLM-4.7-Flash",
         "zai-org/GLM-4.7-TEE"
       ],
       "docUrl": "https://llm.chutes.ai/v1/models",
@@ -1004,9 +1096,10 @@
       "apiKeyEnvVar": "KIMI_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Kimi For Coding",
-      "models": ["kimi-k2-thinking"],
+      "models": ["k2p5", "kimi-k2-thinking"],
       "docUrl": "https://www.kimi.com/coding/docs/en/third-party-agents.html",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "cortecs": {
       "url": "https://api.cortecs.ai/v1",
@@ -1100,24 +1193,29 @@
       "gateway": "models.dev"
     },
     "togetherai": {
-      "url": "https://api.together.xyz/v1",
       "apiKeyEnvVar": "TOGETHER_API_KEY",
-      "apiKeyHeader": "Authorization",
       "name": "Together AI",
       "models": [
+        "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
         "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+        "Qwen/Qwen3-Next-80B-A3B-Instruct",
         "deepseek-ai/DeepSeek-R1",
         "deepseek-ai/DeepSeek-V3",
         "deepseek-ai/DeepSeek-V3-1",
         "essentialai/Rnj-1-Instruct",
         "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "moonshotai/Kimi-K2-5",
         "moonshotai/Kimi-K2-Instruct",
+        "moonshotai/Kimi-K2-Instruct-0905",
         "moonshotai/Kimi-K2-Thinking",
+        "moonshotai/Kimi-K2.5",
         "openai/gpt-oss-120b",
-        "zai-org/GLM-4.6"
+        "zai-org/GLM-4.6",
+        "zai-org/GLM-4.7"
       ],
       "docUrl": "https://docs.together.ai/docs/serverless-models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/togetherai"
     },
     "baseten": {
       "url": "https://inference.baseten.co/v1",
@@ -1348,6 +1446,7 @@
         "moonshotai/Kimi-K2-Instruct",
         "moonshotai/Kimi-K2-Instruct-0905",
         "moonshotai/Kimi-K2-Thinking",
+        "moonshotai/Kimi-K2.5",
         "zai-org/GLM-4.7",
         "zai-org/GLM-4.7-Flash"
       ],
@@ -1382,6 +1481,8 @@
         "gpt-5.2-codex",
         "kimi-k2",
         "kimi-k2-thinking",
+        "kimi-k2.5",
+        "minimax-m2.1",
         "qwen3-coder"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
@@ -1418,7 +1519,8 @@
       "name": "MiniMax (minimax.io)",
       "models": ["MiniMax-M2", "MiniMax-M2.1"],
       "docUrl": "https://platform.minimax.io/docs/guides/quickstart",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "google": {
       "apiKeyEnvVar": "GOOGLE_GENERATIVE_AI_API_KEY",
@@ -1452,7 +1554,8 @@
         "gemini-live-2.5-flash-preview-native-audio"
       ],
       "docUrl": "https://ai.google.dev/gemini-api/docs/pricing",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/google"
     },
     "inception": {
       "url": "https://api.inceptionlabs.ai/v1/",
@@ -1603,7 +1706,8 @@
         "text-embedding-ada-002"
       ],
       "docUrl": "https://platform.openai.com/docs/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/openai"
     },
     "zhipuai-coding-plan": {
       "url": "https://open.bigmodel.cn/api/coding/paas/v4",
@@ -1630,14 +1734,16 @@
       "name": "MiniMax (minimaxi.com)",
       "models": ["MiniMax-M2", "MiniMax-M2.1"],
       "docUrl": "https://platform.minimaxi.com/docs/guides/quickstart",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "perplexity": {
       "apiKeyEnvVar": "PERPLEXITY_API_KEY",
       "name": "Perplexity",
       "models": ["sonar", "sonar-pro", "sonar-reasoning-pro"],
       "docUrl": "https://docs.perplexity.ai",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/perplexity"
     },
     "openrouter": {
       "url": "https://openrouter.ai/api/v1",
@@ -1652,6 +1758,8 @@
         "anthropic/claude-opus-4.5",
         "anthropic/claude-sonnet-4",
         "anthropic/claude-sonnet-4.5",
+        "arcee-ai/trinity-large-preview:free",
+        "arcee-ai/trinity-mini:free",
         "cognitivecomputations/dolphin3.0-mistral-24b",
         "cognitivecomputations/dolphin3.0-r1-mistral-24b",
         "deepseek/deepseek-chat-v3-0324",
@@ -1681,6 +1789,7 @@
         "google/gemma-2-9b-it:free",
         "google/gemma-3-12b-it",
         "google/gemma-3-27b-it",
+        "google/gemma-3-27b-it:free",
         "google/gemma-3n-e4b-it",
         "google/gemma-3n-e4b-it:free",
         "kwaipilot/kat-coder-pro:free",
@@ -1711,6 +1820,7 @@
         "moonshotai/kimi-k2-0905",
         "moonshotai/kimi-k2-0905:exacto",
         "moonshotai/kimi-k2-thinking",
+        "moonshotai/kimi-k2.5",
         "moonshotai/kimi-k2:free",
         "nousresearch/deephermes-3-llama-3-8b-preview",
         "nousresearch/hermes-4-405b",
@@ -1856,7 +1966,8 @@
       "name": "MiniMax Coding Plan (minimax.io)",
       "models": ["MiniMax-M2", "MiniMax-M2.1"],
       "docUrl": "https://platform.minimax.io/docs/coding-plan/intro",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "ovhcloud": {
       "url": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
@@ -1932,6 +2043,7 @@
         "hf:meta-llama/Llama-4-Scout-17B-16E-Instruct",
         "hf:moonshotai/Kimi-K2-Instruct-0905",
         "hf:moonshotai/Kimi-K2-Thinking",
+        "hf:moonshotai/Kimi-K2.5",
         "hf:openai/gpt-oss-120b",
         "hf:zai-org/GLM-4.5",
         "hf:zai-org/GLM-4.6",
@@ -1941,9 +2053,7 @@
       "gateway": "models.dev"
     },
     "deepinfra": {
-      "url": "https://api.deepinfra.com/v1/openai",
       "apiKeyEnvVar": "DEEPINFRA_API_KEY",
-      "apiKeyHeader": "Authorization",
       "name": "Deep Infra",
       "models": [
         "MiniMaxAI/MiniMax-M2",
@@ -1957,7 +2067,8 @@
         "zai-org/GLM-4.7"
       ],
       "docUrl": "https://deepinfra.com/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/deepinfra"
     },
     "zhipuai": {
       "url": "https://open.bigmodel.cn/api/paas/v4",
@@ -1971,7 +2082,6 @@
         "glm-4.5v",
         "glm-4.6",
         "glm-4.6v",
-        "glm-4.6v-flash",
         "glm-4.7",
         "glm-4.7-flash"
       ],
@@ -2033,7 +2143,16 @@
       "apiKeyEnvVar": "ZHIPU_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Z.AI",
-      "models": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6", "glm-4.6v", "glm-4.7"],
+      "models": [
+        "glm-4.5",
+        "glm-4.5-air",
+        "glm-4.5-flash",
+        "glm-4.5v",
+        "glm-4.6",
+        "glm-4.6v",
+        "glm-4.7",
+        "glm-4.7-flash"
+      ],
       "docUrl": "https://docs.z.ai/guides/overview/pricing",
       "gateway": "models.dev"
     },
@@ -2152,7 +2271,8 @@
         "claude-sonnet-4-5-20250929"
       ],
       "docUrl": "https://docs.anthropic.com/en/docs/about-claude/models",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "aihubmix": {
       "url": "https://aihubmix.com/v1",
@@ -2165,15 +2285,16 @@
         "claude-opus-4-1",
         "claude-opus-4-5",
         "claude-sonnet-4-5",
+        "coding-glm-4.7",
         "coding-glm-4.7-free",
         "coding-minimax-m2.1-free",
         "deepseek-v3.2",
         "deepseek-v3.2-fast",
-        "deepseek-v3.2-speciale",
         "deepseek-v3.2-think",
         "gemini-2.5-flash",
         "gemini-2.5-pro",
         "gemini-3-pro-preview",
+        "glm-4.6v",
         "glm-4.7",
         "gpt-4.1",
         "gpt-4.1-mini",
@@ -2189,11 +2310,13 @@
         "gpt-5.1-codex-max",
         "gpt-5.1-codex-mini",
         "gpt-5.2",
+        "kimi-k2.5",
         "minimax-m2.1",
         "o4-mini",
         "qwen3-235b-a22b-instruct-2507",
         "qwen3-235b-a22b-thinking-2507",
-        "qwen3-coder-480b-a35b-instruct"
+        "qwen3-coder-480b-a35b-instruct",
+        "qwen3-max-2026-01-23"
       ],
       "docUrl": "https://docs.aihubmix.com",
       "gateway": "models.dev"
@@ -2216,6 +2339,7 @@
         "accounts/fireworks/models/gpt-oss-20b",
         "accounts/fireworks/models/kimi-k2-instruct",
         "accounts/fireworks/models/kimi-k2-thinking",
+        "accounts/fireworks/models/kimi-k2p5",
         "accounts/fireworks/models/minimax-m2",
         "accounts/fireworks/models/minimax-m2p1",
         "accounts/fireworks/models/qwen3-235b-a22b",
@@ -2441,16 +2565,16 @@
       "name": "MiniMax Coding Plan (minimaxi.com)",
       "models": ["MiniMax-M2", "MiniMax-M2.1"],
       "docUrl": "https://platform.minimaxi.com/docs/coding-plan/intro",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "cerebras": {
-      "url": "https://api.cerebras.ai/v1",
       "apiKeyEnvVar": "CEREBRAS_API_KEY",
-      "apiKeyHeader": "Authorization",
       "name": "Cerebras",
       "models": ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7"],
       "docUrl": "https://inference-docs.cerebras.ai/models/overview",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/cerebras"
     },
     "netlify": {
       "apiKeyEnvVar": ["NETLIFY_TOKEN", "NETLIFY_SITE_ID"],
@@ -2478,7 +2602,6 @@
         "gemini/gemini-2.5-flash-image-preview",
         "gemini/gemini-2.5-flash-lite",
         "gemini/gemini-2.5-flash-lite-preview-09-2025",
-        "gemini/gemini-2.5-flash-preview-09-2025",
         "gemini/gemini-2.5-pro",
         "gemini/gemini-3-flash-preview",
         "gemini/gemini-3-pro-image-preview",
@@ -2522,7 +2645,8 @@
       "kimi-k2-0905-preview",
       "kimi-k2-thinking",
       "kimi-k2-thinking-turbo",
-      "kimi-k2-turbo-preview"
+      "kimi-k2-turbo-preview",
+      "kimi-k2.5"
     ],
     "firmware": [
       "cerebras-gpt-oss-120b",
@@ -2551,7 +2675,74 @@
       "kimi-k2-0905-preview",
       "kimi-k2-thinking",
       "kimi-k2-thinking-turbo",
-      "kimi-k2-turbo-preview"
+      "kimi-k2-turbo-preview",
+      "kimi-k2.5"
+    ],
+    "302ai": [
+      "MiniMax-M1",
+      "MiniMax-M2",
+      "MiniMax-M2.1",
+      "chatgpt-4o-latest",
+      "claude-haiku-4-5-20251001",
+      "claude-opus-4-1-20250805",
+      "claude-opus-4-1-20250805-thinking",
+      "claude-opus-4-5-20251101",
+      "claude-opus-4-5-20251101-thinking",
+      "claude-sonnet-4-5-20250929",
+      "claude-sonnet-4-5-20250929-thinking",
+      "deepseek-chat",
+      "deepseek-reasoner",
+      "deepseek-v3.2",
+      "deepseek-v3.2-thinking",
+      "doubao-seed-1-6-thinking-250715",
+      "doubao-seed-1-6-vision-250815",
+      "doubao-seed-1-8-251215",
+      "doubao-seed-code-preview-251028",
+      "gemini-2.0-flash-lite",
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-image",
+      "gemini-2.5-flash-lite-preview-09-2025",
+      "gemini-2.5-flash-nothink",
+      "gemini-2.5-flash-preview-09-2025",
+      "gemini-2.5-pro",
+      "gemini-3-flash-preview",
+      "gemini-3-pro-image-preview",
+      "gemini-3-pro-preview",
+      "glm-4.5",
+      "glm-4.5v",
+      "glm-4.6",
+      "glm-4.6v",
+      "glm-4.7",
+      "gpt-4.1",
+      "gpt-4.1-mini",
+      "gpt-4.1-nano",
+      "gpt-4o",
+      "gpt-5",
+      "gpt-5-mini",
+      "gpt-5-pro",
+      "gpt-5-thinking",
+      "gpt-5.1",
+      "gpt-5.1-chat-latest",
+      "gpt-5.2",
+      "gpt-5.2-chat-latest",
+      "grok-4-1-fast-non-reasoning",
+      "grok-4-1-fast-reasoning",
+      "grok-4-fast-non-reasoning",
+      "grok-4-fast-reasoning",
+      "grok-4.1",
+      "kimi-k2-0905-preview",
+      "kimi-k2-thinking",
+      "kimi-k2-thinking-turbo",
+      "ministral-14b-2512",
+      "mistral-large-2512",
+      "qwen-flash",
+      "qwen-max-latest",
+      "qwen-plus",
+      "qwen3-235b-a22b",
+      "qwen3-235b-a22b-instruct-2507",
+      "qwen3-30b-a3b",
+      "qwen3-coder-480b-a35b-instruct",
+      "qwen3-max-2025-09-23"
     ],
     "zai-coding-plan": [
       "glm-4.5",
@@ -2579,6 +2770,7 @@
       "gpt-oss:120b",
       "gpt-oss:20b",
       "kimi-k2-thinking",
+      "kimi-k2.5",
       "kimi-k2:1t",
       "minimax-m2",
       "minimax-m2.1",
@@ -2713,6 +2905,7 @@
       "moonshotai/kimi-k2-instruct",
       "moonshotai/kimi-k2-instruct-0905",
       "moonshotai/kimi-k2-thinking",
+      "moonshotai/kimi-k2.5",
       "nvidia/cosmos-nemotron-34b",
       "nvidia/llama-3.1-nemotron-51b-instruct",
       "nvidia/llama-3.1-nemotron-70b-instruct",
@@ -2735,6 +2928,7 @@
       "qwen/qwen3-next-80b-a3b-instruct",
       "qwen/qwen3-next-80b-a3b-thinking",
       "qwen/qwq-32b",
+      "z-ai/glm-4.7",
       "z-ai/glm4.7"
     ],
     "upstage": ["solar-mini", "solar-pro2", "solar-pro3"],
@@ -2943,6 +3137,7 @@
       "moonshotai/kimi-k2-thinking",
       "moonshotai/kimi-k2-thinking-turbo",
       "moonshotai/kimi-k2-turbo",
+      "moonshotai/kimi-k2.5",
       "morph/morph-v3-fast",
       "morph/morph-v3-large",
       "nvidia/nemotron-3-nano-30b-a3b",
@@ -3139,6 +3334,7 @@
       "moonshotai/kimi-k2-0905",
       "moonshotai/kimi-k2-instruct",
       "moonshotai/kimi-k2-thinking",
+      "moonshotai/kimi-k2.5",
       "nousresearch/hermes-2-pro-llama-3-8b",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
@@ -3178,7 +3374,8 @@
       "zai-org/glm-4.5v",
       "zai-org/glm-4.6",
       "zai-org/glm-4.6v",
-      "zai-org/glm-4.7"
+      "zai-org/glm-4.7",
+      "zai-org/glm-4.7-flash"
     ],
     "siliconflow-cn": [
       "ByteDance-Seed/Seed-OSS-36B-Instruct",
@@ -3297,10 +3494,10 @@
       "deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
       "deepseek-ai/DeepSeek-V3.2-TEE",
       "miromind-ai/MiroThinker-v1.5-235B",
-      "mistralai/Devstral-2-123B-Instruct-2512",
       "mistralai/Devstral-2-123B-Instruct-2512-TEE",
       "moonshotai/Kimi-K2-Instruct-0905",
       "moonshotai/Kimi-K2-Thinking-TEE",
+      "moonshotai/Kimi-K2.5-TEE",
       "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
       "openai/gpt-oss-120b-TEE",
       "openai/gpt-oss-20b",
@@ -3308,18 +3505,24 @@
       "tngtech/DeepSeek-R1T-Chimera",
       "tngtech/DeepSeek-TNG-R1T2-Chimera",
       "tngtech/TNG-R1T-Chimera-TEE",
+      "tngtech/TNG-R1T-Chimera-Turbo",
+      "unsloth/Llama-3.2-1B-Instruct",
       "unsloth/Mistral-Nemo-Instruct-2407",
       "unsloth/Mistral-Small-24B-Instruct-2501",
       "unsloth/gemma-3-12b-it",
       "unsloth/gemma-3-27b-it",
       "unsloth/gemma-3-4b-it",
       "zai-org/GLM-4.5-Air",
+      "zai-org/GLM-4.5-FP8",
       "zai-org/GLM-4.5-TEE",
+      "zai-org/GLM-4.6-FP8",
       "zai-org/GLM-4.6-TEE",
       "zai-org/GLM-4.6V",
+      "zai-org/GLM-4.7-FP8",
+      "zai-org/GLM-4.7-Flash",
       "zai-org/GLM-4.7-TEE"
     ],
-    "kimi-for-coding": ["kimi-k2-thinking"],
+    "kimi-for-coding": ["k2p5", "kimi-k2-thinking"],
     "cortecs": [
       "claude-4-5-sonnet",
       "claude-sonnet-4",
@@ -3396,16 +3599,22 @@
       "xai/grok-3-mini"
     ],
     "togetherai": [
+      "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+      "Qwen/Qwen3-Next-80B-A3B-Instruct",
       "deepseek-ai/DeepSeek-R1",
       "deepseek-ai/DeepSeek-V3",
       "deepseek-ai/DeepSeek-V3-1",
       "essentialai/Rnj-1-Instruct",
       "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "moonshotai/Kimi-K2-5",
       "moonshotai/Kimi-K2-Instruct",
+      "moonshotai/Kimi-K2-Instruct-0905",
       "moonshotai/Kimi-K2-Thinking",
+      "moonshotai/Kimi-K2.5",
       "openai/gpt-oss-120b",
-      "zai-org/GLM-4.6"
+      "zai-org/GLM-4.6",
+      "zai-org/GLM-4.7"
     ],
     "baseten": [
       "Qwen/Qwen3-Coder-480B-A35B-Instruct",
@@ -3599,6 +3808,7 @@
       "moonshotai/Kimi-K2-Instruct",
       "moonshotai/Kimi-K2-Instruct-0905",
       "moonshotai/Kimi-K2-Thinking",
+      "moonshotai/Kimi-K2.5",
       "zai-org/GLM-4.7",
       "zai-org/GLM-4.7-Flash"
     ],
@@ -3625,6 +3835,8 @@
       "gpt-5.2-codex",
       "kimi-k2",
       "kimi-k2-thinking",
+      "kimi-k2.5",
+      "minimax-m2.1",
       "qwen3-coder"
     ],
     "fastrouter": [
@@ -3814,6 +4026,8 @@
       "anthropic/claude-opus-4.5",
       "anthropic/claude-sonnet-4",
       "anthropic/claude-sonnet-4.5",
+      "arcee-ai/trinity-large-preview:free",
+      "arcee-ai/trinity-mini:free",
       "cognitivecomputations/dolphin3.0-mistral-24b",
       "cognitivecomputations/dolphin3.0-r1-mistral-24b",
       "deepseek/deepseek-chat-v3-0324",
@@ -3843,6 +4057,7 @@
       "google/gemma-2-9b-it:free",
       "google/gemma-3-12b-it",
       "google/gemma-3-27b-it",
+      "google/gemma-3-27b-it:free",
       "google/gemma-3n-e4b-it",
       "google/gemma-3n-e4b-it:free",
       "kwaipilot/kat-coder-pro:free",
@@ -3873,6 +4088,7 @@
       "moonshotai/kimi-k2-0905",
       "moonshotai/kimi-k2-0905:exacto",
       "moonshotai/kimi-k2-thinking",
+      "moonshotai/kimi-k2.5",
       "moonshotai/kimi-k2:free",
       "nousresearch/deephermes-3-llama-3-8b-preview",
       "nousresearch/hermes-4-405b",
@@ -4054,6 +4270,7 @@
       "hf:meta-llama/Llama-4-Scout-17B-16E-Instruct",
       "hf:moonshotai/Kimi-K2-Instruct-0905",
       "hf:moonshotai/Kimi-K2-Thinking",
+      "hf:moonshotai/Kimi-K2.5",
       "hf:openai/gpt-oss-120b",
       "hf:zai-org/GLM-4.5",
       "hf:zai-org/GLM-4.6",
@@ -4077,7 +4294,6 @@
       "glm-4.5v",
       "glm-4.6",
       "glm-4.6v",
-      "glm-4.6v-flash",
       "glm-4.7",
       "glm-4.7-flash"
     ],
@@ -4115,7 +4331,7 @@
       "zai-org/glm-4.7",
       "zai-org/glm-4.7:thinking"
     ],
-    "zai": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6", "glm-4.6v", "glm-4.7"],
+    "zai": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6", "glm-4.6v", "glm-4.7", "glm-4.7-flash"],
     "inference": [
       "google/gemma-3",
       "meta/llama-3.1-8b-instruct",
@@ -4193,15 +4409,16 @@
       "claude-opus-4-1",
       "claude-opus-4-5",
       "claude-sonnet-4-5",
+      "coding-glm-4.7",
       "coding-glm-4.7-free",
       "coding-minimax-m2.1-free",
       "deepseek-v3.2",
       "deepseek-v3.2-fast",
-      "deepseek-v3.2-speciale",
       "deepseek-v3.2-think",
       "gemini-2.5-flash",
       "gemini-2.5-pro",
       "gemini-3-pro-preview",
+      "glm-4.6v",
       "glm-4.7",
       "gpt-4.1",
       "gpt-4.1-mini",
@@ -4217,11 +4434,13 @@
       "gpt-5.1-codex-max",
       "gpt-5.1-codex-mini",
       "gpt-5.2",
+      "kimi-k2.5",
       "minimax-m2.1",
       "o4-mini",
       "qwen3-235b-a22b-instruct-2507",
       "qwen3-235b-a22b-thinking-2507",
-      "qwen3-coder-480b-a35b-instruct"
+      "qwen3-coder-480b-a35b-instruct",
+      "qwen3-max-2026-01-23"
     ],
     "fireworks-ai": [
       "accounts/fireworks/models/deepseek-r1-0528",
@@ -4236,6 +4455,7 @@
       "accounts/fireworks/models/gpt-oss-20b",
       "accounts/fireworks/models/kimi-k2-instruct",
       "accounts/fireworks/models/kimi-k2-thinking",
+      "accounts/fireworks/models/kimi-k2p5",
       "accounts/fireworks/models/minimax-m2",
       "accounts/fireworks/models/minimax-m2p1",
       "accounts/fireworks/models/qwen3-235b-a22b",
@@ -4434,7 +4654,6 @@
       "gemini/gemini-2.5-flash-image-preview",
       "gemini/gemini-2.5-flash-lite",
       "gemini/gemini-2.5-flash-lite-preview-09-2025",
-      "gemini/gemini-2.5-flash-preview-09-2025",
       "gemini/gemini-2.5-pro",
       "gemini/gemini-3-flash-preview",
       "gemini/gemini-3-pro-image-preview",
