@@ -1,5 +1,4 @@
 import type { StorageScorerConfig } from '@mastra/core/storage';
-import { deepEqual } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,
