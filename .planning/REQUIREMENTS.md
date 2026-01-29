@@ -16,12 +16,12 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 
 ## Click Forwarding
 
-- [ ] **CLICK-01**: User clicks on live view frame and click is dispatched to the corresponding browser viewport position via CDP `Input.dispatchMouseEvent`
-- [ ] **CLICK-02**: Coordinate mapping translates scaled `<img>` element clicks to browser viewport CSS pixels, accounting for `object-contain` letterboxing
-- [ ] **CLICK-03**: Clicks in letterbox regions (black bars from aspect ratio mismatch) are ignored
-- [ ] **CLICK-04**: CDP click uses complete event sequence (mouseMoved → mousePressed → mouseReleased) with explicit `button:'left'` and `clickCount:1`
-- [ ] **CLICK-05**: Modifier keys (Ctrl, Shift, Alt, Meta) are captured and forwarded as CDP bitmask
-- [ ] **CLICK-06**: Right-clicks are forwarded to browser instead of showing host context menu
+- [x] **CLICK-01**: User clicks on live view frame and click is dispatched to the corresponding browser viewport position via CDP `Input.dispatchMouseEvent`
+- [x] **CLICK-02**: Coordinate mapping translates scaled `<img>` element clicks to browser viewport CSS pixels, accounting for `object-contain` letterboxing
+- [x] **CLICK-03**: Clicks in letterbox regions (black bars from aspect ratio mismatch) are ignored
+- [x] **CLICK-04**: CDP click uses complete event sequence (mouseMoved → mousePressed → mouseReleased) with explicit `button:'left'` and `clickCount:1`
+- [x] **CLICK-05**: Modifier keys (Ctrl, Shift, Alt, Meta) are captured and forwarded as CDP bitmask
+- [x] **CLICK-06**: Right-clicks are forwarded to browser instead of showing host context menu
 
 ## Keyboard Forwarding
 
@@ -32,8 +32,8 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 
 ## Scroll Forwarding
 
-- [ ] **SCROLL-01**: User mouse wheel events dispatched as CDP `mouseWheel` events at mapped viewport coordinates
-- [ ] **SCROLL-02**: Scroll delta values normalized across browsers (deltaMode handling) and clamped to prevent extreme jumps
+- [x] **SCROLL-01**: User mouse wheel events dispatched as CDP `mouseWheel` events at mapped viewport coordinates
+- [x] **SCROLL-02**: Scroll delta values normalized across browsers (deltaMode handling) and clamped to prevent extreme jumps
 
 ## Focus Management
 
@@ -45,7 +45,7 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 
 - [ ] **VIS-01**: Interactive mode indicator shows when panel is accepting input (border highlight, cursor change, or badge state)
 - [ ] **VIS-02**: Click ripple effect provides immediate visual confirmation at click position before browser responds
-- [ ] **VIS-03**: mouseMoved events throttled (requestAnimationFrame gating, max ~30/sec) to prevent WebSocket/CDP flood
+- [x] **VIS-03**: mouseMoved events throttled (requestAnimationFrame gating, max ~30/sec) to prevent WebSocket/CDP flood
 
 ## Input Coordination
 
@@ -63,24 +63,24 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 | ROUTE-01 | Phase 11 | Complete |
 | ROUTE-02 | Phase 11 | Complete |
 | ROUTE-03 | Phase 11 | Complete |
-| CLICK-01 | Phase 12 | Pending |
-| CLICK-02 | Phase 12 | Pending |
-| CLICK-03 | Phase 12 | Pending |
-| CLICK-04 | Phase 12 | Pending |
-| CLICK-05 | Phase 12 | Pending |
-| CLICK-06 | Phase 12 | Pending |
+| CLICK-01 | Phase 12 | Complete |
+| CLICK-02 | Phase 12 | Complete |
+| CLICK-03 | Phase 12 | Complete |
+| CLICK-04 | Phase 12 | Complete |
+| CLICK-05 | Phase 12 | Complete |
+| CLICK-06 | Phase 12 | Complete |
 | KEY-01 | Phase 13 | Pending |
 | KEY-02 | Phase 13 | Pending |
 | KEY-03 | Phase 13 | Pending |
 | KEY-04 | Phase 13 | Pending |
-| SCROLL-01 | Phase 12 | Pending |
-| SCROLL-02 | Phase 12 | Pending |
+| SCROLL-01 | Phase 12 | Complete |
+| SCROLL-02 | Phase 12 | Complete |
 | FOCUS-01 | Phase 13 | Pending |
 | FOCUS-02 | Phase 13 | Pending |
 | FOCUS-03 | Phase 13 | Pending |
 | VIS-01 | Phase 14 | Pending |
 | VIS-02 | Phase 14 | Pending |
-| VIS-03 | Phase 12 | Pending |
+| VIS-03 | Phase 12 | Complete |
 | COORD-01 | Phase 15 | Pending |
 | COORD-02 | Phase 15 | Pending |
 | COORD-03 | Phase 15 | Pending |
