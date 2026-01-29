@@ -100,7 +100,10 @@ Plans:
 3. `ClientInputMessage` union type defined with MouseInputMessage and KeyboardInputMessage discriminated by type field
 4. Existing raw base64 frame protocol unchanged (metadata sent separately, not embedded in frame)
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 10-01-PLAN.md — Interface extensions, input message types, and viewport metadata broadcasting
 
 ---
 
@@ -207,7 +210,7 @@ Plans:
 | 7. Screencast API | v1.1 | 1/1 | Complete | 2026-01-27 |
 | 8. Transport Layer | v1.1 | 2/2 | Complete | 2026-01-27 |
 | 9. Studio UI | v1.1 | 2/2 | Complete | 2026-01-28 |
-| 10. Infrastructure Foundations | v1.2 | 0/TBD | Not Started | — |
+| 10. Infrastructure Foundations | v1.2 | 0/1 | Not Started | — |
 | 11. Server Input Routing | v1.2 | 0/TBD | Not Started | — |
 | 12. Client Mapping & Click | v1.2 | 0/TBD | Not Started | — |
 | 13. Focus & Keyboard | v1.2 | 0/TBD | Not Started | — |
