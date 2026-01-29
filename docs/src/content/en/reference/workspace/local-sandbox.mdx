@@ -25,23 +25,35 @@ npm install @mastra/core@latest
 
 ## Usage
 
-```typescript
-import { LocalSandbox } from '@mastra/core/workspace';
+Add a `LocalSandbox` to a workspace and assign it to an agent. The agent can then execute shell commands as part of its tasks:
 
-const sandbox = new LocalSandbox({
-  workingDirectory: './workspace',
-  env: {
-    NODE_ENV: 'development',
-  },
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+    env: {
+      NODE_ENV: 'development',
+    },
+  }),
 });
 
-// Execute a command (auto-starts if not already running)
-const result = await sandbox.executeCommand('echo', ['hello']);
+const agent = new Agent({
+  id: 'dev-agent',
+  model: 'openai/gpt-4o',
+  workspace,
+});
+
+// The agent now has the execute_command tool available
+const response = await agent.generate('Run npm install');
 ```
 
 ### Auto-start behavior
 
-`LocalSandbox` automatically starts on the first `executeCommand()` call if not already running. You can also explicitly start the sandbox by calling `workspace.init()` at application startup to avoid first-command latency.
+`LocalSandbox` automatically starts on the first command execution if not already running. You can also explicitly start the sandbox by calling `workspace.init()` at application startup to avoid first-command latency.
 
 ## Constructor Parameters
 
@@ -171,6 +183,142 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
 
 ## Methods
 
+### `start()`
+
+Initialize and start the sandbox. Creates the working directory and sets up seatbelt profiles if using native isolation.
+
+```typescript
+await sandbox.start();
+```
+
+Called automatically by `workspace.init()` or on first `executeCommand()` call.
+
+### `stop()`
+
+Stop the sandbox.
+
+```typescript
+await sandbox.stop();
+```
+
+### `destroy()`
+
+Clean up sandbox resources. Removes seatbelt profiles if they were auto-generated.
+
+```typescript
+await sandbox.destroy();
+```
+
+Called by `workspace.destroy()`.
+
+### `isReady()`
+
+Check if the sandbox is ready for operations.
+
+```typescript
+const ready = await sandbox.isReady();
+// true if status is 'running'
+```
+
+**Returns:** `Promise<boolean>`
+
+### `executeCommand(command, args?, options?)`
+
+Execute a shell command in the sandbox.
+
+```typescript
+const listResult = await sandbox.executeCommand('ls', ['-la']);
+const installResult = await sandbox.executeCommand('npm', ['install', 'lodash'], {
+  timeout: 60000,
+  env: { NODE_ENV: 'development' },
+});
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      description: "Command to execute",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      description: "Command arguments",
+      isOptional: true,
+    },
+    {
+      name: "options.timeout",
+      type: "number",
+      description: "Execution timeout in milliseconds",
+      isOptional: true,
+    },
+    {
+      name: "options.cwd",
+      type: "string",
+      description: "Working directory for the command",
+      isOptional: true,
+    },
+    {
+      name: "options.env",
+      type: "Record<string, string>",
+      description: "Additional environment variables",
+      isOptional: true,
+    },
+    {
+      name: "options.onStdout",
+      type: "(data: string) => void",
+      description: "Callback for stdout streaming",
+      isOptional: true,
+    },
+    {
+      name: "options.onStderr",
+      type: "(data: string) => void",
+      description: "Callback for stderr streaming",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<CommandResult>`
+
+```typescript
+interface CommandResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  executionTimeMs: number;
+}
+```
+
+### `getInfo()`
+
+Get sandbox status and resource information.
+
+```typescript
+const info = await sandbox.getInfo();
+// { status: 'running', resources: { ... } }
+```
+
+**Returns:** `Promise<SandboxInfo>`
+
+```typescript
+interface SandboxInfo {
+  status: 'starting' | 'running' | 'stopped' | 'error';
+  resources?: {
+    memoryMB?: number;
+    memoryUsedMB?: number;
+    cpuCores?: number;
+    cpuPercent?: number;
+    diskMB?: number;
+    diskUsedMB?: number;
+  };
+}
+```
+
 ### `getInstructions()`
 
 Returns a description of how this sandbox works. Used in tool descriptions.
@@ -179,6 +327,8 @@ Returns a description of how this sandbox works. Used in tool descriptions.
 const instructions = sandbox.getInstructions();
 // 'Local command execution. Working directory: "/workspace".'
 ```
+
+**Returns:** `string`
 
 ## Path Resolution
 
