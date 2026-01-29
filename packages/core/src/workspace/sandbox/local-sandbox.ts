@@ -10,6 +10,7 @@
  */
 
 import * as childProcess from 'node:child_process';
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -269,11 +270,20 @@ export class LocalSandbox implements WorkspaceSandbox {
           // No custom path, use default location
           this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
 
+          // Generate a deterministic hash from workspace path and config
+          // This allows identical sandboxes to share profiles while preventing collisions
+          const configHash = crypto
+            .createHash('sha256')
+            .update(this.workingDirectory)
+            .update(JSON.stringify(this._nativeSandboxConfig))
+            .digest('hex')
+            .slice(0, 8);
+
           // Write profile to .sandbox-profiles/ in cwd (outside working directory)
           // This prevents sandboxed processes from reading/modifying their own security profile
           this._sandboxFolderPath = path.join(process.cwd(), '.sandbox-profiles');
           await fs.mkdir(this._sandboxFolderPath, { recursive: true });
-          this._seatbeltProfilePath = path.join(this._sandboxFolderPath, 'local-sandbox.sb');
+          this._seatbeltProfilePath = path.join(this._sandboxFolderPath, `seatbelt-${configHash}.sb`);
           await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
         }
       }

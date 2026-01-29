@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -457,7 +458,14 @@ describe('LocalSandbox', () => {
       await seatbeltSandbox.start();
 
       // Check that profile file was created in .sandbox-profiles folder (outside working directory)
-      const profilePath = path.join(process.cwd(), '.sandbox-profiles', 'local-sandbox.sb');
+      // Filename is based on hash of workspace path and config
+      const configHash = crypto
+        .createHash('sha256')
+        .update(tempDir)
+        .update(JSON.stringify({}))
+        .digest('hex')
+        .slice(0, 8);
+      const profilePath = path.join(process.cwd(), '.sandbox-profiles', `seatbelt-${configHash}.sb`);
       const profileExists = await fs
         .access(profilePath)
         .then(() => true)
@@ -610,8 +618,14 @@ describe('LocalSandbox', () => {
       });
 
       await seatbeltSandbox.start();
-      // Profile uses unique ID-based filename in .sandbox-profiles folder (outside working directory)
-      const profilePath = path.join(process.cwd(), '.sandbox-profiles', 'local-sandbox.sb');
+      // Profile uses hash-based filename in .sandbox-profiles folder (outside working directory)
+      const configHash = crypto
+        .createHash('sha256')
+        .update(tempDir)
+        .update(JSON.stringify({}))
+        .digest('hex')
+        .slice(0, 8);
+      const profilePath = path.join(process.cwd(), '.sandbox-profiles', `seatbelt-${configHash}.sb`);
 
       // Profile should exist
       expect(

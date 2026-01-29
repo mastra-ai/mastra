@@ -294,9 +294,11 @@ project/
 ├── .sandbox/                      # Default working directory (sandboxed)
 │   └── ... files created by sandbox
 ├── .sandbox-profiles/             # Seatbelt profiles (outside sandbox)
-│   └── local-sandbox.sb
+│   └── seatbelt-a1b2c3d4.sb       # Hash based on workspace + config
 └── ... your project files
 ```
+
+The profile filename is a hash of the workspace path and configuration, so sandboxes with identical settings share the same profile while different configurations get separate files. This prevents collisions when running multiple sandboxes concurrently.
 
 This separation prevents sandboxed processes from reading or modifying their own security profiles. The profile is created when the sandbox starts and cleaned up when destroyed.
 
