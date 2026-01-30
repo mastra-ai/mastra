@@ -135,10 +135,31 @@ Plans:
 - [x] 03-PLAN.md — Integrate 403 handling in domain hooks and tables (wave 2)
 - [x] 04-PLAN.md — Update page components to pass error props (wave 3)
 
+### Phase 6: WorkOS Client Initialization
+
+**Goal**: Make WorkOS client initialization consistent between MastraAuthWorkOS and MastraRBACWorkOS
+**Depends on**: Phase 5
+**Requirements**:
+
+- MastraRBACWorkOS should initialize WorkOS client internally (like MastraAuthWorkOS)
+- Remove requirement to pass pre-instantiated WorkOS client
+
+**Success Criteria** (what must be TRUE):
+
+1. MastraRBACWorkOS constructor accepts config options, not WorkOS instance
+2. WorkOS client initialized internally in MastraRBACWorkOS
+3. API matches MastraAuthWorkOS pattern
+4. TypeScript compiles without errors
+
+**Plans**: 1 plan
+
+Plans:
+- [ ] 06-01-PLAN.md — Update types, constructor, and package documentation
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase                      | Plans Complete | Status     | Completed  |
 | -------------------------- | -------------- | ---------- | ---------- |
@@ -147,3 +168,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 3. Provider Integration    | 1/1            | ✓ Complete | 2026-01-29 |
 | 4. Testing + Validation    | 1/1            | ✓ Complete | 2026-01-28 |
 | 5. RBAC 403 Error Handling | 4/4            | ✓ Complete | 2026-01-30 |
+| 6. WorkOS Client Init      | 0/1            | Planned    | —          |
