@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-23)
 
 **Core value:** Catch quality regressions before they reach users — when you modify a prompt or model, know immediately if scores dropped.
-**Current focus:** Phase 9 - Dataset Items Detail View (COMPLETE)
+**Current focus:** Phase 10 - Dataset Layout Update (NOT PLANNED)
 
 ## Current Position
 
-Phase: 9 of 9 (Dataset Items Detail View) — Complete
-Plan: 5 of 5 in phase 9
-Status: Phase 9 complete
-Last activity: 2026-01-29 — Completed 09-05-PLAN.md (ItemsList and Dialog Integration)
+Phase: 10 of 10 (Dataset Layout Update)
+Plan: 1 of ? in phase 10
+Status: In progress
+Last activity: 2026-01-30 — Completed 10-01-PLAN.md
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 37
+- Total plans completed: 38
 - Average duration: 4 min
-- Total execution time: 2.1 hours
+- Total execution time: 2.2 hours
 
 **By Phase:**
 
@@ -36,9 +36,10 @@ Progress: [██████████] 100%
 | 07-csv-import | 5 | 10 min | 2 min |
 | 08-item-selection-actions | 4 | 13 min | 3.25 min |
 | 09-dataset-items-detail-view | 5 | 16 min | 3.2 min |
+| 10-dataset-layout-update | 1 | 5 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 09-01 (3 min), 09-02 (3 min), 09-03 (3 min), 09-04 (3 min), 09-05 (4 min)
+- Last 5 plans: 09-02 (3 min), 09-03 (3 min), 09-04 (3 min), 09-05 (4 min), 10-01 (5 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -107,6 +108,8 @@ Recent decisions affecting current work:
 - Delete confirmation state resets on item navigation
 - Selection state owned by DatasetDetail parent, passes to children for synchronization
 - Legacy callback props removed when functionality consolidates into child component
+- SplitButton composes CombinedButtons + Popover for visual grouping
+- ChevronDown icon sizing based on button size prop (sm: w-3 h-3, md/lg: w-4 h-4)
 
 ### Pending Todos
 
@@ -116,6 +119,7 @@ None yet.
 
 - Phase 9 added: Dataset Items Detail View (EntryList, SideDialog, edit/delete flows)
 - Phase 9 complete: Full click-to-view-details flow implemented
+- Phase 10 added: Dataset Layout Update
 
 ### Blockers/Concerns
 
@@ -123,6 +127,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-29
-Stopped at: Completed 09-05-PLAN.md (ItemsList and Dialog Integration)
+Last session: 2026-01-30
+Stopped at: Completed 10-01-PLAN.md (SplitButton Component)
 Resume file: None
