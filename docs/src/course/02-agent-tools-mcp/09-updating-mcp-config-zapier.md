@@ -6,10 +6,10 @@ Now, let's update your MCP configuration in `src/mastra/agents/index.ts` to incl
 const mcp = new MCPClient({
   servers: {
     zapier: {
-      url: new URL(process.env.ZAPIER_MCP_URL || ""),
+      url: new URL(process.env.ZAPIER_MCP_URL || ''),
     },
   },
-});
+})
 ```
 
 This configuration tells your agent how to connect to the Zapier MCP server. The `zapier` key is a unique identifier for this server in your configuration, and the `url` property specifies the URL of the Zapier MCP server.

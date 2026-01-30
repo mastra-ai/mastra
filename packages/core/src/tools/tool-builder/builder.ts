@@ -68,7 +68,7 @@ export class CoreToolBuilder extends MastraBase {
       }
       if (isZodObject(schema)) {
         this.originalTool.inputSchema = schema.extend({
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional().default(''),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
           resumeData: z
             .any()
             .describe('The resumeData object created from the resumeSchema of suspended tool')
@@ -281,6 +281,7 @@ export class CoreToolBuilder extends MastraBase {
         name: `tool: '${options.name}'`,
         input: args,
         entityType: EntityType.TOOL,
+        entityId: options.name,
         entityName: options.name,
         attributes: {
           toolDescription: options.description,

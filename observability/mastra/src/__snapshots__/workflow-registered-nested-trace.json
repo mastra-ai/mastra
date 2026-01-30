@@ -1,0 +1,113 @@
+{
+  "__structure__": [
+    "workflow_run: \"workflow run: 'parent-workflow'\"",
+    "└── workflow_step: \"workflow step: 'nested-workflow-step'\"",
+    "    └── workflow_run: \"workflow run: 'simple-workflow'\"",
+    "        └── workflow_step: \"workflow step: 'simple-step'\""
+  ],
+  "spans": [
+    {
+      "span": {
+        "id": "<span-1>",
+        "traceId": "<trace-1>",
+        "name": "workflow run: 'parent-workflow'",
+        "type": "workflow_run",
+        "completed": true,
+        "isEvent": false,
+        "isRootSpan": true,
+        "entityType": "workflow_run",
+        "entityId": "parent-workflow",
+        "attributes": {
+          "status": "success"
+        },
+        "metadata": {
+          "runId": "<runId-1>"
+        },
+        "input": {
+          "input": "nested test"
+        },
+        "output": {
+          "output": "nested test processed"
+        }
+      },
+      "children": [
+        {
+          "span": {
+            "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "workflow step: 'nested-workflow-step'",
+            "type": "workflow_step",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "workflow_step",
+            "entityId": "nested-workflow-step",
+            "attributes": {
+              "status": "success"
+            },
+            "input": {
+              "input": "nested test"
+            },
+            "output": {
+              "output": "nested test processed"
+            }
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-3>",
+                "traceId": "<trace-1>",
+                "name": "workflow run: 'simple-workflow'",
+                "type": "workflow_run",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-2>",
+                "entityType": "workflow_run",
+                "entityId": "simple-workflow",
+                "attributes": {
+                  "status": "success"
+                },
+                "metadata": {
+                  "runId": "<runId-2>"
+                },
+                "input": {
+                  "input": "nested test"
+                },
+                "output": {
+                  "output": "nested test processed"
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-4>",
+                    "traceId": "<trace-1>",
+                    "name": "workflow step: 'simple-step'",
+                    "type": "workflow_step",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "workflow_step",
+                    "entityId": "simple-step",
+                    "attributes": {
+                      "status": "success"
+                    },
+                    "input": {
+                      "input": "nested test"
+                    },
+                    "output": {
+                      "output": "nested test processed"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

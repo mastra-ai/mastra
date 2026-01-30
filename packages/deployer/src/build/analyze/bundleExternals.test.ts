@@ -1,14 +1,15 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createVirtualDependencies, bundleExternals } from './bundleExternals';
-import type { DependencyMetadata } from '../types';
-import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ensureDir, remove, pathExists, writeFile } from 'fs-extra';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
+import type { DependencyMetadata } from '../types';
+import type * as UtilsModule from '../utils';
+import { createVirtualDependencies, bundleExternals } from './bundleExternals';
 
 // Mock the utilities that bundleExternals depends on
 vi.mock('../utils', async importOriginal => {
-  const actual = await importOriginal<typeof import('../utils')>();
+  const actual = await importOriginal<typeof UtilsModule>();
   return {
     ...actual,
     getCompiledDepCachePath: vi.fn((rootPath: string, fileName: string) =>
