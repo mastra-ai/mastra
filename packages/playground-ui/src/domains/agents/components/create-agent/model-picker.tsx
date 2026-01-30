@@ -1,15 +1,8 @@
-import { useRef, useCallback } from 'react';
-import { Spinner } from '@/ds/components/Spinner';
+import { useState } from 'react';
 import { Alert, AlertDescription } from '@/ds/components/Alert';
-import { cleanProviderId } from '../agent-metadata/utils';
 import { Provider } from '@mastra/client-js';
-import {
-  ProviderSelect,
-  ModelSelect,
-  ModelSelectHandle,
-  ProviderNotConnectedAlert,
-  useModelPickerData,
-} from '../model-picker';
+import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId } from '@/domains/llm';
+import { ProviderNotConnectedAlert } from '../model-picker/provider-not-connected-alert';
 
 export interface ModelPickerProps {
   value: { provider: string; name: string };
@@ -18,68 +11,60 @@ export interface ModelPickerProps {
 }
 
 export const ModelPicker = ({ value, onChange, error }: ModelPickerProps) => {
-  const modelSelectRef = useRef<ModelSelectHandle>(null);
-  const providerInputRef = useRef<HTMLInputElement>(null);
+  const [modelOpen, setModelOpen] = useState(false);
+  const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
 
-  const { providers, providersLoading, allModels, currentModelProvider, currentProvider } = useModelPickerData(
-    value.provider,
-  );
+  const providers = dataProviders?.providers || [];
+  const currentModelProvider = cleanProviderId(value.provider);
+  const currentProvider = providers.find((p: Provider) => p.id === currentModelProvider);
 
-  const handleProviderSelect = useCallback(
-    (provider: Provider) => {
-      const cleanedProvider = cleanProviderId(provider.id);
+  const handleProviderSelect = (providerId: string) => {
+    const cleanedProvider = cleanProviderId(providerId);
 
-      // Clear model when switching providers
-      if (provider.id !== currentModelProvider) {
-        onChange({ provider: cleanedProvider, name: '' });
-      }
+    // Clear model when switching providers
+    if (cleanedProvider !== currentModelProvider) {
+      onChange({ provider: cleanedProvider, name: '' });
+    }
 
-      // Auto-focus model input if provider is connected
-      if (provider.connected) {
-        setTimeout(() => {
-          modelSelectRef.current?.focus();
-        }, 100);
-      }
-    },
-    [currentModelProvider, onChange],
-  );
+    // Auto-open model selector when provider is connected
+    const selectedProvider = providers.find((p: Provider) => p.id === cleanedProvider);
+    if (selectedProvider?.connected) {
+      setModelOpen(true);
+    }
+  };
 
-  const handleModelSelect = useCallback(
-    (modelId: string) => {
-      const providerToUse = currentModelProvider || value.provider;
-      if (modelId && providerToUse) {
-        onChange({ provider: providerToUse, name: modelId });
-      }
-    },
-    [currentModelProvider, value.provider, onChange],
-  );
-
-  const handleShiftTab = useCallback(() => {
-    providerInputRef.current?.focus();
-  }, []);
+  const handleModelSelect = (modelId: string) => {
+    const providerToUse = currentModelProvider || value.provider;
+    if (modelId && providerToUse) {
+      onChange({ provider: providerToUse, name: modelId });
+    }
+  };
 
   if (providersLoading) {
-    return (
-      <div className="flex items-center gap-2">
-        <Spinner />
-        <span className="text-sm text-icon3">Loading providers...</span>
-      </div>
-    );
+    return null;
   }
 
   return (
     <div className="@container">
       <div className="flex flex-col @xs:flex-row items-stretch @xs:items-center gap-2 w-full">
-        <ProviderSelect providers={providers} selectedProvider={value.provider} onSelect={handleProviderSelect} />
+        <div className="w-full @xs:w-2/5">
+          <LLMProviders
+            value={value.provider}
+            onValueChange={handleProviderSelect}
+            variant="default"
+          />
+        </div>
 
-        <ModelSelect
-          ref={modelSelectRef}
-          allModels={allModels}
-          currentProvider={currentModelProvider}
-          selectedModel={value.name}
-          onSelect={handleModelSelect}
-          onShiftTab={handleShiftTab}
-        />
+        <div className="w-full @xs:w-3/5">
+          <LLMModels
+            llmId={currentModelProvider}
+            value={value.name}
+            onValueChange={handleModelSelect}
+            variant="default"
+            open={modelOpen}
+            onOpenChange={setModelOpen}
+          />
+        </div>
       </div>
 
       {currentProvider && <ProviderNotConnectedAlert provider={currentProvider} />}
