@@ -2,6 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent/index.js';
 
+/**
+ * Kimi K2.5 (moonshotai) integration test for multi-step tool calling.
+ *
+ * This reproduces a bug where the model returns reasoning_content alongside
+ * tool calls, but the AI SDK didn't send reasoning_content back in follow-up
+ * assistant messages — causing the Moonshot API to reject the request with:
+ *   "thinking is enabled but reasoning_content is missing in assistant tool call message"
+ *
+ * Fixed by upgrading @ai-sdk/openai-compatible to 1.0.32+.
+ *
+ * This test is mostly for debugging future regressions and is not critical
+ * to run in CI (requires MOONSHOT_API_KEY).
+ */
+
 const tokenTool = {
   description: 'Generate a token that must be used in the next tool call',
   parameters: z.object({}),
@@ -24,11 +38,8 @@ const confirmTokenTool = {
   },
 };
 
-describe('Kimi K2.5 Integration Tests', () => {
+describe.skipIf(!process.env.MOONSHOT_API_KEY)('Kimi K2.5 Integration Tests', () => {
   it('completes multi-step tool calls without reasoning_content errors', async () => {
-    if (!process.env.MOONSHOT_API_KEY) {
-      throw new Error('MOONSHOT_API_KEY environment variable is required for this test');
-    }
 
     const agent = new Agent({
       id: 'moonshotai-kimi-k2-5-test',
