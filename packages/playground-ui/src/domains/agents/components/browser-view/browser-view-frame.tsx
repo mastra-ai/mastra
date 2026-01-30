@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { useBrowserStream, type StreamStatus } from '../../hooks/use-browser-stream';
 import { useMouseInteraction } from '../../hooks/use-mouse-interaction';
+import { useKeyboardInteraction } from '../../hooks/use-keyboard-interaction';
 
 interface BrowserViewFrameProps {
   agentId: string;
@@ -53,6 +54,12 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
     viewport,
     sendMessage,
     enabled: status === 'streaming',
+  });
+
+  useKeyboardInteraction({
+    sendMessage,
+    enabled: isInteractive,
+    onEscape: exitInteractive,
   });
 
   // Notify parent of status changes
