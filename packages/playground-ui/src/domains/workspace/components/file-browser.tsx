@@ -102,12 +102,13 @@ function getErrorMessage(error: Error): string {
   // Fallback: parse the message for older client-js versions
   const message = error.message;
 
-  // Try to extract JSON error message from client-js format
-  // Using non-greedy quantifier to avoid ReDoS on malformed input
-  const jsonMatch = message.match(/- ({.+?})$/);
-  if (jsonMatch) {
+  // Try to extract JSON error message from client-js format: "HTTP error! status: 404 - {...}"
+  // Avoid regex to prevent ReDoS - just find the last " - {" and try to parse from there
+  const jsonStart = message.lastIndexOf(' - {');
+  if (jsonStart !== -1) {
     try {
-      const parsed = JSON.parse(jsonMatch[1]);
+      const jsonStr = message.slice(jsonStart + 3); // Skip " - "
+      const parsed = JSON.parse(jsonStr);
       if (parsed.error) return parsed.error;
       if (parsed.message) return parsed.message;
     } catch {
