@@ -131,8 +131,8 @@ export interface SkillMetadata {
   name: string;
   description: string;
   license?: string;
-  compatibility?: string;
-  metadata?: Record<string, string>;
+  compatibility?: unknown;
+  metadata?: Record<string, unknown>;
 }
 
 export interface Skill extends SkillMetadata {
