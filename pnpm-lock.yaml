@@ -2233,8 +2233,8 @@ importers:
         specifier: ^1.3.24
         version: 1.3.24(zod@3.25.76)
       '@ai-sdk/openai-compatible-v5':
-        specifier: npm:@ai-sdk/openai-compatible@1.0.27
-        version: '@ai-sdk/openai-compatible@1.0.27(zod@3.25.76)'
+        specifier: npm:@ai-sdk/openai-compatible@1.0.32
+        version: '@ai-sdk/openai-compatible@1.0.32(zod@3.25.76)'
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.69
         version: '@ai-sdk/openai@2.0.69(zod@3.25.76)'
@@ -4270,7 +4270,7 @@ importers:
   stores/elasticsearch:
     dependencies:
       '@elastic/elasticsearch':
-        specifier: ^8.17.0
+        specifier: ^8.19.1
         version: 8.19.1
     devDependencies:
       '@internal/lint':
@@ -5605,6 +5605,12 @@ packages:
 
   '@ai-sdk/openai-compatible@1.0.31':
     resolution: {integrity: sha512-znBvaVHM0M6yWNerIEy3hR+O8ZK2sPcE7e2cxfb6kYLEX3k//JH5VDnRnajseVofg7LXtTCFFdjsB7WLf1BdeQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/openai-compatible@1.0.32':
+    resolution: {integrity: sha512-YspqqyJPzHjqWrjt4y/Wgc2aJgCcQj5uIJgZpq2Ar/lH30cEVhgE+keePDbjKpetD9UwNggCj7u6kO3unS23OQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -19030,6 +19036,12 @@ snapshots:
       zod: 3.25.76
 
   '@ai-sdk/openai-compatible@1.0.31(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.1
+      '@ai-sdk/provider-utils': 3.0.20(zod@3.25.76)
+      zod: 3.25.76
+
+  '@ai-sdk/openai-compatible@1.0.32(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.1
       '@ai-sdk/provider-utils': 3.0.20(zod@3.25.76)
