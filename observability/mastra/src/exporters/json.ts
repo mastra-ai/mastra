@@ -13,10 +13,6 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const SNAPSHOTS_DIR = join(__dirname, '..', '__snapshots__');
-
 import type {
   TracingEvent,
   TracingEventType,
@@ -850,8 +846,22 @@ export class JsonExporter extends BaseExporter {
    * @throws Error if the snapshot doesn't match (and updateSnapshot is false)
    */
   async assertMatchesSnapshot(snapshotName: string, options?: { updateSnapshot?: boolean }): Promise<void> {
+    // Lazily compute the snapshots directory to avoid calling fileURLToPath at module load time.
+    // This is necessary for CloudFlare Workers compatibility where import.meta.url is undefined
+    // during worker startup. See: https://github.com/mastra-ai/mastra/issues/12536
+    const getSnapshotsDir = (): string => {
+      if (typeof import.meta.url === 'undefined') {
+        throw new Error(
+          'assertMatchesSnapshot is not supported in non-Node.js environments (import.meta.url is undefined)',
+        );
+      }
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      return join(__dirname, '..', '__snapshots__');
+    };
+
     // Resolve snapshot path relative to the __snapshots__ directory
-    const snapshotPath = join(SNAPSHOTS_DIR, snapshotName);
+    const snapshotPath = join(getSnapshotsDir(), snapshotName);
     const normalizedTree = this.buildNormalizedTree();
     const structureGraph = this.generateStructureGraph(normalizedTree);
 
