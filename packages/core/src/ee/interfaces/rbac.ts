@@ -48,7 +48,7 @@ export interface RoleDefinition {
  */
 export type RoleMapping = {
   /** Map role name to array of permissions */
-  [role: string]: string[];
+  [role: string]: Permission[];
 };
 
 /**
