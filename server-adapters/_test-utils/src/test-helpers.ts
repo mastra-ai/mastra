@@ -669,6 +669,22 @@ Follow these instructions for the test skill.
   fs.mkdirSync(testDir, { recursive: true });
   fs.writeFileSync(path.join(testDir, 'nested-file.txt'), 'Nested file content');
 
+  // Create .agents/skills/ structure for skills-sh routes (remove, check-updates, update)
+  const agentSkillsDir = path.join(tempDir, '.agents', 'skills', 'test-skill');
+  fs.mkdirSync(agentSkillsDir, { recursive: true });
+  fs.writeFileSync(path.join(agentSkillsDir, 'SKILL.md'), skillContent);
+
+  // Create .meta.json for the installed skill (used by check-updates and update routes)
+  const metaJson = {
+    skillName: 'test-skill',
+    owner: 'test-owner',
+    repo: 'test-repo',
+    branch: 'main',
+    path: 'skills/test-skill',
+    installedAt: new Date().toISOString(),
+  };
+  fs.writeFileSync(path.join(agentSkillsDir, '.meta.json'), JSON.stringify(metaJson, null, 2));
+
   // Create the workspace with local filesystem and BM25 search
   // Use 'test-workspace' as the ID to match test utilities' getDefaultValidPathParams
   const filesystem = new LocalFilesystem({ basePath: tempDir });

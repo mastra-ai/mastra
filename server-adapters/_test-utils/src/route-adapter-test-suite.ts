@@ -66,8 +66,23 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     // Test non-deprecated routes with full test suite
     // Skip MCP transport routes (mcp-http, mcp-sse) - they require MCP protocol handling
     // and are tested separately via mcp-transport-test-suite
+    // Skip routes that require external dependencies (APIs, sandbox)
+    const routesRequiringExternalDeps = [
+      // skills-sh routes that require external API calls (GitHub, skills.sh)
+      '/workspaces/:workspaceId/skills-sh/search',
+      '/workspaces/:workspaceId/skills-sh/popular',
+      '/workspaces/:workspaceId/skills-sh/preview',
+      '/workspaces/:workspaceId/skills-sh/install',
+      '/workspaces/:workspaceId/skills-sh/update',
+      // sandbox execute requires a configured sandbox on the workspace
+      '/workspaces/:workspaceId/sandbox/execute',
+    ];
     const activeRoutes = SERVER_ROUTES.filter(
-      r => !r.deprecated && r.responseType !== 'mcp-http' && r.responseType !== 'mcp-sse',
+      r =>
+        !r.deprecated &&
+        r.responseType !== 'mcp-http' &&
+        r.responseType !== 'mcp-sse' &&
+        !routesRequiringExternalDeps.includes(r.path),
     );
     activeRoutes.forEach(route => {
       const testName = `${route.method} ${route.path}`;
