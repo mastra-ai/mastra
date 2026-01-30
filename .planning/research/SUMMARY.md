@@ -20,6 +20,7 @@ Key risk is the all-or-nothing nature of this change — partial migration will 
 Use native `fetch` with a typed wrapper pattern. No external HTTP libraries needed. The existing codebase already uses fetch everywhere.
 
 **Core technologies:**
+
 - Native `fetch`: HTTP requests — zero dependencies, monorepo precedent
 - `CloudApiResponse<T>`: Generic envelope type — matches Cloud spec exactly
 - `CloudApiError`: Custom error class — structured errors with code/status
@@ -27,17 +28,20 @@ Use native `fetch` with a typed wrapper pattern. No external HTTP libraries need
 ### Expected Features
 
 **Must have (table stakes):**
+
 - Bearer token in Authorization header — RFC 6750, security standard
 - Response envelope unwrapping — Cloud returns `{ ok, data, error }`
 - API versioning (`/api/v1/`) — spec compliance
 - Token parameter passing — fix singleton collision
 
 **Should have (competitive):**
+
 - Token expiry checking — prevent 401 cascades
 - Request timeout configuration — prevent hung requests
 - Debug logging — opt-in verbose logging
 
 **Defer (v2+):**
+
 - Automatic token refresh — Cloud endpoint may not exist yet
 - Request retry with backoff — nice-to-have
 - Concurrent request deduplication — optimization
@@ -47,6 +51,7 @@ Use native `fetch` with a typed wrapper pattern. No external HTTP libraries need
 Three-layer client design: transport (HTTP mechanics), response (envelope unwrapping), parsing (snake_case to camelCase). Token flows through as parameter, never stored on client instance. `MastraCloudAuth` extracts token from request, passes to `MastraCloudClient` methods, stores on `CloudUser.sessionToken` for later use.
 
 **Major components:**
+
 1. `MastraCloudClient` (client.ts) — HTTP transport, response unwrapping, type parsing
 2. `MastraCloudAuth` (index.ts) — Interface implementation, token extraction, session cookies
 3. Transport layer — Single `request<T>()` method handles headers, errors, JSON parsing
@@ -64,23 +69,27 @@ Three-layer client design: transport (HTTP mechanics), response (envelope unwrap
 Based on research, suggested phase structure:
 
 ### Phase 1: Transport Layer + Response Handling
+
 **Rationale:** Foundation for all other changes. Cannot fix endpoints without proper HTTP layer.
 **Delivers:** `request<T>()` method, `CloudApiResponse<T>` type, `unwrapResponse<T>()` helper, `CloudApiError` class
 **Addresses:** Response envelope unwrapping, Authorization header
 **Avoids:** Token location mismatch, response envelope omission
 
 ### Phase 2: API Path + Method Signatures
+
 **Rationale:** Depends on transport layer. All paths and methods updated together.
 **Delivers:** `/api/v1/` paths, token parameter on authenticated methods
 **Uses:** Transport layer from Phase 1
 **Implements:** Path versioning, stateless token handling
 
 ### Phase 3: Provider Integration
+
 **Rationale:** Depends on client methods being correct. Integrates with interface contracts.
 **Delivers:** Updated `MastraCloudAuth` using new client signatures, `sessionToken` stored on `CloudUser`
 **Avoids:** Singleton token collision, missing method errors
 
 ### Phase 4: Testing + Validation
+
 **Rationale:** Final validation before Cloud API is available.
 **Delivers:** Integration tests with mocked API responses, error path coverage
 **Addresses:** Testing blind spots, all error scenarios
@@ -95,21 +104,23 @@ Based on research, suggested phase structure:
 ### Research Flags
 
 Phases likely needing deeper research during planning:
+
 - **Phase 3:** Cloud API may have undocumented behaviors, test against real API when available
 
 Phases with standard patterns (skip research-phase):
+
 - **Phase 1:** Well-documented fetch patterns, established TypeScript conventions
 - **Phase 2:** Straightforward path updates, no ambiguity
 - **Phase 4:** Standard testing patterns
 
 ## Confidence Assessment
 
-| Area | Confidence | Notes |
-|------|------------|-------|
-| Stack | HIGH | Monorepo precedent, zero new dependencies |
-| Features | HIGH | Based on existing interfaces and Cloud spec |
-| Architecture | HIGH | Existing codebase patterns, approved implementation plan |
-| Pitfalls | HIGH | Codebase analysis, established security patterns |
+| Area         | Confidence | Notes                                                    |
+| ------------ | ---------- | -------------------------------------------------------- |
+| Stack        | HIGH       | Monorepo precedent, zero new dependencies                |
+| Features     | HIGH       | Based on existing interfaces and Cloud spec              |
+| Architecture | HIGH       | Existing codebase patterns, approved implementation plan |
+| Pitfalls     | HIGH       | Codebase analysis, established security patterns         |
 
 **Overall confidence:** HIGH
 
@@ -122,6 +133,7 @@ Phases with standard patterns (skip research-phase):
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - `/auth/cloud/IMPLEMENTATION_PLAN.md` — Approved change requirements
 - `/auth/cloud/SPEC_REVIEW.md` — Cloud API response format
 - `/auth/cloud/PLUGIN_SPEC_EXPLORE.md` — Cloud team's API design
@@ -129,9 +141,11 @@ Phases with standard patterns (skip research-phase):
 - `/auth/workos/src/auth-provider.ts` — Reference implementation
 
 ### Secondary (MEDIUM confidence)
+
 - RFC 6750 — Bearer Token Usage
 - RFC 6749 — OAuth 2.0 Authorization Framework
 
 ---
-*Research completed: 2026-01-28*
-*Ready for roadmap: yes*
+
+_Research completed: 2026-01-28_
+_Ready for roadmap: yes_

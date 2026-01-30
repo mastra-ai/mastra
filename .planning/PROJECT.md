@@ -36,16 +36,19 @@ The Cloud auth plugin must communicate correctly with Cloud's API — if the req
 ## Context
 
 **Technical environment:**
+
 - Plugin location: `auth/cloud/src/`
 - Two files: `client.ts` (HTTP client), `index.ts` (auth provider)
 - Cloud base URL: `https://cloud.mastra.ai`
 - Part of larger Mastra monorepo
 
 **Prior work:**
+
 - Implementation plan reviewed and refined: `auth/cloud/IMPLEMENTATION_PLAN.md`
 - Decided `getPermissions()` token access via `sessionToken` field on `CloudUser`
 
 **Dependency:**
+
 - Cloud endpoints don't exist yet — we're implementing against spec so it works when they ship
 
 ## Constraints
@@ -56,11 +59,12 @@ The Cloud auth plugin must communicate correctly with Cloud's API — if the req
 
 ## Key Decisions
 
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Token on CloudUser for `getPermissions()` | Avoids interface changes, simpler than caching | — Pending |
-| `createSession()` throws descriptive error | Interface requires method, Cloud doesn't support | — Pending |
-| Pass token as param not client storage | Client is singleton, multiple users have different tokens | — Pending |
+| Decision                                   | Rationale                                                 | Outcome   |
+| ------------------------------------------ | --------------------------------------------------------- | --------- |
+| Token on CloudUser for `getPermissions()`  | Avoids interface changes, simpler than caching            | — Pending |
+| `createSession()` throws descriptive error | Interface requires method, Cloud doesn't support          | — Pending |
+| Pass token as param not client storage     | Client is singleton, multiple users have different tokens | — Pending |
 
 ---
-*Last updated: 2026-01-28 after initialization*
+
+_Last updated: 2026-01-28 after initialization_

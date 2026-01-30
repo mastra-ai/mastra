@@ -26,13 +26,13 @@ key-files:
     - auth/cloud/src/index.ts
 
 key-decisions:
-  - "Options pattern: All methods accept options objects (GetUserOptions, etc.)"
-  - "Token required: getUser/getUserPermissions need token for auth"
+  - 'Options pattern: All methods accept options objects (GetUserOptions, etc.)'
+  - 'Token required: getUser/getUserPermissions need token for auth'
   - "createSession throws: Cloud doesn't support server-side session creation"
 
 patterns-established:
-  - "Options objects: All methods use { key: value } instead of positional params"
-  - "Token passing: Token passed per-method, not stored on client"
+  - 'Options objects: All methods use { key: value } instead of positional params'
+  - 'Token passing: Token passed per-method, not stored on client'
 
 # Metrics
 duration: 4min
@@ -105,5 +105,6 @@ None - no external service configuration required.
 - Ready for Phase 3: Interface Compliance
 
 ---
-*Phase: 02-api-paths-methods*
-*Completed: 2026-01-29*
+
+_Phase: 02-api-paths-methods_
+_Completed: 2026-01-29_

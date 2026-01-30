@@ -21,7 +21,7 @@ affects: [future-testing, ci-cd, auth-cloud-maintenance]
 
 # Tech tracking
 tech-stack:
-  added: []  # vitest already in devDeps
+  added: [] # vitest already in devDeps
   patterns:
     - vi.stubGlobal('fetch') for HTTP mocking
     - vi.mock('jose') for JWT decode control
@@ -35,14 +35,14 @@ key-files:
   modified: []
 
 key-decisions:
-  - "Inline mocks per test - no shared fixtures"
-  - "Test both response.ok AND json.ok for Cloud API envelope"
-  - "Use owner role for wildcard permission tests, admin for specific permissions"
+  - 'Inline mocks per test - no shared fixtures'
+  - 'Test both response.ok AND json.ok for Cloud API envelope'
+  - 'Use owner role for wildcard permission tests, admin for specific permissions'
 
 patterns-established:
-  - "Transport tests: vi.stubGlobal fetch with beforeEach/afterEach cleanup"
-  - "Provider tests: vi.mock jose at module level, vi.clearAllMocks in beforeEach"
-  - "Error tests: verify instanceof CloudApiError with status/code"
+  - 'Transport tests: vi.stubGlobal fetch with beforeEach/afterEach cleanup'
+  - 'Provider tests: vi.mock jose at module level, vi.clearAllMocks in beforeEach'
+  - 'Error tests: verify instanceof CloudApiError with status/code'
 
 # Metrics
 duration: 3min
@@ -93,6 +93,7 @@ Each task was committed atomically:
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Fixed incorrect permission expectations in tests**
+
 - **Found during:** Task 3 (provider layer tests)
 - **Issue:** Tests assumed admin role has `*` wildcard, but admin has `agents:*`, `workflows:*`, etc.
 - **Fix:** Changed test to check for `agents:*` with admin, and use owner role for `*` wildcard test
@@ -120,5 +121,6 @@ None - no external service configuration required.
 - Ready for integration into main codebase
 
 ---
-*Phase: 04-testing-validation*
-*Completed: 2026-01-28*
+
+_Phase: 04-testing-validation_
+_Completed: 2026-01-28_

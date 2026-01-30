@@ -14,6 +14,7 @@ Wire `MastraCloudAuth` provider to use updated client with `sessionToken` flow. 
 ## Implementation Decisions
 
 ### CloudUser Type
+
 - `sessionToken` is **required** (not optional)
 - Plain interface with public properties:
   ```typescript
@@ -21,19 +22,21 @@ Wire `MastraCloudAuth` provider to use updated client with `sessionToken` flow. 
     id: string;
     email: string;
     sessionToken: string;
-    name?: string;      // optional
-    avatar?: string;    // optional
+    name?: string; // optional
+    avatar?: string; // optional
   }
   ```
 - Token only used internally by provider methods — not exposed for external use
 
 ### Error Handling
+
 - `createSession()` throws descriptive `CloudApiError` explaining Cloud doesn't support session creation
 - `getPermissions()` throws `CloudApiError` on failures (invalid token, decode errors)
 - Auth error typing (401/403 distinction): Claude's discretion
 - Error logging before throwing: Claude's discretion
 
 ### Permission Lookup Flow
+
 - **No Cloud API call** — permissions resolved locally
 - JWT contains `role` claim (e.g., `"admin"`, `"member"`)
 - `getPermissions()` decodes JWT to extract role
@@ -41,6 +44,7 @@ Wire `MastraCloudAuth` provider to use updated client with `sessionToken` flow. 
 - JWT decode only — no signature validation (validation happens elsewhere)
 
 ### Callback Response Shape
+
 - Cloud returns **JWT only** after OAuth
 - `handleCallback()` processes JWT locally — no API call
 - Decodes JWT to extract: `id`, `email`, `role`, `name?`, `avatar?`
@@ -65,5 +69,5 @@ None — discussion stayed within phase scope
 
 ---
 
-*Phase: 03-provider-integration*
-*Context gathered: 2026-01-28*
+_Phase: 03-provider-integration_
+_Context gathered: 2026-01-28_

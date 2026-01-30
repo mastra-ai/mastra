@@ -28,15 +28,15 @@ key-files:
     - auth/cloud/src/index.ts
 
 key-decisions:
-  - "sessionToken is REQUIRED on CloudUser (not optional)"
-  - "CloudUser does NOT have roles field (role extracted from JWT)"
-  - "getCurrentUser() decodes JWT locally - NO API call to getUser()"
-  - "getPermissions() uses resolvePermissions() from @mastra/core/ee"
-  - "createSession() throws CloudApiError with 501 status"
+  - 'sessionToken is REQUIRED on CloudUser (not optional)'
+  - 'CloudUser does NOT have roles field (role extracted from JWT)'
+  - 'getCurrentUser() decodes JWT locally - NO API call to getUser()'
+  - 'getPermissions() uses resolvePermissions() from @mastra/core/ee'
+  - 'createSession() throws CloudApiError with 501 status'
 
 patterns-established:
-  - "JWT decode pattern: decodeJwt(sessionToken) for user info extraction"
-  - "Permission resolution: resolvePermissions([role], DEFAULT_ROLES)"
+  - 'JWT decode pattern: decodeJwt(sessionToken) for user info extraction'
+  - 'Permission resolution: resolvePermissions([role], DEFAULT_ROLES)'
 
 # Metrics
 duration: 3min
@@ -102,5 +102,6 @@ None - no external service configuration required.
 - All methods use local JWT decode (no additional API dependencies)
 
 ---
-*Phase: 03-provider-integration*
-*Completed: 2026-01-29*
+
+_Phase: 03-provider-integration_
+_Completed: 2026-01-29_

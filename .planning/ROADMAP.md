@@ -7,6 +7,7 @@ Align the `@mastra/auth-cloud` plugin with Cloud's API specification through fou
 ## Phases
 
 **Phase Numbering:**
+
 - Integer phases (1, 2, 3, 4): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
@@ -18,13 +19,16 @@ Align the `@mastra/auth-cloud` plugin with Cloud's API specification through fou
 ## Phase Details
 
 ### Phase 1: Transport Layer
+
 **Goal**: Establish HTTP request/response foundation that all endpoints will use
 **Depends on**: Nothing (first phase)
 **Requirements**:
+
 - Bearer token in Authorization header
 - Response envelope unwrapping from `{ ok, data }`
 
 **Success Criteria** (what must be TRUE):
+
 1. `request<T>()` method sends `Authorization: Bearer <token>` header when token provided
 2. `unwrapResponse<T>()` extracts data from `{ ok, data }` envelope
 3. `CloudApiResponse<T>` type defined matching Cloud spec
@@ -33,16 +37,20 @@ Align the `@mastra/auth-cloud` plugin with Cloud's API specification through fou
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 01-01-PLAN.md — Transport layer types and request helper
 
 ### Phase 2: API Paths + Methods
+
 **Goal**: Update all endpoints to match Cloud spec paths and accept token parameters
 **Depends on**: Phase 1
 **Requirements**:
+
 - API paths use `/api/v1/` prefix and `/auth/oss` login endpoint
 - `getUser()` and `getUserPermissions()` accept token parameter
 
 **Success Criteria** (what must be TRUE):
+
 1. `getLoginUrl()` returns URL with `/auth/oss` path
 2. All authenticated endpoints use `/api/v1/` prefix
 3. `getUser(userId, token)` signature accepts token parameter
@@ -52,17 +60,21 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 02-01-PLAN.md — Update config, option interfaces, and migrate all methods to request<T>()
 
 ### Phase 3: Provider Integration
+
 **Goal**: Wire `MastraCloudAuth` to use updated client and handle `sessionToken` flow
 **Depends on**: Phase 2
 **Requirements**:
+
 - `createSession()` throws descriptive CloudApiError (Cloud doesn't support)
 - `CloudUser` includes required `sessionToken` field for permission lookups
 - Permissions resolved locally via JWT decode + resolvePermissions()
 
 **Success Criteria** (what must be TRUE):
+
 1. `CloudUser` type includes required `sessionToken` field
 2. `handleCallback()` decodes JWT locally and stores token on returned user
 3. `getPermissions(user)` extracts role from JWT, uses `resolvePermissions()` from core
@@ -73,15 +85,19 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 03-01-PLAN.md — Provider integration and sessionToken flow
 
 ### Phase 4: Testing + Validation
+
 **Goal**: Verify TypeScript compiles and all changes work against mocked API
 **Depends on**: Phase 3
 **Requirements**:
+
 - TypeScript compiles without errors
 
 **Success Criteria** (what must be TRUE):
+
 1. `pnpm typecheck` passes for `auth/cloud` package
 2. All auth flow paths covered with mocked responses
 3. Error paths return appropriate errors (not swallowed)
@@ -90,6 +106,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
+
 - [x] 04-01-PLAN.md — Vitest setup and unit tests for transport + provider layers
 
 ## Progress
@@ -97,9 +114,9 @@ Plans:
 **Execution Order:**
 Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Transport Layer | 1/1 | ✓ Complete | 2026-01-28 |
-| 2. API Paths + Methods | 1/1 | ✓ Complete | 2026-01-29 |
-| 3. Provider Integration | 1/1 | ✓ Complete | 2026-01-29 |
-| 4. Testing + Validation | 1/1 | ✓ Complete | 2026-01-28 |
+| Phase                   | Plans Complete | Status     | Completed  |
+| ----------------------- | -------------- | ---------- | ---------- |
+| 1. Transport Layer      | 1/1            | ✓ Complete | 2026-01-28 |
+| 2. API Paths + Methods  | 1/1            | ✓ Complete | 2026-01-29 |
+| 3. Provider Integration | 1/1            | ✓ Complete | 2026-01-29 |
+| 4. Testing + Validation | 1/1            | ✓ Complete | 2026-01-28 |

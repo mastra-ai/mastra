@@ -69,36 +69,43 @@ mastra/
 ## Directory Purposes
 
 **`packages/core/`:**
+
 - Purpose: Foundation of framework, exports `Mastra` class
 - Contains: Agent, Workflow, Tool, Storage interfaces, Memory base, LLM abstractions
 - Key files: `src/mastra/index.ts`, `src/agent/agent.ts`, `src/workflows/workflow.ts`
 
 **`packages/server/`:**
+
 - Purpose: HTTP API definitions and handlers
 - Contains: Route handlers for agents, workflows, memory, tools, MCP
 - Key files: `src/server/handlers/*.ts`, `src/server/server-adapter/`
 
 **`packages/cli/`:**
+
 - Purpose: Command-line interface
 - Contains: `dev`, `build`, `deploy` commands
 - Key files: `src/index.ts`, `src/commands/`
 
 **`packages/memory/`:**
+
 - Purpose: Concrete memory implementation with semantic recall
 - Contains: `Memory` class, working memory tools
 - Key files: `src/index.ts`
 
 **`stores/`:**
+
 - Purpose: Database adapter implementations
 - Contains: One package per storage backend
 - Key files: `{store}/src/storage.ts`, `{store}/src/vector.ts`
 
 **`server-adapters/`:**
+
 - Purpose: HTTP framework integration
 - Contains: Adapter classes extending `MastraServerBase`
 - Key files: `{adapter}/src/index.ts`, `{adapter}/src/auth-middleware.ts`
 
 **`auth/`:**
+
 - Purpose: Auth provider integrations
 - Contains: Provider-specific auth adapters
 - Key files: `{provider}/src/index.ts`
@@ -106,16 +113,19 @@ mastra/
 ## Key File Locations
 
 **Entry Points:**
+
 - `packages/core/src/index.ts`: Core exports (`Mastra`, `Config`)
 - `packages/cli/src/index.ts`: CLI entry point
 - `server-adapters/hono/src/index.ts`: Primary server adapter
 
 **Configuration:**
+
 - `tsconfig.json`: Root TypeScript config
 - `turbo.json`: Turborepo build configuration
 - `pnpm-workspace.yaml`: Workspace package definitions
 
 **Core Logic:**
+
 - `packages/core/src/mastra/index.ts`: `Mastra` class (~1000 lines)
 - `packages/core/src/agent/agent.ts`: `Agent` class
 - `packages/core/src/workflows/workflow.ts`: `Workflow` class
@@ -123,72 +133,86 @@ mastra/
 - `packages/core/src/storage/base.ts`: Storage abstractions
 
 **Testing:**
+
 - `packages/*/src/**/*.test.ts`: Co-located unit tests
 - `e2e-tests/`: End-to-end test packages
 
 ## Naming Conventions
 
 **Files:**
+
 - `kebab-case.ts`: All source files
 - `*.test.ts`: Test files co-located with source
 - `index.ts`: Package/directory entry points
 
 **Directories:**
+
 - `lowercase`: Package and feature directories
 - `_prefix`: Internal packages not for public consumption
 
 **Packages:**
+
 - `@mastra/{name}`: Public packages
 - `@internal/{name}`: Internal packages
 
 ## Where to Add New Code
 
 **New Agent Feature:**
+
 - Primary code: `packages/core/src/agent/`
 - Tests: Co-located `*.test.ts`
 
 **New Storage Adapter:**
+
 - Implementation: `stores/{name}/src/`
 - Follow pattern from `stores/pg/` or `stores/libsql/`
 
 **New Server Handler:**
+
 - Handler: `packages/server/src/server/handlers/{name}.ts`
 - Register in server adapter routes
 
 **New Auth Provider:**
+
 - Implementation: `auth/{provider}/src/`
 - Follow pattern from `auth/workos/`
 
 **New Voice Provider:**
+
 - Implementation: `voice/{provider}/src/`
 - Implement `MastraTTS` interface
 
 **Utilities:**
+
 - Shared helpers: `packages/core/src/utils.ts`
 - Package-specific: `{package}/src/utils/`
 
 ## Special Directories
 
 **`packages/_vendored/`:**
+
 - Purpose: Vendored third-party code
 - Generated: No
 - Committed: Yes
 
 **`packages/_external-types/`:**
+
 - Purpose: External type definitions for AI SDK versions
 - Generated: No
 - Committed: Yes
 
 **`dist/`:**
+
 - Purpose: Build output (per package)
 - Generated: Yes
 - Committed: No
 
 **`.turbo/`:**
+
 - Purpose: Turborepo cache
 - Generated: Yes
 - Committed: No
 
 ---
 
-*Structure analysis: 2026-01-27*
+_Structure analysis: 2026-01-27_

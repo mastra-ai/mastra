@@ -23,12 +23,12 @@ key-files:
     - auth/cloud/src/client.ts
 
 key-decisions:
-  - "setPrototypeOf for Error subclass: Required for instanceof checks in TypeScript"
-  - "Check both response.ok AND json.ok: Cloud returns 200 with ok:false for some errors"
+  - 'setPrototypeOf for Error subclass: Required for instanceof checks in TypeScript'
+  - 'Check both response.ok AND json.ok: Cloud returns 200 with ok:false for some errors'
 
 patterns-established:
-  - "Response envelope: All Cloud responses wrapped in { ok, data, error } structure"
-  - "Auth injection: Bearer token added only when token param provided"
+  - 'Response envelope: All Cloud responses wrapped in { ok, data, error } structure'
+  - 'Auth injection: Bearer token added only when token param provided'
 
 # Metrics
 duration: 1min
@@ -90,5 +90,6 @@ None - no external service configuration required.
 - Phase 2 will migrate existing methods to use request<T>()
 
 ---
-*Phase: 01-transport-layer*
-*Completed: 2026-01-28*
+
+_Phase: 01-transport-layer_
+_Completed: 2026-01-28_

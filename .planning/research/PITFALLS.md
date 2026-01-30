@@ -15,30 +15,35 @@ Mistakes that cause broken auth flows or security issues.
 **What goes wrong:** Client sends token in request body, server expects Authorization header (or vice versa).
 
 **Why it happens:**
+
 - Original spec says one thing, implementation assumes another
 - Different endpoints have different conventions
 - Copy-paste from examples that use body-based auth
 
 **Consequences:**
+
 - 401 on every authenticated request
 - Silent failures (server ignores body token, returns "unauthenticated")
 
 **Prevention:**
+
 ```typescript
 // Explicit contract in types
 interface AuthenticatedRequest {
   headers: {
-    'Authorization': `Bearer ${string}`;  // NOT body.token
+    Authorization: `Bearer ${string}`; // NOT body.token
     'X-Project-ID': string;
   };
 }
 ```
 
 **Detection:**
+
 - Server logs show "missing authentication" despite client sending token
 - Requests work in Postman but fail in code (Postman might auto-set headers)
 
 **Where it bites us:**
+
 - Current `client.ts` sends token in body (`body: JSON.stringify({ token })`)
 - Target spec requires `Authorization: Bearer <token>` header
 - Affects: `verifyToken()`, `validateSession()`, `destroySession()`, `getUser()`, `getUserPermissions()`
@@ -50,16 +55,19 @@ interface AuthenticatedRequest {
 **What goes wrong:** Client expects `{ user: {...} }` but server returns `{ ok: true, data: { user: {...} } }`.
 
 **Why it happens:**
+
 - API evolved from direct objects to envelope pattern
 - Different endpoints have inconsistent wrapping
 - Client written against spec v1, server now at v2
 
 **Consequences:**
+
 - `data.user` is `undefined` (actually at `data.data.user`)
 - Runtime errors: "Cannot read property 'id' of undefined"
 - Partial data extraction (gets `ok: true` instead of user object)
 
 **Prevention:**
+
 ```typescript
 // Generic unwrapper with type safety
 interface CloudApiResponse<T> {
@@ -77,11 +85,13 @@ function unwrap<T>(response: CloudApiResponse<T>): T {
 ```
 
 **Detection:**
+
 - User objects have unexpected shape (e.g., `user.ok` exists)
 - TypeScript errors if types are strict
 - Unit tests that check actual field values, not just truthy
 
 **Where it bites us:**
+
 - Current `client.ts` expects direct objects: `const data = await response.json() as VerifyTokenResponse`
 - Target spec wraps in `{ ok, data }` envelope
 - Every API method needs unwrapping
@@ -93,15 +103,18 @@ function unwrap<T>(response: CloudApiResponse<T>): T {
 **What goes wrong:** Client calls `/api/auth/verify`, server listens on `/api/v1/auth/verify`.
 
 **Why it happens:**
+
 - API versioning added after client written
 - Different environments have different prefixes
 - Spec document out of sync with deployed API
 
 **Consequences:**
+
 - 404 errors on all requests
 - Works in dev (no versioning), fails in prod (versioned)
 
 **Prevention:**
+
 ```typescript
 // Centralize path construction
 class MastraCloudClient {
@@ -113,16 +126,18 @@ class MastraCloudClient {
 
   // Usage
   async verifyToken(token: string) {
-    const url = this.apiPath('/auth/verify');  // => /api/v1/auth/verify
+    const url = this.apiPath('/auth/verify'); // => /api/v1/auth/verify
   }
 }
 ```
 
 **Detection:**
+
 - 404 responses from server
 - Check Network tab for actual URLs being called
 
 **Where it bites us:**
+
 - Current: `/api/auth/verify`, `/api/users/:id`
 - Target: `/api/v1/auth/verify`, `/api/v1/users/:id`
 - Also: Login path is `/auth/login` → should be `/auth/oss`
@@ -134,23 +149,30 @@ class MastraCloudClient {
 **What goes wrong:** Storing auth token on client instance when multiple users share the client.
 
 **Why it happens:**
+
 - Natural to think "client has auth state"
 - Works in single-user scenarios
 - Copy-paste from client-side auth patterns (where there's one user)
 
 **Consequences:**
+
 - User A's request uses User B's token
 - Race conditions in concurrent requests
 - Security breach: data leakage between users
 
 **Prevention:**
+
 ```typescript
 // WRONG: Token stored on instance
 class BadClient {
-  private token: string;  // Shared across all requests!
+  private token: string; // Shared across all requests!
 
-  setToken(t: string) { this.token = t; }
-  async getUser() { /* uses this.token */ }
+  setToken(t: string) {
+    this.token = t;
+  }
+  async getUser() {
+    /* uses this.token */
+  }
 }
 
 // CORRECT: Token passed per-call
@@ -162,11 +184,13 @@ class GoodClient {
 ```
 
 **Detection:**
+
 - Auth failures that "fix themselves" on retry
 - Wrong data returned for user
 - Load testing with multiple users exposes immediately
 
 **Where it bites us:**
+
 - Current `getUser()` and `getUserPermissions()` don't accept token param
 - Implementation Plan says: add `token` parameter to both methods
 - Must NOT store token on `MastraCloudClient` instance
@@ -182,25 +206,30 @@ Mistakes that cause bugs or maintenance burden.
 **What goes wrong:** API returns `avatar_url`, client expects `avatarUrl`, field is silently `undefined`.
 
 **Why it happens:**
+
 - API follows REST convention (snake_case)
 - TypeScript/JS convention is camelCase
 - Mapping done in some places, forgotten in others
 
 **Consequences:**
+
 - Missing data in UI
 - TypeScript types lie about actual shape
 - Bugs appear only for optional fields (required would crash)
 
 **Prevention:**
+
 ```typescript
 // Explicit mapping layer
-interface CloudUserData {  // API shape (snake_case)
+interface CloudUserData {
+  // API shape (snake_case)
   id: string;
   avatar_url: string | null;
   created_at: string;
 }
 
-interface CloudUser {  // Domain shape (camelCase)
+interface CloudUser {
+  // Domain shape (camelCase)
   id: string;
   avatarUrl: string | null;
   createdAt: Date;
@@ -209,17 +238,19 @@ interface CloudUser {  // Domain shape (camelCase)
 function parseUser(data: CloudUserData): CloudUser {
   return {
     id: data.id,
-    avatarUrl: data.avatar_url,  // Explicit mapping
+    avatarUrl: data.avatar_url, // Explicit mapping
     createdAt: new Date(data.created_at),
   };
 }
 ```
 
 **Detection:**
+
 - TypeScript strict mode with explicit field access
 - Integration tests that check all fields
 
 **Where it bites us:**
+
 - Current `parseUser()` does map `avatar_url` → `avatarUrl`
 - But uses `Record<string, unknown>` input type — no compile-time safety
 - New fields from updated spec could be missed
@@ -231,16 +262,19 @@ function parseUser(data: CloudUserData): CloudUser {
 **What goes wrong:** All errors caught and converted to `null`, losing diagnostic info.
 
 **Why it happens:**
+
 - Defensive programming mindset
 - "Don't crash the user" instinct
 - Errors seen as exceptional, not informative
 
 **Consequences:**
+
 - "Why is user null?" — no logs, no clues
 - Network errors look like auth failures
 - Rate limiting looks like invalid token
 
 **Prevention:**
+
 ```typescript
 // WRONG: Silent swallow
 async verifyToken(token: string): Promise<CloudUser | null> {
@@ -267,10 +301,12 @@ async verifyToken(token: string): Promise<CloudUser | CloudAuthError> {
 ```
 
 **Detection:**
+
 - Unexplained `null` returns
 - Users report "not working" with no server-side evidence
 
 **Where it bites us:**
+
 - Current `client.ts` swallows errors: `catch { return null; }` or `catch { return []; }`
 - When Cloud endpoints are built and fail, we'll have no visibility
 - Add logging at minimum, consider typed errors for better UX
@@ -282,16 +318,19 @@ async verifyToken(token: string): Promise<CloudUser | CloudAuthError> {
 **What goes wrong:** Token expires, all requests fail, user must re-login.
 
 **Why it happens:**
+
 - MVP omits refresh flow
 - "2 hour expiry is long enough"
 - Token refresh is complex, deferred
 
 **Consequences:**
+
 - Poor UX (sudden session loss)
 - Data loss if user was mid-action
 - Support tickets for "random logouts"
 
 **Prevention:**
+
 ```typescript
 // Proactive expiry check
 interface TokenInfo {
@@ -307,10 +346,12 @@ function isExpiringSoon(info: TokenInfo, bufferMs = 60000): boolean {
 ```
 
 **Detection:**
+
 - Failures cluster around token expiry time
 - Works after page refresh (gets new token)
 
 **Where it bites us:**
+
 - Cloud spec says token lifetime is 2 hours
 - Current implementation has no expiry check or refresh
 - Spec mentions optional `POST /api/v1/oauth/refresh` endpoint
@@ -323,16 +364,19 @@ function isExpiringSoon(info: TokenInfo, bufferMs = 60000): boolean {
 **What goes wrong:** Interface requires `createSession()`, but spec doesn't support it. Method exists but breaks at runtime.
 
 **Why it happens:**
+
 - Plugin implements interface designed for different provider
 - Spec omits endpoint that was assumed to exist
 - Interface methods are mandatory, can't just delete
 
 **Consequences:**
+
 - Runtime error when method called
 - Compile-time success hides runtime failure
 - Confusing error message ("failed to create session" vs "not supported")
 
 **Prevention:**
+
 ```typescript
 // WRONG: Leave broken implementation
 async createSession(): Promise<CloudSession> {
@@ -349,10 +393,12 @@ async createSession(): Promise<CloudSession> {
 ```
 
 **Detection:**
+
 - Clear error message when attempted
 - Tests that verify behavior
 
 **Where it bites us:**
+
 - `ISessionProvider` interface requires `createSession()`
 - Cloud spec: sessions created only via code exchange
 - Implementation Plan: keep method in `index.ts`, throw descriptive error
@@ -369,15 +415,18 @@ Mistakes that cause friction but are recoverable.
 **What goes wrong:** Callback accepts any `state`, attacker can redirect user to malicious callback.
 
 **Why it happens:**
+
 - State validation seems optional
 - "It's just for development"
 - Implementation focus on happy path
 
 **Consequences:**
+
 - CSRF vulnerability
 - Attacker could steal auth code
 
 **Prevention:**
+
 ```typescript
 // Store state before redirect
 const state = crypto.randomUUID();
@@ -391,10 +440,12 @@ if (state !== savedState) {
 ```
 
 **Detection:**
+
 - Security audit
 - Missing state validation code
 
 **Where it bites us:**
+
 - Current `handleCallback(code, _state)` — `_state` prefix suggests unused
 - State validation should happen in the auth handler, but verify it does
 
@@ -405,15 +456,18 @@ if (state !== savedState) {
 **What goes wrong:** Server expects `X-Project-ID`, client sends `x-project-id`, header ignored.
 
 **Why it happens:**
+
 - HTTP headers are case-insensitive per spec
 - But some servers are strict
 - Different libraries have different behaviors
 
 **Consequences:**
+
 - Subtle auth failures
 - Works in some environments, not others
 
 **Prevention:**
+
 ```typescript
 // Be consistent, match server exactly
 headers: {
@@ -423,10 +477,12 @@ headers: {
 ```
 
 **Detection:**
+
 - Compare headers in docs vs implementation
 - Check server logs for received headers
 
 **Where it bites us:**
+
 - Current code uses `'X-Project-ID'` — verify server expects same case
 - Low risk but worth documenting
 
@@ -434,26 +490,26 @@ headers: {
 
 ## Testing Blind Spots
 
-| Area | Why Missed | Prevention |
-|------|-----------|------------|
-| Response envelope changes | Mocks return expected shape, not actual | Mock actual API responses from spec |
-| Token in wrong location | Unit tests don't check HTTP layer | Integration tests against mock server |
-| Concurrent user tokens | Tests run single-user | Load test with multiple concurrent users |
-| Field mapping for all fields | Tests check happy path fields only | Property-based testing or exhaustive field checks |
-| Error response parsing | Tests focus on success | Test every error code path explicitly |
-| Network timeouts | Local tests are fast | Add timeout and retry tests |
+| Area                         | Why Missed                              | Prevention                                        |
+| ---------------------------- | --------------------------------------- | ------------------------------------------------- |
+| Response envelope changes    | Mocks return expected shape, not actual | Mock actual API responses from spec               |
+| Token in wrong location      | Unit tests don't check HTTP layer       | Integration tests against mock server             |
+| Concurrent user tokens       | Tests run single-user                   | Load test with multiple concurrent users          |
+| Field mapping for all fields | Tests check happy path fields only      | Property-based testing or exhaustive field checks |
+| Error response parsing       | Tests focus on success                  | Test every error code path explicitly             |
+| Network timeouts             | Local tests are fast                    | Add timeout and retry tests                       |
 
 ---
 
 ## Phase-Specific Warnings
 
-| Phase | Likely Pitfall | Mitigation |
-|-------|---------------|------------|
-| API path updates | Miss one path, silent 404 | Centralize path construction, grep for hardcoded paths |
-| Auth header migration | Token in body AND header during transition | Feature flag or big-bang switch |
-| Response unwrapping | Forget one endpoint | Add `unwrap()` helper, use consistently |
-| Token parameter addition | Call sites not updated | TypeScript will catch missing args |
-| createSession removal | Breaks interface contract | Throw explicit error, don't remove from index.ts |
+| Phase                    | Likely Pitfall                             | Mitigation                                             |
+| ------------------------ | ------------------------------------------ | ------------------------------------------------------ |
+| API path updates         | Miss one path, silent 404                  | Centralize path construction, grep for hardcoded paths |
+| Auth header migration    | Token in body AND header during transition | Feature flag or big-bang switch                        |
+| Response unwrapping      | Forget one endpoint                        | Add `unwrap()` helper, use consistently                |
+| Token parameter addition | Call sites not updated                     | TypeScript will catch missing args                     |
+| createSession removal    | Breaks interface contract                  | Throw explicit error, don't remove from index.ts       |
 
 ---
 

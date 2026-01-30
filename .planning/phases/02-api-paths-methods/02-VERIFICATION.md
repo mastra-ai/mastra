@@ -17,24 +17,25 @@ re_verification: false
 
 ### Observable Truths
 
-| # | Truth | Status | Evidence |
-|---|-------|--------|----------|
-| 1 | getLoginUrl() returns URL with /auth/oss path | ✓ VERIFIED | Line 271: `${this.baseUrl}${this.authPath}` where authPath defaults to '/auth/oss' |
-| 2 | All authenticated endpoints use /api/v1/ prefix | ✓ VERIFIED | Lines 185, 203, 220, 235, 251, 282: all use `${this.apiPrefix}` pattern |
-| 3 | getUser() accepts options object with userId and token | ✓ VERIFIED | Line 232: `getUser(options: GetUserOptions)` with GetUserOptions interface |
-| 4 | getUserPermissions() accepts options object with userId and token | ✓ VERIFIED | Line 248: `getUserPermissions(options: GetUserPermissionsOptions)` |
-| 5 | All methods use request<T>() helper instead of raw fetch | ✓ VERIFIED | Only 1 fetch call in codebase (line 150 in request<T>()), all methods call this.request<> |
-| 6 | createSession() removed from client | ✓ VERIFIED | No matches for "createSession" in client.ts, throws in index.ts line 118 |
+| #   | Truth                                                             | Status     | Evidence                                                                                  |
+| --- | ----------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------- |
+| 1   | getLoginUrl() returns URL with /auth/oss path                     | ✓ VERIFIED | Line 271: `${this.baseUrl}${this.authPath}` where authPath defaults to '/auth/oss'        |
+| 2   | All authenticated endpoints use /api/v1/ prefix                   | ✓ VERIFIED | Lines 185, 203, 220, 235, 251, 282: all use `${this.apiPrefix}` pattern                   |
+| 3   | getUser() accepts options object with userId and token            | ✓ VERIFIED | Line 232: `getUser(options: GetUserOptions)` with GetUserOptions interface                |
+| 4   | getUserPermissions() accepts options object with userId and token | ✓ VERIFIED | Line 248: `getUserPermissions(options: GetUserPermissionsOptions)`                        |
+| 5   | All methods use request<T>() helper instead of raw fetch          | ✓ VERIFIED | Only 1 fetch call in codebase (line 150 in request<T>()), all methods call this.request<> |
+| 6   | createSession() removed from client                               | ✓ VERIFIED | No matches for "createSession" in client.ts, throws in index.ts line 118                  |
 
 **Score:** 6/6 truths verified
 
 ### Required Artifacts
 
-| Artifact | Expected | Status | Details |
-|----------|----------|--------|---------|
+| Artifact                   | Expected                    | Status     | Details                                                                   |
+| -------------------------- | --------------------------- | ---------- | ------------------------------------------------------------------------- |
 | `auth/cloud/src/client.ts` | Migrated API client methods | ✓ VERIFIED | 322 lines, exports MastraCloudClient/CloudUser/CloudSession/CloudApiError |
 
 **Artifact Level Checks:**
+
 - **Exists:** ✓ File present
 - **Substantive:** ✓ 322 lines, no stub patterns found
 - **Wired:** ✓ Imported and used by index.ts (line 18)
@@ -42,16 +43,17 @@ re_verification: false
 
 ### Key Link Verification
 
-| From | To | Via | Status | Details |
-|------|----|----|--------|---------|
-| verifyToken() | request<T>() | internal call | ✓ WIRED | Line 184: `this.request<{ user: Record<string, unknown> }>` |
-| getUser() | request<T>() | internal call with token | ✓ WIRED | Line 234-237: calls request() with `options.token` as 3rd param |
-| getUserPermissions() | request<T>() | internal call with token | ✓ WIRED | Line 250-253: calls request() with `options.token` as 3rd param |
-| All methods | apiPrefix | path construction | ✓ WIRED | 6 methods use `${this.apiPrefix}/...` pattern |
-| getLoginUrl() | authPath | path construction | ✓ WIRED | Line 271: uses `${this.authPath}` |
-| index.ts | client methods | options pattern | ✓ WIRED | All client calls use options objects (lines 81, 97, 101, 107, etc.) |
+| From                 | To             | Via                      | Status  | Details                                                             |
+| -------------------- | -------------- | ------------------------ | ------- | ------------------------------------------------------------------- |
+| verifyToken()        | request<T>()   | internal call            | ✓ WIRED | Line 184: `this.request<{ user: Record<string, unknown> }>`         |
+| getUser()            | request<T>()   | internal call with token | ✓ WIRED | Line 234-237: calls request() with `options.token` as 3rd param     |
+| getUserPermissions() | request<T>()   | internal call with token | ✓ WIRED | Line 250-253: calls request() with `options.token` as 3rd param     |
+| All methods          | apiPrefix      | path construction        | ✓ WIRED | 6 methods use `${this.apiPrefix}/...` pattern                       |
+| getLoginUrl()        | authPath       | path construction        | ✓ WIRED | Line 271: uses `${this.authPath}`                                   |
+| index.ts             | client methods | options pattern          | ✓ WIRED | All client calls use options objects (lines 81, 97, 101, 107, etc.) |
 
 **Token Passing Verification:**
+
 - `request<T>()` accepts optional token param (line 134)
 - `getUser()` passes `options.token` to request (line 237)
 - `getUserPermissions()` passes `options.token` to request (line 253)
@@ -66,6 +68,7 @@ No REQUIREMENTS.md entries mapped to Phase 2.
 None detected.
 
 **Scan Results:**
+
 - TODO/FIXME comments: 0
 - Placeholder content: 0
 - Empty implementations: 0

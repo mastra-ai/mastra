@@ -15,11 +15,12 @@ Use native `fetch` with a typed wrapper pattern. No external HTTP libraries need
 
 ### HTTP Client
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
+| Technology     | Version  | Purpose       | Why                                                              |
+| -------------- | -------- | ------------- | ---------------------------------------------------------------- |
 | Native `fetch` | Built-in | HTTP requests | Zero dependencies, TypeScript support, sufficient for auth flows |
 
 **Rationale:**
+
 - Monorepo already uses native fetch everywhere (`packages/core/src/utils.ts:fetchWithRetry`, playground hooks)
 - Auth client is simple CRUD — no need for axios's interceptor complexity
 - fetch is standard, no versioning concerns
@@ -28,13 +29,14 @@ Use native `fetch` with a typed wrapper pattern. No external HTTP libraries need
 
 ### Type-Safe Response Pattern
 
-| Pattern | Purpose | Implementation |
-|---------|---------|----------------|
-| Generic unwrap function | Extract `data` from `{ ok, data, error }` | Single utility, reusable |
-| Discriminated union responses | Type-safe error handling | `CloudApiResponse<T>` |
-| Branded types for IDs | Prevent ID misuse | `UserId`, `SessionId` |
+| Pattern                       | Purpose                                   | Implementation           |
+| ----------------------------- | ----------------------------------------- | ------------------------ |
+| Generic unwrap function       | Extract `data` from `{ ok, data, error }` | Single utility, reusable |
+| Discriminated union responses | Type-safe error handling                  | `CloudApiResponse<T>`    |
+| Branded types for IDs         | Prevent ID misuse                         | `UserId`, `SessionId`    |
 
 **Response wrapper type:**
+
 ```typescript
 // Matches Cloud API spec from IMPLEMENTATION_PLAN.md
 interface CloudApiResponse<T> {
@@ -49,6 +51,7 @@ interface CloudApiResponse<T> {
 ```
 
 **Unwrap utility:**
+
 ```typescript
 async function unwrapResponse<T>(response: Response): Promise<T> {
   const json: CloudApiResponse<T> = await response.json();
@@ -57,7 +60,7 @@ async function unwrapResponse<T>(response: Response): Promise<T> {
     throw new CloudApiError(
       json.error?.message ?? 'Unknown error',
       json.error?.status ?? response.status,
-      json.error?.code
+      json.error?.code,
     );
   }
 
@@ -69,12 +72,13 @@ async function unwrapResponse<T>(response: Response): Promise<T> {
 
 ### Authorization Header Pattern
 
-| Pattern | When | Implementation |
-|---------|------|----------------|
+| Pattern                         | When                    | Implementation                       |
+| ------------------------------- | ----------------------- | ------------------------------------ |
 | `Authorization: Bearer <token>` | Authenticated endpoints | Pass token to method, add to headers |
-| `X-Project-ID: <id>` | All requests | Add in base request builder |
+| `X-Project-ID: <id>`            | All requests            | Add in base request builder          |
 
 **Request builder:**
+
 ```typescript
 private buildHeaders(token?: string): HeadersInit {
   const headers: HeadersInit = {
@@ -91,6 +95,7 @@ private buildHeaders(token?: string): HeadersInit {
 ```
 
 **Why pass token as parameter, not store on client:**
+
 - Client is singleton
 - Multiple users = multiple tokens
 - WorkOS pattern: `getUser(userId)` — no stored state
@@ -100,19 +105,20 @@ private buildHeaders(token?: string): HeadersInit {
 
 ### Error Handling Pattern
 
-| Pattern | Purpose | Confidence |
-|---------|---------|------------|
-| Custom error class | Structured errors with code/status | HIGH |
-| Return `null` for not-found | Matches existing client.ts pattern | HIGH |
-| Throw for unexpected errors | Surface issues to caller | HIGH |
+| Pattern                     | Purpose                            | Confidence |
+| --------------------------- | ---------------------------------- | ---------- |
+| Custom error class          | Structured errors with code/status | HIGH       |
+| Return `null` for not-found | Matches existing client.ts pattern | HIGH       |
+| Throw for unexpected errors | Surface issues to caller           | HIGH       |
 
 **Error class:**
+
 ```typescript
 class CloudApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
-    public readonly code?: string
+    public readonly code?: string,
   ) {
     super(message);
     this.name = 'CloudApiError';
@@ -129,6 +135,7 @@ class CloudApiError extends Error {
 ```
 
 **Error handling strategy:**
+
 ```typescript
 async verifyToken(token: string): Promise<CloudUser | null> {
   try {
@@ -159,13 +166,13 @@ async verifyToken(token: string): Promise<CloudUser | null> {
 
 ## Alternatives Considered
 
-| Option | Recommendation | Why Not |
-|--------|----------------|---------|
-| axios | Do not use | Extra dependency, interceptors overkill for this use case |
-| ky | Do not use | Good library, but fetch already works, avoid churn |
-| got | Do not use | Node-only, Mastra supports edge runtimes |
-| Custom fetch wrapper class | Do not use | Over-engineering, simple functions suffice |
-| ofetch | Do not use | Nice ergonomics but adds dependency |
+| Option                     | Recommendation | Why Not                                                   |
+| -------------------------- | -------------- | --------------------------------------------------------- |
+| axios                      | Do not use     | Extra dependency, interceptors overkill for this use case |
+| ky                         | Do not use     | Good library, but fetch already works, avoid churn        |
+| got                        | Do not use     | Node-only, Mastra supports edge runtimes                  |
+| Custom fetch wrapper class | Do not use     | Over-engineering, simple functions suffice                |
+| ofetch                     | Do not use     | Nice ergonomics but adds dependency                       |
 
 ---
 
@@ -231,14 +238,14 @@ private parseUser(data: CloudUserData): CloudUser {
 
 ## DO NOT
 
-| Anti-pattern | Why |
-|--------------|-----|
+| Anti-pattern                   | Why                                   |
+| ------------------------------ | ------------------------------------- |
 | Store token on client instance | Multiple users share client singleton |
-| Use `any` for API responses | Loses type safety, defeats purpose |
-| Swallow all errors | Hide real issues |
-| Create fetch wrapper class | Over-engineering for 8 methods |
-| Add retry logic | Auth failures shouldn't retry |
-| Add request interceptors | Overkill for explicit header passing |
+| Use `any` for API responses    | Loses type safety, defeats purpose    |
+| Swallow all errors             | Hide real issues                      |
+| Create fetch wrapper class     | Over-engineering for 8 methods        |
+| Add retry logic                | Auth failures shouldn't retry         |
+| Add request interceptors       | Overkill for explicit header passing  |
 
 ---
 
@@ -256,13 +263,13 @@ private parseUser(data: CloudUserData): CloudUser {
 
 ## Confidence Assessment
 
-| Recommendation | Confidence | Basis |
-|----------------|------------|-------|
-| Use native fetch | HIGH | Monorepo precedent, zero dependencies |
-| Generic unwrap pattern | HIGH | Standard TS pattern, matches spec |
-| Pass token as parameter | HIGH | WorkOS precedent, stateless |
-| Custom error class | HIGH | Standard pattern |
-| Avoid axios | HIGH | No benefit for this use case |
+| Recommendation          | Confidence | Basis                                 |
+| ----------------------- | ---------- | ------------------------------------- |
+| Use native fetch        | HIGH       | Monorepo precedent, zero dependencies |
+| Generic unwrap pattern  | HIGH       | Standard TS pattern, matches spec     |
+| Pass token as parameter | HIGH       | WorkOS precedent, stateless           |
+| Custom error class      | HIGH       | Standard pattern                      |
+| Avoid axios             | HIGH       | No benefit for this use case          |
 
 ---
 

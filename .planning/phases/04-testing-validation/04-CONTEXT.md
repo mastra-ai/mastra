@@ -14,6 +14,7 @@ Verify TypeScript compiles and auth flows work against mocked API responses. Thi
 ## Implementation Decisions
 
 ### Test coverage scope
+
 - Happy paths + key error paths (not comprehensive edge cases)
 - Key errors: invalid token, network failure, 501 from createSession
 - Unit tests for transport layer (request<T>(), unwrapResponse(), CloudApiError)
@@ -21,17 +22,20 @@ Verify TypeScript compiles and auth flows work against mocked API responses. Thi
 - Test file location: match existing pattern in auth/cloud package
 
 ### Mock strategy
+
 - Use vi.mock fetch — no MSW or dependency injection
 - Mock responses defined inline in each test — no shared fixtures
 - Error responses must match Cloud API spec exactly (actual error codes/formats)
 
 ### Validation criteria
+
 - Minimum bar: `pnpm typecheck` passes AND all tests green
 - Scope: auth/cloud package only (not whole monorepo)
 - Full vitest setup: add vitest.config.ts + test script to package.json
 - No coverage threshold required
 
 ### Claude's Discretion
+
 - JWT testing approach (real JWTs vs mocked decode function)
 - Exact test file organization within the package
 - Helper utilities for test setup
@@ -55,5 +59,5 @@ None — discussion stayed within phase scope
 
 ---
 
-*Phase: 04-testing-validation*
-*Context gathered: 2026-01-28*
+_Phase: 04-testing-validation_
+_Context gathered: 2026-01-28_

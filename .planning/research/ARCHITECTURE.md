@@ -71,13 +71,13 @@
 
 ## Component Boundaries
 
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| `MastraCloudAuth` | Interface implementation, token extraction from requests, session cookie handling | `MastraCloudClient` |
-| `MastraCloudClient` | API communication, URL building, response handling | Cloud API via fetch |
-| Transport Layer | HTTP mechanics, headers, error catching | Native fetch |
-| Response Layer | Envelope unwrapping, null coercion | Transport Layer |
-| Parsing Layer | Type transformation, date parsing | Response Layer |
+| Component           | Responsibility                                                                    | Communicates With   |
+| ------------------- | --------------------------------------------------------------------------------- | ------------------- |
+| `MastraCloudAuth`   | Interface implementation, token extraction from requests, session cookie handling | `MastraCloudClient` |
+| `MastraCloudClient` | API communication, URL building, response handling                                | Cloud API via fetch |
+| Transport Layer     | HTTP mechanics, headers, error catching                                           | Native fetch        |
+| Response Layer      | Envelope unwrapping, null coercion                                                | Transport Layer     |
+| Parsing Layer       | Type transformation, date parsing                                                 | Response Layer      |
 
 ---
 
@@ -160,6 +160,7 @@ const client = new MastraCloudClient({ projectId: 'proj_xxx' });
 ```
 
 **Wrong approach:** Store token in client instance
+
 ```typescript
 // BAD - race conditions, wrong user's data returned
 client.setToken(tokenA);
@@ -177,10 +178,12 @@ async destroySession(token: string, sessionId: string): Promise<void>
 ```
 
 **Client instance holds only:**
+
 - `projectId` (constant)
 - `baseUrl` (constant)
 
 **Token flows:**
+
 1. Extracted from request (cookie or header) in `MastraCloudAuth`
 2. Passed to `MastraCloudClient` methods
 3. Added to request headers in transport layer
@@ -233,13 +236,13 @@ private async request<T>(
 
 ### Why This Pattern
 
-| Concern | Handled By |
-|---------|-----------|
-| Headers | `request()` adds project ID + optional auth |
-| HTTP errors | `request()` catches and returns `{ ok: false }` |
-| JSON parsing | `request()` always parses response |
-| Response shape | `unwrapResponse()` extracts data |
-| Business logic | Public methods use parsed data |
+| Concern        | Handled By                                      |
+| -------------- | ----------------------------------------------- |
+| Headers        | `request()` adds project ID + optional auth     |
+| HTTP errors    | `request()` catches and returns `{ ok: false }` |
+| JSON parsing   | `request()` always parses response              |
+| Response shape | `unwrapResponse()` extracts data                |
+| Business logic | Public methods use parsed data                  |
 
 ---
 
@@ -285,12 +288,14 @@ async verifyToken(token: string): Promise<CloudUser | null> {
 ### Error Handling Variants
 
 **Nullable return (validation-style):**
+
 ```typescript
 // Returns null on failure - caller handles absence
 async validateSession(token: string): Promise<CloudSession | null>
 ```
 
 **Throws on failure (action-style):**
+
 ```typescript
 // Throws on failure - operation must succeed
 async exchangeCode(code: string): Promise<{ user: CloudUser; session: CloudSession }> {
@@ -369,12 +374,12 @@ private parseSession(data: CloudSessionData): CloudSession {
 
 ### Where Token Lives
 
-| Stage | Token Location |
-|-------|---------------|
-| Initial auth | Cookie (httpOnly) or Authorization header |
-| During request processing | Extracted by `MastraCloudAuth` |
-| Passed to client | Method parameter |
-| Stored for later use | `CloudUser.sessionToken` field |
+| Stage                     | Token Location                            |
+| ------------------------- | ----------------------------------------- |
+| Initial auth              | Cookie (httpOnly) or Authorization header |
+| During request processing | Extracted by `MastraCloudAuth`            |
+| Passed to client          | Method parameter                          |
+| Stored for later use      | `CloudUser.sessionToken` field            |
 
 ### Token Flow Through System
 
@@ -419,6 +424,7 @@ async getPermissions(user: CloudUser): Promise<string[]> {
 **What:** Some methods throw, some return null, inconsistent
 **Why bad:** Callers don't know what to expect
 **Instead:** Document pattern per method type:
+
 - Validation methods → return null on failure
 - Action methods → throw on failure
 
@@ -491,11 +497,23 @@ interface CloudSessionData {
 }
 
 // Endpoint-specific response data
-interface VerifyData { user: CloudUserData; }
-interface ValidateData { session: CloudSessionData; valid: boolean; }
-interface CallbackData { user: CloudUserData; session: CloudSessionData; }
-interface UserData { user: CloudUserData; }
-interface PermissionsData { permissions: string[]; }
+interface VerifyData {
+  user: CloudUserData;
+}
+interface ValidateData {
+  session: CloudSessionData;
+  valid: boolean;
+}
+interface CallbackData {
+  user: CloudUserData;
+  session: CloudSessionData;
+}
+interface UserData {
+  user: CloudUserData;
+}
+interface PermissionsData {
+  permissions: string[];
+}
 ```
 
 ### Public Types (client.ts, exported)
@@ -509,7 +527,7 @@ export interface CloudUser {
   roles: string[];
   createdAt: Date;
   metadata?: Record<string, unknown>;
-  sessionToken?: string;  // NEW: for authenticated API calls
+  sessionToken?: string; // NEW: for authenticated API calls
 }
 
 export interface CloudSession {
@@ -524,13 +542,13 @@ export interface CloudSession {
 
 ## Comparison with WorkOS Pattern
 
-| Aspect | WorkOS | Cloud (Target) |
-|--------|--------|----------------|
-| SDK | `@workos-inc/node` provides typed client | Custom `MastraCloudClient` |
-| Session | AuthKit handles via `authService.withAuth()` | Manual cookie extraction |
-| Token location | Encrypted in cookie, managed by AuthKit | Session ID in cookie, passed as header |
-| User lookup | `workos.userManagement.getUser(id)` | `client.getUser(id, token)` |
-| Response format | WorkOS SDK handles | Manual unwrap from `{ ok, data }` |
+| Aspect          | WorkOS                                       | Cloud (Target)                         |
+| --------------- | -------------------------------------------- | -------------------------------------- |
+| SDK             | `@workos-inc/node` provides typed client     | Custom `MastraCloudClient`             |
+| Session         | AuthKit handles via `authService.withAuth()` | Manual cookie extraction               |
+| Token location  | Encrypted in cookie, managed by AuthKit      | Session ID in cookie, passed as header |
+| User lookup     | `workos.userManagement.getUser(id)`          | `client.getUser(id, token)`            |
+| Response format | WorkOS SDK handles                           | Manual unwrap from `{ ok, data }`      |
 
 **Key difference:** WorkOS SDK abstracts transport; Cloud client must implement it.
 
@@ -539,22 +557,26 @@ export interface CloudSession {
 ## Implementation Checklist
 
 ### Transport Layer
+
 - [ ] Single `request<T>()` method handles all HTTP
 - [ ] `X-Project-ID` header always added
 - [ ] `Authorization: Bearer` added when token provided
 - [ ] Network errors return `{ ok: false }` not throw
 
 ### Response Layer
+
 - [ ] `unwrapResponse<T>()` extracts data from envelope
 - [ ] Returns null for `{ ok: false }` responses
 - [ ] Documented which methods throw vs return null
 
 ### Parsing Layer
+
 - [ ] `parseUser()` transforms snake_case → camelCase
 - [ ] `parseSession()` transforms snake_case → camelCase
 - [ ] Date strings converted to Date objects
 
 ### Token Handling
+
 - [ ] No token stored in client instance
 - [ ] Token passed as parameter to authenticated methods
 - [ ] `sessionToken` field added to `CloudUser`

@@ -9,6 +9,7 @@
 This phase validates the auth/cloud implementation with unit tests. The monorepo uses vitest 4.0.16 (from catalog) with a consistent pattern: `vi.stubGlobal('fetch', ...)` for HTTP mocking, `vi.mock('module')` for dependency mocking. Existing auth packages (auth0, supabase, etc.) provide clear patterns to follow.
 
 Key insight: The auth/cloud package has two layers to test:
+
 1. **Transport layer** (`client.ts`): `MastraCloudClient` methods, `CloudApiError`, `request<T>()` helper
 2. **Provider layer** (`index.ts`): `MastraCloudAuth` implementing all EE interfaces with JWT decode logic
 
@@ -17,23 +18,27 @@ Key insight: The auth/cloud package has two layers to test:
 ## Standard Stack
 
 ### Core
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| vitest | 4.0.16 (catalog) | Test runner | Monorepo standard, already in devDeps |
-| @vitest/coverage-v8 | 4.0.12 (catalog) | Coverage | Already in devDeps, not required |
+
+| Library             | Version          | Purpose     | Why Standard                          |
+| ------------------- | ---------------- | ----------- | ------------------------------------- |
+| vitest              | 4.0.16 (catalog) | Test runner | Monorepo standard, already in devDeps |
+| @vitest/coverage-v8 | 4.0.12 (catalog) | Coverage    | Already in devDeps, not required      |
 
 ### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| jose | ^5.9.6 | JWT decode | Already in deps, mock for unit tests |
+
+| Library | Version | Purpose    | When to Use                          |
+| ------- | ------- | ---------- | ------------------------------------ |
+| jose    | ^5.9.6  | JWT decode | Already in deps, mock for unit tests |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| vi.stubGlobal fetch | MSW | MSW overkill for this scope; decision locked in CONTEXT.md |
-| Real JWTs | Mocked decodeJwt | Real JWTs need signing keys; mocking simpler for unit tests |
+
+| Instead of          | Could Use        | Tradeoff                                                    |
+| ------------------- | ---------------- | ----------------------------------------------------------- |
+| vi.stubGlobal fetch | MSW              | MSW overkill for this scope; decision locked in CONTEXT.md  |
+| Real JWTs           | Mocked decodeJwt | Real JWTs need signing keys; mocking simpler for unit tests |
 
 **Installation:**
+
 ```bash
 # Already installed via devDependencies
 # No additional packages needed
@@ -42,6 +47,7 @@ Key insight: The auth/cloud package has two layers to test:
 ## Architecture Patterns
 
 ### Recommended Test File Structure
+
 ```
 auth/cloud/
 ├── src/
@@ -53,9 +59,11 @@ auth/cloud/
 ```
 
 ### Pattern 1: Fetch Mocking with vi.stubGlobal
+
 **What:** Mock global fetch for HTTP request testing
 **When to use:** All transport layer tests
 **Example:**
+
 ```typescript
 // Source: packages/rag/src/rerank/relevance/cohere/index.test.ts
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -94,9 +102,11 @@ describe('MastraCloudClient', () => {
 ```
 
 ### Pattern 2: Module Mocking with vi.mock
+
 **What:** Mock entire modules (like jose) for isolated unit tests
 **When to use:** Provider tests that need controlled JWT decode behavior
 **Example:**
+
 ```typescript
 // Source: auth/auth0/src/index.test.ts
 import { decodeJwt } from 'jose';
@@ -125,18 +135,21 @@ describe('MastraCloudAuth', () => {
 ```
 
 ### Pattern 3: Error Testing
+
 **What:** Test error paths with mocked failures
 **When to use:** CloudApiError tests, network failures
 **Example:**
+
 ```typescript
 it('throws CloudApiError on API failure', async () => {
   (global.fetch as any).mockResolvedValue({
     ok: false,
     status: 401,
-    json: () => Promise.resolve({
-      ok: false,
-      error: { message: 'Unauthorized', status: 401, code: 'unauthorized' },
-    }),
+    json: () =>
+      Promise.resolve({
+        ok: false,
+        error: { message: 'Unauthorized', status: 401, code: 'unauthorized' },
+      }),
   });
 
   await expect(client.verifyToken({ token: 'bad' })).rejects.toThrow(CloudApiError);
@@ -144,23 +157,25 @@ it('throws CloudApiError on API failure', async () => {
 ```
 
 ### Anti-Patterns to Avoid
+
 - **Shared mock fixtures:** Decision: inline mocks per test for clarity
 - **Mocking implementation internals:** Test public API, not private methods
 - **Real network calls:** Always mock fetch, never hit real endpoints
 
 ## Don't Hand-Roll
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| JWT generation | Custom signing logic | Mock decodeJwt return value | jose signing requires keys; mocking simpler |
-| Response helpers | Utility functions | Inline mock objects | Per-test mocks are clearer (per CONTEXT.md) |
-| Request assertions | Custom matchers | expect.objectContaining | Built-in vitest matchers sufficient |
+| Problem            | Don't Build          | Use Instead                 | Why                                         |
+| ------------------ | -------------------- | --------------------------- | ------------------------------------------- |
+| JWT generation     | Custom signing logic | Mock decodeJwt return value | jose signing requires keys; mocking simpler |
+| Response helpers   | Utility functions    | Inline mock objects         | Per-test mocks are clearer (per CONTEXT.md) |
+| Request assertions | Custom matchers      | expect.objectContaining     | Built-in vitest matchers sufficient         |
 
 **Key insight:** Keep tests minimal. Inline mocks per CONTEXT.md decision; no shared fixtures.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Forgetting to Restore Fetch
+
 **What goes wrong:** Tests leak mocked fetch to other tests
 **Why it happens:** vi.stubGlobal persists between tests
 **How to avoid:** Always restore in afterEach
@@ -174,18 +189,21 @@ afterEach(() => {
 ```
 
 ### Pitfall 2: Mock Not Hoisted
+
 **What goes wrong:** vi.mock called but import not mocked
 **Why it happens:** vi.mock must be at module top level
 **How to avoid:** Put vi.mock calls before imports (vitest hoists automatically)
 **Warning signs:** Test calls real implementation
 
 ### Pitfall 3: instanceof CloudApiError Fails
+
 **What goes wrong:** Caught error not instanceof CloudApiError
 **Why it happens:** Error subclass without setPrototypeOf
 **How to avoid:** Already fixed in implementation (Object.setPrototypeOf)
 **Warning signs:** Error type checks fail in tests
 
 ### Pitfall 4: Response.ok vs json.ok Confusion
+
 **What goes wrong:** Test passes but real API fails
 **Why it happens:** Cloud API returns 200 with ok:false for some errors
 **How to avoid:** Mock both response.ok AND json.ok correctly
@@ -202,6 +220,7 @@ afterEach(() => {
 ## Code Examples
 
 ### Transport Layer Test (client.test.ts)
+
 ```typescript
 // Source: Derived from cohere/index.test.ts + supabase/index.test.ts patterns
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -226,32 +245,36 @@ describe('MastraCloudClient', () => {
     it('returns user on valid token', async () => {
       (global.fetch as any).mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({
-          ok: true,
-          data: {
-            user: {
-              id: 'user-123',
-              email: 'test@example.com',
-              created_at: '2026-01-01T00:00:00Z',
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            data: {
+              user: {
+                id: 'user-123',
+                email: 'test@example.com',
+                created_at: '2026-01-01T00:00:00Z',
+              },
             },
-          },
-        }),
+          }),
       });
 
       const user = await client.verifyToken({ token: 'valid-token' });
-      expect(user).toEqual(expect.objectContaining({
-        id: 'user-123',
-        email: 'test@example.com',
-      }));
+      expect(user).toEqual(
+        expect.objectContaining({
+          id: 'user-123',
+          email: 'test@example.com',
+        }),
+      );
     });
 
     it('returns null on invalid token', async () => {
       (global.fetch as any).mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({
-          ok: false,
-          error: { message: 'Invalid token', status: 401 },
-        }),
+        json: () =>
+          Promise.resolve({
+            ok: false,
+            error: { message: 'Invalid token', status: 401 },
+          }),
       });
 
       const user = await client.verifyToken({ token: 'invalid' });
@@ -262,6 +285,7 @@ describe('MastraCloudClient', () => {
 ```
 
 ### Provider Layer Test (index.test.ts)
+
 ```typescript
 // Source: Derived from auth0/index.test.ts pattern
 import { decodeJwt } from 'jose';
@@ -294,11 +318,13 @@ describe('MastraCloudAuth', () => {
       });
 
       const user = await auth.getCurrentUser(request);
-      expect(user).toEqual(expect.objectContaining({
-        id: 'user-123',
-        email: 'test@example.com',
-        sessionToken: 'jwt-token-here',
-      }));
+      expect(user).toEqual(
+        expect.objectContaining({
+          id: 'user-123',
+          email: 'test@example.com',
+          sessionToken: 'jwt-token-here',
+        }),
+      );
     });
 
     it('returns null when no cookie', async () => {
@@ -321,6 +347,7 @@ describe('MastraCloudAuth', () => {
 ```
 
 ### vitest.config.ts
+
 ```typescript
 // Source: auth/auth0/vitest.config.ts pattern
 import { defineConfig } from 'vitest/config';
@@ -335,13 +362,14 @@ export default defineConfig({
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| jest | vitest | 2023+ | Faster, ESM-native |
-| global.fetch = | vi.stubGlobal | vitest 1.0+ | Cleaner, auto-cleanup option |
-| MSW for unit tests | vi.stubGlobal | Current preference | MSW for integration, stubGlobal for unit |
+| Old Approach       | Current Approach | When Changed       | Impact                                   |
+| ------------------ | ---------------- | ------------------ | ---------------------------------------- |
+| jest               | vitest           | 2023+              | Faster, ESM-native                       |
+| global.fetch =     | vi.stubGlobal    | vitest 1.0+        | Cleaner, auto-cleanup option             |
+| MSW for unit tests | vi.stubGlobal    | Current preference | MSW for integration, stubGlobal for unit |
 
 **Deprecated/outdated:**
+
 - `jest.fn()` -> `vi.fn()` (jest not used in this monorepo)
 
 ## Open Questions
@@ -359,6 +387,7 @@ export default defineConfig({
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - auth/auth0/vitest.config.ts - Vitest config pattern
 - auth/auth0/src/index.test.ts - Jose mocking pattern
 - auth/supabase/src/index.test.ts - Client mocking pattern
@@ -366,15 +395,18 @@ export default defineConfig({
 - pnpm-workspace.yaml catalog - vitest 4.0.16
 
 ### Secondary (MEDIUM confidence)
+
 - [Vitest Mocking Guide](https://vitest.dev/guide/mocking) - Official docs on vi.mock and vi.stubGlobal
 - [Vitest Globals Mocking](https://vitest.dev/guide/mocking/globals) - vi.stubGlobal best practices
 
 ### Tertiary (LOW confidence)
+
 - None
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH - Verified from pnpm catalog and existing packages
 - Architecture: HIGH - Pattern derived from 5+ existing auth package tests
 - Pitfalls: HIGH - Observed from actual codebase patterns and vitest docs
