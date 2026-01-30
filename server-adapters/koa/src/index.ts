@@ -263,7 +263,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
     if (route.responseType === 'json') {
-      ctx.body = result;
+      // Explicitly set content-type and handle null/undefined to ensure proper JSON response
+      // Koa sets 204 No Content when body is null, but we want to return JSON null
+      ctx.type = 'application/json';
+      ctx.body = result === null || result === undefined ? JSON.stringify(null) : result;
     } else if (route.responseType === 'stream') {
       await this.stream(route, ctx, result as { fullStream: ReadableStream });
     } else if (route.responseType === 'datastream-response') {
