@@ -1094,9 +1094,10 @@ async function downloadAndExtractTarball(owner: string, repo: string, branch: st
 
 /**
  * Recursively read all files from a directory.
+ * Returns Buffer content to preserve binary files (images, etc.).
  */
-function readDirectoryRecursive(dirPath: string, basePath: string = ''): Array<{ path: string; content: string }> {
-  const files: Array<{ path: string; content: string }> = [];
+function readDirectoryRecursive(dirPath: string, basePath: string = ''): Array<{ path: string; content: Buffer }> {
+  const files: Array<{ path: string; content: Buffer }> = [];
   const entries = readdirSync(dirPath);
 
   for (const entry of entries) {
@@ -1107,7 +1108,7 @@ function readDirectoryRecursive(dirPath: string, basePath: string = ''): Array<{
     if (stat.isDirectory()) {
       files.push(...readDirectoryRecursive(fullPath, relativePath));
     } else if (stat.isFile()) {
-      const content = readFileSync(fullPath, 'utf-8');
+      const content = readFileSync(fullPath);
       files.push({ path: relativePath, content });
     }
   }
@@ -1178,7 +1179,7 @@ async function fetchSkillFromTarball(
   owner: string,
   repo: string,
   skillName: string,
-): Promise<{ files: Array<{ path: string; content: string }>; installName: string; branch: string } | null> {
+): Promise<{ files: Array<{ path: string; content: Buffer }>; installName: string; branch: string } | null> {
   const branches = ['main', 'master'];
 
   for (const branch of branches) {
