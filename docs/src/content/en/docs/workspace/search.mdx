@@ -17,9 +17,9 @@ Workspace search has two phases: indexing and querying.
 
 Content must be indexed before it can be searched. When you index a document:
 
-1. The content is tokenized (split into searchable terms)
-1. For BM25: term frequencies and document statistics are computed
-1. For vector: the content is embedded using your embedder function and stored in the vector store
+- The content is tokenized (split into searchable terms)
+- For BM25: term frequencies and document statistics are computed
+- For vector: the content is embedded using your embedder function and stored in the vector store
 
 Each indexed document has:
 - **id** - A unique identifier (typically the file path)

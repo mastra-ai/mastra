@@ -11,10 +11,10 @@ A Mastra workspace gives agents a persistent environment for storing files and e
 
 A workspace supports the following features:
 
-- **[Filesystem](/docs/workspace/filesystem)** - File storage (read, write, list, delete)
-- **[Sandbox](/docs/workspace/sandbox)** - Command execution (shell commands)
-- **[Search](/docs/workspace/search)** - BM25, vector, or hybrid search over indexed content
-- **[Skills](/docs/workspace/skills)** - Reusable instructions for agents
+- **[Filesystem](/docs/workspace/filesystem)**: File storage (read, write, list, delete)
+- **[Sandbox](/docs/workspace/sandbox)**: Command execution (shell commands)
+- **[Search](/docs/workspace/search)**: BM25, vector, or hybrid search over indexed content
+- **[Skills](/docs/workspace/skills)**: Reusable instructions for agents
 
 ## How it works
 
@@ -148,9 +148,9 @@ const workspace = new Workspace({
 
 When `requireReadBeforeWrite` is enabled on write tools, agents must read a file before writing to it. This prevents overwriting files the agent hasn't seen:
 
-- **New files** - Can be written without reading (they don't exist yet)
-- **Existing files** - Must be read first
-- **Externally modified files** - If a file changed since the agent read it, the write fails
+- **New files**: Can be written without reading (they don't exist yet)
+- **Existing files**: Must be read first
+- **Externally modified files**: If a file changed since the agent read it, the write fails
 
 ## Related
 
