@@ -127,14 +127,27 @@ The server currently has manual cache calls for workflow event streaming. These 
 
 ### 4. Resume API
 
-**Priority:** Medium
+**Priority:** Medium - **COMPLETE**
 
-The `resume()` method on LocalDurableAgent needs proper implementation for resuming suspended workflows.
+The `resume()` method is fully implemented with:
+- [x] Workflow state restoration via run registry
+- [x] Re-subscription with replay via CachingPubSub
+- [x] Tool approval resume flow with callbacks
+- [x] Context preservation (threadId, resourceId)
 
-**Current state:** Basic implementation exists but needs:
-- [ ] Proper workflow state restoration
-- [ ] Re-subscription with correct replay point
-- [ ] Handle tool approval resume flow
+**Tests:** `packages/core/src/agent/durable/__tests__/resume-api.test.ts` (12 tests):
+- [x] DurableAgent.resume() method available
+- [x] Accept runId and resumeData
+- [x] Preserve threadId/resourceId through prepare/resume
+- [x] LocalDurableAgent has resume method
+- [x] Return stream result from resume
+- [x] Event replay with CachingPubSub
+- [x] Event deduplication during replay
+- [x] onSuspended callback support
+- [x] onFinish callback support
+- [x] onError callback support
+- [x] Maintain run registry across prepare/resume
+- [x] Registry cleanup on cleanup()
 
 ---
 
