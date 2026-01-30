@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/upstash",
+  "name": "@mastra/redis",
   "version": "1.0.0",
-  "description": "Upstash provider for Mastra - includes both vector and db storage capabilities",
+  "description": "Redis cache provider for Mastra - works with any Redis-compatible client (ioredis, node-redis, upstash, etc.)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -19,30 +19,24 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "pretest": "docker compose up -d",
-    "test": "vitest run",
-    "posttest": "docker compose down",
-    "lint": "eslint .",
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/upstash",
-    "build:watch": "tsup --watch --silent --config tsup.config.ts"
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/redis",
+    "build:watch": "pnpm build:lib --watch",
+    "pretest": "docker compose up -d && sleep 2",
+    "test": "vitest run",
+    "posttest": "docker compose down -v",
+    "lint": "eslint ."
   },
   "license": "Apache-2.0",
-  "dependencies": {
-    "@mastra/redis": "workspace:*",
-    "@upstash/redis": "^1.36.0",
-    "@upstash/vector": "^1.2.2"
-  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "dotenv": "^17.2.3",
     "eslint": "^9.37.0",
+    "ioredis": "^5.6.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
@@ -58,7 +52,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "stores/upstash"
+    "directory": "stores/redis"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"

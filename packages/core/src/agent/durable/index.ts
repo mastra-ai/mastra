@@ -1,45 +1,63 @@
 /**
  * Durable Agent Module
  *
- * This module provides a durable execution pattern for AI agents.
- * Unlike the standard Agent, DurableAgent:
+ * This module provides durable execution patterns for AI agents with
+ * resumable streams. If a client disconnects and reconnects, they can
+ * receive missed events from the cache.
  *
- * 1. Separates preparation (non-durable) from execution (durable)
- * 2. Uses pubsub for streaming instead of closures
- * 3. Stores non-serializable state in a registry keyed by runId
- * 4. Creates fully serializable workflow inputs
+ * ## Factory Functions
  *
- * This enables the agent to work with durable execution engines like
- * Cloudflare Workflows, Inngest, Temporal, etc. that replay workflow
- * code and require serializable state.
+ * - `createDurableAgent({ agent })` - Local execution with resumable streams
+ * - `createEventedAgent({ agent, pubsub })` - Built-in evented workflow engine
+ * - `createInngestAgent({ agent, inngest })` - Inngest durable execution (from @mastra/inngest)
  *
- * @example
+ * ## Features
+ *
+ * 1. **Resumable Streams**: Events are cached, allowing reconnection without missing data
+ * 2. **Pluggable Cache**: Use InMemoryServerCache (default) or custom backends (Redis, etc.)
+ * 3. **Durable Execution**: Run agentic loops on workflow engines (Inngest, evented, etc.)
+ *
+ * @example Basic usage with resumable streams
  * ```typescript
- * import { DurableAgent } from '@mastra/core/agent/durable';
- * import { InMemoryPubSub } from '@mastra/core/events';
+ * import { Agent } from '@mastra/core/agent';
+ * import { createDurableAgent } from '@mastra/core/agent/durable';
  *
- * const pubsub = new InMemoryPubSub();
- *
- * const durableAgent = new DurableAgent({
- *   id: 'my-durable-agent',
- *   name: 'My Durable Agent',
+ * const agent = new Agent({
+ *   id: 'my-agent',
  *   instructions: 'You are a helpful assistant',
- *   model: 'openai/gpt-4',
- *   tools: { ... },
- *   pubsub,
+ *   model: openai('gpt-4'),
  * });
  *
- * const { output, runId, cleanup } = await durableAgent.stream('Hello!', {
- *   onChunk: (chunk) => console.log('Chunk:', chunk),
- *   onFinish: (result) => console.log('Done:', result),
- * });
+ * // Wrap with resumable streams
+ * const durableAgent = createDurableAgent({ agent });
  *
+ * const { output, runId, cleanup } = await durableAgent.stream('Hello!');
  * const text = await output.text;
  * cleanup();
  * ```
+ *
+ * @example Custom cache backend (e.g., Redis)
+ * ```typescript
+ * import { RedisServerCache } from '@mastra/redis'; // hypothetical
+ *
+ * const durableAgent = createDurableAgent({
+ *   agent,
+ *   cache: new RedisServerCache({ url: 'redis://...' }),
+ * });
+ * ```
  */
 
-// Main DurableAgent class and types
+// Main factory function for durable agents with resumable streams
+export {
+  createDurableAgent,
+  isLocalDurableAgent,
+  type CreateDurableAgentOptions,
+  type LocalDurableAgent,
+  type LocalDurableAgentStreamOptions,
+  type LocalDurableAgentStreamResult,
+} from './create-durable-agent';
+
+// Legacy DurableAgent class (prefer createDurableAgent factory)
 export {
   DurableAgent,
   type DurableAgentConfig,

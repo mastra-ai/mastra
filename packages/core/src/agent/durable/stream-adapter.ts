@@ -171,10 +171,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     start(ctrl) {
       controller = ctrl;
 
-      // Subscribe to pubsub
+      // Subscribe to pubsub with replay support for resumable streams
+      // If the PubSub supports caching (e.g., CachingPubSub), this will
+      // replay any cached events before receiving live events
       const topic = AGENT_STREAM_TOPIC(runId);
       pubsub
-        .subscribe(topic, handleEvent)
+        .subscribeWithReplay(topic, handleEvent)
         .then(() => {
           isSubscribed = true;
         })

@@ -1,3 +1,7 @@
+import type { MastraServerCache } from '../../cache/base';
+import { InMemoryServerCache } from '../../cache/inmemory';
+import { CachingPubSub } from '../../events/caching-pubsub';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
@@ -86,10 +90,24 @@ export interface DurableAgentConfig<
 > extends AgentConfig<TAgentId, TTools, TOutput> {
   /**
    * PubSub instance for streaming events.
-   * Required for durable agent execution as it enables streaming
-   * across process boundaries and execution engine replays.
+   * Optional - if not provided, defaults to EventEmitterPubSub wrapped
+   * with CachingPubSub for resumable streams.
+   *
+   * If provided, it will be wrapped with CachingPubSub unless
+   * `cache` is explicitly set to `false`.
    */
-  pubsub: PubSub;
+  pubsub?: PubSub;
+
+  /**
+   * Cache instance for storing stream events.
+   * Enables resumable streams - clients can disconnect and reconnect
+   * without missing events.
+   *
+   * - If not provided: Uses InMemoryServerCache (default)
+   * - If provided: Uses the provided cache backend (e.g., Redis)
+   * - If set to `false`: Disables caching (streams are not resumable)
+   */
+  cache?: MastraServerCache | false;
 
   /**
    * Workflow executor for running the durable workflow.
@@ -117,17 +135,14 @@ export interface DurableAgentConfig<
  * @example
  * ```typescript
  * import { DurableAgent } from '@mastra/core/agent/durable';
- * import { InMemoryPubSub } from '@mastra/core/events';
  *
- * const pubsub = new InMemoryPubSub();
- *
+ * // DurableAgent automatically uses CachingPubSub for resumable streams
  * const durableAgent = new DurableAgent({
  *   id: 'my-durable-agent',
  *   name: 'My Durable Agent',
  *   instructions: 'You are a helpful assistant',
  *   model: 'openai/gpt-4',
  *   tools: { ... },
- *   pubsub,
  * });
  *
  * const { output, runId, cleanup } = await durableAgent.stream(
@@ -144,6 +159,27 @@ export interface DurableAgentConfig<
  *
  * // Cleanup when done
  * cleanup();
+ * ```
+ *
+ * @example Custom cache backend (e.g., Redis)
+ * ```typescript
+ * import { DurableAgent } from '@mastra/core/agent/durable';
+ * import { RedisServerCache } from '@mastra/redis'; // hypothetical
+ *
+ * const durableAgent = new DurableAgent({
+ *   id: 'my-durable-agent',
+ *   model: 'openai/gpt-4',
+ *   cache: new RedisServerCache({ url: 'redis://...' }),
+ * });
+ * ```
+ *
+ * @example Disable caching (non-resumable streams)
+ * ```typescript
+ * const durableAgent = new DurableAgent({
+ *   id: 'my-durable-agent',
+ *   model: 'openai/gpt-4',
+ *   cache: false, // Streams are not resumable
+ * });
  * ```
  */
 export class DurableAgent<
@@ -171,19 +207,36 @@ export class DurableAgent<
   /** Pending initialization promise */
   #initPromise: Promise<void> | null = null;
   /** Agent config stored for deferred initialization */
-  readonly #agentConfig: Omit<DurableAgentConfig<TAgentId, TTools, TOutput>, 'pubsub' | 'executor'>;
+  readonly #agentConfig: Omit<DurableAgentConfig<TAgentId, TTools, TOutput>, 'pubsub' | 'executor' | 'cache'>;
+
+  /** Cache instance (if caching is enabled) */
+  readonly #cache: MastraServerCache | null;
 
   /**
    * Create a new DurableAgent
    */
   constructor(config: DurableAgentConfig<TAgentId, TTools, TOutput>) {
-    const { pubsub, executor, ...agentConfig } = config;
+    const { pubsub, executor, cache, ...agentConfig } = config;
 
     this.#agentConfig = agentConfig;
-    this.#pubsub = pubsub;
     this.#executor = executor ?? localExecutor;
     this.#runRegistry = new ExtendedRunRegistry();
     this.#agent = null; // Agent will be initialized lazily on first use
+
+    // Set up PubSub with caching for resumable streams
+    if (cache === false) {
+      // Caching explicitly disabled
+      this.#pubsub = pubsub ?? new EventEmitterPubSub();
+      this.#cache = null;
+    } else {
+      // Create or use provided cache
+      const cacheInstance: MastraServerCache = cache ?? new InMemoryServerCache();
+      this.#cache = cacheInstance;
+
+      // Wrap pubsub with caching
+      const innerPubsub = pubsub ?? new EventEmitterPubSub();
+      this.#pubsub = new CachingPubSub(innerPubsub, cacheInstance);
+    }
   }
 
   /**
@@ -245,6 +298,22 @@ export class DurableAgent<
    */
   get runRegistry(): ExtendedRunRegistry {
     return this.#runRegistry;
+  }
+
+  /**
+   * Get the cache instance (if caching is enabled).
+   * Returns null if caching was disabled via `cache: false`.
+   */
+  get cache(): MastraServerCache | null {
+    return this.#cache;
+  }
+
+  /**
+   * Get the PubSub instance.
+   * This will be a CachingPubSub if caching is enabled.
+   */
+  get pubsub(): PubSub {
+    return this.#pubsub;
   }
 
   /**
