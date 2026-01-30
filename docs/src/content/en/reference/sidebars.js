@@ -542,7 +542,7 @@ const sidebars = {
         { type: 'doc', id: 'rag/graph-rag', label: 'GraphRAG' },
         { type: 'doc', id: 'rag/document', label: 'MDocument' },
         { type: 'doc', id: 'rag/metadata-filters', label: 'Metadata Filters' },
-        { type: 'doc', id: 'rag/chunk', label: 'Reference: .chunk()' },
+        { type: 'doc', id: 'rag/chunk', label: '.chunk()' },
         { type: 'doc', id: 'rag/rerank', label: 'rerank()' },
         {
           type: 'doc',
@@ -620,16 +620,16 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'workspace/filesystem',
-          label: 'Filesystem Interface',
-        },
-        {
-          type: 'doc',
           id: 'workspace/local-filesystem',
           label: 'LocalFilesystem',
         },
-        { type: 'doc', id: 'workspace/sandbox', label: 'Sandbox Interface' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
+        {
+          type: 'doc',
+          id: 'workspace/filesystem',
+          label: 'WorkspaceFilesystem',
+        },
+        { type: 'doc', id: 'workspace/sandbox', label: 'WorkspaceSandbox' },
       ],
     },
     {
