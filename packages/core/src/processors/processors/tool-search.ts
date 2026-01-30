@@ -428,7 +428,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       description:
         'Load a specific tool into your context. ' +
         'Call this after finding a tool with search_tools. ' +
-        'Once loaded, the tool will be available for use on subsequent turns. ' +
+        'Once loaded, the tool will be available for use. ' +
         'Args: toolName - The exact name of the tool to load (from search results).',
       inputSchema: z.object({
         toolName: z.string().describe('The exact name of the tool to load (from search results)'),

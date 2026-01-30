@@ -32,7 +32,6 @@ import {
   generateReport,
   scheduleReminder,
   convertUnits,
-  cookingTool,
 } from '../tools/index.js';
 
 // Create memory for conversation persistence
@@ -55,7 +54,6 @@ const toolSearchProcessor = new ToolSearchProcessor({
     generate_report: generateReport,
     schedule_reminder: scheduleReminder,
     convert_units: convertUnits,
-    cooking_tool: cookingTool,
   },
   search: {
     topK: 5, // Return top 5 matches
@@ -92,18 +90,16 @@ WORKFLOW:
 1. When you need a capability you don't have, use search_tools first
 2. Review the search results and pick the most relevant tool
 3. Use load_tool to load it
-4. Tell the user the tool is now loaded and they can ask again
-5. On subsequent messages, use the loaded tool normally
+4. Use the tool normally
 
 Example conversation:
 User: "What's 5 + 3?"
 You: [search_tools for "add" or "calculator"] -> finds calculator_add
 You: [load_tool for "calculator_add"] -> tool is now loading
 You: "I've found and loaded a calculator tool. Let me add those numbers for you now."
-[On next turn, calculator_add is available]
 
 Be proactive about searching for tools when you don't have the capability the user needs.`,
-  model: openai('gpt-4o'),
+  model: openai('gpt-5.2'),
   memory,
   inputProcessors: [toolSearchProcessor],
 });
