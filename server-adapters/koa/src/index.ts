@@ -479,16 +479,18 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       };
 
       // Check route permission requirement (EE feature)
-      // Only enforce permissions when auth is configured
+      // Uses convention-based permission derivation: permissions are auto-derived
+      // from route path/method unless explicitly set or route is public
       const authConfig = this.mastra.getServer()?.auth;
-      if (route.requiresPermission && authConfig) {
+      if (authConfig) {
         const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
+        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
-        if (!userPermissions || !hasPermission(userPermissions, route.requiresPermission)) {
-          ctx.status = 403;
+        if (permissionError) {
+          ctx.status = permissionError.status;
           ctx.body = {
-            error: 'Forbidden',
-            message: `Missing required permission: ${route.requiresPermission}`,
+            error: permissionError.error,
+            message: permissionError.message,
           };
           return;
         }

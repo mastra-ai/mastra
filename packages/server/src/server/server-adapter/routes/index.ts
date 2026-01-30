@@ -122,5 +122,8 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
 ];
 
 // Export route builder and OpenAPI utilities
-export { createRoute, pickParams, jsonQueryParam, wrapSchemaForQueryParams } from './route-builder';
+export { createRoute, createPublicRoute, pickParams, jsonQueryParam, wrapSchemaForQueryParams } from './route-builder';
 export { generateOpenAPIDocument } from '../openapi-utils';
+
+// Export permission utilities
+export { derivePermission, extractResource, deriveAction, getEffectivePermission } from './permissions';

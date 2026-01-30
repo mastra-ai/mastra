@@ -398,16 +398,17 @@ describe('Fastify RBAC Permission Enforcement', () => {
   });
 
   describe('Routes Without Permission Requirements', () => {
-    it('should allow access to routes without requiresPermission when authenticated', async () => {
+    it('should allow access to routes with requiresAuth: false', async () => {
       const setup = await setupAuthAdapter(context);
       app = setup.app;
       const { adapter } = setup;
 
-      // Route without requiresPermission
+      // Route explicitly marked as public with requiresAuth: false
       const publicRoute: ServerRoute<any, any, any> = {
         method: 'GET',
         path: '/api/public',
         responseType: 'json',
+        requiresAuth: false,
         handler: async () => ({ public: true }),
       };
 
@@ -421,6 +422,36 @@ describe('Fastify RBAC Permission Enforcement', () => {
       });
 
       expect(status).toBe(200);
+    });
+
+    it('should derive permissions from route path/method when not explicitly set', async () => {
+      const setup = await setupAuthAdapter(context);
+      app = setup.app;
+      const { adapter } = setup;
+
+      // Route without explicit requiresPermission - will derive 'agents:read'
+      const derivedRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/agents/test',
+        responseType: 'json',
+        handler: async () => ({ derived: true }),
+      };
+
+      await adapter.registerRoute(app, derivedRoute, { prefix: '' });
+
+      const address = await app.listen({ port: 0 });
+
+      // Viewer has 'agents:read' permission, should have access
+      const { status: viewerStatus } = await makeRequest(address, '/agents/test', {
+        headers: { Authorization: 'Bearer viewer' },
+      });
+      expect(viewerStatus).toBe(200);
+
+      // _default role has no permissions, should be denied
+      const { status: defaultStatus } = await makeRequest(address, '/agents/test', {
+        headers: { Authorization: 'Bearer _default' },
+      });
+      expect(defaultStatus).toBe(403);
     });
   });
 });
