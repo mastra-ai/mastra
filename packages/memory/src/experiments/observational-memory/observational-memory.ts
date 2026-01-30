@@ -683,12 +683,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Resolve model: top-level model takes precedence, then sub-config, then default
     const observationModel =
       config.model ?? config.observation?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
-    const reflectionModel =
-      config.model ?? config.reflection?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
+    const reflectionModel = config.model ?? config.reflection?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
 
     // Get base thresholds first (needed for shared budget calculation)
-    const messageTokens =
-      config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens;
+    const messageTokens = config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens;
     const observationTokens =
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
@@ -697,7 +695,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const totalBudget = messageTokens + observationTokens;
 
     // Debug: log threshold config
-    omDebug(`[OM] Observation config: messageTokens=${messageTokens}, sharedBudget=${isSharedBudget}, totalBudget=${totalBudget}`);
+    omDebug(
+      `[OM] Observation config: messageTokens=${messageTokens}, sharedBudget=${isSharedBudget}, totalBudget=${totalBudget}`,
+    );
 
     // Resolve observation config with defaults
     this.observationConfig = {
@@ -1887,7 +1887,7 @@ PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm goi
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
-      content += `\n\n${unobservedContextBlocks}`;
+      content += `\n\nThe following content is from OTHER conversations different from the current conversation, they're here for reference,  but they're not necessarily your focus:\nSTART_OTHER_CONVERSATIONS_BLOCK\n${unobservedContextBlocks}\nEND_OTHER_CONVERSATIONS_BLOCK`;
     }
 
     // Dynamically inject current-task from thread metadata (not stored in observations)
@@ -2046,9 +2046,7 @@ ${suggestedResponse}
           }
         }
         if (skippedFullyObserved > 0) {
-          omDebug(
-            `[OM processInputStep] Skipped ${skippedFullyObserved} fully observed messages from current thread`,
-          );
+          omDebug(`[OM processInputStep] Skipped ${skippedFullyObserved} fully observed messages from current thread`);
         }
       } else {
         // THREAD SCOPE: Load unobserved messages using resource-level lastObservedAt
@@ -2088,14 +2086,17 @@ ${suggestedResponse}
       const allMessages = messageList.get.all.db();
       const unobservedMessages = this.getUnobservedMessages(allMessages, record);
       const currentSessionTokens = this.tokenCounter.countMessages(unobservedMessages);
+      // In resource scope, also count tokens from other threads' unobserved context blocks.
+      // These are injected as a system message but not included in messageList,
+      // so they'd otherwise be invisible to the threshold check.
+      const otherThreadTokens = unobservedContextBlocks
+        ? this.tokenCounter.countString(unobservedContextBlocks)
+        : 0;
       const currentObservationTokens = record.observationTokenCount ?? 0;
       const pendingTokens = record.pendingMessageTokens ?? 0;
-      const totalPendingTokens = pendingTokens + currentSessionTokens;
+      const totalPendingTokens = pendingTokens + currentSessionTokens + otherThreadTokens;
 
-      const threshold = this.calculateDynamicThreshold(
-        this.observationConfig.messageTokens,
-        currentObservationTokens,
-      );
+      const threshold = this.calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
       // Calculate effective reflection threshold for UI display
       // When adaptive threshold is enabled, both thresholds share a budget
       // Reflection threshold = total budget - message threshold (what's left for observations)
@@ -2107,10 +2108,13 @@ ${suggestedResponse}
       const effectiveObservationTokensThreshold = isSharedBudget
         ? Math.max(totalBudget - threshold, 1000) // What's left after message threshold
         : baseReflectionThreshold;
-      const observationTokensPercent = Math.round((currentObservationTokens / effectiveObservationTokensThreshold) * 100);
+      const observationTokensPercent = Math.round(
+        (currentObservationTokens / effectiveObservationTokensThreshold) * 100,
+      );
 
       omDebug(
-        `[OM processInputStep] Token check: ${totalPendingTokens}/${threshold} (${Math.round((totalPendingTokens / threshold) * 100)}%)`,
+        `[OM processInputStep] Token check: ${totalPendingTokens}/${threshold} (${Math.round((totalPendingTokens / threshold) * 100)}%)` +
+          (otherThreadTokens > 0 ? ` [current: ${currentSessionTokens}, other threads: ${otherThreadTokens}, pending: ${pendingTokens}]` : ''),
       );
 
       // Emit progress event for UI feedback
@@ -2182,7 +2186,13 @@ ${suggestedResponse}
                   abortSignal,
                 );
               } else {
-                await this.doSynchronousObservation(freshRecord, threadId, freshUnobservedMessages, writer, abortSignal);
+                await this.doSynchronousObservation(
+                  freshRecord,
+                  threadId,
+                  freshUnobservedMessages,
+                  writer,
+                  abortSignal,
+                );
               }
               // Check if observation actually updated lastObservedAt
               const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
@@ -2205,14 +2215,82 @@ ${suggestedResponse}
           omDebug(`[OM processInputStep] Observation did not succeed, keeping messages in context`);
         }
 
-        // Save messages with markers
-        // Use .clear to remove observed messages from context - they're now in observations
-        const newInput = observationSucceeded ? messageList.clear.input.db() : [];
-        const newOutput = observationSucceeded ? messageList.clear.response.db() : [];
-        const messagesToSave = [...newInput, ...newOutput];
+        // After observation, find the marker and remove observed messages.
+        // We must do this BEFORE clearing, because clear.input/response.db() only
+        // removes messages tracked as 'input'/'response' — not messages that were
+        // previously per-step-saved and re-added as 'memory' source.
+        // By using the marker + removeByIds, we correctly remove ALL observed messages
+        // regardless of their source tracking.
+        if (observationSucceeded) {
+          const allMsgs = messageList.get.all.db();
+          let markerIdx = -1;
+          let markerMsg: MastraDBMessage | null = null;
 
-        if (messagesToSave.length > 0) {
-          await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
+          // Find the last observation end marker
+          for (let i = allMsgs.length - 1; i >= 0; i--) {
+            const msg = allMsgs[i];
+            if (!msg) continue;
+            if (this.findLastCompletedObservationBoundary(msg) !== -1) {
+              markerIdx = i;
+              markerMsg = msg;
+              break;
+            }
+          }
+
+          if (markerMsg && markerIdx !== -1) {
+            // Collect all messages before the marker (these are fully observed)
+            const idsToRemove: string[] = [];
+            const messagesToSave: MastraDBMessage[] = [];
+
+            for (let i = 0; i < markerIdx; i++) {
+              const msg = allMsgs[i];
+              if (msg?.id && msg.id !== 'om-continuation') {
+                idsToRemove.push(msg.id);
+                messagesToSave.push(msg);
+              }
+            }
+
+            // Also include the marker message itself in the save
+            messagesToSave.push(markerMsg);
+
+            // Filter marker message to only unobserved parts
+            const unobservedParts = this.getUnobservedParts(markerMsg);
+            if (unobservedParts.length === 0) {
+              // Marker message is fully observed — remove it too
+              if (markerMsg.id) {
+                idsToRemove.push(markerMsg.id);
+              }
+            } else if (unobservedParts.length < (markerMsg.content?.parts?.length ?? 0)) {
+              // Trim marker message to only unobserved parts (in-place)
+              markerMsg.content.parts = unobservedParts;
+              omDebug(`[OM processInputStep] Filtered marker message to ${unobservedParts.length} unobserved parts`);
+            }
+
+            // Save all observed messages (with their markers) to DB
+            if (messagesToSave.length > 0) {
+              await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
+            }
+
+            // Remove observed messages from context
+            if (idsToRemove.length > 0) {
+              messageList.removeByIds(idsToRemove);
+              omDebug(`[OM processInputStep] Removed ${idsToRemove.length} observed messages from context`);
+            }
+          } else {
+            // No marker found — fall back to source-based clearing
+            omDebug(`[OM processInputStep] No observation marker found, falling back to source-based clear`);
+            const newInput = messageList.clear.input.db();
+            const newOutput = messageList.clear.response.db();
+            const messagesToSave = [...newInput, ...newOutput];
+            if (messagesToSave.length > 0) {
+              await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
+            }
+          }
+
+          // Also clear any remaining input/response tracking that wasn't caught by removeByIds
+          // (e.g., messages added after the marker during the observation)
+          messageList.clear.input.db();
+          messageList.clear.response.db();
         }
 
         // Re-fetch record to get updated observations
@@ -2295,64 +2373,56 @@ NOTE: Any messages following this system reminder are newer than your memories.
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES
-    // Use data-om-observation markers to determine what's been observed
+    // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES (historical only)
+    // On step 0, historical messages loaded from DB may contain observation
+    // markers from a previous session. Remove those observed messages.
+    // For current-session observations, this is handled in the post-observation
+    // block above (which runs while the marker is still in messageList).
     // ════════════════════════════════════════════════════════════════════════
-    const allMessages = messageList.get.all.db();
-    let filteredCount = 0;
-    let removedCount = 0;
+    if (stepNumber === 0) {
+      const allMessages = messageList.get.all.db();
+      let removedCount = 0;
 
-    // Find the message with the last observation end marker
-    let markerMessageIndex = -1;
-    let markerMessage: MastraDBMessage | null = null;
+      // Find the message with the last observation end marker
+      let markerMessageIndex = -1;
+      let markerMessage: MastraDBMessage | null = null;
 
-    for (let i = allMessages.length - 1; i >= 0; i--) {
-      const msg = allMessages[i];
-      if (!msg) continue;
-      const endMarkerIndex = this.findLastCompletedObservationBoundary(msg);
-      if (endMarkerIndex !== -1) {
-        markerMessageIndex = i;
-        markerMessage = msg;
-        break;
-      }
-    }
-
-    if (markerMessage && markerMessageIndex !== -1) {
-      // Remove all messages BEFORE the marker message (skip om-continuation)
-      const messagesToRemove: string[] = [];
-      for (let i = 0; i < markerMessageIndex; i++) {
+      for (let i = allMessages.length - 1; i >= 0; i--) {
         const msg = allMessages[i];
-        if (msg?.id && msg.id !== 'om-continuation') {
-          messagesToRemove.push(msg.id);
+        if (!msg) continue;
+        if (this.findLastCompletedObservationBoundary(msg) !== -1) {
+          markerMessageIndex = i;
+          markerMessage = msg;
+          break;
         }
       }
 
-      if (messagesToRemove.length > 0) {
-        messageList.removeByIds(messagesToRemove);
-        removedCount = messagesToRemove.length;
-        omDebug(`[OM processInputStep] Removed ${removedCount} fully observed messages before marker`);
-      }
-
-      // Filter marker message to only unobserved parts
-      const unobservedParts = this.getUnobservedParts(markerMessage);
-
-      if (unobservedParts.length === 0) {
-        if (markerMessage.id) {
-          messageList.removeByIds([markerMessage.id]);
-          removedCount++;
-          omDebug(`[OM processInputStep] Removed marker message (all parts observed)`);
+      if (markerMessage && markerMessageIndex !== -1) {
+        const messagesToRemove: string[] = [];
+        for (let i = 0; i < markerMessageIndex; i++) {
+          const msg = allMessages[i];
+          if (msg?.id && msg.id !== 'om-continuation') {
+            messagesToRemove.push(msg.id);
+          }
         }
-      } else if (unobservedParts.length < (markerMessage.content?.parts?.length ?? 0)) {
-        markerMessage.content.parts = unobservedParts;
-        filteredCount++;
-        omDebug(`[OM processInputStep] Filtered marker message to ${unobservedParts.length} unobserved parts`);
-      }
-    }
 
-    if (filteredCount > 0 || removedCount > 0) {
-      omDebug(
-        `[OM processInputStep] Part-level filtering complete: ${filteredCount} messages filtered, ${removedCount} messages removed`,
-      );
+        if (messagesToRemove.length > 0) {
+          messageList.removeByIds(messagesToRemove);
+          removedCount = messagesToRemove.length;
+          omDebug(`[OM processInputStep] Removed ${removedCount} fully observed historical messages`);
+        }
+
+        // Filter marker message to only unobserved parts
+        const unobservedParts = this.getUnobservedParts(markerMessage);
+        if (unobservedParts.length === 0) {
+          if (markerMessage.id) {
+            messageList.removeByIds([markerMessage.id]);
+            removedCount++;
+          }
+        } else if (unobservedParts.length < (markerMessage.content?.parts?.length ?? 0)) {
+          markerMessage.content.parts = unobservedParts;
+        }
+      }
     }
 
     omDebug(`[OM processInputStep] Agent will see: observations + ${messageList.get.all.db().length} messages`);
@@ -2424,16 +2494,12 @@ NOTE: Any messages following this system reminder are newer than your memories.
       if (sealedIds.has(msg.id)) {
         const oldId = msg.id;
         msg.id = crypto.randomUUID();
-        omDebug(
-          `[OM processInputStep] Regenerated ID for message to avoid overwriting sealed: ${oldId} -> ${msg.id}`,
-        );
+        omDebug(`[OM processInputStep] Regenerated ID for message to avoid overwriting sealed: ${oldId} -> ${msg.id}`);
         regeneratedIds++;
       }
     }
 
-    omDebug(
-      `[OM processInputStep] Saving ${messagesToSave.length} messages (${regeneratedIds} with regenerated IDs)`,
-    );
+    omDebug(`[OM processInputStep] Saving ${messagesToSave.length} messages (${regeneratedIds} with regenerated IDs)`);
     await this.messageHistory.persistMessages({
       messages: messagesToSave,
       threadId,
@@ -2897,7 +2963,13 @@ ${formattedMessages}
       });
 
       // Check for reflection (pass threadId so patterns can be cleared)
-      await this.maybeReflect({ ...record, activeObservations: newObservations }, totalTokenCount, threadId, writer, abortSignal);
+      await this.maybeReflect(
+        { ...record, activeObservations: newObservations },
+        totalTokenCount,
+        threadId,
+        writer,
+        abortSignal,
+      );
     } catch (error) {
       // Insert FAILED marker on error
       if (lastMessage?.id) {
