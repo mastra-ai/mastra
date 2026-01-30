@@ -21,7 +21,15 @@ export const RequestContext = () => {
   const [requestContextValue, setRequestContextValue] = useState<string>('');
   const theme = useCodemirrorTheme();
   const presets = useRequestContextPresets();
-  const [selectedPreset, setSelectedPreset] = useState<string>('__custom__');
+
+  const [selectedPreset, setSelectedPreset] = useState<string>(() => {
+    if (!presets || !requestContext) return '__custom__';
+    const savedStr = JSON.stringify(requestContext);
+    for (const [key, value] of Object.entries(presets)) {
+      if (JSON.stringify(value) === savedStr) return key;
+    }
+    return '__custom__';
+  });
 
   const { handleCopy } = useCopyToClipboard({ text: requestContextValue });
 
