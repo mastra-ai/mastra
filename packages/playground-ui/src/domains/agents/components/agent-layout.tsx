@@ -2,6 +2,7 @@ import { Panel, useDefaultLayout, Group, PanelImperativeHandle } from 'react-res
 import { getMainContentContentClassName } from '@/ds/components/MainContent';
 import { PanelSeparator } from '@/lib/resize/separator';
 import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
+import { cn } from '@/lib/utils';
 
 export interface AgentLayoutProps {
   agentId: string;
@@ -23,7 +24,7 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot }: AgentLay
   });
 
   return (
-    <Group className={computedClassName} defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
+    <Group className={cn(computedClassName, 'border-t border-border1')} defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
       {leftSlot && (
         <>
           <CollapsiblePanel

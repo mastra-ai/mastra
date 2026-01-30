@@ -8,7 +8,6 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 
 import { MultiSelectPicker } from '../create-agent/multi-select-picker';
 import { ScorersPicker } from '../create-agent/scorers-picker';
-import { ModelPicker } from '../create-agent/model-picker';
 import { useAgentCreateContext } from './agent-create-context';
 
 export function AgentCreateSidebar() {
@@ -25,7 +24,6 @@ export function AgentCreateSidebar() {
     memoryConfigsLoading,
     scorersLoading,
     isLoading,
-    formRef,
   } = useAgentCreateContext();
 
   const { control, formState: { errors } } = form;
@@ -38,25 +36,6 @@ export function AgentCreateSidebar() {
             <Spinner className="h-5 w-5" />
           </div>
         )}
-
-        {/* Model */}
-        <Section>
-          <Section.Header>
-            <Section.Heading headingLevel="h3">Model</Section.Heading>
-          </Section.Header>
-          <Controller
-            name="model"
-            control={control}
-            render={({ field }) => (
-              <ModelPicker
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.model?.provider?.message || errors.model?.name?.message}
-                container={formRef}
-              />
-            )}
-          />
-        </Section>
 
         {/* Tools */}
         <Section>

@@ -7,10 +7,11 @@ import { Label } from '@/ds/components/Label';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { cn } from '@/lib/utils';
 
+import { ModelPicker } from '../create-agent/model-picker';
 import { useAgentCreateContext } from './agent-create-context';
 
 export function AgentCreateMain() {
-  const { form } = useAgentCreateContext();
+  const { form, formRef } = useAgentCreateContext();
   const {
     register,
     control,
@@ -45,6 +46,25 @@ export function AgentCreateMain() {
           className={cn(errors.description && 'border-accent2')}
         />
         {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
+      </div>
+
+      {/* Model */}
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs text-icon5">
+          Model <span className="text-accent2">*</span>
+        </Label>
+        <Controller
+          name="model"
+          control={control}
+          render={({ field }) => (
+            <ModelPicker
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.model?.provider?.message || errors.model?.name?.message}
+              container={formRef}
+            />
+          )}
+        />
       </div>
 
       {/* Instructions - CodeEditor taking remaining height */}
