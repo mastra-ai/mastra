@@ -114,6 +114,7 @@ export default function Workspace() {
   const {
     data: filesData,
     isLoading: isLoadingFiles,
+    error: filesError,
     refetch: refetchFiles,
   } = useWorkspaceFiles(currentPath, {
     enabled: workspaceInfo?.isWorkspaceConfigured && workspaceInfo?.capabilities?.hasFilesystem,
@@ -543,6 +544,7 @@ export default function Workspace() {
                     entries={files}
                     currentPath={currentPath}
                     isLoading={isLoadingFiles}
+                    error={filesError}
                     onNavigate={setCurrentPath}
                     onFileSelect={setSelectedFile}
                     onRefresh={() => refetchFiles()}

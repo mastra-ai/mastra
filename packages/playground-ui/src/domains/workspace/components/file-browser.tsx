@@ -14,6 +14,7 @@ import {
   Upload,
   FolderPlus,
   Trash2,
+  AlertCircle,
 } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
@@ -30,6 +31,8 @@ export interface FileBrowserProps {
   entries: FileEntry[];
   currentPath: string;
   isLoading: boolean;
+  /** Error from fetching files (e.g., directory not found) */
+  error?: Error | null;
   onNavigate: (path: string) => void;
   onFileSelect?: (path: string) => void;
   onRefresh?: () => void;
@@ -84,6 +87,43 @@ function formatBytes(bytes?: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
+/**
+ * Extract a user-friendly error message from an error.
+ * Checks for MastraClientError.body first, then falls back to parsing the message.
+ */
+function getErrorMessage(error: Error): string {
+  // Check for MastraClientError with body property
+  if ('body' in error && error.body && typeof error.body === 'object') {
+    const body = error.body as Record<string, unknown>;
+    if (typeof body.error === 'string') return body.error;
+    if (typeof body.message === 'string') return body.message;
+  }
+
+  // Fallback: parse the message for older client-js versions
+  const message = error.message;
+
+  // Try to extract JSON error message from client-js format: "HTTP error! status: 404 - {...}"
+  // Avoid regex to prevent ReDoS - just find the last " - {" and try to parse from there
+  const jsonStart = message.lastIndexOf(' - {');
+  if (jsonStart !== -1) {
+    try {
+      const jsonStr = message.slice(jsonStart + 3); // Skip " - "
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.error) return parsed.error;
+      if (parsed.message) return parsed.message;
+    } catch {
+      // Fall through to default
+    }
+  }
+
+  // Check for common patterns
+  if (message.includes('status: 404')) {
+    return 'Directory not found';
+  }
+
+  return message;
+}
+
 // =============================================================================
 // Breadcrumb Navigation
 // =============================================================================
@@ -131,6 +171,7 @@ export function FileBrowser({
   entries,
   currentPath,
   isLoading,
+  error,
   onNavigate,
   onFileSelect,
   onRefresh,
@@ -204,6 +245,14 @@ export function FileBrowser({
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-icon3" />
+          </div>
+        ) : error ? (
+          <div className="py-12 px-4 text-center">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-500/10 mb-4">
+              <AlertCircle className="h-6 w-6 text-red-400" />
+            </div>
+            <p className="text-sm text-icon6 font-medium mb-1">Failed to load directory</p>
+            <p className="text-xs text-icon4 max-w-sm mx-auto">{getErrorMessage(error)}</p>
           </div>
         ) : sortedEntries.length === 0 ? (
           <div className="py-12 text-center text-icon4 text-sm">

@@ -65,6 +65,37 @@ import { handleError } from './error';
 // =============================================================================
 
 /**
+ * Check if an error is a workspace filesystem not-found error.
+ * Handles Node.js ENOENT and workspace FileNotFoundError/DirectoryNotFoundError.
+ */
+function isFilesystemNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  // Check for Node.js native ENOENT
+  if ('code' in error && error.code === 'ENOENT') return true;
+
+  // Check for workspace FileNotFoundError / DirectoryNotFoundError
+  if ('name' in error) {
+    const name = error.name;
+    if (name === 'FileNotFoundError' || name === 'DirectoryNotFoundError') return true;
+  }
+
+  return false;
+}
+
+/**
+ * Workspace-specific error handler.
+ * Converts filesystem not-found errors to 404, then falls back to generic handler.
+ */
+function handleWorkspaceError(error: unknown, defaultMessage: string): never {
+  if (isFilesystemNotFoundError(error)) {
+    const message = error instanceof Error ? error.message : 'Not found';
+    throw new HTTPException(404, { message });
+  }
+  return handleError(error, defaultMessage);
+}
+
+/**
  * Throws if workspace v1 is not supported by the current version of @mastra/core.
  */
 function requireWorkspaceV1Support(): void {
@@ -215,7 +246,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
 
       return { workspaces };
     } catch (error) {
-      return handleError(error, 'Error listing workspaces');
+      return handleWorkspaceError(error, 'Error listing workspaces');
     }
   },
 });
@@ -261,7 +292,7 @@ export const GET_WORKSPACE_ROUTE = createRoute({
         },
       };
     } catch (error) {
-      return handleError(error, 'Error getting workspace info');
+      return handleWorkspaceError(error, 'Error getting workspace info');
     }
   },
 });
@@ -311,7 +342,7 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
         type: 'file' as const,
       };
     } catch (error) {
-      return handleError(error, 'Error reading file');
+      return handleWorkspaceError(error, 'Error reading file');
     }
   },
 });
@@ -358,7 +389,7 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
         path: decodedPath,
       };
     } catch (error) {
-      return handleError(error, 'Error writing file');
+      return handleWorkspaceError(error, 'Error writing file');
     }
   },
 });
@@ -408,7 +439,7 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
         })),
       };
     } catch (error) {
-      return handleError(error, 'Error listing directory');
+      return handleWorkspaceError(error, 'Error listing directory');
     }
   },
 });
@@ -462,7 +493,7 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
         path: decodedPath,
       };
     } catch (error) {
-      return handleError(error, 'Error deleting path');
+      return handleWorkspaceError(error, 'Error deleting path');
     }
   },
 });
@@ -503,7 +534,7 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
         path: decodedPath,
       };
     } catch (error) {
-      return handleError(error, 'Error creating directory');
+      return handleWorkspaceError(error, 'Error creating directory');
     }
   },
 });
@@ -549,7 +580,7 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
         mimeType: stat.mimeType,
       };
     } catch (error) {
-      return handleError(error, 'Error getting file info');
+      return handleWorkspaceError(error, 'Error getting file info');
     }
   },
 });
@@ -625,7 +656,7 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
         mode: searchMode,
       };
     } catch (error) {
-      return handleError(error, 'Error searching workspace');
+      return handleWorkspaceError(error, 'Error searching workspace');
     }
   },
 });
@@ -665,7 +696,7 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
         path,
       };
     } catch (error) {
-      return handleError(error, 'Error indexing content');
+      return handleWorkspaceError(error, 'Error indexing content');
     }
   },
 });
@@ -717,7 +748,7 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
         isSkillsConfigured: true,
       };
     } catch (error) {
-      return handleError(error, 'Error listing skills');
+      return handleWorkspaceError(error, 'Error listing skills');
     }
   },
 });
@@ -766,7 +797,7 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
         assets: skill.assets,
       };
     } catch (error) {
-      return handleError(error, 'Error getting skill');
+      return handleWorkspaceError(error, 'Error getting skill');
     }
   },
 });
@@ -808,7 +839,7 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
         references,
       };
     } catch (error) {
-      return handleError(error, 'Error listing skill references');
+      return handleWorkspaceError(error, 'Error listing skill references');
     }
   },
 });
@@ -852,7 +883,7 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
         content,
       };
     } catch (error) {
-      return handleError(error, 'Error getting skill reference');
+      return handleWorkspaceError(error, 'Error getting skill reference');
     }
   },
 });
@@ -908,7 +939,7 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
         query,
       };
     } catch (error) {
-      return handleError(error, 'Error searching skills');
+      return handleWorkspaceError(error, 'Error searching skills');
     }
   },
 });
