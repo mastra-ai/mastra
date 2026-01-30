@@ -4,6 +4,7 @@
  */
 
 import { scrapeSkills, enrichSkills, getUniqueSources, getUniqueOwners } from '../scraper/scrape.js';
+import { validateScrapedData, type ValidationResult } from '../scraper/validate.js';
 import { saveSkillsDataAsync, getStorageInfo, getActiveStorageType, loadSkillsData } from '../storage/index.js';
 import { reloadDataAsync } from '../registry/data.js';
 
@@ -17,6 +18,8 @@ export interface RefreshResult {
   durationMs?: number;
   storageType?: string;
   savedTo?: { s3: boolean; filesystem: boolean };
+  validation?: ValidationResult;
+  skipped?: boolean;
 }
 
 export interface RefreshSchedulerOptions {
@@ -53,8 +56,52 @@ export async function refreshSkillsData(): Promise<RefreshResult> {
   try {
     console.info('[Scheduler] Starting skills refresh...');
 
+    // Load current data for comparison
+    let previousData = null;
+    try {
+      previousData = loadSkillsData();
+    } catch {
+      console.info('[Scheduler] No previous data to compare against');
+    }
+
     const scrapedSkills = await scrapeSkills();
     const enriched = enrichSkills(scrapedSkills);
+
+    // Validate scraped data before saving
+    const validation = validateScrapedData(enriched, {
+      minSkillCount: 1000,
+      minSourceCount: 100,
+      maxDropPercentage: 50,
+      previousData,
+    });
+
+    // Log validation results
+    if (validation.warnings.length > 0) {
+      console.warn('[Scheduler] Validation warnings:');
+      validation.warnings.forEach(w => console.warn(`  - ${w}`));
+    }
+
+    if (!validation.valid) {
+      console.error('[Scheduler] Validation FAILED - not saving data:');
+      validation.errors.forEach(e => console.error(`  - ${e}`));
+
+      const result: RefreshResult = {
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: `Validation failed: ${validation.errors.join('; ')}`,
+        durationMs: Date.now() - startTime,
+        storageType,
+        validation,
+        skipped: true,
+        skillCount: enriched.length,
+        sourceCount: getUniqueSources(scrapedSkills).length,
+      };
+
+      lastRefreshResult = result;
+      return result;
+    }
+
+    console.info(`[Scheduler] Validation passed: ${validation.stats.skillCount} skills, ${validation.stats.sourceCount} sources`);
 
     const output = {
       scrapedAt: new Date().toISOString(),
@@ -79,6 +126,7 @@ export async function refreshSkillsData(): Promise<RefreshResult> {
       durationMs: Date.now() - startTime,
       storageType,
       savedTo,
+      validation,
     };
 
     lastRefreshResult = result;

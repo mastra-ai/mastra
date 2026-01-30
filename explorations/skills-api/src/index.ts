@@ -47,6 +47,8 @@ export type { SupportedAgent } from './registry/agents.js';
 // Scraper exports
 export { scrapeSkills, enrichSkills, scrapeAndSave } from './scraper/scrape.js';
 export type { ScrapedSkill, EnrichedSkill } from './scraper/scrape.js';
+export { validateScrapedData, isDataUsable } from './scraper/validate.js';
+export type { ValidationResult, ValidationOptions } from './scraper/validate.js';
 
 // GitHub fetch exports
 export { fetchSkillFromGitHub, listSkillsInRepo } from './github/index.js';
