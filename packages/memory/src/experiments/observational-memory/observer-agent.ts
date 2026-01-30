@@ -629,7 +629,12 @@ export interface ObserverResult {
  * Format messages for the Observer's input.
  * Includes timestamps for temporal context.
  */
-export function formatMessagesForObserver(messages: MastraDBMessage[]): string {
+export function formatMessagesForObserver(
+  messages: MastraDBMessage[],
+  options?: { maxPartLength?: number },
+): string {
+  const maxLen = options?.maxPartLength;
+
   return messages
     .map(msg => {
       const timestamp = msg.createdAt
@@ -651,18 +656,20 @@ export function formatMessagesForObserver(messages: MastraDBMessage[]): string {
       // The content.content string is just the text portion
       let content = '';
       if (typeof msg.content === 'string') {
-        content = msg.content;
+        content = maybeTruncate(msg.content, maxLen);
       } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
         // Use parts array - this includes tool invocations and results
         content = msg.content.parts
           .map(part => {
-            if (part.type === 'text') return part.text;
+            if (part.type === 'text') return maybeTruncate(part.text, maxLen);
             if (part.type === 'tool-invocation') {
               const inv = part.toolInvocation;
               if (inv.state === 'result') {
-                return `[Tool Result: ${inv.toolName}]\n${JSON.stringify(inv.result, null, 2)}`;
+                const resultStr = JSON.stringify(inv.result, null, 2);
+                return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
               }
-              return `[Tool Call: ${inv.toolName}]\n${JSON.stringify(inv.args, null, 2)}`;
+              const argsStr = JSON.stringify(inv.args, null, 2);
+              return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
             }
             // Skip observation marker parts
             if (part.type?.startsWith('data-om-observation-')) return '';
@@ -672,12 +679,20 @@ export function formatMessagesForObserver(messages: MastraDBMessage[]): string {
           .join('\n');
       } else if (msg.content?.content) {
         // Fallback to text string if no parts
-        content = msg.content.content;
+        content = maybeTruncate(msg.content.content, maxLen);
       }
 
       return `**${role}${timestampStr}:**\n${content}`;
     })
     .join('\n\n---\n\n');
+}
+
+/** Truncate a string to maxLen characters, appending a note if truncated. */
+function maybeTruncate(str: string, maxLen?: number): string {
+  if (!maxLen || str.length <= maxLen) return str;
+  const truncated = str.slice(0, maxLen);
+  const remaining = str.length - maxLen;
+  return `${truncated}\n... [truncated ${remaining} characters]`;
 }
 
 /**

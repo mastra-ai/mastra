@@ -2600,8 +2600,9 @@ NOTE: Any messages following this system reminder are newer than your memories.
       // Skip if no messages
       if (messages.length === 0) continue;
 
-      // Format messages with timestamps
-      const formattedMessages = formatMessagesForObserver(messages);
+      // Format messages with timestamps, truncating large parts (e.g. tool results)
+      // since this is injected as context for the actor, not sent to the observer
+      const formattedMessages = formatMessagesForObserver(messages, { maxPartLength: 500 });
 
       if (formattedMessages) {
         const obscuredId = await this.representThreadIDInContext(threadId);
