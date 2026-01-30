@@ -28,7 +28,8 @@
   "dependencies": {
     "@mastra/auth": "workspace:*",
     "@workos-inc/node": "^8.0.0",
-    "@workos/authkit-session": "^0.3.4"
+    "@workos/authkit-session": "^0.3.4",
+    "lru-cache": "^11.1.0"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"

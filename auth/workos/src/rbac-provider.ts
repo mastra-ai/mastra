@@ -5,9 +5,10 @@
  * permission-based access control system.
  */
 
-import { WorkOS } from '@workos-inc/node';
 import type { IRBACProvider, RoleMapping } from '@mastra/core/ee';
 import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/ee';
+import type { WorkOS } from '@workos-inc/node';
+import { LRUCache } from 'lru-cache';
 
 import type { WorkOSUser, MastraRBACWorkosOptions } from './types';
 
@@ -17,6 +18,8 @@ import type { WorkOSUser, MastraRBACWorkosOptions } from './types';
 interface MastraRBACWorkosFullOptions extends MastraRBACWorkosOptions {
   /** WorkOS client instance */
   workos: WorkOS;
+  /** Permission cache configuration */
+  cache?: PermissionCacheOptions;
 }
 
 /**
@@ -55,20 +58,24 @@ interface MastraRBACWorkosFullOptions extends MastraRBACWorkosOptions {
  * });
  * ```
  */
-/** Cache entry with expiration timestamp */
-interface CacheEntry {
-  permissions: string[];
-  expiresAt: number;
-}
-
 /** Default cache TTL in milliseconds (60 seconds) */
 const DEFAULT_CACHE_TTL_MS = 60 * 1000;
+
+/** Default max cache size (number of users) */
+const DEFAULT_CACHE_MAX_SIZE = 1000;
+
+/** Cache configuration options */
+export interface PermissionCacheOptions {
+  /** Maximum number of users to cache (default: 1000) */
+  maxSize?: number;
+  /** Time-to-live in milliseconds (default: 60000) */
+  ttlMs?: number;
+}
 
 export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   private workos: WorkOS;
   private options: MastraRBACWorkosOptions;
-  private permissionCache = new Map<string, CacheEntry>();
-  private cacheTtlMs = DEFAULT_CACHE_TTL_MS;
+  private permissionCache: LRUCache<string, string[]>;
 
   /**
    * Expose roleMapping for middleware access.
@@ -88,7 +95,15 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
     this.workos = options.workos;
     this.options = options;
 
-    console.log(`[WorkOS RBAC] Initialized with roleMapping keys: ${Object.keys(this.options.roleMapping).join(', ')}`);
+    // Initialize LRU cache with configurable size and TTL
+    this.permissionCache = new LRUCache<string, string[]>({
+      max: options.cache?.maxSize ?? DEFAULT_CACHE_MAX_SIZE,
+      ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
+    });
+
+    console.info(
+      `[WorkOS RBAC] Initialized with roleMapping keys: ${Object.keys(this.options.roleMapping).join(', ')}`,
+    );
   }
 
   /**
@@ -102,22 +117,22 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
    * @returns Array of role slugs
    */
   async getRoles(user: WorkOSUser): Promise<string[]> {
-    console.log(`[WorkOS RBAC] getRoles called for user ${user.id}, workosId=${user.workosId}`);
+    console.info(`[WorkOS RBAC] getRoles called for user ${user.id}, workosId=${user.workosId}`);
 
     // If memberships are already present on the user object, use them
     if (user.memberships && user.memberships.length > 0) {
       const roles = this.extractRolesFromMemberships(user);
-      console.log(`[WorkOS RBAC] Using cached memberships, roles: ${JSON.stringify(roles)}`);
+      console.info(`[WorkOS RBAC] Using cached memberships, roles: ${JSON.stringify(roles)}`);
       return roles;
     }
 
     // Fetch memberships from WorkOS
     try {
-      console.log(`[WorkOS RBAC] Fetching memberships from WorkOS for user ${user.workosId}`);
+      console.info(`[WorkOS RBAC] Fetching memberships from WorkOS for user ${user.workosId}`);
       const memberships = await this.workos.userManagement.listOrganizationMemberships({
         userId: user.workosId,
       });
-      console.log(`[WorkOS RBAC] Found ${memberships.data.length} memberships`);
+      console.info(`[WorkOS RBAC] Found ${memberships.data.length} memberships`);
 
       // Filter by organization if specified
       const relevantMemberships = this.options.organizationId
@@ -126,7 +141,7 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
 
       // Extract role slugs
       const roles = relevantMemberships.map(m => m.role.slug);
-      console.log(`[WorkOS RBAC] Extracted roles: ${JSON.stringify(roles)}`);
+      console.info(`[WorkOS RBAC] Extracted roles: ${JSON.stringify(roles)}`);
       return roles;
     } catch (error) {
       console.error(`[WorkOS RBAC] Error fetching memberships:`, error);
@@ -161,13 +176,13 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
    * @returns Array of permission strings
    */
   async getPermissions(user: WorkOSUser): Promise<string[]> {
-    console.log(`[WorkOS RBAC] getPermissions called for user ${user.id}`);
+    console.info(`[WorkOS RBAC] getPermissions called for user ${user.id}`);
 
-    // Check cache first (with TTL)
+    // Check cache first (LRU cache handles TTL automatically)
     const cached = this.permissionCache.get(user.id);
-    if (cached && Date.now() < cached.expiresAt) {
-      console.log(`[WorkOS RBAC] Returning cached permissions: ${JSON.stringify(cached.permissions)}`);
-      return cached.permissions;
+    if (cached) {
+      console.info(`[WorkOS RBAC] Returning cached permissions: ${JSON.stringify(cached)}`);
+      return cached;
     }
 
     // Get roles and resolve permissions
@@ -177,17 +192,14 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
     if (roles.length === 0) {
       // No roles - apply _default permissions
       permissions = this.options.roleMapping['_default'] ?? [];
-      console.log(`[WorkOS RBAC] No roles, using _default permissions: ${JSON.stringify(permissions)}`);
+      console.info(`[WorkOS RBAC] No roles, using _default permissions: ${JSON.stringify(permissions)}`);
     } else {
       permissions = resolvePermissionsFromMapping(roles, this.options.roleMapping);
-      console.log(`[WorkOS RBAC] Resolved permissions from roles: ${JSON.stringify(permissions)}`);
+      console.info(`[WorkOS RBAC] Resolved permissions from roles: ${JSON.stringify(permissions)}`);
     }
 
-    // Cache the result with TTL
-    this.permissionCache.set(user.id, {
-      permissions,
-      expiresAt: Date.now() + this.cacheTtlMs,
-    });
+    // Cache the result (LRU cache handles TTL and eviction)
+    this.permissionCache.set(user.id, permissions);
 
     return permissions;
   }
@@ -232,13 +244,37 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   }
 
   /**
-   * Clear the permission cache.
+   * Clear the entire permission cache.
    *
-   * Call this when user roles change to ensure fresh permission resolution.
-   * Useful after role assignments or when memberships are updated.
+   * Call this when system-wide role changes occur.
+   * For individual user changes, prefer clearUserCache() instead.
    */
   clearCache(): void {
     this.permissionCache.clear();
+  }
+
+  /**
+   * Clear cached permissions for a specific user.
+   *
+   * Call this when a user's roles change to ensure fresh permission resolution
+   * on their next request. This is more efficient than clearing the entire cache.
+   *
+   * @param userId - The user ID to clear from cache
+   */
+  clearUserCache(userId: string): void {
+    this.permissionCache.delete(userId);
+  }
+
+  /**
+   * Get cache statistics for monitoring.
+   *
+   * @returns Object with cache size and max size
+   */
+  getCacheStats(): { size: number; maxSize: number } {
+    return {
+      size: this.permissionCache.size,
+      maxSize: this.permissionCache.max,
+    };
   }
 
   /**

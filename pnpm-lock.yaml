@@ -345,6 +345,9 @@ importers:
       '@workos/authkit-session':
         specifier: ^0.3.4
         version: 0.3.4
+      lru-cache:
+        specifier: ^11.1.0
+        version: 11.2.2
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
