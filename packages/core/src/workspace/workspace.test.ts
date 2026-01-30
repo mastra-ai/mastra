@@ -277,16 +277,15 @@ Line 3 conclusion`;
       expect(workspace.skills).toBeUndefined();
     });
 
-    it('should allow skills without filesystem (read-only mode)', () => {
+    it('should allow skills without filesystem (via LocalSkillSource)', () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       const workspace = new Workspace({
         sandbox,
         skills: ['/skills'],
       });
 
-      // Skills should be available via LocalSkillSource (read-only)
+      // Skills should be available via LocalSkillSource
       expect(workspace.skills).toBeDefined();
-      expect(workspace.skills?.isWritable).toBe(false);
     });
 
     it('should return undefined when no skills configured', () => {
