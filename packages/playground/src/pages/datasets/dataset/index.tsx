@@ -63,8 +63,8 @@ function Dataset() {
   };
 
   return (
-    <MainContentLayout>
-      <MainContentContent>
+    <MainContentLayout className="grid-rows-1">
+      <MainContentContent className="content-stretch">
         <DatasetDetail
           datasetId={datasetId}
           onAddItemClick={() => setAddItemDialogOpen(true)}
@@ -89,11 +89,7 @@ function Dataset() {
           onSuccess={handleRunSuccess}
         />
 
-        <AddItemDialog
-          datasetId={datasetId}
-          open={addItemDialogOpen}
-          onOpenChange={setAddItemDialogOpen}
-        />
+        <AddItemDialog datasetId={datasetId} open={addItemDialogOpen} onOpenChange={setAddItemDialogOpen} />
 
         {/* Dataset edit dialog */}
         {dataset && (

@@ -47,8 +47,8 @@ function ActionsMenu({ onExportClick, onCreateDatasetClick, onDeleteClick }: Act
           </Icon>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-56 p-1">
-        <div className="flex flex-col">
+      <PopoverContent align="end" className="w-72 p-1 bg-surface4 ">
+        <div className="flex flex-col gap-2">
           <Button
             variant="ghost"
             size="sm"
@@ -71,12 +71,7 @@ function ActionsMenu({ onExportClick, onCreateDatasetClick, onDeleteClick }: Act
             </Icon>
             Select Items to Create Dataset
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2"
-            disabled
-          >
+          <Button variant="ghost" size="sm" className="w-full justify-start gap-2" disabled>
             <Icon>
               <FolderOutput className="w-4 h-4" />
             </Icon>
@@ -114,22 +109,24 @@ export function ItemsToolbar({
 }: ItemsToolbarProps) {
   if (isSelectionActive) {
     return (
-      <div className="flex justify-end px-4 py-2 gap-2">
+      <div className="flex justify-between px-4 py-3 gap-2 bg-surface4 rounded-lg">
         <span className="text-sm text-neutral3 flex items-center">{selectedCount} selected</span>
-        <Button variant="primary" size="sm" disabled={selectedCount === 0} onClick={onExecuteAction}>
-          {selectionMode === 'export' && 'Export CSV'}
-          {selectionMode === 'create-dataset' && 'Create Dataset'}
-          {selectionMode === 'delete' && 'Delete'}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onCancelSelection}>
-          Cancel
-        </Button>
+        <div>
+          <Button variant="primary" size="sm" disabled={selectedCount === 0} onClick={onExecuteAction}>
+            {selectionMode === 'export' && 'Export CSV'}
+            {selectionMode === 'create-dataset' && 'Create Dataset'}
+            {selectionMode === 'delete' && 'Delete'}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onCancelSelection}>
+            Cancel
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex justify-end px-4 py-2 gap-2">
+    <div className="flex justify-end px-4 py-3 gap-2 bg-surface4 rounded-lg">
       <SplitButton
         mainLabel={
           <>

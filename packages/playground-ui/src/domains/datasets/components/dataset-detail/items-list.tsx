@@ -21,10 +21,7 @@ const itemsListColumns = [
   { name: 'date', label: 'Created', size: '5rem' },
 ];
 
-const itemsListColumnsWithCheckbox = [
-  { name: 'checkbox', label: '', size: '2.5rem' },
-  ...itemsListColumns,
-];
+const itemsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '2.5rem' }, ...itemsListColumns];
 
 export interface ItemsListProps {
   items: DatasetItem[];
@@ -112,6 +109,18 @@ export function ItemsList({
   const isSelectionActive = selectionMode !== 'idle';
   const columns = isSelectionActive ? itemsListColumnsWithCheckbox : itemsListColumns;
 
+  // Select all state
+  const isAllSelected = items.length > 0 && selection.selectedCount === items.length;
+  const isIndeterminate = selection.selectedCount > 0 && selection.selectedCount < items.length;
+
+  const handleSelectAllToggle = () => {
+    if (isAllSelected) {
+      selection.clearSelection();
+    } else {
+      selection.selectAll(allIds);
+    }
+  };
+
   const handleEntryClick = (itemId: string) => {
     if (isSelectionActive) {
       // In selection mode, clicking toggles selection
@@ -123,7 +132,7 @@ export function ItemsList({
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="grid grid-rows-[auto_1fr] gap-4 h-full">
       <ItemsToolbar
         onAddClick={onAddClick}
         onImportClick={onImportClick ?? (() => {})}
@@ -140,7 +149,29 @@ export function ItemsList({
 
       <EntryList>
         <EntryList.Trim>
-          <EntryList.Header columns={columns} />
+          {isSelectionActive ? (
+            <div className="sticky top-0 bg-surface4 z-10 rounded-t-lg px-6">
+              <div
+                className="grid gap-6 text-left uppercase py-3 text-neutral3 text-ui-sm"
+                style={{
+                  gridTemplateColumns: columns.map(c => c.size).join(' '),
+                }}
+              >
+                <div className="flex items-center justify-center">
+                  <Checkbox
+                    checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                    onCheckedChange={handleSelectAllToggle}
+                    aria-label="Select all items"
+                  />
+                </div>
+                {itemsListColumns.map(col => (
+                  <span key={col.name}>{col.label}</span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <EntryList.Header columns={columns} />
+          )}
           <EntryList.Entries>
             {items.map(item => {
               const createdAtDate = new Date(item.createdAt);

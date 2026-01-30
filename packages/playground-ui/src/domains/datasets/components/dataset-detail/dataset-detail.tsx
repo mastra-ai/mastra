@@ -100,15 +100,14 @@ export function DatasetDetail({
   };
 
   return (
-    <div className="h-full overflow-hidden">
-      <div
-        className={cn(
-          'h-full mx-auto w-full',
-          transitions.allSlow,
-          selectedItemId ? 'max-w-[100rem]' : 'max-w-[50rem]',
-        )}
-      >
-        <div className="grid grid-rows-[auto_1fr] h-full">
+    <div className="h-full overflow-hidden px-6 pb-4" style={{ border: 'px solid blue' }}>
+      <div className={cn('h-full w-full', transitions.allSlow)}>
+        <div
+          className={cn(
+            'grid grid-rows-[auto_1fr] mx-auto h-full w-full m-auto',
+            selectedItemId ? 'max-w-[100rem]' : 'max-w-[60rem]',
+          )}
+        >
           {/* Header */}
           <DatasetHeader
             name={dataset?.name}
@@ -122,14 +121,19 @@ export function DatasetDetail({
           />
 
           {/* Content with tabs */}
-          <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
-            <Tabs defaultTab="items" value={activeTab} onValueChange={setActiveTab}>
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <Tabs
+              defaultTab="items"
+              value={activeTab}
+              onValueChange={setActiveTab}
+              className="grid grid-rows-[auto_1fr] h-full"
+            >
               <TabList>
                 <Tab value="items">Items ({items.length})</Tab>
                 <Tab value="runs">Run History ({runs.length})</Tab>
               </TabList>
 
-              <TabContent value="items" className="flex-1 overflow-hidden">
+              <TabContent value="items" className="flex-1 overflow-hidden mt-4">
                 <ItemsMasterDetail
                   datasetId={datasetId}
                   items={items}

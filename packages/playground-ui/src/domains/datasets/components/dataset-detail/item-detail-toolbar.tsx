@@ -23,18 +23,14 @@ export function ItemDetailToolbar({
   isEditing = false,
 }: ItemDetailToolbarProps) {
   return (
-    <div className="flex items-center justify-between px-4 py-2 border-b border-border1">
+    <div className="flex items-center justify-between px-4 py-3 rounded-lg bg-surface4">
       {/* Left side: Navigation */}
       <div className="flex items-center gap-1">
         <Button variant="outline" size="sm" onClick={onPrevious} disabled={!onPrevious} aria-label="Previous item">
-          <Icon>
-            <ChevronLeft />
-          </Icon>
+          <ChevronLeft /> Previous
         </Button>
         <Button variant="outline" size="sm" onClick={onNext} disabled={!onNext} aria-label="Next item">
-          <Icon>
-            <ChevronRight />
-          </Icon>
+          Next <ChevronRight />
         </Button>
       </div>
 
@@ -44,9 +40,7 @@ export function ItemDetailToolbar({
           <SplitButton
             mainLabel={
               <>
-                <Icon>
-                  <Pencil />
-                </Icon>
+                <Pencil />
                 Edit
               </>
             }
@@ -54,7 +48,7 @@ export function ItemDetailToolbar({
             variant="outline"
             size="sm"
           >
-            <div className="flex flex-col">
+            <div className="flex flex-col gap-2">
               <Button
                 variant="ghost"
                 size="sm"

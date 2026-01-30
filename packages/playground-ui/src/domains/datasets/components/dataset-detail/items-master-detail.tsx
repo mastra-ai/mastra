@@ -37,20 +37,28 @@ export function ItemsMasterDetail({
 }: ItemsMasterDetailProps) {
   const selectedItem = items.find(i => i.id === selectedItemId) ?? null;
 
+  const handleItemClick = (itemId: string) => {
+    if (itemId === selectedItemId) {
+      onItemClose();
+    } else {
+      onItemSelect(itemId);
+    }
+  };
+
   return (
     <div
       className={cn(
-        'grid h-full overflow-hidden',
+        'grid h-full overflow-hidden gap-5 ItemsMasterDetail',
         transitions.allSlow, // 300ms transition
-        selectedItemId ? 'grid-cols-[minmax(300px,45%)_minmax(400px,55%)]' : 'grid-cols-1',
+        selectedItemId ? 'grid-cols-[1fr_auto]' : 'grid-cols-1',
       )}
     >
       {/* List column - always visible */}
-      <div className={cn('flex flex-col h-full overflow-hidden', selectedItemId && 'border-r border-border1')}>
+      <div className={cn('flex flex-col h-full overflow-hidden')}>
         <ItemsList
           items={items}
           isLoading={isLoading}
-          onItemClick={onItemSelect}
+          onItemClick={handleItemClick}
           selectedItemId={selectedItemId}
           {...listProps}
         />
@@ -58,7 +66,7 @@ export function ItemsMasterDetail({
 
       {/* Detail column - conditional */}
       {selectedItem && (
-        <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col h-full overflow-hidden w-[20rem] xl:w-[30rem] 2xl:w-[40rem]">
           <ItemDetailPanel
             datasetId={datasetId}
             item={selectedItem}
