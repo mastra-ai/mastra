@@ -66,7 +66,7 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
       </SearchbarWrapper>
 
       {isLoading ? (
-        <AgentsTableSkeleton showSourceColumn={experimentalFeaturesEnabled} />
+        <AgentsTableSkeleton />
       ) : (
         <ScrollableContainer>
           <TooltipProvider>
@@ -101,11 +101,10 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
   );
 }
 
-const AgentsTableSkeleton = ({ showSourceColumn }: { showSourceColumn: boolean }) => (
+const AgentsTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
-      {showSourceColumn && <Th>Source</Th>}
       <Th>Model</Th>
       <Th>Attached entities</Th>
     </Thead>
@@ -115,11 +114,6 @@ const AgentsTableSkeleton = ({ showSourceColumn }: { showSourceColumn: boolean }
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
-          {showSourceColumn && (
-            <Cell>
-              <Skeleton className="h-4 w-16" />
-            </Cell>
-          )}
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>

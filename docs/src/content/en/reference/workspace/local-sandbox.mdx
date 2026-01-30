@@ -11,17 +11,9 @@ Executes commands on the local system.
 
 :::info
 
-For interface details, see [WorkspaceSandbox Interface](/reference/workspace/sandbox).
+For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 :::
-
-## Installation
-
-`LocalSandbox` is included in `@mastra/core`:
-
-```bash npm2yarn
-npm install @mastra/core@latest
-```
 
 ## Usage
 
@@ -55,7 +47,7 @@ const response = await agent.generate('Run npm install');
 
 `LocalSandbox` automatically starts on the first command execution if not already running. You can also explicitly start the sandbox by calling `workspace.init()` at application startup to avoid first-command latency.
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -220,7 +212,7 @@ const ready = await sandbox.isReady();
 // true if status is 'running'
 ```
 
-**Returns:** `Promise<boolean>`
+
 
 ### `executeCommand(command, args?, options?)`
 
@@ -282,18 +274,6 @@ const installResult = await sandbox.executeCommand('npm', ['install', 'lodash'],
   ]}
 />
 
-**Returns:** `Promise<CommandResult>`
-
-```typescript
-interface CommandResult {
-  success: boolean;
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  executionTimeMs: number;
-}
-```
-
 ### `getInfo()`
 
 Get sandbox status and resource information.
@@ -301,22 +281,6 @@ Get sandbox status and resource information.
 ```typescript
 const info = await sandbox.getInfo();
 // { status: 'running', resources: { ... } }
-```
-
-**Returns:** `Promise<SandboxInfo>`
-
-```typescript
-interface SandboxInfo {
-  status: 'starting' | 'running' | 'stopped' | 'error';
-  resources?: {
-    memoryMB?: number;
-    memoryUsedMB?: number;
-    cpuCores?: number;
-    cpuPercent?: number;
-    diskMB?: number;
-    diskUsedMB?: number;
-  };
-}
 ```
 
 ### `getInstructions()`
@@ -327,8 +291,6 @@ Returns a description of how this sandbox works. Used in tool descriptions.
 const instructions = sandbox.getInstructions();
 // 'Local command execution. Working directory: "/workspace".'
 ```
-
-**Returns:** `string`
 
 ## Path Resolution
 
@@ -367,16 +329,6 @@ Detect the best available isolation backend for the current platform.
 ```typescript
 const detection = LocalSandbox.detectIsolation();
 // { backend: 'seatbelt', available: true, message: 'Seatbelt available on macOS' }
-```
-
-**Returns:** `SandboxDetectionResult`
-
-```typescript
-interface SandboxDetectionResult {
-  backend: IsolationBackend;
-  available: boolean;
-  message: string;
-}
 ```
 
 ## Environment Isolation

@@ -1,5 +1,45 @@
 # @mastra/react
 
+## 0.2.0
+
+### Minor Changes
+
+- Added `apiPrefix` prop to `MastraClientProvider` for connecting to servers with custom API route prefixes (defaults to `/api`). ([#12295](https://github.com/mastra-ai/mastra/pull/12295))
+
+  **Default usage (no change required):**
+
+  ```tsx
+  <MastraClientProvider baseUrl="http://localhost:3000">{children}</MastraClientProvider>
+  ```
+
+  **Custom prefix usage:**
+
+  ```tsx
+  <MastraClientProvider baseUrl="http://localhost:3000" apiPrefix="/mastra">
+    {children}
+  </MastraClientProvider>
+  ```
+
+  See #12261 for more details.
+
+- Added useCancelWorkflowRun hook to @mastra/react for canceling workflow runs. This hook was previously only available internally in playground-ui and is now exported for use in custom applications. ([#12142](https://github.com/mastra-ai/mastra/pull/12142))
+
+- Added useStreamWorkflow hook to @mastra/react for streaming workflow execution. This hook supports streaming, observing, resuming, and time-traveling workflows. It accepts tracingOptions and onError as parameters for better customization. ([#12151](https://github.com/mastra-ai/mastra/pull/12151))
+
+### Patch Changes
+
+- Use useExecuteWorkflow hook from @mastra/react instead of local implementation in playground-ui ([#12138](https://github.com/mastra-ai/mastra/pull/12138))
+
+- Updated dependencies [[`deea43e`](https://github.com/mastra-ai/mastra/commit/deea43eb1366d03a864c5e597d16a48592b9893f), [`60d9d89`](https://github.com/mastra-ai/mastra/commit/60d9d899e44b35bc43f1bcd967a74e0ce010b1af), [`0350626`](https://github.com/mastra-ai/mastra/commit/03506267ec41b67add80d994c0c0fcce93bbc75f), [`3efbe5a`](https://github.com/mastra-ai/mastra/commit/3efbe5ae20864c4f3143457f4f3ee7dc2fa5ca76), [`dc82e6c`](https://github.com/mastra-ai/mastra/commit/dc82e6c5a05d6a9160c522af08b8c809ddbcdb66), [`a64a24c`](https://github.com/mastra-ai/mastra/commit/a64a24c9bce499b989667c7963f2f71a11d90334), [`a64a24c`](https://github.com/mastra-ai/mastra/commit/a64a24c9bce499b989667c7963f2f71a11d90334)]:
+  - @mastra/client-js@1.1.0
+
+## 0.2.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`a64a24c`](https://github.com/mastra-ai/mastra/commit/a64a24c9bce499b989667c7963f2f71a11d90334), [`a64a24c`](https://github.com/mastra-ai/mastra/commit/a64a24c9bce499b989667c7963f2f71a11d90334)]:
+  - @mastra/client-js@1.1.0-alpha.2
+
 ## 0.2.0-alpha.1
 
 ### Patch Changes

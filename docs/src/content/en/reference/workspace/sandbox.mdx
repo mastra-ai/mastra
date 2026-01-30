@@ -1,11 +1,11 @@
 ---
-title: "Reference: WorkspaceSandbox Interface | Workspace"
+title: "Reference: WorkspaceSandbox | Workspace"
 description: "Documentation for the WorkspaceSandbox interface that defines command execution operations."
 packages:
   - "@mastra/core"
 ---
 
-# WorkspaceSandbox Interface
+# WorkspaceSandbox
 
 The `WorkspaceSandbox` interface defines how workspaces execute commands.
 
@@ -94,18 +94,6 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash']);
   ]}
 />
 
-**Returns:** `Promise<CommandResult>`
-
-```typescript
-interface CommandResult {
-  success: boolean;
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  executionTimeMs: number;
-}
-```
-
 ### `getInfo()`
 
 Get sandbox status and resource information.
@@ -113,22 +101,6 @@ Get sandbox status and resource information.
 ```typescript
 const info = await sandbox.getInfo();
 // { status: 'running', resources: { memoryMB: 512, cpuPercent: 5 } }
-```
-
-**Returns:** `Promise<SandboxInfo>`
-
-```typescript
-interface SandboxInfo {
-  status: 'starting' | 'running' | 'stopped' | 'error';
-  resources?: {
-    memoryMB?: number;
-    memoryUsedMB?: number;
-    cpuCores?: number;
-    cpuPercent?: number;
-    diskMB?: number;
-    diskUsedMB?: number;
-  };
-}
 ```
 
 ### `getInstructions()`
@@ -139,8 +111,6 @@ Get a description of how this sandbox works. Used in tool descriptions to help a
 const instructions = sandbox.getInstructions?.();
 // 'Local command execution. Working directory: "/workspace".'
 ```
-
-**Returns:** `string`
 
 ## Related
 
