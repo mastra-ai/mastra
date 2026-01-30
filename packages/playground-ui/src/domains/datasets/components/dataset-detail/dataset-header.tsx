@@ -1,0 +1,160 @@
+'use client';
+
+import { useState } from 'react';
+import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import { Button } from '@/ds/components/Button';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Icon } from '@/ds/icons/Icon';
+import { MoreVertical, Pencil, Copy, Trash2, Play } from 'lucide-react';
+
+export interface DatasetHeaderProps {
+  name?: string;
+  description?: string;
+  version?: Date | string;
+  isLoading?: boolean;
+  onEditClick?: () => void;
+  onDeleteClick?: () => void;
+  runTriggerSlot?: React.ReactNode;
+  onRunClick?: () => void;
+}
+
+/**
+ * Format version date for display
+ */
+function formatVersion(version: Date | string | undefined): string {
+  if (!version) return '';
+  const d = typeof version === 'string' ? new Date(version) : version;
+  return d.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+interface HeaderActionsMenuProps {
+  onEditClick?: () => void;
+  onDeleteClick?: () => void;
+}
+
+/**
+ * Three-dot actions menu for dataset header.
+ * Options: Edit Dataset, Duplicate Dataset (disabled), Delete Dataset
+ */
+function HeaderActionsMenu({ onEditClick, onDeleteClick }: HeaderActionsMenuProps) {
+  const [open, setOpen] = useState(false);
+
+  const handleAction = (callback?: () => void) => {
+    callback?.();
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" aria-label="Dataset actions menu">
+          <Icon>
+            <MoreVertical className="w-4 h-4" />
+          </Icon>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-48 p-1">
+        <div className="flex flex-col">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2"
+            onClick={() => handleAction(onEditClick)}
+          >
+            <Icon>
+              <Pencil className="w-4 h-4" />
+            </Icon>
+            Edit Dataset
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2"
+            disabled
+          >
+            <Icon>
+              <Copy className="w-4 h-4" />
+            </Icon>
+            <span className="flex-1 text-left">Duplicate Dataset</span>
+            <span className="text-xs text-neutral3">Coming Soon</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2 text-red-500 hover:text-red-400"
+            onClick={() => handleAction(onDeleteClick)}
+          >
+            <Icon>
+              <Trash2 className="w-4 h-4" />
+            </Icon>
+            Delete Dataset
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * Dataset header with name, description, actions menu, and run button.
+ * Consolidates Edit/Delete into three-dot menu.
+ */
+export function DatasetHeader({
+  name,
+  description,
+  version,
+  isLoading = false,
+  onEditClick,
+  onDeleteClick,
+  runTriggerSlot,
+  onRunClick,
+}: DatasetHeaderProps) {
+  return (
+    <header className="flex items-start justify-between px-4 py-6 gap-4">
+      {/* Left side: Name + Description */}
+      <div className="flex flex-col gap-1">
+        {isLoading ? (
+          <Skeleton className="h-7 w-48" />
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-neutral6">
+                {name ?? 'Dataset'}
+              </h1>
+              {version && (
+                <span className="text-ui-sm text-neutral3 font-normal">
+                  v{formatVersion(version)}
+                </span>
+              )}
+            </div>
+            {description && (
+              <p className="text-sm text-muted-foreground">{description}</p>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Right side: Menu + Run button */}
+      <div className="flex items-center gap-2">
+        <HeaderActionsMenu
+          onEditClick={onEditClick}
+          onDeleteClick={onDeleteClick}
+        />
+        {runTriggerSlot ? (
+          runTriggerSlot
+        ) : onRunClick ? (
+          <Button variant="outline" size="sm" onClick={onRunClick}>
+            <Icon>
+              <Play />
+            </Icon>
+            Run Experiment
+          </Button>
+        ) : null}
+      </div>
+    </header>
+  );
+}

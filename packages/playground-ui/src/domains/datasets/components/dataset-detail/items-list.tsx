@@ -8,7 +8,7 @@ import { Icon } from '@/ds/icons/Icon';
 import { Plus, Upload } from 'lucide-react';
 import { useItemSelection } from '../../hooks/use-item-selection';
 import { exportItemsToCSV } from '../../utils/csv-export';
-import { ActionsMenu } from './items-list-actions';
+import { ItemsToolbar } from './items-toolbar';
 import { toast } from '@/lib/toast';
 import { format, isToday } from 'date-fns';
 
@@ -124,53 +124,19 @@ export function ItemsList({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Action buttons above list */}
-      <div className="flex justify-end px-4 py-2 gap-2">
-        {isSelectionActive ? (
-          <>
-            <span className="text-sm text-neutral3 flex items-center">
-              {selection.selectedCount} selected
-            </span>
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={selection.selectedCount === 0}
-              onClick={handleExecuteAction}
-            >
-              {selectionMode === 'export' && 'Export CSV'}
-              {selectionMode === 'create-dataset' && 'Create Dataset'}
-              {selectionMode === 'delete' && 'Delete'}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleCancelSelection}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            {onImportClick && (
-              <Button variant="outline" size="sm" onClick={onImportClick}>
-                <Icon>
-                  <Upload />
-                </Icon>
-                Import CSV
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={onAddClick}>
-              <Icon>
-                <Plus />
-              </Icon>
-              Add Item
-            </Button>
-            {items.length > 0 && (
-              <ActionsMenu
-                onExportClick={() => setSelectionMode('export')}
-                onCreateDatasetClick={() => setSelectionMode('create-dataset')}
-                onDeleteClick={() => setSelectionMode('delete')}
-              />
-            )}
-          </>
-        )}
-      </div>
+      <ItemsToolbar
+        onAddClick={onAddClick}
+        onImportClick={onImportClick ?? (() => {})}
+        onExportClick={() => setSelectionMode('export')}
+        onCreateDatasetClick={() => setSelectionMode('create-dataset')}
+        onDeleteClick={() => setSelectionMode('delete')}
+        hasItems={items.length > 0}
+        isSelectionActive={isSelectionActive}
+        selectedCount={selection.selectedCount}
+        onExecuteAction={handleExecuteAction}
+        onCancelSelection={handleCancelSelection}
+        selectionMode={selectionMode}
+      />
 
       <EntryList>
         <EntryList.Trim>

@@ -5,43 +5,46 @@
 See: .planning/PROJECT.md (updated 2026-01-23)
 
 **Core value:** Catch quality regressions before they reach users — when you modify a prompt or model, know immediately if scores dropped.
-**Current focus:** Phase 9 - Dataset Items Detail View (COMPLETE)
+**Current focus:** Phase 10 - Dataset Layout Update (COMPLETE)
 
 ## Current Position
 
-Phase: 9 of 9 (Dataset Items Detail View) — Complete
-Plan: 5 of 5 in phase 9
-Status: Phase 9 complete
-Last activity: 2026-01-29 — Completed 09-05-PLAN.md (ItemsList and Dialog Integration)
+Phase: 10 of 10 (Dataset Layout Update)
+Plan: 5 of 5 in phase 10 (all complete)
+Status: Phase complete
+Last activity: 2026-01-30 — Completed 10-05-PLAN.md
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 37
+
+- Total plans completed: 42
 - Average duration: 4 min
-- Total execution time: 2.1 hours
+- Total execution time: 2.33 hours
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01-storage-foundation | 4 | 20 min | 5 min |
-| 02-execution-core | 4 | 15 min | 4 min |
-| 03-agent-workflow-targets | 1 | 2 min | 2 min |
-| 04-scorer-targets | 1 | 3 min | 3 min |
-| 05-run-analytics | 1 | 4 min | 4 min |
-| 06-playground-integration | 12 | 48 min | 4 min |
-| 07-csv-import | 5 | 10 min | 2 min |
-| 08-item-selection-actions | 4 | 13 min | 3.25 min |
-| 09-dataset-items-detail-view | 5 | 16 min | 3.2 min |
+| Phase                        | Plans | Total  | Avg/Plan |
+| ---------------------------- | ----- | ------ | -------- |
+| 01-storage-foundation        | 4     | 20 min | 5 min    |
+| 02-execution-core            | 4     | 15 min | 4 min    |
+| 03-agent-workflow-targets    | 1     | 2 min  | 2 min    |
+| 04-scorer-targets            | 1     | 3 min  | 3 min    |
+| 05-run-analytics             | 1     | 4 min  | 4 min    |
+| 06-playground-integration    | 12    | 48 min | 4 min    |
+| 07-csv-import                | 5     | 10 min | 2 min    |
+| 08-item-selection-actions    | 4     | 13 min | 3.25 min |
+| 09-dataset-items-detail-view | 5     | 16 min | 3.2 min  |
+| 10-dataset-layout-update     | 5     | 24 min | 4.8 min  |
 
 **Recent Trend:**
-- Last 5 plans: 09-01 (3 min), 09-02 (3 min), 09-03 (3 min), 09-04 (3 min), 09-05 (4 min)
+
+- Last 5 plans: 10-01 (5 min), 10-03 (2 min), 10-02 (9 min), 10-04 (3 min), 10-05 (5 min)
 - Trend: Steady
 
-*Updated after each plan completion*
+_Updated after each plan completion_
 
 ## Accumulated Context
 
@@ -107,6 +110,20 @@ Recent decisions affecting current work:
 - Delete confirmation state resets on item navigation
 - Selection state owned by DatasetDetail parent, passes to children for synchronization
 - Legacy callback props removed when functionality consolidates into child component
+- SplitButton composes CombinedButtons + Popover for visual grouping
+- ChevronDown icon sizing based on button size prop (sm: w-3 h-3, md/lg: w-4 h-4)
+- ItemsToolbar extracted for cleaner ItemsList component
+- ActionsMenu internal to ItemsToolbar (not separately exported)
+- Three-dot menu for Edit/Duplicate/Delete in DatasetHeader
+- Duplicate option disabled with 'Coming Soon' indicator
+- Run button uses outline variant (not primary)
+- ESLint disabled in lint-staged (config removed in f9764aaf1e)
+- ItemDetailToolbar with SplitButton for Edit + Delete/Duplicate dropdown
+- ItemDetailPanel uses SideDialog.CodeSection for JSON display consistency
+- Panel structure: toolbar header + scrollable content body
+- CSS Grid with conditional columns for master-detail layout (45%/55% split)
+- Max-width transition: 50rem collapsed, 100rem expanded
+- transitions.allSlow (300ms) for smooth layout animations
 
 ### Pending Todos
 
@@ -116,6 +133,8 @@ None yet.
 
 - Phase 9 added: Dataset Items Detail View (EntryList, SideDialog, edit/delete flows)
 - Phase 9 complete: Full click-to-view-details flow implemented
+- Phase 10 added: Dataset Layout Update
+- Phase 10 complete: Master-detail layout with inline item panel
 
 ### Blockers/Concerns
 
@@ -123,6 +142,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-29
-Stopped at: Completed 09-05-PLAN.md (ItemsList and Dialog Integration)
+Last session: 2026-01-30
+Stopped at: Completed 10-05-PLAN.md (Master-Detail Layout Integration)
 Resume file: None

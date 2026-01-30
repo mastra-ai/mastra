@@ -3,17 +3,15 @@ import { DatasetItem } from '@mastra/client-js';
 import { useDataset, useDatasetItems } from '../../hooks/use-datasets';
 import { useDatasetRuns } from '../../hooks/use-dataset-runs';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { ItemsList } from './items-list';
+import { ItemsMasterDetail } from './items-master-detail';
 import { RunHistory } from './run-history';
-import { ItemDetailDialog } from './item-detail-dialog';
+import { DatasetHeader } from './dataset-header';
 import { CSVImportDialog } from '../csv-import';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
 import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
-import { Button } from '@/ds/components/Button';
-import { Skeleton } from '@/ds/components/Skeleton';
 import { AlertDialog } from '@/ds/components/AlertDialog';
-import { Icon } from '@/ds/icons/Icon';
-import { Play, Database, Pencil, Trash2 } from 'lucide-react';
+import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 
 export interface DatasetDetailProps {
@@ -54,20 +52,13 @@ export function DatasetDetail({
   const items = itemsData?.items ?? [];
   const runs = runsData?.runs ?? [];
 
-  // Compute selected item from items array
-  const selectedItem = items.find(item => item.id === selectedItemId) ?? null;
-
-  // Item detail dialog handlers
-  const handleItemClick = (itemId: string) => {
+  // Item selection handlers
+  const handleItemSelect = (itemId: string) => {
     setSelectedItemId(itemId);
   };
 
-  const handleItemDialogClose = () => {
+  const handleItemClose = () => {
     setSelectedItemId(null);
-  };
-
-  const handleItemChange = (itemId: string) => {
-    setSelectedItemId(itemId);
   };
 
   // Handler for Create Dataset action from selection
@@ -108,110 +99,63 @@ export function DatasetDetail({
     }
   };
 
-  // Format version date for display
-  const formatVersion = (version: Date | string | undefined): string => {
-    if (!version) return '';
-    const d = typeof version === 'string' ? new Date(version) : version;
-    return d.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-
   return (
-    <div className="grid grid-rows-[auto_1fr] h-full">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-6 gap-4">
-        <div className="flex items-center gap-3">
-          <Icon className="text-neutral3">
-            <Database />
-          </Icon>
-          {isDatasetLoading ? (
-            <Skeleton className="h-6 w-48" />
-          ) : (
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-medium text-neutral6">
-                {dataset?.name ?? 'Dataset'}
-              </h1>
-              {dataset?.version && (
-                <span className="text-ui-sm text-neutral3 font-normal">
-                  v{formatVersion(dataset.version)}
-                </span>
-              )}
-            </div>
-          )}
+    <div className="h-full overflow-hidden">
+      <div
+        className={cn(
+          'h-full mx-auto w-full',
+          transitions.allSlow,
+          selectedItemId ? 'max-w-[100rem]' : 'max-w-[50rem]',
+        )}
+      >
+        <div className="grid grid-rows-[auto_1fr] h-full">
+          {/* Header */}
+          <DatasetHeader
+            name={dataset?.name}
+            description={(dataset as { description?: string } | undefined)?.description}
+            version={dataset?.version}
+            isLoading={isDatasetLoading}
+            onEditClick={onEditClick}
+            onDeleteClick={onDeleteClick}
+            runTriggerSlot={runTriggerSlot}
+            onRunClick={onRunClick}
+          />
+
+          {/* Content with tabs */}
+          <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
+            <Tabs defaultTab="items" value={activeTab} onValueChange={setActiveTab}>
+              <TabList>
+                <Tab value="items">Items ({items.length})</Tab>
+                <Tab value="runs">Run History ({runs.length})</Tab>
+              </TabList>
+
+              <TabContent value="items" className="flex-1 overflow-hidden">
+                <ItemsMasterDetail
+                  datasetId={datasetId}
+                  items={items}
+                  isLoading={isItemsLoading}
+                  selectedItemId={selectedItemId}
+                  onItemSelect={handleItemSelect}
+                  onItemClose={handleItemClose}
+                  onAddClick={onAddItemClick ?? (() => {})}
+                  onImportClick={() => setImportDialogOpen(true)}
+                  onBulkDeleteClick={handleBulkDeleteClick}
+                  onCreateDatasetClick={handleCreateDatasetClick}
+                  datasetName={dataset?.name}
+                  clearSelectionTrigger={clearSelectionTrigger}
+                />
+              </TabContent>
+
+              <TabContent value="runs" className="flex-1 overflow-auto">
+                <RunHistory runs={runs} isLoading={isRunsLoading} datasetId={datasetId} />
+              </TabContent>
+            </Tabs>
+          </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          {onEditClick && (
-            <Button variant="outline" size="sm" onClick={onEditClick}>
-              <Icon>
-                <Pencil />
-              </Icon>
-              Edit
-            </Button>
-          )}
-          {onDeleteClick && (
-            <Button variant="outline" size="sm" onClick={onDeleteClick}>
-              <Icon>
-                <Trash2 />
-              </Icon>
-              Delete
-            </Button>
-          )}
-          {runTriggerSlot ? (
-            runTriggerSlot
-          ) : onRunClick ? (
-            <Button variant="primary" size="sm" onClick={onRunClick}>
-              <Icon>
-                <Play />
-              </Icon>
-              Run
-            </Button>
-          ) : null}
-        </div>
-      </header>
-
-      {/* Content with tabs */}
-      <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
-        <Tabs defaultTab="items" value={activeTab} onValueChange={setActiveTab}>
-          <TabList>
-            <Tab value="items">Items ({items.length})</Tab>
-            <Tab value="runs">Run History ({runs.length})</Tab>
-          </TabList>
-
-          <TabContent value="items" className="flex-1 overflow-auto">
-            <ItemsList
-              items={items}
-              isLoading={isItemsLoading}
-              onAddClick={onAddItemClick ?? (() => {})}
-              onImportClick={() => setImportDialogOpen(true)}
-              onBulkDeleteClick={handleBulkDeleteClick}
-              onCreateDatasetClick={handleCreateDatasetClick}
-              datasetName={dataset?.name}
-              clearSelectionTrigger={clearSelectionTrigger}
-              onItemClick={handleItemClick}
-              selectedItemId={selectedItemId}
-            />
-          </TabContent>
-
-          <TabContent value="runs" className="flex-1 overflow-auto">
-            <RunHistory
-              runs={runs}
-              isLoading={isRunsLoading}
-              datasetId={datasetId}
-            />
-          </TabContent>
-        </Tabs>
       </div>
 
       {/* CSV Import Dialog */}
-      <CSVImportDialog
-        datasetId={datasetId}
-        open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
-      />
+      <CSVImportDialog datasetId={datasetId} open={importDialogOpen} onOpenChange={setImportDialogOpen} />
 
       {/* Create Dataset From Items Dialog */}
       <CreateDatasetFromItemsDialog
@@ -239,16 +183,6 @@ export function DatasetDetail({
           </AlertDialog.Footer>
         </AlertDialog.Content>
       </AlertDialog>
-
-      {/* Item Detail Dialog */}
-      <ItemDetailDialog
-        datasetId={datasetId}
-        item={selectedItem}
-        items={items}
-        isOpen={selectedItemId !== null}
-        onClose={handleItemDialogClose}
-        onItemChange={handleItemChange}
-      />
     </div>
   );
 }

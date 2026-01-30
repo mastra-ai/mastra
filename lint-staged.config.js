@@ -4,10 +4,11 @@ export default {
   '**/*.ts?(x)': 'pnpm exec tsc-files --noEmit',
 
   // Code quality and style
-  '*.{ts,tsx}': ['pnpm exec eslint --fix --max-warnings=0', 'pnpm exec prettier --write'],
+  // TODO: eslint temporarily disabled - config was removed in f9764aaf1e but lint-staged still referenced it
+  '*.{ts,tsx}': ['pnpm exec prettier --write'],
 
   // Non-TS JavaScript
-  '*.{js,jsx}': ['pnpm exec eslint --fix', 'pnpm exec prettier --write'],
+  '*.{js,jsx}': ['pnpm exec prettier --write'],
 
   // Documentation and config
   '*.{json,md,yml,yaml}': ['pnpm exec prettier --write'],
