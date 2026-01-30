@@ -17,6 +17,7 @@ Align the `@mastra/auth-cloud` plugin with Cloud's API specification through fou
 - [x] **Phase 4: Testing + Validation** - Verify TypeScript compiles and test against mocked API
 - [x] **Phase 5: RBAC 403 Error Handling** - Fix playground retry behavior and fallback on 403 RBAC errors
 - [x] **Phase 6: WorkOS Client Initialization** - Make WorkOS client initialization consistent between providers
+- [x] **Phase 7: Strict Permission Types** - Type RoleDefinition.permissions to only allow valid STUDIO_PERMISSIONS strings
 
 ## Phase Details
 
@@ -158,10 +159,31 @@ Plans:
 Plans:
 - [x] 06-01-PLAN.md — Update types, constructor, and package documentation
 
+### Phase 7: Strict Permission Types
+
+**Goal**: Type RoleDefinition.permissions field to only allow valid permission strings from STUDIO_PERMISSIONS
+**Depends on**: Phase 6
+**Requirements**:
+
+- Extract permission string literal type from STUDIO_PERMISSIONS object
+- Update RoleDefinition.permissions to use strict type instead of string[]
+
+**Success Criteria** (what must be TRUE):
+
+1. RoleDefinition.permissions typed as array of valid permission literals
+2. Invalid permission strings cause TypeScript errors
+3. TypeScript compiles without errors
+4. No breaking changes to runtime behavior
+
+**Plans**: 1 plan
+
+Plans:
+- [x] 07-01-PLAN.md — Define Permission type and update RoleDefinition interface
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 | Phase                      | Plans Complete | Status     | Completed  |
 | -------------------------- | -------------- | ---------- | ---------- |
@@ -171,3 +193,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 4. Testing + Validation    | 1/1            | ✓ Complete | 2026-01-28 |
 | 5. RBAC 403 Error Handling | 4/4            | ✓ Complete | 2026-01-30 |
 | 6. WorkOS Client Init      | 1/1            | ✓ Complete | 2026-01-30 |
+| 7. Strict Permission Types | 1/1            | ✓ Complete | 2026-01-30 |

@@ -136,6 +136,35 @@ export const STUDIO_PERMISSIONS = [
 export type StudioPermission = (typeof STUDIO_PERMISSIONS)[number];
 
 /**
+ * Extract resource names from StudioPermission.
+ * Infers 'agents' from 'agents:read', 'studio' from 'studio:write', etc.
+ */
+type Resource = StudioPermission extends `${infer R}:${string}` ? R : never;
+
+/**
+ * Resource-level wildcard permissions.
+ * Patterns like 'agents:*', 'studio:*', 'workflows:*', etc.
+ */
+type ResourceWildcard = `${Resource}:*`;
+
+/**
+ * Resource-scoped permissions with instance ID.
+ * Patterns like 'agents:read:my-agent', 'workflows:execute:my-workflow', etc.
+ */
+type ResourceActionId = `${StudioPermission}:${string}`;
+
+/**
+ * All valid permission values for RoleDefinition.permissions.
+ *
+ * Includes:
+ * - StudioPermission: 'studio:read', 'agents:write', etc.
+ * - '*': Global wildcard (owner role)
+ * - ResourceWildcard: 'studio:*', 'agents:*', etc.
+ * - ResourceActionId: 'agents:read:my-agent', etc.
+ */
+export type Permission = StudioPermission | '*' | ResourceWildcard | ResourceActionId;
+
+/**
  * Get role by ID from default roles.
  *
  * @param roleId - Role ID to find
@@ -154,8 +183,8 @@ export function getDefaultRole(roleId: string): RoleDefinition | undefined {
  * @param roles - Role definitions (defaults to DEFAULT_ROLES)
  * @returns Array of resolved permissions
  */
-export function resolvePermissions(roleIds: string[], roles: RoleDefinition[] = DEFAULT_ROLES): string[] {
-  const permissions = new Set<string>();
+export function resolvePermissions(roleIds: string[], roles: RoleDefinition[] = DEFAULT_ROLES): Permission[] {
+  const permissions = new Set<Permission>();
   const visited = new Set<string>();
 
   function resolveRole(roleId: string) {
@@ -166,8 +195,10 @@ export function resolvePermissions(roleIds: string[], roles: RoleDefinition[] = 
     if (!role) return;
 
     // Add permissions from this role
+    // Cast required: RoleDefinition.permissions is string[] for interface compatibility,
+    // but runtime values are always valid Permission types
     for (const permission of role.permissions) {
-      permissions.add(permission);
+      permissions.add(permission as Permission);
     }
 
     // Resolve inherited roles
