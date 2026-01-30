@@ -1,0 +1,133 @@
+---
+title: "Skills | Workspace"
+description: Teach agents reusable capabilities with the Agent Skills specification.
+packages:
+  - "@mastra/core"
+---
+
+# Skills
+
+Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io) - an open standard for packaging agent capabilities.
+
+## How it works
+
+A skill is a folder containing:
+
+- **SKILL.md** - Instructions and metadata for the agent
+- **references/** - Supporting documentation (optional)
+- **scripts/** - Executable scripts (optional)
+- **assets/** - Images and other files (optional)
+
+```
+/skills
+  /code-review
+    SKILL.md
+    /references
+      style-guide.md
+      pr-checklist.md
+    /scripts
+      lint.ts
+```
+
+When skills are configured on a workspace, agents can discover and activate them during conversations.
+
+## SKILL.md structure
+
+A skill file contains YAML frontmatter followed by markdown instructions:
+
+```markdown
+---
+name: code-review
+description: Reviews code for quality, style, and potential issues
+version: 1.0.0
+tags:
+  - development
+  - review
+---
+
+# Code Review
+
+You are a code reviewer. When reviewing code:
+
+1. Check for bugs and edge cases
+2. Verify the code follows the style guide in references/style-guide.md
+3. Suggest improvements for readability
+4. Run the linter using scripts/lint.ts
+
+## What to look for
+
+- Unused variables and imports
+- Missing error handling
+- Security vulnerabilities
+- Performance issues
+```
+
+## Configuring skills
+
+Enable skill discovery by setting the `skills` option on your workspace:
+
+```typescript
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['/skills'],
+});
+```
+
+You can specify multiple skill directories:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: [
+    '/skills',           // Project skills
+    '/team-skills',      // Shared team skills
+  ],
+});
+```
+
+## Dynamic skills
+
+For dynamic skill paths based on context, pass a function:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: (context) => {
+    const paths = ['/skills'];
+    if (context.user?.role === 'developer') {
+      paths.push('/dev-skills');
+    }
+    return paths;
+  },
+});
+```
+
+## How agents use skills
+
+When skills are configured, agents receive a `SkillsProcessor` that:
+
+1. Lists available skills in the system message
+2. Allows agents to activate skills during conversation
+3. Provides access to skill references and scripts
+
+Agents can reference skill content in their responses and use scripts defined in skills to perform actions.
+
+## Skill search
+
+If BM25 or vector search is enabled on the workspace, skills are automatically indexed. Agents can search across skill content to find relevant instructions.
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['/skills'],
+  bm25: true, // Enable skill search
+});
+```
+
+## Related
+
+- [Agent Skills Specification](https://agentskills.io)
+- [Workspace Overview](/docs/workspace/overview)
+- [Search and Indexing](/docs/workspace/search)

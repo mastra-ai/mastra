@@ -9,10 +9,12 @@ packages:
   - "@mastra/pinecone"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # Storage
 
-For Mastra to remember previous interactions, you must configure a storage adapter. Mastra is designed to work with your preferred database provider - choose from the [supported providers](#supported-providers) and pass it to your Mastra instance.
-
+For agents to remember previous interactions, Mastra needs a database. Use a storage adapter for one of the [supported databases](#supported-providers) and pass it to your Mastra instance. 
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -25,7 +27,9 @@ export const mastra = new Mastra({
   }),
 });
 ```
-On first interaction, Mastra automatically creates the necessary tables following the [core schema](/reference/storage/overview#core-schema). This includes tables for messages, threads, resources, workflows, traces, and evaluation datasets.
+This configures instance-level storage, which all agents share by default. You can also configure [agent-level storage](#agent-level-storage) for isolated data boundaries.
+
+Mastra automatically creates the necessary tables on first interaction. See the [core schema](/reference/storage/overview#core-schema) for details on what gets created, including tables for messages, threads, resources, workflows, traces, and evaluation datasets.
 
 ## Supported providers
 
@@ -44,18 +48,18 @@ Each provider page includes installation instructions, configuration parameters,
 - [Microsoft SQL Server](/reference/storage/mssql)
 
 :::tip
-libSQL is the easiest way to get started because it doesn’t require running a separate database server
+libSQL is the easiest way to get started because it doesn’t require running a separate database server.
 :::
 
 ## Configuration scope
 
-You can configure storage at two different scopes:
+Storage can be configured at the instance level (shared by all agents) or at the agent level (isolated to a specific agent).
 
 ### Instance-level storage
 
 Add storage to your Mastra instance so all agents, workflows, observability traces and scores share the same memory provider:
 
-```typescript
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 
@@ -66,7 +70,7 @@ export const mastra = new Mastra({
   }),
 });
 
-// All agents automatically use this storage
+// Both agents inherit storage from the Mastra instance above
 const agent1 = new Agent({ id: "agent-1", memory: new Memory() });
 const agent2 = new Agent({ id: "agent-2", memory: new Memory() });
 ```
@@ -75,7 +79,7 @@ This is useful when all primitives share the same storage backend and have simil
 
 #### Composite storage
 
-Add storage to your Mastra instance using `MastraCompositeStore` and configure individual storage domains to use different storage providers.
+[Composite storage](/reference/storage/composite) is an alternative way to configure instance-level storage. Use `MastraCompositeStore` to set the `memory` domain (and any other [domains](/reference/storage/composite#storage-domains) you need) to different storage providers.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -88,6 +92,7 @@ export const mastra = new Mastra({
   storage: new MastraCompositeStore({
     id: "composite",
     domains: {
+      // highlight-next-line
       memory: new MemoryLibSQL({ url: "file:./memory.db" }),
       workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
       observability: new ObservabilityStorageClickhouse({
@@ -102,15 +107,11 @@ export const mastra = new Mastra({
 
 This is useful when different types of data have different performance or operational requirements, such as low-latency storage for memory, durable storage for workflows, and high-throughput storage for observability.
 
-:::info
-See [Storage Domains](/reference/storage/composite#storage-domains) for more information.
-:::
-
 ### Agent-level storage
 
-Agent-level storage overrides storage configured at the instance-level. Add storage to a specific agent when you need data boundaries or compliance requirements:
+Agent-level storage overrides storage configured at the instance level. Add storage to a specific agent when you need data boundaries or compliance requirements:
 
-```typescript title="src/mastra/agents/memory-agent.ts"
+```typescript title="src/mastra/agents/your-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { PostgresStore } from "@mastra/pg";
@@ -126,58 +127,59 @@ export const agent = new Agent({
 });
 ```
 
-This is useful when different agents need to store data in separate databases for security, compliance, or organizational reasons.
-
-:::warning[Mastra Cloud Store limitation]
-Agent-level storage is not supported when using [Mastra Cloud Store](/docs/mastra-cloud/deployment#using-mastra-cloud-store). If you use Mastra Cloud Store, configure storage on the Mastra instance instead. This limitation does not apply if you bring your own database.
+:::warning
+[Mastra Cloud Store](/docs/mastra-cloud/deployment#using-mastra-cloud-store) doesn't support agent-level storage.
 :::
 
 ## Threads and resources
 
-Mastra organizes memory into threads using two identifiers:
+Mastra organizes conversations using two identifiers: 
 
-- **Thread**: A conversation session containing a sequence of messages (e.g., `convo_123`)
-- **Resource**: An identifier for the entity the thread belongs to, typically a user (e.g., `user_123`)
+- **Thread** - a conversation session containing a sequence of messages.
+- **Resource** - the entity that owns the thread, such as a user, organization, project, or any other domain entity in your application.
 
-Both identifiers are required for agents to store and recall information:
+Both identifiers are required for agents to store information:
+
+<Tabs>
+  <TabItem value="generate" label="Generate">
 
 ```typescript
-const stream = await agent.stream("message for agent", {
+const response = await agent.generate("hello", {
   memory: {
-    thread: "convo_123",
+    thread: "conversation-abc-123",
     resource: "user_123",
   },
 });
 ```
 
-:::note
-[Studio](/docs/getting-started/studio) automatically generates a thread and resource ID for you. Remember to  to pass these explicitly when calling `stream` or `generate` yourself.
-:::
+  </TabItem>
+  <TabItem value="stream" label="Stream">
 
-### Thread and resource relationship
-
-Each thread has an owner (its `resourceId`) that is set when the thread is created and cannot be changed. When you query a thread, you must use the correct owner's resource ID. Attempting to query a thread with a different resource ID will result in an error:
-
-```text
-Thread with id <thread_id> is for resource with id <resource_a>
-but resource <resource_b> was queried
+```typescript
+const stream = await agent.stream("hello", {
+  memory: {
+    thread: "conversation-abc-123",
+    resource: "user_123",
+  },
+});
 ```
 
-Note that while each thread has one owner, messages within that thread can have different `resourceId` values. This is used for message attribution and filtering (e.g., distinguishing between different agents in a multi-agent system, or filtering messages for analytics).
+  </TabItem>
+</Tabs>
 
-**Security:** Memory is a storage layer, not an authorization layer. Your application must implement access control before calling memory APIs. The `resourceId` parameter controls both validation and filtering - provide it to validate ownership and filter messages, or omit it for server-side access without validation. See [Authorization middleware](/docs/server/middleware#authorization-user-isolation) for how to implement user isolation using reserved context keys.
-
-To avoid accidentally reusing thread IDs across different owners, use UUIDs: `crypto.randomUUID()`
+:::note
+[Studio](/docs/getting-started/studio) automatically generates a thread and resource ID for you. When calling `stream()` or `generate()` yourself, remember to provide these identifiers explicitly.
+:::
 
 ### Thread title generation
 
-Mastra can automatically generate descriptive thread titles based on the user's first message.
+Mastra can automatically generate descriptive thread titles based on the user's first message when `generateTitle` is enabled.
 
 Use this option when implementing a ChatGPT-style chat interface to render a title alongside each thread in the conversation list (for example, in a sidebar) derived from the thread’s initial user message.
 
-```typescript
-export const testAgent = new Agent({
-  id: "test-agent",
+```typescript title="src/mastra/agents/my-agent.ts"
+export const agent = new Agent({
+  id: "agent",
   memory: new Memory({
     options: {
       generateTitle: true,
@@ -188,16 +190,16 @@ export const testAgent = new Agent({
 
 Title generation runs asynchronously after the agent responds and does not affect response time.
 
-To optimize cost or behavior, provide a smaller `model` and custom `instructions`:
+To optimize cost or behavior, provide a smaller [`model`](/models) and custom `instructions`:
 
-```typescript
-export const testAgent = new Agent({
-  id: "test-agent",
+```typescript title="src/mastra/agents/my-agent.ts"
+export const agent = new Agent({
+  id: "agent",
   memory: new Memory({
     options: {
       generateTitle: {
         model: "openai/gpt-4o-mini",
-        instructions: "Generate a concise title based on the user's first message",
+        instructions: "Generate a 1 word title",
       },
     },
   }),
@@ -206,52 +208,11 @@ export const testAgent = new Agent({
 
 ## Semantic recall
 
-Semantic recall uses vector embeddings to retrieve relevant past messages based on meaning rather than recency. This requires a vector database instance, which can be configured at the instance or agent level.
-
-The vector database doesn't have to be the same as your storage provider. For example, you might use PostgreSQL for storage and Pinecone for vectors:
-
-```typescript
-import { Mastra } from "@mastra/core";
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { PostgresStore } from "@mastra/pg";
-import { PineconeVector } from "@mastra/pinecone";
-
-// Instance-level vector configuration
-export const mastra = new Mastra({
-  storage: new PostgresStore({
-    id: 'mastra-storage',
-    connectionString: process.env.DATABASE_URL,
-  }),
-});
-
-// Agent-level vector configuration
-export const agent = new Agent({
-  id: "agent",
-  memory: new Memory({
-    vector: new PineconeVector({
-      id: 'agent-vector',
-      apiKey: process.env.PINECONE_API_KEY,
-    }),
-    options: {
-      semanticRecall: {
-        topK: 5,
-        messageRange: 2,
-      },
-    },
-  }),
-});
-```
-
-We support all popular vector providers including [Pinecone](/reference/vectors/pinecone), [Chroma](/reference/vectors/chroma), [Qdrant](/reference/vectors/qdrant), and many more.
-
-For more information on configuring semantic recall, see the [Semantic Recall](./semantic-recall) documentation.
+Semantic recall has different storage requirements - it needs a vector database in addition to the standard storage adapter. See [Semantic recall](/docs/memory/semantic-recall) for setup and supported vector providers.
 
 ## Handling large attachments
 
-Some storage providers enforce record size limits that can be exceeded when storing messages with base64-encoded attachments (such as images). When an attachment is embedded directly in the message content, the total record size may exceed the provider's limit.
-
-### Affected providers
+Some storage providers enforce record size limits that base64-encoded file attachments (such as images) can exceed:
 
 | Provider | Record size limit |
 | -------- | ----------------- |
@@ -259,11 +220,9 @@ Some storage providers enforce record size limits that can be exceeded when stor
 | [Convex](/reference/storage/convex) | 1 MiB |
 | [Cloudflare D1](/reference/storage/cloudflare-d1) | 1 MiB |
 
-Other providers like PostgreSQL, MongoDB, and libSQL have significantly higher limits and are generally not affected.
+PostgreSQL, MongoDB, and libSQL have higher limits and are generally unaffected.
 
-### Solution: Upload attachments to external storage
-
-The recommended approach is to use an input processor that uploads large attachments to external storage and replaces them with URL references before the message is persisted. This works with any file storage service—S3, Cloudflare R2, Google Cloud Storage, [Convex file storage](https://docs.convex.dev/file-storage), or your own server.
+To avoid this, use an input processor to upload attachments to external storage (S3, R2, GCS, [Convex file storage](https://docs.convex.dev/file-storage), etc.) and replace them with URL references before persistence.
 
 ```typescript title="src/mastra/processors/attachment-uploader.ts"
 import type { Processor } from "@mastra/core/processors";

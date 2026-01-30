@@ -1,5 +1,118 @@
 # @mastra/deployer
 
+## 1.1.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/server@1.1.0-alpha.2
+  - @mastra/core@1.1.0-alpha.2
+
+## 1.1.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`b99ceac`](https://github.com/mastra-ai/mastra/commit/b99ceace2c830dbdef47c8692d56a91954aefea2), [`deea43e`](https://github.com/mastra-ai/mastra/commit/deea43eb1366d03a864c5e597d16a48592b9893f), [`ac9ec66`](https://github.com/mastra-ai/mastra/commit/ac9ec6672779b2e6d4344e415481d1a6a7d4911a)]:
+  - @mastra/core@1.1.0-alpha.1
+  - @mastra/server@1.1.0-alpha.1
+
+## 1.1.0-alpha.0
+
+### Minor Changes
+
+- Added dynamic agent management with CRUD operations and version tracking ([#12038](https://github.com/mastra-ai/mastra/pull/12038))
+
+  **New Features:**
+  - Create, edit, and delete agents directly from the Mastra Studio UI
+  - Full version history for agents with compare and restore capabilities
+  - Visual diff viewer to compare agent configurations across versions
+  - Agent creation modal with comprehensive configuration options (model selection, instructions, tools, workflows, sub-agents, memory)
+  - AI-powered instruction enhancement
+
+  **Storage:**
+  - New storage interfaces for stored agents and agent versions
+  - PostgreSQL, LibSQL, and MongoDB implementations included
+  - In-memory storage for development and testing
+
+  **API:**
+  - RESTful endpoints for agent CRUD operations
+  - Version management endpoints (create, list, activate, restore, delete, compare)
+  - Automatic versioning on agent updates when enabled
+
+  **Client SDK:**
+  - JavaScript client with full support for stored agents and versions
+  - Type-safe methods for all CRUD and version operations
+
+  **Usage Example:**
+
+  ```typescript
+  // Server-side: Configure storage
+  import { Mastra } from '@mastra/core';
+  import { PgAgentsStorage } from '@mastra/pg';
+
+  const mastra = new Mastra({
+    agents: { agentOne },
+    storage: {
+      agents: new PgAgentsStorage({
+        connectionString: process.env.DATABASE_URL,
+      }),
+    },
+  });
+
+  // Client-side: Use the SDK
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:3000' });
+
+  // Create a stored agent
+  const agent = await client.createStoredAgent({
+    name: 'Customer Support Agent',
+    description: 'Handles customer inquiries',
+    model: { provider: 'ANTHROPIC', name: 'claude-sonnet-4-5' },
+    instructions: 'You are a helpful customer support agent...',
+    tools: ['search', 'email'],
+  });
+
+  // Create a version snapshot
+  await client.storedAgent(agent.id).createVersion({
+    name: 'v1.0 - Initial release',
+    changeMessage: 'First production version',
+  });
+
+  // Compare versions
+  const diff = await client.storedAgent(agent.id).compareVersions('version-1', 'version-2');
+  ```
+
+  **Why:**
+  This feature enables teams to manage agents dynamically without code changes, making it easier to iterate on agent configurations and maintain a complete audit trail of changes.
+
+### Patch Changes
+
+- dependencies updates: ([#12191](https://github.com/mastra-ai/mastra/pull/12191))
+  - Updated dependency [`@babel/core@^7.28.6` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.28.6) (from `^7.28.5`, in `dependencies`)
+
+- dependencies updates: ([#9737](https://github.com/mastra-ai/mastra/pull/9737))
+  - Updated dependency [`rollup@~4.55.1` ↗︎](https://www.npmjs.com/package/rollup/v/4.55.1) (from `~4.50.2`, in `dependencies`)
+
+- Fixed lint errors in deployer package ([#12476](https://github.com/mastra-ai/mastra/pull/12476))
+
+- Fixed swagger-ui to use the correct OpenAPI endpoint URL (/api/openapi.json). ([#11786](https://github.com/mastra-ai/mastra/pull/11786))
+
+- Fixed dependency version resolution in monorepos. ([#12125](https://github.com/mastra-ai/mastra/pull/12125))
+
+  **What's fixed:**
+  - Dependency versions are now accurately resolved in monorepos, even with hoisted dependencies
+  - ESM-only packages and transitive workspace dependencies are now correctly handled
+  - Deployer-provided packages (like `hono`) that aren't in your project are now resolved correctly
+
+  **Why this happened:**
+
+  Previously, dependency versions were resolved at bundle time without the correct project context, causing the bundler to fall back to `latest` instead of using the actual installed version.
+
+- Updated dependencies [[`90fc0e5`](https://github.com/mastra-ai/mastra/commit/90fc0e5717cb280c2d4acf4f0410b510bb4c0a72), [`1cf5d2e`](https://github.com/mastra-ai/mastra/commit/1cf5d2ea1b085be23e34fb506c80c80a4e6d9c2b), [`7515471`](https://github.com/mastra-ai/mastra/commit/7515471f7c1e987582785f68970b4a99ce27f602), [`833ae96`](https://github.com/mastra-ai/mastra/commit/833ae96c3e34370e58a1e979571c41f39a720592), [`c0c15b9`](https://github.com/mastra-ai/mastra/commit/c0c15b90f177c54d7d7d24ea9c0efb1d22c31d1e), [`4e1aa64`](https://github.com/mastra-ai/mastra/commit/4e1aa6457f082c9f8021123635c483f9f2a7fd92), [`943772b`](https://github.com/mastra-ai/mastra/commit/943772b4378f625f0f4e19ea2b7c392bd8e71786), [`b5c711b`](https://github.com/mastra-ai/mastra/commit/b5c711b281dd1fb81a399a766bc9f86c55efc13e), [`a747073`](https://github.com/mastra-ai/mastra/commit/a747073a003358abc95bd53dd6a10ec47570718b), [`0350626`](https://github.com/mastra-ai/mastra/commit/03506267ec41b67add80d994c0c0fcce93bbc75f), [`7c4d4b4`](https://github.com/mastra-ai/mastra/commit/7c4d4b4b749e2291bc1b01ca2bd98d25f70d930e), [`3efbe5a`](https://github.com/mastra-ai/mastra/commit/3efbe5ae20864c4f3143457f4f3ee7dc2fa5ca76), [`0ba3ad0`](https://github.com/mastra-ai/mastra/commit/0ba3ad042c9cec63d5aa510d8cb616bc00f3919a), [`a646090`](https://github.com/mastra-ai/mastra/commit/a646090808ed6df5bfc379fd0672c9d15d6ae905), [`1e49e7a`](https://github.com/mastra-ai/mastra/commit/1e49e7ab5f173582154cb26b29d424de67d09aef), [`751eaab`](https://github.com/mastra-ai/mastra/commit/751eaab4e0d3820a94e4c3d39a2ff2663ded3d91), [`69d8156`](https://github.com/mastra-ai/mastra/commit/69d81568bcf062557c24471ce26812446bec465d), [`60d9d89`](https://github.com/mastra-ai/mastra/commit/60d9d899e44b35bc43f1bcd967a74e0ce010b1af), [`5c544c8`](https://github.com/mastra-ai/mastra/commit/5c544c8d12b08ab40d64d8f37b3c4215bee95b87), [`771ad96`](https://github.com/mastra-ai/mastra/commit/771ad962441996b5c43549391a3e6a02c6ddedc2), [`2b0936b`](https://github.com/mastra-ai/mastra/commit/2b0936b0c9a43eeed9bef63e614d7e02ee803f7e), [`3b04f30`](https://github.com/mastra-ai/mastra/commit/3b04f3010604f3cdfc8a0674731700ad66471cee), [`56d4097`](https://github.com/mastra-ai/mastra/commit/56d4097ccdb6fada9963eb50e65d67a071d45fd1), [`97e26de`](https://github.com/mastra-ai/mastra/commit/97e26deaebd9836647a67b96423281d66421ca07), [`10523f4`](https://github.com/mastra-ai/mastra/commit/10523f4882d9b874b40ce6e3715f66dbcd4947d2), [`cb72d20`](https://github.com/mastra-ai/mastra/commit/cb72d2069d7339bda8a0e76d4f35615debb07b84), [`03bb0e6`](https://github.com/mastra-ai/mastra/commit/03bb0e6ac4f56e5fab38a8e7493dd9a3e5923761), [`42856b1`](https://github.com/mastra-ai/mastra/commit/42856b1c8aeea6371c9ee77ae2f5f5fe34400933), [`66f33ff`](https://github.com/mastra-ai/mastra/commit/66f33ff68620018513e499c394411d1d39b3aa5c), [`ab3c190`](https://github.com/mastra-ai/mastra/commit/ab3c1901980a99910ca9b96a7090c22e24060113), [`bb68d4d`](https://github.com/mastra-ai/mastra/commit/bb68d4d2becb7f41c1ae38228054cd7833dbac81), [`d4f06c8`](https://github.com/mastra-ai/mastra/commit/d4f06c85ffa5bb0da38fb82ebf3b040cc6b4ec4e), [`fcc4157`](https://github.com/mastra-ai/mastra/commit/fcc41572830b5cf245058b2a424f46b33e7b25a5), [`60d9d89`](https://github.com/mastra-ai/mastra/commit/60d9d899e44b35bc43f1bcd967a74e0ce010b1af), [`0350626`](https://github.com/mastra-ai/mastra/commit/03506267ec41b67add80d994c0c0fcce93bbc75f), [`dc82e6c`](https://github.com/mastra-ai/mastra/commit/dc82e6c5a05d6a9160c522af08b8c809ddbcdb66), [`bc9fa00`](https://github.com/mastra-ai/mastra/commit/bc9fa00859c5c4a796d53a0a5cae46ab4a3072e4), [`f46a478`](https://github.com/mastra-ai/mastra/commit/f46a4782f595949c696569e891f81c8d26338508), [`90fc0e5`](https://github.com/mastra-ai/mastra/commit/90fc0e5717cb280c2d4acf4f0410b510bb4c0a72), [`b94d043`](https://github.com/mastra-ai/mastra/commit/b94d0438ce34101b0279a8e5b1ce8d229b7b0968), [`f05a3a5`](https://github.com/mastra-ai/mastra/commit/f05a3a5cf2b9a9c2d40c09cb8c762a4b6cd5d565), [`a291da9`](https://github.com/mastra-ai/mastra/commit/a291da9363efd92dafd8775dccb4f2d0511ece7a), [`c5d71da`](https://github.com/mastra-ai/mastra/commit/c5d71da1c680ce5640b1a7f8ca0e024a4ab1cfed), [`07042f9`](https://github.com/mastra-ai/mastra/commit/07042f9f89080f38b8f72713ba1c972d5b1905b8), [`0423442`](https://github.com/mastra-ai/mastra/commit/0423442b7be2dfacba95890bea8f4a810db4d603)]:
+  - @mastra/core@1.1.0-alpha.0
+  - @mastra/server@1.1.0-alpha.0
+
 ## 1.0.4
 
 ### Patch Changes

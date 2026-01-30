@@ -15,17 +15,6 @@
 }
 
 /*
-'@font-face {\n' +
-    '  font-family: "Inter Fallback";\n' +
-    "  src: local('Arial'), local('ArialMT');\n" +
-    '  ascent-override: 90.4365%;\n' +
-    '  descent-override: 22.518%;\n' +
-    '  line-gap-override: 0%;\n' +
-    '  size-adjust: 107.1194%;\n' +
-    '}'
-*/
-
-/*
 @font-face {
   font-family: 'Greed';
   src: url('/fonts/GreedVF.woff2') format('woff2');
