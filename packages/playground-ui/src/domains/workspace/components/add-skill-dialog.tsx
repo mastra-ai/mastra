@@ -57,7 +57,7 @@ export function AddSkillDialog({
     return `https://skills.sh/${parsedSource.owner}/${parsedSource.repo}/${selectedSkill.name}`;
   }, [parsedSource, selectedSkill]);
 
-  // Fetch skill preview HTML (via server proxy to skills.sh)
+  // Fetch skill preview markdown (via server proxy to skills.sh)
   const { data: previewContent, isLoading: isLoadingPreview } = useSkillPreview(
     workspaceId,
     parsedSource?.owner,
@@ -83,9 +83,11 @@ export function AddSkillDialog({
   );
 
   // Determine which skills to display
+  // When searching (query >= 2 chars), show search results (or empty if pending/error)
+  // Otherwise show popular skills
   const displaySkills = useMemo(() => {
-    if (searchQuery.trim().length >= 2 && searchMutation.data?.skills) {
-      return searchMutation.data.skills;
+    if (searchQuery.trim().length >= 2) {
+      return searchMutation.data?.skills ?? [];
     }
     return popularData?.skills ?? [];
   }, [searchQuery, searchMutation.data, popularData]);
