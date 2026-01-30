@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** Agents can browse real websites and users can watch and assist them in real-time
-**Current focus:** v1.2 Browser Input Injection (Phase 14+)
+**Current focus:** v1.2 Browser Input Injection -- COMPLETE
 
 ## Current Position
 
-Phase: 14 - Visual Feedback and Polish
+Phase: 15 - Input Coordination
 Plan: 01 of 01
-Status: Phase complete
-Last activity: 2026-01-30 -- Completed 14-01-PLAN.md
+Status: Phase complete -- v1.2 milestone complete
+Last activity: 2026-01-30 -- Completed 15-01-PLAN.md
 
-Progress: [███████████████░░░░░] 86% (6/7 plans in v1.2)
+Progress: [████████████████████] 100% (7/7 plans in v1.2)
 
 ## Performance Metrics
 
@@ -27,7 +27,7 @@ Progress: [███████████████░░░░░] 86% (6/
 - Phases: 3 (7, 8, 9)
 
 **v1.2 Milestone:**
-- Total plans completed: 8
+- Total plans completed: 9
 - Phases: 6 (10-15)
 - Requirements: 27
 
@@ -91,6 +91,13 @@ Phase 14 decisions (Plan 01):
 - bg-accent1/40 Tailwind class for ripple color, no hardcoded rgba
 - CSS keyframe animation with onAnimationEnd self-cleanup pattern
 
+Phase 15 decisions (Plan 01):
+- Agent-busy state derived from BrowserToolCallsContext (any pending tool call), no new infrastructure
+- Mouse clicks and scroll suppressed via enabled=false on useMouseInteraction and useClickRipple
+- Keyboard input continues during agent activity (safe, no destructive races)
+- Ring color changes from green (ring-accent1) to amber (ring-amber-400) when agent busy
+- TOOL_DISPLAY_NAMES map provides gerund-form labels (Navigating, Clicking, etc.)
+
 ### Pending Todos
 
 None.
@@ -133,25 +140,25 @@ None.
 ### Phase 15: Input Coordination
 **Goal:** User input and agent tool calls coexist without destructive race conditions
 **Requirements:** COORD-01, COORD-02, COORD-03 (3 total)
-**Status:** Not Started
-**Depends on:** Phases 10-14
+**Status:** Complete (15-01-SUMMARY.md)
+**Depends on:** Phases 10-14 (all complete)
 
 ## Milestone History
 
 - v1.0: SHIPPED 2026-01-27 (6 phases, 10 plans) -- archived to milestones/
 - v1.1: SHIPPED 2026-01-28 (3 phases, 5 plans) -- archived to milestones/
+- v1.2: SHIPPED 2026-01-30 (6 phases, 9 plans, 27 requirements) -- Browser Input Injection complete
 
 ## Session Continuity
 
-Last session: 2026-01-30T06:29:09Z
-Stopped at: Completed 14-01-PLAN.md (click ripple visual feedback)
+Last session: 2026-01-30T07:03:56Z
+Stopped at: Completed 15-01-PLAN.md (input coordination -- final phase of v1.2)
 Resume file: None
 
-**Next action:** Execute Phase 15 (Input Coordination) -- all dependencies now satisfied (Phases 10-14 complete).
+**Next action:** v1.2 Browser Input Injection milestone is complete. All 27 requirements delivered across 6 phases. Next milestone planning needed.
 
 **Context for next session:**
-- Phase 14 complete: click ripple feedback with CSS animation, letterbox-aware positioning, auto-cleanup
-- VIS-01 was already delivered in Phase 13 (ring-2 ring-accent1 + cursor changes)
-- VIS-02 delivered: useClickRipple hook + ClickRippleOverlay component integrated into BrowserViewFrame
-- Phase 15 is the final phase of v1.2 -- input coordination for user/agent coexistence
-- All Phase 15 dependencies now complete (Phases 10-14)
+- v1.2 complete: all 6 phases (10-15) shipped, 27 requirements delivered
+- Phase 15 delivered: useInputCoordination hook, AgentBusyOverlay, BrowserViewFrame coordination wiring
+- Known limitations: ~16ms render-cycle race window, stuck overlay relies on 10s tool timeout
+- No blockers or pending items
