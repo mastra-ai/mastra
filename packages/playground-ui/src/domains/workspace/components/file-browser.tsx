@@ -103,7 +103,8 @@ function getErrorMessage(error: Error): string {
   const message = error.message;
 
   // Try to extract JSON error message from client-js format
-  const jsonMatch = message.match(/- ({.+})$/);
+  // Using non-greedy quantifier to avoid ReDoS on malformed input
+  const jsonMatch = message.match(/- ({.+?})$/);
   if (jsonMatch) {
     try {
       const parsed = JSON.parse(jsonMatch[1]);

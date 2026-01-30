@@ -567,8 +567,13 @@ export class LocalFilesystem implements WorkspaceFilesystem {
 
   async init(): Promise<void> {
     this.status = 'starting';
-    await fs.mkdir(this._basePath, { recursive: true });
-    this.status = 'running';
+    try {
+      await fs.mkdir(this._basePath, { recursive: true });
+      this.status = 'running';
+    } catch (error) {
+      this.status = 'error';
+      throw error;
+    }
   }
 
   async destroy(): Promise<void> {
