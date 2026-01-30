@@ -12,16 +12,15 @@
  * ```typescript
  * import { MastraAuthWorkos, MastraRBACWorkos } from '@mastra/auth-workos';
  *
- * const workosAuth = new MastraAuthWorkos({
- *   apiKey: process.env.WORKOS_API_KEY,
- *   clientId: process.env.WORKOS_CLIENT_ID,
- * });
- *
  * const mastra = new Mastra({
  *   server: {
- *     auth: workosAuth,
+ *     auth: new MastraAuthWorkos({
+ *       apiKey: process.env.WORKOS_API_KEY,
+ *       clientId: process.env.WORKOS_CLIENT_ID,
+ *     }),
  *     rbac: new MastraRBACWorkos({
- *       workos: workosAuth.getWorkOS(),
+ *       apiKey: process.env.WORKOS_API_KEY,
+ *       clientId: process.env.WORKOS_CLIENT_ID,
  *       roleMapping: {
  *         'admin': ['*'],
  *         'member': ['agents:read', 'workflows:*'],
