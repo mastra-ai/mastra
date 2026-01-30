@@ -225,6 +225,8 @@ export default function Workspace() {
             if (result.success) {
               toast.success(`Skill "${result.skillName}" removed successfully`);
               refetchSkills();
+            } else {
+              toast.error(`Failed to remove skill "${result.skillName}"`);
             }
           },
           onError: error => {

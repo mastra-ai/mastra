@@ -88,7 +88,9 @@ export const useSkillPreview = (
       if (!response.ok) {
         throw new Error(`Failed to fetch preview: ${response.statusText}`);
       }
-      const data = await response.json();
+      const data = await response.json().catch(() => {
+        throw new Error('Invalid response from server');
+      });
       return data.content;
     },
     enabled: options?.enabled !== false && !!workspaceId && !!owner && !!repo && !!skillPath,

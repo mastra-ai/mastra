@@ -931,8 +931,12 @@ export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ q, limit }) => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const url = `${SKILLS_SH_API_URL}/api/skills?query=${encodeURIComponent(q)}&pageSize=${limit}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new HTTPException(502, {
@@ -983,9 +987,13 @@ export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ limit, offset }) => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const page = offset > 0 ? Math.floor(offset / limit) + 1 : 1;
       const url = `${SKILLS_SH_API_URL}/api/skills/top?pageSize=${limit}&page=${page}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new HTTPException(502, {
@@ -1040,6 +1048,29 @@ function assertSafeSkillName(name: string): string {
   return name;
 }
 
+/**
+ * Validate that a file path is safe (no traversal, no absolute paths).
+ * Prevents malicious API responses from writing files outside the skill directory.
+ */
+function assertSafeFilePath(filePath: string): string {
+  // Reject absolute paths
+  if (filePath.startsWith('/') || /^[a-zA-Z]:/.test(filePath)) {
+    throw new HTTPException(400, {
+      message: `Invalid file path "${filePath}". Absolute paths are not allowed.`,
+    });
+  }
+  // Reject path traversal attempts
+  const segments = filePath.split('/');
+  for (const segment of segments) {
+    if (segment === '..' || segment === '.') {
+      throw new HTTPException(400, {
+        message: `Invalid file path "${filePath}". Path traversal is not allowed.`,
+      });
+    }
+  }
+  return filePath;
+}
+
 interface SkillFileEntry {
   path: string;
   content: string;
@@ -1088,8 +1119,12 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ owner, repo, path: skillName }) => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const url = `${SKILLS_SH_API_URL}/api/skills/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(skillName)}/content`;
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new HTTPException(404, {
@@ -1169,10 +1204,12 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
       // Write all files to the workspace
       let filesWritten = 0;
       for (const file of result.files) {
-        const filePath = `${installPath}/${file.path}`;
+        // Validate file path to prevent path traversal from API response
+        const safePath = assertSafeFilePath(file.path);
+        const filePath = `${installPath}/${safePath}`;
 
         // Create subdirectory if needed
-        if (file.path.includes('/')) {
+        if (safePath.includes('/')) {
           const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
           try {
             await workspace.filesystem.mkdir(dirPath, { recursive: true });
@@ -1361,9 +1398,11 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
           let filesWritten = 0;
 
           for (const file of fetchResult.files) {
-            const filePath = `${installPath}/${file.path}`;
+            // Validate file path to prevent path traversal from API response
+            const safePath = assertSafeFilePath(file.path);
+            const filePath = `${installPath}/${safePath}`;
 
-            if (file.path.includes('/')) {
+            if (safePath.includes('/')) {
               const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
               try {
                 await workspace.filesystem.mkdir(dirPath, { recursive: true });

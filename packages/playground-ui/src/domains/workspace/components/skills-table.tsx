@@ -25,6 +25,9 @@ export interface SkillsTableProps {
   removingSkillName?: string;
 }
 
+/** Path segment that identifies skills installed via the skills CLI */
+const DOWNLOADED_SKILLS_PATH = '.agents/skills/';
+
 const columns = [
   { name: 'name', label: 'Skill', size: '1fr' },
   { name: 'description', label: 'Description', size: '2fr' },
@@ -45,8 +48,8 @@ export function SkillsTable({
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
 
-  // Helper to check if a skill is downloaded (lives in .agents/skills/)
-  const isDownloaded = (skill: SkillMetadata) => skill.path?.includes('.agents/skills/') ?? false;
+  // Helper to check if a skill is downloaded (installed via skills CLI)
+  const isDownloaded = (skill: SkillMetadata) => skill.path?.includes(DOWNLOADED_SKILLS_PATH) ?? false;
 
   // Check if any skill is downloaded (for determining if we need the actions column)
   const hasDownloadedSkills = skills.some(isDownloaded);
