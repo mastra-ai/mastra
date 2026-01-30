@@ -775,11 +775,19 @@ export class Agent<
         }
       }
 
+      await resolvedWorkspace.init();
+
       return resolvedWorkspace;
     }
 
     // Fall back to Mastra's global workspace
-    return this.#mastra?.getWorkspace();
+    const globalWorkspace = this.#mastra?.getWorkspace();
+    if (globalWorkspace) {
+      await globalWorkspace.init();
+      return globalWorkspace;
+    }
+
+    return undefined;
   }
 
   get voice() {
