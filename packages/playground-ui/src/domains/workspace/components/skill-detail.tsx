@@ -19,6 +19,8 @@ import type { Skill, SkillSource } from '../types';
 
 export interface SkillDetailProps {
   skill: Skill;
+  /** Raw SKILL.md file contents to show in "Source" view. Falls back to skill.instructions if not provided. */
+  rawSkillMd?: string;
   onReferenceClick?: (referencePath: string) => void;
 }
 
@@ -45,7 +47,7 @@ function getSourceInfo(source: SkillSource): { icon: React.ReactNode; label: str
   }
 }
 
-export function SkillDetail({ skill, onReferenceClick }: SkillDetailProps) {
+export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetailProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['instructions']));
   const [showRawInstructions, setShowRawInstructions] = useState(false);
   const sourceInfo = getSourceInfo(skill.source);
@@ -118,7 +120,7 @@ export function SkillDetail({ skill, onReferenceClick }: SkillDetailProps) {
                 fontSize: '0.875rem',
               }}
             >
-              {skill.instructions}
+              {rawSkillMd ?? skill.instructions}
             </SyntaxHighlighter>
           </div>
         ) : (
