@@ -251,7 +251,7 @@ export function FileBrowser({
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-500/10 mb-4">
               <AlertCircle className="h-6 w-6 text-red-400" />
             </div>
-            <p className="text-sm text-icon6 font-medium mb-1">Directory not found</p>
+            <p className="text-sm text-icon6 font-medium mb-1">Failed to load directory</p>
             <p className="text-xs text-icon4 max-w-sm mx-auto">{getErrorMessage(error)}</p>
           </div>
         ) : sortedEntries.length === 0 ? (
