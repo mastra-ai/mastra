@@ -50,14 +50,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
   return async ({ inputData, bail, tracingContext }) => {
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
-    const legacyTemperature = (options as { temperature?: number }).temperature;
 
     const result = {
       ...options,
       agentId,
       tools: toolsData.convertedTools,
       runId,
-      temperature: legacyTemperature ?? options.modelSettings?.temperature,
+      temperature: options.modelSettings?.temperature,
       toolChoice: options.toolChoice,
       thread: memoryData.thread,
       threadId: memoryData.thread?.id,
@@ -244,8 +243,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
       inputProcessors: effectiveInputProcessors,
       outputProcessors: effectiveOutputProcessors,
       modelSettings: {
+        temperature: 0,
         ...(options.modelSettings || {}),
-        temperature: options.modelSettings?.temperature ?? legacyTemperature ?? 0,
       },
       messageList: memoryData.messageList!,
       maxProcessorRetries: options.maxProcessorRetries,
