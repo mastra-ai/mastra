@@ -13,6 +13,7 @@ import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { cn } from '@/lib/utils';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
 import type { SkillsShSkill } from '../types';
 
@@ -40,8 +41,8 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
     return parseSkillSource(selectedSkill.topSource, selectedSkill.name);
   }, [selectedSkill]);
 
-  // Build skills.sh preview URL
-  const skillsShUrl = useMemo(() => {
+  // Build agentskills.io preview URL
+  const skillsUrl = useMemo(() => {
     if (!parsedSource || !selectedSkill) return null;
     return `https://skills.sh/${parsedSource.owner}/${parsedSource.repo}/${selectedSkill.name}`;
   }, [parsedSource, selectedSkill]);
@@ -108,7 +109,7 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Add Skill from skills.sh</DialogTitle>
+          <DialogTitle>Add Skill</DialogTitle>
           <DialogDescription>Search and install skills from the community registry</DialogDescription>
         </DialogHeader>
 
@@ -220,18 +221,17 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
                       </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
-                        <div
-                          className="p-4 prose prose-sm prose-invert max-w-none"
-                          dangerouslySetInnerHTML={{ __html: previewContent }}
-                        />
+                        <div className="p-4">
+                          <MarkdownRenderer>{previewContent}</MarkdownRenderer>
+                        </div>
                       </ScrollArea>
                     ) : (
                       <div className="flex-1 flex flex-col items-center justify-center text-icon4">
                         <Package className="h-8 w-8 mb-2" />
                         <p className="text-sm">Preview unavailable</p>
-                        {skillsShUrl && (
+                        {skillsUrl && (
                           <a
-                            href={skillsShUrl}
+                            href={skillsUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-xs mt-2 text-accent1 hover:underline flex items-center gap-1"

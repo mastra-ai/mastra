@@ -7,16 +7,9 @@
  * - Skills operations (list, get, search, references)
  */
 
-import { mkdtempSync, rmSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-import { createGunzip } from 'node:zlib';
 import { coreFeatures } from '@mastra/core/features';
 import type { Workspace, WorkspaceSkills } from '@mastra/core/workspace';
-import * as tar from 'tar';
-import xss from 'xss';
+
 import { HTTPException } from '../http-exception';
 import {
   // Workspace info
@@ -924,7 +917,7 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
 // skills.sh Proxy Routes
 // =============================================================================
 
-const SKILLS_SH_API_URL = 'https://skills.sh/api';
+const SKILLS_SH_API_URL = 'https://skills-api-production.up.railway.app';
 
 export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
   method: 'GET',
@@ -938,27 +931,42 @@ export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ q, limit }) => {
     try {
-      const url = `${SKILLS_SH_API_URL}/search?q=${encodeURIComponent(q)}&limit=${limit}`;
+      const url = `${SKILLS_SH_API_URL}/api/skills?query=${encodeURIComponent(q)}&pageSize=${limit}`;
       const response = await fetch(url);
 
       if (!response.ok) {
         throw new HTTPException(502, {
-          message: `skills.sh API error: ${response.status} ${response.statusText}`,
+          message: `Skills API error: ${response.status} ${response.statusText}`,
         });
       }
 
       const data = (await response.json()) as {
-        query: string;
-        searchType: string;
-        skills: Array<{ id: string; name: string; installs: number; topSource: string }>;
-        count: number;
+        skills: Array<{
+          skillId: string;
+          name: string;
+          installs: number;
+          source: string;
+          owner: string;
+          repo: string;
+          githubUrl: string;
+          displayName: string;
+        }>;
+        total: number;
+        page: number;
+        pageSize: number;
+        totalPages: number;
       };
-      return data;
+      return {
+        query: q,
+        searchType: 'query',
+        skills: data.skills.map(s => ({ id: s.skillId, name: s.name, installs: s.installs, topSource: s.source })),
+        count: data.total,
+      };
     } catch (error) {
       if (error instanceof HTTPException) {
         throw error;
       }
-      return handleError(error, 'Error searching skills.sh');
+      return handleError(error, 'Error searching skills');
     }
   },
 });
@@ -975,82 +983,47 @@ export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
   tags: ['Workspace', 'Skills'],
   handler: async ({ limit, offset }) => {
     try {
-      const url = `${SKILLS_SH_API_URL}/skills?limit=${limit}&offset=${offset}`;
+      const page = offset > 0 ? Math.floor(offset / limit) + 1 : 1;
+      const url = `${SKILLS_SH_API_URL}/api/skills/top?pageSize=${limit}&page=${page}`;
       const response = await fetch(url);
 
       if (!response.ok) {
         throw new HTTPException(502, {
-          message: `skills.sh API error: ${response.status} ${response.statusText}`,
+          message: `Skills API error: ${response.status} ${response.statusText}`,
         });
       }
 
       const data = (await response.json()) as {
-        skills: Array<{ id: string; name: string; installs: number; topSource: string }>;
-        count: number;
-        limit: number;
-        offset: number;
+        skills: Array<{
+          skillId: string;
+          name: string;
+          installs: number;
+          source: string;
+          owner: string;
+          repo: string;
+          githubUrl: string;
+          displayName: string;
+        }>;
+        total: number;
       };
-      return data;
+      return {
+        skills: data.skills.map(s => ({ id: s.skillId, name: s.name, installs: s.installs, topSource: s.source })),
+        count: data.total,
+        limit,
+        offset,
+      };
     } catch (error) {
       if (error instanceof HTTPException) {
         throw error;
       }
-      return handleError(error, 'Error fetching popular skills from skills.sh');
+      return handleError(error, 'Error fetching popular skills');
     }
   },
 });
 
 // =============================================================================
-// Tarball-based GitHub helpers for skills.sh routes
+// Skills API helpers
 // =============================================================================
-
-/**
- * Parse YAML frontmatter from a SKILL.md file to extract the name field.
- */
-function parseSkillFrontmatter(content: string): { name?: string } {
-  const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  const frontmatter = frontmatterMatch?.[1];
-  if (!frontmatter) {
-    return {};
-  }
-
-  const result: { name?: string } = {};
-
-  // Simple YAML parsing for the name field
-  const nameMatch = frontmatter.match(/^name:\s*["']?([^"'\n]+)["']?\s*$/m);
-  if (nameMatch?.[1]) {
-    result.name = nameMatch[1].trim();
-  }
-
-  return result;
-}
-
-/**
- * Generate possible name variations for matching.
- * skills.sh names often have vendor prefixes that the actual SKILL.md might not have.
- */
-function getNameVariations(skillName: string): string[] {
-  const variations = [skillName];
-
-  // Common vendor prefixes used by skills.sh
-  const vendorPrefixes = ['vercel-', 'anthropic-', 'anthropics-'];
-
-  // If skillName has a vendor prefix, also try without it
-  for (const prefix of vendorPrefixes) {
-    if (skillName.startsWith(prefix)) {
-      variations.push(skillName.slice(prefix.length));
-    }
-  }
-
-  // Also try adding vendor prefixes (in case skills.sh name doesn't have it but frontmatter does)
-  for (const prefix of vendorPrefixes) {
-    if (!skillName.startsWith(prefix)) {
-      variations.push(`${prefix}${skillName}`);
-    }
-  }
-
-  return variations;
-}
 
 /**
  * Validate skill name to prevent path traversal attacks.
@@ -1067,158 +1040,36 @@ function assertSafeSkillName(name: string): string {
   return name;
 }
 
+interface SkillFileEntry {
+  path: string;
+  content: string;
+  encoding: 'utf-8' | 'base64';
+}
+
+interface SkillFilesResponse {
+  skillId: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  files: SkillFileEntry[];
+}
+
 /**
- * Download and extract a GitHub repo tarball to a temp directory.
- * Streams directly from fetch → gunzip → extract (no intermediate file).
- * Returns the path to the extracted directory containing the repo contents.
+ * Fetch skill files from the Skills API.
+ * Returns all files for a skill with their content.
  */
-async function downloadAndExtractTarball(owner: string, repo: string, branch: string): Promise<string> {
-  const tarballUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.tar.gz`;
-  const response = await fetch(tarballUrl, {
-    headers: { 'User-Agent': 'Mastra-Skills-Installer' },
-  });
+async function fetchSkillFiles(owner: string, repo: string, skillName: string): Promise<SkillFilesResponse | null> {
+  const url = `${SKILLS_SH_API_URL}/api/skills/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(skillName)}/files`;
+  const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error(`Failed to download tarball: ${response.status} ${response.statusText}`);
-  }
-
-  // Create temp directory
-  const tempDir = mkdtempSync(join(tmpdir(), 'mastra-skill-'));
-
-  // Stream directly: fetch → gunzip → tar extract
-  await pipeline(Readable.fromWeb(response.body as any), createGunzip(), tar.extract({ cwd: tempDir }));
-
-  // GitHub tarballs extract to {repo}-{branch}/ directory
-  const extractedDir = join(tempDir, `${repo}-${branch}`);
-  return extractedDir;
-}
-
-/**
- * Recursively read all files from a directory.
- * Returns Buffer content to preserve binary files (images, etc.).
- */
-function readDirectoryRecursive(dirPath: string, basePath: string = ''): Array<{ path: string; content: Buffer }> {
-  const files: Array<{ path: string; content: Buffer }> = [];
-  const entries = readdirSync(dirPath);
-
-  for (const entry of entries) {
-    const fullPath = join(dirPath, entry);
-    const relativePath = basePath ? `${basePath}/${entry}` : entry;
-    const stat = statSync(fullPath);
-
-    if (stat.isDirectory()) {
-      files.push(...readDirectoryRecursive(fullPath, relativePath));
-    } else if (stat.isFile()) {
-      const content = readFileSync(fullPath);
-      files.push({ path: relativePath, content });
+    if (response.status === 404) {
+      return null;
     }
+    throw new Error(`Skills API error: ${response.status} ${response.statusText}`);
   }
 
-  return files;
-}
-
-/**
- * Find SKILL.md files in extracted tarball and match by frontmatter name.
- */
-function findSkillInExtractedRepo(
-  extractedDir: string,
-  skillName: string,
-): { skillDir: string; frontmatterName: string } | null {
-  const nameVariations = getNameVariations(skillName);
-
-  // Recursively find all SKILL.md files
-  function findSkillMdFiles(dir: string, relativePath: string = ''): string[] {
-    const results: string[] = [];
-    try {
-      const entries = readdirSync(dir);
-      for (const entry of entries) {
-        const fullPath = join(dir, entry);
-        const relPath = relativePath ? `${relativePath}/${entry}` : entry;
-        try {
-          const stat = statSync(fullPath);
-          if (stat.isDirectory()) {
-            results.push(...findSkillMdFiles(fullPath, relPath));
-          } else if (entry === 'SKILL.md') {
-            results.push(relPath);
-          }
-        } catch {
-          // Skip inaccessible files
-        }
-      }
-    } catch {
-      // Skip inaccessible directories
-    }
-    return results;
-  }
-
-  const skillMdPaths = findSkillMdFiles(extractedDir);
-
-  for (const skillMdPath of skillMdPaths) {
-    const fullPath = join(extractedDir, skillMdPath);
-    try {
-      const content = readFileSync(fullPath, 'utf-8');
-      const frontmatter = parseSkillFrontmatter(content);
-
-      if (frontmatter.name && nameVariations.includes(frontmatter.name)) {
-        // Return the directory containing SKILL.md
-        const skillDir = skillMdPath.replace(/\/?SKILL\.md$/, '') || '.';
-        return { skillDir, frontmatterName: frontmatter.name };
-      }
-    } catch {
-      // Continue to next file
-    }
-  }
-
-  return null;
-}
-
-/**
- * Download repo as tarball and extract skill files.
- * Returns skill files and metadata, cleaning up temp directory afterward.
- */
-async function fetchSkillFromTarball(
-  owner: string,
-  repo: string,
-  skillName: string,
-): Promise<{ files: Array<{ path: string; content: Buffer }>; installName: string; branch: string } | null> {
-  const branches = ['main', 'master'];
-
-  for (const branch of branches) {
-    let extractedDir: string | null = null;
-    try {
-      extractedDir = await downloadAndExtractTarball(owner, repo, branch);
-
-      const skillMatch = findSkillInExtractedRepo(extractedDir, skillName);
-      if (!skillMatch) {
-        continue; // Try next branch
-      }
-
-      // Read all files from the skill directory
-      const skillFullPath = skillMatch.skillDir === '.' ? extractedDir : join(extractedDir, skillMatch.skillDir);
-      const files = readDirectoryRecursive(skillFullPath);
-
-      return {
-        files,
-        installName: skillMatch.frontmatterName,
-        branch,
-      };
-    } catch {
-      // Try next branch
-    } finally {
-      // Clean up temp directory
-      if (extractedDir) {
-        try {
-          // Get parent temp dir (extractedDir is {tempDir}/{repo}-{branch})
-          const tempDir = join(extractedDir, '..');
-          rmSync(tempDir, { recursive: true, force: true });
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
-    }
-  }
-
-  return null;
+  return (await response.json()) as SkillFilesResponse;
 }
 
 // =============================================================================
@@ -1232,129 +1083,35 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
   pathParamSchema: workspaceIdPathParams,
   queryParamSchema: skillsShPreviewQuerySchema,
   responseSchema: skillsShPreviewResponseSchema,
-  summary: 'Preview skill from skills.sh',
-  description: 'Fetches the skill page from skills.sh and extracts the main content HTML.',
+  summary: 'Preview skill content',
+  description: 'Fetches the skill content from the Skills API.',
   tags: ['Workspace', 'Skills'],
   handler: async ({ owner, repo, path: skillName }) => {
     try {
-      // Fetch the skills.sh page directly
-      const skillsShUrl = `https://skills.sh/${owner}/${repo}/${skillName}`;
-      const response = await fetch(skillsShUrl, {
-        headers: {
-          'User-Agent': 'Mastra-Skills-Preview',
-          Accept: 'text/html',
-        },
-      });
+      const url = `${SKILLS_SH_API_URL}/api/skills/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(skillName)}/content`;
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new HTTPException(404, {
-          message: `Could not find skill "${skillName}" on skills.sh`,
+          message: `Could not find skill "${skillName}" for ${owner}/${repo}`,
         });
       }
 
-      const html = await response.text();
-
-      // Extract the main content - look for the article or main content div
-      // skills.sh uses a prose class for the markdown content
-      let content = '';
-
-      // Try to find the main content area - typically in an article or div with prose class
-      const proseMatch = html.match(/<article[^>]*class="[^"]*prose[^"]*"[^>]*>([\s\S]*?)<\/article>/i);
-      if (proseMatch) {
-        content = proseMatch[0];
-      } else {
-        // Fallback: look for any element with prose class
-        const anyProseMatch = html.match(
-          /<(?:div|section|article)[^>]*class="[^"]*prose[^"]*"[^>]*>[\s\S]*?<\/(?:div|section|article)>/i,
-        );
-        if (anyProseMatch) {
-          content = anyProseMatch[0];
-        } else {
-          // Last fallback: look for main content area
-          const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
-          if (mainMatch?.[1]) {
-            content = mainMatch[1];
-          }
-        }
-      }
+      const data = (await response.json()) as { instructions: string; raw: string };
+      const content = data.instructions || data.raw || '';
 
       if (!content) {
         throw new HTTPException(404, {
-          message: `Could not extract content from skills.sh page`,
+          message: `No content available for skill "${skillName}"`,
         });
       }
-
-      // Fix relative URLs before sanitization
-      content = content.replace(/href="\//g, 'href="https://skills.sh/').replace(/src="\//g, 'src="https://skills.sh/');
-
-      // Sanitize HTML to prevent XSS attacks using xss package
-      content = xss(content, {
-        whiteList: {
-          // Text content
-          h1: [],
-          h2: [],
-          h3: [],
-          h4: [],
-          h5: [],
-          h6: [],
-          p: [],
-          br: [],
-          hr: [],
-          // Lists
-          ul: [],
-          ol: [],
-          li: [],
-          // Formatting
-          strong: [],
-          b: [],
-          em: [],
-          i: [],
-          u: [],
-          s: [],
-          del: [],
-          ins: [],
-          mark: [],
-          small: [],
-          sub: [],
-          sup: [],
-          // Links and media
-          a: ['href', 'title', 'rel', 'target'],
-          img: ['src', 'alt', 'title', 'width', 'height'],
-          // Code (allow class for syntax highlighting)
-          pre: ['class'],
-          code: ['class'],
-          kbd: [],
-          samp: [],
-          // Tables
-          table: [],
-          thead: [],
-          tbody: [],
-          tfoot: [],
-          tr: [],
-          th: ['colspan', 'rowspan', 'scope'],
-          td: ['colspan', 'rowspan'],
-          // Semantic
-          blockquote: [],
-          cite: [],
-          q: [],
-          abbr: [],
-          dfn: [],
-          // Structure (allow class for syntax highlighting spans)
-          div: [],
-          span: ['class'],
-          section: [],
-          article: [],
-        },
-        stripIgnoreTag: true,
-        stripIgnoreTagBody: ['script', 'style'],
-      });
 
       return { content };
     } catch (error) {
       if (error instanceof HTTPException) {
         throw error;
       }
-      return handleError(error, 'Error fetching skill preview from skills.sh');
+      return handleError(error, 'Error fetching skill preview');
     }
   },
 });
@@ -1370,9 +1127,8 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
   pathParamSchema: workspaceIdPathParams,
   bodySchema: skillsShInstallBodySchema,
   responseSchema: skillsShInstallResponseSchema,
-  summary: 'Install skill from GitHub',
-  description:
-    'Installs a skill by fetching files from GitHub and writing to workspace filesystem. Does not require sandbox.',
+  summary: 'Install skill from Skills API',
+  description: 'Installs a skill by fetching files from the Skills API and writing to workspace filesystem.',
   tags: ['Workspace', 'Skills'],
   handler: async ({ mastra, workspaceId, owner, repo, skillName }) => {
     try {
@@ -1387,28 +1143,21 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workspace filesystem not available' });
       }
 
-      // Check if workspace is read-only
       if (workspace.filesystem.readOnly) {
         throw new HTTPException(403, { message: 'Workspace is read-only' });
       }
 
-      // Download tarball and extract skill files
-      const result = await fetchSkillFromTarball(owner, repo, skillName);
-      if (!result) {
+      // Fetch skill files from the Skills API
+      const result = await fetchSkillFiles(owner, repo, skillName);
+      if (!result || result.files.length === 0) {
         throw new HTTPException(404, {
-          message: `Could not find skill "${skillName}" in ${owner}/${repo}. Tried main and master branches.`,
+          message: `Could not find skill "${skillName}" in ${owner}/${repo}.`,
         });
       }
 
-      const { files, installName, branch } = result;
-
-      if (files.length === 0) {
-        throw new HTTPException(404, { message: 'No files found in skill directory' });
-      }
-
       // Validate skill name to prevent path traversal
-      const safeInstallName = assertSafeSkillName(installName);
-      const installPath = `.agents/skills/${safeInstallName}`;
+      const safeSkillId = assertSafeSkillName(result.skillId);
+      const installPath = `.agents/skills/${safeSkillId}`;
 
       // Ensure the skills directory exists
       try {
@@ -1419,7 +1168,7 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
 
       // Write all files to the workspace
       let filesWritten = 0;
-      for (const file of files) {
+      for (const file of result.files) {
         const filePath = `${installPath}/${file.path}`;
 
         // Create subdirectory if needed
@@ -1432,16 +1181,17 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
           }
         }
 
-        await workspace.filesystem.writeFile(filePath, file.content);
+        const content = file.encoding === 'base64' ? Buffer.from(file.content, 'base64') : file.content;
+        await workspace.filesystem.writeFile(filePath, content);
         filesWritten++;
       }
 
       // Write metadata file for update support
       const metadata = {
-        skillName: installName,
-        owner,
-        repo,
-        branch,
+        skillName: result.skillId,
+        owner: result.owner,
+        repo: result.repo,
+        branch: result.branch,
         installedAt: new Date().toISOString(),
       };
       await workspace.filesystem.writeFile(`${installPath}/.meta.json`, JSON.stringify(metadata, null, 2));
@@ -1449,7 +1199,7 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
 
       return {
         success: true,
-        skillName: installName,
+        skillName: result.skillId,
         installedPath: installPath,
         filesWritten,
       };
@@ -1457,7 +1207,7 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
       if (error instanceof HTTPException) {
         throw error;
       }
-      return handleError(error, 'Error installing skill from GitHub');
+      return handleError(error, 'Error installing skill');
     }
   },
 });
@@ -1595,8 +1345,8 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
           const metaContent = await workspace?.filesystem?.readFile(metaPath, { encoding: 'utf-8' });
           const meta: SkillMetaFile = JSON.parse(metaContent as string);
 
-          // Re-fetch skill files via tarball
-          const fetchResult = await fetchSkillFromTarball(meta.owner, meta.repo, meta.skillName);
+          // Re-fetch skill files from the Skills API
+          const fetchResult = await fetchSkillFiles(meta.owner, meta.repo, meta.skillName);
 
           if (!fetchResult || fetchResult.files.length === 0) {
             results.push({
@@ -1607,11 +1357,10 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
             continue;
           }
 
-          const { files, branch } = fetchResult;
           const installPath = `${skillsPath}/${skill}`;
           let filesWritten = 0;
 
-          for (const file of files) {
+          for (const file of fetchResult.files) {
             const filePath = `${installPath}/${file.path}`;
 
             if (file.path.includes('/')) {
@@ -1623,14 +1372,15 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
               }
             }
 
-            await workspace.filesystem.writeFile(filePath, file.content);
+            const content = file.encoding === 'base64' ? Buffer.from(file.content, 'base64') : file.content;
+            await workspace.filesystem.writeFile(filePath, content);
             filesWritten++;
           }
 
           // Update metadata with new install time and branch
           const updatedMeta: SkillMetaFile = {
             ...meta,
-            branch,
+            branch: fetchResult.branch,
             installedAt: new Date().toISOString(),
           };
           await workspace.filesystem.writeFile(metaPath, JSON.stringify(updatedMeta, null, 2));
