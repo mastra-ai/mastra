@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** Agents can browse real websites and users can watch and assist them in real-time
-**Current focus:** v1.2 Browser Input Injection (Phase 13+)
+**Current focus:** v1.2 Browser Input Injection (Phase 14+)
 
 ## Current Position
 
 Phase: 13 - Focus Management and Keyboard
-Plan: 01 of 02
-Status: In progress
-Last activity: 2026-01-30 -- Completed 13-01-PLAN.md
+Plan: 02 of 02
+Status: Phase complete
+Last activity: 2026-01-30 -- Completed 13-02-PLAN.md
 
-Progress: [████████████░░░░░░░░] 58% (4/7 plans in v1.2)
+Progress: [██████████████░░░░░░] 71% (5/7 plans in v1.2)
 
 ## Performance Metrics
 
@@ -27,7 +27,7 @@ Progress: [████████████░░░░░░░░] 58% (4/
 - Phases: 3 (7, 8, 9)
 
 **v1.2 Milestone:**
-- Total plans completed: 6
+- Total plans completed: 7
 - Phases: 6 (10-15)
 - Requirements: 27
 
@@ -73,6 +73,16 @@ Phase 13 decisions (Plan 01):
 - compositionend uses bubble phase (not capture) -- standard DOM behavior
 - Composed IME text sent as individual character sequences with modifiers=0
 
+Phase 13 decisions (Plan 02):
+- Interactive mode gated by frame click (not auto-activated on streaming)
+- Click-outside uses document mousedown with containerRef.contains() check
+- Window blur exits interactive mode (tab switch detection)
+- Status change away from streaming resets interactive mode
+- useKeyboardInteraction enabled=isInteractive (not status) -- redundant check avoided
+- Visual indicator: ring-2 ring-accent1 Tailwind classes
+- Cursor changes: pointer (clickable) to text (typing) when interactive
+- exitInteractive/handleFrameClick placed after useBrowserStream (status dependency)
+
 ### Pending Todos
 
 None.
@@ -103,7 +113,7 @@ None.
 ### Phase 13: Focus Management and Keyboard
 **Goal:** User can type in the live view without keyboard events leaking to host page
 **Requirements:** KEY-01 through KEY-04, FOCUS-01 through FOCUS-03 (7 total)
-**Status:** In progress (Plan 01 complete, Plan 02 remaining)
+**Status:** Complete (13-01, 13-02 SUMMARY.md files)
 **Depends on:** Phase 11 (complete)
 
 ### Phase 14: Visual Feedback and Polish
@@ -125,15 +135,15 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-30T00:04:44Z
-Stopped at: Completed 13-01-PLAN.md (key-mapping utility + keyboard interaction hook)
+Last session: 2026-01-30T00:10:35Z
+Stopped at: Completed 13-02-PLAN.md (interactive mode wiring + keyboard hook connection)
 Resume file: None
 
-**Next action:** Execute Phase 13 Plan 02 (interactive mode wiring) or Phase 14 (Visual Feedback and Polish).
+**Next action:** Execute Phase 14 (Visual Feedback and Polish) or Phase 15 (Input Coordination -- blocked until Phase 14 completes).
 
 **Context for next session:**
-- Phase 13 Plan 01 complete: isPrintableKey utility and useKeyboardInteraction hook created
-- Hook follows identical patterns as useMouseInteraction (refs, void return, capture phase, Record<string,unknown>)
-- Plan 02 will add interactive mode state (click-to-focus, Escape-to-exit) and wire hook into BrowserViewFrame
-- Phase 14 depends on Phase 12 (complete) -- can proceed in parallel
-- Phase 15 blocked until Phases 13 and 14 complete
+- Phase 13 complete: keyboard interaction hook + interactive mode state fully wired
+- Full keyboard pipeline operational: frame click -> isInteractive -> capture-phase keydown -> CDP -> WebSocket -> server -> injectKeyboardEvent
+- Interactive mode has four exit triggers: Escape, click-outside, window blur, status change
+- Phase 14 depends on Phase 12 (complete) -- ready to start
+- Phase 15 blocked until Phases 13 (now complete) and 14 both complete
