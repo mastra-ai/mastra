@@ -2,11 +2,10 @@
  * SkillSource - Minimal interface for loading skills.
  *
  * This abstraction allows skills to be loaded from different sources:
- * - WorkspaceFilesystem (full CRUD support)
+ * - WorkspaceFilesystem
  * - LocalSkillSource (read-only from local disk)
  *
  * The interface only includes methods needed for discovery and reading.
- * Write operations (create/update/delete) require a full WorkspaceFilesystem.
  */
 
 /**
@@ -65,23 +64,4 @@ export interface SkillSource {
    * List directory contents.
    */
   readdir(path: string): Promise<SkillSourceEntry[]>;
-}
-
-/**
- * Type guard to check if a source supports write operations.
- * WorkspaceFilesystem has writeFile, mkdir, rmdir - SkillSource doesn't.
- */
-export function isWritableSource(source: SkillSource): source is SkillSource & {
-  writeFile(path: string, content: string | Buffer): Promise<void>;
-  mkdir(path: string): Promise<void>;
-  rmdir(path: string, options?: { recursive?: boolean }): Promise<void>;
-} {
-  return (
-    'writeFile' in source &&
-    typeof (source as any).writeFile === 'function' &&
-    'mkdir' in source &&
-    typeof (source as any).mkdir === 'function' &&
-    'rmdir' in source &&
-    typeof (source as any).rmdir === 'function'
-  );
 }

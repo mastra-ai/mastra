@@ -5,9 +5,9 @@ import type { SkillSource, SkillSourceEntry } from './skill-source';
 import { WorkspaceSkillsImpl } from './workspace-skills';
 
 /**
- * Writable skill source - SkillSource with write methods for CRUD operations.
+ * Mock skill source with write methods for test setup (simulating filesystem changes).
  */
-type WritableSkillSource = SkillSource & {
+type MockSkillSource = SkillSource & {
   writeFile(path: string, content: string | Buffer): Promise<void>;
   mkdir(path: string): Promise<void>;
   rmdir(path: string, options?: { recursive?: boolean }): Promise<void>;
@@ -16,10 +16,10 @@ type WritableSkillSource = SkillSource & {
 };
 
 // =============================================================================
-// Mock Skill Source (Writable)
+// Mock Skill Source
 // =============================================================================
 
-function createMockFilesystem(files: Record<string, string | Buffer> = {}): WritableSkillSource {
+function createMockFilesystem(files: Record<string, string | Buffer> = {}): MockSkillSource {
   const fileSystem = new Map<string, string | Buffer>(Object.entries(files));
   const directories = new Set<string>();
 
@@ -457,163 +457,6 @@ describe('WorkspaceSkillsImpl', () => {
 
       const results = await skills.search('test', { topK: 2 });
       expect(results.length).toBeLessThanOrEqual(2);
-    });
-  });
-
-  describe('create()', () => {
-    it('should create a new skill', async () => {
-      const filesystem = createMockFilesystem({});
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['/skills'],
-      });
-
-      const newSkill = await skills.create({
-        metadata: {
-          name: 'new-skill',
-          description: 'A newly created skill',
-        },
-        instructions: '# New Skill\n\nInstructions here.',
-      });
-
-      expect(newSkill.name).toBe('new-skill');
-      expect(newSkill.description).toBe('A newly created skill');
-      expect(await skills.has('new-skill')).toBe(true);
-
-      // Verify file was written
-      expect(filesystem.writeFile).toHaveBeenCalled();
-    });
-
-    it('should throw when skill already exists', async () => {
-      const filesystem = createMockFilesystem({
-        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['/skills'],
-      });
-
-      await expect(
-        skills.create({
-          metadata: {
-            name: 'test-skill',
-            description: 'Duplicate skill',
-          },
-          instructions: 'Instructions',
-        }),
-      ).rejects.toThrow('already exists');
-    });
-
-    it('should create references, scripts, and assets', async () => {
-      const filesystem = createMockFilesystem({});
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['/skills'],
-      });
-
-      await skills.create({
-        metadata: {
-          name: 'new-skill',
-          description: 'Skill with files',
-        },
-        instructions: 'Instructions',
-        references: [{ path: 'doc.md', content: REFERENCE_CONTENT }],
-        scripts: [{ path: 'run.sh', content: SCRIPT_CONTENT }],
-        assets: [{ path: 'logo.png', content: Buffer.from('PNG') }],
-      });
-
-      const skill = await skills.get('new-skill');
-      expect(skill?.references).toContain('doc.md');
-      expect(skill?.scripts).toContain('run.sh');
-      expect(skill?.assets).toContain('logo.png');
-    });
-  });
-
-  describe('update()', () => {
-    it('should update skill metadata', async () => {
-      const filesystem = createMockFilesystem({
-        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['/skills'],
-      });
-
-      const updated = await skills.update('test-skill', {
-        metadata: {
-          description: 'Updated description',
-        },
-      });
-
-      expect(updated.description).toBe('Updated description');
-      expect(updated.name).toBe('test-skill'); // Name should not change
-    });
-
-    it('should update skill instructions', async () => {
-      const filesystem = createMockFilesystem({
-        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['/skills'],
-      });
-
-      const updated = await skills.update('test-skill', {
-        instructions: '# Updated Instructions',
-      });
-
-      expect(updated.instructions).toBe('# Updated Instructions');
-    });
-
-    it('should throw when updating non-existent skill', async () => {
-      const filesystem = createMockFilesystem({});
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['/skills'],
-      });
-
-      await expect(
-        skills.update('non-existent', {
-          metadata: { description: 'New' },
-        }),
-      ).rejects.toThrow('not found');
-    });
-  });
-
-  describe('delete()', () => {
-    it('should delete an existing skill', async () => {
-      const filesystem = createMockFilesystem({
-        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['/skills'],
-      });
-
-      expect(await skills.has('test-skill')).toBe(true);
-
-      await skills.delete('test-skill');
-
-      expect(await skills.has('test-skill')).toBe(false);
-      expect(filesystem.rmdir).toHaveBeenCalledWith('/skills/test-skill', { recursive: true });
-    });
-
-    it('should throw when deleting non-existent skill', async () => {
-      const filesystem = createMockFilesystem({});
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['/skills'],
-      });
-
-      await expect(skills.delete('non-existent')).rejects.toThrow('not found');
     });
   });
 
@@ -1078,32 +921,6 @@ Instructions for the new skill.`;
       };
     }
 
-    it('should report isWritable as true when using writable source (filesystem)', async () => {
-      const filesystem = createMockFilesystem({
-        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['/skills'],
-      });
-
-      expect(skills.isWritable).toBe(true);
-    });
-
-    it('should report isWritable as false when using read-only source', async () => {
-      const source = createMockReadOnlySource({
-        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source,
-        skills: ['/skills'],
-      });
-
-      expect(skills.isWritable).toBe(false);
-    });
-
     it('should list skills from read-only source', async () => {
       const source = createMockReadOnlySource({
         '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
@@ -1152,82 +969,6 @@ Instructions for the new skill.`;
       const results = await skills.search('API');
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.skillName).toBe('api-skill');
-    });
-
-    it('should throw on create() when using read-only source', async () => {
-      const source = createMockReadOnlySource({});
-
-      const skills = new WorkspaceSkillsImpl({
-        source,
-        skills: ['/skills'],
-      });
-
-      await expect(
-        skills.create({
-          metadata: { name: 'new-skill', description: 'Test' },
-          instructions: 'Instructions',
-        }),
-      ).rejects.toThrow('read-only');
-    });
-
-    it('should throw on update() when using read-only source', async () => {
-      const source = createMockReadOnlySource({
-        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source,
-        skills: ['/skills'],
-      });
-
-      await expect(
-        skills.update('test-skill', {
-          metadata: { description: 'Updated' },
-        }),
-      ).rejects.toThrow('read-only');
-    });
-
-    it('should throw on delete() when using read-only source', async () => {
-      const source = createMockReadOnlySource({
-        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source,
-        skills: ['/skills'],
-      });
-
-      await expect(skills.delete('test-skill')).rejects.toThrow('read-only');
-    });
-
-    it('should still allow CRUD when using filesystem via source config', async () => {
-      const filesystem = createMockFilesystem({});
-
-      // Use new 'source' config instead of deprecated 'filesystem'
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['/skills'],
-      });
-
-      // Create should work
-      await skills.create({
-        metadata: { name: 'new-skill', description: 'Test' },
-        instructions: 'Instructions',
-      });
-
-      expect(await skills.has('new-skill')).toBe(true);
-
-      // Update should work
-      await skills.update('new-skill', {
-        metadata: { description: 'Updated' },
-      });
-
-      const updated = await skills.get('new-skill');
-      expect(updated?.description).toBe('Updated');
-
-      // Delete should work
-      await skills.delete('new-skill');
-      expect(await skills.has('new-skill')).toBe(false);
     });
   });
 

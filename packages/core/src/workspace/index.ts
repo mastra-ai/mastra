@@ -53,8 +53,6 @@ export type {
   Skill,
   SkillSearchResult,
   SkillSearchOptions,
-  CreateSkillInput,
-  UpdateSkillInput,
   WorkspaceSkills,
   SkillsResolver,
   SkillsContext,

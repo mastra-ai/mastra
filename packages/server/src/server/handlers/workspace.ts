@@ -167,7 +167,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
           status: globalWorkspace.status,
           source: 'mastra',
           capabilities: {
-            hasFilesystem: !!globalWorkspace.fs,
+            hasFilesystem: !!globalWorkspace.filesystem,
             hasSandbox: !!globalWorkspace.sandbox,
             canBM25: globalWorkspace.canBM25,
             canVector: globalWorkspace.canVector,
@@ -196,7 +196,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
                 agentId,
                 agentName: agent.name,
                 capabilities: {
-                  hasFilesystem: !!agentWorkspace.fs,
+                  hasFilesystem: !!agentWorkspace.filesystem,
                   hasSandbox: !!agentWorkspace.sandbox,
                   canBM25: agentWorkspace.canBM25,
                   canVector: agentWorkspace.canVector,
@@ -251,7 +251,7 @@ export const GET_WORKSPACE_ROUTE = createRoute({
         name: workspace.name,
         status: workspace.status,
         capabilities: {
-          hasFilesystem: !!workspace.fs,
+          hasFilesystem: !!workspace.filesystem,
           hasSandbox: !!workspace.sandbox,
           canBM25: workspace.canBM25,
           canVector: workspace.canVector,
@@ -291,19 +291,19 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
-      if (!workspace?.fs) {
+      if (!workspace?.filesystem) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
 
       const decodedPath = decodeURIComponent(path);
 
       // Check if path exists
-      if (!(await workspace.fs.exists(decodedPath))) {
+      if (!(await workspace.filesystem.exists(decodedPath))) {
         throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
       }
 
       // Read file content
-      const content = await workspace.fs.readFile(decodedPath, {
+      const content = await workspace.filesystem.readFile(decodedPath, {
         encoding: (encoding as BufferEncoding) || 'utf-8',
       });
 
@@ -337,7 +337,7 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
-      if (!workspace?.fs) {
+      if (!workspace?.filesystem) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
 
@@ -353,7 +353,7 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
         fileContent = Buffer.from(content, 'base64');
       }
 
-      await workspace.fs.writeFile(decodedPath, fileContent, { recursive: recursive ?? true });
+      await workspace.filesystem.writeFile(decodedPath, fileContent, { recursive: recursive ?? true });
 
       return {
         success: true,
@@ -384,7 +384,7 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
-      if (!workspace?.fs) {
+      if (!workspace?.filesystem) {
         return {
           path: decodeURIComponent(path),
           entries: [],
@@ -395,11 +395,11 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
       const decodedPath = decodeURIComponent(path);
 
       // Check if path exists
-      if (!(await workspace.fs.exists(decodedPath))) {
+      if (!(await workspace.filesystem.exists(decodedPath))) {
         throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
       }
 
-      const entries = await workspace.fs.readdir(decodedPath, { recursive });
+      const entries = await workspace.filesystem.readdir(decodedPath, { recursive });
 
       return {
         path: decodedPath,
@@ -434,7 +434,7 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
-      if (!workspace?.fs) {
+      if (!workspace?.filesystem) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
 
@@ -445,7 +445,7 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
       const decodedPath = decodeURIComponent(path);
 
       // Check if path exists (unless force is true)
-      const exists = await workspace.fs.exists(decodedPath);
+      const exists = await workspace.filesystem.exists(decodedPath);
       if (!exists && !force) {
         throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
       }
@@ -453,9 +453,9 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
       if (exists) {
         // Try to delete as file first, then as directory
         try {
-          await workspace.fs.deleteFile(decodedPath, { force });
+          await workspace.filesystem.deleteFile(decodedPath, { force });
         } catch {
-          await workspace.fs.rmdir(decodedPath, { recursive, force });
+          await workspace.filesystem.rmdir(decodedPath, { recursive, force });
         }
       }
 
@@ -488,7 +488,7 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
-      if (!workspace?.fs) {
+      if (!workspace?.filesystem) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
 
@@ -498,7 +498,7 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
 
       const decodedPath = decodeURIComponent(path);
 
-      await workspace.fs.mkdir(decodedPath, { recursive: recursive ?? true });
+      await workspace.filesystem.mkdir(decodedPath, { recursive: recursive ?? true });
 
       return {
         success: true,
@@ -529,18 +529,18 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
       }
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
-      if (!workspace?.fs) {
+      if (!workspace?.filesystem) {
         throw new HTTPException(404, { message: 'No workspace filesystem configured' });
       }
 
       const decodedPath = decodeURIComponent(path);
 
       // Check if path exists
-      if (!(await workspace.fs.exists(decodedPath))) {
+      if (!(await workspace.filesystem.exists(decodedPath))) {
         throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
       }
 
-      const stat = await workspace.fs.stat(decodedPath);
+      const stat = await workspace.filesystem.stat(decodedPath);
 
       return {
         path: stat.path,
