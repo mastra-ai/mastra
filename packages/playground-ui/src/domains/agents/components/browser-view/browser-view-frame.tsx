@@ -4,6 +4,8 @@ import { Skeleton } from '@/ds/components/Skeleton';
 import { useBrowserStream, type StreamStatus } from '../../hooks/use-browser-stream';
 import { useMouseInteraction } from '../../hooks/use-mouse-interaction';
 import { useKeyboardInteraction } from '../../hooks/use-keyboard-interaction';
+import { useClickRipple } from '../../hooks/use-click-ripple';
+import { ClickRippleOverlay } from './click-ripple-overlay';
 
 interface BrowserViewFrameProps {
   agentId: string;
@@ -60,6 +62,12 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
     sendMessage,
     enabled: isInteractive,
     onEscape: exitInteractive,
+  });
+
+  const { ripples, removeRipple } = useClickRipple({
+    imgRef,
+    viewport,
+    enabled: status === 'streaming' && hasFrame,
   });
 
   // Notify parent of status changes
@@ -131,6 +139,9 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
           status === 'streaming' && (isInteractive ? 'cursor-text' : 'cursor-pointer'),
         )}
       />
+
+      {/* Click ripple feedback overlay */}
+      <ClickRippleOverlay ripples={ripples} onAnimationEnd={removeRipple} />
 
       {/* Loading skeleton - shown until first frame arrives */}
       {isLoading && <Skeleton className="absolute inset-0" />}
