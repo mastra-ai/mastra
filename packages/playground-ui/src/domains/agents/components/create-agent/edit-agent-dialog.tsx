@@ -18,6 +18,7 @@ export interface EditAgentDialogProps {
 }
 
 export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDelete }: EditAgentDialogProps) {
+  const dialogContentRef = React.useRef<HTMLDivElement>(null);
   const { data: agent, isLoading: isLoadingAgent } = useStoredAgent(agentId);
   const { updateStoredAgent, deleteStoredAgent } = useStoredAgentMutations(agentId);
 
@@ -114,7 +115,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent ref={dialogContentRef} className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Agent</DialogTitle>
         </DialogHeader>
@@ -133,6 +134,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
             isSubmitting={updateStoredAgent.isPending}
             isDeleting={deleteStoredAgent.isPending}
             excludeAgentId={agentId}
+            container={dialogContentRef}
           />
         ) : (
           <div className="flex items-center justify-center py-8 px-6 text-icon3">Agent not found</div>
