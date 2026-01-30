@@ -300,7 +300,11 @@ function SkillSearchResultCard({ result, onClick }: { result: SkillSearchResult;
     >
       <div className="flex items-start gap-3">
         <div className="p-1.5 rounded bg-surface5 shrink-0 mt-0.5">
-          {isReference ? <FileText className="h-3.5 w-3.5 text-icon4" /> : <SkillIcon className="h-3.5 w-3.5 text-icon4" />}
+          {isReference ? (
+            <FileText className="h-3.5 w-3.5 text-icon4" />
+          ) : (
+            <SkillIcon className="h-3.5 w-3.5 text-icon4" />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
