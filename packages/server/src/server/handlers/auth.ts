@@ -30,7 +30,7 @@ import {
   credentialsSignInBodySchema,
   credentialsSignUpBodySchema,
 } from '../schemas/auth';
-import { createRoute } from '../server-adapter/routes/route-builder';
+import { createPublicRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
 /**
@@ -68,7 +68,7 @@ function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
 // GET /auth/capabilities
 // ============================================================================
 
-export const GET_AUTH_CAPABILITIES_ROUTE = createRoute({
+export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
   method: 'GET',
   path: '/auth/capabilities',
   responseType: 'json',
@@ -97,7 +97,7 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createRoute({
 // GET /auth/me
 // ============================================================================
 
-export const GET_CURRENT_USER_ROUTE = createRoute({
+export const GET_CURRENT_USER_ROUTE = createPublicRoute({
   method: 'GET',
   path: '/auth/me',
   responseType: 'json',
@@ -149,7 +149,7 @@ export const GET_CURRENT_USER_ROUTE = createRoute({
 // GET /auth/sso/login
 // ============================================================================
 
-export const GET_SSO_LOGIN_ROUTE = createRoute({
+export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
   method: 'GET',
   path: '/auth/sso/login',
   responseType: 'json',
@@ -190,7 +190,7 @@ export const GET_SSO_LOGIN_ROUTE = createRoute({
 // GET /auth/sso/callback
 // ============================================================================
 
-export const GET_SSO_CALLBACK_ROUTE = createRoute({
+export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
   method: 'GET',
   path: '/auth/sso/callback',
   responseType: 'datastream-response',
@@ -263,7 +263,7 @@ export const GET_SSO_CALLBACK_ROUTE = createRoute({
 // POST /auth/logout
 // ============================================================================
 
-export const POST_LOGOUT_ROUTE = createRoute({
+export const POST_LOGOUT_ROUTE = createPublicRoute({
   method: 'POST',
   path: '/auth/logout',
   responseType: 'datastream-response',
@@ -325,7 +325,7 @@ export const POST_LOGOUT_ROUTE = createRoute({
 // POST /auth/credentials/sign-in
 // ============================================================================
 
-export const POST_CREDENTIALS_SIGN_IN_ROUTE = createRoute({
+export const POST_CREDENTIALS_SIGN_IN_ROUTE = createPublicRoute({
   method: 'POST',
   path: '/auth/credentials/sign-in',
   responseType: 'datastream-response',
@@ -381,7 +381,7 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createRoute({
 // POST /auth/credentials/sign-up
 // ============================================================================
 
-export const POST_CREDENTIALS_SIGN_UP_ROUTE = createRoute({
+export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
   method: 'POST',
   path: '/auth/credentials/sign-up',
   responseType: 'datastream-response',
