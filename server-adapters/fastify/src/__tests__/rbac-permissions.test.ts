@@ -9,9 +9,11 @@
  * - Wildcard (*) permissions grant access to all routes
  */
 
-import { createDefaultTestContext, type AdapterTestContext } from '@internal/server-adapter-test-utils';
+import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MastraServer } from '../index';
 
