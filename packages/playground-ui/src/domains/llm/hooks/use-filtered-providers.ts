@@ -5,11 +5,7 @@ import { Provider } from '@mastra/client-js';
  * Hook to filter and sort providers based on search and connection status
  * Sort order: connected -> popular (openai, anthropic, google, openrouter, netlify) -> alphabetical
  */
-export const useFilteredProviders = (
-  providers: Provider[],
-  searchTerm: string,
-  isSearching: boolean,
-): Provider[] => {
+export const useFilteredProviders = (providers: Provider[], searchTerm: string, isSearching: boolean): Provider[] => {
   return useMemo(() => {
     const term = isSearching ? searchTerm : '';
 
