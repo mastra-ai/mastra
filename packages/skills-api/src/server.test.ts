@@ -218,4 +218,49 @@ describe('Skills API Server', () => {
       expect(body.error).toBe('Not Found');
     });
   });
+
+  describe('Admin Routes', () => {
+    describe('GET /api/admin/status', () => {
+      it('returns scheduler and data status', async () => {
+        const res = await app.request('/api/admin/status');
+        expect(res.status).toBe(200);
+
+        const body = await res.json();
+        expect(body.scheduler).toBeDefined();
+        expect(typeof body.scheduler.running).toBe('boolean');
+        expect(typeof body.scheduler.refreshing).toBe('boolean');
+        expect(body.data).toBeDefined();
+        expect(body.data.lastUpdated).toBeDefined();
+      });
+    });
+
+    describe('POST /api/admin/scheduler/start', () => {
+      it('starts the scheduler', async () => {
+        const res = await app.request('/api/admin/scheduler/start', { method: 'POST' });
+        expect(res.status).toBe(200);
+
+        const body = await res.json();
+        expect(body.message).toMatch(/scheduler/i);
+      });
+    });
+
+    describe('POST /api/admin/scheduler/stop', () => {
+      it('stops the scheduler', async () => {
+        const res = await app.request('/api/admin/scheduler/stop', { method: 'POST' });
+        expect(res.status).toBe(200);
+
+        const body = await res.json();
+        expect(body.message).toMatch(/scheduler/i);
+      });
+    });
+  });
+
+  describe('Admin Routes Disabled', () => {
+    const appNoAdmin = createSkillsApiServer({ logging: false, enableAdmin: false });
+
+    it('returns 404 for admin routes when disabled', async () => {
+      const res = await appNoAdmin.request('/api/admin/status');
+      expect(res.status).toBe(404);
+    });
+  });
 });

@@ -25,3 +25,15 @@ export type { ScrapedSkill, EnrichedSkill } from './scraper/scrape.js';
 // GitHub fetch exports
 export { fetchSkillFromGitHub, listSkillsInRepo } from './github/index.js';
 export type { SkillContent, FetchSkillResult } from './github/index.js';
+
+// Scheduler exports
+export {
+  refreshSkillsData,
+  startRefreshScheduler,
+  stopRefreshScheduler,
+  isSchedulerRunning,
+  isRefreshInProgress,
+  getLastRefreshResult,
+  getCurrentDataTimestamp,
+} from './scheduler/index.js';
+export type { RefreshResult, RefreshSchedulerOptions } from './scheduler/index.js';

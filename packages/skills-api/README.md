@@ -34,11 +34,13 @@ The server runs on `http://localhost:3456` by default.
 
 ### Environment Variables
 
-| Variable      | Default   | Description |
-| ------------- | --------- | ----------- |
-| `PORT`        | `3456`    | Server port |
-| `HOST`        | `0.0.0.0` | Server host |
-| `CORS_ORIGIN` | `*`       | CORS origin |
+| Variable           | Default   | Description                                     |
+| ------------------ | --------- | ----------------------------------------------- |
+| `PORT`             | `3456`    | Server port                                     |
+| `HOST`             | `0.0.0.0` | Server host                                     |
+| `CORS_ORIGIN`      | `*`       | CORS origin                                     |
+| `AUTO_REFRESH`     | `false`   | Enable auto-refresh scheduler (`true` or `1`)   |
+| `REFRESH_INTERVAL` | `30`      | Refresh interval in minutes (minimum 5 minutes) |
 
 ## API Endpoints
 
@@ -279,15 +281,136 @@ Get registry statistics.
 
 ---
 
+### Admin Routes
+
+Admin routes allow you to manage the data refresh scheduler.
+
+#### Get Status
+
+```
+GET /api/admin/status
+```
+
+Get scheduler and data status.
+
+**Response:**
+
+```json
+{
+  "scheduler": {
+    "running": true,
+    "refreshing": false
+  },
+  "data": {
+    "lastUpdated": "2026-01-30T04:51:07.907Z",
+    "lastRefresh": {
+      "success": true,
+      "timestamp": "2026-01-30T04:51:07.907Z",
+      "skillCount": 34311,
+      "sourceCount": 2843,
+      "ownerCount": 2451,
+      "durationMs": 1234
+    }
+  }
+}
+```
+
+#### Trigger Manual Refresh
+
+```
+POST /api/admin/refresh
+```
+
+Manually trigger a skills data refresh (scrapes skills.sh).
+
+#### Start Scheduler
+
+```
+POST /api/admin/scheduler/start?interval=30
+```
+
+Start the automatic refresh scheduler.
+
+**Query Parameters:**
+
+| Parameter  | Type   | Default | Description                          |
+| ---------- | ------ | ------- | ------------------------------------ |
+| `interval` | number | `30`    | Refresh interval in minutes (min: 5) |
+
+#### Stop Scheduler
+
+```
+POST /api/admin/scheduler/stop
+```
+
+Stop the automatic refresh scheduler.
+
+---
+
 ## Updating the Skills Data
 
-The skills data is scraped from skills.sh. To update:
+The skills data is scraped from skills.sh. There are several ways to keep it updated:
+
+### Manual Update
 
 ```bash
 pnpm scrape
 ```
 
 This fetches the latest skills and saves them to `src/registry/scraped-skills.json`.
+
+### Auto-Refresh with Environment Variables
+
+Enable automatic refresh when starting the server:
+
+```bash
+AUTO_REFRESH=true REFRESH_INTERVAL=30 pnpm start
+```
+
+This will refresh the skills data every 30 minutes.
+
+### Using the Admin API
+
+Start the scheduler via API:
+
+```bash
+# Start scheduler (30 minute interval)
+curl -X POST http://localhost:3456/api/admin/scheduler/start?interval=30
+
+# Check status
+curl http://localhost:3456/api/admin/status
+
+# Manual refresh
+curl -X POST http://localhost:3456/api/admin/refresh
+
+# Stop scheduler
+curl -X POST http://localhost:3456/api/admin/scheduler/stop
+```
+
+### Programmatic Scheduling
+
+```typescript
+import { startRefreshScheduler, stopRefreshScheduler, refreshSkillsData } from '@mastra/skills-api';
+
+// Start automatic refresh every 30 minutes
+startRefreshScheduler({
+  intervalMs: 30 * 60 * 1000, // 30 minutes
+  refreshOnStart: false, // Don't refresh immediately
+  onRefresh: result => {
+    console.log(`Refreshed: ${result.skillCount} skills`);
+  },
+  onError: error => {
+    console.error('Refresh failed:', error);
+  },
+});
+
+// Or trigger a manual refresh
+const result = await refreshSkillsData();
+console.log(`Refreshed ${result.skillCount} skills in ${result.durationMs}ms`);
+
+// Stop when done
+stopRefreshScheduler();
+```
 
 ## Usage as a Library
 

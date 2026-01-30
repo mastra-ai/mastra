@@ -7,7 +7,10 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { prettyJSON } from 'hono/pretty-json';
+
+import { adminRouter } from './routes/admin.js';
 import { skillsRouter } from './routes/index.js';
+import { startRefreshScheduler } from './scheduler/index.js';
 
 export interface SkillsApiServerOptions {
   /**
@@ -30,13 +33,36 @@ export interface SkillsApiServerOptions {
    * @default '/api'
    */
   prefix?: string;
+  /**
+   * Enable admin routes for refresh/scheduler control
+   * @default true
+   */
+  enableAdmin?: boolean;
+  /**
+   * Auto-start the refresh scheduler
+   * @default false
+   */
+  autoRefresh?: boolean;
+  /**
+   * Refresh interval in minutes (if autoRefresh is enabled)
+   * @default 30
+   */
+  refreshIntervalMinutes?: number;
 }
 
 /**
  * Create the Skills API server
  */
 export function createSkillsApiServer(options: SkillsApiServerOptions = {}): Hono {
-  const { cors: enableCors = true, corsOrigin = '*', logging = true, prefix = '/api' } = options;
+  const {
+    cors: enableCors = true,
+    corsOrigin = '*',
+    logging = true,
+    prefix = '/api',
+    enableAdmin = true,
+    autoRefresh = false,
+    refreshIntervalMinutes = 30,
+  } = options;
 
   const app = new Hono();
 
@@ -104,6 +130,19 @@ export function createSkillsApiServer(options: SkillsApiServerOptions = {}): Hon
 
   // Mount skills routes
   app.route(`${prefix}/skills`, skillsRouter);
+
+  // Mount admin routes if enabled
+  if (enableAdmin) {
+    app.route(`${prefix}/admin`, adminRouter);
+  }
+
+  // Start auto-refresh scheduler if enabled
+  if (autoRefresh) {
+    startRefreshScheduler({
+      intervalMs: refreshIntervalMinutes * 60 * 1000,
+      refreshOnStart: false,
+    });
+  }
 
   // 404 handler
   app.notFound(c => {
