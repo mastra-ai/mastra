@@ -124,22 +124,10 @@ export class AgentsPG extends AgentsStorage {
   private parseRow(row: any): StorageAgentType {
     return {
       id: row.id as string,
-      name: row.name as string,
-      description: row.description as string | undefined,
-      instructions: row.instructions as string,
-      model: this.parseJson(row.model, 'model'),
-      tools: this.parseJson(row.tools, 'tools'),
-      defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
-      workflows: this.parseJson(row.workflows, 'workflows'),
-      agents: this.parseJson(row.agents, 'agents'),
-      integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
-      inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
-      outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
-      memory: this.parseJson(row.memory, 'memory'),
-      scorers: this.parseJson(row.scorers, 'scorers'),
-      metadata: this.parseJson(row.metadata, 'metadata'),
-      ownerId: row.ownerId as string | undefined,
+      status: row.status as string,
       activeVersionId: row.activeVersionId as string | undefined,
+      authorId: row.authorId as string | undefined,
+      metadata: this.parseJson(row.metadata, 'metadata'),
       createdAt: row.createdAtZ || row.createdAt,
       updatedAt: row.updatedAtZ || row.updatedAt,
     };
@@ -171,36 +159,23 @@ export class AgentsPG extends AgentsStorage {
 
   async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
     try {
-      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+      const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
       const nowIso = now.toISOString();
 
+      // 1. Create the thin agent record with status='draft'
       await this.#db.client.none(
-        `INSERT INTO ${tableName} (
-          id, name, description, instructions, model, tools,
-          "defaultOptions", workflows, agents, "integrationTools",
-          "inputProcessors", "outputProcessors", memory, scorers, metadata,
-          "ownerId", "activeVersionId",
+        `INSERT INTO ${agentsTable} (
+          id, status, "authorId", metadata,
+          "activeVersionId",
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           agent.id,
-          agent.name,
-          agent.description ?? null,
-          agent.instructions,
-          JSON.stringify(agent.model),
-          agent.tools ? JSON.stringify(agent.tools) : null,
-          agent.defaultOptions ? JSON.stringify(agent.defaultOptions) : null,
-          agent.workflows ? JSON.stringify(agent.workflows) : null,
-          agent.agents ? JSON.stringify(agent.agents) : null,
-          agent.integrationTools ? JSON.stringify(agent.integrationTools) : null,
-          agent.inputProcessors ? JSON.stringify(agent.inputProcessors) : null,
-          agent.outputProcessors ? JSON.stringify(agent.outputProcessors) : null,
-          agent.memory ? JSON.stringify(agent.memory) : null,
-          agent.scorers ? JSON.stringify(agent.scorers) : null,
+          'draft',
+          agent.authorId ?? null,
           agent.metadata ? JSON.stringify(agent.metadata) : null,
-          agent.ownerId ?? null,
-          agent.activeVersionId ?? null,
+          null, // activeVersionId starts as null
           nowIso,
           nowIso,
           nowIso,
@@ -208,8 +183,32 @@ export class AgentsPG extends AgentsStorage {
         ],
       );
 
+      // 2. Extract config fields from the flat input
+      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+
+      // Create version 1 from the config
+      const versionId = crypto.randomUUID();
+      await this.createVersion({
+        id: versionId,
+        agentId: agent.id,
+        versionNumber: 1,
+        ...snapshotConfig,
+        changedFields: Object.keys(snapshotConfig),
+        changeMessage: 'Initial version',
+      });
+
+      // 3. Set the activeVersionId and status='published'
+      await this.#db.client.none(
+        `UPDATE ${agentsTable} SET "activeVersionId" = $1, status = $2, "updatedAt" = $3, "updatedAtZ" = $4 WHERE id = $5`,
+        [versionId, 'published', nowIso, nowIso, agent.id],
+      );
+
       return {
-        ...agent,
+        id: agent.id,
+        status: 'published',
+        activeVersionId: versionId,
+        authorId: agent.authorId,
+        metadata: agent.metadata,
         createdAt: now,
         updatedAt: now,
       };
@@ -246,79 +245,18 @@ export class AgentsPG extends AgentsStorage {
       const values: any[] = [];
       let paramIndex = 1;
 
-      if (updates.name !== undefined) {
-        setClauses.push(`name = $${paramIndex++}`);
-        values.push(updates.name);
-      }
-
-      if (updates.description !== undefined) {
-        setClauses.push(`description = $${paramIndex++}`);
-        values.push(updates.description);
-      }
-
-      if (updates.instructions !== undefined) {
-        setClauses.push(`instructions = $${paramIndex++}`);
-        values.push(updates.instructions);
-      }
-
-      if (updates.model !== undefined) {
-        setClauses.push(`model = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.model));
-      }
-
-      if (updates.tools !== undefined) {
-        setClauses.push(`tools = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.tools));
-      }
-
-      if (updates.defaultOptions !== undefined) {
-        setClauses.push(`"defaultOptions" = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.defaultOptions));
-      }
-
-      if (updates.workflows !== undefined) {
-        setClauses.push(`workflows = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.workflows));
-      }
-
-      if (updates.agents !== undefined) {
-        setClauses.push(`agents = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.agents));
-      }
-
-      if (updates.inputProcessors !== undefined) {
-        setClauses.push(`"inputProcessors" = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.inputProcessors));
-      }
-
-      if (updates.outputProcessors !== undefined) {
-        setClauses.push(`"outputProcessors" = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.outputProcessors));
-      }
-
-      if (updates.memory !== undefined) {
-        setClauses.push(`memory = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.memory));
-      }
-
-      if (updates.scorers !== undefined) {
-        setClauses.push(`scorers = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.scorers));
-      }
-
-      if (updates.integrationTools !== undefined) {
-        setClauses.push(`"integrationTools" = $${paramIndex++}`);
-        values.push(JSON.stringify(updates.integrationTools));
-      }
-
-      if (updates.ownerId !== undefined) {
-        setClauses.push(`"ownerId" = $${paramIndex++}`);
-        values.push(updates.ownerId);
+      if (updates.authorId !== undefined) {
+        setClauses.push(`"authorId" = $${paramIndex++}`);
+        values.push(updates.authorId);
       }
 
       if (updates.activeVersionId !== undefined) {
         setClauses.push(`"activeVersionId" = $${paramIndex++}`);
         values.push(updates.activeVersionId);
+
+        // If activeVersionId is set, mark as published
+        setClauses.push(`status = $${paramIndex++}`);
+        values.push('published');
       }
 
       if (updates.metadata !== undefined) {
@@ -473,14 +411,30 @@ export class AgentsPG extends AgentsStorage {
 
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
-          id, "agentId", "versionNumber", name, snapshot, "changedFields", "changeMessage", "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          id, "agentId", "versionNumber",
+          name, description, instructions, model, tools,
+          "defaultOptions", workflows, agents, "integrationTools",
+          "inputProcessors", "outputProcessors", memory, scorers,
+          "changedFields", "changeMessage",
+          "createdAt", "createdAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
         [
           input.id,
           input.agentId,
           input.versionNumber,
-          input.name ?? null,
-          JSON.stringify(input.snapshot),
+          input.name,
+          input.description ?? null,
+          input.instructions,
+          JSON.stringify(input.model),
+          input.tools ? JSON.stringify(input.tools) : null,
+          input.defaultOptions ? JSON.stringify(input.defaultOptions) : null,
+          input.workflows ? JSON.stringify(input.workflows) : null,
+          input.agents ? JSON.stringify(input.agents) : null,
+          input.integrationTools ? JSON.stringify(input.integrationTools) : null,
+          input.inputProcessors ? JSON.stringify(input.inputProcessors) : null,
+          input.outputProcessors ? JSON.stringify(input.outputProcessors) : null,
+          input.memory ? JSON.stringify(input.memory) : null,
+          input.scorers ? JSON.stringify(input.scorers) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
@@ -710,8 +664,19 @@ export class AgentsPG extends AgentsStorage {
       id: row.id as string,
       agentId: row.agentId as string,
       versionNumber: row.versionNumber as number,
-      name: row.name as string | undefined,
-      snapshot: this.parseJson(row.snapshot, 'snapshot'),
+      name: row.name as string,
+      description: row.description as string | undefined,
+      instructions: row.instructions as string,
+      model: this.parseJson(row.model, 'model'),
+      tools: this.parseJson(row.tools, 'tools'),
+      defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
+      workflows: this.parseJson(row.workflows, 'workflows'),
+      agents: this.parseJson(row.agents, 'agents'),
+      integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
+      inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
+      outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
+      memory: this.parseJson(row.memory, 'memory'),
+      scorers: this.parseJson(row.scorers, 'scorers'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,

@@ -9,6 +9,7 @@ declare global {
     MASTRA_STUDIO_BASE_PATH?: string;
     MASTRA_SERVER_HOST: string;
     MASTRA_SERVER_PORT: string;
+    MASTRA_API_PREFIX?: string;
     MASTRA_TELEMETRY_DISABLED?: string;
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
@@ -48,6 +49,8 @@ import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
+import Workspace from './pages/workspace';
+import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
@@ -56,6 +59,10 @@ import { StudioSettingsPage } from './pages/settings';
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
+  agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) =>
+    workspaceId
+      ? `/workspaces/${workspaceId}/skills/${skillName}?agentId=${encodeURIComponent(agentId)}`
+      : `/workspaces`,
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}?new=true`,
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
@@ -67,6 +74,12 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
+  skillLink: (skillName: string, workspaceId?: string) =>
+    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
+  workspaceSkillLink: (skillName: string, workspaceId?: string) =>
+    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  workspacesLink: () => `/workspaces`,
   processorsLink: () => `/processors`,
   processorLink: (processorId: string) => `/processors/${processorId}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
@@ -135,6 +148,10 @@ const routes = [
       { path: '/mcps/:serverId', element: <McpServerPage /> },
       { path: '/mcps/:serverId/tools/:toolId', element: <MCPServerToolExecutor /> },
 
+      { path: '/workspaces', element: <Workspace /> },
+      { path: '/workspaces/:workspaceId', element: <Workspace /> },
+      { path: '/workspaces/:workspaceId/skills/:skillName', element: <WorkspaceSkillDetailPage /> },
+
       { path: '/workflows', element: <Workflows /> },
       {
         path: '/workflows/:workflowId',
@@ -162,7 +179,7 @@ const routes = [
 
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
-  const { baseUrl, headers, isLoading } = useStudioConfig();
+  const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -177,7 +194,7 @@ function App() {
   const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers}>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
       <PostHogProvider>
         <RouterProvider router={router} />
       </PostHogProvider>
@@ -189,12 +206,13 @@ export default function AppWrapper() {
   const protocol = window.MASTRA_SERVER_PROTOCOL || 'http';
   const host = window.MASTRA_SERVER_HOST || 'localhost';
   const port = window.MASTRA_SERVER_PORT || 4111;
+  const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const endpoint = cloudApiEndpoint || `${protocol}://${host}:${port}`;
 
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>

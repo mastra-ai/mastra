@@ -12,10 +12,8 @@ import LayoutProvider from '@theme/Layout/Provider'
 import Navbar from '@theme/Navbar'
 import SkipToContent from '@theme/SkipToContent'
 import clsx from 'clsx'
-import { useMemo, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import styles from './styles.module.css'
-
-import FeatureVersioning from '../../../feature-versioning.json'
 
 export default function Layout(props: Props): ReactNode {
   const {

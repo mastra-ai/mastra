@@ -24,6 +24,26 @@ import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
+/**
+ * The set of fields from StorageAgentSnapshotType that live on version rows.
+ * Used to strip snapshot config from version documents when transforming.
+ */
+const SNAPSHOT_FIELDS = [
+  'name',
+  'description',
+  'instructions',
+  'model',
+  'tools',
+  'defaultOptions',
+  'workflows',
+  'agents',
+  'integrationTools',
+  'inputProcessors',
+  'outputProcessors',
+  'memory',
+  'scorers',
+] as const;
+
 export class MongoDBAgentsStorage extends AgentsStorage {
   #connector: MongoDBConnector;
   #skipDefaultIndexes?: boolean;
@@ -146,13 +166,38 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       }
 
       const now = new Date();
+
+      // Create the thin agent record with status='draft'
       const newAgent: StorageAgentType = {
-        ...agent,
+        id: agent.id,
+        status: 'draft',
+        activeVersionId: undefined,
+        authorId: agent.authorId,
+        metadata: agent.metadata,
         createdAt: now,
         updatedAt: now,
       };
 
       await collection.insertOne(this.serializeAgent(newAgent));
+
+      // Extract config fields from the flat input
+      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+
+      // Create version 1 from the config
+      const versionId = crypto.randomUUID();
+      await this.createVersion({
+        id: versionId,
+        agentId: agent.id,
+        versionNumber: 1,
+        ...snapshotConfig,
+        changedFields: Object.keys(snapshotConfig),
+        changeMessage: 'Initial version',
+      });
+
+      // Set the active version and mark as published
+      newAgent.activeVersionId = versionId;
+      newAgent.status = 'published';
+      await collection.updateOne({ id: agent.id }, { $set: { activeVersionId: versionId, status: 'published' } });
 
       return newAgent;
     } catch (error) {
@@ -190,21 +235,12 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         updatedAt: new Date(),
       };
 
-      if (updates.name !== undefined) updateDoc.name = updates.name;
-      if (updates.description !== undefined) updateDoc.description = updates.description;
-      if (updates.instructions !== undefined) updateDoc.instructions = updates.instructions;
-      if (updates.model !== undefined) updateDoc.model = updates.model;
-      if (updates.tools !== undefined) updateDoc.tools = updates.tools;
-      if (updates.defaultOptions !== undefined) updateDoc.defaultOptions = updates.defaultOptions;
-      if (updates.workflows !== undefined) updateDoc.workflows = updates.workflows;
-      if (updates.agents !== undefined) updateDoc.agents = updates.agents;
-      if (updates.inputProcessors !== undefined) updateDoc.inputProcessors = updates.inputProcessors;
-      if (updates.outputProcessors !== undefined) updateDoc.outputProcessors = updates.outputProcessors;
-      if (updates.memory !== undefined) updateDoc.memory = updates.memory;
-      if (updates.scorers !== undefined) updateDoc.scorers = updates.scorers;
-      if (updates.integrationTools !== undefined) updateDoc.integrationTools = updates.integrationTools;
-      if (updates.ownerId !== undefined) updateDoc.ownerId = updates.ownerId;
-      if (updates.activeVersionId !== undefined) updateDoc.activeVersionId = updates.activeVersionId;
+      // Only handle metadata-level fields on the thin agent record
+      if (updates.authorId !== undefined) updateDoc.authorId = updates.authorId;
+      if (updates.activeVersionId !== undefined) {
+        updateDoc.activeVersionId = updates.activeVersionId;
+        updateDoc.status = 'published';
+      }
 
       // Merge metadata if provided
       if (updates.metadata !== undefined) {
@@ -333,18 +369,36 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
+  /**
+   * Transforms a raw MongoDB document into a thin StorageAgentType record.
+   * Only returns metadata-level fields (no config/snapshot fields).
+   */
   private transformAgent(doc: any): StorageAgentType {
-    const { _id, ...agent } = doc;
+    const { _id, ...rest } = doc;
     return {
-      ...agent,
-      createdAt: agent.createdAt instanceof Date ? agent.createdAt : new Date(agent.createdAt),
-      updatedAt: agent.updatedAt instanceof Date ? agent.updatedAt : new Date(agent.updatedAt),
+      id: rest.id,
+      status: rest.status,
+      activeVersionId: rest.activeVersionId,
+      authorId: rest.authorId,
+      metadata: rest.metadata,
+      createdAt: rest.createdAt instanceof Date ? rest.createdAt : new Date(rest.createdAt),
+      updatedAt: rest.updatedAt instanceof Date ? rest.updatedAt : new Date(rest.updatedAt),
     };
   }
 
+  /**
+   * Serializes a thin StorageAgentType record for MongoDB insertion.
+   * Only persists metadata-level fields.
+   */
   private serializeAgent(agent: StorageAgentType): Record<string, any> {
     return {
-      ...agent,
+      id: agent.id,
+      status: agent.status,
+      activeVersionId: agent.activeVersionId,
+      authorId: agent.authorId,
+      metadata: agent.metadata,
+      createdAt: agent.createdAt,
+      updatedAt: agent.updatedAt,
     };
   }
 
@@ -357,16 +411,22 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
       const now = new Date();
 
-      const versionDoc = {
+      // Store all config fields directly on the version document (no nested snapshot)
+      const versionDoc: Record<string, any> = {
         id: input.id,
         agentId: input.agentId,
         versionNumber: input.versionNumber,
-        name: input.name ?? undefined,
-        snapshot: input.snapshot,
         changedFields: input.changedFields ?? undefined,
         changeMessage: input.changeMessage ?? undefined,
         createdAt: now,
       };
+
+      // Copy all snapshot config fields directly onto the document
+      for (const field of SNAPSHOT_FIELDS) {
+        if ((input as any)[field] !== undefined) {
+          versionDoc[field] = (input as any)[field];
+        }
+      }
 
       await collection.insertOne(versionDoc);
 
@@ -581,11 +641,29 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   // Private Helper Methods
   // ==========================================================================
 
+  /**
+   * Transforms a raw MongoDB version document into an AgentVersion.
+   * Config fields are returned directly (no nested snapshot object).
+   */
   private transformVersion(doc: any): AgentVersion {
     const { _id, ...version } = doc;
-    return {
-      ...version,
+
+    const result: any = {
+      id: version.id,
+      agentId: version.agentId,
+      versionNumber: version.versionNumber,
+      changedFields: version.changedFields,
+      changeMessage: version.changeMessage,
       createdAt: version.createdAt instanceof Date ? version.createdAt : new Date(version.createdAt),
     };
+
+    // Copy all snapshot config fields directly onto the result
+    for (const field of SNAPSHOT_FIELDS) {
+      if (version[field] !== undefined) {
+        result[field] = version[field];
+      }
+    }
+
+    return result as AgentVersion;
   }
 }
