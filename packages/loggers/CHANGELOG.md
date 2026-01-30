@@ -1,5 +1,14 @@
 # @mastra/loggers
 
+## 1.0.1-alpha.0
+
+### Patch Changes
+
+- Force alpha version bump for @mastra/evals, @mastra/loggers, @mastra/observability, and @mastra/memory ([#12505](https://github.com/mastra-ai/mastra/pull/12505))
+
+- Updated dependencies:
+  - @mastra/core@1.1.0-alpha.2
+
 ## 1.0.0
 
 ### Major Changes
