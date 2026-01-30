@@ -171,8 +171,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- Key-mapping utility and useKeyboardInteraction hook
-- [ ] 13-02-PLAN.md -- Interactive mode state and BrowserViewFrame wiring
+- [x] 13-01-PLAN.md -- Key-mapping utility and useKeyboardInteraction hook
+- [x] 13-02-PLAN.md -- Interactive mode state and BrowserViewFrame wiring
 
 ---
 
@@ -225,10 +225,10 @@ Plans:
 | 10. Infrastructure Foundations | v1.2 | 1/1 | Complete | 2026-01-29 |
 | 11. Server Input Routing | v1.2 | 1/1 | Complete | 2026-01-29 |
 | 12. Client Mapping & Click | v1.2 | 3/3 | Complete | 2026-01-29 |
-| 13. Focus & Keyboard | v1.2 | 0/2 | Planned | -- |
+| 13. Focus & Keyboard | v1.2 | 2/2 | Complete | 2026-01-30 |
 | 14. Visual Feedback | v1.2 | 0/TBD | Not Started | -- |
 | 15. Input Coordination | v1.2 | 0/TBD | Not Started | -- |
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-29 -- Phase 13 planned (2 plans in 2 waves)*
+*Last updated: 2026-01-30 -- Phase 13 complete (2 plans executed)*

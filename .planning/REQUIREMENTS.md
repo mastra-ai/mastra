@@ -25,10 +25,10 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 
 ## Keyboard Forwarding
 
-- [ ] **KEY-01**: User keystrokes are forwarded to browser when live view panel is focused
-- [ ] **KEY-02**: Printable characters use 3-event CDP sequence (keyDown → char → keyUp) for text insertion
-- [ ] **KEY-03**: Non-printable keys (Enter, Escape, Tab, arrows, Backspace) use 2-event sequence (keyDown → keyUp)
-- [ ] **KEY-04**: Modifier key state tracked and included in keyboard event bitmask
+- [x] **KEY-01**: User keystrokes are forwarded to browser when live view panel is focused
+- [x] **KEY-02**: Printable characters use 3-event CDP sequence (keyDown → char → keyUp) for text insertion
+- [x] **KEY-03**: Non-printable keys (Enter, Escape, Tab, arrows, Backspace) use 2-event sequence (keyDown → keyUp)
+- [x] **KEY-04**: Modifier key state tracked and included in keyboard event bitmask
 
 ## Scroll Forwarding
 
@@ -37,9 +37,9 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 
 ## Focus Management
 
-- [ ] **FOCUS-01**: Live view panel requires explicit click to enter interactive mode (keyboard events captured)
-- [ ] **FOCUS-02**: Clicking outside the panel or pressing Escape exits interactive mode
-- [ ] **FOCUS-03**: Keyboard events do NOT leak to host page (chat input, Studio shortcuts) when panel is focused
+- [x] **FOCUS-01**: Live view panel requires explicit click to enter interactive mode (keyboard events captured)
+- [x] **FOCUS-02**: Clicking outside the panel or pressing Escape exits interactive mode
+- [x] **FOCUS-03**: Keyboard events do NOT leak to host page (chat input, Studio shortcuts) when panel is focused
 
 ## Visual Feedback
 
@@ -69,15 +69,15 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 | CLICK-04 | Phase 12 | Complete |
 | CLICK-05 | Phase 12 | Complete |
 | CLICK-06 | Phase 12 | Complete |
-| KEY-01 | Phase 13 | Pending |
-| KEY-02 | Phase 13 | Pending |
-| KEY-03 | Phase 13 | Pending |
-| KEY-04 | Phase 13 | Pending |
+| KEY-01 | Phase 13 | Complete |
+| KEY-02 | Phase 13 | Complete |
+| KEY-03 | Phase 13 | Complete |
+| KEY-04 | Phase 13 | Complete |
 | SCROLL-01 | Phase 12 | Complete |
 | SCROLL-02 | Phase 12 | Complete |
-| FOCUS-01 | Phase 13 | Pending |
-| FOCUS-02 | Phase 13 | Pending |
-| FOCUS-03 | Phase 13 | Pending |
+| FOCUS-01 | Phase 13 | Complete |
+| FOCUS-02 | Phase 13 | Complete |
+| FOCUS-03 | Phase 13 | Complete |
 | VIS-01 | Phase 14 | Pending |
 | VIS-02 | Phase 14 | Pending |
 | VIS-03 | Phase 12 | Complete |
