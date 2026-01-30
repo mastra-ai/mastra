@@ -5,6 +5,8 @@ import { useBrowserStream, type StreamStatus } from '../../hooks/use-browser-str
 import { useMouseInteraction } from '../../hooks/use-mouse-interaction';
 import { useKeyboardInteraction } from '../../hooks/use-keyboard-interaction';
 import { useClickRipple } from '../../hooks/use-click-ripple';
+import { useInputCoordination } from '../../hooks/use-input-coordination';
+import { AgentBusyOverlay } from './agent-busy-overlay';
 import { ClickRippleOverlay } from './click-ripple-overlay';
 
 interface BrowserViewFrameProps {
@@ -51,11 +53,13 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
     }
   }, [status]);
 
+  const { isAgentBusy, activeToolName } = useInputCoordination();
+
   useMouseInteraction({
     imgRef,
     viewport,
     sendMessage,
-    enabled: status === 'streaming',
+    enabled: status === 'streaming' && !isAgentBusy,
   });
 
   useKeyboardInteraction({
@@ -67,7 +71,7 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
   const { ripples, removeRipple } = useClickRipple({
     imgRef,
     viewport,
-    enabled: status === 'streaming' && hasFrame,
+    enabled: status === 'streaming' && hasFrame && !isAgentBusy,
   });
 
   // Notify parent of status changes
@@ -124,7 +128,8 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
       ref={containerRef}
       className={cn(
         'relative w-full aspect-video bg-surface2 rounded-md overflow-hidden',
-        isInteractive && 'ring-2 ring-accent1',
+        isInteractive && !isAgentBusy && 'ring-2 ring-accent1',
+        isInteractive && isAgentBusy && 'ring-2 ring-amber-400',
         className,
       )}
     >
@@ -142,6 +147,9 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
 
       {/* Click ripple feedback overlay */}
       <ClickRippleOverlay ripples={ripples} onAnimationEnd={removeRipple} />
+
+      {/* Agent busy overlay - shown when agent is executing a browser tool */}
+      {isAgentBusy && <AgentBusyOverlay toolName={activeToolName} />}
 
       {/* Loading skeleton - shown until first frame arrives */}
       {isLoading && <Skeleton className="absolute inset-0" />}
