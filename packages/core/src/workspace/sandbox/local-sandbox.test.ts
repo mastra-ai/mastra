@@ -159,7 +159,7 @@ describe('LocalSandbox', () => {
       await fs.mkdir(subDir);
       await fs.writeFile(path.join(subDir, 'subfile.txt'), 'content');
 
-      const result = await sandbox.executeCommand('ls', ['-1'], { cwd: 'subdir' });
+      const result = await sandbox.executeCommand('ls', ['-1'], { cwd: subDir });
 
       expect(result.success).toBe(true);
       expect(result.stdout).toContain('subfile.txt');
