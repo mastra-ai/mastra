@@ -612,6 +612,8 @@ export interface StoredAgentScorerConfig {
  */
 export interface StoredAgentResponse {
   id: string;
+  status: string;
+  authorId?: string;
   name: string;
   description?: string;
   instructions: string;
@@ -623,7 +625,7 @@ export interface StoredAgentResponse {
   agents?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: Record<string, unknown>;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -654,10 +656,13 @@ export interface ListStoredAgentsResponse {
 }
 
 /**
- * Parameters for creating a stored agent
+ * Parameters for creating a stored agent.
+ * Flat union of agent-record fields and config fields.
  */
 export interface CreateStoredAgentParams {
   id: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
   name: string;
   description?: string;
   instructions: string;
@@ -669,16 +674,16 @@ export interface CreateStoredAgentParams {
   integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: Record<string, unknown>;
   scorers?: Record<string, StoredAgentScorerConfig>;
-  metadata?: Record<string, unknown>;
-  ownerId?: string;
 }
 
 /**
  * Parameters for updating a stored agent
  */
 export interface UpdateStoredAgentParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
   instructions?: string;
@@ -690,10 +695,8 @@ export interface UpdateStoredAgentParams {
   integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: Record<string, unknown>;
   scorers?: Record<string, StoredAgentScorerConfig>;
-  metadata?: Record<string, unknown>;
-  ownerId?: string;
 }
 
 /**
@@ -712,8 +715,19 @@ export interface AgentVersionResponse {
   id: string;
   agentId: string;
   versionNumber: number;
-  name?: string;
-  snapshot: Record<string, any>;
+  name: string;
+  description?: string;
+  instructions: string;
+  model: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  integrationTools?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: Record<string, unknown>;
+  scorers?: Record<string, StoredAgentScorerConfig>;
   changedFields?: string[];
   changeMessage?: string;
   createdAt: string;
@@ -735,7 +749,6 @@ export interface ListAgentVersionsResponse {
 }
 
 export interface CreateAgentVersionParams {
-  name?: string;
   changeMessage?: string;
 }
 

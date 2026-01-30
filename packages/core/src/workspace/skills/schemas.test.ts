@@ -1,15 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import {
-  SKILL_LIMITS,
-  SkillNameSchema,
-  SkillDescriptionSchema,
-  SkillCompatibilitySchema,
-  SkillLicenseSchema,
-  SkillMetadataFieldSchema,
-  SkillMetadataSchema,
-  validateSkillMetadata,
-} from './schemas';
+import { SKILL_LIMITS, validateSkillMetadata } from './schemas';
 
 describe('schemas', () => {
   // ===========================================================================
@@ -26,188 +17,265 @@ describe('schemas', () => {
   });
 
   // ===========================================================================
-  // SkillNameSchema
+  // Name Validation
   // ===========================================================================
-  describe('SkillNameSchema', () => {
+  describe('name validation', () => {
+    const validDescription = 'A valid description';
+
     describe('valid names', () => {
       it('should accept simple lowercase name', () => {
-        expect(SkillNameSchema.parse('myskill')).toBe('myskill');
+        const result = validateSkillMetadata({ name: 'myskill', description: validDescription });
+        expect(result.valid).toBe(true);
+        expect(result.errors).toHaveLength(0);
       });
 
       it('should accept name with hyphens', () => {
-        expect(SkillNameSchema.parse('my-skill-name')).toBe('my-skill-name');
+        const result = validateSkillMetadata({ name: 'my-skill-name', description: validDescription });
+        expect(result.valid).toBe(true);
       });
 
       it('should accept name with numbers', () => {
-        expect(SkillNameSchema.parse('skill123')).toBe('skill123');
-        expect(SkillNameSchema.parse('123skill')).toBe('123skill');
+        const result1 = validateSkillMetadata({ name: 'skill123', description: validDescription });
+        const result2 = validateSkillMetadata({ name: '123skill', description: validDescription });
+        expect(result1.valid).toBe(true);
+        expect(result2.valid).toBe(true);
       });
 
       it('should accept name with hyphens and numbers', () => {
-        expect(SkillNameSchema.parse('my-skill-v2')).toBe('my-skill-v2');
+        const result = validateSkillMetadata({ name: 'my-skill-v2', description: validDescription });
+        expect(result.valid).toBe(true);
       });
 
       it('should accept single character name', () => {
-        expect(SkillNameSchema.parse('a')).toBe('a');
-        expect(SkillNameSchema.parse('1')).toBe('1');
+        const result1 = validateSkillMetadata({ name: 'a', description: validDescription });
+        const result2 = validateSkillMetadata({ name: '1', description: validDescription });
+        expect(result1.valid).toBe(true);
+        expect(result2.valid).toBe(true);
       });
 
       it('should accept name at max length (64 chars)', () => {
         const maxName = 'a'.repeat(64);
-        expect(SkillNameSchema.parse(maxName)).toBe(maxName);
+        const result = validateSkillMetadata({ name: maxName, description: validDescription });
+        expect(result.valid).toBe(true);
       });
     });
 
     describe('invalid names', () => {
       it('should reject empty name', () => {
-        expect(() => SkillNameSchema.parse('')).toThrow('Skill name cannot be empty');
+        const result = validateSkillMetadata({ name: '', description: validDescription });
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.includes('cannot be empty'))).toBe(true);
       });
 
       it('should reject name exceeding max length', () => {
         const longName = 'a'.repeat(65);
-        expect(() => SkillNameSchema.parse(longName)).toThrow('64 characters or less');
+        const result = validateSkillMetadata({ name: longName, description: validDescription });
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.includes('64 characters or less'))).toBe(true);
       });
 
       it('should reject uppercase letters', () => {
-        expect(() => SkillNameSchema.parse('MySkill')).toThrow('only lowercase letters, numbers, and hyphens');
+        const result = validateSkillMetadata({ name: 'MySkill', description: validDescription });
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.includes('only lowercase letters, numbers, and hyphens'))).toBe(true);
       });
 
       it('should reject special characters', () => {
-        expect(() => SkillNameSchema.parse('my_skill')).toThrow('only lowercase letters, numbers, and hyphens');
-        expect(() => SkillNameSchema.parse('my.skill')).toThrow('only lowercase letters, numbers, and hyphens');
-        expect(() => SkillNameSchema.parse('my skill')).toThrow('only lowercase letters, numbers, and hyphens');
+        const result1 = validateSkillMetadata({ name: 'my_skill', description: validDescription });
+        const result2 = validateSkillMetadata({ name: 'my.skill', description: validDescription });
+        const result3 = validateSkillMetadata({ name: 'my skill', description: validDescription });
+        expect(result1.valid).toBe(false);
+        expect(result2.valid).toBe(false);
+        expect(result3.valid).toBe(false);
+        expect(result1.errors.some(e => e.includes('only lowercase letters, numbers, and hyphens'))).toBe(true);
       });
 
       it('should reject name starting with hyphen', () => {
-        expect(() => SkillNameSchema.parse('-myskill')).toThrow('must not start or end with a hyphen');
+        const result = validateSkillMetadata({ name: '-myskill', description: validDescription });
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.includes('must not start or end with a hyphen'))).toBe(true);
       });
 
       it('should reject name ending with hyphen', () => {
-        expect(() => SkillNameSchema.parse('myskill-')).toThrow('must not start or end with a hyphen');
+        const result = validateSkillMetadata({ name: 'myskill-', description: validDescription });
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.includes('must not start or end with a hyphen'))).toBe(true);
       });
 
       it('should reject consecutive hyphens', () => {
-        expect(() => SkillNameSchema.parse('my--skill')).toThrow('must not contain consecutive hyphens');
+        const result = validateSkillMetadata({ name: 'my--skill', description: validDescription });
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.includes('must not contain consecutive hyphens'))).toBe(true);
       });
 
       it('should reject name with multiple issues', () => {
         // Just hyphen - multiple issues
-        expect(() => SkillNameSchema.parse('-')).toThrow();
+        const result = validateSkillMetadata({ name: '-', description: validDescription });
+        expect(result.valid).toBe(false);
+        expect(result.errors.length).toBeGreaterThan(0);
       });
     });
   });
 
   // ===========================================================================
-  // SkillDescriptionSchema
+  // Description Validation
   // ===========================================================================
-  describe('SkillDescriptionSchema', () => {
+  describe('description validation', () => {
+    const validName = 'my-skill';
+
     describe('valid descriptions', () => {
       it('should accept normal description', () => {
         const desc = 'A skill that helps users manage files';
-        expect(SkillDescriptionSchema.parse(desc)).toBe(desc);
+        const result = validateSkillMetadata({ name: validName, description: desc });
+        expect(result.valid).toBe(true);
       });
 
       it('should accept single character description', () => {
-        expect(SkillDescriptionSchema.parse('A')).toBe('A');
+        const result = validateSkillMetadata({ name: validName, description: 'A' });
+        expect(result.valid).toBe(true);
       });
 
       it('should accept description at max length (1024 chars)', () => {
         const maxDesc = 'a'.repeat(1024);
-        expect(SkillDescriptionSchema.parse(maxDesc)).toBe(maxDesc);
+        const result = validateSkillMetadata({ name: validName, description: maxDesc });
+        expect(result.valid).toBe(true);
       });
 
       it('should accept description with various characters', () => {
         const desc = 'This skill: does things! (v2.0) - includes "special" chars & more.';
-        expect(SkillDescriptionSchema.parse(desc)).toBe(desc);
+        const result = validateSkillMetadata({ name: validName, description: desc });
+        expect(result.valid).toBe(true);
       });
     });
 
     describe('invalid descriptions', () => {
       it('should reject empty description', () => {
-        expect(() => SkillDescriptionSchema.parse('')).toThrow('cannot be empty');
+        const result = validateSkillMetadata({ name: validName, description: '' });
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.includes('cannot be empty'))).toBe(true);
       });
 
       it('should reject description exceeding max length', () => {
         const longDesc = 'a'.repeat(1025);
-        expect(() => SkillDescriptionSchema.parse(longDesc)).toThrow('1024 characters or less');
+        const result = validateSkillMetadata({ name: validName, description: longDesc });
+        expect(result.valid).toBe(false);
+        expect(result.errors.some(e => e.includes('1024 characters or less'))).toBe(true);
       });
 
       it('should reject whitespace-only description', () => {
-        expect(() => SkillDescriptionSchema.parse('   ')).toThrow('cannot be only whitespace');
-        expect(() => SkillDescriptionSchema.parse('\t\n')).toThrow('cannot be only whitespace');
+        const result1 = validateSkillMetadata({ name: validName, description: '   ' });
+        const result2 = validateSkillMetadata({ name: validName, description: '\t\n' });
+        expect(result1.valid).toBe(false);
+        expect(result2.valid).toBe(false);
+        expect(result1.errors.some(e => e.includes('cannot be only whitespace'))).toBe(true);
       });
     });
   });
 
   // ===========================================================================
-  // SkillCompatibilitySchema
+  // Compatibility Validation
   // ===========================================================================
-  describe('SkillCompatibilitySchema', () => {
+  describe('compatibility validation', () => {
+    const validBase = { name: 'my-skill', description: 'A skill' };
+
     it('should accept valid compatibility string', () => {
-      const compat = 'Requires Node.js 18+ and TypeScript 5.0+';
-      expect(SkillCompatibilitySchema.parse(compat)).toBe(compat);
+      const result = validateSkillMetadata({
+        ...validBase,
+        compatibility: 'Requires Node.js 18+ and TypeScript 5.0+',
+      });
+      expect(result.valid).toBe(true);
     });
 
     it('should accept empty string', () => {
-      expect(SkillCompatibilitySchema.parse('')).toBe('');
-    });
-
-    it('should accept string at max length (500 chars)', () => {
-      const maxCompat = 'a'.repeat(500);
-      expect(SkillCompatibilitySchema.parse(maxCompat)).toBe(maxCompat);
+      const result = validateSkillMetadata({ ...validBase, compatibility: '' });
+      expect(result.valid).toBe(true);
     });
 
     it('should accept undefined (optional)', () => {
-      expect(SkillCompatibilitySchema.parse(undefined)).toBeUndefined();
+      const result = validateSkillMetadata(validBase);
+      expect(result.valid).toBe(true);
     });
 
-    it('should reject string exceeding max length', () => {
-      const longCompat = 'a'.repeat(501);
-      expect(() => SkillCompatibilitySchema.parse(longCompat)).toThrow('500 characters or less');
+    it('should accept object compatibility (for external skill compatibility)', () => {
+      const result = validateSkillMetadata({
+        ...validBase,
+        compatibility: { requires: ['node>=18', 'typescript>=5.0'] },
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it('should accept array compatibility (for external skill compatibility)', () => {
+      const result = validateSkillMetadata({
+        ...validBase,
+        compatibility: ['node>=18', 'typescript>=5.0'],
+      });
+      expect(result.valid).toBe(true);
     });
   });
 
   // ===========================================================================
-  // SkillLicenseSchema
+  // License Validation
   // ===========================================================================
-  describe('SkillLicenseSchema', () => {
+  describe('license validation', () => {
+    const validBase = { name: 'my-skill', description: 'A skill' };
+
     it('should accept common license strings', () => {
-      expect(SkillLicenseSchema.parse('MIT')).toBe('MIT');
-      expect(SkillLicenseSchema.parse('Apache-2.0')).toBe('Apache-2.0');
-      expect(SkillLicenseSchema.parse('BSD-3-Clause')).toBe('BSD-3-Clause');
+      const result1 = validateSkillMetadata({ ...validBase, license: 'MIT' });
+      const result2 = validateSkillMetadata({ ...validBase, license: 'Apache-2.0' });
+      const result3 = validateSkillMetadata({ ...validBase, license: 'BSD-3-Clause' });
+      expect(result1.valid).toBe(true);
+      expect(result2.valid).toBe(true);
+      expect(result3.valid).toBe(true);
     });
 
     it('should accept empty string', () => {
-      expect(SkillLicenseSchema.parse('')).toBe('');
+      const result = validateSkillMetadata({ ...validBase, license: '' });
+      expect(result.valid).toBe(true);
     });
 
     it('should accept undefined (optional)', () => {
-      expect(SkillLicenseSchema.parse(undefined)).toBeUndefined();
+      const result = validateSkillMetadata(validBase);
+      expect(result.valid).toBe(true);
     });
   });
 
   // ===========================================================================
-  // SkillMetadataFieldSchema
+  // Metadata Field Validation
   // ===========================================================================
-  describe('SkillMetadataFieldSchema', () => {
+  describe('metadata field validation', () => {
+    const validBase = { name: 'my-skill', description: 'A skill' };
+
     it('should accept record of string values', () => {
-      const metadata = { author: 'john', version: '1.0.0' };
-      expect(SkillMetadataFieldSchema.parse(metadata)).toEqual(metadata);
+      const result = validateSkillMetadata({
+        ...validBase,
+        metadata: { author: 'john', version: '1.0.0' },
+      });
+      expect(result.valid).toBe(true);
     });
 
     it('should accept empty record', () => {
-      expect(SkillMetadataFieldSchema.parse({})).toEqual({});
+      const result = validateSkillMetadata({ ...validBase, metadata: {} });
+      expect(result.valid).toBe(true);
     });
 
     it('should accept undefined (optional)', () => {
-      expect(SkillMetadataFieldSchema.parse(undefined)).toBeUndefined();
+      const result = validateSkillMetadata(validBase);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should accept non-string values in metadata (for external skill compatibility)', () => {
+      const result = validateSkillMetadata({
+        ...validBase,
+        metadata: { author: 'john', count: 42, keywords: ['a', 'b', 'c'] },
+      });
+      expect(result.valid).toBe(true);
     });
   });
 
   // ===========================================================================
-  // SkillMetadataSchema (full object)
+  // Full Metadata Validation
   // ===========================================================================
-  describe('SkillMetadataSchema', () => {
+  describe('full metadata validation', () => {
     it('should accept valid complete metadata', () => {
       const metadata = {
         name: 'my-skill',
@@ -216,7 +284,9 @@ describe('schemas', () => {
         compatibility: 'Node.js 18+',
         metadata: { author: 'john', version: '1.0.0' },
       };
-      expect(SkillMetadataSchema.parse(metadata)).toEqual(metadata);
+      const result = validateSkillMetadata(metadata);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
     });
 
     it('should accept minimal metadata (only required fields)', () => {
@@ -224,27 +294,35 @@ describe('schemas', () => {
         name: 'my-skill',
         description: 'A helpful skill',
       };
-      const result = SkillMetadataSchema.parse(metadata);
-      expect(result.name).toBe('my-skill');
-      expect(result.description).toBe('A helpful skill');
-      expect(result.license).toBeUndefined();
-      expect(result.compatibility).toBeUndefined();
-      expect(result.metadata).toBeUndefined();
+      const result = validateSkillMetadata(metadata);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
     });
 
     it('should reject missing name', () => {
-      const metadata = { description: 'A skill' };
-      expect(() => SkillMetadataSchema.parse(metadata)).toThrow();
+      const result = validateSkillMetadata({ description: 'A skill' });
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('name'))).toBe(true);
     });
 
     it('should reject missing description', () => {
-      const metadata = { name: 'my-skill' };
-      expect(() => SkillMetadataSchema.parse(metadata)).toThrow();
+      const result = validateSkillMetadata({ name: 'my-skill' });
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('description'))).toBe(true);
     });
 
     it('should reject invalid name format', () => {
-      const metadata = { name: 'My_Skill', description: 'A skill' };
-      expect(() => SkillMetadataSchema.parse(metadata)).toThrow();
+      const result = validateSkillMetadata({ name: 'My_Skill', description: 'A skill' });
+      expect(result.valid).toBe(false);
+    });
+
+    it('should reject non-object input', () => {
+      const result1 = validateSkillMetadata(null);
+      const result2 = validateSkillMetadata('string');
+      const result3 = validateSkillMetadata([]);
+      expect(result1.valid).toBe(false);
+      expect(result2.valid).toBe(false);
+      expect(result3.valid).toBe(false);
     });
   });
 

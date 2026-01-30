@@ -1,5 +1,41 @@
 # @mastra/playground-ui
 
+## 8.0.0-alpha.2
+
+### Patch Changes
+
+- Added raw SKILL.md source view in skill detail page. The 'Source' toggle now shows the full file contents including YAML frontmatter. ([#12497](https://github.com/mastra-ai/mastra/pull/12497))
+
+## 8.0.0-alpha.1
+
+### Patch Changes
+
+- Restructured stored agents to use a thin metadata record with versioned configuration snapshots. ([#12488](https://github.com/mastra-ai/mastra/pull/12488))
+
+  The agent record now only stores metadata fields (id, status, activeVersionId, authorId, metadata, timestamps). All configuration fields (name, instructions, model, tools, etc.) live exclusively in version snapshot rows, enabling full version history and rollback.
+
+  **Key changes:**
+  - Stored Agent records are now thin metadata-only (StorageAgentType)
+  - All config lives in version snapshots (StorageAgentSnapshotType)
+  - New resolved type (StorageResolvedAgentType) merges agent record + active version config
+  - Renamed `ownerId` to `authorId` for multi-tenant filtering
+  - Changed `memory` field type from `string` to `Record<string, unknown>`
+  - Added `status` field ('draft' | 'published') to agent records
+  - Flattened CreateAgent/UpdateAgent input types (config fields at top level, no nested snapshot)
+  - Version config columns are top-level in the agent_versions table (no single snapshot jsonb column)
+  - List endpoints return resolved agents (thin record + active version config)
+  - Auto-versioning on update with retention limits and race condition handling
+
+- Improved skill activation styling with cleaner badge appearance and dark-themed tooltip on hover. ([#12487](https://github.com/mastra-ai/mastra/pull/12487))
+
+- Fixed skill detail page crashing when skills have object-typed compatibility or metadata fields. Skills from skills.sh and other external sources now display correctly. ([#12491](https://github.com/mastra-ai/mastra/pull/12491))
+
+- Updated dependencies [[`b99ceac`](https://github.com/mastra-ai/mastra/commit/b99ceace2c830dbdef47c8692d56a91954aefea2), [`deea43e`](https://github.com/mastra-ai/mastra/commit/deea43eb1366d03a864c5e597d16a48592b9893f), [`ac9ec66`](https://github.com/mastra-ai/mastra/commit/ac9ec6672779b2e6d4344e415481d1a6a7d4911a)]:
+  - @mastra/core@1.1.0-alpha.1
+  - @mastra/client-js@1.1.0-alpha.1
+  - @mastra/react@0.2.0-alpha.1
+  - @mastra/ai-sdk@1.0.3-alpha.0
+
 ## 8.0.0-alpha.0
 
 ### Minor Changes
