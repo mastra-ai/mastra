@@ -15,14 +15,6 @@ For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/
 
 :::
 
-## Installation
-
-`LocalFilesystem` is included in `@mastra/core`:
-
-```bash npm2yarn
-npm install @mastra/core@latest
-```
-
 ## Usage
 
 Add a `LocalFilesystem` to a workspace and assign it to an agent. The agent can then read, write, and manage files as part of its tasks:
@@ -47,7 +39,7 @@ const agent = new Agent({
 const response = await agent.generate('List all files in the workspace');
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -154,8 +146,6 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' });
     },
   ]}
 />
-
-**Returns:** `Promise<string | Buffer>`
 
 ### `writeFile(path, content, options?)`
 
@@ -388,17 +378,6 @@ const entries = await filesystem.readdir('/docs');
 // [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
 ```
 
-**Returns:** `Promise<FileEntry[]>`
-
-```typescript
-interface FileEntry {
-  name: string;
-  type: 'file' | 'directory';
-  size?: number;
-  modifiedAt?: Date;
-}
-```
-
 ### `exists(path)`
 
 Check if a path exists.
@@ -407,8 +386,6 @@ Check if a path exists.
 const exists = await filesystem.exists('/docs/guide.md');
 ```
 
-**Returns:** `Promise<boolean>`
-
 ### `stat(path)`
 
 Get file or directory metadata.
@@ -416,18 +393,6 @@ Get file or directory metadata.
 ```typescript
 const stat = await filesystem.stat('/docs/guide.md');
 // { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date, path: '/docs/guide.md' }
-```
-
-**Returns:** `Promise<FileStat>`
-
-```typescript
-interface FileStat {
-  type: 'file' | 'directory';
-  size: number;
-  modifiedAt: Date;
-  createdAt: Date;
-  path: string;
-}
 ```
 
 ### `getInfo()`
@@ -439,18 +404,6 @@ const info = filesystem.getInfo();
 // { id: '...', name: 'LocalFilesystem', provider: 'local', basePath: '/workspace', readOnly: false }
 ```
 
-**Returns:** `FilesystemInfo`
-
-```typescript
-interface FilesystemInfo {
-  id: string;
-  name: string;
-  provider: string;
-  basePath?: string;
-  readOnly?: boolean;
-}
-```
-
 ### `getInstructions()`
 
 Returns a description of how paths work in this filesystem. Used in tool descriptions.
@@ -460,9 +413,7 @@ const instructions = filesystem.getInstructions();
 // 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
 ```
 
-**Returns:** `string`
-
-## Path Resolution
+## Path resolution
 
 ### How basePath works
 
@@ -510,6 +461,6 @@ Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my
 
 ## Related
 
-- [WorkspaceFilesystem Interface](/reference/workspace/filesystem)
-- [Workspace Class](/reference/workspace/workspace-class)
-- [Workspace Overview](/docs/workspace/overview)
+- [WorkspaceFilesystem interface](/reference/workspace/filesystem)
+- [Workspace class](/reference/workspace/workspace-class)
+- [Workspace overview](/docs/workspace/overview)
