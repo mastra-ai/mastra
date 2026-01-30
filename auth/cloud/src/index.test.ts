@@ -32,6 +32,25 @@ describe('MastraCloudAuth', () => {
   // ============================================
 
   describe('getCurrentUser', () => {
+    it('returns null when JWT is expired', async () => {
+      // Expired JWT - exp claim is in the past
+      (decodeJwt as ReturnType<typeof vi.fn>).mockReturnValue({
+        sub: 'user-123',
+        email: 'test@example.com',
+        role: 'admin',
+        name: 'Test User',
+        iat: Math.floor(Date.now() / 1000) - 3600, // issued 1 hour ago
+        exp: Math.floor(Date.now() / 1000) - 1800, // expired 30 minutes ago
+      });
+
+      const request = new Request('http://localhost', {
+        headers: { cookie: 'mastra_session=expired-jwt-token' },
+      });
+
+      const user = await auth.getCurrentUser(request);
+      expect(user).toBeNull();
+    });
+
     it('extracts user from JWT in cookie', async () => {
       (decodeJwt as ReturnType<typeof vi.fn>).mockReturnValue({
         sub: 'user-123',
@@ -271,6 +290,26 @@ describe('MastraCloudAuth', () => {
   // ============================================
 
   describe('getRoles', () => {
+    it('returns empty array when JWT is expired', async () => {
+      (decodeJwt as ReturnType<typeof vi.fn>).mockReturnValue({
+        sub: 'user-123',
+        email: 'test@example.com',
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000) - 3600,
+        exp: Math.floor(Date.now() / 1000) - 1800, // expired
+      });
+
+      const user = {
+        id: 'user-123',
+        email: 'test@example.com',
+        sessionToken: 'expired-jwt',
+        createdAt: new Date(),
+      };
+
+      const roles = await auth.getRoles(user);
+      expect(roles).toEqual([]);
+    });
+
     it('extracts role from JWT claims', async () => {
       (decodeJwt as ReturnType<typeof vi.fn>).mockReturnValue({
         sub: 'user-123',
@@ -314,6 +353,25 @@ describe('MastraCloudAuth', () => {
   // ============================================
 
   describe('hasRole', () => {
+    it('returns false when JWT is expired', async () => {
+      (decodeJwt as ReturnType<typeof vi.fn>).mockReturnValue({
+        sub: 'user-123',
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000) - 3600,
+        exp: Math.floor(Date.now() / 1000) - 1800, // expired
+      });
+
+      const user = {
+        id: 'user-123',
+        email: 'test@example.com',
+        sessionToken: 'expired-jwt',
+        createdAt: new Date(),
+      };
+
+      const hasAdmin = await auth.hasRole(user, 'admin');
+      expect(hasAdmin).toBe(false);
+    });
+
     it('returns true when role matches', async () => {
       (decodeJwt as ReturnType<typeof vi.fn>).mockReturnValue({
         sub: 'user-123',
@@ -354,6 +412,24 @@ describe('MastraCloudAuth', () => {
   // ============================================
 
   describe('getPermissions', () => {
+    it('throws CloudApiError when JWT is expired', async () => {
+      (decodeJwt as ReturnType<typeof vi.fn>).mockReturnValue({
+        sub: 'user-123',
+        role: 'admin',
+        iat: Math.floor(Date.now() / 1000) - 3600,
+        exp: Math.floor(Date.now() / 1000) - 1800, // expired
+      });
+
+      const user = {
+        id: 'user-123',
+        email: 'test@example.com',
+        sessionToken: 'expired-jwt',
+        createdAt: new Date(),
+      };
+
+      await expect(auth.getPermissions(user)).rejects.toThrow(CloudApiError);
+    });
+
     it('uses resolvePermissions with role from JWT', async () => {
       (decodeJwt as ReturnType<typeof vi.fn>).mockReturnValue({
         sub: 'user-123',

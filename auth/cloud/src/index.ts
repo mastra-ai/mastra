@@ -101,6 +101,11 @@ export class MastraCloudAuth
       // sessionToken IS the JWT - decode it locally to get user info (NO API call)
       const claims = decodeJwt(sessionToken);
 
+      // Check if token is expired
+      if (this.isTokenExpired(claims)) {
+        return null;
+      }
+
       return {
         id: claims.sub as string,
         email: claims.email as string,
@@ -211,6 +216,12 @@ export class MastraCloudAuth
   async getRoles(user: CloudUser): Promise<string[]> {
     try {
       const claims = decodeJwt(user.sessionToken);
+
+      // Check if token is expired
+      if (this.isTokenExpired(claims)) {
+        return [];
+      }
+
       const role = claims.role as string | undefined;
       return role ? [role] : [];
     } catch {
@@ -221,6 +232,12 @@ export class MastraCloudAuth
   async hasRole(user: CloudUser, role: string): Promise<boolean> {
     try {
       const claims = decodeJwt(user.sessionToken);
+
+      // Check if token is expired
+      if (this.isTokenExpired(claims)) {
+        return false;
+      }
+
       return claims.role === role;
     } catch {
       return false;
@@ -230,6 +247,12 @@ export class MastraCloudAuth
   async getPermissions(user: CloudUser): Promise<string[]> {
     try {
       const claims = decodeJwt(user.sessionToken);
+
+      // Check if token is expired
+      if (this.isTokenExpired(claims)) {
+        throw new CloudApiError('Session token has expired', 401, 'token_expired');
+      }
+
       const role = claims.role as string | undefined;
 
       if (!role) {
@@ -239,6 +262,9 @@ export class MastraCloudAuth
 
       return resolvePermissions([role], DEFAULT_ROLES);
     } catch (error) {
+      if (error instanceof CloudApiError) {
+        throw error;
+      }
       throw new CloudApiError(
         `Failed to decode session token: ${error instanceof Error ? error.message : 'unknown error'}`,
         401,
@@ -274,5 +300,18 @@ export class MastraCloudAuth
 
     const match = cookieHeader.match(new RegExp(`${this.cookieName}=([^;]+)`));
     return match?.[1] ?? null;
+  }
+
+  /**
+   * Checks if JWT claims indicate the token is expired.
+   * Returns true if the token is expired, false if valid or no exp claim.
+   */
+  private isTokenExpired(claims: { exp?: number }): boolean {
+    if (typeof claims.exp !== 'number') {
+      // No expiration claim - token doesn't expire (but should be treated with caution)
+      return false;
+    }
+    // exp is in seconds since epoch, Date.now() is in milliseconds
+    return claims.exp < Date.now() / 1000;
   }
 }
