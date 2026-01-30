@@ -86,6 +86,7 @@ export function detectPackageManager(): 'pnpm' | 'npm' | 'yarn' {
 
 /**
  * Returns the command to update mismatched packages, or null if no mismatches.
+ * Suggests updating the peer dependency (the package that's too old), not the package requiring it.
  */
 export function getUpdateCommand(mismatches: PeerDepMismatch[]): string | null {
   if (mismatches.length === 0) {
@@ -93,7 +94,8 @@ export function getUpdateCommand(mismatches: PeerDepMismatch[]): string | null {
   }
 
   const pm = detectPackageManager();
-  const packagesToUpdate = [...new Set(mismatches.map(m => m.package))];
+  // Update the peer deps that don't satisfy the required ranges (e.g., @mastra/core)
+  const packagesToUpdate = [...new Set(mismatches.map(m => m.peerDep))];
   const packagesWithLatest = packagesToUpdate.map(pkg => `${pkg}@latest`);
   return `${pm} add ${packagesWithLatest.join(' ')}`;
 }
