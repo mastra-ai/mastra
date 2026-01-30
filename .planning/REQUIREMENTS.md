@@ -49,9 +49,9 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 
 ## Input Coordination
 
-- [ ] **COORD-01**: Basic input state tracking distinguishes agent-active vs user-active periods
-- [ ] **COORD-02**: Visual indicator shows when agent is executing a tool call ("agent busy" state)
-- [ ] **COORD-03**: User input during agent tool execution is handled gracefully (queued, warned, or documented limitation)
+- [x] **COORD-01**: Basic input state tracking distinguishes agent-active vs user-active periods
+- [x] **COORD-02**: Visual indicator shows when agent is executing a tool call ("agent busy" state)
+- [x] **COORD-03**: User input during agent tool execution is handled gracefully (queued, warned, or documented limitation)
 
 ## Traceability
 
@@ -81,9 +81,9 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 | VIS-01 | Phase 14 | Complete |
 | VIS-02 | Phase 14 | Complete |
 | VIS-03 | Phase 12 | Complete |
-| COORD-01 | Phase 15 | Pending |
-| COORD-02 | Phase 15 | Pending |
-| COORD-03 | Phase 15 | Pending |
+| COORD-01 | Phase 15 | Complete |
+| COORD-02 | Phase 15 | Complete |
+| COORD-03 | Phase 15 | Complete |
 
 **Coverage:**
 - v1.2 requirements: 27 total

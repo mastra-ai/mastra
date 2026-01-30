@@ -211,7 +211,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 15-01-PLAN.md -- useInputCoordination hook, AgentBusyOverlay component, and BrowserViewFrame wiring
+- [x] 15-01-PLAN.md -- useInputCoordination hook, AgentBusyOverlay component, and BrowserViewFrame wiring
 
 ---
 
@@ -233,8 +233,8 @@ Plans:
 | 12. Client Mapping & Click | v1.2 | 3/3 | Complete | 2026-01-29 |
 | 13. Focus & Keyboard | v1.2 | 2/2 | Complete | 2026-01-30 |
 | 14. Visual Feedback | v1.2 | 1/1 | Complete | 2026-01-30 |
-| 15. Input Coordination | v1.2 | 0/1 | Not Started | -- |
+| 15. Input Coordination | v1.2 | 1/1 | Complete | 2026-01-30 |
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-30 -- Phase 15 planned (1 plan)*
+*Last updated: 2026-01-30 -- Phase 15 complete (1 plan executed)*
