@@ -14,6 +14,7 @@ export interface LLMProvidersProps {
   className?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
 }
 
 export const LLMProviders = ({
@@ -23,6 +24,7 @@ export const LLMProviders = ({
   className,
   open,
   onOpenChange,
+  container,
 }: LLMProvidersProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const providers = dataProviders?.providers || [];
@@ -85,6 +87,7 @@ export const LLMProviders = ({
       className={className}
       open={open}
       onOpenChange={onOpenChange}
+      container={container}
     />
   );
 };

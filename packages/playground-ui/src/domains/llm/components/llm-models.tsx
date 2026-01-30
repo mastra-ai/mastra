@@ -12,6 +12,7 @@ export interface LLMModelsProps {
   className?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
 }
 
 export const LLMModels = ({
@@ -22,6 +23,7 @@ export const LLMModels = ({
   className,
   open,
   onOpenChange,
+  container,
 }: LLMModelsProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const providers = dataProviders?.providers || [];
@@ -60,6 +62,7 @@ export const LLMModels = ({
       className={className}
       open={open}
       onOpenChange={onOpenChange}
+      container={container}
     />
   );
 };

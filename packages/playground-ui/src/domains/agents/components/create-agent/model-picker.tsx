@@ -8,9 +8,10 @@ export interface ModelPickerProps {
   value: { provider: string; name: string };
   onChange: (value: { provider: string; name: string }) => void;
   error?: string;
+  container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
 }
 
-export const ModelPicker = ({ value, onChange, error }: ModelPickerProps) => {
+export const ModelPicker = ({ value, onChange, error, container }: ModelPickerProps) => {
   const [modelOpen, setModelOpen] = useState(false);
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
 
@@ -51,7 +52,8 @@ export const ModelPicker = ({ value, onChange, error }: ModelPickerProps) => {
           <LLMProviders
             value={value.provider}
             onValueChange={handleProviderSelect}
-            variant="default"
+            variant="light"
+            container={container}
           />
         </div>
 
@@ -60,9 +62,10 @@ export const ModelPicker = ({ value, onChange, error }: ModelPickerProps) => {
             llmId={currentModelProvider}
             value={value.name}
             onValueChange={handleModelSelect}
-            variant="default"
+            variant="light"
             open={modelOpen}
             onOpenChange={setModelOpen}
+            container={container}
           />
         </div>
       </div>
