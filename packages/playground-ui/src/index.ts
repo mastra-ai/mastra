@@ -66,6 +66,7 @@ export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
 export * from './ds/components/SelectElement';
 export * from './ds/components/SideDialog';
+export * from './ds/components/SplitButton';
 export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
 export * from './ds/components/Text';
