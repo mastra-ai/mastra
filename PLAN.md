@@ -1,0 +1,219 @@
+# Durable Agent POC - Implementation Plan
+
+## Overview
+
+This branch implements durable execution patterns for Mastra agents with resumable streams. The goal is to allow agents to survive crashes and clients to reconnect without missing events.
+
+**Key Concepts:**
+- **Durable Execution** - Agentic loop runs on workflow engine, survives crashes
+- **Resumable Streams** - Client can disconnect/reconnect without missing events
+
+---
+
+## Completed Work
+
+### CachingPubSub & Resumable Streams
+- [x] `CachingPubSub` decorator wrapping PubSub + MastraServerCache
+- [x] Extended `PubSub` interface with `getHistory()` and `subscribeWithReplay()`
+- [x] `createDurableAgent()` factory function
+- [x] `DurableAgent` uses CachingPubSub by default
+- [x] Stream adapter uses `subscribeWithReplay()`
+
+### Redis Cache Infrastructure
+- [x] `@mastra/redis` package with generic `RedisServerCache`
+- [x] Works with any Redis client (ioredis, node-redis, @upstash/redis)
+- [x] Presets: `upstashPreset`, `nodeRedisPreset`
+- [x] `@mastra/upstash` updated to use `@mastra/redis`
+
+---
+
+## Remaining Work
+
+### 1. Wire Caching into Evented/Inngest Agents
+
+**Priority:** High - **COMPLETED**
+
+`createEventedAgent` and `createInngestAgent` now support CachingPubSub for resumable streams.
+
+**Files:**
+- `packages/core/src/agent/durable/create-evented-agent.ts`
+- `workflows/inngest/src/durable-agent/create-inngest-agent.ts`
+
+**Tasks:**
+- [x] Add `cache` option to `CreateEventedAgentOptions`
+- [x] Wrap pubsub with CachingPubSub when cache provided
+- [x] Add `cache` option to `CreateInngestAgentOptions`
+- [x] Update Inngest agent to use CachingPubSub
+
+---
+
+### 2. Server Workflow Handlers Migration
+
+**Priority:** Medium
+
+The server currently has manual cache calls for workflow event streaming. These should use CachingPubSub instead.
+
+**File:** `packages/server/src/server/handlers/workflows.ts`
+
+**Current manual caching at:**
+- Line ~384: `listPush` for workflow events
+- Line ~442: `listPush` for workflow events
+- Line ~588: Manual replay logic
+- Line ~1037: `listPush` for workflow events
+- Line ~1136: `listPush` for workflow events
+- Line ~1195: Manual replay logic
+
+**Tasks:**
+- [ ] Replace manual `listPush` calls with CachingPubSub publish
+- [ ] Replace manual replay with `subscribeWithReplay()`
+- [ ] Remove redundant cache handling code
+
+---
+
+### 3. Integration Tests
+
+**Priority:** High - **PARTIALLY COMPLETE**
+
+**Tests completed** (`packages/core/src/agent/durable/__tests__/resumable-streams.test.ts`):
+- [x] Late subscriber receives full history via replay
+- [x] Receives both cached and live events
+- [x] Multiple concurrent subscribers each get full history
+- [x] Disconnect/reconnect scenario (unsubscribe, miss events, resubscribe with replay)
+- [x] Topic isolation between runs
+- [x] Cache cleanup
+
+**Tests remaining:**
+- [ ] Full DurableAgent stream test (with mocked LLM)
+- [ ] Cache TTL expiry behavior
+- [ ] Redis cache integration test (with actual Redis via docker)
+
+---
+
+### 4. Resume API
+
+**Priority:** Medium
+
+The `resume()` method on LocalDurableAgent needs proper implementation for resuming suspended workflows.
+
+**Current state:** Basic implementation exists but needs:
+- [ ] Proper workflow state restoration
+- [ ] Re-subscription with correct replay point
+- [ ] Handle tool approval resume flow
+
+---
+
+### 5. Cache TTL Configuration
+
+**Priority:** Low
+
+**Ideas:**
+- [ ] Make cache TTL configurable per-agent
+- [ ] Different TTLs for different event types
+- [ ] Auto-cleanup of completed run caches
+- [ ] Cache size limits / eviction policies
+
+---
+
+### 6. Observability
+
+**Priority:** Low
+
+**Ideas:**
+- [ ] Emit metrics for cache hits/misses
+- [ ] Log replay events for debugging
+- [ ] Dashboard for active streams / cache usage
+
+---
+
+## Future Ideas
+
+### Postgres Cache Backend
+Create `PostgresServerCache` for deployments without Redis.
+
+```typescript
+import { PostgresServerCache } from '@mastra/pg';
+
+const cache = new PostgresServerCache({
+  connectionString: process.env.DATABASE_URL,
+});
+```
+
+### Stream Checkpointing
+Allow clients to specify a checkpoint (last event ID) when reconnecting instead of replaying full history.
+
+```typescript
+const { output } = await durableAgent.stream(messages, {
+  resumeFromEventId: 'evt_abc123',
+});
+```
+
+### Multi-Region Stream Replication
+For globally distributed deployments, replicate stream events across regions.
+
+### Client SDK Integration
+Add resumable stream support to `@mastra/client-js`:
+
+```typescript
+const stream = await client.agents.stream('my-agent', messages, {
+  resumable: true,
+  onDisconnect: () => console.log('Disconnected, will auto-resume'),
+});
+```
+
+---
+
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Client                                  │
+│  (can disconnect/reconnect without missing events)          │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   CachingPubSub                              │
+│  ┌─────────────────────┐    ┌─────────────────────────┐     │
+│  │    Inner PubSub     │    │   MastraServerCache     │     │
+│  │  (EventEmitter,     │    │  (InMemory, Redis,      │     │
+│  │   Inngest, etc)     │    │   Postgres, etc)        │     │
+│  └─────────────────────┘    └─────────────────────────┘     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Durable Agent / Workflow Engine                 │
+│  (LocalExecutor, Inngest, Evented)                          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Quick Reference
+
+### Create a durable agent with resumable streams
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { createDurableAgent } from '@mastra/core/agent/durable';
+import { RedisServerCache } from '@mastra/redis';
+import Redis from 'ioredis';
+
+const agent = new Agent({
+  id: 'my-agent',
+  instructions: 'You are helpful',
+  model: openai('gpt-4'),
+});
+
+// With Redis for distributed deployments
+const cache = new RedisServerCache({
+  client: new Redis(process.env.REDIS_URL)
+});
+
+const durableAgent = createDurableAgent({ agent, cache });
+
+// Stream with resumable capability
+const { output, runId, cleanup } = await durableAgent.stream('Hello!');
+const text = await output.text;
+cleanup();
+```

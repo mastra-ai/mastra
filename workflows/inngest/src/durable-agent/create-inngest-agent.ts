@@ -51,6 +51,8 @@ import type {
   AgentSuspendedEventData,
 } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { MastraServerCache } from '@mastra/core/cache';
+import { CachingPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
@@ -79,6 +81,14 @@ export interface CreateInngestAgentOptions {
   name?: string;
   /** Optional PubSub override (defaults to InngestPubSub) */
   pubsub?: PubSub;
+  /**
+   * Cache instance for storing stream events.
+   * Enables resumable streams - clients can disconnect and reconnect
+   * without missing events.
+   *
+   * When provided, the pubsub is wrapped with CachingPubSub.
+   */
+  cache?: MastraServerCache;
   /** Mastra instance for observability (optional, set automatically when registered with Mastra) */
   mastra?: Mastra;
 }
@@ -161,6 +171,8 @@ export interface InngestAgent<TOutput = undefined> {
   readonly agent: Agent<any, any, TOutput>;
   /** The Inngest client */
   readonly inngest: Inngest;
+  /** The cache instance if resumable streams are enabled */
+  readonly cache?: MastraServerCache;
 
   /**
    * Stream a response using Inngest's durable execution.
@@ -246,7 +258,15 @@ export interface InngestAgent<TOutput = undefined> {
  * ```
  */
 export function createInngestAgent<TOutput = undefined>(options: CreateInngestAgentOptions): InngestAgent<TOutput> {
-  const { agent, inngest, id: idOverride, name: nameOverride, pubsub: customPubsub, mastra: mastraOption } = options;
+  const {
+    agent,
+    inngest,
+    id: idOverride,
+    name: nameOverride,
+    pubsub: customPubsub,
+    cache,
+    mastra: mastraOption,
+  } = options;
 
   // Use provided id/name or fall back to agent.id/agent.name
   const agentId = idOverride ?? agent.id;
@@ -260,7 +280,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   const workflow = createInngestDurableAgenticWorkflow({ inngest });
 
   // Create pubsub (default to InngestPubSub)
-  const pubsub = customPubsub ?? new InngestPubSub(inngest, DurableStepIds.AGENTIC_LOOP);
+  // Wrap with CachingPubSub if cache is provided (enables resumable streams)
+  const innerPubsub = customPubsub ?? new InngestPubSub(inngest, DurableStepIds.AGENTIC_LOOP);
+  const pubsub: PubSub = cache ? new CachingPubSub(innerPubsub, cache) : innerPubsub;
 
   /**
    * Trigger the workflow via Inngest event
@@ -307,6 +329,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     get inngest() {
       return inngest;
+    },
+
+    get cache() {
+      return cache;
     },
 
     async stream(messages, streamOptions): Promise<InngestAgentStreamResult<TOutput>> {

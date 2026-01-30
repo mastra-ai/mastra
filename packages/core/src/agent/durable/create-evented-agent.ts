@@ -36,6 +36,8 @@
  * ```
  */
 
+import type { MastraServerCache } from '../../cache/base';
+import { CachingPubSub } from '../../events/caching-pubsub';
 import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
 import type { MastraModelOutput, ChunkType } from '../../stream';
@@ -60,6 +62,14 @@ export interface CreateEventedAgentOptions {
   agent: Agent<any, any, any>;
   /** PubSub instance for streaming events */
   pubsub: PubSub;
+  /**
+   * Cache instance for storing stream events.
+   * Enables resumable streams - clients can disconnect and reconnect
+   * without missing events.
+   *
+   * When provided, the pubsub is wrapped with CachingPubSub.
+   */
+  cache?: MastraServerCache;
   /** Optional ID override (defaults to agent.id) */
   id?: string;
   /** Optional name override (defaults to agent.name) */
@@ -146,8 +156,10 @@ export interface EventedAgent<TOutput = undefined> {
   readonly name: string;
   /** The underlying Mastra Agent (for Mastra registration) */
   readonly agent: Agent<any, any, TOutput>;
-  /** The PubSub instance */
+  /** The PubSub instance (may be wrapped with CachingPubSub if cache was provided) */
   readonly pubsub: PubSub;
+  /** The cache instance if resumable streams are enabled */
+  readonly cache?: MastraServerCache;
 
   /**
    * Stream a response using evented durable execution.
@@ -233,7 +245,15 @@ export interface EventedAgent<TOutput = undefined> {
  * ```
  */
 export function createEventedAgent<TOutput = undefined>(options: CreateEventedAgentOptions): EventedAgent<TOutput> {
-  const { agent, pubsub, id: idOverride, name: nameOverride, mastra: mastraOption, maxSteps } = options;
+  const {
+    agent,
+    pubsub: innerPubsub,
+    cache,
+    id: idOverride,
+    name: nameOverride,
+    mastra: mastraOption,
+    maxSteps,
+  } = options;
 
   // Use provided id/name or fall back to agent.id/agent.name
   const agentId = idOverride ?? agent.id;
@@ -241,6 +261,9 @@ export function createEventedAgent<TOutput = undefined>(options: CreateEventedAg
 
   // Track mastra instance - can be set later when registered with Mastra
   let _mastra: Mastra | undefined = mastraOption;
+
+  // Wrap pubsub with CachingPubSub if cache is provided (enables resumable streams)
+  const pubsub: PubSub = cache ? new CachingPubSub(innerPubsub, cache) : innerPubsub;
 
   // Create the durable workflow for this agent
   const workflow = createDurableAgenticWorkflow({ maxSteps });
@@ -281,6 +304,10 @@ export function createEventedAgent<TOutput = undefined>(options: CreateEventedAg
 
     get pubsub() {
       return pubsub;
+    },
+
+    get cache() {
+      return cache;
     },
 
     async stream(messages, streamOptions): Promise<EventedAgentStreamResult<TOutput>> {
