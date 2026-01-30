@@ -236,8 +236,8 @@ export const skillMetadataSchema = z.object({
   name: z.string(),
   description: z.string(),
   license: z.string().optional(),
-  compatibility: z.string().optional(),
-  metadata: z.record(z.string()).optional(),
+  compatibility: z.unknown().optional(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 export const skillSourceSchema = z.discriminatedUnion('type', [

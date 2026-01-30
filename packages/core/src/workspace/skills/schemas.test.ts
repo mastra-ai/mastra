@@ -191,22 +191,25 @@ describe('schemas', () => {
       expect(result.valid).toBe(true);
     });
 
-    it('should accept string at max length (500 chars)', () => {
-      const maxCompat = 'a'.repeat(500);
-      const result = validateSkillMetadata({ ...validBase, compatibility: maxCompat });
-      expect(result.valid).toBe(true);
-    });
-
     it('should accept undefined (optional)', () => {
       const result = validateSkillMetadata(validBase);
       expect(result.valid).toBe(true);
     });
 
-    it('should reject string exceeding max length', () => {
-      const longCompat = 'a'.repeat(501);
-      const result = validateSkillMetadata({ ...validBase, compatibility: longCompat });
-      expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('500 characters or less'))).toBe(true);
+    it('should accept object compatibility (for external skill compatibility)', () => {
+      const result = validateSkillMetadata({
+        ...validBase,
+        compatibility: { requires: ['node>=18', 'typescript>=5.0'] },
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it('should accept array compatibility (for external skill compatibility)', () => {
+      const result = validateSkillMetadata({
+        ...validBase,
+        compatibility: ['node>=18', 'typescript>=5.0'],
+      });
+      expect(result.valid).toBe(true);
     });
   });
 
@@ -260,13 +263,12 @@ describe('schemas', () => {
       expect(result.valid).toBe(true);
     });
 
-    it('should reject non-string values in metadata', () => {
+    it('should accept non-string values in metadata (for external skill compatibility)', () => {
       const result = validateSkillMetadata({
         ...validBase,
-        metadata: { author: 'john', count: 42 as unknown as string },
+        metadata: { author: 'john', count: 42, keywords: ['a', 'b', 'c'] },
       });
-      expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('metadata.count'))).toBe(true);
+      expect(result.valid).toBe(true);
     });
   });
 
