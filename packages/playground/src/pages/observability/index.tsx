@@ -1,20 +1,16 @@
-import { cn } from '@/lib/utils';
 import {
   HeaderTitle,
   Header,
   MainContentLayout,
-  TracesList,
-  tracesListColumns,
-  PageHeader,
+  MainContentContent,
+  TracesTable,
   EntityOptions,
-  TracesTools,
   TraceDialog,
   parseError,
   Icon,
   HeaderAction,
   Button,
   DocsIcon,
-  EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
   useAgents,
@@ -86,7 +82,7 @@ export default function Observability() {
     }
   }, [traceId]);
 
-  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([_, value]) => ({
+  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([, value]) => ({
     value: value.id,
     label: value.name,
     type: EntityType.AGENT,
@@ -131,7 +127,9 @@ export default function Observability() {
   };
 
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
-    option?.value && setSearchParams({ entity: option?.value });
+    if (option?.value) {
+      setSearchParams({ entity: option.value });
+    }
   };
 
   const handleTraceClick = (id: string) => {
@@ -178,41 +176,27 @@ export default function Observability() {
           </HeaderAction>
         </Header>
 
-        <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] px-12 mx-auto grid content-start gap-8 h-full')}>
-            <PageHeader
-              title="Observability"
-              description="Explore observability traces for your entities"
-              icon={<EyeIcon />}
-            />
-
-            <TracesTools
-              onEntityChange={handleSelectedEntityChange}
-              onReset={handleReset}
-              selectedEntity={selectedEntityOption}
-              entityOptions={entityOptions}
-              onDateChange={handleDataChange}
-              selectedDateFrom={selectedDateFrom}
-              selectedDateTo={selectedDateTo}
-              isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
-            />
-
-            {isTracesLoading ? (
-              <EntryListSkeleton columns={tracesListColumns} />
-            ) : (
-              <TracesList
-                traces={traces}
-                selectedTraceId={selectedTraceId}
-                onTraceClick={handleTraceClick}
-                errorMsg={error?.error}
-                setEndOfListElement={setEndOfListElement}
-                filtersApplied={Boolean(filtersApplied)}
-                isFetchingNextPage={isFetchingNextPage}
-                hasNextPage={hasNextPage}
-              />
-            )}
-          </div>
-        </div>
+        <MainContentContent>
+          <TracesTable
+            traces={traces}
+            isLoading={isTracesLoading}
+            selectedTraceId={selectedTraceId}
+            onTraceClick={handleTraceClick}
+            errorMsg={error?.error}
+            filtersApplied={Boolean(filtersApplied)}
+            entityOptions={entityOptions}
+            selectedEntity={selectedEntityOption}
+            onEntityChange={handleSelectedEntityChange}
+            selectedDateFrom={selectedDateFrom}
+            selectedDateTo={selectedDateTo}
+            onDateChange={handleDataChange}
+            onReset={handleReset}
+            isLoadingFilters={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
+            setEndOfListElement={setEndOfListElement}
+            isFetchingNextPage={isFetchingNextPage}
+            hasNextPage={hasNextPage}
+          />
+        </MainContentContent>
       </MainContentLayout>
       <TraceDialog
         traceSpans={Trace?.spans}

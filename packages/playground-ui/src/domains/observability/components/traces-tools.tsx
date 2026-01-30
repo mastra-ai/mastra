@@ -1,10 +1,12 @@
 import { SelectField } from '@/ds/components/FormFields';
 import { DateTimePicker } from '@/ds/components/DateTimePicker';
 import { Button } from '@/ds/components/Button/Button';
+import { IconButton } from '@/ds/components/IconButton/IconButton';
 import { cn } from '@/lib/utils';
-import { XIcon } from 'lucide-react';
+import { XIcon, CalendarIcon } from 'lucide-react';
 import { EntityType } from '@mastra/core/observability';
 import { Icon } from '@/ds/icons/Icon';
+import { format } from 'date-fns';
 
 // UI-specific entity options that map to API EntityType values
 // Using the enum values (lowercase strings) for the type field
@@ -48,36 +50,56 @@ export function TracesTools({
           }
         }}
         value={selectedEntity?.value || ''}
-        className="min-w-[20rem]"
+        className="min-w-[12rem] [&_button]:bg-surface3 [&_button]:hover:bg-surface5"
         disabled={isLoading}
+        size="sm"
       />
-      <div className={cn('flex gap-4 items-center flex-wrap')}>
-        <span className={cn('shrink-0 text-ui-md text-neutral3')}>Filter by Date & time range</span>
+      <div className={cn('flex gap-2 items-center flex-wrap')}>
+        <span className={cn('shrink-0 text-ui-sm text-neutral3')}>Filter by Date & time range</span>
         <DateTimePicker
           placeholder="From"
           value={selectedDateFrom}
           maxValue={selectedDateTo}
           onValueChange={date => onDateChange?.(date, 'from')}
-          className="min-w-32"
           defaultTimeStrValue="12:00 AM"
           disabled={isLoading}
-        />
+        >
+          <Button className="justify-start" variant="light" size="sm" disabled={isLoading}>
+            <Icon size="sm" className="mr-1">
+              <CalendarIcon />
+            </Icon>
+            {selectedDateFrom ? (
+              <span>{format(selectedDateFrom, 'PP p')}</span>
+            ) : (
+              <span className="text-neutral3">From</span>
+            )}
+          </Button>
+        </DateTimePicker>
         <DateTimePicker
           placeholder="To"
           value={selectedDateTo}
           minValue={selectedDateFrom}
           onValueChange={date => onDateChange?.(date, 'to')}
-          className="min-w-32"
           defaultTimeStrValue="11:59 PM"
           disabled={isLoading}
-        />
+        >
+          <Button className="justify-start" variant="light" size="sm" disabled={isLoading}>
+            <Icon size="sm" className="mr-1">
+              <CalendarIcon />
+            </Icon>
+            {selectedDateTo ? (
+              <span>{format(selectedDateTo, 'PP p')}</span>
+            ) : (
+              <span className="text-neutral3">To</span>
+            )}
+          </Button>
+        </DateTimePicker>
 
-        <Button variant="light" size="lg" className="min-w-32" onClick={onReset} disabled={isLoading}>
-          <Icon>
+        {(selectedDateFrom || selectedDateTo) && (
+          <IconButton variant="ghost" size="sm" onClick={onReset} disabled={isLoading} tooltip="Reset filters">
             <XIcon />
-          </Icon>
-          Reset
-        </Button>
+          </IconButton>
+        )}
       </div>
     </div>
   );
