@@ -301,4 +301,3 @@ export interface SkillUpdateResult {
 export interface SkillsShUpdateResponse {
   updated: SkillUpdateResult[];
 }
-

@@ -67,12 +67,7 @@ export function SkillRemoveButton({ skillName, onRemove, isRemoving }: SkillRemo
   return (
     <AlertDialog>
       <AlertDialog.Trigger asChild>
-        <IconButton
-          variant="light"
-          size="sm"
-          disabled={isRemoving}
-          tooltip={`Remove ${skillName}`}
-        >
+        <IconButton variant="light" size="sm" disabled={isRemoving} tooltip={`Remove ${skillName}`}>
           {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
         </IconButton>
       </AlertDialog.Trigger>

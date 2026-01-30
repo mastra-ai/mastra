@@ -25,4 +25,9 @@ export { ReferenceViewerDialog, type ReferenceViewerDialogProps } from './refere
 // Skills.sh components
 export { AddSkillDialog, type AddSkillDialogProps } from './add-skill-dialog';
 
-export { SkillActionsHeader, SkillRemoveButton, type SkillActionsHeaderProps, type SkillRemoveButtonProps } from './skill-actions';
+export {
+  SkillActionsHeader,
+  SkillRemoveButton,
+  type SkillActionsHeaderProps,
+  type SkillRemoveButtonProps,
+} from './skill-actions';
