@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-01-23)
 
 **Core value:** Catch quality regressions before they reach users — when you modify a prompt or model, know immediately if scores dropped.
-**Current focus:** Phase 10 - Dataset Layout Update (NOT PLANNED)
+**Current focus:** Phase 10 - Dataset Layout Update (COMPLETE)
 
 ## Current Position
 
 Phase: 10 of 10 (Dataset Layout Update)
-Plan: 4 of 5 in phase 10 (10-01, 10-02, 10-03, 10-04 complete)
-Status: In progress
-Last activity: 2026-01-30 — Completed 10-04-PLAN.md
+Plan: 5 of 5 in phase 10 (all complete)
+Status: Phase complete
+Last activity: 2026-01-30 — Completed 10-05-PLAN.md
 
 Progress: [██████████] 100%
 
@@ -20,9 +20,9 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 41
+- Total plans completed: 42
 - Average duration: 4 min
-- Total execution time: 2.25 hours
+- Total execution time: 2.33 hours
 
 **By Phase:**
 
@@ -37,11 +37,11 @@ Progress: [██████████] 100%
 | 07-csv-import                | 5     | 10 min | 2 min    |
 | 08-item-selection-actions    | 4     | 13 min | 3.25 min |
 | 09-dataset-items-detail-view | 5     | 16 min | 3.2 min  |
-| 10-dataset-layout-update     | 4     | 19 min | 4.75 min |
+| 10-dataset-layout-update     | 5     | 24 min | 4.8 min  |
 
 **Recent Trend:**
 
-- Last 5 plans: 09-05 (4 min), 10-01 (5 min), 10-03 (2 min), 10-02 (9 min), 10-04 (3 min)
+- Last 5 plans: 10-01 (5 min), 10-03 (2 min), 10-02 (9 min), 10-04 (3 min), 10-05 (5 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -121,6 +121,9 @@ Recent decisions affecting current work:
 - ItemDetailToolbar with SplitButton for Edit + Delete/Duplicate dropdown
 - ItemDetailPanel uses SideDialog.CodeSection for JSON display consistency
 - Panel structure: toolbar header + scrollable content body
+- CSS Grid with conditional columns for master-detail layout (45%/55% split)
+- Max-width transition: 50rem collapsed, 100rem expanded
+- transitions.allSlow (300ms) for smooth layout animations
 
 ### Pending Todos
 
@@ -131,6 +134,7 @@ None yet.
 - Phase 9 added: Dataset Items Detail View (EntryList, SideDialog, edit/delete flows)
 - Phase 9 complete: Full click-to-view-details flow implemented
 - Phase 10 added: Dataset Layout Update
+- Phase 10 complete: Master-detail layout with inline item panel
 
 ### Blockers/Concerns
 
@@ -139,5 +143,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 10-04-PLAN.md (Item Detail Components)
+Stopped at: Completed 10-05-PLAN.md (Master-Detail Layout Integration)
 Resume file: None
