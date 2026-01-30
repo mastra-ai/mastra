@@ -25,8 +25,9 @@ describe('RedisServerCache', () => {
   });
 
   describe('get', () => {
-    it('should get a value with prefixed key', async () => {
-      mockClient.get.mockResolvedValue({ foo: 'bar' });
+    it('should get a value with prefixed key and deserialize JSON', async () => {
+      // Redis returns JSON string, cache deserializes it
+      mockClient.get.mockResolvedValue('{"foo":"bar"}');
 
       const result = await cache.get('test-key');
 
@@ -41,16 +42,24 @@ describe('RedisServerCache', () => {
 
       expect(result).toBeNull();
     });
+
+    it('should return plain string if not valid JSON', async () => {
+      mockClient.get.mockResolvedValue('plain-string');
+
+      const result = await cache.get('test-key');
+
+      expect(result).toBe('plain-string');
+    });
   });
 
   describe('set', () => {
-    it('should set a value with TTL by default (ioredis style)', async () => {
+    it('should set a value with TTL by default (ioredis style) and serialize to JSON', async () => {
       mockClient.set.mockResolvedValue('OK');
 
       await cache.set('test-key', { foo: 'bar' });
 
-      // Default uses ioredis style: set(key, value, 'EX', seconds)
-      expect(mockClient.set).toHaveBeenCalledWith('mastra:cache:test-key', { foo: 'bar' }, 'EX', 300);
+      // Default uses ioredis style: set(key, serialized-value, 'EX', seconds)
+      expect(mockClient.set).toHaveBeenCalledWith('mastra:cache:test-key', '{"foo":"bar"}', 'EX', 300);
     });
 
     it('should set without TTL when ttlSeconds is 0', async () => {
@@ -59,7 +68,7 @@ describe('RedisServerCache', () => {
 
       await noTtlCache.set('test-key', { foo: 'bar' });
 
-      expect(mockClient.set).toHaveBeenCalledWith('mastra:cache:test-key', { foo: 'bar' });
+      expect(mockClient.set).toHaveBeenCalledWith('mastra:cache:test-key', '{"foo":"bar"}');
     });
 
     it('should use custom TTL when specified', async () => {
@@ -68,7 +77,7 @@ describe('RedisServerCache', () => {
 
       await customTtlCache.set('test-key', { foo: 'bar' });
 
-      expect(mockClient.set).toHaveBeenCalledWith('mastra:cache:test-key', { foo: 'bar' }, 'EX', 600);
+      expect(mockClient.set).toHaveBeenCalledWith('mastra:cache:test-key', '{"foo":"bar"}', 'EX', 600);
     });
   });
 
@@ -84,13 +93,13 @@ describe('RedisServerCache', () => {
   });
 
   describe('listPush', () => {
-    it('should push value to list and refresh TTL', async () => {
+    it('should push serialized value to list and refresh TTL', async () => {
       mockClient.rpush.mockResolvedValue(1);
       mockClient.expire.mockResolvedValue(1);
 
       await cache.listPush('my-list', { event: 'test' });
 
-      expect(mockClient.rpush).toHaveBeenCalledWith('mastra:cache:my-list', { event: 'test' });
+      expect(mockClient.rpush).toHaveBeenCalledWith('mastra:cache:my-list', '{"event":"test"}');
       expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:my-list', 300);
     });
 
@@ -100,20 +109,21 @@ describe('RedisServerCache', () => {
 
       await noTtlCache.listPush('my-list', { event: 'test' });
 
-      expect(mockClient.rpush).toHaveBeenCalled();
+      expect(mockClient.rpush).toHaveBeenCalledWith('mastra:cache:my-list', '{"event":"test"}');
       expect(mockClient.expire).not.toHaveBeenCalled();
     });
   });
 
   describe('listFromTo', () => {
-    it('should get range from list', async () => {
-      const events = [{ id: '1' }, { id: '2' }, { id: '3' }];
-      mockClient.lrange.mockResolvedValue(events);
+    it('should get range from list and deserialize items', async () => {
+      // Redis returns JSON strings, cache deserializes them
+      const storedEvents = ['{"id":"1"}', '{"id":"2"}', '{"id":"3"}'];
+      mockClient.lrange.mockResolvedValue(storedEvents);
 
       const result = await cache.listFromTo('my-list', 0, 2);
 
       expect(mockClient.lrange).toHaveBeenCalledWith('mastra:cache:my-list', 0, 2);
-      expect(result).toEqual(events);
+      expect(result).toEqual([{ id: '1' }, { id: '2' }, { id: '3' }]);
     });
 
     it('should use -1 as default end index', async () => {
@@ -188,8 +198,8 @@ describe('RedisServerCache', () => {
 
       await upstashCache.set('test-key', 'value');
 
-      // Upstash uses { ex: seconds } style
-      expect(mockClient.set).toHaveBeenCalledWith('mastra:cache:test-key', 'value', { ex: 300 });
+      // Upstash uses { ex: seconds } style, value is serialized to JSON
+      expect(mockClient.set).toHaveBeenCalledWith('mastra:cache:test-key', '"value"', { ex: 300 });
     });
 
     it('should use upstash-style scan', async () => {
@@ -210,8 +220,8 @@ describe('RedisServerCache', () => {
 
       await nodeCache.set('test-key', 'value');
 
-      // node-redis uses { EX: seconds } style
-      expect(mockClient.set).toHaveBeenCalledWith('mastra:cache:test-key', 'value', { EX: 300 });
+      // node-redis uses { EX: seconds } style, value is serialized to JSON
+      expect(mockClient.set).toHaveBeenCalledWith('mastra:cache:test-key', '"value"', { EX: 300 });
     });
 
     it('should use node-redis-style scan', async () => {

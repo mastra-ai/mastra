@@ -254,11 +254,36 @@ export class RedisServerCache extends MastraServerCache {
   }
 
   /**
+   * Serialize a value to JSON string for Redis storage
+   */
+  private serialize(value: unknown): string {
+    return JSON.stringify(value);
+  }
+
+  /**
+   * Deserialize a JSON string from Redis
+   */
+  private deserialize(value: unknown): unknown {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value; // Return as-is if not valid JSON
+      }
+    }
+    return value;
+  }
+
+  /**
    * Get a value from the cache
    */
   async get(key: string): Promise<unknown> {
     const fullKey = this.getKey(key);
-    return this.client.get(fullKey);
+    const value = await this.client.get(fullKey);
+    if (value === null) {
+      return null;
+    }
+    return this.deserialize(value);
   }
 
   /**
@@ -266,10 +291,11 @@ export class RedisServerCache extends MastraServerCache {
    */
   async set(key: string, value: unknown): Promise<void> {
     const fullKey = this.getKey(key);
+    const serialized = this.serialize(value);
     if (this.ttlSeconds > 0) {
-      await this.setWithExpiry(this.client, fullKey, value, this.ttlSeconds);
+      await this.setWithExpiry(this.client, fullKey, serialized, this.ttlSeconds);
     } else {
-      await this.client.set(fullKey, value);
+      await this.client.set(fullKey, serialized);
     }
   }
 
@@ -286,7 +312,8 @@ export class RedisServerCache extends MastraServerCache {
    */
   async listPush(key: string, value: unknown): Promise<void> {
     const fullKey = this.getKey(key);
-    await this.client.rpush(fullKey, value);
+    const serialized = this.serialize(value);
+    await this.client.rpush(fullKey, serialized);
 
     // Refresh TTL on push if TTL is enabled
     if (this.ttlSeconds > 0) {
@@ -304,7 +331,8 @@ export class RedisServerCache extends MastraServerCache {
    */
   async listFromTo(key: string, from: number, to: number = -1): Promise<unknown[]> {
     const fullKey = this.getKey(key);
-    return this.client.lrange(fullKey, from, to);
+    const values = await this.client.lrange(fullKey, from, to);
+    return values.map(v => this.deserialize(v));
   }
 
   /**

@@ -72,7 +72,7 @@ The server currently has manual cache calls for workflow event streaming. These 
 
 ### 3. Integration Tests
 
-**Priority:** High - **PARTIALLY COMPLETE**
+**Priority:** High - **COMPLETE**
 
 **Tests completed:**
 
@@ -108,8 +108,20 @@ The server currently has manual cache calls for workflow event streaming. These 
 - [x] Partial cache expiry handling
 - [x] Default TTL values
 
-**Tests remaining:**
-- [ ] Redis cache integration test (with actual Redis via docker)
+`stores/redis/src/integration.test.ts` (11 tests):
+- [x] Set and get values with automatic JSON serialization
+- [x] Return null for non-existent keys
+- [x] Delete keys
+- [x] Push and retrieve list items
+- [x] Return list length
+- [x] Return range of items
+- [x] TTL expiry behavior with real Redis
+- [x] CachingPubSub: replay events to late subscriber
+- [x] CachingPubSub: receive both cached and live events
+- [x] CachingPubSub: disconnect/reconnect scenario
+- [x] CachingPubSub: topic isolation
+
+**All integration tests complete!**
 
 ---
 
