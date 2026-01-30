@@ -48,8 +48,11 @@ export function SkillsTable({
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
 
+  // Helper to check if a skill is downloaded (lives in .agents/skills/)
+  const isDownloaded = (skill: SkillMetadata) => skill.path?.includes('.agents/skills/') ?? false;
+
   // Check if any skill is downloaded (for determining if we need the actions column)
-  const hasDownloadedSkills = skills.some(skill => skill.isDownloaded);
+  const hasDownloadedSkills = skills.some(isDownloaded);
   const hasRowActions = (!!onRemoveSkill || !!onUpdateSkill) && hasDownloadedSkills;
   const effectiveColumns = hasRowActions ? columnsWithActions : columns;
 
@@ -107,7 +110,7 @@ export function SkillsTable({
                     {hasRowActions && (
                       <div className="flex justify-end gap-1" onClick={e => e.stopPropagation()}>
                         {/* Only show actions for downloaded skills */}
-                        {skill.isDownloaded && (
+                        {isDownloaded(skill) && (
                           <>
                             {onUpdateSkill && (
                               <SkillUpdateButton

@@ -133,8 +133,8 @@ export interface SkillMetadata {
   license?: string;
   compatibility?: unknown;
   metadata?: Record<string, unknown>;
-  /** True if skill was downloaded from skills.sh (lives in .agents/skills/) */
-  isDownloaded?: boolean;
+  /** Path to the skill directory */
+  path: string;
 }
 
 export interface Skill extends SkillMetadata {

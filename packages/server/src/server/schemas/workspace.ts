@@ -255,12 +255,12 @@ export const skillSchema = skillMetadataSchema.extend({
   assets: z.array(z.string()),
 });
 
-export const skillMetadataWithSourceSchema = skillMetadataSchema.extend({
-  isDownloaded: z.boolean().describe('True if skill was downloaded from skills.sh (lives in .agents/skills/)'),
+export const skillMetadataWithPathSchema = skillMetadataSchema.extend({
+  path: z.string().describe('Path to the skill directory'),
 });
 
 export const listSkillsResponseSchema = z.object({
-  skills: z.array(skillMetadataWithSourceSchema),
+  skills: z.array(skillMetadataWithPathSchema),
   isSkillsConfigured: z.boolean().describe('Whether skills are configured in the workspace'),
 });
 

@@ -703,28 +703,23 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
 
       const skillsList = await skills.list();
 
-      // Determine which skills are from .agents/skills/ (downloaded from skills.sh)
-      // We need to get full skill details to check the path
-      const skillsWithGitHubInfo = await Promise.all(
+      // Get full skill details to include path in response
+      const skillsWithPath = await Promise.all(
         skillsList.map(async skillMeta => {
-          // Get full skill to access path
           const fullSkill = await skills.get(skillMeta.name);
-          // Skills installed via skills.sh live in .agents/skills/
-          const isDownloaded = fullSkill?.path?.includes('.agents/skills/') ?? false;
-
           return {
             name: skillMeta.name,
             description: skillMeta.description,
             license: skillMeta.license,
             compatibility: skillMeta.compatibility,
             metadata: skillMeta.metadata,
-            isDownloaded,
+            path: fullSkill?.path ?? '',
           };
         }),
       );
 
       return {
-        skills: skillsWithGitHubInfo,
+        skills: skillsWithPath,
         isSkillsConfigured: true,
       };
     } catch (error) {
