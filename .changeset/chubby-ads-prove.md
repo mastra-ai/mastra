@@ -2,6 +2,6 @@
 'mastra': patch
 ---
 
-Fixed peer dependency checker:
-- Correctly validates prerelease versions (e.g., 1.1.0-alpha.1 now satisfies >=1.0.0-0 <2.0.0-0)
-- Fix command now suggests upgrading the outdated peer dependency (e.g., @mastra/core) instead of the packages that require it
+Fixed peer dependency checker fix command to suggest the correct package to upgrade:
+- If peer dep is too old (below range) → suggests upgrading the peer dep (e.g., `@mastra/core`)
+- If peer dep is too new (above range) → suggests upgrading the package requiring it (e.g., `@mastra/libsql`)

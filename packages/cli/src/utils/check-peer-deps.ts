@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 
 import { getPackageInfo } from 'local-pkg';
 import pc from 'picocolors';
-import { satisfies } from 'semver';
+import { satisfies, gtr } from 'semver';
 
 import type { MastraPackageInfo } from './mastra-packages.js';
 
@@ -86,7 +86,9 @@ export function detectPackageManager(): 'pnpm' | 'npm' | 'yarn' {
 
 /**
  * Returns the command to update mismatched packages, or null if no mismatches.
- * Suggests updating the peer dependency (the package that's too old), not the package requiring it.
+ *
+ * - If peer dep is BELOW the required range → upgrade the peer dep (e.g., @mastra/core)
+ * - If peer dep is ABOVE the required range → upgrade the package requiring it (e.g., @mastra/libsql)
  */
 export function getUpdateCommand(mismatches: PeerDepMismatch[]): string | null {
   if (mismatches.length === 0) {
@@ -94,9 +96,22 @@ export function getUpdateCommand(mismatches: PeerDepMismatch[]): string | null {
   }
 
   const pm = detectPackageManager();
-  // Update the peer deps that don't satisfy the required ranges (e.g., @mastra/core)
-  const packagesToUpdate = [...new Set(mismatches.map(m => m.peerDep))];
-  const packagesWithLatest = packagesToUpdate.map(pkg => `${pkg}@latest`);
+  const packagesToUpdate = new Set<string>();
+
+  for (const m of mismatches) {
+    // Check if installed version is above the range (too new) or below (too old)
+    const isAboveRange = gtr(m.installedVersion, m.requiredRange, { includePrerelease: true });
+
+    if (isAboveRange) {
+      // Peer dep is too new - upgrade the package that requires it
+      packagesToUpdate.add(m.package);
+    } else {
+      // Peer dep is too old - upgrade the peer dep itself
+      packagesToUpdate.add(m.peerDep);
+    }
+  }
+
+  const packagesWithLatest = [...packagesToUpdate].map(pkg => `${pkg}@latest`);
   return `${pm} add ${packagesWithLatest.join(' ')}`;
 }
 
