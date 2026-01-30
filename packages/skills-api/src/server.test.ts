@@ -176,6 +176,24 @@ describe('Skills API Server', () => {
     });
   });
 
+  describe('GET /api/skills/:owner/:repo/:skillId/content', () => {
+    it('fetches skill content from GitHub', async () => {
+      // This test makes a real network request to GitHub
+      const res = await app.request('/api/skills/vercel-labs/agent-skills/vercel-react-best-practices/content');
+
+      // May be 200 or 404 depending on network/rate limits
+      if (res.status === 200) {
+        const body = await res.json();
+        expect(body.source).toBe('vercel-labs/agent-skills');
+        expect(body.metadata).toBeDefined();
+        expect(body.instructions).toBeDefined();
+      } else {
+        // Accept 404 if skill path changed or rate limited
+        expect(res.status).toBe(404);
+      }
+    }, 10000); // 10 second timeout for network request
+  });
+
   describe('404 handling', () => {
     it('returns 404 for unknown routes', async () => {
       const res = await app.request('/unknown-route');

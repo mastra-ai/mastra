@@ -4,6 +4,8 @@
  */
 
 import { Hono } from 'hono';
+
+import { fetchSkillFromGitHub } from '../github/index.js';
 import { skills, metadata, getSources, getOwners, getTopSkills, getTopSources } from '../registry/index.js';
 import type { PaginatedSkillsResponse, SkillSearchParams } from '../registry/types.js';
 
@@ -260,6 +262,32 @@ skillsRouter.get('/:owner/:repo/:skillId', c => {
   return c.json({
     ...skill,
     installCommand,
+  });
+});
+
+/**
+ * GET /api/skills/:owner/:repo/:skillId/content
+ * Fetch the full SKILL.md content from GitHub
+ */
+skillsRouter.get('/:owner/:repo/:skillId/content', async c => {
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  const skillId = c.req.param('skillId');
+  const branch = c.req.query('branch') || 'main';
+
+  const result = await fetchSkillFromGitHub(owner, repo, skillId, branch);
+
+  if (!result.success) {
+    return c.json({ error: result.error }, 404);
+  }
+
+  return c.json({
+    source: `${owner}/${repo}`,
+    skillId,
+    path: result.path,
+    metadata: result.content?.metadata,
+    instructions: result.content?.instructions,
+    raw: result.content?.raw,
   });
 });
 

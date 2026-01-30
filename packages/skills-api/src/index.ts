@@ -19,3 +19,7 @@ export { skills, metadata, getSources, getOwners, getTopSkills, getTopSources } 
 // Scraper exports
 export { scrapeSkills, enrichSkills, scrapeAndSave } from './scraper/scrape.js';
 export type { ScrapedSkill, EnrichedSkill } from './scraper/scrape.js';
+
+// GitHub fetch exports
+export { fetchSkillFromGitHub, listSkillsInRepo } from './github/index.js';
+export type { SkillContent, FetchSkillResult } from './github/index.js';
