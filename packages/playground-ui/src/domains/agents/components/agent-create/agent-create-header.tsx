@@ -34,17 +34,15 @@ export function AgentCreateHeader({ onPublish, isSubmitting = false }: AgentCrea
           Create Agent
         </HeaderTitle>
       </HeaderGroup>
-      <HeaderGroup>
+      <HeaderAction>
         <Combobox
           options={mockRevisions}
           placeholder="Revisions"
           value="current"
           onValueChange={() => {}}
-          variant="ghost"
+          variant="default"
           size="sm"
         />
-      </HeaderGroup>
-      <HeaderAction>
         <Button variant="primary" onClick={onPublish} disabled={isSubmitting}>
           {isSubmitting ? (
             <>

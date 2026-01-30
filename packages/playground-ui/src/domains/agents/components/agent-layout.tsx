@@ -1,7 +1,3 @@
-import { Panel, useDefaultLayout, Group, PanelImperativeHandle } from 'react-resizable-panels';
-import { getMainContentContentClassName } from '@/ds/components/MainContent';
-import { PanelSeparator } from '@/lib/resize/separator';
-import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
 import { cn } from '@/lib/utils';
 
 export interface AgentLayoutProps {
@@ -11,55 +7,20 @@ export interface AgentLayoutProps {
   rightSlot?: React.ReactNode;
 }
 
-export const AgentLayout = ({ agentId, children, leftSlot, rightSlot }: AgentLayoutProps) => {
-  const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `agent-layout-${agentId}`,
-    storage: localStorage,
-  });
-
-  const computedClassName = getMainContentContentClassName({
-    isCentered: false,
-    isDivided: true,
-    hasLeftServiceColumn: Boolean(leftSlot),
-  });
-
+export const AgentLayout = ({ children, leftSlot, rightSlot }: AgentLayoutProps) => {
   return (
-    <Group className={cn(computedClassName, 'border-t border-border1')} defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
-      {leftSlot && (
-        <>
-          <CollapsiblePanel
-            direction="left"
-            id="left-slot"
-            minSize={200}
-            maxSize={'30%'}
-            defaultSize={200}
-            collapsedSize={60}
-            collapsible={true}
-          >
-            {leftSlot}
-          </CollapsiblePanel>
-          <PanelSeparator />
-        </>
+    <div
+      className={cn(
+        'grid h-full overflow-hidden border-t border-border1',
+        rightSlot && !leftSlot && 'grid-cols-2',
+        leftSlot && !rightSlot && 'grid-cols-2',
+        leftSlot && rightSlot && 'grid-cols-3',
+        !leftSlot && !rightSlot && 'grid-cols-1',
       )}
-      <Panel id="main-slot" className="grid overflow-y-auto relative bg-surface1 py-4">
-        {children}
-      </Panel>
-      {rightSlot && (
-        <>
-          <PanelSeparator />
-          <CollapsiblePanel
-            direction="right"
-            id="right-slot"
-            minSize={300}
-            maxSize={'50%'}
-            defaultSize="30%"
-            collapsedSize={60}
-            collapsible={true}
-          >
-            {rightSlot}
-          </CollapsiblePanel>
-        </>
-      )}
-    </Group>
+    >
+      {leftSlot && <div className="overflow-y-auto bg-surface1">{leftSlot}</div>}
+      <div className="overflow-y-auto bg-surface1 py-4">{children}</div>
+      {rightSlot && <div className="overflow-y-auto bg-surface2 border-l border-border1">{rightSlot}</div>}
+    </div>
   );
 };
