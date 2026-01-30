@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: CSV Import** - Bulk item creation from CSV files ✓
 - [x] **Phase 8: Item Selection & Actions** - Bulk operations via item selection ✓
 - [x] **Phase 9: Dataset Items Detail View** - EntryList with SideDialog, edit/delete flows ✓
-- [ ] **Phase 10: Dataset Layout Update** - [To be planned]
+- [x] **Phase 10: Dataset Layout Update** - Master-detail layout with inline item viewing ✓
 
 ## Phase Details
 
@@ -237,11 +237,12 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 10-01-PLAN.md — SplitButton design system component
-- [ ] 10-02-PLAN.md — DatasetHeader with three-dot menu
-- [ ] 10-03-PLAN.md — ItemsToolbar with split button and reorganized actions
-- [ ] 10-04-PLAN.md — ItemDetailPanel and ItemDetailToolbar extraction
-- [ ] 10-05-PLAN.md — ItemsMasterDetail container and DatasetDetail integration
+
+- [x] 10-01-PLAN.md — SplitButton design system component
+- [x] 10-02-PLAN.md — DatasetHeader with three-dot menu
+- [x] 10-03-PLAN.md — ItemsToolbar with split button and reorganized actions
+- [x] 10-04-PLAN.md — ItemDetailPanel and ItemDetailToolbar extraction
+- [x] 10-05-PLAN.md — ItemsMasterDetail container and DatasetDetail integration
 
 ## Progress
 
@@ -259,4 +260,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. CSV Import                | 5/5            | ✓ Complete | 2026-01-27 |
 | 8. Item Selection & Actions  | 4/4            | ✓ Complete | 2026-01-27 |
 | 9. Dataset Items Detail View | 5/5            | ✓ Complete | 2026-01-29 |
-| 10. Dataset Layout Update    | 0/5            | ○ Pending  |            |
+| 10. Dataset Layout Update    | 5/5            | ✓ Complete | 2026-01-30 |
