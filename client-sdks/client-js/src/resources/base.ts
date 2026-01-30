@@ -1,4 +1,5 @@
 import type { RequestOptions, ClientOptions } from '../types';
+import { MastraClientError } from '../types';
 import { normalizeRoutePath } from '../utils';
 
 export class BaseResource {
@@ -72,16 +73,17 @@ export class BaseResource {
 
         if (!response.ok) {
           const errorBody = await response.text();
+          let parsedBody: unknown;
           let errorMessage = `HTTP error! status: ${response.status}`;
           try {
-            const errorJson = JSON.parse(errorBody);
-            errorMessage += ` - ${JSON.stringify(errorJson)}`;
+            parsedBody = JSON.parse(errorBody);
+            errorMessage += ` - ${JSON.stringify(parsedBody)}`;
           } catch {
             if (errorBody) {
               errorMessage += ` - ${errorBody}`;
             }
           }
-          throw new Error(errorMessage);
+          throw new MastraClientError(response.status, response.statusText, errorMessage, parsedBody);
         }
 
         if (options.stream) {
