@@ -12,6 +12,7 @@ import {
   ReferenceViewerDialog,
   useWorkspaceSkill,
   useWorkspaceSkillReference,
+  useWorkspaceFile,
 } from '@mastra/playground-ui';
 
 import { Link, useParams, useSearchParams } from 'react-router';
@@ -37,6 +38,12 @@ export default function WorkspaceSkillDetailPage() {
 
   // Fetch skill details - pass workspaceId to fetch from correct workspace
   const { data: skill, isLoading, error } = useWorkspaceSkill(decodedSkillName, { workspaceId });
+
+  // Fetch raw SKILL.md file for "Source" view
+  const { data: rawSkillMdData } = useWorkspaceFile(skill?.path ? `${skill.path}/SKILL.md` : '', {
+    enabled: !!skill?.path,
+    workspaceId,
+  });
 
   // Fetch reference content when viewing
   const { data: referenceData, isLoading: isLoadingReference } = useWorkspaceSkillReference(
@@ -129,7 +136,7 @@ export default function WorkspaceSkillDetailPage() {
 
       <div className="grid overflow-y-auto overflow-x-hidden h-full">
         <div className="max-w-[100rem] px-[3rem] mx-auto py-8 h-full w-full overflow-x-hidden">
-          <SkillDetail skill={skill} onReferenceClick={setViewingReference} />
+          <SkillDetail skill={skill} rawSkillMd={rawSkillMdData?.content} onReferenceClick={setViewingReference} />
         </div>
       </div>
 
