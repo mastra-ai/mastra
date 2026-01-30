@@ -523,7 +523,7 @@ export type SerializedStepFlowEntry =
       };
     };
 
-export type StepWithComponent = Step<string, any, any, any, any, any> & {
+export type StepWithComponent = Step<string, any, any, any, any, any, any, any> & {
   component?: string;
   steps?: Record<string, StepWithComponent>;
 };
@@ -578,7 +578,7 @@ export type StepParamsLegacy<
   TStepOutput,
   TResume,
   TSuspend,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > = {
   id: TStepId;
   description?: string;
@@ -720,7 +720,7 @@ export type WorkflowConfig<
   TInput,
   TOutput,
   TSteps extends Step[],
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > = {
   mastra?: Mastra;
   id: TWorkflowId;

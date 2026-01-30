@@ -38,6 +38,7 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWork
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import type { IRequestContext } from '../request-context';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -120,11 +121,10 @@ export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
-  TRequestContext extends Record<string, any> | unknown = unknown,
 > extends MastraBase {
   public id: TAgentId;
   public name: string;
-  #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
+  #instructions: DynamicArgument<AgentInstructions>;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
   #originalModel: DynamicArgument<MastraModelConfig> | ModelFallbacks;
@@ -136,14 +136,14 @@ export class Agent<
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>>;
   #defaultNetworkOptions: DynamicArgument<NetworkOptions>;
-  #tools: DynamicArgument<TTools, TRequestContext>;
+  #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: MastraVoice;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
-  #requestContextSchema?: ZodSchema<TRequestContext>;
+  #requestContextSchema?: ZodSchema;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
 
@@ -169,7 +169,7 @@ export class Agent<
    * });
    * ```
    */
-  constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
+  constructor(config: AgentConfig<TAgentId, TTools, TOutput>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
@@ -802,7 +802,7 @@ export class Agent<
     | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
       const result = this.#instructions({
-        requestContext: requestContext as RequestContext<TRequestContext>,
+        requestContext,
         mastra: this.#mastra,
       });
       return resolveMaybePromise(result, instructions => {
@@ -1082,7 +1082,7 @@ export class Agent<
     }
 
     const result = this.#tools({
-      requestContext: requestContext as RequestContext<TRequestContext>,
+      requestContext,
       mastra: this.#mastra,
     });
 
@@ -2943,10 +2943,10 @@ export class Agent<
       getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
       executeOnFinish: this.#executeOnFinish.bind(this),
-      inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
-        this.listResolvedInputProcessors(requestContext),
-      outputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
-        this.listResolvedOutputProcessors(requestContext),
+      inputProcessors: async ({ requestContext }: { requestContext: IRequestContext }) =>
+        this.listResolvedInputProcessors(requestContext as RequestContext),
+      outputProcessors: async ({ requestContext }: { requestContext: IRequestContext }) =>
+        this.listResolvedOutputProcessors(requestContext as RequestContext),
       llm,
     };
 

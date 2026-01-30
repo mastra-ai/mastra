@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
-import type { RequestContext } from '../request-context';
+import type { IRequestContext, RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
 import { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
@@ -88,13 +88,10 @@ describe('Agent Type Tests', () => {
   });
 
   describe('requestContextSchema type inference', () => {
-    it('should type requestContext in instructions function based on requestContextSchema', () => {
-      const config: AgentConfig<
-        'test-agent',
-        Record<string, never>,
-        undefined,
-        { userId: string; tenantId: string }
-      > = {
+    it('should provide IRequestContext in instructions function', () => {
+      // With the new design, DynamicArgument uses IRequestContext interface
+      // This allows any RequestContext<T> to be passed, avoiding variance issues
+      const config: AgentConfig<'test-agent', Record<string, never>, undefined> = {
         id: 'test-agent',
         name: 'Test Agent',
         model: {} as any,
@@ -103,16 +100,16 @@ describe('Agent Type Tests', () => {
           tenantId: z.string(),
         }),
         instructions: ({ requestContext }) => {
-          // Verify requestContext is typed
-          expectTypeOf(requestContext).toEqualTypeOf<RequestContext<{ userId: string; tenantId: string }>>();
+          // requestContext is IRequestContext (the interface without generics)
+          expectTypeOf(requestContext).toEqualTypeOf<IRequestContext>();
 
-          // Verify get() returns the correct type
+          // get() returns unknown since IRequestContext doesn't have type info
           const userId = requestContext.get('userId');
-          expectTypeOf(userId).toEqualTypeOf<string>();
+          expectTypeOf(userId).toEqualTypeOf<unknown>();
 
-          // Verify .all returns the typed object
+          // .all returns Record<string, unknown>
           const all = requestContext.all;
-          expectTypeOf(all).toEqualTypeOf<{ userId: string; tenantId: string }>();
+          expectTypeOf(all).toEqualTypeOf<Record<string, unknown>>();
 
           return 'You are a helpful assistant';
         },
@@ -121,13 +118,8 @@ describe('Agent Type Tests', () => {
       expectTypeOf(config.id).toEqualTypeOf<'test-agent'>();
     });
 
-    it('should type requestContext in tools function based on requestContextSchema', () => {
-      const config: AgentConfig<
-        'test-agent',
-        Record<string, never>,
-        undefined,
-        { featureFlags: { enableSearch: boolean } }
-      > = {
+    it('should provide IRequestContext in tools function', () => {
+      const config: AgentConfig<'test-agent', Record<string, never>, undefined> = {
         id: 'test-agent',
         name: 'Test Agent',
         model: {} as any,
@@ -138,18 +130,33 @@ describe('Agent Type Tests', () => {
         }),
         instructions: 'You are a helpful assistant',
         tools: ({ requestContext }) => {
-          // Verify requestContext is typed
-          expectTypeOf(requestContext).toEqualTypeOf<RequestContext<{ featureFlags: { enableSearch: boolean } }>>();
+          // requestContext is IRequestContext (the interface without generics)
+          expectTypeOf(requestContext).toEqualTypeOf<IRequestContext>();
 
-          // Verify get() returns the correct type
+          // get() returns unknown since IRequestContext doesn't have type info
           const flags = requestContext.get('featureFlags');
-          expectTypeOf(flags).toEqualTypeOf<{ enableSearch: boolean }>();
+          expectTypeOf(flags).toEqualTypeOf<unknown>();
 
           return {};
         },
       };
 
       expectTypeOf(config.id).toEqualTypeOf<'test-agent'>();
+    });
+
+    it('should allow typed RequestContext to be assigned to IRequestContext parameter', () => {
+      // This is the key benefit - typed RequestContext can be passed to functions
+      // expecting IRequestContext, solving the variance issue
+      type TypedContext = { userId: string; tenantId: string };
+
+      // A function that accepts IRequestContext
+      const fn = ({ requestContext }: { requestContext: IRequestContext }) => {
+        return requestContext.get('userId');
+      };
+
+      // A typed RequestContext should be assignable
+      const typedCtx = {} as RequestContext<TypedContext>;
+      expectTypeOf(typedCtx).toMatchTypeOf<IRequestContext>();
     });
   });
 });

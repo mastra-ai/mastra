@@ -27,7 +27,7 @@ export type ExecuteFunctionParams<
   TResume,
   TSuspend,
   EngineType,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > = {
   runId: string;
   resourceId?: string;
@@ -71,7 +71,7 @@ export type ConditionFunctionParams<
   TResumeSchema,
   TSuspendSchema,
   EngineType,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > = Omit<
   ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext>,
   'setState' | 'suspend'
@@ -84,7 +84,7 @@ export type ExecuteFunction<
   TResumeSchema,
   TSuspendSchema,
   EngineType,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > = (
   params: ExecuteFunctionParams<
     TState,
@@ -104,7 +104,7 @@ export type ConditionFunction<
   TResumeSchema,
   TSuspendSchema,
   EngineType,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > = (
   params: ConditionFunctionParams<
     TState,
@@ -124,7 +124,7 @@ export type LoopConditionFunction<
   TResumeSchema,
   TSuspendSchema,
   EngineType,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > = (
   params: ConditionFunctionParams<
     TState,
@@ -148,7 +148,7 @@ export interface Step<
   TResume = unknown,
   TSuspend = unknown,
   TEngineType = any,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > {
   id: TStepId;
   description?: string;

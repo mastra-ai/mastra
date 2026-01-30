@@ -2,6 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
+import type { RequestContext } from '../../../request-context';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
@@ -240,7 +241,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       }
 
       try {
-        const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
+        const requireToolApproval = (requestContext as RequestContext).get('__mastra_requireToolApproval');
 
         let resumeDataFromArgs: any = undefined;
         let args: any = inputData.args;

@@ -236,7 +236,7 @@ export type InternalCoreTool = {
 export interface ToolExecutionContext<
   TSuspend = unknown,
   TResume = unknown,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > {
   // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
@@ -267,7 +267,7 @@ export interface ToolAction<
   TResume = unknown,
   TContext extends ToolExecutionContext<TSuspend, TResume, any> = ToolExecutionContext<TSuspend, TResume>,
   TId extends string = string,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > {
   id: TId;
   description: string;

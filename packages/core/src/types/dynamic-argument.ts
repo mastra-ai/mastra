@@ -1,15 +1,16 @@
 import type { Mastra } from '../mastra';
-import type { RequestContext } from '../request-context';
+import type { IRequestContext } from '../request-context';
 
-export type DynamicArgument<T, TRequestContext extends Record<string, any> | unknown = unknown> =
+/**
+ * A value that can be provided statically or resolved dynamically at runtime.
+ * When a function is provided, it receives the request context and Mastra instance.
+ *
+ * Uses IRequestContext (the interface) to allow any typed RequestContext<T>
+ * to be passed, avoiding TypeScript variance issues.
+ */
+export type DynamicArgument<T> =
   | T
-  | (({
-      requestContext,
-      mastra,
-    }: {
-      requestContext: RequestContext<TRequestContext>;
-      mastra?: Mastra;
-    }) => Promise<T> | T);
+  | (({ requestContext, mastra }: { requestContext: IRequestContext; mastra?: Mastra }) => Promise<T> | T);
 
 export type NonEmpty<T extends string> = T extends '' ? never : T;
 

@@ -45,10 +45,10 @@ describe('requestContextSchema type inference', () => {
       id: 'untyped-tool',
       description: 'A tool without request context schema',
       execute: async (input, context) => {
-        // Without schema, requestContext should be RequestContext<unknown>
-        expectTypeOf(context.requestContext).toEqualTypeOf<RequestContext<unknown> | undefined>();
+        // Without schema, requestContext defaults to Record<string, unknown>
+        expectTypeOf(context.requestContext).toEqualTypeOf<RequestContext<Record<string, unknown>> | undefined>();
 
-        // get() should return unknown
+        // get() returns unknown via the overload
         const value = context.requestContext?.get('anyKey');
         expectTypeOf(value).toEqualTypeOf<unknown>();
 

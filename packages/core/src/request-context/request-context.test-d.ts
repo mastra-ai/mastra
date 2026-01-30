@@ -1,16 +1,17 @@
-import { assertType, describe, expectTypeOf, it } from 'vitest';
+import { describe, expectTypeOf, it } from 'vitest';
 import { RequestContext } from './index';
+import type { IRequestContext } from './index';
 
 /**
  * Type tests for RequestContext type inference
  *
- * Problem: When calling get(), the type should be inferred based on the specific key being accessed.
- * Also, entries()/keys()/values() should return properly typed iterators.
- *
- * Expected: get('age') should return `number`, not `string | number`
+ * With the new IRequestContext interface design:
+ * - RequestContext<T> provides typed get/set via method overloads
+ * - keys(), entries(), values() return string/unknown for IRequestContext compatibility
+ * - RequestContext<T> is always assignable to IRequestContext
  */
 describe('RequestContext Type Tests', () => {
-  describe('Issue #4467: get() should return accurate types based on key', () => {
+  describe('Typed get() and set() with method overloads', () => {
     type MyContext = {
       name: string;
       age: number;
@@ -29,40 +30,6 @@ describe('RequestContext Type Tests', () => {
 
       const isActive = context.get('isActive');
       expectTypeOf(isActive).toEqualTypeOf<boolean>();
-    });
-
-    it('should infer correct key type from keyof Values', () => {
-      const context = new RequestContext<MyContext>();
-
-      // Keys should be typed as 'name' | 'age' | 'isActive'
-      const keys = context.keys();
-      expectTypeOf(keys).toEqualTypeOf<IterableIterator<keyof MyContext>>();
-    });
-
-    it('should return discriminated union entries() for proper type narrowing', () => {
-      const context = new RequestContext<MyContext>();
-
-      // entries() should return a discriminated union of tuples
-      // This enables type narrowing when checking the key
-      const entries = context.entries();
-
-      // The type should be a discriminated union: ['name', string] | ['age', number] | ['isActive', boolean]
-      type ExpectedEntryType = ['name', string] | ['age', number] | ['isActive', boolean];
-      assertType<IterableIterator<ExpectedEntryType>>(entries);
-
-      // Verify type narrowing works when iterating
-      for (const [key, value] of entries) {
-        if (key === 'age') {
-          // When key is narrowed to 'age', value should be narrowed to number
-          expectTypeOf(value).toEqualTypeOf<number>();
-        } else if (key === 'name') {
-          // When key is narrowed to 'name', value should be narrowed to string
-          expectTypeOf(value).toEqualTypeOf<string>();
-        } else {
-          // When key is 'isActive', value should be boolean
-          expectTypeOf(value).toEqualTypeOf<boolean>();
-        }
-      }
     });
 
     it('should accept correct value types in set()', () => {
@@ -94,25 +61,73 @@ describe('RequestContext Type Tests', () => {
       const settings = context.get('settings');
       expectTypeOf(settings).toEqualTypeOf<{ theme: 'light' | 'dark' }>();
     });
+  });
 
-    it('should infer correct value types from values()', () => {
+  describe('IRequestContext-compatible methods return loose types', () => {
+    type MyContext = {
+      name: string;
+      age: number;
+      isActive: boolean;
+    };
+
+    it('should return IterableIterator<string> from keys() for IRequestContext compatibility', () => {
       const context = new RequestContext<MyContext>();
-      const values = context.values();
-      expectTypeOf(values).toEqualTypeOf<IterableIterator<string | number | boolean>>();
+
+      // keys() returns string iterator (not keyof T) for IRequestContext compatibility
+      const keys = context.keys();
+      expectTypeOf(keys).toEqualTypeOf<IterableIterator<string>>();
     });
 
-    it('should provide typed callback in forEach()', () => {
+    it('should return IterableIterator<[string, unknown]> from entries()', () => {
+      const context = new RequestContext<MyContext>();
+
+      // entries() returns [string, unknown] for IRequestContext compatibility
+      const entries = context.entries();
+      expectTypeOf(entries).toEqualTypeOf<IterableIterator<[string, unknown]>>();
+    });
+
+    it('should return IterableIterator<unknown> from values()', () => {
+      const context = new RequestContext<MyContext>();
+
+      // values() returns unknown iterator for IRequestContext compatibility
+      const values = context.values();
+      expectTypeOf(values).toEqualTypeOf<IterableIterator<unknown>>();
+    });
+
+    it('should provide unknown value in forEach() callback', () => {
       const context = new RequestContext<MyContext>();
       context.forEach((value, key) => {
-        // Key should be typed as keyof MyContext
-        expectTypeOf(key).toEqualTypeOf<keyof MyContext>();
-        // Value is the union of all value types (no narrowing in forEach)
-        expectTypeOf(value).toEqualTypeOf<string | number | boolean>();
+        // Key is string, value is unknown for IRequestContext compatibility
+        expectTypeOf(key).toEqualTypeOf<string>();
+        expectTypeOf(value).toEqualTypeOf<unknown>();
       });
     });
   });
 
-  describe('Untyped RequestContext should allow any key', () => {
+  describe('RequestContext assignability to IRequestContext', () => {
+    it('should be assignable to IRequestContext', () => {
+      type MyContext = { userId: string; tenantId: string };
+
+      // Any typed RequestContext should be assignable to IRequestContext
+      const typedContext = new RequestContext<MyContext>();
+      expectTypeOf(typedContext).toMatchTypeOf<IRequestContext>();
+    });
+
+    it('should allow passing typed context to function expecting IRequestContext', () => {
+      type MyContext = { userId: string };
+
+      // A function that accepts IRequestContext
+      type AcceptIRequestContext = (ctx: IRequestContext) => unknown;
+
+      // A typed RequestContext should be passable
+      const typedCtx = new RequestContext<MyContext>();
+
+      // This should compile - the key benefit of the IRequestContext design
+      expectTypeOf(typedCtx).toMatchTypeOf<Parameters<AcceptIRequestContext>[0]>();
+    });
+  });
+
+  describe('Untyped RequestContext', () => {
     it('should return unknown for untyped context', () => {
       const context = new RequestContext();
 
@@ -127,6 +142,29 @@ describe('RequestContext Type Tests', () => {
       context.set('stringKey', 'value');
       context.set('numberKey', 42);
       context.set('objectKey', { foo: 'bar' });
+    });
+
+    it('should have all property return Record<string, unknown>', () => {
+      const context = new RequestContext();
+
+      const all = context.all;
+      expectTypeOf(all).toEqualTypeOf<Record<string, unknown>>();
+    });
+  });
+
+  describe('Typed RequestContext all property', () => {
+    it('should return typed object from all property', () => {
+      type MyContext = {
+        name: string;
+        age: number;
+      };
+
+      const context = new RequestContext<MyContext>();
+      context.set('name', 'John');
+      context.set('age', 30);
+
+      const all = context.all;
+      expectTypeOf(all).toEqualTypeOf<MyContext>();
     });
   });
 });

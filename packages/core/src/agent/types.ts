@@ -27,7 +27,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
-import type { RequestContext } from '../request-context';
+import type { IRequestContext, RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
 import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
@@ -117,7 +117,7 @@ type DynamicModel = ({
   requestContext,
   mastra,
 }: {
-  requestContext: RequestContext;
+  requestContext: IRequestContext;
   mastra?: Mastra;
 }) => Promise<MastraModelConfig> | MastraModelConfig;
 
@@ -132,7 +132,6 @@ export interface AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
-  TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   /**
    * Identifier for the agent.
@@ -150,7 +149,7 @@ export interface AgentConfig<
    * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
    * array of system messages, or a function that returns any of these types dynamically.
    */
-  instructions: DynamicArgument<AgentInstructions, TRequestContext>;
+  instructions: DynamicArgument<AgentInstructions>;
   /**
    * The language model used by the agent. Can be provided statically or resolved at runtime.
    */
@@ -163,7 +162,7 @@ export interface AgentConfig<
   /**
    * Tools that the agent can access. Can be provided statically or resolved dynamically.
    */
-  tools?: DynamicArgument<TTools, TRequestContext>;
+  tools?: DynamicArgument<TTools>;
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
@@ -254,7 +253,7 @@ export interface AgentConfig<
    * When provided, the request context will be validated against this schema at the start of generate() and stream() calls.
    * If validation fails, an error is thrown.
    */
-  requestContextSchema?: ZodSchema<TRequestContext>;
+  requestContextSchema?: ZodSchema;
 }
 
 export type AgentMemoryOption = {

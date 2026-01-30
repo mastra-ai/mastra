@@ -67,7 +67,7 @@ export class Tool<
     TResumeSchema
   >,
   TId extends string = string,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext> {
   /** Unique identifier for the tool */
   id: TId;
@@ -406,7 +406,7 @@ export function createTool<
   TSchemaOut = unknown,
   TSuspend = unknown,
   TResume = unknown,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
   TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
     TSuspend,
     TResume,

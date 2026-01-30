@@ -30,49 +30,96 @@ export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
  */
 export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
-export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
+/**
+ * Interface for RequestContext without generics.
+ * This allows any RequestContext<T> to be assignable to IRequestContext,
+ * avoiding TypeScript variance issues with generic type parameters.
+ *
+ * Use this interface in internal APIs that don't need the specific type,
+ * while keeping RequestContext<T> for user-facing APIs that need type safety.
+ */
+export interface IRequestContext {
+  set(key: string, value: unknown): void;
+  get(key: string): unknown;
+  has(key: string): boolean;
+  delete(key: string): boolean;
+  clear(): void;
+  keys(): IterableIterator<string>;
+  values(): IterableIterator<unknown>;
+  entries(): IterableIterator<[string, unknown]>;
+  size(): number;
+  forEach(callbackfn: (value: unknown, key: string, map: Map<string, unknown>) => void): void;
+  toJSON(): Record<string, unknown>;
+  readonly all: Record<string, unknown>;
+}
+
+/**
+ * RequestContext provides a type-safe container for request-scoped data.
+ * It can be typed with a specific schema for full type safety, or used untyped.
+ *
+ * The generic parameter is used for type inference in method overloads,
+ * but the class itself implements IRequestContext to ensure all RequestContext
+ * instances are structurally compatible regardless of their type parameter.
+ *
+ * @example Typed usage
+ * ```typescript
+ * type MyContext = { userId: string; apiKey: string };
+ * const ctx = new RequestContext<MyContext>();
+ * ctx.set('userId', 'user-123'); // Type-safe
+ * const id = ctx.get('userId'); // Type: string
+ * ```
+ *
+ * @example Untyped usage
+ * ```typescript
+ * const ctx = new RequestContext();
+ * ctx.set('anything', 'value'); // Accepts any string key
+ * const val = ctx.get('anything'); // Type: unknown
+ * ```
+ */
+export class RequestContext<
+  Values extends Record<string, unknown> = Record<string, unknown>,
+> implements IRequestContext {
   private registry = new Map<string, unknown>();
 
-  constructor(
-    iterable?: Values extends Record<string, any>
-      ? RecordToTuple<Partial<Values>>
-      : Iterable<readonly [string, unknown]>,
-  ) {
-    this.registry = new Map(iterable);
+  constructor(iterable?: RecordToTuple<Partial<Values>> | Iterable<readonly [string, unknown]>) {
+    this.registry = new Map(iterable as Iterable<readonly [string, unknown]>);
   }
 
   /**
-   * set a value with strict typing if `Values` is a Record and the key exists in it.
+   * Set a value with strict typing when Values is defined.
+   * Overloaded to also accept any string key for IRequestContext compatibility.
    */
-  public set<K extends Values extends Record<string, any> ? keyof Values : string>(
-    key: K,
-    value: Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
-  ): void {
-    // The type assertion `key as string` is safe because K always extends string ultimately.
-    this.registry.set(key as string, value);
+  public set<K extends keyof Values & string>(key: K, value: Values[K]): void;
+  public set(key: string, value: unknown): void;
+  public set(key: string, value: unknown): void {
+    this.registry.set(key, value);
   }
 
   /**
-   * Get a value with its type
+   * Get a value with its type when Values is defined.
+   * Overloaded to also accept any string key for IRequestContext compatibility.
    */
-  public get<
-    K extends Values extends Record<string, any> ? keyof Values : string,
-    R = Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
-  >(key: K): R {
-    return this.registry.get(key as string) as R;
+  public get<K extends keyof Values & string>(key: K): Values[K];
+  public get(key: string): unknown;
+  public get(key: string): unknown {
+    return this.registry.get(key);
   }
 
   /**
    * Check if a key exists in the container
    */
-  public has<K extends Values extends Record<string, any> ? keyof Values : string>(key: K): boolean {
+  public has<K extends keyof Values & string>(key: K): boolean;
+  public has(key: string): boolean;
+  public has(key: string): boolean {
     return this.registry.has(key);
   }
 
   /**
    * Delete a value by key
    */
-  public delete<K extends Values extends Record<string, any> ? keyof Values : string>(key: K): boolean {
+  public delete<K extends keyof Values & string>(key: K): boolean;
+  public delete(key: string): boolean;
+  public delete(key: string): boolean {
     return this.registry.delete(key);
   }
 
@@ -86,29 +133,22 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   /**
    * Get all keys in the container
    */
-  public keys(): IterableIterator<Values extends Record<string, any> ? keyof Values : string> {
-    return this.registry.keys() as IterableIterator<Values extends Record<string, any> ? keyof Values : string>;
+  public keys(): IterableIterator<string> {
+    return this.registry.keys();
   }
 
   /**
    * Get all values in the container
    */
-  public values(): IterableIterator<Values extends Record<string, any> ? Values[keyof Values] : unknown> {
-    return this.registry.values() as IterableIterator<
-      Values extends Record<string, any> ? Values[keyof Values] : unknown
-    >;
+  public values(): IterableIterator<unknown> {
+    return this.registry.values();
   }
 
   /**
    * Get all entries in the container.
-   * Returns a discriminated union of tuples for proper type narrowing when iterating.
    */
-  public entries(): IterableIterator<
-    Values extends Record<string, any> ? { [K in keyof Values]: [K, Values[K]] }[keyof Values] : [string, unknown]
-  > {
-    return this.registry.entries() as IterableIterator<
-      Values extends Record<string, any> ? { [K in keyof Values]: [K, Values[K]] }[keyof Values] : [string, unknown]
-    >;
+  public entries(): IterableIterator<[string, unknown]> {
+    return this.registry.entries();
   }
 
   /**
@@ -120,29 +160,46 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
 
   /**
    * Execute a function for each entry in the container.
-   * The callback receives properly typed key-value pairs.
    */
-  public forEach<K extends Values extends Record<string, any> ? keyof Values : string>(
-    callbackfn: (
-      value: Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : unknown) : unknown,
-      key: K,
-      map: Map<string, unknown>,
-    ) => void,
-  ): void {
-    this.registry.forEach(callbackfn as (value: unknown, key: string, map: Map<string, unknown>) => void);
+  public forEach(callbackfn: (value: unknown, key: string, map: Map<string, unknown>) => void): void {
+    this.registry.forEach(callbackfn);
   }
 
   /**
-   * Custom JSON serialization method
-   * Converts the internal Map to a plain object for proper JSON serialization
+   * Custom JSON serialization method.
+   * Converts the internal Map to a plain object for proper JSON serialization.
+   * Non-serializable values (e.g., RPC proxies, functions, circular references)
+   * are skipped to prevent serialization errors when storing to database.
    */
-  public toJSON(): Record<string, any> {
-    return Object.fromEntries(this.registry);
+  public toJSON(): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of this.registry.entries()) {
+      if (this.isSerializable(value)) {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Check if a value can be safely serialized to JSON.
+   */
+  private isSerializable(value: unknown): boolean {
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'function') return false;
+    if (typeof value === 'symbol') return false;
+    if (typeof value !== 'object') return true;
+
+    try {
+      JSON.stringify(value);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
    * Get all values as a typed object for destructuring.
-   * Returns Record<string, any> when untyped, or the Values type when typed.
    *
    * @example
    * ```typescript
@@ -152,7 +209,7 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
    * const { userId, apiKey } = ctx.all;
    * ```
    */
-  public get all(): Values extends Record<string, any> ? Values : Record<string, any> {
-    return Object.fromEntries(this.registry) as Values extends Record<string, any> ? Values : Record<string, any>;
+  public get all(): Values {
+    return Object.fromEntries(this.registry) as Values;
   }
 }

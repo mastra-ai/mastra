@@ -178,7 +178,7 @@ export function createStep<
   TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
   TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
+  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : Record<string, unknown>
 >;
 
 /**
@@ -191,7 +191,16 @@ export function createStep<TStepId extends string>(
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
   },
-): Step<TStepId, unknown, { prompt: string }, { text: string }, unknown, unknown, DefaultEngineType>;
+): Step<
+  TStepId,
+  unknown,
+  { prompt: string },
+  { text: string },
+  unknown,
+  unknown,
+  DefaultEngineType,
+  Record<string, unknown>
+>;
 
 /**
  * Creates a step from an agent with structured output
@@ -203,7 +212,16 @@ export function createStep<TStepId extends string, TStepOutput>(
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
   },
-): Step<TStepId, unknown, { prompt: string }, TStepOutput, unknown, unknown, DefaultEngineType>;
+): Step<
+  TStepId,
+  unknown,
+  { prompt: string },
+  TStepOutput,
+  unknown,
+  unknown,
+  DefaultEngineType,
+  Record<string, unknown>
+>;
 
 /**
  * Creates a step from a tool
@@ -215,7 +233,7 @@ export function createStep<
   TSchemaOut,
   TContext extends ToolExecutionContext<TSuspend, TResume, any>,
   TId extends string,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
@@ -240,7 +258,8 @@ export function createStep<TProcessorId extends string>(
   z.infer<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
-  DefaultEngineType
+  DefaultEngineType,
+  Record<string, unknown>
 >;
 
 /**
@@ -274,14 +293,14 @@ export function createStep<
   TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
   TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
+  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : Record<string, unknown>
 >;
 
 // ============================================
 // Implementation (uses type guards for clean logic)
 // ============================================
 
-export function createStep(params: any, agentOrToolOptions?: any): Step<any, any, any, any, any, any, any> {
+export function createStep(params: any, agentOrToolOptions?: any): Step<any, any, any, any, any, any, any, any> {
   // Type assertions are needed because each branch returns a different Step type,
   // but the overloads ensure type safety for consumers
   if (isAgent(params)) {
@@ -1165,7 +1184,7 @@ export function createWorkflow<
   TInput = unknown,
   TOutput = unknown,
   TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 >(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
   return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>(params);
 }
@@ -1219,7 +1238,7 @@ export class Workflow<
   TInput = unknown,
   TOutput = unknown,
   TPrevSchema = TInput,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 >
   extends MastraBase
   implements Step<TWorkflowId, TState, TInput, TOutput | undefined, any, any, DefaultEngineType, TRequestContext>
@@ -2476,7 +2495,7 @@ export class Run<
   TState = unknown,
   TInput = unknown,
   TOutput = unknown,
-  TRequestContext extends Record<string, any> | unknown = unknown,
+  TRequestContext extends Record<string, unknown> = Record<string, unknown>,
 > {
   #abortController?: AbortController;
   protected pubsub: PubSub;
