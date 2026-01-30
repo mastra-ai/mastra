@@ -7,6 +7,7 @@ export {
   DEFAULT_ROLES,
   STUDIO_PERMISSIONS,
   type StudioPermission,
+  type Permission,
   type RoleMapping,
   getDefaultRole,
   resolvePermissions,
