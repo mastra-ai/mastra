@@ -17,6 +17,31 @@ import { ZodError } from 'zod';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
+/**
+ * Convert Fastify request to Web API Request for cookie-based auth providers.
+ */
+function toWebRequest(request: FastifyRequest): globalThis.Request {
+  const protocol = request.protocol || 'http';
+  const host = request.headers.host || 'localhost';
+  const url = `${protocol}://${host}${request.url}`;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(request.headers)) {
+    if (value) {
+      if (Array.isArray(value)) {
+        value.forEach(v => headers.append(key, v));
+      } else {
+        headers.set(key, value);
+      }
+    }
+  }
+
+  return new globalThis.Request(url, {
+    method: request.method,
+    headers,
+  });
+}
+
 // Extend Fastify types to include Mastra context
 declare module 'fastify' {
   interface FastifyRequest {
@@ -367,6 +392,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         getHeader: name => request.headers[name.toLowerCase()] as string | undefined,
         getQuery: name => (request.query as Record<string, string>)[name],
         requestContext: request.requestContext,
+        request: toWebRequest(request),
       });
 
       if (authError) {

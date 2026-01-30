@@ -147,12 +147,15 @@ export class MastraAuthWorkos
    * Uses AuthKit's withAuth() for cookie-based sessions, falls back to
    * JWT verification for bearer tokens.
    */
-  async authenticateToken(token: string, request: HonoRequest): Promise<WorkOSUser | null> {
+  async authenticateToken(token: string, request: HonoRequest | Request): Promise<WorkOSUser | null> {
     console.log(`[WorkOS:${this.instanceId}] authenticateToken called`);
 
     try {
+      // Get the raw Request object - handle both HonoRequest and plain Request
+      const rawRequest = 'raw' in request ? request.raw : request;
+
       // First try session-based auth via AuthKit
-      const { auth } = await this.authService.withAuth(request.raw);
+      const { auth } = await this.authService.withAuth(rawRequest);
 
       if (auth.user) {
         console.log(`[WorkOS:${this.instanceId}] authenticateToken: session valid for user ${auth.user.id}`);

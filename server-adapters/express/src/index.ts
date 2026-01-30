@@ -17,6 +17,31 @@ import { ZodError } from 'zod';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
+/**
+ * Convert Express request to Web API Request for cookie-based auth providers.
+ */
+function toWebRequest(req: Request): globalThis.Request {
+  const protocol = req.protocol || 'http';
+  const host = req.get('host') || 'localhost';
+  const url = `${protocol}://${host}${req.originalUrl || req.url}`;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value) {
+      if (Array.isArray(value)) {
+        value.forEach(v => headers.append(key, v));
+      } else {
+        headers.set(key, value);
+      }
+    }
+  }
+
+  return new globalThis.Request(url, {
+    method: req.method,
+    headers,
+  });
+}
+
 // Extend Express types to include Mastra context
 declare global {
   namespace Express {
@@ -354,6 +379,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
           getQuery: name => req.query[name] as string | undefined,
           requestContext: res.locals.requestContext,
+          request: toWebRequest(req),
         });
 
         if (authError) {

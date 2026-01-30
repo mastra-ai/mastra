@@ -18,6 +18,31 @@ import { ZodError } from 'zod';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
+/**
+ * Convert Koa context to Web API Request for cookie-based auth providers.
+ */
+function toWebRequest(ctx: Context): globalThis.Request {
+  const protocol = ctx.protocol || 'http';
+  const host = ctx.host || 'localhost';
+  const url = `${protocol}://${host}${ctx.url}`;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(ctx.headers)) {
+    if (value) {
+      if (Array.isArray(value)) {
+        value.forEach(v => headers.append(key, v));
+      } else {
+        headers.set(key, value);
+      }
+    }
+  }
+
+  return new globalThis.Request(url, {
+    method: ctx.method,
+    headers,
+  });
+}
+
 // Extend Koa types to include Mastra context
 declare module 'koa' {
   interface DefaultState {
@@ -377,6 +402,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
         getQuery: name => (ctx.query as Record<string, string>)[name],
         requestContext: ctx.state.requestContext,
+        request: toWebRequest(ctx),
       });
 
       if (authError) {

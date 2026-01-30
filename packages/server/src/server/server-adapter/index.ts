@@ -216,6 +216,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       getHeader: (name: string) => string | undefined;
       getQuery: (name: string) => string | undefined;
       requestContext: RequestContext;
+      /** Raw Request object for cookie-based auth providers */
+      request?: Request;
     },
   ): Promise<{ status: number; error: string } | null> {
     const authConfig = this.mastra.getServer()?.auth;
@@ -249,22 +251,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       token = context.getQuery('apiKey') || null;
     }
 
-    if (!token) {
-      return { status: 401, error: 'Authentication required' };
-    }
-
     let user: unknown;
     try {
       if (typeof authConfig.authenticateToken === 'function') {
-        // Note: We pass null as request since adapters have different request types
-        // If specific request is needed, authenticateToken can use data from token
-        user = await authConfig.authenticateToken(token, null as any);
+        // Pass the raw request for cookie-based auth providers (e.g., WorkOS)
+        // Token may be null for cookie-based auth - provider will read from request
+        user = await authConfig.authenticateToken(token ?? '', context.request as any);
       } else {
         return { status: 401, error: 'No token verification method configured' };
       }
 
       if (!user) {
-        return { status: 401, error: 'Invalid or expired token' };
+        return { status: 401, error: 'Authentication required' };
       }
 
       context.requestContext.set('user', user);
