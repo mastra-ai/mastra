@@ -729,16 +729,23 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
       const skillsList = await skills.list();
 
       // Get full skill details to include path in response
+      // Handle individual skill fetch failures gracefully to avoid failing the entire list
       const skillsWithPath = await Promise.all(
         skillsList.map(async skillMeta => {
-          const fullSkill = await skills.get(skillMeta.name);
+          let path = '';
+          try {
+            const fullSkill = await skills.get(skillMeta.name);
+            path = fullSkill?.path ?? '';
+          } catch {
+            // Fall back to empty path if skill details can't be loaded
+          }
           return {
             name: skillMeta.name,
             description: skillMeta.description,
             license: skillMeta.license,
             compatibility: skillMeta.compatibility,
             metadata: skillMeta.metadata,
-            path: fullSkill?.path ?? '',
+            path,
           };
         }),
       );
@@ -1121,8 +1128,12 @@ interface SkillFilesResponse {
  * Returns all files for a skill with their content.
  */
 async function fetchSkillFiles(owner: string, repo: string, skillName: string): Promise<SkillFilesResponse | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s for file downloads
+
   const url = `${SKILLS_SH_API_URL}/api/skills/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(skillName)}/files`;
-  const response = await fetch(url);
+  const response = await fetch(url, { signal: controller.signal });
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     if (response.status === 404) {
@@ -1392,6 +1403,8 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
           const entries = await workspace?.filesystem?.readdir(skillsPath);
           skillsToUpdate = entries?.filter(e => e.type === 'directory').map(e => e.name) ?? [];
         } catch {
+          // Skills directory doesn't exist or isn't readable - no skills to update
+          // This is expected when no skills have been installed yet
           return { updated: [] };
         }
       }
