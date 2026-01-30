@@ -1083,65 +1083,6 @@ export interface GetSkillReferenceResponse {
   content: string;
 }
 
-/**
- * Parameters for skills.sh install
- */
-export interface SkillsShInstallParams {
-  owner: string;
-  repo: string;
-  skillName: string;
-}
-
-/**
- * Response for skills.sh install
- */
-export interface SkillsShInstallResponse {
-  success: boolean;
-  skillName: string;
-  installedPath: string;
-  filesWritten: number;
-}
-
-/**
- * Parameters for skills.sh remove
- */
-export interface SkillsShRemoveParams {
-  skillName: string;
-}
-
-/**
- * Response for skills.sh remove
- */
-export interface SkillsShRemoveResponse {
-  success: boolean;
-  skillName: string;
-  removedPath: string;
-}
-
-/**
- * Parameters for skills.sh update
- */
-export interface SkillsShUpdateParams {
-  skillName?: string;
-}
-
-/**
- * Individual skill update result
- */
-export interface SkillUpdateResult {
-  skillName: string;
-  success: boolean;
-  filesWritten?: number;
-  error?: string;
-}
-
-/**
- * Response for skills.sh update
- */
-export interface SkillsShUpdateResponse {
-  updated: SkillUpdateResult[];
-}
-
 // ============================================================================
 // Processor Types
 // ============================================================================

@@ -3,10 +3,10 @@ import { useMastraClient } from '@mastra/react';
 import type {
   SkillsShSearchResponse,
   SkillsShListResponse,
+  SkillsShInstallResponse,
   SkillsShRemoveResponse,
   SkillsShUpdateResponse,
 } from '../types';
-import { isWorkspaceV1Supported } from '../compatibility';
 
 // =============================================================================
 // skills.sh API Hooks (via server proxy to avoid CORS)
@@ -93,7 +93,7 @@ export const useSkillPreview = (
 };
 
 // =============================================================================
-// Skill Management Hooks (via server filesystem)
+// Skill Management Hooks (via server proxy)
 // =============================================================================
 
 export interface InstallSkillParams {
@@ -104,44 +104,36 @@ export interface InstallSkillParams {
   skillName: string;
 }
 
-export interface SkillsShInstallResult {
-  success: boolean;
-  skillName: string;
-  installedPath: string;
-  filesWritten: number;
-}
-
 /**
  * Install a skill by fetching from GitHub and writing to workspace filesystem.
- * Does NOT require sandbox - only requires filesystem access.
  */
 export const useInstallSkill = () => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: InstallSkillParams): Promise<SkillsShInstallResult> => {
-      if (!isWorkspaceV1Supported(client)) {
-        throw new Error('Workspace v1 not supported by core or client');
-      }
-
-      // Parse repository to get owner and repo
+    mutationFn: async (params: InstallSkillParams): Promise<SkillsShInstallResponse> => {
       const [owner, repo] = params.repository.split('/');
       if (!owner || !repo) {
         throw new Error('Invalid repository format. Expected owner/repo');
       }
 
-      const workspace = (client as any).getWorkspace(params.workspaceId);
-      const result = await workspace.skillsShInstall({
-        owner,
-        repo,
-        skillName: params.skillName,
+      const baseUrl = (client as any).baseUrl || '';
+      const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/install`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner, repo, skillName: params.skillName }),
       });
 
-      return result;
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || `Failed to install skill: ${response.statusText}`);
+      }
+
+      return response.json();
     },
     onSuccess: (_, variables) => {
-      // Invalidate skills list to refresh after installation
       queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },
   });
@@ -154,7 +146,6 @@ export interface UpdateSkillsParams {
 
 /**
  * Update installed skills by re-fetching from GitHub.
- * Does NOT require sandbox - only requires filesystem access.
  */
 export const useUpdateSkills = () => {
   const client = useMastraClient();
@@ -162,14 +153,22 @@ export const useUpdateSkills = () => {
 
   return useMutation({
     mutationFn: async (params: UpdateSkillsParams): Promise<SkillsShUpdateResponse> => {
-      if (!isWorkspaceV1Supported(client)) {
-        throw new Error('Workspace v1 not supported by core or client');
+      const baseUrl = (client as any).baseUrl || '';
+      const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/update`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skillName: params.skillName }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || `Failed to update skill: ${response.statusText}`);
       }
-      const workspace = (client as any).getWorkspace(params.workspaceId);
-      return workspace.skillsShUpdate({ skillName: params.skillName });
+
+      return response.json();
     },
     onSuccess: (_, variables) => {
-      // Invalidate skills list to refresh after update
       queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },
   });
@@ -182,7 +181,6 @@ export interface RemoveSkillParams {
 
 /**
  * Remove an installed skill by deleting its directory.
- * Does NOT require sandbox - only requires filesystem access.
  */
 export const useRemoveSkill = () => {
   const client = useMastraClient();
@@ -190,14 +188,22 @@ export const useRemoveSkill = () => {
 
   return useMutation({
     mutationFn: async (params: RemoveSkillParams): Promise<SkillsShRemoveResponse> => {
-      if (!isWorkspaceV1Supported(client)) {
-        throw new Error('Workspace v1 not supported by core or client');
+      const baseUrl = (client as any).baseUrl || '';
+      const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/remove`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skillName: params.skillName }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || `Failed to remove skill: ${response.statusText}`);
       }
-      const workspace = (client as any).getWorkspace(params.workspaceId);
-      return workspace.skillsShRemove({ skillName: params.skillName });
+
+      return response.json();
     },
     onSuccess: (_, variables) => {
-      // Invalidate skills list to refresh after removal
       queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
     },
   });
