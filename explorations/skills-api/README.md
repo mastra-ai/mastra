@@ -43,9 +43,47 @@ The server runs on `http://localhost:3456` by default.
 | `REFRESH_INTERVAL` | `30`      | Refresh interval in minutes (minimum 5 minutes) |
 | `SKILLS_DATA_DIR`  | -         | External directory for persistent data storage  |
 
-### Persistent Storage
+### Storage Options
 
-By default, skills data is bundled with the build. For production deployments where you need persistent storage across restarts:
+By default, skills data is bundled with the build. For production, use S3 or filesystem storage.
+
+#### S3 Storage (Recommended for Production)
+
+Works with AWS S3, MinIO, Cloudflare R2, or any S3-compatible service:
+
+```bash
+# AWS S3
+S3_BUCKET=my-skills-bucket \
+S3_KEY=skills-data.json \
+AWS_ACCESS_KEY_ID=xxx \
+AWS_SECRET_ACCESS_KEY=xxx \
+pnpm start
+
+# MinIO / S3-compatible
+S3_BUCKET=skills \
+S3_ENDPOINT=http://minio:9000 \
+AWS_ACCESS_KEY_ID=minioadmin \
+AWS_SECRET_ACCESS_KEY=minioadmin \
+pnpm start
+
+# Cloudflare R2
+S3_BUCKET=skills \
+S3_ENDPOINT=https://xxx.r2.cloudflarestorage.com \
+AWS_ACCESS_KEY_ID=xxx \
+AWS_SECRET_ACCESS_KEY=xxx \
+pnpm start
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `S3_BUCKET` | - | S3 bucket name (required for S3) |
+| `S3_KEY` | `skills-data.json` | Object key for the data file |
+| `S3_REGION` | `us-east-1` | AWS region |
+| `S3_ENDPOINT` | - | Custom endpoint for S3-compatible services |
+
+#### Filesystem Storage
+
+For simpler deployments with persistent volumes:
 
 ```bash
 # Point to a persistent volume
@@ -55,10 +93,13 @@ SKILLS_DATA_DIR=/data/skills pnpm start
 docker run -v /host/data:/data/skills -e SKILLS_DATA_DIR=/data/skills skills-api
 ```
 
-When `SKILLS_DATA_DIR` is set:
-- Data is saved to `$SKILLS_DATA_DIR/skills-data.json`
-- Falls back to bundled data if external file doesn't exist
-- Refresh operations write to the external location
+#### Storage Priority
+
+1. **S3** - If `S3_BUCKET` is configured, data is loaded from and saved to S3
+2. **Filesystem** - If `SKILLS_DATA_DIR` is set, uses local filesystem
+3. **Bundled** - Falls back to data bundled with the build
+
+When both S3 and filesystem are configured, data is saved to both (S3 as primary, filesystem as backup).
 
 ## API Endpoints
 

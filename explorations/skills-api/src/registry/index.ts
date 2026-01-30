@@ -9,6 +9,8 @@ export {
   getSkills,
   getMetadata,
   reloadData,
+  reloadDataAsync,
+  initializeData,
 } from './data.js';
 export { supportedAgents, getAgent } from './agents.js';
 export type { SupportedAgent } from './agents.js';

@@ -24,16 +24,23 @@ export {
   getSkills,
   getMetadata,
   reloadData,
+  reloadDataAsync,
+  initializeData,
 } from './registry/data.js';
 
 // Storage exports
 export {
   loadSkillsData,
+  loadSkillsDataAsync,
   saveSkillsData,
+  saveSkillsDataAsync,
   getDataFilePath,
   isUsingExternalStorage,
+  getActiveStorageType,
   getStorageInfo,
+  isS3Configured,
 } from './storage/index.js';
+export type { StorageType } from './storage/index.js';
 export { supportedAgents, getAgent } from './registry/agents.js';
 export type { SupportedAgent } from './registry/agents.js';
 

@@ -3,7 +3,7 @@
  * Loaded from scraped skills.sh data with support for dynamic reloading
  */
 
-import { loadSkillsData } from '../storage/index.js';
+import { loadSkillsData, loadSkillsDataAsync } from '../storage/index.js';
 import type { RegistrySkill, ScrapedData, Source } from './types.js';
 
 // Cache for skills data
@@ -24,6 +24,22 @@ function getData(): ScrapedData {
  */
 export function reloadData(): void {
   cachedData = loadSkillsData();
+}
+
+/**
+ * Reload data from storage async (supports S3)
+ */
+export async function reloadDataAsync(): Promise<void> {
+  cachedData = await loadSkillsDataAsync();
+}
+
+/**
+ * Initialize data async (for startup with S3)
+ */
+export async function initializeData(): Promise<void> {
+  if (!cachedData) {
+    cachedData = await loadSkillsDataAsync();
+  }
 }
 
 /**

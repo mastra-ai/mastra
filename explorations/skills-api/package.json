@@ -42,6 +42,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.978.0",
     "@hono/node-server": "^1.13.7",
     "gray-matter": "^4.0.3",
     "hono": "^4.11.3"

@@ -4,8 +4,8 @@
  */
 
 import { scrapeSkills, enrichSkills, getUniqueSources, getUniqueOwners } from '../scraper/scrape.js';
-import { saveSkillsData, loadSkillsData, getStorageInfo } from '../storage/index.js';
-import { reloadData } from '../registry/data.js';
+import { saveSkillsDataAsync, getStorageInfo, getActiveStorageType, loadSkillsData } from '../storage/index.js';
+import { reloadDataAsync } from '../registry/data.js';
 
 export interface RefreshResult {
   success: boolean;
@@ -15,7 +15,8 @@ export interface RefreshResult {
   ownerCount?: number;
   error?: string;
   durationMs?: number;
-  storagePath?: string;
+  storageType?: string;
+  savedTo?: { s3: boolean; filesystem: boolean };
 }
 
 export interface RefreshSchedulerOptions {
@@ -47,7 +48,7 @@ export async function refreshSkillsData(): Promise<RefreshResult> {
 
   isRefreshing = true;
   const startTime = Date.now();
-  const storageInfo = getStorageInfo();
+  const storageType = getActiveStorageType();
 
   try {
     console.info('[Scheduler] Starting skills refresh...');
@@ -63,11 +64,11 @@ export async function refreshSkillsData(): Promise<RefreshResult> {
       skills: enriched,
     };
 
-    // Save to storage
-    saveSkillsData(output);
+    // Save to storage (S3 + filesystem)
+    const savedTo = await saveSkillsDataAsync(output);
 
     // Reload the in-memory cache
-    reloadData();
+    await reloadDataAsync();
 
     const result: RefreshResult = {
       success: true,
@@ -76,13 +77,16 @@ export async function refreshSkillsData(): Promise<RefreshResult> {
       sourceCount: output.totalSources,
       ownerCount: output.totalOwners,
       durationMs: Date.now() - startTime,
-      storagePath: storageInfo.dataFile,
+      storageType,
+      savedTo,
     };
 
     lastRefreshResult = result;
     console.info(
       `[Scheduler] Refresh complete: ${result.skillCount} skills, ${result.sourceCount} sources in ${result.durationMs}ms`,
     );
+    if (savedTo.s3) console.info('[Scheduler] Data saved to S3');
+    if (savedTo.filesystem) console.info('[Scheduler] Data saved to filesystem');
 
     return result;
   } catch (error) {
@@ -113,9 +117,13 @@ export function startRefreshScheduler(options: RefreshSchedulerOptions = {}): vo
     return;
   }
 
+  const storageType = getActiveStorageType();
   const storageInfo = getStorageInfo();
   console.info(`[Scheduler] Starting scheduler with ${intervalMs / 1000 / 60} minute interval`);
-  console.info(`[Scheduler] Data storage: ${storageInfo.dataFile} (external: ${storageInfo.isExternal})`);
+  console.info(`[Scheduler] Storage type: ${storageType}`);
+  if (storageInfo.s3.configured) {
+    console.info(`[Scheduler] S3: s3://${storageInfo.s3.bucket}/${storageInfo.s3.key}`);
+  }
 
   // Optionally refresh immediately
   if (refreshOnStart) {
