@@ -1,7 +1,9 @@
 import { GetWorkflowResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { is403ForbiddenError } from '@/lib/query-utils';
 
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
@@ -18,9 +20,10 @@ import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 export interface WorkflowTableProps {
   workflows: Record<string, GetWorkflowResponse>;
   isLoading: boolean;
+  error?: Error | null;
 }
 
-export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
+export function WorkflowTable({ workflows, isLoading, error }: WorkflowTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
   const workflowData: WorkflowTableData[] = useMemo(() => {
@@ -60,6 +63,15 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
 
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows;
+
+  // 403 check BEFORE empty state - permission denied takes precedence
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="workflows" />
+      </div>
+    );
+  }
 
   if (workflowData.length === 0 && !isLoading) {
     return <EmptyWorkflowsTable />;
