@@ -96,8 +96,19 @@ The server currently has manual cache calls for workflow event streaming. These 
 - [x] getDurableWorkflows returns workflows
 - [x] __setMastra accepts mastra instance
 
+`packages/core/src/agent/durable/__tests__/cache-ttl.test.ts` (10 tests):
+- [x] Configurable TTL on InMemoryServerCache
+- [x] Cache item expiry after TTL
+- [x] List item expiry after TTL
+- [x] TTL refresh on list push
+- [x] Disable TTL with ttlMs: 0
+- [x] Respect maxSize option (LRU eviction)
+- [x] Empty history when cache expires
+- [x] Live events still work after cache expires
+- [x] Partial cache expiry handling
+- [x] Default TTL values
+
 **Tests remaining:**
-- [ ] Cache TTL expiry behavior
 - [ ] Redis cache integration test (with actual Redis via docker)
 
 ---
@@ -117,13 +128,17 @@ The `resume()` method on LocalDurableAgent needs proper implementation for resum
 
 ### 5. Cache TTL Configuration
 
-**Priority:** Low
+**Priority:** Low - **PARTIALLY COMPLETE**
 
-**Ideas:**
-- [ ] Make cache TTL configurable per-agent
+**Completed:**
+- [x] Configurable TTL on InMemoryServerCache (`ttlMs` option)
+- [x] Configurable TTL on RedisServerCache (`ttlSeconds` option)
+- [x] Cache size limits / eviction policies (InMemoryServerCache `maxSize` option)
+
+**Ideas (future):**
+- [ ] Make cache TTL configurable per-agent at runtime
 - [ ] Different TTLs for different event types
 - [ ] Auto-cleanup of completed run caches
-- [ ] Cache size limits / eviction policies
 
 ---
 

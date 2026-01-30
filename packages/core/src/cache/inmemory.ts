@@ -1,14 +1,39 @@
 import { TTLCache } from '@isaacs/ttlcache';
 import { MastraServerCache } from './base';
 
-export class InMemoryServerCache extends MastraServerCache {
-  private cache: TTLCache<string, unknown> = new TTLCache({
-    max: 1000,
-    ttl: 1000 * 60 * 5,
-  });
+/**
+ * Options for InMemoryServerCache
+ */
+export interface InMemoryServerCacheOptions {
+  /**
+   * Maximum number of items to store in cache.
+   * Defaults to 1000.
+   */
+  maxSize?: number;
 
-  constructor() {
+  /**
+   * Default TTL in milliseconds for cached items.
+   * Defaults to 300000 (5 minutes).
+   * Set to 0 to disable TTL (items persist until explicitly deleted or evicted).
+   */
+  ttlMs?: number;
+}
+
+export class InMemoryServerCache extends MastraServerCache {
+  private cache: TTLCache<string, unknown>;
+  private ttlMs: number;
+
+  constructor(options: InMemoryServerCacheOptions = {}) {
     super({ name: 'InMemoryServerCache' });
+
+    this.ttlMs = options.ttlMs ?? 1000 * 60 * 5;
+    // TTLCache requires positive integer or Infinity; use Infinity when TTL is disabled
+    const ttl = this.ttlMs > 0 ? this.ttlMs : Infinity;
+
+    this.cache = new TTLCache<string, unknown>({
+      max: options.maxSize ?? 1000,
+      ttl,
+    });
   }
 
   async get(key: string): Promise<unknown> {
@@ -31,6 +56,10 @@ export class InMemoryServerCache extends MastraServerCache {
     const list = this.cache.get(key) as unknown[];
     if (Array.isArray(list)) {
       list.push(value);
+      // Refresh TTL on push by re-setting the key with the updated list
+      if (this.ttlMs > 0) {
+        this.cache.set(key, list, { ttl: this.ttlMs });
+      }
     } else {
       this.cache.set(key, [value]);
     }
