@@ -122,13 +122,8 @@ export function ItemsList({
   };
 
   const handleEntryClick = (itemId: string) => {
-    if (isSelectionActive) {
-      // In selection mode, clicking toggles selection
-      selection.toggle(itemId, false, allIds);
-    } else {
-      // In normal mode, trigger item click callback
-      onItemClick?.(itemId);
-    }
+    // Always open item details - selection is handled by checkbox click
+    onItemClick?.(itemId);
   };
 
   return (

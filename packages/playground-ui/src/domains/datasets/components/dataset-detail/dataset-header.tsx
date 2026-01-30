@@ -57,8 +57,8 @@ function HeaderActionsMenu({ onEditClick, onDeleteClick }: HeaderActionsMenuProp
           </Icon>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-48 p-1">
-        <div className="flex flex-col">
+      <PopoverContent align="end" className="w-64 p-1">
+        <div className="flex flex-col gap-2">
           <Button
             variant="ghost"
             size="sm"
@@ -70,12 +70,7 @@ function HeaderActionsMenu({ onEditClick, onDeleteClick }: HeaderActionsMenuProp
             </Icon>
             Edit Dataset
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2"
-            disabled
-          >
+          <Button variant="ghost" size="sm" className="w-full justify-start gap-2" disabled>
             <Icon>
               <Copy className="w-4 h-4" />
             </Icon>
@@ -122,28 +117,16 @@ export function DatasetHeader({
         ) : (
           <>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold text-neutral6">
-                {name ?? 'Dataset'}
-              </h1>
-              {version && (
-                <span className="text-ui-sm text-neutral3 font-normal">
-                  v{formatVersion(version)}
-                </span>
-              )}
+              <h1 className="text-xl font-semibold text-neutral6">{name ?? 'Dataset'}</h1>
+              {version && <span className="text-ui-sm text-neutral3 font-normal">v{formatVersion(version)}</span>}
             </div>
-            {description && (
-              <p className="text-sm text-muted-foreground">{description}</p>
-            )}
+            {description && <p className="text-sm text-muted-foreground">{description}</p>}
           </>
         )}
       </div>
 
       {/* Right side: Menu + Run button */}
       <div className="flex items-center gap-2">
-        <HeaderActionsMenu
-          onEditClick={onEditClick}
-          onDeleteClick={onDeleteClick}
-        />
         {runTriggerSlot ? (
           runTriggerSlot
         ) : onRunClick ? (
@@ -154,6 +137,7 @@ export function DatasetHeader({
             Run Experiment
           </Button>
         ) : null}
+        <HeaderActionsMenu onEditClick={onEditClick} onDeleteClick={onDeleteClick} />
       </div>
     </header>
   );
