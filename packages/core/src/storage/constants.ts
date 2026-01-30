@@ -101,22 +101,10 @@ export const OLD_SPAN_SCHEMA: Record<string, StorageColumn> = {
 
 export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  name: { type: 'text', nullable: false },
-  description: { type: 'text', nullable: true },
-  instructions: { type: 'text', nullable: false }, // System instructions for the agent
-  model: { type: 'jsonb', nullable: false }, // Model configuration (provider, name, etc.)
-  tools: { type: 'jsonb', nullable: true }, // Serialized tool references/configurations
-  defaultOptions: { type: 'jsonb', nullable: true }, // Default options for generate/stream calls
-  workflows: { type: 'jsonb', nullable: true }, // Workflow references (IDs or configurations)
-  agents: { type: 'jsonb', nullable: true }, // Sub-agent references (IDs or configurations)
-  integrationTools: { type: 'jsonb', nullable: true }, // Specific integration tool IDs (provider_toolkit_tool format)
-  inputProcessors: { type: 'jsonb', nullable: true }, // Input processor configurations
-  outputProcessors: { type: 'jsonb', nullable: true }, // Output processor configurations
-  memory: { type: 'jsonb', nullable: true }, // Memory configuration
-  scorers: { type: 'jsonb', nullable: true }, // Scorer configurations
-  metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
-  ownerId: { type: 'text', nullable: true }, // Owner identifier for multi-tenant filtering
+  status: { type: 'text', nullable: false }, // 'draft' or 'published'
   activeVersionId: { type: 'text', nullable: true }, // FK to agent_versions.id
+  authorId: { type: 'text', nullable: true }, // Author identifier for multi-tenant filtering
+  metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -125,8 +113,21 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true }, // UUID
   agentId: { type: 'text', nullable: false },
   versionNumber: { type: 'integer', nullable: false },
-  name: { type: 'text', nullable: true }, // Vanity name
-  snapshot: { type: 'jsonb', nullable: false }, // Full agent config
+  // Agent config fields
+  name: { type: 'text', nullable: false }, // Agent display name
+  description: { type: 'text', nullable: true },
+  instructions: { type: 'text', nullable: false },
+  model: { type: 'jsonb', nullable: false },
+  tools: { type: 'jsonb', nullable: true },
+  defaultOptions: { type: 'jsonb', nullable: true },
+  workflows: { type: 'jsonb', nullable: true },
+  agents: { type: 'jsonb', nullable: true },
+  integrationTools: { type: 'jsonb', nullable: true },
+  inputProcessors: { type: 'jsonb', nullable: true },
+  outputProcessors: { type: 'jsonb', nullable: true },
+  memory: { type: 'jsonb', nullable: true },
+  scorers: { type: 'jsonb', nullable: true },
+  // Version metadata
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
   changeMessage: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },

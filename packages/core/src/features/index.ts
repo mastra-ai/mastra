@@ -8,12 +8,13 @@
  * ```ts
  * import { coreFeatures } from "@mastra/core/features"
  *
- * if (coreFeatures.has('someNewThing')) {
- *   doWhatever()
+ * if (coreFeatures.has('workspaces-v1')) {
+ *   // Workspace features available
  * }
  * ```
  */
 // Add feature flags here as new features are introduced
 export const coreFeatures = new Set<string>([
   'observationalMemory', // Added in 1.x - storage methods and types for observational memory
+  'workspaces-v1',
 ]);

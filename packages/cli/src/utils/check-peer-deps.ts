@@ -1,10 +1,12 @@
+import { existsSync } from 'node:fs';
+
 import { getPackageInfo } from 'local-pkg';
 import pc from 'picocolors';
 import { satisfies } from 'semver';
 
 import type { MastraPackageInfo } from './mastra-packages.js';
 
-interface PeerDepMismatch {
+export interface PeerDepMismatch {
   package: string;
   packageVersion: string;
   peerDep: string;
@@ -15,8 +17,14 @@ interface PeerDepMismatch {
 /**
  * Checks if the installed versions of @mastra packages satisfy each other's peer dependency requirements.
  * Returns a list of mismatches that should be warned about.
+ *
+ * Set MASTRA_SKIP_PEERDEP_CHECK=1 to skip this check.
  */
 export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promise<PeerDepMismatch[]> {
+  if (process.env.MASTRA_SKIP_PEERDEP_CHECK === '1' || process.env.MASTRA_SKIP_PEERDEP_CHECK === 'true') {
+    return [];
+  }
+
   const mismatches: PeerDepMismatch[] = [];
 
   // Build a map of installed package versions for quick lookup
@@ -48,7 +56,8 @@ export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promis
         }
 
         // Check if the installed version satisfies the peer dep range
-        if (!satisfies(installedVersion, requiredRange)) {
+        // includePrerelease: true so that 1.1.0-alpha.1 satisfies >=1.0.0-0 <2.0.0-0
+        if (!satisfies(installedVersion, requiredRange, { includePrerelease: true })) {
           mismatches.push({
             package: pkg.name,
             packageVersion: pkg.version,
@@ -67,11 +76,35 @@ export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promis
 }
 
 /**
+ * Detects the package manager being used in the project.
+ */
+export function detectPackageManager(): 'pnpm' | 'npm' | 'yarn' {
+  if (existsSync('pnpm-lock.yaml')) return 'pnpm';
+  if (existsSync('yarn.lock')) return 'yarn';
+  return 'npm';
+}
+
+/**
+ * Returns the command to update mismatched packages, or null if no mismatches.
+ */
+export function getUpdateCommand(mismatches: PeerDepMismatch[]): string | null {
+  if (mismatches.length === 0) {
+    return null;
+  }
+
+  const pm = detectPackageManager();
+  const packagesToUpdate = [...new Set(mismatches.map(m => m.package))];
+  const packagesWithLatest = packagesToUpdate.map(pkg => `${pkg}@latest`);
+  return `${pm} add ${packagesWithLatest.join(' ')}`;
+}
+
+/**
  * Logs warnings for any peer dependency mismatches found.
  * Returns true if any mismatches were found.
  */
 export function logPeerDepWarnings(mismatches: PeerDepMismatch[]): boolean {
-  if (mismatches.length === 0) {
+  const updateCommand = getUpdateCommand(mismatches);
+  if (!updateCommand) {
     return false;
   }
 
@@ -91,8 +124,8 @@ export function logPeerDepWarnings(mismatches: PeerDepMismatch[]): boolean {
   }
 
   console.warn();
-  console.warn(pc.dim('  Consider upgrading your @mastra packages to compatible versions.'));
-  console.warn(pc.dim('  Run: pnpm update @mastra/*'));
+  console.warn(pc.dim('  To fix, run:'));
+  console.warn(`  ${pc.cyan(updateCommand)}`);
   console.warn();
 
   return true;

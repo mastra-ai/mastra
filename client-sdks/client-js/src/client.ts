@@ -16,6 +16,7 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  Workspace,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -59,6 +60,7 @@ import type {
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
   GetMemoryStatusResponse,
+  ListWorkspacesResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -845,5 +847,26 @@ export class MastraClient extends BaseResource {
    */
   public getSystemPackages(): Promise<GetSystemPackagesResponse> {
     return this.request('/system/packages');
+  }
+
+  // ============================================================================
+  // Workspace
+  // ============================================================================
+
+  /**
+   * Lists all workspaces from both Mastra instance and agents
+   * @returns Promise containing array of workspace items
+   */
+  public listWorkspaces(): Promise<ListWorkspacesResponse> {
+    return this.request('/workspaces');
+  }
+
+  /**
+   * Gets the workspace resource for filesystem, search, and skills operations
+   * @param workspaceId - Workspace ID to target
+   * @returns Workspace instance
+   */
+  public getWorkspace(workspaceId: string): Workspace {
+    return new Workspace(this.options, workspaceId);
   }
 }

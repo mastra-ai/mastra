@@ -117,7 +117,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
         messageList: memoryData.messageList,
       });
 
-      // @ts-expect-error - TODO: types are wrong here, maybe wrong in general?
       return bail(modelOutput);
     }
 

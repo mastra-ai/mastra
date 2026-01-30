@@ -99,15 +99,27 @@ async function getMemoryFromContext({
     }
   }
   if (agentId && !agent) {
-    logger.debug('Agent not found, searching agents for agent', { agentId });
+    logger.debug('Agent not found in registered agents, trying stored agents', { agentId });
+    try {
+      const storedAgent = await mastra.getStoredAgentById(agentId);
+      if (storedAgent) {
+        agent = storedAgent;
+      }
+    } catch (error) {
+      logger.debug('Error getting stored agent', error);
+    }
+  }
+
+  if (agentId && !agent) {
+    logger.debug('Stored agent not found, searching sub-agents', { agentId });
     const agents = mastra.listAgents();
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
         try {
-          const agents = await ag.listAgents();
+          const subAgents = await ag.listAgents({ requestContext });
 
-          if (agents[agentId]) {
-            agent = agents[agentId];
+          if (subAgents[agentId]) {
+            agent = subAgents[agentId];
             break;
           }
         } catch (error) {

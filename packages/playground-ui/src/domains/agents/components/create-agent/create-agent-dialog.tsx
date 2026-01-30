@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { toast } from '@/lib/toast';
 
@@ -14,6 +15,7 @@ export interface CreateAgentDialogProps {
 }
 
 export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgentDialogProps) {
+  const dialogContentRef = React.useRef<HTMLDivElement>(null);
   const { createStoredAgent } = useStoredAgentMutations();
 
   const handleSubmit = async (values: AgentFormValues) => {
@@ -28,7 +30,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
         tools: values.tools && values.tools.length > 0 ? values.tools : undefined,
         workflows: values.workflows,
         agents: values.agents,
-        memory: values.memory,
+        memory: values.memory ? ({ key: values.memory } as Record<string, unknown>) : undefined,
         scorers: values.scorers,
       };
 
@@ -47,7 +49,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent ref={dialogContentRef} className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Agent</DialogTitle>
         </DialogHeader>
@@ -56,6 +58,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
           onSubmit={handleSubmit}
           onCancel={handleCancel}
           isSubmitting={createStoredAgent.isPending}
+          container={dialogContentRef}
         />
       </DialogContent>
     </Dialog>
