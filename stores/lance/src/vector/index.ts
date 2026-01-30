@@ -173,23 +173,20 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       const results = await query.toArray();
 
       return results.map(result => {
-        // Collect all metadata_ prefixed fields
-        const flatMetadata: Record<string, any> = {};
+        let metadata: Record<string, any>;
 
-        // Get all keys from the result object
-        Object.keys(result).forEach(key => {
-          // Skip reserved keys (id, score, and the vector column)
-          if (key !== 'id' && key !== 'score' && key !== 'vector' && key !== '_distance') {
-            if (key.startsWith('metadata_')) {
-              // Remove the prefix and add to flat metadata
-              const metadataKey = key.substring('metadata_'.length);
-              flatMetadata[metadataKey] = result[key];
-            }
+        // Prefer the stored JSON metadata if available (lossless retrieval)
+        if (result['_metadata_json']) {
+          try {
+            metadata = JSON.parse(result['_metadata_json']);
+          } catch {
+            // Fallback to flat columns if JSON parse fails
+            metadata = this.extractFlatMetadata(result);
           }
-        });
-
-        // Reconstruct nested metadata object
-        const metadata = this.unflattenObject(flatMetadata);
+        } else {
+          // Old data without JSON: return flat column names as-is
+          metadata = this.extractFlatMetadata(result);
+        }
 
         return {
           id: String(result.id || ''),
@@ -321,6 +318,9 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           Object.entries(flattenedMetadata).forEach(([key, value]) => {
             rowData[key] = value;
           });
+          // Store original metadata as JSON for lossless retrieval
+          // This avoids ambiguity when unflattening keys with underscores
+          rowData['_metadata_json'] = JSON.stringify(metadataItem);
         }
 
         return rowData;
@@ -1097,40 +1097,27 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
   }
 
   /**
-   * Converts a flattened object with keys using underscore notation back to a nested object.
-   * Example: { name: 'test', details_text: 'test' } → { name: 'test', details: { text: 'test' } }
+   * Extracts metadata from query result columns as flat key-value pairs.
+   * Used for old data that doesn't have the _metadata_json column.
+   *
+   * Returns column names as-is (e.g., 'details_text' stays 'details_text').
+   * No attempt is made to unflatten into nested objects since this is ambiguous.
    */
-  private unflattenObject(obj: Record<string, any>): Record<string, any> {
-    const result: Record<string, any> = {};
+  private extractFlatMetadata(result: Record<string, any>): Record<string, any> {
+    const metadata: Record<string, any> = {};
 
-    Object.keys(obj).forEach(key => {
-      const value = obj[key];
-      const parts = key.split('_');
-
-      // Start with the result object
-      let current = result;
-
-      // Process all parts except the last one
-      for (let i = 0; i < parts.length - 1; i++) {
-        const part = parts[i];
-        // Skip empty parts
-        if (!part) continue;
-
-        // Create nested object if it doesn't exist
-        if (!current[part] || typeof current[part] !== 'object') {
-          current[part] = {};
+    Object.keys(result).forEach(key => {
+      // Skip reserved keys
+      if (key !== 'id' && key !== 'score' && key !== 'vector' && key !== '_distance' && key !== '_metadata_json') {
+        if (key.startsWith('metadata_')) {
+          // Remove the prefix and return as flat key
+          const metadataKey = key.substring('metadata_'.length);
+          metadata[metadataKey] = result[key];
         }
-        current = current[part];
-      }
-
-      // Set the value at the last part
-      const lastPart = parts[parts.length - 1];
-      if (lastPart) {
-        current[lastPart] = value;
       }
     });
 
-    return result;
+    return metadata;
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<LanceVectorFilter>): Promise<void> {

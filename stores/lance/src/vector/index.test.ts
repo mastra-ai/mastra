@@ -1150,7 +1150,8 @@ describe('Lance vector store tests', () => {
         expect(res).toHaveLength(1);
         expect(res[0].id).toBe(ids[0]);
         expect(res[0].metadata?.name).to.equal('test2');
-        expect(res[0].metadata?.details?.text).to.equal('test2');
+        // Table created via createTable doesn't have _metadata_json, so returns flat keys
+        expect(res[0].metadata?.details_text).to.equal('test2');
       });
 
       it('should not throw error when filter is not provided', async () => {
@@ -1557,7 +1558,8 @@ describe('Lance vector store tests', () => {
 
         expect(res.length).toBeGreaterThanOrEqual(2);
 
-        const usernamesFound = res.map(item => item.metadata?.profile?.username);
+        // Table created via createTable doesn't have _metadata_json, so returns flat keys
+        const usernamesFound = res.map(item => item.metadata?.profile_username);
         expect(usernamesFound).toContain('john_doe');
         expect(usernamesFound).toContain('jane_smith');
       });
@@ -1932,6 +1934,109 @@ describe('Lance vector store tests', () => {
         });
 
         expect(results).toEqual([]);
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+
+      /**
+       * Regression test for GitHub issue #12500: @mastra/lance vector search not working
+       *
+       * The issue: Keys with common suffixes like `resource_id`, `thread_id`, `message_id`
+       * were being incorrectly unflattened into nested objects like `{ resource: { id: value } }`
+       * instead of staying as `{ resource_id: value }`.
+       */
+      it('should handle recall with resource_id filter after createIndex then upsert (issue #12500)', async () => {
+        const indexName = 'memory_resource_scope_' + Date.now();
+        const resourceId = 'test-resource-123';
+        const threadId = 'test-thread-456';
+
+        // Step 1: Memory calls createIndex
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        });
+
+        // Step 2: Memory saves messages with metadata including resource_id
+        await vectorDB.upsert({
+          indexName,
+          vectors: [
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+            [0.7, 0.8, 0.9],
+          ],
+          metadata: [
+            { message_id: 'msg1', thread_id: threadId, resource_id: resourceId },
+            { message_id: 'msg2', thread_id: threadId, resource_id: resourceId },
+            { message_id: 'msg3', thread_id: threadId, resource_id: resourceId },
+          ],
+        });
+
+        // Step 3: Memory.recall() with semanticRecall.scope: "resource" filters by resource_id
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 3,
+          filter: { resource_id: resourceId },
+        });
+
+        expect(results.length).toBe(3);
+
+        // The fix ensures resource_id stays flat, not nested as { resource: { id } }
+        results.forEach(result => {
+          expect(result.metadata?.resource_id).toBe(resourceId);
+          expect(result.metadata?.thread_id).toBe(threadId);
+          expect(result.metadata?.message_id).toBeDefined();
+        });
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+
+      /**
+       * Same issue but with thread_id filter (semanticRecall.scope: "thread")
+       */
+      it('should handle recall with thread_id filter after createIndex then upsert', async () => {
+        const indexName = 'memory_thread_scope_' + Date.now();
+        const resourceId = 'test-resource-123';
+        const threadId = 'test-thread-456';
+
+        // Step 1: Memory calls createIndex
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        });
+
+        // Step 2: Memory saves messages
+        await vectorDB.upsert({
+          indexName,
+          vectors: [
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+          ],
+          metadata: [
+            { message_id: 'msg1', thread_id: threadId, resource_id: resourceId },
+            { message_id: 'msg2', thread_id: threadId, resource_id: resourceId },
+          ],
+        });
+
+        // Step 3: Memory.recall() with thread scope filters by thread_id
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 2,
+          filter: { thread_id: threadId },
+        });
+
+        expect(results.length).toBe(2);
+
+        // The fix ensures thread_id stays flat, not nested as { thread: { id } }
+        results.forEach(result => {
+          expect(result.metadata?.thread_id).toBe(threadId);
+          expect(result.metadata?.resource_id).toBe(resourceId);
+        });
 
         // Cleanup
         await vectorDB.deleteTable(indexName);
