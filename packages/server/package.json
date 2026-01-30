@@ -102,7 +102,6 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "superjson": "^2.2.2",
-    "tar": "^7.5.7",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
@@ -121,6 +120,8 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "hono": "^4.11.3"
+    "hono": "^4.11.3",
+    "tar": "^7.5.7",
+    "xss": "^1.0.15"
   }
 }

@@ -16,6 +16,7 @@ import { createGunzip } from 'node:zlib';
 import { coreFeatures } from '@mastra/core/features';
 import type { Workspace, WorkspaceSkills } from '@mastra/core/workspace';
 import * as tar from 'tar';
+import xss from 'xss';
 import { HTTPException } from '../http-exception';
 import {
   // Workspace info
@@ -1283,18 +1284,70 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
         });
       }
 
-      // Clean up the HTML:
-      // 1. Remove all class attributes (we apply our own styles)
-      // 2. Remove inline styles
-      // 3. Fix relative URLs
-      content = content
-        // Remove all class attributes
-        .replace(/\s*class="[^"]*"/g, '')
-        // Remove inline styles
-        .replace(/\s*style="[^"]*"/g, '')
-        // Fix relative URLs to point to skills.sh
-        .replace(/href="\//g, 'href="https://skills.sh/')
-        .replace(/src="\//g, 'src="https://skills.sh/');
+      // Fix relative URLs before sanitization
+      content = content.replace(/href="\//g, 'href="https://skills.sh/').replace(/src="\//g, 'src="https://skills.sh/');
+
+      // Sanitize HTML to prevent XSS attacks using xss package
+      content = xss(content, {
+        whiteList: {
+          // Text content
+          h1: [],
+          h2: [],
+          h3: [],
+          h4: [],
+          h5: [],
+          h6: [],
+          p: [],
+          br: [],
+          hr: [],
+          // Lists
+          ul: [],
+          ol: [],
+          li: [],
+          // Formatting
+          strong: [],
+          b: [],
+          em: [],
+          i: [],
+          u: [],
+          s: [],
+          del: [],
+          ins: [],
+          mark: [],
+          small: [],
+          sub: [],
+          sup: [],
+          // Links and media
+          a: ['href', 'title', 'rel', 'target'],
+          img: ['src', 'alt', 'title', 'width', 'height'],
+          // Code (allow class for syntax highlighting)
+          pre: ['class'],
+          code: ['class'],
+          kbd: [],
+          samp: [],
+          // Tables
+          table: [],
+          thead: [],
+          tbody: [],
+          tfoot: [],
+          tr: [],
+          th: ['colspan', 'rowspan', 'scope'],
+          td: ['colspan', 'rowspan'],
+          // Semantic
+          blockquote: [],
+          cite: [],
+          q: [],
+          abbr: [],
+          dfn: [],
+          // Structure (allow class for syntax highlighting spans)
+          div: [],
+          span: ['class'],
+          section: [],
+          article: [],
+        },
+        stripIgnoreTag: true,
+        stripIgnoreTagBody: ['script', 'style'],
+      });
 
       return { content };
     } catch (error) {

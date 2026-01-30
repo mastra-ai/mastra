@@ -22,6 +22,8 @@ export default defineConfig({
   sourcemap: true,
   // The `@mastra/agent-builder` package has `typescript` as a peer dependency and we don't want to bundle it
   external: ['typescript'],
+  // Bundle these dependencies into the output (they're used at runtime but we want to bundle them)
+  noExternal: ['tar', 'xss'],
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },
