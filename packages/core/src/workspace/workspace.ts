@@ -514,6 +514,11 @@ export class Workspace {
    * Starts the sandbox and initializes the filesystem.
    */
   async init(): Promise<void> {
+    // if it's being initialized, return
+    if (this._status !== 'pending' && this._status !== 'destroyed') {
+      return;
+    }
+
     this._status = 'initializing';
 
     try {
