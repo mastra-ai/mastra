@@ -157,10 +157,10 @@ export interface SkillMetadata {
   description: string;
   /** Optional license */
   license?: string;
-  /** Optional compatibility requirements */
-  compatibility?: string;
-  /** Optional arbitrary metadata */
-  metadata?: Record<string, string>;
+  /** Optional compatibility requirements (string or object for flexibility) */
+  compatibility?: unknown;
+  /** Optional arbitrary metadata - values can be strings, arrays, objects, etc. */
+  metadata?: Record<string, unknown>;
 }
 
 /**
