@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { Search, Download, ExternalLink, Loader2, Package, Wand2, Github } from 'lucide-react';
+import { Search, Download, ExternalLink, Loader2, Package, Github } from 'lucide-react';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
 import {
   Dialog,
   DialogContent,
@@ -185,7 +186,7 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
                     <div className="p-4 border-b border-border1 bg-surface3">
                       <div className="flex items-start gap-3">
                         <div className="p-2 rounded-lg bg-surface5">
-                          <Wand2 className="h-5 w-5 text-icon4" />
+                          <SkillIcon className="h-5 w-5 text-icon4" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold text-icon6 truncate">{selectedSkill.name}</h3>

@@ -1,8 +1,9 @@
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { EntryList } from '@/ds/components/EntryList';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
 import { useLinkComponent } from '@/lib/framework';
-import { Wand2, BookOpen, Plus } from 'lucide-react';
+import { BookOpen, Plus } from 'lucide-react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
 
@@ -100,7 +101,7 @@ export function SkillsTable({
                   >
                     <div className="flex items-center gap-3">
                       <div className="p-1.5 rounded bg-surface5">
-                        <Wand2 className="h-3.5 w-3.5 text-icon4" />
+                        <SkillIcon className="h-3.5 w-3.5 text-icon4" />
                       </div>
                       <span className="font-medium text-icon6">{skill.name}</span>
                     </div>
@@ -179,7 +180,7 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
     <div className="grid place-items-center py-16">
       <div className="flex flex-col items-center text-center max-w-md">
         <div className="p-4 rounded-full bg-surface4 mb-4">
-          <Wand2 className="h-8 w-8 text-icon3" />
+          <SkillIcon className="h-8 w-8 text-icon3" />
         </div>
         <h2 className="text-lg font-medium text-icon6 mb-2">Skills Not Configured</h2>
         <p className="text-sm text-icon4 mb-6">

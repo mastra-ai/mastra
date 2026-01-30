@@ -1,6 +1,6 @@
 import { useState } from 'react';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
 import {
-  Wand2,
   FileText,
   Code,
   Image,
@@ -69,7 +69,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
       {/* Header */}
       <div className="flex items-start gap-4">
         <div className="p-3 rounded-lg bg-surface5">
-          <Wand2 className="h-6 w-6 text-icon4" />
+          <SkillIcon className="h-6 w-6 text-icon4" />
         </div>
         <div className="flex-1">
           <h1 className="text-xl font-semibold text-icon6">{skill.name}</h1>
