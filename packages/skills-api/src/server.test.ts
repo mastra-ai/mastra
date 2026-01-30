@@ -115,6 +115,21 @@ describe('Skills API Server', () => {
     });
   });
 
+  describe('GET /api/skills/agents', () => {
+    it('returns supported AI agents', async () => {
+      const res = await app.request('/api/skills/agents');
+      expect(res.status).toBe(200);
+
+      const body = await res.json();
+      expect(body.agents).toBeInstanceOf(Array);
+      expect(body.agents.length).toBeGreaterThan(0);
+      expect(body.agents[0]).toHaveProperty('id');
+      expect(body.agents[0]).toHaveProperty('name');
+      expect(body.agents[0]).toHaveProperty('url');
+      expect(body.agents[0]).toHaveProperty('iconUrl');
+    });
+  });
+
   describe('GET /api/skills/stats', () => {
     it('returns statistics', async () => {
       const res = await app.request('/api/skills/stats');

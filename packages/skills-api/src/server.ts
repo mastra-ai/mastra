@@ -72,17 +72,32 @@ export function createSkillsApiServer(options: SkillsApiServerOptions = {}): Hon
   app.get('/', c => {
     return c.json({
       name: 'Skills.sh API',
-      description: 'API for the Agent Skills marketplace',
+      description: 'Open API for the Agent Skills marketplace. Build your own skills directory!',
       version: '0.0.1',
       specification: 'https://agentskills.io',
+      license: 'Apache-2.0',
       endpoints: {
+        // Skill listing
         skills: `${prefix}/skills`,
         top: `${prefix}/skills/top`,
-        sources: `${prefix}/skills/sources`,
-        owners: `${prefix}/skills/owners`,
-        stats: `${prefix}/skills/stats`,
+        search: `${prefix}/skills?query=:query`,
+        // Filtering
+        byOwner: `${prefix}/skills?owner=:owner`,
         bySource: `${prefix}/skills/by-source/:owner/:repo`,
-        skill: `${prefix}/skills/:owner/:repo/:skillId`,
+        // Metadata
+        sources: `${prefix}/skills/sources`,
+        topSources: `${prefix}/skills/sources/top`,
+        owners: `${prefix}/skills/owners`,
+        agents: `${prefix}/skills/agents`,
+        stats: `${prefix}/skills/stats`,
+        // Individual skills
+        skill: `${prefix}/skills/:skillId`,
+        skillBySource: `${prefix}/skills/:owner/:repo/:skillId`,
+        skillContent: `${prefix}/skills/:owner/:repo/:skillId/content`,
+      },
+      usage: {
+        install: 'npx skills add :owner/:repo/:skillId',
+        example: 'npx skills add vercel-labs/agent-skills/vercel-react-best-practices',
       },
     });
   });

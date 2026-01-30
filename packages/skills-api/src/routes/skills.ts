@@ -6,7 +6,15 @@
 import { Hono } from 'hono';
 
 import { fetchSkillFromGitHub } from '../github/index.js';
-import { skills, metadata, getSources, getOwners, getTopSkills, getTopSources } from '../registry/index.js';
+import {
+  skills,
+  metadata,
+  getSources,
+  getOwners,
+  getTopSkills,
+  getTopSources,
+  supportedAgents,
+} from '../registry/index.js';
 import type { PaginatedSkillsResponse, SkillSearchParams } from '../registry/types.js';
 
 const skillsRouter = new Hono();
@@ -181,6 +189,17 @@ skillsRouter.get('/owners', c => {
     page,
     pageSize,
     totalPages,
+  });
+});
+
+/**
+ * GET /api/skills/agents
+ * Get all supported AI agents
+ */
+skillsRouter.get('/agents', c => {
+  return c.json({
+    agents: supportedAgents,
+    total: supportedAgents.length,
   });
 });
 

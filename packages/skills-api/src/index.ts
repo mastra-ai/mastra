@@ -15,6 +15,8 @@ export type {
 } from './registry/types.js';
 
 export { skills, metadata, getSources, getOwners, getTopSkills, getTopSources } from './registry/data.js';
+export { supportedAgents, getAgent } from './registry/agents.js';
+export type { SupportedAgent } from './registry/agents.js';
 
 // Scraper exports
 export { scrapeSkills, enrichSkills, scrapeAndSave } from './scraper/scrape.js';
