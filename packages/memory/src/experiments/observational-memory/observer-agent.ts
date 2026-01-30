@@ -1,15 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 
-/**
- * Debug logging controlled by OM_DEV_DEBUG environment variable.
- */
-const OM_DEBUG = process.env.OM_DEV_DEBUG === '1' || process.env.OM_DEV_DEBUG === 'true';
 
-function omWarn(...args: unknown[]): void {
-  if (OM_DEBUG) {
-    console.warn(...args);
-  }
-}
 
 /**
  * Legacy extraction instructions from Jan 7, 2026.
@@ -846,11 +837,8 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
     });
   }
 
-  // If no thread blocks found, log a warning
-  // The caller will need to handle this case (e.g., by falling back to single-thread parsing)
-  if (threads.size === 0) {
-    omWarn('[OM Observer] No thread blocks found in multi-thread output');
-  }
+  // If no thread blocks found, the caller will need to handle this case
+  // (e.g., by falling back to single-thread parsing)
 
   return {
     threads,
@@ -895,9 +883,7 @@ export function parseObserverOutput(output: string): ObserverResult {
   // Those are stored separately in thread metadata and injected dynamically
   const observations = parsed.observations || '';
 
-  if (!parsed.currentTask) {
-    omWarn('[OM Observer] Warning: Observations missing <current-task> section.');
-  }
+
 
   // Only include patterns if there are any
   const hasPatterns = Object.keys(parsed.patterns).length > 0;
