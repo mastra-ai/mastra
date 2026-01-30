@@ -65,10 +65,154 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async init(): Promise<void> {
+    // Migrate from legacy schemas before creating tables
+    await this.#migrateFromLegacySchema();
+    await this.#migrateVersionsSchema();
+
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
     await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
+    // Add new columns for backwards compatibility with intermediate schema versions
+    await this.#db.alterTable({
+      tableName: TABLE_AGENTS,
+      schema: TABLE_SCHEMAS[TABLE_AGENTS],
+      ifNotExists: ['status', 'authorId'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+
+    // Clean up any stale draft records from previously failed createAgent calls
+    await this.#cleanupStaleDrafts();
+  }
+
+  /**
+   * Migrates from the legacy flat agent schema (where config fields like name, instructions, model
+   * were stored directly on mastra_agents) to the new versioned schema (thin agent record + versions table).
+   */
+  async #migrateFromLegacySchema(): Promise<void> {
+    const fullTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+    const fullVersionsTableName = getTableName({
+      indexName: TABLE_AGENT_VERSIONS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const legacyTableName = getTableName({
+      indexName: `${TABLE_AGENTS}_legacy`,
+      schemaName: getSchemaName(this.#schema),
+    });
+
+    const hasLegacyColumns = await this.#db.hasColumn(TABLE_AGENTS, 'name');
+
+    if (hasLegacyColumns) {
+      // Current table has legacy schema — rename it and drop old versions table
+      await this.#db.client.none(`ALTER TABLE ${fullTableName} RENAME TO "${TABLE_AGENTS}_legacy"`);
+      await this.#db.client.none(`DROP TABLE IF EXISTS ${fullVersionsTableName}`);
+    }
+
+    // Check if legacy table exists (either just renamed, or left behind by a previous partial migration)
+    const legacyExists = await this.#db.hasColumn(`${TABLE_AGENTS}_legacy`, 'name');
+    if (!legacyExists) return;
+
+    // Read all existing agents from the legacy table
+    const oldAgents = await this.#db.client.manyOrNone(`SELECT * FROM ${legacyTableName}`);
+
+    // Create new tables (IF NOT EXISTS handles idempotency on resume)
+    await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
+    await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
+
+    // ON CONFLICT DO NOTHING makes inserts safe for resumed partial migrations
+    for (const row of oldAgents) {
+      const agentId = row.id as string;
+      if (!agentId) continue;
+
+      const versionId = crypto.randomUUID();
+      const now = new Date();
+
+      await this.#db.client.none(
+        `INSERT INTO ${fullTableName} (id, status, "activeVersionId", "authorId", metadata, "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          agentId,
+          'published',
+          versionId,
+          row.ownerId ?? row.authorId ?? null,
+          row.metadata ? JSON.stringify(row.metadata) : null,
+          row.createdAt ?? now,
+          row.updatedAt ?? now,
+        ],
+      );
+
+      await this.#db.client.none(
+        `INSERT INTO ${fullVersionsTableName}
+         (id, "agentId", "versionNumber", name, description, instructions, model, tools,
+          "defaultOptions", workflows, agents, "integrationTools", "inputProcessors",
+          "outputProcessors", memory, scorers, "changedFields", "changeMessage", "createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          versionId,
+          agentId,
+          1,
+          row.name ?? agentId,
+          row.description ?? null,
+          row.instructions ?? '',
+          row.model ? JSON.stringify(row.model) : '{}',
+          row.tools ? JSON.stringify(row.tools) : null,
+          row.defaultOptions ? JSON.stringify(row.defaultOptions) : null,
+          row.workflows ? JSON.stringify(row.workflows) : null,
+          row.agents ? JSON.stringify(row.agents) : null,
+          row.integrationTools ? JSON.stringify(row.integrationTools) : null,
+          row.inputProcessors ? JSON.stringify(row.inputProcessors) : null,
+          row.outputProcessors ? JSON.stringify(row.outputProcessors) : null,
+          row.memory ? JSON.stringify(row.memory) : null,
+          row.scorers ? JSON.stringify(row.scorers) : null,
+          null,
+          'Migrated from legacy schema',
+          row.createdAt ?? now,
+        ],
+      );
+    }
+
+    // Drop legacy table only after all inserts succeed
+    await this.#db.client.none(`DROP TABLE IF EXISTS ${legacyTableName}`);
+  }
+
+  /**
+   * Migrates the agent_versions table from the old snapshot-based schema (single `snapshot` JSON column)
+   * to the new flat schema (individual config columns). This handles the case where the agents table
+   * was already migrated but the versions table still has the old schema.
+   */
+  async #migrateVersionsSchema(): Promise<void> {
+    const hasSnapshotColumn = await this.#db.hasColumn(TABLE_AGENT_VERSIONS, 'snapshot');
+    if (!hasSnapshotColumn) return;
+
+    const fullVersionsTableName = getTableName({
+      indexName: TABLE_AGENT_VERSIONS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const legacyTableName = getTableName({
+      indexName: `${TABLE_AGENTS}_legacy`,
+      schemaName: getSchemaName(this.#schema),
+    });
+
+    // Drop the old versions table - the new schema will be created by init()
+    await this.#db.client.none(`DROP TABLE IF EXISTS ${fullVersionsTableName}`);
+
+    // Also clean up any lingering legacy table from a partial migration
+    await this.#db.client.none(`DROP TABLE IF EXISTS ${legacyTableName}`);
+  }
+
+  /**
+   * Removes stale draft agent records that have no activeVersionId.
+   * These are left behind when createAgent partially fails (inserts thin record
+   * but fails to create the version due to schema mismatch).
+   */
+  async #cleanupStaleDrafts(): Promise<void> {
+    try {
+      const fullTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+      await this.#db.client.none(`DELETE FROM ${fullTableName} WHERE status = 'draft' AND "activeVersionId" IS NULL`);
+    } catch {
+      // Non-critical cleanup, ignore errors
+    }
   }
 
   /**
