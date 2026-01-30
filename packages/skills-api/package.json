@@ -1,0 +1,70 @@
+{
+  "name": "@mastra/skills-api",
+  "version": "0.0.1",
+  "description": "API server for skills.sh - a marketplace for Agent Skills",
+  "type": "module",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "skills-api": "./dist/bin.js"
+  },
+  "scripts": {
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
+    "build:watch": "pnpm build:lib --watch",
+    "dev": "tsx watch src/bin.ts",
+    "start": "node dist/bin.js",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "mastra",
+    "skills",
+    "agents",
+    "ai"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "hono": "^4.11.3"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@types/node": "22.19.7",
+    "eslint": "^9.37.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.4",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "homepage": "https://skills.sh",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/skills-api"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
