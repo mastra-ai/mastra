@@ -2,18 +2,19 @@
 
 ## What This Is
 
-A browser toolset integration for Mastra agents that enables web page navigation, interaction, and real-time live view using the agent-browser library. Agents can navigate to URLs, capture accessibility snapshots, interact with elements via refs, take screenshots, and stream their browser session live to Mastra Studio.
+A browser toolset integration for Mastra agents that enables web page navigation, interaction, and real-time live view with user input injection using the agent-browser library. Agents can navigate to URLs, capture accessibility snapshots, interact with elements via refs, take screenshots, and stream their browser session live to Mastra Studio. Users can click, type, and scroll in the live view to assist agents with CAPTCHAs, logins, and other interactive elements.
 
 ## Core Value
 
-Agents can browse and interact with real websites to gather information, and users can watch them work in real-time from within Studio.
+Agents can browse real websites and users can watch and assist them in real-time from within Studio.
 
-## Current State (v1.1 shipped)
+## Current State (v1.2 shipped)
 
 **Package:** `integrations/agent-browser/` + `packages/deployer/` (transport) + `packages/playground-ui/` (UI)
-**Lines of code:** ~4,500 TypeScript across 3 packages
+**Lines of code:** ~5,700 TypeScript across 3 packages
 **Tools:** 7 (navigate, snapshot, click, type, select, scroll, screenshot)
 **Live View:** CDP screencast → WebSocket → React panel with tool call history
+**Input Injection:** Click, keyboard, scroll forwarding with coordinate mapping and focus management
 **Build:** ESM + CJS with TypeScript declarations
 
 ## Requirements
@@ -29,14 +30,15 @@ Agents can browse and interact with real websites to gather information, and use
 - [x] Live browser screencast streams to Studio during tool execution — v1.1
 - [x] Browser view renders inline with agent chat in Studio — v1.1
 - [x] Tool call history displayed in browser panel — v1.1
+- [x] User can click on the live view frame to interact with browser elements — v1.2
+- [x] User can type in the live view to fill forms or enter text — v1.2
+- [x] User can scroll in the live view to navigate long pages — v1.2
+- [x] Coordinate mapping translates frame clicks to browser viewport coordinates — v1.2
+- [x] Agent-busy coordination prevents destructive races during tool execution — v1.2
 
 ### Active
 
-- [ ] User can click on the live view frame to interact with browser elements — v1.2
-- [ ] User can type in the live view to fill forms or enter text — v1.2
-- [ ] User can scroll in the live view to navigate long pages — v1.2
-- [ ] Coordinate mapping translates frame clicks to browser viewport coordinates — v1.2
-- [ ] Agent can detect page changes after user input and continue working — v1.2
+(None — next milestone requirements TBD)
 
 ### Out of Scope
 
@@ -101,25 +103,19 @@ Agents can browse and interact with real websites to gather information, and use
 | Panel hides on user X click only | No auto-hide on browser_closed preserves last frame | Good |
 | everyNthFrame: 1 for headless | Chrome generates fewer frames without display cycle | Good |
 | BrowserToolCallsContext bridge | React Context bridges ToolFallback and BrowserViewPanel | Good |
-
-## Current Milestone: v1.2 Browser Input Injection
-
-**Goal:** Users can click, type, and scroll in the live view panel to unblock agents stuck on CAPTCHAs, popups, or login prompts (assist mode).
-
-**Target features:**
-- Click on live view frame → click forwarded to browser element
-- Type in live view → keystrokes forwarded to browser
-- Scroll in live view → viewport scrolls in browser
-- Coordinate mapping from scaled frame to actual viewport
-- Agent auto-detects page changes after user input, or user clicks "Resume"
-- Assist mode: user intervenes briefly, agent continues working
-
-**Use case:** Agent navigates to a site, hits a CAPTCHA. User sees it in the live view, clicks to solve it, agent resumes automatically.
-
-**Infrastructure ready:**
-- `injectMouseEvent()` and `injectKeyboardEvent()` exist on BrowserToolset (Phase 7)
-- WebSocket is already bidirectional (Phase 8)
-- BrowserViewPanel renders frames with coordinate info available (Phase 9)
+| ClientInputMessage discriminated union | Type field discriminates mouse/keyboard, eventType for CDP subtypes | Good |
+| Viewport metadata as separate JSON message | Keeps raw base64 frame protocol unchanged, metadata sent alongside | Good |
+| Fire-and-forget input injection | No ack latency, client responsible for throttle, CDP handles errors | Good |
+| object-fit:contain letterbox coordinate mapping | Pure function maps scaled img clicks to browser viewport CSS pixels | Good |
+| rAF throttle at 30fps for mouse move | Prevents WebSocket/CDP flood from high-frequency mousemove events | Good |
+| key.length === 1 for printable detection | Single Unicode codepoint distinguishes printable from special keys | Good |
+| Escape consumed by hook, never forwarded | Escape exits interactive mode rather than being sent to remote browser | Good |
+| IME guard with isComposing + keyCode 229 | Cross-browser compatibility for IME input composition | Good |
+| Interactive mode gated by frame click | Explicit opt-in prevents accidental keyboard capture | Good |
+| Container-relative ripple coordinates | Display-space CSS pixels avoid coordinate system coupling | Good |
+| Agent-busy derived from BrowserToolCallsContext | No new infrastructure, derives isAgentBusy from pending tool calls | Good |
+| Mouse suppressed, keyboard continues during agent | Click/scroll cause destructive races, keyboard is safe to continue | Good |
+| Ring color green→amber for agent busy | Visual state distinction without extra UI elements | Good |
 
 ---
-*Last updated: 2026-01-28 after v1.2 milestone start*
+*Last updated: 2026-01-30 after v1.2 milestone completion*

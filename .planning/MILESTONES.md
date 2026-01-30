@@ -1,5 +1,33 @@
 # Project Milestones: Mastra Browser Tools
 
+## v1.2 Browser Input Injection (Shipped: 2026-01-30)
+
+**Delivered:** Full user input injection into the live browser view — click, keyboard, and scroll forwarding with coordinate mapping, focus management, visual feedback, and agent-busy coordination.
+
+**Phases completed:** 10-15 (9 plans total)
+
+**Key accomplishments:**
+
+- Infrastructure extensions with injectMouseEvent/injectKeyboardEvent interface methods and viewport metadata broadcasting with change detection
+- Server-side input routing with fire-and-forget CDP injection, JSON message validation, and type-guarded dispatch
+- Full mouse input pipeline with object-fit:contain letterbox coordinate mapping, wheel delta normalization, and modifier bitmask conversion
+- Keyboard interaction with capture-phase listeners, IME composition handling, and 3-event/2-event CDP sequences for printable/non-printable keys
+- Interactive mode with multi-exit triggers (Escape, click-outside, blur, status change) and visual ring indicator
+- Click ripple feedback and agent-busy coordination that suppresses mouse input during tool execution with contextual activity overlay
+
+**Stats:**
+
+- 1,203 lines added/changed across 18 TypeScript files
+- 6 phases, 9 plans, 16 feat commits
+- 1 day from start to ship (2026-01-29)
+- 27 requirements delivered across 8 categories
+
+**Git range:** `feat(10-01): extend BrowserToolsetLike interface` → `feat(15-01): wire input coordination into BrowserViewFrame`
+
+**What's next:** TBD — full takeover mode, session persistence, multi-tab, or PR to main
+
+---
+
 ## v1.1 Browser Live View (Shipped: 2026-01-28)
 
 **Delivered:** Real-time browser screencast streaming from agent to Mastra Studio, with live view panel, connection status, and tool call history inline with agent chat.
