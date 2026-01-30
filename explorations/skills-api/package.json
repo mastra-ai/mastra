@@ -27,13 +27,11 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build:lib --watch",
     "dev": "tsx watch src/bin.ts",
     "start": "node dist/bin.js",
     "scrape": "tsx src/scraper/scrape.ts",
-    "test": "vitest run",
-    "lint": "eslint ."
+    "test": "vitest run"
   },
   "keywords": [
     "mastra",
@@ -49,19 +47,17 @@
     "hono": "^4.11.3"
   },
   "devDependencies": {
-    "@internal/lint": "workspace:*",
     "@types/node": "22.19.7",
-    "eslint": "^9.37.0",
     "tsup": "^8.5.1",
     "tsx": "^4.19.4",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "^5.8.3",
+    "vitest": "^4.0.16"
   },
   "homepage": "https://skills.sh",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "packages/skills-api"
+    "directory": "explorations/skills-api"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"

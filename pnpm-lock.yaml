@@ -3504,40 +3504,6 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
 
-  packages/skills-api:
-    dependencies:
-      '@hono/node-server':
-        specifier: ^1.13.7
-        version: 1.19.6(hono@4.11.3)
-      gray-matter:
-        specifier: ^4.0.3
-        version: 4.0.3
-      hono:
-        specifier: ^4.11.3
-        version: 4.11.3
-    devDependencies:
-      '@internal/lint':
-        specifier: workspace:*
-        version: link:../_config
-      '@types/node':
-        specifier: 22.19.7
-        version: 22.19.7
-      eslint:
-        specifier: ^9.37.0
-        version: 9.39.2(jiti@2.6.1)
-      tsup:
-        specifier: ^8.5.1
-        version: 8.5.1(@microsoft/api-extractor@7.55.2(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
-      tsx:
-        specifier: ^4.19.4
-        version: 4.21.0
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: 'catalog:'
-        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
-
   pubsub/google-cloud-pubsub:
     dependencies:
       '@google-cloud/pubsub':
