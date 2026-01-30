@@ -28,7 +28,7 @@ const workspace = new Workspace({
 });
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -104,7 +104,7 @@ const workspace = new Workspace({
   ]}
 />
 
-## Tool Configuration
+## Tool configuration
 
 The `tools` option accepts a `WorkspaceToolsConfig` object that controls which workspace tools are enabled and their safety settings.
 
@@ -127,9 +127,9 @@ The config object has two parts:
 - **Global defaults** (`enabled`, `requireApproval`) - Apply to all tools unless overridden
 - **Per-tool overrides** - Use `WORKSPACE_TOOLS` constants as keys to configure individual tools
 
-See [Workspace Overview](/docs/workspace/overview#tool-configuration) for more examples.
+See [workspace overview](/docs/workspace/overview#tool-configuration) for more examples.
 
-### Per-tool Options
+### Per-tool options
 
 Each tool can be configured with these options:
 
@@ -241,7 +241,7 @@ Destroy the workspace and clean up resources.
 await workspace.destroy();
 ```
 
-### Search Operations
+### Search operations
 
 #### `index(path, content, options?)`
 
@@ -308,7 +308,7 @@ Get the tools configuration.
 const config = workspace.getToolsConfig();
 ```
 
-## Agent Tools
+## Agent tools
 
 A workspace provides tools to agents based on what is configured.
 
@@ -349,7 +349,7 @@ The `index` tool is excluded when the filesystem is in read-only mode.
 
 ## Related
 
-- [Workspace Overview](/docs/workspace/overview)
-- [Search and Indexing](/docs/workspace/search)
-- [Filesystem Reference](/reference/workspace/filesystem)
-- [Sandbox Reference](/reference/workspace/sandbox)
+- [Workspace overview](/docs/workspace/overview)
+- [Search and indexing](/docs/workspace/search)
+- [Filesystem reference](/reference/workspace/filesystem)
+- [Sandbox reference](/reference/workspace/sandbox)
