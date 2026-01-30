@@ -188,7 +188,10 @@ Plans:
 2. Click ripple effect appears immediately at click position before browser responds (CSS animation overlay)
 3. Ripple effect positions correctly accounting for letterbox offset (same coordinate mapping as actual click)
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 14-01-PLAN.md -- Click ripple overlay with letterbox-aware positioning (VIS-01 already complete from Phase 13)
 
 ---
 
@@ -226,9 +229,9 @@ Plans:
 | 11. Server Input Routing | v1.2 | 1/1 | Complete | 2026-01-29 |
 | 12. Client Mapping & Click | v1.2 | 3/3 | Complete | 2026-01-29 |
 | 13. Focus & Keyboard | v1.2 | 2/2 | Complete | 2026-01-30 |
-| 14. Visual Feedback | v1.2 | 0/TBD | Not Started | -- |
+| 14. Visual Feedback | v1.2 | 0/1 | Not Started | -- |
 | 15. Input Coordination | v1.2 | 0/TBD | Not Started | -- |
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-30 -- Phase 13 complete (2 plans executed)*
+*Last updated: 2026-01-30 -- Phase 14 planned (1 plan)*
