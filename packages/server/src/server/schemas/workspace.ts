@@ -316,25 +316,6 @@ export const searchSkillsResponseSchema = z.object({
 });
 
 // =============================================================================
-// Sandbox Execute Schemas
-// =============================================================================
-
-export const sandboxExecuteBodySchema = z.object({
-  command: z.string().describe('The command to execute'),
-  args: z.array(z.string()).describe('Arguments for the command'),
-  cwd: z.string().optional().describe('Working directory for the command'),
-  timeout: z.number().optional().describe('Timeout in milliseconds'),
-});
-
-export const sandboxExecuteResponseSchema = z.object({
-  success: z.boolean(),
-  exitCode: z.number(),
-  stdout: z.string(),
-  stderr: z.string(),
-  executionTimeMs: z.number(),
-});
-
-// =============================================================================
 // skills.sh Proxy Schemas
 // =============================================================================
 

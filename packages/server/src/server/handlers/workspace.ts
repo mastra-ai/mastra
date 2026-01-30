@@ -42,9 +42,6 @@ import {
   skillReferenceResponseSchema,
   listReferencesResponseSchema,
   searchSkillsResponseSchema,
-  // Sandbox schemas
-  sandboxExecuteBodySchema,
-  sandboxExecuteResponseSchema,
   // skills.sh proxy schemas
   skillsShSearchQuerySchema,
   skillsShPopularQuerySchema,
@@ -921,54 +918,6 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
 });
 
 // =============================================================================
-// Sandbox Routes
-// =============================================================================
-
-export const WORKSPACE_SANDBOX_EXECUTE_ROUTE = createRoute({
-  method: 'POST',
-  path: '/workspaces/:workspaceId/sandbox/execute',
-  responseType: 'json',
-  pathParamSchema: workspaceIdPathParams,
-  bodySchema: sandboxExecuteBodySchema,
-  responseSchema: sandboxExecuteResponseSchema,
-  summary: 'Execute command in sandbox',
-  description: 'Executes a command in the workspace sandbox environment',
-  tags: ['Workspace', 'Sandbox'],
-  handler: async ({ mastra, workspaceId, command, args, cwd, timeout }) => {
-    try {
-      requireWorkspaceV1Support();
-
-      if (!command) {
-        throw new HTTPException(400, { message: 'Command is required' });
-      }
-
-      const workspace = await getWorkspaceById(mastra, workspaceId);
-      if (!workspace) {
-        throw new HTTPException(404, { message: 'Workspace not found' });
-      }
-
-      if (!workspace.sandbox?.executeCommand) {
-        throw new HTTPException(400, { message: 'Workspace sandbox not available' });
-      }
-
-      const startTime = Date.now();
-      const result = await workspace.sandbox.executeCommand(command, args ?? [], { cwd, timeout });
-      const executionTimeMs = Date.now() - startTime;
-
-      return {
-        success: result.exitCode === 0,
-        exitCode: result.exitCode,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        executionTimeMs,
-      };
-    } catch (error) {
-      return handleError(error, 'Error executing sandbox command');
-    }
-  },
-});
-
-// =============================================================================
 // skills.sh Proxy Routes
 // =============================================================================
 
@@ -1649,5 +1598,3 @@ export const WORKSPACE_SKILLS_ROUTES = [
   WORKSPACE_LIST_SKILL_REFERENCES_ROUTE,
   WORKSPACE_GET_SKILL_REFERENCE_ROUTE,
 ];
-
-export const WORKSPACE_SANDBOX_ROUTES = [WORKSPACE_SANDBOX_EXECUTE_ROUTE];

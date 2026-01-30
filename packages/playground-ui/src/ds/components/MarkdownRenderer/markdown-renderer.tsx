@@ -10,27 +10,10 @@ import { highlight } from '@/ds/components/CodeEditor';
 
 export type MarkdownRendererProps = {
   children: string;
-  /** Strip YAML frontmatter from the content (default: true) */
-  stripFrontmatter?: boolean;
 };
 
-/**
- * Strip YAML frontmatter from markdown content.
- * Frontmatter is delimited by --- at the start and end.
- */
-function stripYamlFrontmatter(content: string): string {
-  // Match frontmatter: starts with ---, ends with ---, at the beginning of the string
-  const frontmatterRegex = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
-  return content.replace(frontmatterRegex, '');
-}
-
-export function MarkdownRenderer({ children, stripFrontmatter = true }: MarkdownRendererProps) {
-  let processedText = children.replace(/\\n/g, '\n');
-
-  // Strip YAML frontmatter if present (common in SKILL.md files)
-  if (stripFrontmatter) {
-    processedText = stripYamlFrontmatter(processedText);
-  }
+export function MarkdownRenderer({ children }: MarkdownRendererProps) {
+  const processedText = children.replace(/\\n/g, '\n');
 
   return (
     <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS} className="space-y-3">
@@ -215,20 +198,13 @@ const COMPONENTS: Components = {
     </li>
   ),
   table: ({ children, ...props }) => (
-    <div className="my-4 w-full overflow-x-auto">
-      <table className="w-full border-collapse rounded-md border border-border1" {...props}>
-        {children}
-      </table>
-    </div>
-  ),
-  thead: ({ children, ...props }) => (
-    <thead className="bg-surface4" {...props}>
+    <table className="w-full border-collapse overflow-y-auto rounded-md border border-neutral6/20" {...props}>
       {children}
-    </thead>
+    </table>
   ),
   th: ({ children, ...props }) => (
     <th
-      className="border border-border1 px-3 py-2 text-left text-xs font-semibold text-icon5 [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right"
       {...props}
     >
       {children}
@@ -236,14 +212,14 @@ const COMPONENTS: Components = {
   ),
   td: ({ children, ...props }) => (
     <td
-      className="border border-border1 px-3 py-2 text-left text-sm [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
       {...props}
     >
       {children}
     </td>
   ),
   tr: ({ children, ...props }) => (
-    <tr className="m-0 border-t border-border1 p-0 even:bg-surface3" {...props}>
+    <tr className="m-0 border-t p-0 even:bg-surface4" {...props}>
       {children}
     </tr>
   ),
