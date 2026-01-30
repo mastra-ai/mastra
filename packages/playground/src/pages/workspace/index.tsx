@@ -603,6 +603,7 @@ export default function Workspace() {
           workspaceId={effectiveWorkspaceId}
           onInstall={handleInstallSkill}
           isInstalling={installSkill.isPending}
+          installedSkillNames={skills.map(s => s.name)}
         />
       )}
     </MainContentLayout>

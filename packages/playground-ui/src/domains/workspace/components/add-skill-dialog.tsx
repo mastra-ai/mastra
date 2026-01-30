@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { Search, Download, ExternalLink, Loader2, Package, Github } from 'lucide-react';
+import { Search, Download, ExternalLink, Loader2, Package, Github, Check } from 'lucide-react';
 import { SkillIcon } from '@/ds/icons/SkillIcon';
 import {
   Dialog,
@@ -24,9 +24,18 @@ export interface AddSkillDialogProps {
   workspaceId: string;
   onInstall: (params: { repository: string; skillName: string }) => void;
   isInstalling?: boolean;
+  /** Names of skills that are already installed (to show indicator and prevent re-install) */
+  installedSkillNames?: string[];
 }
 
-export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isInstalling }: AddSkillDialogProps) {
+export function AddSkillDialog({
+  open,
+  onOpenChange,
+  workspaceId,
+  onInstall,
+  isInstalling,
+  installedSkillNames = [],
+}: AddSkillDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<SkillsShSkill | null>(null);
 
@@ -83,6 +92,9 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
 
   const isSearching = searchMutation.isPending;
   const hasSearchResults = searchQuery.trim().length >= 2;
+
+  // Check if selected skill is already installed
+  const isSelectedSkillInstalled = selectedSkill ? installedSkillNames.includes(selectedSkill.name) : false;
 
   // Handle install
   const handleInstall = useCallback(() => {
@@ -144,28 +156,39 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
                   </div>
                 ) : (
                   <div className="p-2 space-y-1">
-                    {displaySkills.map(skill => (
-                      <button
-                        key={skill.id}
-                        onClick={() => setSelectedSkill(skill)}
-                        className={cn(
-                          'w-full text-left px-3 py-2 rounded-md transition-colors',
-                          'hover:bg-surface4',
-                          selectedSkill?.id === skill.id && 'bg-surface5 border border-accent1',
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium text-sm text-icon6 truncate">{skill.name}</div>
-                            <div className="text-xs text-icon4 truncate">{skill.topSource}</div>
+                    {displaySkills.map(skill => {
+                      const isInstalled = installedSkillNames.includes(skill.name);
+                      return (
+                        <button
+                          key={skill.id}
+                          onClick={() => setSelectedSkill(skill)}
+                          className={cn(
+                            'w-full text-left px-3 py-2 rounded-md transition-colors',
+                            'hover:bg-surface4',
+                            selectedSkill?.id === skill.id && 'bg-surface5 border border-accent1',
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm text-icon6 truncate">{skill.name}</span>
+                                {isInstalled && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent1/20 text-accent1">
+                                    <Check className="h-2.5 w-2.5" />
+                                    Installed
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-icon4 truncate">{skill.topSource}</div>
+                            </div>
+                            <div className="flex items-center gap-1 text-xs text-icon3 shrink-0">
+                              <Download className="h-3 w-3" />
+                              <span>{skill.installs.toLocaleString()}</span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1 text-xs text-icon3 shrink-0">
-                            <Download className="h-3 w-3" />
-                            <span>{skill.installs.toLocaleString()}</span>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </ScrollArea>
@@ -254,11 +277,21 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
               <Button variant="light" onClick={() => handleOpenChange(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleInstall} disabled={!parsedSource || isInstalling}>
+              <Button
+                variant="primary"
+                onClick={handleInstall}
+                disabled={!parsedSource || isInstalling || isSelectedSkillInstalled}
+                data-testid="install-skill-button"
+              >
                 {isInstalling ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Installing...
+                  </>
+                ) : isSelectedSkillInstalled ? (
+                  <>
+                    <Check className="h-4 w-4 mr-2" />
+                    Already Installed
                   </>
                 ) : (
                   <>
