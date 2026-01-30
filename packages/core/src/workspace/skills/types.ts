@@ -18,23 +18,16 @@ import type { LineRange } from '../line-utils';
 export type ContentSourceType = 'external' | 'local' | 'managed';
 
 /**
- * Content source indicating where a skill comes from and its access level.
+ * Content source indicating where a skill comes from.
  *
- * - external: From node_modules packages (read-only)
- * - local: From project source directory (read-write)
- * - managed: From .mastra directory, typically Studio-managed (read-write)
+ * - external: From node_modules packages
+ * - local: From project source directory
+ * - managed: From .mastra directory, typically Studio-managed
  */
 export type ContentSource =
   | { type: 'external'; packagePath: string }
   | { type: 'local'; projectPath: string }
   | { type: 'managed'; mastraPath: string };
-
-/**
- * Check if a source is writable (not external/read-only)
- */
-export function isWritableContentSource(source: ContentSource): boolean {
-  return source.type !== 'external';
-}
 
 /**
  * Determine the source type for a given path.
@@ -201,39 +194,13 @@ export interface SkillSearchOptions extends BaseSearchOptions {
   includeReferences?: boolean;
 }
 
-/**
- * Options for creating a skill
- */
-export interface CreateSkillInput {
-  /** Skill metadata (name, description, etc.) */
-  metadata: SkillMetadata;
-  /** Markdown instructions (body of SKILL.md) */
-  instructions: string;
-  /** Optional reference files to include */
-  references?: Array<{ path: string; content: string }>;
-  /** Optional script files to include */
-  scripts?: Array<{ path: string; content: string }>;
-  /** Optional asset files to include */
-  assets?: Array<{ path: string; content: Buffer | string }>;
-}
-
-/**
- * Options for updating a skill
- */
-export interface UpdateSkillInput {
-  /** Updated metadata (partial - only provided fields are updated) */
-  metadata?: Partial<SkillMetadata>;
-  /** Updated instructions */
-  instructions?: string;
-}
-
 // =============================================================================
 // WorkspaceSkills Interface
 // =============================================================================
 
 /**
  * Interface for skills accessed via workspace.skills.
- * Provides discovery, search, and CRUD operations for skills in the workspace.
+ * Provides discovery and search operations for skills in the workspace.
  *
  * Skills are SKILL.md files discovered from configured skills.
  * All operations are async because they use the workspace filesystem.
@@ -256,16 +223,6 @@ export interface UpdateSkillInput {
  * ```
  */
 export interface WorkspaceSkills {
-  // ===========================================================================
-  // Properties
-  // ===========================================================================
-
-  /**
-   * Whether this skills instance supports write operations (create/update/delete).
-   * Returns false when using a read-only source like LocalSkillSource.
-   */
-  readonly isWritable: boolean;
-
   // ===========================================================================
   // Discovery
   // ===========================================================================
@@ -313,36 +270,6 @@ export interface WorkspaceSkills {
    * Uses workspace's search engine (BM25, vector, or hybrid).
    */
   search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]>;
-
-  // ===========================================================================
-  // CRUD Operations
-  // ===========================================================================
-
-  /**
-   * Create a new skill.
-   * Creates a skill directory with SKILL.md and optional reference/script/asset files.
-   *
-   * @param input - Skill creation input
-   * @throws Error if skill already exists or validation fails
-   */
-  create(input: CreateSkillInput): Promise<Skill>;
-
-  /**
-   * Update an existing skill.
-   *
-   * @param name - Name of the skill to update
-   * @param input - Update input (partial metadata and/or instructions)
-   * @throws Error if skill doesn't exist
-   */
-  update(name: string, input: UpdateSkillInput): Promise<Skill>;
-
-  /**
-   * Delete a skill.
-   *
-   * @param name - Name of the skill to delete
-   * @throws Error if skill doesn't exist
-   */
-  delete(name: string): Promise<void>;
 
   // ===========================================================================
   // Single-item Accessors

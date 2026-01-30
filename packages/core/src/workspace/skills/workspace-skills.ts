@@ -1,12 +1,8 @@
 /**
  * WorkspaceSkills - Skills implementation.
  *
- * Provides discovery, search, and CRUD operations for skills stored
+ * Provides discovery and search operations for skills stored
  * in skills paths. All operations are async.
- *
- * Supports two modes:
- * - With WorkspaceFilesystem: Full CRUD operations (create/update/delete)
- * - With SkillSource: Read-only operations (list/get/search)
  */
 
 import matter from 'gray-matter';
@@ -14,15 +10,12 @@ import matter from 'gray-matter';
 import type { IndexDocument, SearchResult } from '../search';
 import { validateSkillMetadata } from './schemas';
 import type { SkillSource as SkillSourceInterface } from './skill-source';
-import { isWritableSource } from './skill-source';
 import type {
   ContentSource,
   Skill,
   SkillMetadata,
   SkillSearchResult,
   SkillSearchOptions,
-  CreateSkillInput,
-  UpdateSkillInput,
   WorkspaceSkills,
   SkillsResolver,
   SkillsContext,
@@ -45,16 +38,6 @@ interface SkillSearchEngine {
   clear(): void;
 }
 
-/**
- * Writable source - SkillSource with write methods.
- * Used internally for CRUD operations.
- */
-interface WritableSkillSource extends SkillSourceInterface {
-  writeFile(path: string, content: string | Buffer): Promise<void>;
-  mkdir(path: string): Promise<void>;
-  rmdir(path: string, options?: { recursive?: boolean }): Promise<void>;
-}
-
 interface InternalSkill extends Skill {
   /** Content for BM25 indexing (instructions + all references) */
   indexableContent: string;
@@ -70,7 +53,6 @@ interface InternalSkill extends Skill {
 export interface WorkspaceSkillsImplConfig {
   /**
    * Source for loading skills.
-   * Can be a WorkspaceFilesystem (full CRUD) or SkillSource (read-only).
    */
   source: SkillSourceInterface;
   /**
@@ -86,17 +68,12 @@ export interface WorkspaceSkillsImplConfig {
 
 /**
  * Implementation of WorkspaceSkills interface.
- *
- * Supports two modes:
- * - With WorkspaceFilesystem or writable source: Full CRUD operations
- * - With read-only SkillSource: Read-only operations (create/update/delete throw)
  */
 export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #source: SkillSourceInterface;
   readonly #skillsResolver: SkillsResolver;
   readonly #searchEngine?: SkillSearchEngine;
   readonly #validateOnLoad: boolean;
-  readonly #isWritable: boolean;
 
   /** Map of skill name -> full skill data */
   #skills: Map<string, InternalSkill> = new Map();
@@ -118,23 +95,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#skillsResolver = config.skills;
     this.#searchEngine = config.searchEngine;
     this.#validateOnLoad = config.validateOnLoad ?? true;
-    this.#isWritable = isWritableSource(this.#source);
-  }
-
-  /**
-   * Whether this skills instance supports write operations.
-   * Returns true if backed by a WorkspaceFilesystem, false for read-only sources.
-   */
-  get isWritable(): boolean {
-    return this.#isWritable;
-  }
-
-  /**
-   * Get the source as a writable source.
-   * Only call after checking #isWritable is true.
-   */
-  #getWritableSource(): WritableSkillSource {
-    return this.#source as WritableSkillSource;
   }
 
   // ===========================================================================
@@ -274,201 +234,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     }
 
     return results;
-  }
-
-  // ===========================================================================
-  // CRUD Operations
-  // ===========================================================================
-
-  async create(input: CreateSkillInput): Promise<Skill> {
-    await this.#ensureInitialized();
-
-    // Check if source supports write operations
-    if (!this.#isWritable) {
-      throw new Error('Skills are read-only. Write operations require a WorkspaceFilesystem.');
-    }
-
-    const { metadata, instructions, references, scripts, assets } = input;
-
-    // Check if skill already exists
-    if (this.#skills.has(metadata.name)) {
-      throw new Error(`Skill "${metadata.name}" already exists`);
-    }
-
-    // Validate the skill metadata
-    if (this.#validateOnLoad) {
-      const validation = this.#validateSkillMetadata(metadata, metadata.name, instructions);
-      if (!validation.valid) {
-        throw new Error(`Invalid skill metadata:\n${validation.errors.join('\n')}`);
-      }
-    }
-
-    // Use first resolved skills path for creating new skills
-    const skillsPath = this.#resolvedPaths[0];
-    if (!skillsPath) {
-      throw new Error('No skills path configured for creating skills');
-    }
-
-    const skillDir = this.#joinPath(skillsPath, metadata.name);
-
-    // Check if directory already exists
-    if (await this.#source.exists(skillDir)) {
-      throw new Error(`Directory "${skillDir}" already exists`);
-    }
-
-    // Get writable source (safe because we checked #isWritable above)
-    const fs = this.#getWritableSource();
-
-    // Create skill directory
-    await fs.mkdir(skillDir);
-
-    // Build SKILL.md content
-    const skillMdContent = this.#buildSkillMd(metadata, instructions);
-    await fs.writeFile(this.#joinPath(skillDir, 'SKILL.md'), skillMdContent);
-
-    // Create reference files
-    const refPaths: string[] = [];
-    if (references && references.length > 0) {
-      const refsDir = this.#joinPath(skillDir, 'references');
-      await fs.mkdir(refsDir);
-      for (const ref of references) {
-        const safeRefPath = this.#assertRelativePath(ref.path, 'reference');
-        const refPath = this.#joinPath(refsDir, safeRefPath);
-        await this.#ensureParentDir(refPath);
-        await fs.writeFile(refPath, ref.content);
-        refPaths.push(safeRefPath);
-      }
-    }
-
-    // Create script files
-    const scriptPaths: string[] = [];
-    if (scripts && scripts.length > 0) {
-      const scriptsDir = this.#joinPath(skillDir, 'scripts');
-      await fs.mkdir(scriptsDir);
-      for (const script of scripts) {
-        const safeScriptPath = this.#assertRelativePath(script.path, 'script');
-        const scriptPath = this.#joinPath(scriptsDir, safeScriptPath);
-        await this.#ensureParentDir(scriptPath);
-        await fs.writeFile(scriptPath, script.content);
-        scriptPaths.push(safeScriptPath);
-      }
-    }
-
-    // Create asset files
-    const assetPaths: string[] = [];
-    if (assets && assets.length > 0) {
-      const assetsDir = this.#joinPath(skillDir, 'assets');
-      await fs.mkdir(assetsDir);
-      for (const asset of assets) {
-        const safeAssetPath = this.#assertRelativePath(asset.path, 'asset');
-        const assetPath = this.#joinPath(assetsDir, safeAssetPath);
-        await this.#ensureParentDir(assetPath);
-        await fs.writeFile(assetPath, asset.content);
-        assetPaths.push(safeAssetPath);
-      }
-    }
-
-    // Build skill object
-    const source = this.#determineSource(skillsPath);
-    const indexableContent = await this.#buildIndexableContent(instructions, skillDir, refPaths);
-
-    const skill: InternalSkill = {
-      ...metadata,
-      path: skillDir,
-      instructions,
-      source,
-      references: refPaths,
-      scripts: scriptPaths,
-      assets: assetPaths,
-      indexableContent,
-    };
-
-    // Update cache and index
-    this.#skills.set(metadata.name, skill);
-    await this.#indexSkill(skill);
-
-    // Return without internal indexableContent field
-    const { indexableContent: _, ...skillData } = skill;
-    return skillData;
-  }
-
-  async update(name: string, input: UpdateSkillInput): Promise<Skill> {
-    await this.#ensureInitialized();
-
-    // Check if source supports write operations
-    if (!this.#isWritable) {
-      throw new Error('Skills are read-only. Write operations require a WorkspaceFilesystem.');
-    }
-
-    const skill = this.#skills.get(name);
-    if (!skill) {
-      throw new Error(`Skill "${name}" not found`);
-    }
-
-    const { metadata: updatedMetadata, instructions: updatedInstructions } = input;
-
-    // Merge metadata
-    const newMetadata: SkillMetadata = {
-      name: skill.name, // Name cannot be changed
-      description: updatedMetadata?.description ?? skill.description,
-      license: updatedMetadata?.license ?? skill.license,
-      compatibility: updatedMetadata?.compatibility ?? skill.compatibility,
-      metadata: updatedMetadata?.metadata ?? skill.metadata,
-    };
-
-    const newInstructions = updatedInstructions ?? skill.instructions;
-
-    // Validate if enabled
-    if (this.#validateOnLoad) {
-      const validation = this.#validateSkillMetadata(newMetadata, name, newInstructions);
-      if (!validation.valid) {
-        throw new Error(`Invalid skill metadata:\n${validation.errors.join('\n')}`);
-      }
-    }
-
-    // Write updated SKILL.md (safe because we checked #isWritable above)
-    const skillMdContent = this.#buildSkillMd(newMetadata, newInstructions);
-    await this.#getWritableSource().writeFile(this.#joinPath(skill.path, 'SKILL.md'), skillMdContent);
-
-    // Update cached skill
-    const indexableContent = await this.#buildIndexableContent(newInstructions, skill.path, skill.references);
-    const updatedSkill: InternalSkill = {
-      ...skill,
-      ...newMetadata,
-      instructions: newInstructions,
-      indexableContent,
-    };
-    this.#skills.set(name, updatedSkill);
-
-    // Re-index the skill (uses stable document IDs, so this overwrites existing entries)
-    await this.#indexSkill(updatedSkill);
-
-    // Return without internal indexableContent field
-    const { indexableContent: _, ...skillData } = updatedSkill;
-    return skillData;
-  }
-
-  async delete(name: string): Promise<void> {
-    await this.#ensureInitialized();
-
-    // Check if source supports write operations
-    if (!this.#isWritable) {
-      throw new Error('Skills are read-only. Write operations require a WorkspaceFilesystem.');
-    }
-
-    const skill = this.#skills.get(name);
-    if (!skill) {
-      throw new Error(`Skill "${name}" not found`);
-    }
-
-    // Delete the entire skill directory
-    await this.#getWritableSource().rmdir(skill.path, { recursive: true });
-
-    // Remove from cache
-    this.#skills.delete(name);
-
-    // Note: SearchEngine doesn't currently support removing individual documents,
-    // so a full refresh() would be needed to remove from index
   }
 
   // ===========================================================================
@@ -933,28 +698,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   /**
-   * Build SKILL.md content from metadata and instructions
-   */
-  #buildSkillMd(metadata: SkillMetadata, instructions: string): string {
-    const frontmatter: Record<string, unknown> = {
-      name: metadata.name,
-      description: metadata.description,
-    };
-
-    if (metadata.license) {
-      frontmatter.license = metadata.license;
-    }
-    if (metadata.compatibility) {
-      frontmatter.compatibility = metadata.compatibility;
-    }
-    if (metadata.metadata) {
-      frontmatter.metadata = metadata.metadata;
-    }
-
-    return matter.stringify(instructions, frontmatter);
-  }
-
-  /**
    * Join path segments (workspace paths use forward slashes)
    */
   #joinPath(...segments: string[]): string {
@@ -986,31 +729,5 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   #getParentPath(path: string): string {
     const lastSlash = path.lastIndexOf('/');
     return lastSlash > 0 ? path.substring(0, lastSlash) : '/';
-  }
-
-  /**
-   * Ensure parent directory exists for a file path.
-   * Recursively creates parent directories if they don't exist.
-   * Only called from write operations that already checked #isWritable.
-   */
-  async #ensureParentDir(filePath: string): Promise<void> {
-    const parentPath = this.#getParentPath(filePath);
-    if (parentPath && parentPath !== '/') {
-      await this.#mkdirRecursive(parentPath);
-    }
-  }
-
-  /**
-   * Recursively create directories if they don't exist.
-   */
-  async #mkdirRecursive(dirPath: string): Promise<void> {
-    if (await this.#source.exists(dirPath)) {
-      return;
-    }
-    const parentPath = this.#getParentPath(dirPath);
-    if (parentPath && parentPath !== '/') {
-      await this.#mkdirRecursive(parentPath);
-    }
-    await this.#getWritableSource().mkdir(dirPath);
   }
 }

@@ -95,8 +95,7 @@ function createMockWorkspace(
     id: 'test-workspace',
     name: 'Test Workspace',
     status: 'ready',
-    fs: filesystem,
-    filesystem, // Alias used by server handlers for readOnly check
+    filesystem,
     sandbox: null,
     skills: options.skills,
     canBM25: options.canBM25 ?? false,
