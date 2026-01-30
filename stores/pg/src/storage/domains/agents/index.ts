@@ -97,7 +97,10 @@ export class AgentsPG extends AgentsStorage {
       indexName: TABLE_AGENT_VERSIONS,
       schemaName: getSchemaName(this.#schema),
     });
-    const legacyTableName = `${fullTableName}_legacy`;
+    const legacyTableName = getTableName({
+      indexName: `${TABLE_AGENTS}_legacy`,
+      schemaName: getSchemaName(this.#schema),
+    });
 
     // Read all existing agents from the old flat schema
     const oldAgents = await this.#db.client.manyOrNone(`SELECT * FROM ${fullTableName}`);
@@ -178,8 +181,10 @@ export class AgentsPG extends AgentsStorage {
       indexName: TABLE_AGENT_VERSIONS,
       schemaName: getSchemaName(this.#schema),
     });
-    const fullTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
-    const legacyTableName = `${fullTableName}_legacy`;
+    const legacyTableName = getTableName({
+      indexName: `${TABLE_AGENTS}_legacy`,
+      schemaName: getSchemaName(this.#schema),
+    });
 
     // Drop the old versions table - the new schema will be created by init()
     await this.#db.client.none(`DROP TABLE IF EXISTS ${fullVersionsTableName}`);

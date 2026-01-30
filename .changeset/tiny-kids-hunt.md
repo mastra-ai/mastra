@@ -4,4 +4,4 @@
 '@mastra/pg': patch
 ---
 
-Fixed PATCH requests not sending content-type: application/json header, which caused the server to skip body parsing. This broke stored agent updates (edits) since the request body was silently ignored.
+Stored agent edits no longer fail silently. PATCH requests now save changes correctly.

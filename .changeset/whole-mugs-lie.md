@@ -4,4 +4,4 @@
 '@mastra/pg': patch
 ---
 
-Fixed stored agent schema migration to handle the old agent_versions table that used a snapshot column instead of individual config columns. The migration now drops and recreates the versions table when the old schema is detected, cleans up stale draft records from partial createAgent failures, and removes lingering legacy tables.
+Fix PATCH request JSON-body handling in `@mastra/client-js` so stored agent edit flows work correctly. Fix stored agent schema migration in `@mastra/libsql` and `@mastra/pg` to drop and recreate the versions table when the old snapshot-based schema is detected, clean up stale draft records from partial create failures, and remove lingering legacy tables. Restores create and edit flows for stored agents.
