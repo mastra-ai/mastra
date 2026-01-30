@@ -89,6 +89,13 @@ export default {
         shimmer: {
           '100%': { transform: 'translateX(100%)' },
         },
+        'click-ripple': {
+          '0%': { transform: 'scale(0)', opacity: '0.5' },
+          '100%': { transform: 'scale(1)', opacity: '0' },
+        },
+      },
+      animation: {
+        'click-ripple': 'click-ripple 300ms ease-out forwards',
       },
     },
   },
