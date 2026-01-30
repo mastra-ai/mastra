@@ -149,6 +149,8 @@ export interface Skill extends SkillMetadata {
 export interface ListSkillsResponse {
   skills: SkillMetadata[];
   isSkillsConfigured: boolean;
+  /** True if .agents/skills has skills that aren't being discovered (missing skills path config) */
+  hasUndiscoveredAgentSkills?: boolean;
 }
 
 export interface SkillSearchResult {

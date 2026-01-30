@@ -750,9 +750,41 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
         }),
       );
 
+      // Check if there are skills in .agents/skills that aren't being discovered
+      // This happens when user has installed skills but hasn't configured the path
+      let hasUndiscoveredAgentSkills = false;
+
+      // First, check if .agents/skills is already being discovered
+      // If so, skip the filesystem check entirely (optimization)
+      const isAgentSkillsDiscovered = skillsWithPath.some(s => s.path.includes('.agents/skills'));
+
+      // Only check filesystem if .agents/skills is NOT being discovered
+      if (!isAgentSkillsDiscovered) {
+        const workspace = await getWorkspaceById(mastra, workspaceId);
+        if (workspace?.filesystem) {
+          try {
+            const agentSkillsPath = '.agents/skills';
+            const entries = await workspace.filesystem.readdir(agentSkillsPath);
+            const agentSkillDirs = entries?.filter(e => e.type === 'directory').map(e => e.name) ?? [];
+
+            // Check if any of these skills are NOT in the discovered list
+            const discoveredPaths = skillsWithPath.map(s => s.path);
+            const hasUndiscovered = agentSkillDirs.some(skillName => {
+              const expectedPath = `${agentSkillsPath}/${skillName}`;
+              return !discoveredPaths.some(p => p.includes(expectedPath));
+            });
+
+            hasUndiscoveredAgentSkills = hasUndiscovered;
+          } catch {
+            // .agents/skills directory doesn't exist - that's fine
+          }
+        }
+      }
+
       return {
         skills: skillsWithPath,
         isSkillsConfigured: true,
+        hasUndiscoveredAgentSkills,
       };
     } catch (error) {
       return handleWorkspaceError(error, 'Error listing skills');

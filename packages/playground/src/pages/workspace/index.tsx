@@ -163,11 +163,22 @@ export default function Workspace() {
       installSkill.mutate(
         { ...params, workspaceId: effectiveWorkspaceId },
         {
-          onSuccess: result => {
+          onSuccess: async result => {
             if (result.success) {
-              toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
               setShowAddSkillDialog(false);
-              refetchSkills();
+
+              // Refetch skills and check if the installed skill appears in the list
+              const { data: refreshedData } = await refetchSkills();
+              const installedSkillFound = refreshedData?.skills.some(s => s.name === result.skillName);
+
+              if (installedSkillFound) {
+                toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
+              } else {
+                // Skill was installed but not discovered - likely missing path config
+                toast.warning(
+                  `Skill "${result.skillName}" installed to .agents/skills but not discovered. Add .agents/skills to your workspace skills paths.`,
+                );
+              }
             } else {
               toast.error('Failed to install skill');
             }
@@ -255,6 +266,7 @@ export default function Workspace() {
 
   const skills = skillsData?.skills ?? [];
   const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
+  const hasUndiscoveredAgentSkills = skillsData?.hasUndiscoveredAgentSkills ?? false;
   const files = filesData?.entries ?? [];
 
   // If workspace v1 is not supported by the server's @mastra/core version
@@ -578,6 +590,7 @@ export default function Workspace() {
                 skills={skills}
                 isLoading={isLoadingSkills}
                 isSkillsConfigured={isSkillsConfigured}
+                hasUndiscoveredAgentSkills={hasUndiscoveredAgentSkills}
                 basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
                 onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
                 onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
