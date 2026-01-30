@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-01-30)
 
 **Core value:** Agents can browse real websites and users can watch and assist them in real-time
-**Current focus:** Planning next milestone
+**Current focus:** v1.3 Browser View Layout
 
 ## Current Position
 
-Phase: None active
-Plan: Not started
-Status: v1.2 milestone archived, ready for next milestone
-Last activity: 2026-01-30 -- v1.2 milestone completed and archived
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements for v1.3
+Last activity: 2026-01-30 -- Milestone v1.3 started
 
 ## Performance Metrics
 
@@ -55,13 +55,13 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: v1.2 milestone completion and archival
+Stopped at: v1.3 milestone initialization
 Resume file: None
 
-**Next action:** Start next milestone with `/gsd:new-milestone`
+**Next action:** Define requirements and create roadmap for v1.3
 
 **Context for next session:**
-- v1.2 archived: roadmap, requirements, audit all in milestones/
-- PROJECT.md evolved with v1.2 validated requirements and decisions
-- ROADMAP.md and REQUIREMENTS.md deleted (fresh for next milestone)
+- v1.3 Browser View Layout: side-by-side split-pane replacing floating overlay
+- Team feedback: floating panel hides chat messages, needs dedicated layout space
+- Chat left, browser right, hidden when no session, collapsible
 - Phase numbering continues from 16

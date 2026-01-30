@@ -38,7 +38,9 @@ Agents can browse real websites and users can watch and assist them in real-time
 
 ### Active
 
-(None — next milestone requirements TBD)
+- [ ] Browser view renders side-by-side with chat (not floating overlay) — v1.3
+- [ ] Layout splits when browser session starts, chat reclaims full width when collapsed — v1.3
+- [ ] Browser panel is collapsible to let chat expand — v1.3
 
 ### Out of Scope
 
@@ -117,5 +119,20 @@ Agents can browse real websites and users can watch and assist them in real-time
 | Mouse suppressed, keyboard continues during agent | Click/scroll cause destructive races, keyboard is safe to continue | Good |
 | Ring color green→amber for agent busy | Visual state distinction without extra UI elements | Good |
 
+## Current Milestone: v1.3 Browser View Layout
+
+**Goal:** Replace the floating browser overlay with a side-by-side split-pane layout so the browser view and chat are both visible without obstruction.
+
+**Target features:**
+- Side-by-side layout: chat on left, browser view on right
+- Hidden entirely when no browser session (chat full width)
+- Layout splits automatically when agent launches a browser
+- Collapsible browser panel — user can close to reclaim full chat width
+- All existing browser view functionality preserved (input injection, tool history, visual feedback)
+
+**Use case:** Agent launches a browser, the layout splits to show chat narration on the left and the live browser on the right. User can watch the agent work, assist with input, and read chat messages simultaneously without anything being hidden.
+
+**Team feedback:** Demo'd v1.2 — team loved the concept but hated the floating panel UX that hides chat messages behind it.
+
 ---
-*Last updated: 2026-01-30 after v1.2 milestone completion*
+*Last updated: 2026-01-30 after v1.3 milestone start*
