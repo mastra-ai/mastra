@@ -335,6 +335,8 @@ export type StorageUpdateAgentInput = {
   metadata?: Record<string, unknown>;
   /** FK to agent_versions.id - the currently active version */
   activeVersionId?: string;
+  /** Agent status: 'draft' or 'published' */
+  status?: string;
 } & Partial<StorageAgentSnapshotType>;
 
 export type StorageListAgentsInput = {

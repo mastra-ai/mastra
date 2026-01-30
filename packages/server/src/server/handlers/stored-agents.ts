@@ -288,7 +288,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       const providedConfigFields = Object.fromEntries(Object.entries(configFields).filter(([_, v]) => v !== undefined));
 
       // Handle auto-versioning with retry logic for race conditions
-      // This creates a version if there are meaningful config changes and updates activeVersionId
+      // This creates a version if there are meaningful config changes (does NOT update activeVersionId)
       await handleAutoVersioning(agentsStore, storedAgentId, existing, updatedAgent, providedConfigFields);
 
       // Clear the cached agent instance so the next request gets the updated config

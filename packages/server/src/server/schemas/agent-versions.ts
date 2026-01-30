@@ -93,7 +93,7 @@ export const agentVersionSchema = z.object({
   // Version metadata fields
   changedFields: z.array(z.string()).optional().describe('Array of field names that changed from the previous version'),
   changeMessage: z.string().optional().describe('Optional message describing the changes'),
-  createdAt: z.date().describe('When this version was created'),
+  createdAt: z.coerce.date().describe('When this version was created'),
 });
 
 /**

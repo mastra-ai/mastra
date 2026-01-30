@@ -305,8 +305,16 @@ export interface AgentsStoreWithVersions<TAgent = any> {
     perPage?: number | false;
     orderBy?: { field?: 'versionNumber' | 'createdAt'; direction?: 'ASC' | 'DESC' };
   }) => Promise<{
-    versions: Array<{ id: string; versionNumber: number }>;
+    versions: Array<{
+      id: string;
+      agentId: string;
+      versionNumber: number;
+      [key: string]: any;
+    }>;
     total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
   }>;
   deleteVersion: (id: string) => Promise<void>;
 }
@@ -395,7 +403,7 @@ export async function createVersionWithRetry<TAgent>(
 export async function handleAutoVersioning<TAgent>(
   agentsStore: AgentsStoreWithVersions<TAgent>,
   agentId: string,
-  existingAgent: TAgent,
+  existingAgent: TAgent & { activeVersionId?: string },
   updatedAgent: TAgent,
   configFields?: Record<string, unknown>,
 ): Promise<{ agent: TAgent; versionCreated: boolean }> {
@@ -426,20 +434,15 @@ export async function handleAutoVersioning<TAgent>(
   }
 
   // Create version with retry logic for race conditions
-  const { versionId } = await createVersionWithRetry(agentsStore, agentId, fullConfig, changedFields, {
+  await createVersionWithRetry(agentsStore, agentId, fullConfig, changedFields, {
     changeMessage: 'Auto-saved after edit',
   });
 
-  // Update the agent's activeVersionId
-  const finalAgent = await agentsStore.updateAgent({
-    id: agentId,
-    activeVersionId: versionId,
-  });
+  // Enforce retention limit (use existing activeVersionId from existingAgent)
+  const activeVersionId = existingAgent.activeVersionId;
+  await enforceRetentionLimit(agentsStore, agentId, activeVersionId);
 
-  // Enforce retention limit
-  await enforceRetentionLimit(agentsStore, agentId, versionId);
-
-  return { agent: finalAgent, versionCreated: true };
+  return { agent: updatedAgent, versionCreated: true };
 }
 
 // ============================================================================
@@ -650,10 +653,11 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Version with id ${versionId} not found for agent ${agentId}` });
       }
 
-      // Update the agent's activeVersionId
+      // Update the agent's activeVersionId AND status to 'published'
       await agentsStore.updateAgent({
         id: agentId,
         activeVersionId: versionId,
+        status: 'published',
       });
 
       return {
@@ -736,11 +740,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
         },
       );
 
-      // Update the agent's activeVersionId to the new version
-      await agentsStore.updateAgent({
-        id: agentId,
-        activeVersionId: newVersionId,
-      });
+      // Do NOT auto-activate the restored version - user must explicitly activate it
 
       // Get the created version to return
       const newVersion = await agentsStore.getVersion(newVersionId);
@@ -749,8 +749,8 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Enforce retention limit - delete oldest versions if we exceed the max
-      // Use the new version ID as the active version
-      await enforceRetentionLimit(agentsStore, agentId, newVersionId);
+      // Use the agent's existing activeVersionId
+      await enforceRetentionLimit(agentsStore, agentId, agent.activeVersionId);
 
       return newVersion;
     } catch (error) {

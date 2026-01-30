@@ -162,6 +162,13 @@ export abstract class AgentsStorage extends StorageDomain {
     // If an active version is set, use that
     if (agent.activeVersionId) {
       version = await this.getVersion(agent.activeVersionId);
+
+      // Warn if activeVersionId points to a non-existent version
+      if (!version) {
+        console.warn(
+          `[AgentsStorage] Agent ${agent.id} has activeVersionId ${agent.activeVersionId} but version not found. Falling back to latest version.`,
+        );
+      }
     }
 
     // If no active version or it wasn't found, fall back to latest version

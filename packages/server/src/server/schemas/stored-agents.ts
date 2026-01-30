@@ -114,8 +114,8 @@ export const storedAgentSchema = z.object({
   activeVersionId: z.string().optional(),
   authorId: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
   // Version snapshot config fields (resolved from active version)
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
