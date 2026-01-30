@@ -1,12 +1,6 @@
 import { MastraBase } from '../base';
 
-import type {
-  AgentsStorage,
-  ScoresStorage,
-  WorkflowsStorage,
-  MemoryStorage,
-  ObservabilityStorage,
-} from './domains';
+import type { AgentsStorage, ScoresStorage, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
 
 export type StorageDomains = {
   workflows: WorkflowsStorage;

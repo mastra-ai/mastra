@@ -194,10 +194,7 @@ describe('MastraCloudAuth', () => {
           userId: 'user-456',
         }),
       );
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/auth/session/validate'),
-        expect.any(Object),
-      );
+      expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/auth/session/validate'), expect.any(Object));
     });
   });
 
