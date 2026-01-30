@@ -214,10 +214,7 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
                       </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
-                        <div
-                          className="p-4 prose prose-sm prose-invert max-w-none"
-                          dangerouslySetInnerHTML={{ __html: previewContent }}
-                        />
+                        <div className="p-4 prose prose-sm prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: previewContent }} />
                       </ScrollArea>
                     ) : (
                       <div className="flex-1 flex flex-col items-center justify-center text-icon4">

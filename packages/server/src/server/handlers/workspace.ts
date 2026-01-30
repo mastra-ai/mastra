@@ -1298,22 +1298,14 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
       }
 
       // Clean up the HTML:
-      // 1. Remove their custom classes except 'prose' related ones
+      // 1. Remove all class attributes (we apply our own styles)
       // 2. Remove inline styles
       // 3. Fix relative URLs
       content = content
-        // Remove class attributes except prose
-        .replace(/class="([^"]*)"/g, (match, classes) => {
-          const proseClasses = classes
-            .split(' ')
-            .filter((c: string) => c.includes('prose'))
-            .join(' ');
-          return proseClasses ? `class="${proseClasses}"` : '';
-        })
-        // Remove empty class attributes
-        .replace(/class=""\s*/g, '')
+        // Remove all class attributes
+        .replace(/\s*class="[^"]*"/g, '')
         // Remove inline styles
-        .replace(/style="[^"]*"/g, '')
+        .replace(/\s*style="[^"]*"/g, '')
         // Fix relative URLs to point to skills.sh
         .replace(/href="\//g, 'href="https://skills.sh/')
         .replace(/src="\//g, 'src="https://skills.sh/');
@@ -1352,12 +1344,12 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workspace not found' });
       }
 
-      if (!workspace.fs) {
+      if (!workspace.filesystem) {
         throw new HTTPException(400, { message: 'Workspace filesystem not available' });
       }
 
       // Check if workspace is read-only
-      if (workspace.fs.readOnly) {
+      if (workspace.filesystem.readOnly) {
         throw new HTTPException(403, { message: 'Workspace is read-only' });
       }
 
@@ -1390,7 +1382,7 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
 
       // Ensure the skills directory exists
       try {
-        await workspace.fs.mkdir(installPath, { recursive: true });
+        await workspace.filesystem.mkdir(installPath, { recursive: true });
       } catch {
         // Directory might already exist
       }
@@ -1404,13 +1396,13 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
         if (file.path.includes('/')) {
           const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
           try {
-            await workspace.fs.mkdir(dirPath, { recursive: true });
+            await workspace.filesystem.mkdir(dirPath, { recursive: true });
           } catch {
             // Directory might already exist
           }
         }
 
-        await workspace.fs.writeFile(filePath, file.content);
+        await workspace.filesystem.writeFile(filePath, file.content);
         filesWritten++;
       }
 
@@ -1423,7 +1415,7 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
         path: skillLocation.path,
         installedAt: new Date().toISOString(),
       };
-      await workspace.fs.writeFile(`${installPath}/.meta.json`, JSON.stringify(metadata, null, 2));
+      await workspace.filesystem.writeFile(`${installPath}/.meta.json`, JSON.stringify(metadata, null, 2));
       filesWritten++;
 
       return {
@@ -1472,11 +1464,11 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workspace not found' });
       }
 
-      if (!workspace.fs) {
+      if (!workspace.filesystem) {
         throw new HTTPException(400, { message: 'Workspace filesystem not available' });
       }
 
-      if (workspace.fs.readOnly) {
+      if (workspace.filesystem.readOnly) {
         throw new HTTPException(403, { message: 'Workspace is read-only' });
       }
 
@@ -1484,13 +1476,13 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
 
       // Check if skill exists
       try {
-        await workspace.fs.stat(skillPath);
+        await workspace.filesystem.stat(skillPath);
       } catch {
         throw new HTTPException(404, { message: `Skill "${skillName}" not found at ${skillPath}` });
       }
 
       // Delete the skill directory
-      await workspace.fs.rmdir(skillPath, { recursive: true });
+      await workspace.filesystem.rmdir(skillPath, { recursive: true });
 
       return {
         success: true,
@@ -1526,11 +1518,11 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workspace not found' });
       }
 
-      if (!workspace.fs) {
+      if (!workspace.filesystem) {
         throw new HTTPException(400, { message: 'Workspace filesystem not available' });
       }
 
-      if (workspace.fs.readOnly) {
+      if (workspace.filesystem.readOnly) {
         throw new HTTPException(403, { message: 'Workspace is read-only' });
       }
 
@@ -1548,8 +1540,8 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         skillsToUpdate = [skillName];
       } else {
         try {
-          const entries = await workspace.fs.readdir(skillsPath);
-          skillsToUpdate = entries.filter(e => e.type === 'directory').map(e => e.name);
+          const entries = await workspace?.filesystem?.readdir(skillsPath);
+          skillsToUpdate = entries?.filter(e => e.type === 'directory').map(e => e.name) ?? [];
         } catch {
           return { updated: [] };
         }
@@ -1558,7 +1550,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
       for (const skill of skillsToUpdate) {
         const metaPath = `${skillsPath}/${skill}/.meta.json`;
         try {
-          const metaContent = await workspace.fs.readFile(metaPath, { encoding: 'utf-8' });
+          const metaContent = await workspace?.filesystem?.readFile(metaPath, { encoding: 'utf-8' });
           const meta: SkillMetaFile = JSON.parse(metaContent as string);
 
           // Re-fetch all files from GitHub
@@ -1582,13 +1574,13 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
             if (file.path.includes('/')) {
               const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
               try {
-                await workspace.fs.mkdir(dirPath, { recursive: true });
+                await workspace.filesystem.mkdir(dirPath, { recursive: true });
               } catch {
                 // Directory might already exist
               }
             }
 
-            await workspace.fs.writeFile(filePath, file.content);
+            await workspace.filesystem.writeFile(filePath, file.content);
             filesWritten++;
           }
 
@@ -1597,7 +1589,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
             ...meta,
             installedAt: new Date().toISOString(),
           };
-          await workspace.fs.writeFile(metaPath, JSON.stringify(updatedMeta, null, 2));
+          await workspace.filesystem.writeFile(metaPath, JSON.stringify(updatedMeta, null, 2));
           filesWritten++;
 
           results.push({
