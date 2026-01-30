@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 
 ## Current Position
 
-Phase: 12 - Client Coordinate Mapping and Click
-Plan: 03 of 03
-Status: Phase complete
-Last activity: 2026-01-29 -- Completed 12-03-PLAN.md
+Phase: 13 - Focus Management and Keyboard
+Plan: 01 of 02
+Status: In progress
+Last activity: 2026-01-30 -- Completed 13-01-PLAN.md
 
-Progress: [██████████░░░░░░░░░░] 50% (3/6 phases)
+Progress: [████████████░░░░░░░░] 58% (4/7 plans in v1.2)
 
 ## Performance Metrics
 
@@ -27,7 +27,7 @@ Progress: [██████████░░░░░░░░░░] 50% (3/
 - Phases: 3 (7, 8, 9)
 
 **v1.2 Milestone:**
-- Total plans completed: 5
+- Total plans completed: 6
 - Phases: 6 (10-15)
 - Requirements: 27
 
@@ -66,6 +66,13 @@ Phase 12 decisions:
 - Mouse interaction enabled only when status === 'streaming'
 - No server type imports -- CDP message shape constructed inline as Record<string,unknown>
 
+Phase 13 decisions (Plan 01):
+- Printable key detection via key.length === 1 (single Unicode codepoint)
+- Escape consumed by hook (calls onEscape), never forwarded to remote browser
+- IME guard uses both e.isComposing and e.keyCode === 229 for cross-browser compatibility
+- compositionend uses bubble phase (not capture) -- standard DOM behavior
+- Composed IME text sent as individual character sequences with modifiers=0
+
 ### Pending Todos
 
 None.
@@ -96,7 +103,7 @@ None.
 ### Phase 13: Focus Management and Keyboard
 **Goal:** User can type in the live view without keyboard events leaking to host page
 **Requirements:** KEY-01 through KEY-04, FOCUS-01 through FOCUS-03 (7 total)
-**Status:** Not Started
+**Status:** In progress (Plan 01 complete, Plan 02 remaining)
 **Depends on:** Phase 11 (complete)
 
 ### Phase 14: Visual Feedback and Polish
@@ -118,15 +125,15 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-29T20:49:48Z
-Stopped at: Completed 12-03-PLAN.md (Phase 12 complete)
+Last session: 2026-01-30T00:04:44Z
+Stopped at: Completed 13-01-PLAN.md (key-mapping utility + keyboard interaction hook)
 Resume file: None
 
-**Next action:** Execute Phase 13 (Focus Management and Keyboard) or Phase 14 (Visual Feedback and Polish).
+**Next action:** Execute Phase 13 Plan 02 (interactive mode wiring) or Phase 14 (Visual Feedback and Polish).
 
 **Context for next session:**
-- Phase 12 fully complete: all mouse input works (click, scroll, right-click, move)
-- Full pipeline: DOM events -> useMouseInteraction -> mapClientToViewport -> sendMessage -> WebSocket -> handleInputMessage -> CDP
-- Phase 13 depends only on Phase 11 (complete) -- can proceed independently
-- Phase 14 depends on Phase 12 (now complete) -- can proceed
+- Phase 13 Plan 01 complete: isPrintableKey utility and useKeyboardInteraction hook created
+- Hook follows identical patterns as useMouseInteraction (refs, void return, capture phase, Record<string,unknown>)
+- Plan 02 will add interactive mode state (click-to-focus, Escape-to-exit) and wire hook into BrowserViewFrame
+- Phase 14 depends on Phase 12 (complete) -- can proceed in parallel
 - Phase 15 blocked until Phases 13 and 14 complete
