@@ -1075,21 +1075,28 @@ export async function createNetworkLoop({
       let input;
       try {
         input = JSON.parse(inputData.prompt);
-      } catch (e: unknown) {
-        const mastraError = new MastraError(
-          {
-            id: 'WORKFLOW_EXECUTION_STEP_INVALID_TASK_INPUT',
-            domain: ErrorDomain.AGENT_NETWORK,
-            category: ErrorCategory.USER,
-            text: `Invalid task input: ${inputData.task}`,
-          },
-          e,
+      } catch {
+        // Instead of throwing, return an error result that feeds back into the network loop.
+        // This allows the routing agent to retry with valid JSON on the next iteration.
+        // The network loop has a maxSteps limit to prevent infinite retries.
+        const logger = mastra?.getLogger();
+        logger?.warn(
+          `Workflow execution step received invalid JSON prompt for workflow "${inputData.primitiveId}". ` +
+            `Prompt was: "${inputData.prompt}". Returning error to routing agent for retry.`,
         );
 
-        // TODO pass agent logger in here
-        // logger.trackException(mastraError);
-        // logger.error(mastraError.toString());
-        throw mastraError;
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result:
+            `Error: The prompt provided for workflow "${inputData.primitiveId}" is not valid JSON. ` +
+            `Received: "${inputData.prompt}". ` +
+            `Workflows require a valid JSON string matching their input schema. ` +
+            `Please provide the prompt as properly formatted JSON (e.g., {"key": "value"}).`,
+          isComplete: false,
+          iteration: inputData.iteration,
+        };
       }
 
       const stepId = generateId({
@@ -1423,20 +1430,27 @@ export async function createNetworkLoop({
       let inputDataToUse: any;
       try {
         inputDataToUse = JSON.parse(inputData.prompt);
-      } catch (e: unknown) {
-        const mastraError = new MastraError(
-          {
-            id: 'AGENT_NETWORK_TOOL_EXECUTION_STEP_INVALID_TASK_INPUT',
-            domain: ErrorDomain.AGENT_NETWORK,
-            category: ErrorCategory.USER,
-            text: `Invalid task input: ${inputData.task}`,
-          },
-          e,
+      } catch {
+        // Instead of throwing, return an error result that feeds back into the network loop.
+        // This allows the routing agent to retry with valid JSON on the next iteration.
+        // The network loop has a maxSteps limit to prevent infinite retries.
+        logger?.warn(
+          `Tool execution step received invalid JSON prompt for tool "${toolId}". ` +
+            `Prompt was: "${inputData.prompt}". Returning error to routing agent for retry.`,
         );
-        // TODO pass agent logger in here
-        // logger.trackException(mastraError);
-        // logger.error(mastraError.toString());
-        throw mastraError;
+
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result:
+            `Error: The prompt provided for tool "${toolId}" is not valid JSON. ` +
+            `Received: "${inputData.prompt}". ` +
+            `Tools require a valid JSON string matching their input schema. ` +
+            `Please provide the prompt as properly formatted JSON (e.g., {"key": "value"}).`,
+          isComplete: false,
+          iteration: inputData.iteration,
+        };
       }
 
       const toolCallId = generateId({

@@ -56,7 +56,8 @@ export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promis
         }
 
         // Check if the installed version satisfies the peer dep range
-        if (!satisfies(installedVersion, requiredRange)) {
+        // includePrerelease: true so that 1.1.0-alpha.1 satisfies >=1.0.0-0 <2.0.0-0
+        if (!satisfies(installedVersion, requiredRange, { includePrerelease: true })) {
           mismatches.push({
             package: pkg.name,
             packageVersion: pkg.version,

@@ -28,7 +28,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
         tools: values.tools && values.tools.length > 0 ? values.tools : undefined,
         workflows: values.workflows,
         agents: values.agents,
-        memory: values.memory,
+        memory: values.memory ? ({ key: values.memory } as Record<string, unknown>) : undefined,
         scorers: values.scorers,
       };
 

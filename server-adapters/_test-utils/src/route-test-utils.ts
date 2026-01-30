@@ -49,7 +49,9 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'email' || field.includes('email')) return 'test@example.com';
 
   // Version comparison query params (from/to are version IDs)
-  if (field === 'from') return 'test-version-1';
+  // Both use the same known version ID - comparing a version to itself returns empty diffs,
+  // which is valid for route integration tests that verify the endpoint responds correctly
+  if (field === 'from') return 'test-version-id';
   if (field === 'to') return 'test-version-id';
 
   // Workspace filesystem - content and query fields

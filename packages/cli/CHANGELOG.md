@@ -1,5 +1,19 @@
 # mastra
 
+## 1.1.0-alpha.2
+
+### Patch Changes
+
+- Fixed peer dependency checker to correctly validate prerelease versions (e.g., 1.1.0-alpha.1 now satisfies >=1.0.0-0 <2.0.0-0) ([#12495](https://github.com/mastra-ai/mastra/pull/12495))
+
+## 1.1.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`b99ceac`](https://github.com/mastra-ai/mastra/commit/b99ceace2c830dbdef47c8692d56a91954aefea2), [`deea43e`](https://github.com/mastra-ai/mastra/commit/deea43eb1366d03a864c5e597d16a48592b9893f), [`ac9ec66`](https://github.com/mastra-ai/mastra/commit/ac9ec6672779b2e6d4344e415481d1a6a7d4911a)]:
+  - @mastra/core@1.1.0-alpha.1
+  - @mastra/deployer@1.1.0-alpha.1
+
 ## 1.1.0-alpha.0
 
 ### Minor Changes
