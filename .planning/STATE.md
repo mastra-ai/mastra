@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 10 of 10 (Dataset Layout Update)
-Plan: 1 of ? in phase 10
+Plan: 3 of 5 in phase 10
 Status: In progress
-Last activity: 2026-01-30 — Completed 10-01-PLAN.md
+Last activity: 2026-01-30 — Completed 10-03-PLAN.md
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 38
+- Total plans completed: 39
 - Average duration: 4 min
 - Total execution time: 2.2 hours
 
@@ -36,10 +36,10 @@ Progress: [██████████] 100%
 | 07-csv-import | 5 | 10 min | 2 min |
 | 08-item-selection-actions | 4 | 13 min | 3.25 min |
 | 09-dataset-items-detail-view | 5 | 16 min | 3.2 min |
-| 10-dataset-layout-update | 1 | 5 min | 5 min |
+| 10-dataset-layout-update | 2 | 7 min | 3.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 09-02 (3 min), 09-03 (3 min), 09-04 (3 min), 09-05 (4 min), 10-01 (5 min)
+- Last 5 plans: 09-03 (3 min), 09-04 (3 min), 09-05 (4 min), 10-01 (5 min), 10-03 (2 min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -110,6 +110,8 @@ Recent decisions affecting current work:
 - Legacy callback props removed when functionality consolidates into child component
 - SplitButton composes CombinedButtons + Popover for visual grouping
 - ChevronDown icon sizing based on button size prop (sm: w-3 h-3, md/lg: w-4 h-4)
+- ItemsToolbar extracted for cleaner ItemsList component
+- ActionsMenu internal to ItemsToolbar (not separately exported)
 
 ### Pending Todos
 
@@ -128,5 +130,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 10-01-PLAN.md (SplitButton Component)
+Stopped at: Completed 10-03-PLAN.md (Items Toolbar with Split Button)
 Resume file: None
