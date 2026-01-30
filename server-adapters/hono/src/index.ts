@@ -1,7 +1,7 @@
 import type { ToolsInput } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { hasPermission } from '@mastra/core/ee';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';

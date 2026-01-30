@@ -1,6 +1,6 @@
+import type { IUserProvider, ICredentialsProvider, EEUser, CredentialsResult } from '@mastra/core/ee';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 import { MastraAuthProvider } from '@mastra/core/server';
-import type { IUserProvider, ICredentialsProvider, EEUser, CredentialsResult } from '@mastra/core/ee';
 
 import type { Auth, Session, User } from 'better-auth';
 import type { HonoRequest } from 'hono';
@@ -149,7 +149,7 @@ export class MastraAuthBetterAuth
    * @param userId - User identifier
    * @returns EE User object or null if not found
    */
-  async getUser(userId: string): Promise<EEUser | null> {
+  async getUser(_userId: string): Promise<EEUser | null> {
     // Better Auth doesn't have a direct getUser API
     // Users can override this method with their own implementation
     // that queries the database directly

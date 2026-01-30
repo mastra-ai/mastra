@@ -10,7 +10,8 @@
  * @module
  */
 
-import { type WorkOS, GeneratePortalLinkIntent } from '@workos-inc/node';
+import { GeneratePortalLinkIntent } from '@workos-inc/node';
+import type { WorkOS } from '@workos-inc/node';
 
 import type { AdminPortalIntent, WorkOSAdminPortalOptions } from './types.js';
 

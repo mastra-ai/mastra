@@ -6,8 +6,6 @@
  */
 
 import { verifyJwks } from '@mastra/auth';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
 import type {
   IUserProvider,
   ISSOProvider,
@@ -17,20 +15,16 @@ import type {
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@mastra/core/ee';
+import type { MastraAuthProviderOptions } from '@mastra/core/server';
+import { MastraAuthProvider } from '@mastra/core/server';
+import { AuthService, sessionEncryption } from '@workos/authkit-session';
+import type { AuthKitConfig } from '@workos/authkit-session';
 import { WorkOS } from '@workos-inc/node';
-import {
-  AuthService,
-  CookieSessionStorage,
-  sessionEncryption,
-  type AuthKitConfig,
-  type Session as WorkOSSession,
-  type AuthResult,
-} from '@workos/authkit-session';
 import type { HonoRequest } from 'hono';
 
-import type { WorkOSUser, MastraAuthWorkosOptions, WorkOSSessionConfig } from './types.js';
-import { mapWorkOSUserToEEUser } from './types.js';
 import { WebSessionStorage } from './session-storage.js';
+import type { WorkOSUser, MastraAuthWorkosOptions } from './types.js';
+import { mapWorkOSUserToEEUser } from './types.js';
 
 /**
  * Default cookie password for development (MUST be overridden in production).
@@ -67,13 +61,8 @@ export class MastraAuthWorkos
   protected authService: AuthService<Request, Response>;
   protected config: AuthKitConfig;
 
-  /** Unique identifier for this instance (for debugging) */
-  private instanceId = crypto.randomUUID().slice(0, 8);
-
   constructor(options?: MastraAuthWorkosOptions) {
     super({ name: options?.name ?? 'workos' });
-
-    console.log(`[WorkOS:${this.instanceId}] Constructor called - new instance created`);
 
     const apiKey = options?.apiKey ?? process.env.WORKOS_API_KEY;
     const clientId = options?.clientId ?? process.env.WORKOS_CLIENT_ID;
@@ -148,8 +137,6 @@ export class MastraAuthWorkos
    * JWT verification for bearer tokens.
    */
   async authenticateToken(token: string, request: HonoRequest | Request): Promise<WorkOSUser | null> {
-    console.log(`[WorkOS:${this.instanceId}] authenticateToken called`);
-
     try {
       // Get the raw Request object - handle both HonoRequest and plain Request
       const rawRequest = 'raw' in request ? request.raw : request;
@@ -158,7 +145,6 @@ export class MastraAuthWorkos
       const { auth } = await this.authService.withAuth(rawRequest);
 
       if (auth.user) {
-        console.log(`[WorkOS:${this.instanceId}] authenticateToken: session valid for user ${auth.user.id}`);
         return {
           ...mapWorkOSUserToEEUser(auth.user),
           workosId: auth.user.id,
@@ -173,7 +159,6 @@ export class MastraAuthWorkos
         const payload = await verifyJwks(token, jwksUri);
 
         if (payload?.sub) {
-          console.log(`[WorkOS:${this.instanceId}] authenticateToken: JWT valid for user ${payload.sub}`);
           const user = await this.workos.userManagement.getUser(payload.sub);
           const memberships = await this.workos.userManagement.listOrganizationMemberships({
             userId: user.id,
@@ -189,8 +174,7 @@ export class MastraAuthWorkos
       }
 
       return null;
-    } catch (error) {
-      console.log(`[WorkOS:${this.instanceId}] authenticateToken failed:`, error);
+    } catch {
       return null;
     }
   }
@@ -225,12 +209,9 @@ export class MastraAuthWorkos
             userId: auth.user.id,
           });
           organizationId = memberships.data[0]?.organizationId;
-          console.log(`[WorkOS:${this.instanceId}] getCurrentUser: fetched orgId from memberships: ${organizationId}`);
         } catch {
           // Ignore membership fetch errors
         }
-      } else {
-        console.log(`[WorkOS:${this.instanceId}] getCurrentUser: orgId from JWT: ${organizationId}`);
       }
 
       // Build user with session data
@@ -240,12 +221,8 @@ export class MastraAuthWorkos
         organizationId,
       };
 
-      // If session was refreshed, we should save it
-      // Note: This is a side effect, but necessary to persist refreshed tokens
+      // If session was refreshed, attach to user object for caller to save
       if (refreshedSessionData) {
-        console.log(`[WorkOS:${this.instanceId}] Session refreshed for user ${auth.user.id}`);
-        // The caller should handle saving the refreshed session via response headers
-        // We attach it to the user object for the handler to access
         (user as any)._refreshedSessionData = refreshedSessionData;
       }
 
@@ -438,7 +415,7 @@ export class MastraAuthWorkos
    *
    * With AuthKit, sessions are validated via withAuth().
    */
-  async validateSession(sessionId: string): Promise<Session | null> {
+  async validateSession(_sessionId: string): Promise<Session | null> {
     // AuthKit handles validation internally via withAuth()
     // This method is kept for interface compatibility
     return null;
@@ -447,7 +424,7 @@ export class MastraAuthWorkos
   /**
    * Destroy a session.
    */
-  async destroySession(sessionId: string): Promise<void> {
+  async destroySession(_sessionId: string): Promise<void> {
     // AuthKit handles session clearing via signOut()
     // The actual cookie clearing happens in the response headers
   }
@@ -455,7 +432,7 @@ export class MastraAuthWorkos
   /**
    * Refresh a session.
    */
-  async refreshSession(sessionId: string): Promise<Session | null> {
+  async refreshSession(_sessionId: string): Promise<Session | null> {
     // AuthKit handles refresh automatically in withAuth()
     return null;
   }
@@ -463,7 +440,7 @@ export class MastraAuthWorkos
   /**
    * Extract session ID from a request.
    */
-  getSessionIdFromRequest(request: Request): string | null {
+  getSessionIdFromRequest(_request: Request): string | null {
     // With AuthKit, we don't expose the session ID directly
     // The session is managed via encrypted cookies
     return null;

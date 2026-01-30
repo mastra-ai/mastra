@@ -83,7 +83,7 @@ export class CookieSessionProvider implements ISessionProvider {
     return session;
   }
 
-  async validateSession(sessionId: string): Promise<Session | null> {
+  async validateSession(_sessionId: string): Promise<Session | null> {
     // For cookie sessions, validation happens in getSessionFromCookie
     // This method is here for interface compliance
     return null;
@@ -94,7 +94,7 @@ export class CookieSessionProvider implements ISessionProvider {
     // This is a no-op on the server side
   }
 
-  async refreshSession(sessionId: string): Promise<Session | null> {
+  async refreshSession(_sessionId: string): Promise<Session | null> {
     // For cookie sessions, we need the full session to refresh
     // This would be called with the session from getSessionFromCookie
     return null;

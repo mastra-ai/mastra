@@ -114,12 +114,13 @@ describe('MastraAuthWorkos', () => {
     });
 
     it('should throw error when redirect URI is not provided', () => {
-      expect(() =>
-        new MastraAuthWorkos({
-          apiKey: mockApiKey,
-          clientId: mockClientId,
-          session: { cookiePassword: mockCookiePassword },
-        }),
+      expect(
+        () =>
+          new MastraAuthWorkos({
+            apiKey: mockApiKey,
+            clientId: mockClientId,
+            session: { cookiePassword: mockCookiePassword },
+          }),
       ).toThrow('WorkOS redirect URI is required');
     });
   });
@@ -168,7 +169,7 @@ describe('MastraAuthWorkos', () => {
       });
 
       const mockToken = 'valid-token';
-      const result = await auth.authenticateToken(mockToken, mockRequest);
+      const _result = await auth.authenticateToken(mockToken, mockRequest);
 
       expect(verifyJwks).toHaveBeenCalledWith(mockToken, 'https://mock-jwks-url');
     });

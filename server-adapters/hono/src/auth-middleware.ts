@@ -1,3 +1,4 @@
+import type { IRBACProvider, EEUser } from '@mastra/core/ee';
 import type { ContextWithMastra } from '@mastra/core/server';
 import {
   canAccessPublicly,
@@ -6,7 +7,6 @@ import {
   isDevPlaygroundRequest,
   isProtectedPath,
 } from '@mastra/server/auth';
-import type { IRBACProvider, EEUser } from '@mastra/core/ee';
 import type { Next } from 'hono';
 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {

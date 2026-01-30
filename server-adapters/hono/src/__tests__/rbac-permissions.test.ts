@@ -9,7 +9,8 @@
  * - Wildcard (*) permissions grant access to all routes
  */
 
-import { createDefaultTestContext, type AdapterTestContext } from '@internal/server-adapter-test-utils';
+import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach } from 'vitest';

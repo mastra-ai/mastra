@@ -10,7 +10,8 @@
  */
 
 import type { Server } from 'node:http';
-import { createDefaultTestContext, type AdapterTestContext } from '@internal/server-adapter-test-utils';
+import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
