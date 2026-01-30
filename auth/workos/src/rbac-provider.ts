@@ -7,20 +7,10 @@
 
 import type { IRBACProvider, RoleMapping } from '@mastra/core/ee';
 import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/ee';
-import type { WorkOS } from '@workos-inc/node';
+import { WorkOS } from '@workos-inc/node';
 import { LRUCache } from 'lru-cache';
 
 import type { WorkOSUser, MastraRBACWorkosOptions } from './types';
-
-/**
- * Extended options that include the WorkOS client.
- */
-interface MastraRBACWorkosFullOptions extends MastraRBACWorkosOptions {
-  /** WorkOS client instance */
-  workos: WorkOS;
-  /** Permission cache configuration */
-  cache?: PermissionCacheOptions;
-}
 
 /**
  * WorkOS RBAC provider that maps organization roles to Mastra permissions.
@@ -30,13 +20,11 @@ interface MastraRBACWorkosFullOptions extends MastraRBACWorkosOptions {
  *
  * @example Basic usage
  * ```typescript
- * import { WorkOS } from '@workos-inc/node';
  * import { MastraRBACWorkos } from '@mastra/auth-workos';
  *
- * const workos = new WorkOS(process.env.WORKOS_API_KEY);
- *
  * const rbac = new MastraRBACWorkos({
- *   workos,
+ *   apiKey: process.env.WORKOS_API_KEY,
+ *   clientId: process.env.WORKOS_CLIENT_ID,
  *   roleMapping: {
  *     admin: ['*'],
  *     member: ['agents:read', 'workflows:*'],
@@ -49,7 +37,8 @@ interface MastraRBACWorkosFullOptions extends MastraRBACWorkosOptions {
  * @example With specific organization
  * ```typescript
  * const rbac = new MastraRBACWorkos({
- *   workos,
+ *   apiKey: process.env.WORKOS_API_KEY,
+ *   clientId: process.env.WORKOS_CLIENT_ID,
  *   organizationId: 'org_123456',
  *   roleMapping: {
  *     admin: ['*'],
@@ -63,14 +52,6 @@ const DEFAULT_CACHE_TTL_MS = 60 * 1000;
 
 /** Default max cache size (number of users) */
 const DEFAULT_CACHE_MAX_SIZE = 1000;
-
-/** Cache configuration options */
-export interface PermissionCacheOptions {
-  /** Maximum number of users to cache (default: 1000) */
-  maxSize?: number;
-  /** Time-to-live in milliseconds (default: 60000) */
-  ttlMs?: number;
-}
 
 export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   private workos: WorkOS;
@@ -89,10 +70,20 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   /**
    * Create a new WorkOS RBAC provider.
    *
-   * @param options - RBAC configuration options including WorkOS client
+   * @param options - RBAC configuration options
    */
-  constructor(options: MastraRBACWorkosFullOptions) {
-    this.workos = options.workos;
+  constructor(options: MastraRBACWorkosOptions) {
+    const apiKey = options.apiKey ?? process.env.WORKOS_API_KEY;
+    const clientId = options.clientId ?? process.env.WORKOS_CLIENT_ID;
+
+    if (!apiKey || !clientId) {
+      throw new Error(
+        'WorkOS API key and client ID are required. ' +
+          'Provide them in the options or set WORKOS_API_KEY and WORKOS_CLIENT_ID environment variables.',
+      );
+    }
+
+    this.workos = new WorkOS(apiKey, { clientId });
     this.options = options;
 
     // Initialize LRU cache with configurable size and TTL

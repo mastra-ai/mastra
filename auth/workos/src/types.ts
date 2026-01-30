@@ -99,9 +99,24 @@ export interface MastraAuthWorkosOptions {
 // ============================================================================
 
 /**
+ * Cache configuration options for RBAC permission caching.
+ */
+export interface PermissionCacheOptions {
+  /** Maximum number of users to cache (default: 1000) */
+  maxSize?: number;
+  /** Time-to-live in milliseconds (default: 60000) */
+  ttlMs?: number;
+}
+
+/**
  * Options for MastraRBACWorkos.
  */
 export interface MastraRBACWorkosOptions {
+  /** WorkOS API key (defaults to WORKOS_API_KEY env var) */
+  apiKey?: string;
+  /** WorkOS Client ID (defaults to WORKOS_CLIENT_ID env var) */
+  clientId?: string;
+
   /**
    * Map WorkOS organization roles to Mastra permissions.
    *
@@ -122,6 +137,9 @@ export interface MastraRBACWorkosOptions {
    * If not provided, uses the first organization the user belongs to.
    */
   organizationId?: string;
+
+  /** Permission cache configuration */
+  cache?: PermissionCacheOptions;
 }
 
 // ============================================================================

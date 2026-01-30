@@ -39,7 +39,7 @@
 export { MastraAuthWorkos } from './auth-provider';
 
 // RBAC provider for role mapping
-export { MastraRBACWorkos, type PermissionCacheOptions } from './rbac-provider';
+export { MastraRBACWorkos } from './rbac-provider';
 
 // Directory Sync (SCIM) webhook handler
 export { WorkOSDirectorySync } from './directory-sync';
@@ -62,6 +62,7 @@ export type {
 
   // RBAC options
   MastraRBACWorkosOptions,
+  PermissionCacheOptions,
 
   // Directory Sync types
   DirectorySyncHandlers,
