@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 
 ## Current Position
 
-Phase: 13 - Focus Management and Keyboard
-Plan: 02 of 02
+Phase: 14 - Visual Feedback and Polish
+Plan: 01 of 01
 Status: Phase complete
-Last activity: 2026-01-30 -- Completed 13-02-PLAN.md
+Last activity: 2026-01-30 -- Completed 14-01-PLAN.md
 
-Progress: [██████████████░░░░░░] 71% (5/7 plans in v1.2)
+Progress: [███████████████░░░░░] 86% (6/7 plans in v1.2)
 
 ## Performance Metrics
 
@@ -83,6 +83,14 @@ Phase 13 decisions (Plan 02):
 - Cursor changes: pointer (clickable) to text (typing) when interactive
 - exitInteractive/handleFrameClick placed after useBrowserStream (status dependency)
 
+Phase 14 decisions (Plan 01):
+- Ripple uses container-relative display-space CSS pixels (relX, relY), not CDP viewport coordinates
+- Letterbox boundary check inlined in useClickRipple rather than importing mapClientToViewport
+- MAX_RIPPLES = 10 safety cap prevents unbounded state growth
+- Left-click only (button === 0) -- right-click has different semantics
+- bg-accent1/40 Tailwind class for ripple color, no hardcoded rgba
+- CSS keyframe animation with onAnimationEnd self-cleanup pattern
+
 ### Pending Todos
 
 None.
@@ -119,7 +127,7 @@ None.
 ### Phase 14: Visual Feedback and Polish
 **Goal:** User receives immediate visual confirmation for input actions despite frame latency
 **Requirements:** VIS-01, VIS-02 (2 total)
-**Status:** Not Started
+**Status:** Complete (14-01-SUMMARY.md) -- VIS-01 was already delivered in Phase 13
 **Depends on:** Phase 12 (complete)
 
 ### Phase 15: Input Coordination
@@ -135,15 +143,15 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-30T00:10:35Z
-Stopped at: Completed 13-02-PLAN.md (interactive mode wiring + keyboard hook connection)
+Last session: 2026-01-30T06:29:09Z
+Stopped at: Completed 14-01-PLAN.md (click ripple visual feedback)
 Resume file: None
 
-**Next action:** Execute Phase 14 (Visual Feedback and Polish) or Phase 15 (Input Coordination -- blocked until Phase 14 completes).
+**Next action:** Execute Phase 15 (Input Coordination) -- all dependencies now satisfied (Phases 10-14 complete).
 
 **Context for next session:**
-- Phase 13 complete: keyboard interaction hook + interactive mode state fully wired
-- Full keyboard pipeline operational: frame click -> isInteractive -> capture-phase keydown -> CDP -> WebSocket -> server -> injectKeyboardEvent
-- Interactive mode has four exit triggers: Escape, click-outside, window blur, status change
-- Phase 14 depends on Phase 12 (complete) -- ready to start
-- Phase 15 blocked until Phases 13 (now complete) and 14 both complete
+- Phase 14 complete: click ripple feedback with CSS animation, letterbox-aware positioning, auto-cleanup
+- VIS-01 was already delivered in Phase 13 (ring-2 ring-accent1 + cursor changes)
+- VIS-02 delivered: useClickRipple hook + ClickRippleOverlay component integrated into BrowserViewFrame
+- Phase 15 is the final phase of v1.2 -- input coordination for user/agent coexistence
+- All Phase 15 dependencies now complete (Phases 10-14)
