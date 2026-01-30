@@ -191,7 +191,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 14-01-PLAN.md -- Click ripple overlay with letterbox-aware positioning (VIS-01 already complete from Phase 13)
+- [x] 14-01-PLAN.md -- Click ripple overlay with letterbox-aware positioning (VIS-01 already complete from Phase 13)
 
 ---
 
@@ -229,9 +229,9 @@ Plans:
 | 11. Server Input Routing | v1.2 | 1/1 | Complete | 2026-01-29 |
 | 12. Client Mapping & Click | v1.2 | 3/3 | Complete | 2026-01-29 |
 | 13. Focus & Keyboard | v1.2 | 2/2 | Complete | 2026-01-30 |
-| 14. Visual Feedback | v1.2 | 0/1 | Not Started | -- |
+| 14. Visual Feedback | v1.2 | 1/1 | Complete | 2026-01-30 |
 | 15. Input Coordination | v1.2 | 0/TBD | Not Started | -- |
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-30 -- Phase 14 planned (1 plan)*
+*Last updated: 2026-01-30 -- Phase 14 complete (1 plan executed)*

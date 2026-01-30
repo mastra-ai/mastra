@@ -43,8 +43,8 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 
 ## Visual Feedback
 
-- [ ] **VIS-01**: Interactive mode indicator shows when panel is accepting input (border highlight, cursor change, or badge state)
-- [ ] **VIS-02**: Click ripple effect provides immediate visual confirmation at click position before browser responds
+- [x] **VIS-01**: Interactive mode indicator shows when panel is accepting input (border highlight, cursor change, or badge state)
+- [x] **VIS-02**: Click ripple effect provides immediate visual confirmation at click position before browser responds
 - [x] **VIS-03**: mouseMoved events throttled (requestAnimationFrame gating, max ~30/sec) to prevent WebSocket/CDP flood
 
 ## Input Coordination
@@ -78,8 +78,8 @@ Requirements for Browser Input Injection milestone. Each maps to roadmap phases.
 | FOCUS-01 | Phase 13 | Complete |
 | FOCUS-02 | Phase 13 | Complete |
 | FOCUS-03 | Phase 13 | Complete |
-| VIS-01 | Phase 14 | Pending |
-| VIS-02 | Phase 14 | Pending |
+| VIS-01 | Phase 14 | Complete |
+| VIS-02 | Phase 14 | Complete |
 | VIS-03 | Phase 12 | Complete |
 | COORD-01 | Phase 15 | Pending |
 | COORD-02 | Phase 15 | Pending |
