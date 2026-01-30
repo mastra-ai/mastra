@@ -148,6 +148,70 @@ async function getSkillsById(mastra: any, workspaceId?: string): Promise<Workspa
   return workspace?.skills;
 }
 
+/** Normalize path separators for consistent comparison */
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/+/g, '/');
+}
+
+/** Check if a path is under the .agents/skills directory */
+function isUnderAgentSkills(path: string): boolean {
+  const normalized = normalizePath(path);
+  // Use trailing slash to avoid matching .agents/skills-backup/ etc.
+  return normalized.includes('.agents/skills/');
+}
+
+/**
+ * Check if there are skills in .agents/skills that aren't being discovered.
+ * This can happen when a user installs skills via skills.sh but hasn't
+ * configured .agents/skills in their workspace skills paths.
+ *
+ * Optimizations:
+ * - Skips entirely if any discovered skill is already under .agents/skills/
+ * - Checks if directory exists before attempting to read it
+ * - Exits early on first undiscovered skill found
+ */
+async function checkForUndiscoveredAgentSkills(
+  mastra: any,
+  workspaceId: string | undefined,
+  discoveredPaths: string[],
+): Promise<boolean> {
+  // If any discovered skill is under .agents/skills/, the path is already configured
+  const isAgentSkillsDiscovered = discoveredPaths.some(isUnderAgentSkills);
+  if (isAgentSkillsDiscovered) {
+    return false;
+  }
+
+  // Check filesystem for skills in .agents/skills/
+  const workspace = await getWorkspaceById(mastra, workspaceId);
+  if (!workspace?.filesystem) {
+    return false;
+  }
+
+  const agentSkillsPath = '.agents/skills';
+
+  // Check if directory exists before reading (avoids try/catch overhead)
+  const exists = await workspace.filesystem.exists(agentSkillsPath);
+  if (!exists) {
+    return false;
+  }
+
+  try {
+    const entries = await workspace.filesystem.readdir(agentSkillsPath);
+    const agentSkillDirs = entries?.filter(e => e.type === 'directory').map(e => e.name) ?? [];
+
+    // Check if any skill in .agents/skills/ is NOT in the discovered list
+    // Uses some() to exit early on first undiscovered skill
+    return agentSkillDirs.some(skillName => {
+      const expectedPath = `${agentSkillsPath}/${skillName}`;
+      // Normalize paths for comparison
+      return !discoveredPaths.some(p => normalizePath(p).includes(expectedPath));
+    });
+  } catch {
+    // Directory read failed - assume no undiscovered skills
+    return false;
+  }
+}
+
 // =============================================================================
 // List All Workspaces Route
 // =============================================================================
@@ -752,34 +816,11 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
 
       // Check if there are skills in .agents/skills that aren't being discovered
       // This happens when user has installed skills but hasn't configured the path
-      let hasUndiscoveredAgentSkills = false;
-
-      // First, check if .agents/skills is already being discovered
-      // If so, skip the filesystem check entirely (optimization)
-      const isAgentSkillsDiscovered = skillsWithPath.some(s => s.path.includes('.agents/skills'));
-
-      // Only check filesystem if .agents/skills is NOT being discovered
-      if (!isAgentSkillsDiscovered) {
-        const workspace = await getWorkspaceById(mastra, workspaceId);
-        if (workspace?.filesystem) {
-          try {
-            const agentSkillsPath = '.agents/skills';
-            const entries = await workspace.filesystem.readdir(agentSkillsPath);
-            const agentSkillDirs = entries?.filter(e => e.type === 'directory').map(e => e.name) ?? [];
-
-            // Check if any of these skills are NOT in the discovered list
-            const discoveredPaths = skillsWithPath.map(s => s.path);
-            const hasUndiscovered = agentSkillDirs.some(skillName => {
-              const expectedPath = `${agentSkillsPath}/${skillName}`;
-              return !discoveredPaths.some(p => p.includes(expectedPath));
-            });
-
-            hasUndiscoveredAgentSkills = hasUndiscovered;
-          } catch {
-            // .agents/skills directory doesn't exist - that's fine
-          }
-        }
-      }
+      const hasUndiscoveredAgentSkills = await checkForUndiscoveredAgentSkills(
+        mastra,
+        workspaceId,
+        skillsWithPath.map(s => s.path),
+      );
 
       return {
         skills: skillsWithPath,
