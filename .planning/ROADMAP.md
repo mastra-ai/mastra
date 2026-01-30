@@ -208,7 +208,10 @@ Plans:
 3. User input during agent tool execution is handled gracefully (queued, blocked with warning, or limitations documented)
 4. No destructive races between user clicks and agent tool calls (stale refs, double actions, element invalidation)
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 15-01-PLAN.md -- useInputCoordination hook, AgentBusyOverlay component, and BrowserViewFrame wiring
 
 ---
 
@@ -230,8 +233,8 @@ Plans:
 | 12. Client Mapping & Click | v1.2 | 3/3 | Complete | 2026-01-29 |
 | 13. Focus & Keyboard | v1.2 | 2/2 | Complete | 2026-01-30 |
 | 14. Visual Feedback | v1.2 | 1/1 | Complete | 2026-01-30 |
-| 15. Input Coordination | v1.2 | 0/TBD | Not Started | -- |
+| 15. Input Coordination | v1.2 | 0/1 | Not Started | -- |
 
 ---
 *Roadmap created: 2026-01-27*
-*Last updated: 2026-01-30 -- Phase 14 complete (1 plan executed)*
+*Last updated: 2026-01-30 -- Phase 15 planned (1 plan)*
