@@ -13416,6 +13416,21 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
+      const childWorkflowStep = createStep({
+        id: 'child-workflow-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const childWorkflow = createWorkflow({
+        id: 'child-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(childWorkflowStep)
+        .commit();
+
       // Create a step that takes 30 seconds to complete
       const longRunningStep = createStep({
         id: 'long-running-step',
@@ -13432,9 +13447,9 @@ describe('MastraInngestWorkflow', () => {
         id: 'long-running-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({ result: z.string() }),
-        steps: [longRunningStep],
+        steps: [childWorkflow, longRunningStep],
       });
-      workflow.then(longRunningStep).commit();
+      workflow.then(childWorkflow).then(longRunningStep).commit();
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
