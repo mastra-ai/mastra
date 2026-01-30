@@ -1,5 +1,11 @@
 # mastra
 
+## 1.1.0-alpha.2
+
+### Patch Changes
+
+- Fixed peer dependency checker to correctly validate prerelease versions (e.g., 1.1.0-alpha.1 now satisfies >=1.0.0-0 <2.0.0-0) ([#12495](https://github.com/mastra-ai/mastra/pull/12495))
+
 ## 1.1.0-alpha.1
 
 ### Patch Changes

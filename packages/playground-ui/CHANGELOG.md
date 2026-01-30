@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 8.0.0-alpha.2
+
+### Patch Changes
+
+- Added raw SKILL.md source view in skill detail page. The 'Source' toggle now shows the full file contents including YAML frontmatter. ([#12497](https://github.com/mastra-ai/mastra/pull/12497))
+
 ## 8.0.0-alpha.1
 
 ### Patch Changes
