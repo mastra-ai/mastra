@@ -68,11 +68,12 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     // and are tested separately via mcp-transport-test-suite
     // Skip auth routes that require specific providers (SSO, credentials) - they return 404
     // when providers aren't configured, which is expected behavior
+    // Note: Route paths in SERVER_ROUTES don't include /api prefix
     const authRoutesRequiringProviders = [
-      '/api/auth/sso/login',
-      '/api/auth/sso/callback',
-      '/api/auth/credentials/sign-in',
-      '/api/auth/credentials/sign-up',
+      '/auth/sso/login',
+      '/auth/sso/callback',
+      '/auth/credentials/sign-in',
+      '/auth/credentials/sign-up',
     ];
     const activeRoutes = SERVER_ROUTES.filter(
       r =>
