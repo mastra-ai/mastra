@@ -9,6 +9,8 @@
  * - Use Auth0 for auth + custom RBAC provider
  */
 
+import type { Permission } from '../defaults/roles';
+
 /**
  * Definition of a role with its permissions.
  */
@@ -20,7 +22,7 @@ export interface RoleDefinition {
   /** Role description */
   description?: string;
   /** Permissions granted by this role */
-  permissions: string[];
+  permissions: Permission[];
   /** Role IDs this role inherits from */
   inherits?: string[];
 }
