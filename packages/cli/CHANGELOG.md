@@ -1,5 +1,14 @@
 # mastra
 
+## 1.1.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`9517e02`](https://github.com/mastra-ai/mastra/commit/9517e023192d1ad862679a4edd6b66396c48bdeb)]:
+  - @mastra/loggers@1.0.1-alpha.0
+  - @mastra/core@1.1.0-alpha.2
+  - @mastra/deployer@1.1.0-alpha.2
+
 ## 1.1.0-alpha.2
 
 ### Patch Changes

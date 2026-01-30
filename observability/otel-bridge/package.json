@@ -1,6 +1,6 @@
 {
   "name": "@mastra/otel-bridge",
-  "version": "1.0.1-alpha.0",
+  "version": "1.0.1-alpha.1",
   "description": "OpenTelemetry observability bridge for Mastra",
   "type": "module",
   "main": "dist/index.js",
