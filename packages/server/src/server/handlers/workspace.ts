@@ -1117,6 +1117,42 @@ interface GitHubContentItem {
   download_url: string | null;
 }
 
+interface GitHubTreeItem {
+  path: string;
+  mode: string;
+  type: 'blob' | 'tree';
+  sha: string;
+  url: string;
+}
+
+interface GitHubTreeResponse {
+  sha: string;
+  url: string;
+  tree: GitHubTreeItem[];
+  truncated: boolean;
+}
+
+/**
+ * Parse YAML frontmatter from a SKILL.md file to extract the name field.
+ */
+function parseSkillFrontmatter(content: string): { name?: string } {
+  const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const frontmatter = frontmatterMatch?.[1];
+  if (!frontmatter) {
+    return {};
+  }
+
+  const result: { name?: string } = {};
+
+  // Simple YAML parsing for the name field
+  const nameMatch = frontmatter.match(/^name:\s*["']?([^"'\n]+)["']?\s*$/m);
+  if (nameMatch?.[1]) {
+    result.name = nameMatch[1].trim();
+  }
+
+  return result;
+}
+
 /**
  * Recursively fetch all files from a GitHub directory using the Contents API.
  */
@@ -1165,8 +1201,11 @@ async function fetchGitHubDirectoryContents(
 }
 
 /**
- * Find the actual skill path in a GitHub repo using multi-path discovery.
- * Returns the path and branch if found, null otherwise.
+ * Find the actual skill path in a GitHub repo by searching for SKILL.md files
+ * and matching on the `name` field in frontmatter.
+ *
+ * Uses GitHub's Tree API to find all SKILL.md files, then fetches each one's
+ * frontmatter to find the matching skill name.
  */
 async function findSkillPath(
   owner: string,
@@ -1175,39 +1214,48 @@ async function findSkillPath(
 ): Promise<{ path: string; branch: string } | null> {
   const branches = ['main', 'master'];
 
-  // Common vendor prefixes that skills.sh adds to skill names
-  const vendorPrefixes = ['vercel-', 'anthropic-', 'anthropics-'];
-  let baseName = skillName;
-  for (const prefix of vendorPrefixes) {
-    if (skillName.startsWith(prefix)) {
-      baseName = skillName.slice(prefix.length);
-      break;
-    }
-  }
-
-  // Path variants to try (based on skills CLI discovery logic)
-  const pathVariants = [
-    skillName,
-    `skills/${skillName}`,
-    `skills/${baseName}`,
-    baseName,
-    `.agents/skills/${baseName}`,
-    `.claude/skills/${baseName}`,
-    `.cursor/skills/${baseName}`,
-  ].filter((p, i, arr) => arr.indexOf(p) === i);
-
   for (const branch of branches) {
-    for (const pathVariant of pathVariants) {
-      // Check if SKILL.md exists at this path
-      const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${pathVariant}/SKILL.md`;
-      try {
-        const response = await fetch(url, { method: 'HEAD' });
-        if (response.ok) {
-          return { path: pathVariant, branch };
-        }
-      } catch {
-        // Continue trying other paths
+    try {
+      // Get the entire repo tree to find all SKILL.md files
+      const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+      const treeResponse = await fetch(treeUrl, {
+        headers: {
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'Mastra-Skills-Installer',
+        },
+      });
+
+      if (!treeResponse.ok) {
+        continue; // Try next branch
       }
+
+      const tree = (await treeResponse.json()) as GitHubTreeResponse;
+
+      // Find all SKILL.md files
+      const skillFiles = tree.tree.filter(item => item.type === 'blob' && item.path.endsWith('/SKILL.md'));
+
+      // Check each SKILL.md's frontmatter for matching name
+      for (const skillFile of skillFiles) {
+        const contentUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${skillFile.path}`;
+        try {
+          const contentResponse = await fetch(contentUrl);
+          if (!contentResponse.ok) continue;
+
+          const content = await contentResponse.text();
+          const frontmatter = parseSkillFrontmatter(content);
+
+          // Match on the name field in frontmatter
+          if (frontmatter.name === skillName) {
+            // Return the directory path (remove /SKILL.md from the end)
+            const dirPath = skillFile.path.replace(/\/SKILL\.md$/, '');
+            return { path: dirPath, branch };
+          }
+        } catch {
+          // Continue to next file
+        }
+      }
+    } catch {
+      // Continue to next branch
     }
   }
 
@@ -1258,14 +1306,13 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'No files found in skill directory' });
       }
 
-      // Determine install path - use the skill name from SKILL.md frontmatter if available
-      // For now, use baseName (without vendor prefix)
-      const vendorPrefixes = ['vercel-', 'anthropic-', 'anthropics-'];
-      let installName = skillName;
-      for (const prefix of vendorPrefixes) {
-        if (skillName.startsWith(prefix)) {
-          installName = skillName.slice(prefix.length);
-          break;
+      // Get the skill name from SKILL.md frontmatter for the install directory name
+      const skillMdFile = files.find(f => f.path === 'SKILL.md');
+      let installName = skillName; // fallback to the skills.sh name
+      if (skillMdFile) {
+        const frontmatter = parseSkillFrontmatter(skillMdFile.content);
+        if (frontmatter.name) {
+          installName = frontmatter.name;
         }
       }
 
