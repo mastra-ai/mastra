@@ -146,14 +146,14 @@ export default function Workspace() {
   const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
   const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? false;
   const hasSkills = workspaceInfo?.capabilities?.hasSkills ?? false;
-  const hasSandbox = workspaceInfo?.capabilities?.hasSandbox ?? false;
   const canBM25 = workspaceInfo?.capabilities?.canBM25 ?? false;
   const canVector = workspaceInfo?.capabilities?.canVector ?? false;
   // Check if the selected workspace is read-only
   const isReadOnly = selectedWorkspace?.safety?.readOnly ?? false;
 
-  // Can manage skills if we have sandbox and not read-only
-  const canManageSkills = hasSandbox && !isReadOnly;
+  // Can manage skills (install/remove/check/update) if we have filesystem and not read-only
+  // None of these operations require sandbox - all are done via GitHub API + filesystem
+  const canManageSkills = hasFilesystem && !isReadOnly;
 
   // Skills.sh handlers
   const handleInstallSkill = useCallback(
@@ -165,11 +165,11 @@ export default function Workspace() {
         {
           onSuccess: result => {
             if (result.success) {
-              toast.success(`Skill "${params.skillName}" installed successfully`);
+              toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
               setShowAddSkillDialog(false);
               refetchSkills();
             } else {
-              toast.error(`Failed to install skill: ${result.stderr || 'Unknown error'}`);
+              toast.error('Failed to install skill');
             }
           },
           onError: error => {
@@ -188,10 +188,11 @@ export default function Workspace() {
       { workspaceId: effectiveWorkspaceId },
       {
         onSuccess: result => {
-          if (result.success) {
-            toast.success(result.stdout || 'Update check completed');
+          const skillsWithUpdates = result.skills.filter(s => s.hasUpdate);
+          if (skillsWithUpdates.length > 0) {
+            toast.success(`${skillsWithUpdates.length} skill(s) have updates available`);
           } else {
-            toast.error(`Update check failed: ${result.stderr || 'Unknown error'}`);
+            toast.success('All skills are up to date');
           }
         },
         onError: error => {
@@ -208,11 +209,17 @@ export default function Workspace() {
       { workspaceId: effectiveWorkspaceId },
       {
         onSuccess: result => {
-          if (result.success) {
-            toast.success('Skills updated successfully');
+          const successful = result.updated.filter(s => s.success);
+          const failed = result.updated.filter(s => !s.success);
+          if (successful.length > 0) {
+            toast.success(`Updated ${successful.length} skill(s)`);
             refetchSkills();
-          } else {
-            toast.error(`Update failed: ${result.stderr || 'Unknown error'}`);
+          }
+          if (failed.length > 0) {
+            toast.error(`Failed to update ${failed.length} skill(s)`);
+          }
+          if (result.updated.length === 0) {
+            toast.success('No skills to update');
           }
         },
         onError: error => {
@@ -233,10 +240,8 @@ export default function Workspace() {
           onSuccess: result => {
             setRemovingSkillName(null);
             if (result.success) {
-              toast.success(`Skill "${skillName}" removed successfully`);
+              toast.success(`Skill "${result.skillName}" removed successfully`);
               refetchSkills();
-            } else {
-              toast.error(`Failed to remove skill: ${result.stderr || 'Unknown error'}`);
             }
           },
           onError: error => {

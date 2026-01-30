@@ -19,6 +19,13 @@ import type {
   GetSkillReferenceResponse,
   SandboxExecuteParams,
   SandboxExecuteResponse,
+  SkillsShInstallParams,
+  SkillsShInstallResponse,
+  SkillsShRemoveParams,
+  SkillsShRemoveResponse,
+  SkillsShCheckUpdatesResponse,
+  SkillsShUpdateParams,
+  SkillsShUpdateResponse,
 } from '../types';
 
 import { BaseResource } from './base';
@@ -252,6 +259,57 @@ export class Workspace extends BaseResource {
     return this.request(`${this.basePath}/sandbox/execute`, {
       method: 'POST',
       body: params,
+    });
+  }
+
+  // ==========================================================================
+  // skills.sh Operations
+  // ==========================================================================
+
+  /**
+   * Installs a skill from GitHub via skills.sh
+   * Fetches skill files from GitHub and writes to workspace filesystem.
+   * Does not require sandbox - only requires filesystem access.
+   * @param params - Install parameters (owner, repo, skillName)
+   * @returns Promise containing install result
+   */
+  skillsShInstall(params: SkillsShInstallParams): Promise<SkillsShInstallResponse> {
+    return this.request(`${this.basePath}/skills-sh/install`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Removes an installed skill
+   * Does not require sandbox - only requires filesystem access.
+   * @param params - Remove parameters (skillName)
+   * @returns Promise containing remove result
+   */
+  skillsShRemove(params: SkillsShRemoveParams): Promise<SkillsShRemoveResponse> {
+    return this.request(`${this.basePath}/skills-sh/remove`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Checks for available updates on installed skills
+   * @returns Promise containing update status for each skill
+   */
+  skillsShCheckUpdates(): Promise<SkillsShCheckUpdatesResponse> {
+    return this.request(`${this.basePath}/skills-sh/check-updates`);
+  }
+
+  /**
+   * Updates installed skills by re-fetching from GitHub
+   * @param params - Update parameters (optional skillName to update specific skill)
+   * @returns Promise containing update results
+   */
+  skillsShUpdate(params?: SkillsShUpdateParams): Promise<SkillsShUpdateResponse> {
+    return this.request(`${this.basePath}/skills-sh/update`, {
+      method: 'POST',
+      body: params ?? {},
     });
   }
 

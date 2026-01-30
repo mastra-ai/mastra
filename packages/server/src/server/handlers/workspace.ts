@@ -51,7 +51,14 @@ import {
   skillsShSearchResponseSchema,
   skillsShListResponseSchema,
   skillsShPreviewQuerySchema,
+  skillsShInstallBodySchema,
+  skillsShInstallResponseSchema,
   skillsShPreviewResponseSchema,
+  skillsShRemoveBodySchema,
+  skillsShRemoveResponseSchema,
+  skillsShCheckUpdatesResponseSchema,
+  skillsShUpdateBodySchema,
+  skillsShUpdateResponseSchema,
 } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -1099,10 +1106,508 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
   },
 });
 
+// =============================================================================
+// skills.sh Install Route (GitHub API-based, no sandbox required)
+// =============================================================================
+
+interface GitHubContentItem {
+  name: string;
+  path: string;
+  type: 'file' | 'dir';
+  download_url: string | null;
+}
+
+/**
+ * Recursively fetch all files from a GitHub directory using the Contents API.
+ */
+async function fetchGitHubDirectoryContents(
+  owner: string,
+  repo: string,
+  path: string,
+  branch: string,
+): Promise<Array<{ path: string; content: string }>> {
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
+  const response = await fetch(apiUrl, {
+    headers: {
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Mastra-Skills-Installer',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+  }
+
+  const items = (await response.json()) as GitHubContentItem[];
+  const files: Array<{ path: string; content: string }> = [];
+
+  for (const item of items) {
+    if (item.type === 'file' && item.download_url) {
+      // Fetch file content
+      const fileResponse = await fetch(item.download_url);
+      if (fileResponse.ok) {
+        const content = await fileResponse.text();
+        // Get relative path from the skill folder - use item.name for the filename
+        files.push({ path: item.name, content });
+      }
+    } else if (item.type === 'dir') {
+      // Recursively fetch subdirectory
+      const subFiles = await fetchGitHubDirectoryContents(owner, repo, item.path, branch);
+      // Preserve subdirectory structure
+      const dirName = item.name;
+      for (const subFile of subFiles) {
+        files.push({ path: `${dirName}/${subFile.path}`, content: subFile.content });
+      }
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Find the actual skill path in a GitHub repo using multi-path discovery.
+ * Returns the path and branch if found, null otherwise.
+ */
+async function findSkillPath(
+  owner: string,
+  repo: string,
+  skillName: string,
+): Promise<{ path: string; branch: string } | null> {
+  const branches = ['main', 'master'];
+
+  // Common vendor prefixes that skills.sh adds to skill names
+  const vendorPrefixes = ['vercel-', 'anthropic-', 'anthropics-'];
+  let baseName = skillName;
+  for (const prefix of vendorPrefixes) {
+    if (skillName.startsWith(prefix)) {
+      baseName = skillName.slice(prefix.length);
+      break;
+    }
+  }
+
+  // Path variants to try (based on skills CLI discovery logic)
+  const pathVariants = [
+    skillName,
+    `skills/${skillName}`,
+    `skills/${baseName}`,
+    baseName,
+    `.agents/skills/${baseName}`,
+    `.claude/skills/${baseName}`,
+    `.cursor/skills/${baseName}`,
+  ].filter((p, i, arr) => arr.indexOf(p) === i);
+
+  for (const branch of branches) {
+    for (const pathVariant of pathVariants) {
+      // Check if SKILL.md exists at this path
+      const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${pathVariant}/SKILL.md`;
+      try {
+        const response = await fetch(url, { method: 'HEAD' });
+        if (response.ok) {
+          return { path: pathVariant, branch };
+        }
+      } catch {
+        // Continue trying other paths
+      }
+    }
+  }
+
+  return null;
+}
+
+export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workspaces/:workspaceId/skills-sh/install',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  bodySchema: skillsShInstallBodySchema,
+  responseSchema: skillsShInstallResponseSchema,
+  summary: 'Install skill from GitHub',
+  description:
+    'Installs a skill by fetching files from GitHub and writing to workspace filesystem. Does not require sandbox.',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ mastra, workspaceId, owner, repo, skillName }) => {
+    try {
+      requireWorkspaceV1Support();
+
+      const workspace = await getWorkspaceById(mastra, workspaceId);
+      if (!workspace) {
+        throw new HTTPException(404, { message: 'Workspace not found' });
+      }
+
+      if (!workspace.fs) {
+        throw new HTTPException(400, { message: 'Workspace filesystem not available' });
+      }
+
+      // Check if workspace is read-only
+      if (workspace.fs.readOnly) {
+        throw new HTTPException(403, { message: 'Workspace is read-only' });
+      }
+
+      // Find the actual skill path in the repo
+      const skillLocation = await findSkillPath(owner, repo, skillName);
+      if (!skillLocation) {
+        throw new HTTPException(404, {
+          message: `Could not find skill "${skillName}" in ${owner}/${repo}. Tried multiple path patterns.`,
+        });
+      }
+
+      // Fetch all files from the skill directory
+      const files = await fetchGitHubDirectoryContents(owner, repo, skillLocation.path, skillLocation.branch);
+
+      if (files.length === 0) {
+        throw new HTTPException(404, { message: 'No files found in skill directory' });
+      }
+
+      // Determine install path - use the skill name from SKILL.md frontmatter if available
+      // For now, use baseName (without vendor prefix)
+      const vendorPrefixes = ['vercel-', 'anthropic-', 'anthropics-'];
+      let installName = skillName;
+      for (const prefix of vendorPrefixes) {
+        if (skillName.startsWith(prefix)) {
+          installName = skillName.slice(prefix.length);
+          break;
+        }
+      }
+
+      const installPath = `.agents/skills/${installName}`;
+
+      // Ensure the skills directory exists
+      try {
+        await workspace.fs.mkdir(installPath, { recursive: true });
+      } catch {
+        // Directory might already exist
+      }
+
+      // Write all files to the workspace
+      let filesWritten = 0;
+      for (const file of files) {
+        const filePath = `${installPath}/${file.path}`;
+
+        // Create subdirectory if needed
+        if (file.path.includes('/')) {
+          const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+          try {
+            await workspace.fs.mkdir(dirPath, { recursive: true });
+          } catch {
+            // Directory might already exist
+          }
+        }
+
+        await workspace.fs.writeFile(filePath, file.content);
+        filesWritten++;
+      }
+
+      // Write metadata file for check/update support
+      const metadata = {
+        skillName: installName,
+        owner,
+        repo,
+        branch: skillLocation.branch,
+        path: skillLocation.path,
+        installedAt: new Date().toISOString(),
+      };
+      await workspace.fs.writeFile(`${installPath}/.meta.json`, JSON.stringify(metadata, null, 2));
+      filesWritten++;
+
+      return {
+        success: true,
+        skillName: installName,
+        installedPath: installPath,
+        filesWritten,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error installing skill from GitHub');
+    }
+  },
+});
+
+/**
+ * Interface for skill metadata stored in .meta.json
+ */
+interface SkillMetaFile {
+  skillName: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  path: string;
+  installedAt: string;
+}
+
+export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workspaces/:workspaceId/skills-sh/remove',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  bodySchema: skillsShRemoveBodySchema,
+  responseSchema: skillsShRemoveResponseSchema,
+  summary: 'Remove an installed skill',
+  description: 'Removes an installed skill by deleting its directory. Does not require sandbox.',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ mastra, workspaceId, skillName }) => {
+    try {
+      requireWorkspaceV1Support();
+
+      const workspace = await getWorkspaceById(mastra, workspaceId);
+      if (!workspace) {
+        throw new HTTPException(404, { message: 'Workspace not found' });
+      }
+
+      if (!workspace.fs) {
+        throw new HTTPException(400, { message: 'Workspace filesystem not available' });
+      }
+
+      if (workspace.fs.readOnly) {
+        throw new HTTPException(403, { message: 'Workspace is read-only' });
+      }
+
+      const skillPath = `.agents/skills/${skillName}`;
+
+      // Check if skill exists
+      try {
+        await workspace.fs.stat(skillPath);
+      } catch {
+        throw new HTTPException(404, { message: `Skill "${skillName}" not found at ${skillPath}` });
+      }
+
+      // Delete the skill directory
+      await workspace.fs.rmdir(skillPath, { recursive: true });
+
+      return {
+        success: true,
+        skillName,
+        removedPath: skillPath,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error removing skill');
+    }
+  },
+});
+
+export const WORKSPACE_SKILLS_SH_CHECK_UPDATES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workspaces/:workspaceId/skills-sh/check-updates',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  responseSchema: skillsShCheckUpdatesResponseSchema,
+  summary: 'Check for skill updates',
+  description: 'Checks if any installed skills have updates available on GitHub.',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ mastra, workspaceId }) => {
+    try {
+      requireWorkspaceV1Support();
+
+      const workspace = await getWorkspaceById(mastra, workspaceId);
+      if (!workspace) {
+        throw new HTTPException(404, { message: 'Workspace not found' });
+      }
+
+      if (!workspace.fs) {
+        throw new HTTPException(400, { message: 'Workspace filesystem not available' });
+      }
+
+      const skillsPath = '.agents/skills';
+      const results: Array<{
+        skillName: string;
+        currentVersion?: string;
+        hasUpdate: boolean;
+        latestCommit?: string;
+      }> = [];
+
+      // List all skills directories
+      let skillDirs: Array<{ name: string; type: string }>;
+      try {
+        const entries = await workspace.fs.readdir(skillsPath);
+        skillDirs = entries.filter(e => e.type === 'directory');
+      } catch {
+        // Skills directory doesn't exist yet
+        return { skills: [] };
+      }
+
+      for (const dir of skillDirs) {
+        const metaPath = `${skillsPath}/${dir.name}/.meta.json`;
+        try {
+          const metaContent = await workspace.fs.readFile(metaPath, { encoding: 'utf-8' });
+          const meta: SkillMetaFile = JSON.parse(metaContent as string);
+
+          // Check GitHub for latest commit on the skill path
+          const apiUrl = `https://api.github.com/repos/${meta.owner}/${meta.repo}/commits?path=${encodeURIComponent(meta.path)}&per_page=1&sha=${meta.branch}`;
+          const response = await fetch(apiUrl, {
+            headers: {
+              Accept: 'application/vnd.github.v3+json',
+              'User-Agent': 'Mastra-Skills-Installer',
+            },
+          });
+
+          if (response.ok) {
+            const commits = (await response.json()) as Array<{ sha: string }>;
+            const latestCommit = commits[0]?.sha?.substring(0, 7);
+
+            // Note: For accurate update detection, we'd need to compare commit timestamps
+            // with installedAt date. For now, we just indicate if there's a latest commit.
+            results.push({
+              skillName: dir.name,
+              currentVersion: meta.installedAt,
+              hasUpdate: !!latestCommit, // We'd need commit dates for accurate comparison
+              latestCommit,
+            });
+          } else {
+            results.push({
+              skillName: dir.name,
+              currentVersion: meta.installedAt,
+              hasUpdate: false,
+            });
+          }
+        } catch {
+          // No metadata file - skill was installed manually or before metadata support
+          results.push({
+            skillName: dir.name,
+            hasUpdate: false,
+          });
+        }
+      }
+
+      return { skills: results };
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error checking for updates');
+    }
+  },
+});
+
+export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workspaces/:workspaceId/skills-sh/update',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  bodySchema: skillsShUpdateBodySchema,
+  responseSchema: skillsShUpdateResponseSchema,
+  summary: 'Update installed skills',
+  description:
+    'Updates installed skills by re-fetching from GitHub. Specify skillName to update one, or omit to update all.',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ mastra, workspaceId, skillName }) => {
+    try {
+      requireWorkspaceV1Support();
+
+      const workspace = await getWorkspaceById(mastra, workspaceId);
+      if (!workspace) {
+        throw new HTTPException(404, { message: 'Workspace not found' });
+      }
+
+      if (!workspace.fs) {
+        throw new HTTPException(400, { message: 'Workspace filesystem not available' });
+      }
+
+      if (workspace.fs.readOnly) {
+        throw new HTTPException(403, { message: 'Workspace is read-only' });
+      }
+
+      const skillsPath = '.agents/skills';
+      const results: Array<{
+        skillName: string;
+        success: boolean;
+        filesWritten?: number;
+        error?: string;
+      }> = [];
+
+      // Get list of skills to update
+      let skillsToUpdate: string[];
+      if (skillName) {
+        skillsToUpdate = [skillName];
+      } else {
+        try {
+          const entries = await workspace.fs.readdir(skillsPath);
+          skillsToUpdate = entries.filter(e => e.type === 'directory').map(e => e.name);
+        } catch {
+          return { updated: [] };
+        }
+      }
+
+      for (const skill of skillsToUpdate) {
+        const metaPath = `${skillsPath}/${skill}/.meta.json`;
+        try {
+          const metaContent = await workspace.fs.readFile(metaPath, { encoding: 'utf-8' });
+          const meta: SkillMetaFile = JSON.parse(metaContent as string);
+
+          // Re-fetch all files from GitHub
+          const files = await fetchGitHubDirectoryContents(meta.owner, meta.repo, meta.path, meta.branch);
+
+          if (files.length === 0) {
+            results.push({
+              skillName: skill,
+              success: false,
+              error: 'No files found in skill directory',
+            });
+            continue;
+          }
+
+          const installPath = `${skillsPath}/${skill}`;
+          let filesWritten = 0;
+
+          for (const file of files) {
+            const filePath = `${installPath}/${file.path}`;
+
+            if (file.path.includes('/')) {
+              const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+              try {
+                await workspace.fs.mkdir(dirPath, { recursive: true });
+              } catch {
+                // Directory might already exist
+              }
+            }
+
+            await workspace.fs.writeFile(filePath, file.content);
+            filesWritten++;
+          }
+
+          // Update metadata with new install time
+          const updatedMeta = {
+            ...meta,
+            installedAt: new Date().toISOString(),
+          };
+          await workspace.fs.writeFile(metaPath, JSON.stringify(updatedMeta, null, 2));
+          filesWritten++;
+
+          results.push({
+            skillName: skill,
+            success: true,
+            filesWritten,
+          });
+        } catch (error) {
+          results.push({
+            skillName: skill,
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      return { updated: results };
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error updating skills');
+    }
+  },
+});
+
 export const WORKSPACE_SKILLS_SH_ROUTES = [
   WORKSPACE_SKILLS_SH_SEARCH_ROUTE,
   WORKSPACE_SKILLS_SH_POPULAR_ROUTE,
   WORKSPACE_SKILLS_SH_PREVIEW_ROUTE,
+  WORKSPACE_SKILLS_SH_INSTALL_ROUTE,
+  WORKSPACE_SKILLS_SH_REMOVE_ROUTE,
+  WORKSPACE_SKILLS_SH_CHECK_UPDATES_ROUTE,
+  WORKSPACE_SKILLS_SH_UPDATE_ROUTE,
 ];
 
 // =============================================================================

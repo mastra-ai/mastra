@@ -374,3 +374,52 @@ export const skillsShPreviewQuerySchema = z.object({
 export const skillsShPreviewResponseSchema = z.object({
   content: z.string(),
 });
+
+export const skillsShInstallBodySchema = z.object({
+  owner: z.string().describe('GitHub repository owner'),
+  repo: z.string().describe('GitHub repository name'),
+  skillName: z.string().describe('Skill name from skills.sh'),
+});
+
+export const skillsShInstallResponseSchema = z.object({
+  success: z.boolean(),
+  skillName: z.string(),
+  installedPath: z.string(),
+  filesWritten: z.number(),
+});
+
+export const skillsShRemoveBodySchema = z.object({
+  skillName: z.string().describe('Name of the installed skill to remove'),
+});
+
+export const skillsShRemoveResponseSchema = z.object({
+  success: z.boolean(),
+  skillName: z.string(),
+  removedPath: z.string(),
+});
+
+export const skillsShCheckUpdatesResponseSchema = z.object({
+  skills: z.array(
+    z.object({
+      skillName: z.string(),
+      currentVersion: z.string().optional(),
+      hasUpdate: z.boolean(),
+      latestCommit: z.string().optional(),
+    }),
+  ),
+});
+
+export const skillsShUpdateBodySchema = z.object({
+  skillName: z.string().optional().describe('Specific skill to update, or omit to update all'),
+});
+
+export const skillsShUpdateResponseSchema = z.object({
+  updated: z.array(
+    z.object({
+      skillName: z.string(),
+      success: z.boolean(),
+      filesWritten: z.number().optional(),
+      error: z.string().optional(),
+    }),
+  ),
+});

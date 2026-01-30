@@ -6,6 +6,9 @@ import type {
   SkillsShListResponse,
   SandboxExecuteParams,
   SandboxExecuteResponse,
+  SkillsShRemoveResponse,
+  SkillsShCheckUpdatesResponse,
+  SkillsShUpdateResponse,
 } from '../types';
 import { isWorkspaceV1Supported } from '../compatibility';
 
@@ -131,21 +134,40 @@ export interface InstallSkillParams {
   skillName: string;
 }
 
+export interface SkillsShInstallResult {
+  success: boolean;
+  skillName: string;
+  installedPath: string;
+  filesWritten: number;
+}
+
 /**
- * Install a skill using the skills CLI
+ * Install a skill by fetching from GitHub and writing to workspace filesystem.
+ * Does NOT require sandbox - only requires filesystem access.
  */
 export const useInstallSkill = () => {
-  const sandboxExecute = useSandboxExecute();
+  const client = useMastraClient();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: InstallSkillParams): Promise<SandboxExecuteResponse> => {
-      const result = await sandboxExecute.mutateAsync({
-        workspaceId: params.workspaceId,
-        command: 'npx',
-        args: ['skills', 'add', params.repository, '--skill', params.skillName, '--agent', 'claude-code', '-y'],
-        timeout: 120000, // 2 minutes for npm install
+    mutationFn: async (params: InstallSkillParams): Promise<SkillsShInstallResult> => {
+      if (!isWorkspaceV1Supported(client)) {
+        throw new Error('Workspace v1 not supported by core or client');
+      }
+
+      // Parse repository to get owner and repo
+      const [owner, repo] = params.repository.split('/');
+      if (!owner || !repo) {
+        throw new Error('Invalid repository format. Expected owner/repo');
+      }
+
+      const workspace = (client as any).getWorkspace(params.workspaceId);
+      const result = await workspace.skillsShInstall({
+        owner,
+        repo,
+        skillName: params.skillName,
       });
+
       return result;
     },
     onSuccess: (_, variables) => {
@@ -160,42 +182,43 @@ export interface CheckUpdatesParams {
 }
 
 /**
- * Check for skill updates using the skills CLI
+ * Check for skill updates by comparing installed skills with GitHub.
+ * Does NOT require sandbox - only requires filesystem access.
  */
 export const useCheckSkillUpdates = () => {
-  const sandboxExecute = useSandboxExecute();
+  const client = useMastraClient();
 
   return useMutation({
-    mutationFn: async (params: CheckUpdatesParams): Promise<SandboxExecuteResponse> => {
-      return sandboxExecute.mutateAsync({
-        workspaceId: params.workspaceId,
-        command: 'npx',
-        args: ['skills', 'check'],
-        timeout: 60000, // 1 minute
-      });
+    mutationFn: async (params: CheckUpdatesParams): Promise<SkillsShCheckUpdatesResponse> => {
+      if (!isWorkspaceV1Supported(client)) {
+        throw new Error('Workspace v1 not supported by core or client');
+      }
+      const workspace = (client as any).getWorkspace(params.workspaceId);
+      return workspace.skillsShCheckUpdates();
     },
   });
 };
 
 export interface UpdateSkillsParams {
   workspaceId: string;
+  skillName?: string;
 }
 
 /**
- * Update all skills using the skills CLI
+ * Update installed skills by re-fetching from GitHub.
+ * Does NOT require sandbox - only requires filesystem access.
  */
 export const useUpdateSkills = () => {
-  const sandboxExecute = useSandboxExecute();
+  const client = useMastraClient();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: UpdateSkillsParams): Promise<SandboxExecuteResponse> => {
-      return sandboxExecute.mutateAsync({
-        workspaceId: params.workspaceId,
-        command: 'npx',
-        args: ['skills', 'update'],
-        timeout: 180000, // 3 minutes for updates
-      });
+    mutationFn: async (params: UpdateSkillsParams): Promise<SkillsShUpdateResponse> => {
+      if (!isWorkspaceV1Supported(client)) {
+        throw new Error('Workspace v1 not supported by core or client');
+      }
+      const workspace = (client as any).getWorkspace(params.workspaceId);
+      return workspace.skillsShUpdate({ skillName: params.skillName });
     },
     onSuccess: (_, variables) => {
       // Invalidate skills list to refresh after update
@@ -210,20 +233,20 @@ export interface RemoveSkillParams {
 }
 
 /**
- * Remove a skill using the skills CLI
+ * Remove an installed skill by deleting its directory.
+ * Does NOT require sandbox - only requires filesystem access.
  */
 export const useRemoveSkill = () => {
-  const sandboxExecute = useSandboxExecute();
+  const client = useMastraClient();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: RemoveSkillParams): Promise<SandboxExecuteResponse> => {
-      return sandboxExecute.mutateAsync({
-        workspaceId: params.workspaceId,
-        command: 'npx',
-        args: ['skills', 'remove', params.skillName, '-y'],
-        timeout: 60000, // 1 minute
-      });
+    mutationFn: async (params: RemoveSkillParams): Promise<SkillsShRemoveResponse> => {
+      if (!isWorkspaceV1Supported(client)) {
+        throw new Error('Workspace v1 not supported by core or client');
+      }
+      const workspace = (client as any).getWorkspace(params.workspaceId);
+      return workspace.skillsShRemove({ skillName: params.skillName });
     },
     onSuccess: (_, variables) => {
       // Invalidate skills list to refresh after removal

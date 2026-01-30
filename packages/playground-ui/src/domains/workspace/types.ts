@@ -234,3 +234,71 @@ export interface SandboxExecuteResponse {
   executionTimeMs: number;
 }
 
+// =============================================================================
+// skills.sh Install Types
+// =============================================================================
+
+export interface SkillsShInstallParams {
+  workspaceId: string;
+  owner: string;
+  repo: string;
+  skillName: string;
+}
+
+export interface SkillsShInstallResponse {
+  success: boolean;
+  skillName: string;
+  installedPath: string;
+  filesWritten: number;
+}
+
+// =============================================================================
+// skills.sh Remove Types
+// =============================================================================
+
+export interface SkillsShRemoveParams {
+  workspaceId: string;
+  skillName: string;
+}
+
+export interface SkillsShRemoveResponse {
+  success: boolean;
+  skillName: string;
+  removedPath: string;
+}
+
+// =============================================================================
+// skills.sh Check Updates Types
+// =============================================================================
+
+export interface SkillUpdateStatus {
+  skillName: string;
+  currentVersion?: string;
+  hasUpdate: boolean;
+  latestCommit?: string;
+}
+
+export interface SkillsShCheckUpdatesResponse {
+  skills: SkillUpdateStatus[];
+}
+
+// =============================================================================
+// skills.sh Update Types
+// =============================================================================
+
+export interface SkillsShUpdateParams {
+  workspaceId: string;
+  skillName?: string;
+}
+
+export interface SkillUpdateResult {
+  skillName: string;
+  success: boolean;
+  filesWritten?: number;
+  error?: string;
+}
+
+export interface SkillsShUpdateResponse {
+  updated: SkillUpdateResult[];
+}
+
