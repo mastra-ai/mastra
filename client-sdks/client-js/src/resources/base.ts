@@ -81,7 +81,9 @@ export class BaseResource {
               errorMessage += ` - ${errorBody}`;
             }
           }
-          throw new Error(errorMessage);
+          const error = new Error(errorMessage) as Error & { status: number };
+          error.status = response.status;
+          throw error;
         }
 
         if (options.stream) {
@@ -92,6 +94,12 @@ export class BaseResource {
         return data as T;
       } catch (error) {
         lastError = error as Error;
+
+        // Don't retry 4xx client errors - they won't resolve with retries
+        const status = (error as Error & { status?: number }).status;
+        if (status !== undefined && status >= 400 && status < 500) {
+          throw error;
+        }
 
         if (attempt === retries) {
           break;
