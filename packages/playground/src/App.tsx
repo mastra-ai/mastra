@@ -55,6 +55,7 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
+import CmsAgentsCreatePage from './pages/cms/agents/create';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -120,6 +121,7 @@ const routes = [
       { path: '/scorers/:scorerId', element: <Scorer /> },
       { path: '/observability', element: <Observability /> },
       { path: '/agents', element: <Agents /> },
+      { path: '/cms/agents/create', element: <CmsAgentsCreatePage /> },
       { path: '/agents/:agentId/tools/:toolId', element: <AgentTool /> },
       {
         path: '/agents/:agentId',
