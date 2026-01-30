@@ -65,10 +65,141 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async init(): Promise<void> {
+    // Migrate from legacy schemas before creating tables
+    await this.#migrateFromLegacySchema();
+    await this.#migrateVersionsSchema();
+
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
     await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
+    // Add new columns for backwards compatibility with intermediate schema versions
+    await this.#db.alterTable({
+      tableName: TABLE_AGENTS,
+      schema: TABLE_SCHEMAS[TABLE_AGENTS],
+      ifNotExists: ['status', 'authorId'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+
+    // Clean up any stale draft records from previously failed createAgent calls
+    await this.#cleanupStaleDrafts();
+  }
+
+  /**
+   * Migrates from the legacy flat agent schema (where config fields like name, instructions, model
+   * were stored directly on mastra_agents) to the new versioned schema (thin agent record + versions table).
+   */
+  async #migrateFromLegacySchema(): Promise<void> {
+    const hasLegacyColumns = await this.#db.hasColumn(TABLE_AGENTS, 'name');
+    if (!hasLegacyColumns) return;
+
+    const fullTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+    const fullVersionsTableName = getTableName({
+      indexName: TABLE_AGENT_VERSIONS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const legacyTableName = `${fullTableName}_legacy`;
+
+    // Read all existing agents from the old flat schema
+    const oldAgents = await this.#db.client.manyOrNone(`SELECT * FROM ${fullTableName}`);
+
+    // Rename old table, create new one, migrate data
+    await this.#db.client.none(`ALTER TABLE ${fullTableName} RENAME TO "${TABLE_AGENTS}_legacy"`);
+
+    // Drop old versions table if it exists (may have incompatible schema with snapshot column)
+    await this.#db.client.none(`DROP TABLE IF EXISTS ${fullVersionsTableName}`);
+
+    await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
+    await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
+
+    for (const row of oldAgents) {
+      const agentId = row.id as string;
+      if (!agentId) continue;
+
+      const versionId = crypto.randomUUID();
+      const now = new Date();
+
+      await this.#db.client.none(
+        `INSERT INTO ${fullTableName} (id, status, "activeVersionId", "authorId", metadata, "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          agentId,
+          'published',
+          versionId,
+          row.ownerId ?? row.authorId ?? null,
+          row.metadata ? JSON.stringify(row.metadata) : null,
+          row.createdAt ?? now,
+          row.updatedAt ?? now,
+        ],
+      );
+
+      await this.#db.client.none(
+        `INSERT INTO ${fullVersionsTableName}
+         (id, "agentId", "versionNumber", name, description, instructions, model, tools,
+          "defaultOptions", workflows, agents, "integrationTools", "inputProcessors",
+          "outputProcessors", memory, scorers, "changedFields", "changeMessage", "createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+        [
+          versionId,
+          agentId,
+          1,
+          row.name ?? agentId,
+          row.description ?? null,
+          row.instructions ?? '',
+          row.model ? JSON.stringify(row.model) : '{}',
+          row.tools ? JSON.stringify(row.tools) : null,
+          row.defaultOptions ? JSON.stringify(row.defaultOptions) : null,
+          row.workflows ? JSON.stringify(row.workflows) : null,
+          row.agents ? JSON.stringify(row.agents) : null,
+          row.integrationTools ? JSON.stringify(row.integrationTools) : null,
+          row.inputProcessors ? JSON.stringify(row.inputProcessors) : null,
+          row.outputProcessors ? JSON.stringify(row.outputProcessors) : null,
+          row.memory ? JSON.stringify(row.memory) : null,
+          row.scorers ? JSON.stringify(row.scorers) : null,
+          null,
+          'Migrated from legacy schema',
+          row.createdAt ?? now,
+        ],
+      );
+    }
+
+    await this.#db.client.none(`DROP TABLE IF EXISTS ${legacyTableName}`);
+  }
+
+  /**
+   * Migrates the agent_versions table from the old snapshot-based schema (single `snapshot` JSON column)
+   * to the new flat schema (individual config columns). This handles the case where the agents table
+   * was already migrated but the versions table still has the old schema.
+   */
+  async #migrateVersionsSchema(): Promise<void> {
+    const hasSnapshotColumn = await this.#db.hasColumn(TABLE_AGENT_VERSIONS, 'snapshot');
+    if (!hasSnapshotColumn) return;
+
+    const fullVersionsTableName = getTableName({
+      indexName: TABLE_AGENT_VERSIONS,
+      schemaName: getSchemaName(this.#schema),
+    });
+    const fullTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+    const legacyTableName = `${fullTableName}_legacy`;
+
+    // Drop the old versions table - the new schema will be created by init()
+    await this.#db.client.none(`DROP TABLE IF EXISTS ${fullVersionsTableName}`);
+
+    // Also clean up any lingering legacy table from a partial migration
+    await this.#db.client.none(`DROP TABLE IF EXISTS ${legacyTableName}`);
+  }
+
+  /**
+   * Removes stale draft agent records that have no activeVersionId.
+   * These are left behind when createAgent partially fails (inserts thin record
+   * but fails to create the version due to schema mismatch).
+   */
+  async #cleanupStaleDrafts(): Promise<void> {
+    try {
+      const fullTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+      await this.#db.client.none(`DELETE FROM ${fullTableName} WHERE status = 'draft' AND "activeVersionId" IS NULL`);
+    } catch {
+      // Non-critical cleanup, ignore errors
+    }
   }
 
   /**
