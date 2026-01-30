@@ -68,6 +68,7 @@ function requireWorkspaceV1Support(): void {
 async function getWorkspaceById(mastra: any, workspaceId?: string): Promise<Workspace | undefined> {
   requireWorkspaceV1Support();
   const globalWorkspace = mastra.getWorkspace?.();
+  await globalWorkspace?.init();
 
   // If no workspaceId specified, return global workspace
   if (!workspaceId) {
