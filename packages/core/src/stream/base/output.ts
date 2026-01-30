@@ -439,6 +439,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   args = {};
                 }
               }
+              delete self.#toolCallStreamingMeta[toolCallId];
+              delete self.#toolCallArgsDeltas[toolCallId];
+              delete self.#toolCallDeltaIdNameMap[toolCallId];
               if (meta) {
                 const synthetic: ChunkType<OUTPUT> = {
                   type: 'tool-call',
@@ -454,10 +457,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 } as ChunkType<OUTPUT>;
                 self.#toolCalls.push(synthetic);
                 self.#bufferedByStep.toolCalls.push(synthetic);
+                // Emit streaming-end then synthetic so studio receives tool-input-end then tool-input-available before tool-output-available
+                self.#emitChunk(chunk);
+                controller.enqueue(chunk);
+                self.#emitChunk(synthetic);
+                controller.enqueue(synthetic);
+                return;
               }
-              delete self.#toolCallStreamingMeta[toolCallId];
-              delete self.#toolCallArgsDeltas[toolCallId];
-              delete self.#toolCallDeltaIdNameMap[toolCallId];
               break;
             }
             case 'tool-call-delta':
