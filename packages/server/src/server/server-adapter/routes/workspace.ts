@@ -10,6 +10,8 @@ import {
   WORKSPACE_FS_ROUTES,
   WORKSPACE_SEARCH_ROUTES,
   WORKSPACE_SKILLS_ROUTES,
+  WORKSPACE_SANDBOX_ROUTES,
+  WORKSPACE_SKILLS_SH_ROUTES,
 } from '../../handlers/workspace';
 import type { ServerRoute } from '.';
 
@@ -28,4 +30,10 @@ export const WORKSPACE_ROUTES: ServerRoute<any, any, any>[] = [
 
   // Skills routes (search must come before parameterized routes)
   ...WORKSPACE_SKILLS_ROUTES,
+
+  // Sandbox routes (at /api/workspaces/:workspaceId/sandbox/*)
+  ...WORKSPACE_SANDBOX_ROUTES,
+
+  // skills.sh proxy routes (at /api/workspaces/:workspaceId/skills-sh/*)
+  ...WORKSPACE_SKILLS_SH_ROUTES,
 ];

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   MainContentLayout,
   Header,
@@ -24,6 +24,13 @@ import {
   WorkspaceNotConfigured,
   useWorkspaceFile,
   isWorkspaceNotSupportedError,
+  // Skills.sh
+  AddSkillDialog,
+  useInstallSkill,
+  useCheckSkillUpdates,
+  useUpdateSkills,
+  useRemoveSkill,
+  toast,
   type WorkspaceItem,
 } from '@mastra/playground-ui';
 
@@ -38,6 +45,8 @@ export default function Workspace() {
   const navigate = useNavigate();
   const [showSearch, setShowSearch] = useState(false);
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
+  const [showAddSkillDialog, setShowAddSkillDialog] = useState(false);
+  const [removingSkillName, setRemovingSkillName] = useState<string | null>(null);
 
   // Get state from URL query params (path, file, tab are still query params)
   const pathFromUrl = searchParams.get('path') || '/';
@@ -121,16 +130,124 @@ export default function Workspace() {
   });
 
   // Skills - pass workspaceId to get skills from the selected workspace
-  const { data: skillsData, isLoading: isLoadingSkills } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
+  const {
+    data: skillsData,
+    isLoading: isLoadingSkills,
+    refetch: refetchSkills,
+  } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
   const searchSkills = useSearchWorkspaceSkills();
+
+  // Skills.sh hooks
+  const installSkill = useInstallSkill();
+  const checkUpdates = useCheckSkillUpdates();
+  const updateSkills = useUpdateSkills();
+  const removeSkill = useRemoveSkill();
 
   const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
   const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? false;
   const hasSkills = workspaceInfo?.capabilities?.hasSkills ?? false;
+  const hasSandbox = workspaceInfo?.capabilities?.hasSandbox ?? false;
   const canBM25 = workspaceInfo?.capabilities?.canBM25 ?? false;
   const canVector = workspaceInfo?.capabilities?.canVector ?? false;
   // Check if the selected workspace is read-only
   const isReadOnly = selectedWorkspace?.safety?.readOnly ?? false;
+
+  // Can manage skills if we have sandbox and not read-only
+  const canManageSkills = hasSandbox && !isReadOnly;
+
+  // Skills.sh handlers
+  const handleInstallSkill = useCallback(
+    (params: { repository: string; skillName: string }) => {
+      if (!effectiveWorkspaceId) return;
+
+      installSkill.mutate(
+        { ...params, workspaceId: effectiveWorkspaceId },
+        {
+          onSuccess: result => {
+            if (result.success) {
+              toast.success(`Skill "${params.skillName}" installed successfully`);
+              setShowAddSkillDialog(false);
+              refetchSkills();
+            } else {
+              toast.error(`Failed to install skill: ${result.stderr || 'Unknown error'}`);
+            }
+          },
+          onError: error => {
+            toast.error(`Failed to install skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          },
+        },
+      );
+    },
+    [effectiveWorkspaceId, installSkill, refetchSkills],
+  );
+
+  const handleCheckUpdates = useCallback(() => {
+    if (!effectiveWorkspaceId) return;
+
+    checkUpdates.mutate(
+      { workspaceId: effectiveWorkspaceId },
+      {
+        onSuccess: result => {
+          if (result.success) {
+            toast.success(result.stdout || 'Update check completed');
+          } else {
+            toast.error(`Update check failed: ${result.stderr || 'Unknown error'}`);
+          }
+        },
+        onError: error => {
+          toast.error(`Update check failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        },
+      },
+    );
+  }, [effectiveWorkspaceId, checkUpdates]);
+
+  const handleUpdateAll = useCallback(() => {
+    if (!effectiveWorkspaceId) return;
+
+    updateSkills.mutate(
+      { workspaceId: effectiveWorkspaceId },
+      {
+        onSuccess: result => {
+          if (result.success) {
+            toast.success('Skills updated successfully');
+            refetchSkills();
+          } else {
+            toast.error(`Update failed: ${result.stderr || 'Unknown error'}`);
+          }
+        },
+        onError: error => {
+          toast.error(`Update failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        },
+      },
+    );
+  }, [effectiveWorkspaceId, updateSkills, refetchSkills]);
+
+  const handleRemoveSkill = useCallback(
+    (skillName: string) => {
+      if (!effectiveWorkspaceId) return;
+
+      setRemovingSkillName(skillName);
+      removeSkill.mutate(
+        { workspaceId: effectiveWorkspaceId, skillName },
+        {
+          onSuccess: result => {
+            setRemovingSkillName(null);
+            if (result.success) {
+              toast.success(`Skill "${skillName}" removed successfully`);
+              refetchSkills();
+            } else {
+              toast.error(`Failed to remove skill: ${result.stderr || 'Unknown error'}`);
+            }
+          },
+          onError: error => {
+            setRemovingSkillName(null);
+            toast.error(`Failed to remove skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          },
+        },
+      );
+    },
+    [effectiveWorkspaceId, removeSkill, refetchSkills],
+  );
 
   // Compute active tab based on URL and workspace capabilities
   // If URL specifies a tab, use it only if the workspace supports it
@@ -470,6 +587,13 @@ export default function Workspace() {
                 isLoading={isLoadingSkills}
                 isSkillsConfigured={isSkillsConfigured}
                 basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
+                onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
+                onCheckUpdates={canManageSkills ? handleCheckUpdates : undefined}
+                onUpdateAll={canManageSkills ? handleUpdateAll : undefined}
+                onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
+                isCheckingUpdates={checkUpdates.isPending}
+                isUpdating={updateSkills.isPending}
+                removingSkillName={removingSkillName ?? undefined}
               />
             )}
 
@@ -482,6 +606,17 @@ export default function Workspace() {
           </div>
         </div>
       </div>
+
+      {/* Add Skill Dialog */}
+      {effectiveWorkspaceId && canManageSkills && (
+        <AddSkillDialog
+          open={showAddSkillDialog}
+          onOpenChange={setShowAddSkillDialog}
+          workspaceId={effectiveWorkspaceId}
+          onInstall={handleInstallSkill}
+          isInstalling={installSkill.isPending}
+        />
+      )}
     </MainContentLayout>
   );
 }

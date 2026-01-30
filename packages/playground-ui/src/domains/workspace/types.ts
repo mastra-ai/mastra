@@ -188,3 +188,49 @@ export interface SearchSkillsParams {
   skillNames?: string[];
   includeReferences?: boolean;
 }
+
+// =============================================================================
+// skills.sh Types
+// =============================================================================
+
+export interface SkillsShSkill {
+  id: string;
+  name: string;
+  installs: number;
+  topSource: string;
+}
+
+export interface SkillsShSearchResponse {
+  query: string;
+  searchType: string;
+  skills: SkillsShSkill[];
+  count: number;
+}
+
+export interface SkillsShListResponse {
+  skills: SkillsShSkill[];
+  count: number;
+  limit: number;
+  offset: number;
+}
+
+// =============================================================================
+// Sandbox Types
+// =============================================================================
+
+export interface SandboxExecuteParams {
+  workspaceId: string;
+  command: string;
+  args: string[];
+  cwd?: string;
+  timeout?: number;
+}
+
+export interface SandboxExecuteResponse {
+  success: boolean;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  executionTimeMs: number;
+}
+

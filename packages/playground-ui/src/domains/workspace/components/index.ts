@@ -21,3 +21,8 @@ export { SkillsTable, SkillsNotConfigured, type SkillsTableProps } from './skill
 export { SkillDetail, type SkillDetailProps } from './skill-detail';
 
 export { ReferenceViewerDialog, type ReferenceViewerDialogProps } from './reference-viewer-dialog';
+
+// Skills.sh components
+export { AddSkillDialog, type AddSkillDialogProps } from './add-skill-dialog';
+
+export { SkillActionsHeader, SkillRemoveButton, type SkillActionsHeaderProps, type SkillRemoveButtonProps } from './skill-actions';

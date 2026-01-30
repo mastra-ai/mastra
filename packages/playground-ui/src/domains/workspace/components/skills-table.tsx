@@ -2,8 +2,9 @@ import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { EntryList } from '@/ds/components/EntryList';
 import { useLinkComponent } from '@/lib/framework';
-import { Wand2, BookOpen, Package, Home, Server } from 'lucide-react';
+import { Wand2, BookOpen, Package, Home, Server, Plus } from 'lucide-react';
 import type { SkillMetadata, SkillSource } from '../types';
+import { SkillActionsHeader, SkillRemoveButton } from './skill-actions';
 
 export interface SkillsTableProps {
   skills: SkillMetadata[];
@@ -11,6 +12,20 @@ export interface SkillsTableProps {
   isSkillsConfigured?: boolean;
   /** Base path for skill links (should include workspaceId, e.g., /workspaces/{id}/skills) */
   basePath?: string;
+  /** Callback when "Add Skill" is clicked (only shown if provided) */
+  onAddSkill?: () => void;
+  /** Callback when "Check Updates" is clicked (only shown if provided) */
+  onCheckUpdates?: () => void;
+  /** Callback when "Update All" is clicked (only shown if provided) */
+  onUpdateAll?: () => void;
+  /** Callback when "Remove" is clicked on a skill (only shown if provided) */
+  onRemoveSkill?: (skillName: string) => void;
+  /** Whether we're currently checking for updates */
+  isCheckingUpdates?: boolean;
+  /** Whether we're currently updating skills */
+  isUpdating?: boolean;
+  /** Name of the skill currently being removed (if any) */
+  removingSkillName?: string;
 }
 
 const columns = [
@@ -48,77 +63,135 @@ function getSourceLabel(source?: SkillSource) {
   }
 }
 
+const columnsWithActions = [
+  { name: 'name', label: 'Skill', size: '1fr' },
+  { name: 'description', label: 'Description', size: '2fr' },
+  { name: 'actions', label: '', size: '48px' },
+];
+
 export function SkillsTable({
   skills,
   isLoading,
   isSkillsConfigured = true,
   basePath = '/workspace/skills',
+  onAddSkill,
+  onCheckUpdates,
+  onUpdateAll,
+  onRemoveSkill,
+  isCheckingUpdates,
+  isUpdating,
+  removingSkillName,
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
 
+  const hasActions = onAddSkill || onCheckUpdates || onUpdateAll;
+  const hasRowActions = !!onRemoveSkill;
+  const effectiveColumns = hasRowActions ? columnsWithActions : columns;
+
   if (!isSkillsConfigured && !isLoading) {
-    return <SkillsNotConfigured />;
+    return <SkillsNotConfigured onAddSkill={onAddSkill} />;
   }
 
   if (isLoading) {
-    return <SkillsTableSkeleton />;
+    return <SkillsTableSkeleton hasRowActions={hasRowActions} />;
   }
 
   return (
-    <EntryList>
-      <EntryList.Trim>
-        <EntryList.Header columns={columns} />
-        {skills.length > 0 ? (
-          <EntryList.Entries>
-            {skills.map(skill => {
-              const entry = {
-                id: skill.name,
-                name: skill.name,
-                description: skill.description || '—',
-              };
+    <div className="space-y-4">
+      {/* Header Actions */}
+      {hasActions && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {onAddSkill && (
+              <Button variant="default" size="sm" onClick={onAddSkill}>
+                <Icon>
+                  <Plus className="h-4 w-4" />
+                </Icon>
+                Add Skill
+              </Button>
+            )}
+          </div>
+          <SkillActionsHeader
+            onCheckUpdates={onCheckUpdates}
+            onUpdateAll={onUpdateAll}
+            isCheckingUpdates={isCheckingUpdates}
+            isUpdating={isUpdating}
+          />
+        </div>
+      )}
 
-              return (
-                <EntryList.Entry
-                  key={skill.name}
-                  entry={entry}
-                  columns={columns}
-                  onClick={() => {
-                    const url = `${basePath}/${encodeURIComponent(skill.name)}`;
-                    navigate(url);
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-1.5 rounded bg-surface5">
-                      <Wand2 className="h-3.5 w-3.5 text-icon4" />
+      <EntryList>
+        <EntryList.Trim>
+          <EntryList.Header columns={effectiveColumns} />
+          {skills.length > 0 ? (
+            <EntryList.Entries>
+              {skills.map(skill => {
+                const entry = {
+                  id: skill.name,
+                  name: skill.name,
+                  description: skill.description || '—',
+                };
+
+                return (
+                  <EntryList.Entry
+                    key={skill.name}
+                    entry={entry}
+                    columns={effectiveColumns}
+                    onClick={() => {
+                      const url = `${basePath}/${encodeURIComponent(skill.name)}`;
+                      navigate(url);
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-1.5 rounded bg-surface5">
+                        <Wand2 className="h-3.5 w-3.5 text-icon4" />
+                      </div>
+                      <span className="font-medium text-icon6">{skill.name}</span>
                     </div>
-                    <span className="font-medium text-icon6">{skill.name}</span>
-                  </div>
-                  <EntryList.EntryText>{skill.description || '—'}</EntryList.EntryText>
-                </EntryList.Entry>
-              );
-            })}
-          </EntryList.Entries>
-        ) : (
-          <EntryList.Message message="No skills discovered. Add SKILL.md files to your skills directory." />
-        )}
-      </EntryList.Trim>
-    </EntryList>
+                    <EntryList.EntryText>{skill.description || '—'}</EntryList.EntryText>
+                    {hasRowActions && (
+                      <div className="flex justify-end" onClick={e => e.stopPropagation()}>
+                        <SkillRemoveButton
+                          skillName={skill.name}
+                          onRemove={() => onRemoveSkill?.(skill.name)}
+                          isRemoving={removingSkillName === skill.name}
+                        />
+                      </div>
+                    )}
+                  </EntryList.Entry>
+                );
+              })}
+            </EntryList.Entries>
+          ) : (
+            <EntryList.Message
+              message={
+                onAddSkill
+                  ? 'No skills discovered. Click "Add Skill" to install from skills.sh.'
+                  : 'No skills discovered. Add SKILL.md files to your skills directory.'
+              }
+            />
+          )}
+        </EntryList.Trim>
+      </EntryList>
+    </div>
   );
 }
 
-function SkillsTableSkeleton() {
+function SkillsTableSkeleton({ hasRowActions }: { hasRowActions?: boolean }) {
+  const effectiveColumns = hasRowActions ? columnsWithActions : columns;
   return (
     <EntryList>
       <EntryList.Trim>
-        <EntryList.Header columns={columns} />
+        <EntryList.Header columns={effectiveColumns} />
         <EntryList.Entries>
           {Array.from({ length: 3 }).map((_, i) => (
-            <EntryList.Entry key={i} columns={columns} isLoading>
+            <EntryList.Entry key={i} columns={effectiveColumns} isLoading>
               <div className="flex items-center gap-3">
                 <div className="h-7 w-7 rounded bg-surface4 animate-pulse" />
                 <div className="h-4 w-32 rounded bg-surface4 animate-pulse" />
               </div>
               <div className="h-4 w-48 rounded bg-surface4 animate-pulse" />
+              {hasRowActions && <div className="h-4 w-6 rounded bg-surface4 animate-pulse" />}
             </EntryList.Entry>
           ))}
         </EntryList.Entries>
@@ -127,7 +200,11 @@ function SkillsTableSkeleton() {
   );
 }
 
-function SkillsNotConfigured() {
+interface SkillsNotConfiguredProps {
+  onAddSkill?: () => void;
+}
+
+function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
   return (
     <div className="grid place-items-center py-16">
       <div className="flex flex-col items-center text-center max-w-md">
@@ -139,12 +216,22 @@ function SkillsNotConfigured() {
           No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
           agent skills.
         </p>
-        <Button size="lg" variant="default" as="a" href="https://mastra.ai/en/docs/workspace/skills" target="_blank">
-          <Icon>
-            <BookOpen className="h-4 w-4" />
-          </Icon>
-          Learn about Skills
-        </Button>
+        <div className="flex gap-3">
+          {onAddSkill && (
+            <Button size="lg" variant="default" onClick={onAddSkill}>
+              <Icon>
+                <Plus className="h-4 w-4" />
+              </Icon>
+              Add Skill from skills.sh
+            </Button>
+          )}
+          <Button size="lg" variant="light" as="a" href="https://mastra.ai/en/docs/workspace/skills" target="_blank">
+            <Icon>
+              <BookOpen className="h-4 w-4" />
+            </Icon>
+            Learn about Skills
+          </Button>
+        </div>
       </div>
     </div>
   );

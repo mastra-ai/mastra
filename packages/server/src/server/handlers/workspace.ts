@@ -42,6 +42,16 @@ import {
   skillReferenceResponseSchema,
   listReferencesResponseSchema,
   searchSkillsResponseSchema,
+  // Sandbox schemas
+  sandboxExecuteBodySchema,
+  sandboxExecuteResponseSchema,
+  // skills.sh proxy schemas
+  skillsShSearchQuerySchema,
+  skillsShPopularQuerySchema,
+  skillsShSearchResponseSchema,
+  skillsShListResponseSchema,
+  skillsShPreviewQuerySchema,
+  skillsShPreviewResponseSchema,
 } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -891,6 +901,211 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
 });
 
 // =============================================================================
+// Sandbox Routes
+// =============================================================================
+
+export const WORKSPACE_SANDBOX_EXECUTE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workspaces/:workspaceId/sandbox/execute',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  bodySchema: sandboxExecuteBodySchema,
+  responseSchema: sandboxExecuteResponseSchema,
+  summary: 'Execute command in sandbox',
+  description: 'Executes a command in the workspace sandbox environment',
+  tags: ['Workspace', 'Sandbox'],
+  handler: async ({ mastra, workspaceId, command, args, cwd, timeout }) => {
+    try {
+      requireWorkspaceV1Support();
+
+      if (!command) {
+        throw new HTTPException(400, { message: 'Command is required' });
+      }
+
+      const workspace = await getWorkspaceById(mastra, workspaceId);
+      if (!workspace) {
+        throw new HTTPException(404, { message: 'Workspace not found' });
+      }
+
+      if (!workspace.sandbox?.executeCommand) {
+        throw new HTTPException(400, { message: 'Workspace sandbox not available' });
+      }
+
+      const startTime = Date.now();
+      const result = await workspace.sandbox.executeCommand(command, args ?? [], { cwd, timeout });
+      const executionTimeMs = Date.now() - startTime;
+
+      return {
+        success: result.exitCode === 0,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        executionTimeMs,
+      };
+    } catch (error) {
+      return handleError(error, 'Error executing sandbox command');
+    }
+  },
+});
+
+// =============================================================================
+// skills.sh Proxy Routes
+// =============================================================================
+
+const SKILLS_SH_API_URL = 'https://skills.sh/api';
+
+export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workspaces/:workspaceId/skills-sh/search',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  queryParamSchema: skillsShSearchQuerySchema,
+  responseSchema: skillsShSearchResponseSchema,
+  summary: 'Search skills on skills.sh',
+  description: 'Proxies search requests to skills.sh API to avoid CORS issues',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ q, limit }) => {
+    try {
+      const url = `${SKILLS_SH_API_URL}/search?q=${encodeURIComponent(q)}&limit=${limit}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new HTTPException(502, {
+          message: `skills.sh API error: ${response.status} ${response.statusText}`,
+        });
+      }
+
+      const data = (await response.json()) as {
+        query: string;
+        searchType: string;
+        skills: Array<{ id: string; name: string; installs: number; topSource: string }>;
+        count: number;
+      };
+      return data;
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error searching skills.sh');
+    }
+  },
+});
+
+export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workspaces/:workspaceId/skills-sh/popular',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  queryParamSchema: skillsShPopularQuerySchema,
+  responseSchema: skillsShListResponseSchema,
+  summary: 'Get popular skills from skills.sh',
+  description: 'Proxies popular skills requests to skills.sh API to avoid CORS issues',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ limit, offset }) => {
+    try {
+      const url = `${SKILLS_SH_API_URL}/skills?limit=${limit}&offset=${offset}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new HTTPException(502, {
+          message: `skills.sh API error: ${response.status} ${response.statusText}`,
+        });
+      }
+
+      const data = (await response.json()) as {
+        skills: Array<{ id: string; name: string; installs: number; topSource: string }>;
+        count: number;
+        limit: number;
+        offset: number;
+      };
+      return data;
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error fetching popular skills from skills.sh');
+    }
+  },
+});
+
+export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workspaces/:workspaceId/skills-sh/preview',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  queryParamSchema: skillsShPreviewQuerySchema,
+  responseSchema: skillsShPreviewResponseSchema,
+  summary: 'Preview skill SKILL.md from GitHub',
+  description: 'Proxies GitHub raw content requests to fetch SKILL.md files and avoid CORS issues',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ owner, repo, path }) => {
+    try {
+      const branches = ['main', 'master'];
+
+      // Common vendor prefixes that skills.sh adds to skill names
+      const vendorPrefixes = ['vercel-', 'anthropic-', 'anthropics-'];
+
+      // Extract the base skill name by removing vendor prefix if present
+      let baseName = path;
+      for (const prefix of vendorPrefixes) {
+        if (path.startsWith(prefix)) {
+          baseName = path.slice(prefix.length);
+          break;
+        }
+      }
+
+      // Try multiple path patterns since skills.sh names may differ from actual paths
+      // Based on how the skills CLI discovers skills in repos
+      const pathVariants = [
+        // Direct path as provided
+        path,
+        // Common "skills/" directory pattern
+        `skills/${path}`,
+        `skills/${baseName}`,
+        // Root level with base name
+        baseName,
+        // Other common skill directory patterns (from skills CLI)
+        `.cursor/skills/${baseName}`,
+        `.windsurf/skills/${baseName}`,
+        `.agents/skills/${baseName}`,
+      ].filter((p, i, arr) => arr.indexOf(p) === i); // Remove duplicates
+
+      let lastError: Error | null = null;
+
+      for (const branch of branches) {
+        for (const pathVariant of pathVariants) {
+          const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${pathVariant}/SKILL.md`;
+          try {
+            const response = await fetch(url);
+            if (response.ok) {
+              const content = await response.text();
+              return { content };
+            }
+          } catch (e) {
+            lastError = e instanceof Error ? e : new Error(String(e));
+          }
+        }
+      }
+
+      throw new HTTPException(404, {
+        message: `Could not fetch SKILL.md: ${lastError?.message ?? 'Not found'}`,
+      });
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error fetching skill preview from GitHub');
+    }
+  },
+});
+
+export const WORKSPACE_SKILLS_SH_ROUTES = [
+  WORKSPACE_SKILLS_SH_SEARCH_ROUTE,
+  WORKSPACE_SKILLS_SH_POPULAR_ROUTE,
+  WORKSPACE_SKILLS_SH_PREVIEW_ROUTE,
+];
+
+// =============================================================================
 // Route Collections
 // =============================================================================
 
@@ -914,3 +1129,5 @@ export const WORKSPACE_SKILLS_ROUTES = [
   WORKSPACE_LIST_SKILL_REFERENCES_ROUTE,
   WORKSPACE_GET_SKILL_REFERENCE_ROUTE,
 ];
+
+export const WORKSPACE_SANDBOX_ROUTES = [WORKSPACE_SANDBOX_EXECUTE_ROUTE];

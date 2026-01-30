@@ -1070,6 +1070,27 @@ export interface GetSkillReferenceResponse {
   content: string;
 }
 
+/**
+ * Parameters for executing a command in the sandbox
+ */
+export interface SandboxExecuteParams {
+  command: string;
+  args: string[];
+  cwd?: string;
+  timeout?: number;
+}
+
+/**
+ * Response for sandbox command execution
+ */
+export interface SandboxExecuteResponse {
+  success: boolean;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  executionTimeMs: number;
+}
+
 // ============================================================================
 // Processor Types
 // ============================================================================

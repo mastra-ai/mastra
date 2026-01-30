@@ -17,6 +17,8 @@ import type {
   SearchSkillsResponse,
   ListSkillReferencesResponse,
   GetSkillReferenceResponse,
+  SandboxExecuteParams,
+  SandboxExecuteResponse,
 } from '../types';
 
 import { BaseResource } from './base';
@@ -232,6 +234,22 @@ export class Workspace extends BaseResource {
    */
   index(params: WorkspaceIndexParams): Promise<WorkspaceIndexResponse> {
     return this.request(`${this.basePath}/index`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  // ==========================================================================
+  // Sandbox Operations
+  // ==========================================================================
+
+  /**
+   * Executes a command in the workspace sandbox
+   * @param params - Command execution parameters
+   * @returns Promise containing execution result
+   */
+  sandboxExecute(params: SandboxExecuteParams): Promise<SandboxExecuteResponse> {
+    return this.request(`${this.basePath}/sandbox/execute`, {
       method: 'POST',
       body: params,
     });

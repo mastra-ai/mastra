@@ -310,3 +310,67 @@ export const searchSkillsResponseSchema = z.object({
   results: z.array(skillSearchResultSchema),
   query: z.string(),
 });
+
+// =============================================================================
+// Sandbox Execute Schemas
+// =============================================================================
+
+export const sandboxExecuteBodySchema = z.object({
+  command: z.string().describe('The command to execute'),
+  args: z.array(z.string()).describe('Arguments for the command'),
+  cwd: z.string().optional().describe('Working directory for the command'),
+  timeout: z.number().optional().describe('Timeout in milliseconds'),
+});
+
+export const sandboxExecuteResponseSchema = z.object({
+  success: z.boolean(),
+  exitCode: z.number(),
+  stdout: z.string(),
+  stderr: z.string(),
+  executionTimeMs: z.number(),
+});
+
+// =============================================================================
+// skills.sh Proxy Schemas
+// =============================================================================
+
+export const skillsShSearchQuerySchema = z.object({
+  q: z.string().describe('Search query'),
+  limit: z.coerce.number().optional().default(10).describe('Maximum number of results'),
+});
+
+export const skillsShPopularQuerySchema = z.object({
+  limit: z.coerce.number().optional().default(10).describe('Maximum number of results'),
+  offset: z.coerce.number().optional().default(0).describe('Offset for pagination'),
+});
+
+export const skillsShSkillSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  installs: z.number(),
+  topSource: z.string(),
+});
+
+export const skillsShSearchResponseSchema = z.object({
+  query: z.string(),
+  searchType: z.string(),
+  skills: z.array(skillsShSkillSchema),
+  count: z.number(),
+});
+
+export const skillsShListResponseSchema = z.object({
+  skills: z.array(skillsShSkillSchema),
+  count: z.number(),
+  limit: z.number(),
+  offset: z.number(),
+});
+
+export const skillsShPreviewQuerySchema = z.object({
+  owner: z.string().describe('GitHub repository owner'),
+  repo: z.string().describe('GitHub repository name'),
+  path: z.string().describe('Path to skill within repo'),
+});
+
+export const skillsShPreviewResponseSchema = z.object({
+  content: z.string(),
+});
