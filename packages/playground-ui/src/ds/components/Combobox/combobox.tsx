@@ -70,7 +70,7 @@ export function Combobox({
       </BaseCombobox.Trigger>
 
       <BaseCombobox.Portal>
-        <BaseCombobox.Positioner align="start" sideOffset={4} className="z-50">
+        <BaseCombobox.Positioner align="start" sideOffset={4} className="z-[100]">
           <BaseCombobox.Popup
             className={cn(
               'min-w-[var(--anchor-width)] w-max rounded-md bg-surface3 text-neutral5',
