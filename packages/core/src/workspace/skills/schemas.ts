@@ -40,10 +40,10 @@ export interface SkillMetadataInput {
   description: string;
   /** License for the skill (e.g., "Apache-2.0", "MIT") */
   license?: string;
-  /** Environment requirements or compatibility notes (max 500 chars) */
-  compatibility?: string;
-  /** Arbitrary key-value metadata (e.g., author, version) */
-  metadata?: Record<string, string>;
+  /** Environment requirements or compatibility notes (string or object for flexibility) */
+  compatibility?: unknown;
+  /** Arbitrary key-value metadata - values can be strings, arrays, objects, etc. */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -174,38 +174,21 @@ function validateSkillLicense(license: unknown): string[] {
 }
 
 /**
- * Validate skill compatibility notes (optional, max 500 chars).
+ * Validate skill compatibility notes (optional).
+ * Accepts string or any JSON-serializable value for flexibility with external skills.
  *
- * @param compatibility - The compatibility string to validate
+ * @param compatibility - The compatibility value to validate
  * @returns Array of error messages (empty if valid)
  */
-function validateSkillCompatibility(compatibility: unknown): string[] {
-  const errors: string[] = [];
-  const fieldPath = 'compatibility';
-
-  // Optional field - undefined/null is valid
-  if (compatibility === undefined || compatibility === null) {
-    return errors;
-  }
-
-  // If provided, must be string
-  if (typeof compatibility !== 'string') {
-    errors.push(`${fieldPath}: Expected string, received ${typeof compatibility}`);
-    return errors;
-  }
-
-  // Check max length
-  if (compatibility.length > SKILL_LIMITS.MAX_COMPATIBILITY_LENGTH) {
-    errors.push(
-      `${fieldPath}: Compatibility field must be ${SKILL_LIMITS.MAX_COMPATIBILITY_LENGTH} characters or less`,
-    );
-  }
-
-  return errors;
+function validateSkillCompatibility(_compatibility: unknown): string[] {
+  // Optional field - any value is allowed (string, object, array, etc.)
+  // External skills don't always follow the spec strictly
+  return [];
 }
 
 /**
- * Validate skill metadata field (optional Record<string, string>).
+ * Validate skill metadata field (optional Record<string, unknown>).
+ * Accepts any values (not just strings) for flexibility with external skills.
  *
  * @param metadata - The metadata object to validate
  * @returns Array of error messages (empty if valid)
@@ -219,19 +202,13 @@ function validateSkillMetadataField(metadata: unknown): string[] {
     return errors;
   }
 
-  // If provided, must be object
+  // If provided, must be object (but values can be anything)
   if (typeof metadata !== 'object' || Array.isArray(metadata)) {
     errors.push(`${fieldPath}: Expected object, received ${Array.isArray(metadata) ? 'array' : typeof metadata}`);
     return errors;
   }
 
-  // Check all values are strings
-  for (const [key, value] of Object.entries(metadata)) {
-    if (typeof value !== 'string') {
-      errors.push(`${fieldPath}.${key}: Expected string, received ${typeof value}`);
-    }
-  }
-
+  // Allow any values - external skills use arrays, objects, etc.
   return errors;
 }
 
