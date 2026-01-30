@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 10 of 10 (Dataset Layout Update)
-Plan: 3 of 5 in phase 10 (10-01, 10-02, 10-03 complete)
+Plan: 4 of 5 in phase 10 (10-01, 10-02, 10-03, 10-04 complete)
 Status: In progress
-Last activity: 2026-01-30 — Completed 10-02-PLAN.md
+Last activity: 2026-01-30 — Completed 10-04-PLAN.md
 
 Progress: [██████████] 100%
 
@@ -20,9 +20,9 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 40
+- Total plans completed: 41
 - Average duration: 4 min
-- Total execution time: 2.2 hours
+- Total execution time: 2.25 hours
 
 **By Phase:**
 
@@ -37,11 +37,11 @@ Progress: [██████████] 100%
 | 07-csv-import                | 5     | 10 min | 2 min    |
 | 08-item-selection-actions    | 4     | 13 min | 3.25 min |
 | 09-dataset-items-detail-view | 5     | 16 min | 3.2 min  |
-| 10-dataset-layout-update     | 3     | 16 min | 5.3 min  |
+| 10-dataset-layout-update     | 4     | 19 min | 4.75 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 09-04 (3 min), 09-05 (4 min), 10-01 (5 min), 10-03 (2 min), 10-02 (9 min)
+- Last 5 plans: 09-05 (4 min), 10-01 (5 min), 10-03 (2 min), 10-02 (9 min), 10-04 (3 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -118,6 +118,9 @@ Recent decisions affecting current work:
 - Duplicate option disabled with 'Coming Soon' indicator
 - Run button uses outline variant (not primary)
 - ESLint disabled in lint-staged (config removed in f9764aaf1e)
+- ItemDetailToolbar with SplitButton for Edit + Delete/Duplicate dropdown
+- ItemDetailPanel uses SideDialog.CodeSection for JSON display consistency
+- Panel structure: toolbar header + scrollable content body
 
 ### Pending Todos
 
@@ -136,5 +139,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 10-02-PLAN.md (Dataset Header Restructure)
+Stopped at: Completed 10-04-PLAN.md (Item Detail Components)
 Resume file: None
