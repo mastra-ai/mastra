@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed workspace initialization by automatically calling init() when resolving the workspace in agents. This ensures the workspace is properly set up before being used.
+Fixed agents so their workspaces are ready before first use, preventing errors when a workspace isn't set up yet.
