@@ -10,39 +10,41 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 10 of 10 (Dataset Layout Update)
-Plan: 3 of 5 in phase 10
+Plan: 3 of 5 in phase 10 (10-01, 10-02, 10-03 complete)
 Status: In progress
-Last activity: 2026-01-30 — Completed 10-03-PLAN.md
+Last activity: 2026-01-30 — Completed 10-02-PLAN.md
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 39
+
+- Total plans completed: 40
 - Average duration: 4 min
 - Total execution time: 2.2 hours
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01-storage-foundation | 4 | 20 min | 5 min |
-| 02-execution-core | 4 | 15 min | 4 min |
-| 03-agent-workflow-targets | 1 | 2 min | 2 min |
-| 04-scorer-targets | 1 | 3 min | 3 min |
-| 05-run-analytics | 1 | 4 min | 4 min |
-| 06-playground-integration | 12 | 48 min | 4 min |
-| 07-csv-import | 5 | 10 min | 2 min |
-| 08-item-selection-actions | 4 | 13 min | 3.25 min |
-| 09-dataset-items-detail-view | 5 | 16 min | 3.2 min |
-| 10-dataset-layout-update | 2 | 7 min | 3.5 min |
+| Phase                        | Plans | Total  | Avg/Plan |
+| ---------------------------- | ----- | ------ | -------- |
+| 01-storage-foundation        | 4     | 20 min | 5 min    |
+| 02-execution-core            | 4     | 15 min | 4 min    |
+| 03-agent-workflow-targets    | 1     | 2 min  | 2 min    |
+| 04-scorer-targets            | 1     | 3 min  | 3 min    |
+| 05-run-analytics             | 1     | 4 min  | 4 min    |
+| 06-playground-integration    | 12    | 48 min | 4 min    |
+| 07-csv-import                | 5     | 10 min | 2 min    |
+| 08-item-selection-actions    | 4     | 13 min | 3.25 min |
+| 09-dataset-items-detail-view | 5     | 16 min | 3.2 min  |
+| 10-dataset-layout-update     | 3     | 16 min | 5.3 min  |
 
 **Recent Trend:**
-- Last 5 plans: 09-03 (3 min), 09-04 (3 min), 09-05 (4 min), 10-01 (5 min), 10-03 (2 min)
+
+- Last 5 plans: 09-04 (3 min), 09-05 (4 min), 10-01 (5 min), 10-03 (2 min), 10-02 (9 min)
 - Trend: Steady
 
-*Updated after each plan completion*
+_Updated after each plan completion_
 
 ## Accumulated Context
 
@@ -112,6 +114,10 @@ Recent decisions affecting current work:
 - ChevronDown icon sizing based on button size prop (sm: w-3 h-3, md/lg: w-4 h-4)
 - ItemsToolbar extracted for cleaner ItemsList component
 - ActionsMenu internal to ItemsToolbar (not separately exported)
+- Three-dot menu for Edit/Duplicate/Delete in DatasetHeader
+- Duplicate option disabled with 'Coming Soon' indicator
+- Run button uses outline variant (not primary)
+- ESLint disabled in lint-staged (config removed in f9764aaf1e)
 
 ### Pending Todos
 
@@ -130,5 +136,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 10-03-PLAN.md (Items Toolbar with Split Button)
+Stopped at: Completed 10-02-PLAN.md (Dataset Header Restructure)
 Resume file: None
