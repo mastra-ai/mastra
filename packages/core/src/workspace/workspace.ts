@@ -252,6 +252,7 @@ export class Workspace {
   lastAccessedAt: Date;
 
   private _status: WorkspaceStatus = 'pending';
+  private _initPromise: Promise<void> | null = null;
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _sandbox?: WorkspaceSandbox;
   private readonly _config: WorkspaceConfig;
@@ -514,32 +515,48 @@ export class Workspace {
    * Starts the sandbox and initializes the filesystem.
    */
   async init(): Promise<void> {
-    // if it's being initialized, return
-    if (this._status !== 'pending' && this._status !== 'destroyed') {
+    // If already ready, nothing to do
+    if (this._status === 'ready') {
       return;
     }
 
-    this._status = 'initializing';
-
-    try {
-      if (this._fs?.init) {
-        await this._fs.init();
-      }
-
-      if (this._sandbox?.start) {
-        await this._sandbox.start();
-      }
-
-      // Auto-index files if autoIndexPaths is configured
-      if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
-        await this.rebuildSearchIndex(this._config.autoIndexPaths ?? []);
-      }
-
-      this._status = 'ready';
-    } catch (error) {
-      this._status = 'error';
-      throw error;
+    // If initialization is in progress, wait for it
+    if (this._initPromise) {
+      return this._initPromise;
     }
+
+    // Only allow init from 'pending' or 'error' (retry) states
+    if (this._status !== 'pending' && this._status !== 'error') {
+      return;
+    }
+
+    this._initPromise = (async () => {
+      this._status = 'initializing';
+
+      try {
+        if (this._fs?.init) {
+          await this._fs.init();
+        }
+
+        if (this._sandbox?.start) {
+          await this._sandbox.start();
+        }
+
+        // Auto-index files if autoIndexPaths is configured
+        if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
+          await this.rebuildSearchIndex(this._config.autoIndexPaths ?? []);
+        }
+
+        this._status = 'ready';
+      } catch (error) {
+        this._status = 'error';
+        throw error;
+      } finally {
+        this._initPromise = null;
+      }
+    })();
+
+    return this._initPromise;
   }
 
   /**
