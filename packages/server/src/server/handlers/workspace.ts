@@ -7,8 +7,15 @@
  * - Skills operations (list, get, search, references)
  */
 
+import { mkdtempSync, rmSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createGunzip } from 'node:zlib';
 import { coreFeatures } from '@mastra/core/features';
 import type { Workspace, WorkspaceSkills } from '@mastra/core/workspace';
+import * as tar from 'tar';
 import { HTTPException } from '../http-exception';
 import {
   // Workspace info
@@ -998,30 +1005,8 @@ export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
 });
 
 // =============================================================================
-// GitHub API Helpers for skills.sh routes
+// Tarball-based GitHub helpers for skills.sh routes
 // =============================================================================
-
-interface GitHubContentItem {
-  name: string;
-  path: string;
-  type: 'file' | 'dir';
-  download_url: string | null;
-}
-
-interface GitHubTreeItem {
-  path: string;
-  mode: string;
-  type: 'blob' | 'tree';
-  sha: string;
-  url: string;
-}
-
-interface GitHubTreeResponse {
-  sha: string;
-  url: string;
-  tree: GitHubTreeItem[];
-  truncated: boolean;
-}
 
 /**
  * Parse YAML frontmatter from a SKILL.md file to extract the name field.
@@ -1072,64 +1057,103 @@ function getNameVariations(skillName: string): string[] {
 }
 
 /**
- * Find the actual skill path in a GitHub repo by searching for SKILL.md files
- * and matching on the `name` field in frontmatter.
- *
- * Uses GitHub's Tree API to find all SKILL.md files, then fetches each one's
- * frontmatter to find the matching skill name.
+ * Download and extract a GitHub repo tarball to a temp directory.
+ * Streams directly from fetch → gunzip → extract (no intermediate file).
+ * Returns the path to the extracted directory containing the repo contents.
  */
-async function findSkillPath(
-  owner: string,
-  repo: string,
+async function downloadAndExtractTarball(owner: string, repo: string, branch: string): Promise<string> {
+  const tarballUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.tar.gz`;
+  const response = await fetch(tarballUrl, {
+    headers: { 'User-Agent': 'Mastra-Skills-Installer' },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to download tarball: ${response.status} ${response.statusText}`);
+  }
+
+  // Create temp directory
+  const tempDir = mkdtempSync(join(tmpdir(), 'mastra-skill-'));
+
+  // Stream directly: fetch → gunzip → tar extract
+  await pipeline(Readable.fromWeb(response.body as any), createGunzip(), tar.extract({ cwd: tempDir }));
+
+  // GitHub tarballs extract to {repo}-{branch}/ directory
+  const extractedDir = join(tempDir, `${repo}-${branch}`);
+  return extractedDir;
+}
+
+/**
+ * Recursively read all files from a directory.
+ */
+function readDirectoryRecursive(dirPath: string, basePath: string = ''): Array<{ path: string; content: string }> {
+  const files: Array<{ path: string; content: string }> = [];
+  const entries = readdirSync(dirPath);
+
+  for (const entry of entries) {
+    const fullPath = join(dirPath, entry);
+    const relativePath = basePath ? `${basePath}/${entry}` : entry;
+    const stat = statSync(fullPath);
+
+    if (stat.isDirectory()) {
+      files.push(...readDirectoryRecursive(fullPath, relativePath));
+    } else if (stat.isFile()) {
+      const content = readFileSync(fullPath, 'utf-8');
+      files.push({ path: relativePath, content });
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Find SKILL.md files in extracted tarball and match by frontmatter name.
+ */
+function findSkillInExtractedRepo(
+  extractedDir: string,
   skillName: string,
-): Promise<{ path: string; branch: string } | null> {
-  const branches = ['main', 'master'];
+): { skillDir: string; frontmatterName: string } | null {
   const nameVariations = getNameVariations(skillName);
 
-  for (const branch of branches) {
+  // Recursively find all SKILL.md files
+  function findSkillMdFiles(dir: string, relativePath: string = ''): string[] {
+    const results: string[] = [];
     try {
-      // Get the entire repo tree to find all SKILL.md files
-      const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
-      const treeResponse = await fetch(treeUrl, {
-        headers: {
-          Accept: 'application/vnd.github.v3+json',
-          'User-Agent': 'Mastra-Skills-Installer',
-        },
-      });
-
-      if (!treeResponse.ok) {
-        continue; // Try next branch
-      }
-
-      const tree = (await treeResponse.json()) as GitHubTreeResponse;
-
-      // Find all SKILL.md files (both in subdirectories and at root level)
-      const skillFiles = tree.tree.filter(
-        item => item.type === 'blob' && (item.path.endsWith('/SKILL.md') || item.path === 'SKILL.md'),
-      );
-
-      // Check each SKILL.md's frontmatter for matching name
-      for (const skillFile of skillFiles) {
-        const contentUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${skillFile.path}`;
+      const entries = readdirSync(dir);
+      for (const entry of entries) {
+        const fullPath = join(dir, entry);
+        const relPath = relativePath ? `${relativePath}/${entry}` : entry;
         try {
-          const contentResponse = await fetch(contentUrl);
-          if (!contentResponse.ok) continue;
-
-          const content = await contentResponse.text();
-          const frontmatter = parseSkillFrontmatter(content);
-
-          // Match on the name field in frontmatter (try multiple variations)
-          if (frontmatter.name && nameVariations.includes(frontmatter.name)) {
-            // Return the directory path (remove /SKILL.md from the end, or empty for root)
-            const dirPath = skillFile.path.replace(/\/?SKILL\.md$/, '') || '.';
-            return { path: dirPath, branch };
+          const stat = statSync(fullPath);
+          if (stat.isDirectory()) {
+            results.push(...findSkillMdFiles(fullPath, relPath));
+          } else if (entry === 'SKILL.md') {
+            results.push(relPath);
           }
         } catch {
-          // Continue to next file
+          // Skip inaccessible files
         }
       }
     } catch {
-      // Continue to next branch
+      // Skip inaccessible directories
+    }
+    return results;
+  }
+
+  const skillMdPaths = findSkillMdFiles(extractedDir);
+
+  for (const skillMdPath of skillMdPaths) {
+    const fullPath = join(extractedDir, skillMdPath);
+    try {
+      const content = readFileSync(fullPath, 'utf-8');
+      const frontmatter = parseSkillFrontmatter(content);
+
+      if (frontmatter.name && nameVariations.includes(frontmatter.name)) {
+        // Return the directory containing SKILL.md
+        const skillDir = skillMdPath.replace(/\/?SKILL\.md$/, '') || '.';
+        return { skillDir, frontmatterName: frontmatter.name };
+      }
+    } catch {
+      // Continue to next file
     }
   }
 
@@ -1137,50 +1161,52 @@ async function findSkillPath(
 }
 
 /**
- * Recursively fetch all files from a GitHub directory using the Contents API.
+ * Download repo as tarball and extract skill files.
+ * Returns skill files and metadata, cleaning up temp directory afterward.
  */
-async function fetchGitHubDirectoryContents(
+async function fetchSkillFromTarball(
   owner: string,
   repo: string,
-  path: string,
-  branch: string,
-): Promise<Array<{ path: string; content: string }>> {
-  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
-  const response = await fetch(apiUrl, {
-    headers: {
-      Accept: 'application/vnd.github.v3+json',
-      'User-Agent': 'Mastra-Skills-Installer',
-    },
-  });
+  skillName: string,
+): Promise<{ files: Array<{ path: string; content: string }>; installName: string; branch: string } | null> {
+  const branches = ['main', 'master'];
 
-  if (!response.ok) {
-    throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
-  }
+  for (const branch of branches) {
+    let extractedDir: string | null = null;
+    try {
+      extractedDir = await downloadAndExtractTarball(owner, repo, branch);
 
-  const items = (await response.json()) as GitHubContentItem[];
-  const files: Array<{ path: string; content: string }> = [];
-
-  for (const item of items) {
-    if (item.type === 'file' && item.download_url) {
-      // Fetch file content
-      const fileResponse = await fetch(item.download_url);
-      if (fileResponse.ok) {
-        const content = await fileResponse.text();
-        // Get relative path from the skill folder - use item.name for the filename
-        files.push({ path: item.name, content });
+      const skillMatch = findSkillInExtractedRepo(extractedDir, skillName);
+      if (!skillMatch) {
+        continue; // Try next branch
       }
-    } else if (item.type === 'dir') {
-      // Recursively fetch subdirectory
-      const subFiles = await fetchGitHubDirectoryContents(owner, repo, item.path, branch);
-      // Preserve subdirectory structure
-      const dirName = item.name;
-      for (const subFile of subFiles) {
-        files.push({ path: `${dirName}/${subFile.path}`, content: subFile.content });
+
+      // Read all files from the skill directory
+      const skillFullPath = skillMatch.skillDir === '.' ? extractedDir : join(extractedDir, skillMatch.skillDir);
+      const files = readDirectoryRecursive(skillFullPath);
+
+      return {
+        files,
+        installName: skillMatch.frontmatterName,
+        branch,
+      };
+    } catch {
+      // Try next branch
+    } finally {
+      // Clean up temp directory
+      if (extractedDir) {
+        try {
+          // Get parent temp dir (extractedDir is {tempDir}/{repo}-{branch})
+          const tempDir = join(extractedDir, '..');
+          rmSync(tempDir, { recursive: true, force: true });
+        } catch {
+          // Ignore cleanup errors
+        }
       }
     }
   }
 
-  return files;
+  return null;
 }
 
 // =============================================================================
@@ -1302,29 +1328,18 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
         throw new HTTPException(403, { message: 'Workspace is read-only' });
       }
 
-      // Find the actual skill path in the repo
-      const skillLocation = await findSkillPath(owner, repo, skillName);
-      if (!skillLocation) {
+      // Download tarball and extract skill files
+      const result = await fetchSkillFromTarball(owner, repo, skillName);
+      if (!result) {
         throw new HTTPException(404, {
-          message: `Could not find skill "${skillName}" in ${owner}/${repo}. Tried multiple path patterns.`,
+          message: `Could not find skill "${skillName}" in ${owner}/${repo}. Tried main and master branches.`,
         });
       }
 
-      // Fetch all files from the skill directory
-      const files = await fetchGitHubDirectoryContents(owner, repo, skillLocation.path, skillLocation.branch);
+      const { files, installName, branch } = result;
 
       if (files.length === 0) {
         throw new HTTPException(404, { message: 'No files found in skill directory' });
-      }
-
-      // Get the skill name from SKILL.md frontmatter for the install directory name
-      const skillMdFile = files.find(f => f.path === 'SKILL.md');
-      let installName = skillName; // fallback to the skills.sh name
-      if (skillMdFile) {
-        const frontmatter = parseSkillFrontmatter(skillMdFile.content);
-        if (frontmatter.name) {
-          installName = frontmatter.name;
-        }
       }
 
       const installPath = `.agents/skills/${installName}`;
@@ -1355,13 +1370,12 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
         filesWritten++;
       }
 
-      // Write metadata file for check/update support
+      // Write metadata file for update support
       const metadata = {
         skillName: installName,
         owner,
         repo,
-        branch: skillLocation.branch,
-        path: skillLocation.path,
+        branch,
         installedAt: new Date().toISOString(),
       };
       await workspace.filesystem.writeFile(`${installPath}/.meta.json`, JSON.stringify(metadata, null, 2));
@@ -1390,7 +1404,6 @@ interface SkillMetaFile {
   owner: string;
   repo: string;
   branch: string;
-  path: string;
   installedAt: string;
 }
 
@@ -1502,10 +1515,10 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
           const metaContent = await workspace?.filesystem?.readFile(metaPath, { encoding: 'utf-8' });
           const meta: SkillMetaFile = JSON.parse(metaContent as string);
 
-          // Re-fetch all files from GitHub
-          const files = await fetchGitHubDirectoryContents(meta.owner, meta.repo, meta.path, meta.branch);
+          // Re-fetch skill files via tarball
+          const fetchResult = await fetchSkillFromTarball(meta.owner, meta.repo, meta.skillName);
 
-          if (files.length === 0) {
+          if (!fetchResult || fetchResult.files.length === 0) {
             results.push({
               skillName: skill,
               success: false,
@@ -1514,6 +1527,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
             continue;
           }
 
+          const { files, branch } = fetchResult;
           const installPath = `${skillsPath}/${skill}`;
           let filesWritten = 0;
 
@@ -1533,9 +1547,10 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
             filesWritten++;
           }
 
-          // Update metadata with new install time
-          const updatedMeta = {
+          // Update metadata with new install time and branch
+          const updatedMeta: SkillMetaFile = {
             ...meta,
+            branch,
             installedAt: new Date().toISOString(),
           };
           await workspace.filesystem.writeFile(metaPath, JSON.stringify(updatedMeta, null, 2));

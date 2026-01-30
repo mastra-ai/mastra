@@ -3,8 +3,6 @@ import { useMastraClient } from '@mastra/react';
 import type {
   SkillsShSearchResponse,
   SkillsShListResponse,
-  SandboxExecuteParams,
-  SandboxExecuteResponse,
   SkillsShRemoveResponse,
   SkillsShUpdateResponse,
 } from '../types';
@@ -95,33 +93,7 @@ export const useSkillPreview = (
 };
 
 // =============================================================================
-// Sandbox Execute Hook (Server-side via workspace)
-// =============================================================================
-
-/**
- * Execute a command in the workspace sandbox
- */
-export const useSandboxExecute = () => {
-  const client = useMastraClient();
-
-  return useMutation({
-    mutationFn: async (params: SandboxExecuteParams): Promise<SandboxExecuteResponse> => {
-      if (!isWorkspaceV1Supported(client)) {
-        throw new Error('Workspace v1 not supported by core or client');
-      }
-      const workspace = (client as any).getWorkspace(params.workspaceId);
-      return workspace.sandboxExecute({
-        command: params.command,
-        args: params.args,
-        cwd: params.cwd,
-        timeout: params.timeout,
-      });
-    },
-  });
-};
-
-// =============================================================================
-// Skill Management Hooks (CLI via sandbox)
+// Skill Management Hooks (via server filesystem)
 // =============================================================================
 
 export interface InstallSkillParams {

@@ -1084,27 +1084,6 @@ export interface GetSkillReferenceResponse {
 }
 
 /**
- * Parameters for executing a command in the sandbox
- */
-export interface SandboxExecuteParams {
-  command: string;
-  args: string[];
-  cwd?: string;
-  timeout?: number;
-}
-
-/**
- * Response for sandbox command execution
- */
-export interface SandboxExecuteResponse {
-  success: boolean;
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  executionTimeMs: number;
-}
-
-/**
  * Parameters for skills.sh install
  */
 export interface SkillsShInstallParams {
@@ -1137,23 +1116,6 @@ export interface SkillsShRemoveResponse {
   success: boolean;
   skillName: string;
   removedPath: string;
-}
-
-/**
- * Skill update status
- */
-export interface SkillUpdateStatus {
-  skillName: string;
-  currentVersion?: string;
-  hasUpdate: boolean;
-  latestCommit?: string;
-}
-
-/**
- * Response for skills.sh check-updates
- */
-export interface SkillsShCheckUpdatesResponse {
-  skills: SkillUpdateStatus[];
 }
 
 /**

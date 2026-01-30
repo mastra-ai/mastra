@@ -31,7 +31,6 @@ export {
   useSearchSkillsSh,
   usePopularSkillsSh,
   useSkillPreview,
-  useSandboxExecute,
   useInstallSkill,
   useUpdateSkills,
   useRemoveSkill,

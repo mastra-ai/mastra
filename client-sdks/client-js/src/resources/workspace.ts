@@ -17,13 +17,10 @@ import type {
   SearchSkillsResponse,
   ListSkillReferencesResponse,
   GetSkillReferenceResponse,
-  SandboxExecuteParams,
-  SandboxExecuteResponse,
   SkillsShInstallParams,
   SkillsShInstallResponse,
   SkillsShRemoveParams,
   SkillsShRemoveResponse,
-  SkillsShCheckUpdatesResponse,
   SkillsShUpdateParams,
   SkillsShUpdateResponse,
 } from '../types';
@@ -247,22 +244,6 @@ export class Workspace extends BaseResource {
   }
 
   // ==========================================================================
-  // Sandbox Operations
-  // ==========================================================================
-
-  /**
-   * Executes a command in the workspace sandbox
-   * @param params - Command execution parameters
-   * @returns Promise containing execution result
-   */
-  sandboxExecute(params: SandboxExecuteParams): Promise<SandboxExecuteResponse> {
-    return this.request(`${this.basePath}/sandbox/execute`, {
-      method: 'POST',
-      body: params,
-    });
-  }
-
-  // ==========================================================================
   // skills.sh Operations
   // ==========================================================================
 
@@ -291,14 +272,6 @@ export class Workspace extends BaseResource {
       method: 'POST',
       body: params,
     });
-  }
-
-  /**
-   * Checks for available updates on installed skills
-   * @returns Promise containing update status for each skill
-   */
-  skillsShCheckUpdates(): Promise<SkillsShCheckUpdatesResponse> {
-    return this.request(`${this.basePath}/skills-sh/check-updates`);
   }
 
   /**

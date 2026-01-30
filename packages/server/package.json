@@ -102,6 +102,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "superjson": "^2.2.2",
+    "tar": "^7.5.7",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

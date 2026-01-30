@@ -674,13 +674,12 @@ Follow these instructions for the test skill.
   fs.mkdirSync(agentSkillsDir, { recursive: true });
   fs.writeFileSync(path.join(agentSkillsDir, 'SKILL.md'), skillContent);
 
-  // Create .meta.json for the installed skill (used by check-updates and update routes)
+  // Create .meta.json for the installed skill (used by update routes)
   const metaJson = {
     skillName: 'test-skill',
     owner: 'test-owner',
     repo: 'test-repo',
     branch: 'main',
-    path: 'skills/test-skill',
     installedAt: new Date().toISOString(),
   };
   fs.writeFileSync(path.join(agentSkillsDir, '.meta.json'), JSON.stringify(metaJson, null, 2));

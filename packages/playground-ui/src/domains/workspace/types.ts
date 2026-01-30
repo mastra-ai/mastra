@@ -217,26 +217,6 @@ export interface SkillsShListResponse {
 }
 
 // =============================================================================
-// Sandbox Types
-// =============================================================================
-
-export interface SandboxExecuteParams {
-  workspaceId: string;
-  command: string;
-  args: string[];
-  cwd?: string;
-  timeout?: number;
-}
-
-export interface SandboxExecuteResponse {
-  success: boolean;
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  executionTimeMs: number;
-}
-
-// =============================================================================
 // skills.sh Install Types
 // =============================================================================
 
