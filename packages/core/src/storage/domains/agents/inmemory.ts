@@ -77,12 +77,8 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       changeMessage: 'Initial version',
     });
 
-    // Set the active version
-    newAgent.activeVersionId = versionId;
-    newAgent.status = 'published';
-    this.db.agents.set(agent.id, newAgent);
-
-    return { ...newAgent };
+    // Return the thin agent record (activeVersionId remains null)
+    return this.deepCopyAgent(newAgent);
   }
 
   async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
@@ -93,23 +89,94 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       throw new Error(`Agent with id ${id} not found`);
     }
 
+    // Separate metadata fields from config fields
+    const { authorId, activeVersionId, metadata, ...configFields } = updates;
+
+    // Extract just the config field names from StorageAgentSnapshotType
+    const configFieldNames = [
+      'name',
+      'description',
+      'instructions',
+      'model',
+      'tools',
+      'defaultOptions',
+      'workflows',
+      'agents',
+      'integrationTools',
+      'inputProcessors',
+      'outputProcessors',
+      'memory',
+      'scorers',
+    ];
+
+    // Check if any config fields are present in the update
+    const hasConfigUpdate = configFieldNames.some(field => field in configFields);
+
+    // Update metadata fields on the agent record
     const updatedAgent: StorageAgentType = {
       ...existingAgent,
-      ...(updates.authorId !== undefined && { authorId: updates.authorId }),
-      ...(updates.activeVersionId !== undefined && { activeVersionId: updates.activeVersionId }),
-      ...(updates.metadata !== undefined && {
-        metadata: { ...existingAgent.metadata, ...updates.metadata },
+      ...(authorId !== undefined && { authorId }),
+      ...(activeVersionId !== undefined && { activeVersionId }),
+      ...(metadata !== undefined && {
+        metadata: { ...existingAgent.metadata, ...metadata },
       }),
       updatedAt: new Date(),
     };
 
     // If activeVersionId is set, mark as published
-    if (updates.activeVersionId !== undefined) {
+    if (activeVersionId !== undefined) {
       updatedAgent.status = 'published';
     }
 
+    // If config fields are being updated, create a new version
+    if (hasConfigUpdate) {
+      // Get the latest version to use as base
+      const latestVersion = await this.getLatestVersion(id);
+      if (!latestVersion) {
+        throw new Error(`No versions found for agent ${id}`);
+      }
+
+      // Extract config from latest version
+      const {
+        id: _versionId,
+        agentId: _agentId,
+        versionNumber: _versionNumber,
+        changedFields: _changedFields,
+        changeMessage: _changeMessage,
+        createdAt: _createdAt,
+        ...latestConfig
+      } = latestVersion;
+
+      // Merge updates into latest config
+      const newConfig = {
+        ...latestConfig,
+        ...configFields,
+      };
+
+      // Identify which fields changed
+      const changedFields = configFieldNames.filter(
+        field =>
+          field in configFields &&
+          configFields[field as keyof typeof configFields] !== latestConfig[field as keyof typeof latestConfig],
+      );
+
+      // Create new version
+      const newVersionId = crypto.randomUUID();
+      const newVersionNumber = latestVersion.versionNumber + 1;
+
+      await this.createVersion({
+        id: newVersionId,
+        agentId: id,
+        versionNumber: newVersionNumber,
+        ...newConfig,
+        changedFields,
+        changeMessage: `Updated ${changedFields.join(', ')}`,
+      });
+    }
+
+    // Save the updated agent record
     this.db.agents.set(id, updatedAgent);
-    return { ...updatedAgent };
+    return this.deepCopyAgent(updatedAgent);
   }
 
   async deleteAgent({ id }: { id: string }): Promise<void> {

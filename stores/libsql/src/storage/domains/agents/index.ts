@@ -16,6 +16,8 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
+  StorageListAgentsResolvedOutput,
+  StorageResolvedAgentType,
   AgentVersion,
   CreateVersionInput,
   ListVersionsInput,
@@ -23,6 +25,26 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+
+/**
+ * The set of fields from StorageAgentSnapshotType that live on version rows.
+ * Used to determine which updates create new versions vs update agent metadata.
+ */
+const SNAPSHOT_FIELDS = [
+  'name',
+  'description',
+  'instructions',
+  'model',
+  'tools',
+  'defaultOptions',
+  'workflows',
+  'agents',
+  'integrationTools',
+  'inputProcessors',
+  'outputProcessors',
+  'memory',
+  'scorers',
+] as const;
 
 export class AgentsLibSQL extends AgentsStorage {
   #db: LibSQLDB;
@@ -273,17 +295,7 @@ export class AgentsLibSQL extends AgentsStorage {
         changeMessage: 'Initial version',
       });
 
-      // 3. Set activeVersionId and status='published'
-      await this.#db.update({
-        tableName: TABLE_AGENTS,
-        keys: { id: agent.id },
-        data: {
-          activeVersionId: versionId,
-          status: 'published',
-          updatedAt: new Date(),
-        },
-      });
-
+      // 3. Return the thin agent record (activeVersionId remains null, status remains 'draft')
       const created = await this.getAgentById({ id: agent.id });
       if (!created) {
         throw new MastraError({
@@ -326,19 +338,73 @@ export class AgentsLibSQL extends AgentsStorage {
         });
       }
 
+      // Separate metadata-level fields from config fields
+      const metadataFields = {
+        authorId: updates.authorId,
+        activeVersionId: updates.activeVersionId,
+        metadata: updates.metadata,
+      };
+
+      // Extract config fields (anything that's part of StorageAgentSnapshotType)
+      const configFields: Record<string, any> = {};
+      for (const field of SNAPSHOT_FIELDS) {
+        if ((updates as any)[field] !== undefined) {
+          configFields[field] = (updates as any)[field];
+        }
+      }
+
+      // If we have config updates, create a new version
+      if (Object.keys(configFields).length > 0) {
+        // Get the latest version number
+        const latestVersion = await this.getLatestVersion(id);
+        const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+        // If we have a latest version, start from its config, otherwise error
+        if (!latestVersion) {
+          throw new MastraError({
+            id: createStorageErrorId('LIBSQL', 'UPDATE_AGENT', 'NO_VERSION'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Cannot update config fields for agent ${id} - no versions exist`,
+            details: { id },
+          });
+        }
+
+        // Extract snapshot fields from latest version
+        const latestSnapshot: Record<string, any> = {};
+        for (const field of SNAPSHOT_FIELDS) {
+          if ((latestVersion as any)[field] !== undefined) {
+            latestSnapshot[field] = (latestVersion as any)[field];
+          }
+        }
+
+        // Create new version with the config updates
+        const versionInput: CreateVersionInput = {
+          id: crypto.randomUUID(),
+          agentId: id,
+          versionNumber: nextVersionNumber,
+          ...latestSnapshot, // Start from latest version
+          ...configFields, // Apply updates
+          changedFields: Object.keys(configFields),
+          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
+        } as CreateVersionInput;
+
+        await this.createVersion(versionInput);
+      }
+
       // Build the data object with only metadata-level fields
       const data: Record<string, any> = {
         updatedAt: new Date(),
       };
 
-      if (updates.authorId !== undefined) data.authorId = updates.authorId;
-      if (updates.activeVersionId !== undefined) {
-        data.activeVersionId = updates.activeVersionId;
-        data.status = 'published';
+      if (metadataFields.authorId !== undefined) data.authorId = metadataFields.authorId;
+      if (metadataFields.activeVersionId !== undefined) {
+        data.activeVersionId = metadataFields.activeVersionId;
+        // Do NOT automatically set status='published' when activeVersionId is updated
       }
-      if (updates.metadata !== undefined) {
-        // Merge metadata
-        data.metadata = { ...existingAgent.metadata, ...updates.metadata };
+      if (metadataFields.metadata !== undefined) {
+        // LibSQL uses REPLACE semantics for metadata
+        data.metadata = metadataFields.metadata;
       }
 
       // Only update if there's more than just updatedAt
@@ -457,6 +523,137 @@ export class AgentsLibSQL extends AgentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_AGENTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async listAgentsResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsResolvedOutput> {
+    const { page = 0, perPage: perPageInput, orderBy } = args || {};
+    const { field, direction } = this.parseOrderBy(orderBy);
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_AGENTS_RESOLVED', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 100);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      // Get total count
+      const total = await this.#db.selectTotalCount({ tableName: TABLE_AGENTS });
+
+      if (total === 0) {
+        return {
+          agents: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Get paginated results with a JOIN to get active version or latest version
+      const limitValue = perPageInput === false ? total : perPage;
+
+      // LibSQL query with JOIN and COALESCE
+      const query = `
+        WITH latest_versions AS (
+          SELECT v.*
+          FROM ${TABLE_AGENT_VERSIONS} v
+          INNER JOIN (
+            SELECT agentId, MAX(versionNumber) as max_version
+            FROM ${TABLE_AGENT_VERSIONS}
+            GROUP BY agentId
+          ) lv ON v.agentId = lv.agentId AND v.versionNumber = lv.max_version
+        )
+        SELECT 
+          a.*,
+          COALESCE(av.id, lv.id) as version_id,
+          COALESCE(av.versionNumber, lv.versionNumber) as version_number,
+          COALESCE(av.name, lv.name) as version_name,
+          COALESCE(av.description, lv.description) as version_description,
+          COALESCE(av.instructions, lv.instructions) as version_instructions,
+          COALESCE(av.model, lv.model) as version_model,
+          COALESCE(av.tools, lv.tools) as version_tools,
+          COALESCE(av.defaultOptions, lv.defaultOptions) as version_defaultOptions,
+          COALESCE(av.workflows, lv.workflows) as version_workflows,
+          COALESCE(av.agents, lv.agents) as version_agents,
+          COALESCE(av.integrationTools, lv.integrationTools) as version_integrationTools,
+          COALESCE(av.inputProcessors, lv.inputProcessors) as version_inputProcessors,
+          COALESCE(av.outputProcessors, lv.outputProcessors) as version_outputProcessors,
+          COALESCE(av.memory, lv.memory) as version_memory,
+          COALESCE(av.scorers, lv.scorers) as version_scorers
+        FROM ${TABLE_AGENTS} a
+        LEFT JOIN ${TABLE_AGENT_VERSIONS} av ON a.activeVersionId = av.id
+        LEFT JOIN latest_versions lv ON a.id = lv.agentId
+        ORDER BY a."${field}" ${direction}
+        LIMIT ? OFFSET ?
+      `;
+
+      const result = await this.#client.execute({
+        sql: query,
+        args: [limitValue, offset],
+      });
+
+      const resolvedAgents = result.rows.map((row: any) => {
+        // Parse the agent record
+        const agent = this.parseRow({
+          id: row.id,
+          status: row.status,
+          activeVersionId: row.activeVersionId,
+          authorId: row.authorId,
+          metadata: row.metadata,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        });
+
+        // If we have version data, merge it with agent
+        if (row.version_id) {
+          return {
+            ...agent,
+            name: row.version_name,
+            description: row.version_description,
+            instructions: row.version_instructions,
+            model: this.parseJson(row.version_model, 'model'),
+            tools: this.parseJson(row.version_tools, 'tools'),
+            defaultOptions: this.parseJson(row.version_defaultOptions, 'defaultOptions'),
+            workflows: this.parseJson(row.version_workflows, 'workflows'),
+            agents: this.parseJson(row.version_agents, 'agents'),
+            integrationTools: this.parseJson(row.version_integrationTools, 'integrationTools'),
+            inputProcessors: this.parseJson(row.version_inputProcessors, 'inputProcessors'),
+            outputProcessors: this.parseJson(row.version_outputProcessors, 'outputProcessors'),
+            memory: this.parseJson(row.version_memory, 'memory'),
+            scorers: this.parseJson(row.version_scorers, 'scorers'),
+          } as StorageResolvedAgentType;
+        }
+
+        // No versions exist - return thin record cast as resolved
+        return agent as StorageResolvedAgentType;
+      });
+
+      return {
+        agents: resolvedAgents,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_AGENTS_RESOLVED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
