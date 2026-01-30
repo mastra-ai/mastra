@@ -89,9 +89,6 @@ export class AgentsPG extends AgentsStorage {
    * were stored directly on mastra_agents) to the new versioned schema (thin agent record + versions table).
    */
   async #migrateFromLegacySchema(): Promise<void> {
-    const hasLegacyColumns = await this.#db.hasColumn(TABLE_AGENTS, 'name');
-    if (!hasLegacyColumns) return;
-
     const fullTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
     const fullVersionsTableName = getTableName({
       indexName: TABLE_AGENT_VERSIONS,
@@ -102,18 +99,26 @@ export class AgentsPG extends AgentsStorage {
       schemaName: getSchemaName(this.#schema),
     });
 
-    // Read all existing agents from the old flat schema
-    const oldAgents = await this.#db.client.manyOrNone(`SELECT * FROM ${fullTableName}`);
+    const hasLegacyColumns = await this.#db.hasColumn(TABLE_AGENTS, 'name');
 
-    // Rename old table, create new one, migrate data
-    await this.#db.client.none(`ALTER TABLE ${fullTableName} RENAME TO "${TABLE_AGENTS}_legacy"`);
+    if (hasLegacyColumns) {
+      // Current table has legacy schema — rename it and drop old versions table
+      await this.#db.client.none(`ALTER TABLE ${fullTableName} RENAME TO "${TABLE_AGENTS}_legacy"`);
+      await this.#db.client.none(`DROP TABLE IF EXISTS ${fullVersionsTableName}`);
+    }
 
-    // Drop old versions table if it exists (may have incompatible schema with snapshot column)
-    await this.#db.client.none(`DROP TABLE IF EXISTS ${fullVersionsTableName}`);
+    // Check if legacy table exists (either just renamed, or left behind by a previous partial migration)
+    const legacyExists = await this.#db.hasColumn(`${TABLE_AGENTS}_legacy`, 'name');
+    if (!legacyExists) return;
 
+    // Read all existing agents from the legacy table
+    const oldAgents = await this.#db.client.manyOrNone(`SELECT * FROM ${legacyTableName}`);
+
+    // Create new tables (IF NOT EXISTS handles idempotency on resume)
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
     await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
 
+    // ON CONFLICT DO NOTHING makes inserts safe for resumed partial migrations
     for (const row of oldAgents) {
       const agentId = row.id as string;
       if (!agentId) continue;
@@ -123,7 +128,8 @@ export class AgentsPG extends AgentsStorage {
 
       await this.#db.client.none(
         `INSERT INTO ${fullTableName} (id, status, "activeVersionId", "authorId", metadata, "createdAt", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id) DO NOTHING`,
         [
           agentId,
           'published',
@@ -140,7 +146,8 @@ export class AgentsPG extends AgentsStorage {
          (id, "agentId", "versionNumber", name, description, instructions, model, tools,
           "defaultOptions", workflows, agents, "integrationTools", "inputProcessors",
           "outputProcessors", memory, scorers, "changedFields", "changeMessage", "createdAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         ON CONFLICT (id) DO NOTHING`,
         [
           versionId,
           agentId,
@@ -165,6 +172,7 @@ export class AgentsPG extends AgentsStorage {
       );
     }
 
+    // Drop legacy table only after all inserts succeed
     await this.#db.client.none(`DROP TABLE IF EXISTS ${legacyTableName}`);
   }
 

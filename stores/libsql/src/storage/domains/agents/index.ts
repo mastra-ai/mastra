@@ -59,28 +59,34 @@ export class AgentsLibSQL extends AgentsStorage {
    * SQLite cannot drop columns or alter NOT NULL constraints, so we must recreate the table.
    */
   async #migrateFromLegacySchema(): Promise<void> {
+    const legacyTable = `${TABLE_AGENTS}_legacy`;
     const hasLegacyColumns = await this.#db.hasColumn(TABLE_AGENTS, 'name');
-    if (!hasLegacyColumns) return;
 
-    // Read all existing agents from the old flat schema
+    if (hasLegacyColumns) {
+      // Current table has legacy schema — rename it and drop old versions table
+      await this.#client.execute({
+        sql: `ALTER TABLE "${TABLE_AGENTS}" RENAME TO "${legacyTable}"`,
+      });
+      await this.#client.execute({
+        sql: `DROP TABLE IF EXISTS "${TABLE_AGENT_VERSIONS}"`,
+      });
+    }
+
+    // Check if legacy table exists (either just renamed, or left behind by a previous partial migration)
+    const legacyExists = await this.#db.hasColumn(legacyTable, 'name');
+    if (!legacyExists) return;
+
+    // Read all existing agents from the legacy table
     const result = await this.#client.execute({
-      sql: `SELECT * FROM "${TABLE_AGENTS}"`,
+      sql: `SELECT * FROM "${legacyTable}"`,
     });
     const oldAgents = result.rows || [];
 
-    // Rename old table, create new one, migrate data
-    await this.#client.execute({
-      sql: `ALTER TABLE "${TABLE_AGENTS}" RENAME TO "${TABLE_AGENTS}_legacy"`,
-    });
-
-    // Drop old versions table if it exists (may have incompatible schema with snapshot column)
-    await this.#client.execute({
-      sql: `DROP TABLE IF EXISTS "${TABLE_AGENT_VERSIONS}"`,
-    });
-
+    // Create new tables (CREATE TABLE IF NOT EXISTS handles idempotency on resume)
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: AGENTS_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: AGENT_VERSIONS_SCHEMA });
 
+    // INSERT OR REPLACE (used by #db.insert) is safe for resumed partial migrations
     for (const row of oldAgents) {
       const agentId = row.id as string;
       if (!agentId) continue;
@@ -127,8 +133,9 @@ export class AgentsLibSQL extends AgentsStorage {
       });
     }
 
+    // Drop legacy table only after all inserts succeed
     await this.#client.execute({
-      sql: `DROP TABLE IF EXISTS "${TABLE_AGENTS}_legacy"`,
+      sql: `DROP TABLE IF EXISTS "${legacyTable}"`,
     });
   }
 
