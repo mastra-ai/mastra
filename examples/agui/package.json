@@ -34,7 +34,8 @@
       "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/memory": "link:../../packages/memory",
       "mastra": "link:../../packages/cli",
-      "jws": "^4.0.1"
+      "jws": "^4.0.1",
+      "@langchain/core": "^0.3.80"
     }
   },
   "devDependencies": {
