@@ -7,8 +7,8 @@ import { z } from 'zod';
 import { init } from '../../index';
 import type { InngestWorkflow } from '../../workflow';
 
-export const INNGEST_PORT = 4000;
-export const HANDLER_PORT = 4001;
+export const INNGEST_PORT = 4100;
+export const HANDLER_PORT = 4101;
 
 export function createTestInngest(id: string) {
   return new Inngest({

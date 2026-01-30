@@ -17,8 +17,8 @@ import { Inngest } from 'inngest';
 
 import { serve as inngestServe } from '../index';
 
-export const INNGEST_PORT = 4000;
-export const HANDLER_PORT = 4001;
+export const INNGEST_PORT = 4100;
+export const HANDLER_PORT = 4101;
 
 // =============================================================================
 // Shared Test Infrastructure

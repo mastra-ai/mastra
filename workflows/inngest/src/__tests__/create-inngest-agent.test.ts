@@ -43,7 +43,7 @@ function createMockModel() {
   };
 }
 
-const INNGEST_PORT = 4000;
+const INNGEST_PORT = 4100;
 
 describe('createInngestAgent factory function', () => {
   const inngest = new Inngest({

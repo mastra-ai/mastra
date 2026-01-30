@@ -2,9 +2,10 @@ version: '3'
 
 services:
   inngest:
+    container_name: inngest-durable-poc
     image: inngest/inngest:v1.12.1
-    command: inngest dev -p 4000 -u http://host.docker.internal:4001/inngest/api --poll-interval=1
+    command: inngest dev -p 4100 -u http://host.docker.internal:4101/inngest/api --poll-interval=1
     ports:
-      - '4000:4000'
+      - '4100:4100'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
