@@ -454,15 +454,17 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       };
 
       // Check route permission requirement (EE feature)
-      // Only enforce permissions when auth is configured
+      // Uses convention-based permission derivation: permissions are auto-derived
+      // from route path/method unless explicitly set or route is public
       const authConfig = this.mastra.getServer()?.auth;
-      if (route.requiresPermission && authConfig) {
+      if (authConfig) {
         const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
+        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
-        if (!userPermissions || !hasPermission(userPermissions, route.requiresPermission)) {
-          return reply.status(403).send({
-            error: 'Forbidden',
-            message: `Missing required permission: ${route.requiresPermission}`,
+        if (permissionError) {
+          return reply.status(permissionError.status).send({
+            error: permissionError.error,
+            message: permissionError.message,
           });
         }
       }
