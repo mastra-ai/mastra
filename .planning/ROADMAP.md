@@ -109,14 +109,41 @@ Plans:
 
 - [x] 04-01-PLAN.md — Vitest setup and unit tests for transport + provider layers
 
+### Phase 5: RBAC 403 Error Handling
+
+**Goal**: Fix playground retry behavior and fallback on 403 RBAC errors
+**Depends on**: Phase 4
+**Requirements**:
+
+- On 403 response, do not retry the request
+- Immediately display existing "Permission Denied" page
+- Fix in playground or playground-ui package
+
+**Success Criteria** (what must be TRUE):
+
+1. 403 responses are not retried
+2. 403 errors route to Permission Denied page immediately
+3. No fallback to "no agents created" docs page on 403
+4. Other error codes retain existing behavior
+
+**Plans**: 4 plans
+
+Plans:
+
+- [x] 01-PLAN.md — 403 error detection and query retry handling (wave 1)
+- [x] 02-PLAN.md — PermissionDenied UI component (wave 1)
+- [x] 03-PLAN.md — Integrate 403 handling in domain hooks and tables (wave 2)
+- [x] 04-PLAN.md — Update page components to pass error props (wave 3)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
-| Phase                   | Plans Complete | Status     | Completed  |
-| ----------------------- | -------------- | ---------- | ---------- |
-| 1. Transport Layer      | 1/1            | ✓ Complete | 2026-01-28 |
-| 2. API Paths + Methods  | 1/1            | ✓ Complete | 2026-01-29 |
-| 3. Provider Integration | 1/1            | ✓ Complete | 2026-01-29 |
-| 4. Testing + Validation | 1/1            | ✓ Complete | 2026-01-28 |
+| Phase                      | Plans Complete | Status     | Completed  |
+| -------------------------- | -------------- | ---------- | ---------- |
+| 1. Transport Layer         | 1/1            | ✓ Complete | 2026-01-28 |
+| 2. API Paths + Methods     | 1/1            | ✓ Complete | 2026-01-29 |
+| 3. Provider Integration    | 1/1            | ✓ Complete | 2026-01-29 |
+| 4. Testing + Validation    | 1/1            | ✓ Complete | 2026-01-28 |
+| 5. RBAC 403 Error Handling | 4/4            | ✓ Complete | 2026-01-30 |
