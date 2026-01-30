@@ -40,7 +40,6 @@ const confirmTokenTool = {
 
 describe.skipIf(!process.env.MOONSHOT_API_KEY)('Kimi K2.5 Integration Tests', () => {
   it('completes multi-step tool calls without reasoning_content errors', async () => {
-
     const agent = new Agent({
       id: 'moonshotai-kimi-k2-5-test',
       name: 'moonshotai-kimi-k2-5-test',
