@@ -9,16 +9,14 @@ packages:
 
 Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io) - an open standard for packaging agent capabilities.
 
-## How it works
-
 A skill is a folder containing:
 
-- **SKILL.md** - Instructions and metadata for the agent
-- **references/** - Supporting documentation (optional)
-- **scripts/** - Executable scripts (optional)
-- **assets/** - Images and other files (optional)
+- `SKILL.md`: Instructions and metadata for the agent
+- `references/`: Supporting documentation (optional)
+- `scripts/`: Executable scripts (optional)
+- `assets/`: Images and other files (optional)
 
-```
+```plaintext title="Folder structure"
 /skills
   /code-review
     SKILL.md
@@ -31,11 +29,11 @@ A skill is a folder containing:
 
 When skills are configured on a workspace, agents can discover and activate them during conversations.
 
-## SKILL.md structure
+## SKILL.md format
 
-A skill file contains YAML frontmatter followed by markdown instructions:
+Follow the official [skill specification](https://agentskills.io/specification) when creating your skill. Here is an example `SKILL.md` for a code review skill:
 
-```markdown
+```markdown title="SKILL.md"
 ---
 name: code-review
 description: Reviews code for quality, style, and potential issues
@@ -54,7 +52,7 @@ You are a code reviewer. When reviewing code:
 3. Suggest improvements for readability
 4. Run the linter using scripts/lint.ts
 
-## What to look for
+## What to look out for
 
 - Unused variables and imports
 - Missing error handling
@@ -66,7 +64,7 @@ You are a code reviewer. When reviewing code:
 
 Enable skill discovery by setting the `skills` option on your workspace:
 
-```typescript
+```typescript title="src/mastra/workspaces.ts"
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
@@ -75,14 +73,14 @@ const workspace = new Workspace({
 });
 ```
 
-You can specify multiple skill directories:
+The `skills` directory is relative to your `basePath`. You can specify multiple skill directories:
 
-```typescript
+```typescript title="src/mastra/workspaces.ts"
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   skills: [
-    '/skills',           // Project skills
-    '/team-skills',      // Shared team skills
+    '/skills',      // Project skills
+    '/team-skills', // Shared team skills
   ],
 });
 ```
@@ -106,13 +104,13 @@ const workspace = new Workspace({
 
 ## How agents use skills
 
-When skills are configured, agents receive a `SkillsProcessor` that:
+When an agent activates a skill, the skill's instructions are added to the conversation context. The agent can then follow those instructions and access the skill's references and scripts.
+
+Under the hood this involves:
 
 1. Lists available skills in the system message
-2. Allows agents to activate skills during conversation
-3. Provides access to skill references and scripts
-
-Agents can reference skill content in their responses and use scripts defined in skills to perform actions.
+1. Allows agents to activate skills during conversation
+1. Provides access to skill references and scripts
 
 ## Skill search
 
@@ -122,12 +120,13 @@ If BM25 or vector search is enabled on the workspace, skills are automatically i
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   skills: ['/skills'],
-  bm25: true, // Enable skill search
+  // highlight-next-line
+  bm25: true,
 });
 ```
 
 ## Related
 
-- [Agent Skills Specification](https://agentskills.io)
-- [Workspace Overview](/docs/workspace/overview)
-- [Search and Indexing](/docs/workspace/search)
+- [Agent skills specification](https://agentskills.io)
+- [Workspace overview](/docs/workspace/overview)
+- [Search and indexing](/docs/workspace/search)
