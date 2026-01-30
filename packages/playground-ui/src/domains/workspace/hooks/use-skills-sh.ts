@@ -23,13 +23,15 @@ export const useSearchSkillsSh = (workspaceId: string | undefined) => {
       if (!workspaceId) {
         throw new Error('Workspace ID is required');
       }
-      const baseUrl = (client as any).baseUrl || '';
+      const baseUrl = client.options.baseUrl || '';
       const url = `${baseUrl}/api/workspaces/${workspaceId}/skills-sh/search?q=${encodeURIComponent(query)}&limit=10`;
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to search skills: ${response.statusText}`);
       }
-      return response.json();
+      return response.json().catch(() => {
+        throw new Error('Invalid response from server');
+      });
     },
   });
 };
@@ -46,13 +48,15 @@ export const usePopularSkillsSh = (workspaceId: string | undefined) => {
       if (!workspaceId) {
         throw new Error('Workspace ID is required');
       }
-      const baseUrl = (client as any).baseUrl || '';
+      const baseUrl = client.options.baseUrl || '';
       const url = `${baseUrl}/api/workspaces/${workspaceId}/skills-sh/popular?limit=10&offset=0`;
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch popular skills: ${response.statusText}`);
       }
-      return response.json();
+      return response.json().catch(() => {
+        throw new Error('Invalid response from server');
+      });
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     enabled: !!workspaceId,
@@ -77,7 +81,7 @@ export const useSkillPreview = (
       if (!workspaceId || !owner || !repo || !skillPath) {
         throw new Error('workspaceId, owner, repo, and skillPath are required');
       }
-      const baseUrl = (client as any).baseUrl || '';
+      const baseUrl = client.options.baseUrl || '';
       const params = new URLSearchParams({ owner, repo, path: skillPath });
       const url = `${baseUrl}/api/workspaces/${workspaceId}/skills-sh/preview?${params}`;
       const response = await fetch(url);
@@ -118,7 +122,7 @@ export const useInstallSkill = () => {
         throw new Error('Invalid repository format. Expected owner/repo');
       }
 
-      const baseUrl = (client as any).baseUrl || '';
+      const baseUrl = client.options.baseUrl || '';
       const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/install`;
       const response = await fetch(url, {
         method: 'POST',
@@ -131,7 +135,9 @@ export const useInstallSkill = () => {
         throw new Error(error.message || `Failed to install skill: ${response.statusText}`);
       }
 
-      return response.json();
+      return response.json().catch(() => {
+        throw new Error('Invalid response from server');
+      });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
@@ -153,7 +159,7 @@ export const useUpdateSkills = () => {
 
   return useMutation({
     mutationFn: async (params: UpdateSkillsParams): Promise<SkillsShUpdateResponse> => {
-      const baseUrl = (client as any).baseUrl || '';
+      const baseUrl = client.options.baseUrl || '';
       const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/update`;
       const response = await fetch(url, {
         method: 'POST',
@@ -166,7 +172,9 @@ export const useUpdateSkills = () => {
         throw new Error(error.message || `Failed to update skill: ${response.statusText}`);
       }
 
-      return response.json();
+      return response.json().catch(() => {
+        throw new Error('Invalid response from server');
+      });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
@@ -188,7 +196,7 @@ export const useRemoveSkill = () => {
 
   return useMutation({
     mutationFn: async (params: RemoveSkillParams): Promise<SkillsShRemoveResponse> => {
-      const baseUrl = (client as any).baseUrl || '';
+      const baseUrl = client.options.baseUrl || '';
       const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/remove`;
       const response = await fetch(url, {
         method: 'POST',
@@ -201,7 +209,9 @@ export const useRemoveSkill = () => {
         throw new Error(error.message || `Failed to remove skill: ${response.statusText}`);
       }
 
-      return response.json();
+      return response.json().catch(() => {
+        throw new Error('Invalid response from server');
+      });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
@@ -234,8 +244,10 @@ export function parseSkillSource(
   // Remove protocol and github.com prefix if present
   let cleanSource = topSource.replace(/^https?:\/\//, '');
   cleanSource = cleanSource.replace(/^github\.com\//, '');
+  // Remove trailing slash if present
+  cleanSource = cleanSource.replace(/\/$/, '');
 
-  const parts = cleanSource.split('/');
+  const parts = cleanSource.split('/').filter(Boolean);
 
   if (parts.length < 2) {
     return null;

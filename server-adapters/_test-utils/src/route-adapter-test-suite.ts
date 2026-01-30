@@ -73,6 +73,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/workspaces/:workspaceId/skills-sh/popular',
       '/workspaces/:workspaceId/skills-sh/preview',
       '/workspaces/:workspaceId/skills-sh/install',
+      '/workspaces/:workspaceId/skills-sh/remove',
       '/workspaces/:workspaceId/skills-sh/update',
     ];
     const activeRoutes = SERVER_ROUTES.filter(

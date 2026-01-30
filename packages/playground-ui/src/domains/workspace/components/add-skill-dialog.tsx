@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 import { Search, Download, ExternalLink, Loader2, Package, Wand2, Github } from 'lucide-react';
 import {
   Dialog,
@@ -54,15 +55,20 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
     { enabled: !!parsedSource && !!selectedSkill },
   );
 
-  // Handle search with debounce
+  // Debounced search to reduce API calls
+  const debouncedSearch = useDebouncedCallback((query: string) => {
+    if (query.trim().length >= 2) {
+      searchMutation.mutate(query);
+    }
+  }, 300);
+
+  // Handle search input
   const handleSearch = useCallback(
     (query: string) => {
       setSearchQuery(query);
-      if (query.trim().length >= 2) {
-        searchMutation.mutate(query);
-      }
+      debouncedSearch(query);
     },
-    [searchMutation],
+    [debouncedSearch],
   );
 
   // Determine which skills to display
@@ -214,7 +220,10 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
                       </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
-                        <div className="p-4 prose prose-sm prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: previewContent }} />
+                        <div
+                          className="p-4 prose prose-sm prose-invert max-w-none"
+                          dangerouslySetInnerHTML={{ __html: previewContent }}
+                        />
                       </ScrollArea>
                     ) : (
                       <div className="flex-1 flex flex-col items-center justify-center text-icon4">

@@ -29,11 +29,7 @@ const columns = [
   { name: 'description', label: 'Description', size: '2fr' },
 ];
 
-const columnsWithActions = [
-  { name: 'name', label: 'Skill', size: '1fr' },
-  { name: 'description', label: 'Description', size: '2fr' },
-  { name: 'actions', label: '', size: '48px' },
-];
+const columnsWithActions = [...columns, { name: 'actions', label: '', size: '48px' }];
 
 export function SkillsTable({
   skills,
@@ -53,7 +49,9 @@ export function SkillsTable({
 
   // Check if any skill is downloaded (for determining if we need the actions column)
   const hasDownloadedSkills = skills.some(isDownloaded);
-  const hasRowActions = (!!onRemoveSkill || !!onUpdateSkill) && hasDownloadedSkills;
+  // For skeleton, assume actions column is needed if callbacks are provided
+  const hasActionCallbacks = !!onRemoveSkill || !!onUpdateSkill;
+  const hasRowActions = hasActionCallbacks && hasDownloadedSkills;
   const effectiveColumns = hasRowActions ? columnsWithActions : columns;
 
   if (!isSkillsConfigured && !isLoading) {
@@ -61,7 +59,7 @@ export function SkillsTable({
   }
 
   if (isLoading) {
-    return <SkillsTableSkeleton hasRowActions={hasRowActions} />;
+    return <SkillsTableSkeleton hasRowActions={hasActionCallbacks} />;
   }
 
   return (

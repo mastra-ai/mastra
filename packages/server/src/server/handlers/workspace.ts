@@ -1052,6 +1052,21 @@ function getNameVariations(skillName: string): string[] {
 }
 
 /**
+ * Validate skill name to prevent path traversal attacks.
+ * Only allows alphanumeric characters, hyphens, and underscores.
+ */
+const SKILL_NAME_REGEX = /^[a-z0-9][a-z0-9-_]*$/i;
+
+function assertSafeSkillName(name: string): string {
+  if (!SKILL_NAME_REGEX.test(name)) {
+    throw new HTTPException(400, {
+      message: `Invalid skill name "${name}". Names must start with alphanumeric and contain only letters, numbers, hyphens, and underscores.`,
+    });
+  }
+  return name;
+}
+
+/**
  * Download and extract a GitHub repo tarball to a temp directory.
  * Streams directly from fetch → gunzip → extract (no intermediate file).
  * Returns the path to the extracted directory containing the repo contents.
@@ -1337,7 +1352,9 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'No files found in skill directory' });
       }
 
-      const installPath = `.agents/skills/${installName}`;
+      // Validate skill name to prevent path traversal
+      const safeInstallName = assertSafeSkillName(installName);
+      const installPath = `.agents/skills/${safeInstallName}`;
 
       // Ensure the skills directory exists
       try {
@@ -1429,7 +1446,9 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
         throw new HTTPException(403, { message: 'Workspace is read-only' });
       }
 
-      const skillPath = `.agents/skills/${skillName}`;
+      // Validate skill name to prevent path traversal
+      const safeSkillName = assertSafeSkillName(skillName);
+      const skillPath = `.agents/skills/${safeSkillName}`;
 
       // Check if skill exists
       try {
@@ -1494,7 +1513,8 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
       // Get list of skills to update
       let skillsToUpdate: string[];
       if (skillName) {
-        skillsToUpdate = [skillName];
+        // Validate skill name to prevent path traversal
+        skillsToUpdate = [assertSafeSkillName(skillName)];
       } else {
         try {
           const entries = await workspace?.filesystem?.readdir(skillsPath);
@@ -1505,6 +1525,17 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
       }
 
       for (const skill of skillsToUpdate) {
+        // Validate each skill name for safety
+        try {
+          assertSafeSkillName(skill);
+        } catch {
+          results.push({
+            skillName: skill,
+            success: false,
+            error: 'Invalid skill name',
+          });
+          continue;
+        }
         const metaPath = `${skillsPath}/${skill}/.meta.json`;
         try {
           const metaContent = await workspace?.filesystem?.readFile(metaPath, { encoding: 'utf-8' });

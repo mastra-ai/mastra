@@ -675,12 +675,14 @@ Follow these instructions for the test skill.
   fs.writeFileSync(path.join(agentSkillsDir, 'SKILL.md'), skillContent);
 
   // Create .meta.json for the installed skill (used by update routes)
+  // Use a fixed timestamp for deterministic tests
+  const installedAt = new Date('2024-01-01T00:00:00.000Z').toISOString();
   const metaJson = {
     skillName: 'test-skill',
     owner: 'test-owner',
     repo: 'test-repo',
     branch: 'main',
-    installedAt: new Date().toISOString(),
+    installedAt,
   };
   fs.writeFileSync(path.join(agentSkillsDir, '.meta.json'), JSON.stringify(metaJson, null, 2));
 

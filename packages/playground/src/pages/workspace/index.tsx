@@ -190,12 +190,16 @@ export default function Workspace() {
         {
           onSuccess: result => {
             setUpdatingSkillName(null);
-            const updated = result.updated[0];
-            if (updated?.success) {
-              toast.success(`Skill "${skillName}" updated successfully (${updated.filesWritten} files)`);
-              refetchSkills();
+            if (result.updated.length > 0) {
+              const updated = result.updated[0];
+              if (updated.success) {
+                toast.success(`Skill "${skillName}" updated successfully (${updated.filesWritten} files)`);
+                refetchSkills();
+              } else {
+                toast.error(`Failed to update skill: ${updated.error ?? 'Unknown error'}`);
+              }
             } else {
-              toast.error(`Failed to update skill: ${updated?.error ?? 'Unknown error'}`);
+              toast.error(`Failed to update skill: No update result returned`);
             }
           },
           onError: error => {
