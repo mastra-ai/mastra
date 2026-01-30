@@ -49,7 +49,10 @@ const EXECUTE_PATTERNS = [
 
 /**
  * Known resource prefixes in the API.
- * Used to extract the primary resource from route paths.
+ * Used by extractResource() to identify the primary resource from route paths.
+ *
+ * Note: This list is used for runtime permission derivation.
+ * Type-safe permissions are generated from SERVER_ROUTES via `pnpm generate:permissions`.
  */
 const KNOWN_RESOURCES = [
   'agents',
@@ -64,10 +67,12 @@ const KNOWN_RESOURCES = [
   'scores',
   'processors',
   'stored',
+  'stored-agents',
   'agent-builder',
   'workspaces',
   'a2a',
   'system',
+  'auth',
 ];
 
 /**
