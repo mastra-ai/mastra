@@ -13,6 +13,8 @@ import type { Extension } from '@codemirror/state';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { variableHighlight } from './variable-highlight-extension';
 
+export type CodeEditorLanguage = 'json' | 'markdown';
+
 export const useCodemirrorTheme = (): Extension => {
   return useMemo(() => {
     const baseTheme = draculaInit({
@@ -59,14 +61,25 @@ export const useCodemirrorTheme = (): Extension => {
   }, []);
 };
 
+const getLanguageExtension = (language: CodeEditorLanguage): Extension => {
+  switch (language) {
+    case 'markdown':
+      return markdown({ base: markdownLanguage });
+    case 'json':
+    default:
+      return jsonLanguage;
+  }
+};
+
 export type CodeEditorProps = {
   data?: Record<string, unknown> | Array<Record<string, unknown>>;
   value?: string;
   onChange?: (value: string) => void;
   showCopyButton?: boolean;
   className?: string;
-  language?: 'json' | 'markdown';
   highlightVariables?: boolean;
+  language?: CodeEditorLanguage;
+  placeholder?: string;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
 export const CodeEditor = ({
@@ -77,6 +90,7 @@ export const CodeEditor = ({
   className,
   language = 'json',
   highlightVariables = false,
+  placeholder,
   ...props
 }: CodeEditorProps) => {
   const theme = useCodemirrorTheme();
@@ -108,6 +122,7 @@ export const CodeEditor = ({
         extensions={extensions}
         onChange={onChange}
         aria-label="Code editor"
+        placeholder={placeholder}
       />
     </div>
   );
