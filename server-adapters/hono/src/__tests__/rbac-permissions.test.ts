@@ -339,28 +339,80 @@ describe('RBAC Permission Enforcement', () => {
   });
 
   describe('Routes Without Permission Requirements', () => {
-    it('should allow access to routes without requiresPermission when authenticated', async () => {
-      const { app, adapter } = await setupAuthAdapter(context);
+    it('should allow access to explicitly public routes (requiresAuth: false) when path is in public config', async () => {
+      // Create a custom auth config that marks /api/public as public
+      const app = new Hono();
+      const authConfigWithPublicPath = {
+        ...createMockAuthConfig(),
+        public: ['/api/public'], // Mark this path as public at the middleware level
+      };
 
-      // Route without requiresPermission
+      const originalGetServer = context.mastra.getServer.bind(context.mastra);
+      context.mastra.getServer = () => ({
+        ...originalGetServer(),
+        auth: authConfigWithPublicPath,
+        rbac: createMockRBACProvider(),
+      });
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      adapter.registerContextMiddleware();
+      adapter.registerAuthMiddleware();
+
+      // Route explicitly marked as public with requiresAuth: false
       const publicRoute: ServerRoute<any, any, any> = {
         method: 'GET',
         path: '/api/public',
         responseType: 'json',
+        requiresAuth: false, // Explicitly opt-out of route-level auth/permissions
         handler: async () => ({ public: true }),
       };
 
       await adapter.registerRoute(app, publicRoute, { prefix: '' });
 
-      // Authenticated user should access even without specific permission
+      // Public route should be accessible without authentication
       const response = await app.request(
         new Request('http://localhost/api/public', {
           method: 'GET',
-          headers: { Authorization: 'Bearer viewer' },
         }),
       );
 
       expect(response.status).toBe(200);
+    });
+
+    it('should derive permissions from route path/method when not explicitly set', async () => {
+      const { app, adapter } = await setupAuthAdapter(context);
+
+      // Route without explicit requiresPermission - will derive 'agents:read'
+      const derivedRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/agents/test',
+        responseType: 'json',
+        handler: async () => ({ derived: true }),
+      };
+
+      await adapter.registerRoute(app, derivedRoute, { prefix: '' });
+
+      // Viewer has 'agents:read' permission, should have access
+      const viewerResponse = await app.request(
+        new Request('http://localhost/agents/test', {
+          method: 'GET',
+          headers: { Authorization: 'Bearer viewer' },
+        }),
+      );
+      expect(viewerResponse.status).toBe(200);
+
+      // _default role has no permissions, should be denied
+      const defaultResponse = await app.request(
+        new Request('http://localhost/agents/test', {
+          method: 'GET',
+          headers: { Authorization: 'Bearer _default' },
+        }),
+      );
+      expect(defaultResponse.status).toBe(403);
     });
   });
 

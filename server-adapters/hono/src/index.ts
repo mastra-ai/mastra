@@ -402,18 +402,20 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         };
 
         // Check route permission requirement (EE feature)
-        // Only enforce permissions when auth is configured
+        // Uses convention-based permission derivation: permissions are auto-derived
+        // from route path/method unless explicitly set or route is public
         const authConfig = this.mastra.getServer()?.auth;
-        if (route.requiresPermission && authConfig) {
+        if (authConfig) {
           const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
-          if (!userPermissions || !hasPermission(userPermissions, route.requiresPermission)) {
+          if (permissionError) {
             return c.json(
               {
-                error: 'Forbidden',
-                message: `Missing required permission: ${route.requiresPermission}`,
+                error: permissionError.error,
+                message: permissionError.message,
               },
-              403,
+              permissionError.status as any,
             );
           }
         }
