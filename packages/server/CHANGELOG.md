@@ -1,5 +1,30 @@
 # @mastra/server
 
+## 1.1.0-alpha.1
+
+### Minor Changes
+
+- Restructured stored agents to use a thin metadata record with versioned configuration snapshots. ([#12488](https://github.com/mastra-ai/mastra/pull/12488))
+
+  The agent record now only stores metadata fields (id, status, activeVersionId, authorId, metadata, timestamps). All configuration fields (name, instructions, model, tools, etc.) live exclusively in version snapshot rows, enabling full version history and rollback.
+
+  **Key changes:**
+  - Stored Agent records are now thin metadata-only (StorageAgentType)
+  - All config lives in version snapshots (StorageAgentSnapshotType)
+  - New resolved type (StorageResolvedAgentType) merges agent record + active version config
+  - Renamed `ownerId` to `authorId` for multi-tenant filtering
+  - Changed `memory` field type from `string` to `Record<string, unknown>`
+  - Added `status` field ('draft' | 'published') to agent records
+  - Flattened CreateAgent/UpdateAgent input types (config fields at top level, no nested snapshot)
+  - Version config columns are top-level in the agent_versions table (no single snapshot jsonb column)
+  - List endpoints return resolved agents (thin record + active version config)
+  - Auto-versioning on update with retention limits and race condition handling
+
+### Patch Changes
+
+- Updated dependencies [[`b99ceac`](https://github.com/mastra-ai/mastra/commit/b99ceace2c830dbdef47c8692d56a91954aefea2), [`deea43e`](https://github.com/mastra-ai/mastra/commit/deea43eb1366d03a864c5e597d16a48592b9893f), [`ac9ec66`](https://github.com/mastra-ai/mastra/commit/ac9ec6672779b2e6d4344e415481d1a6a7d4911a)]:
+  - @mastra/core@1.1.0-alpha.1
+
 ## 1.1.0-alpha.0
 
 ### Minor Changes
