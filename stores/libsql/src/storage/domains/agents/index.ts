@@ -72,21 +72,9 @@ export class AgentsLibSQL extends AgentsStorage {
   private parseRow(row: any): StorageAgentType {
     return {
       id: row.id as string,
-      name: row.name as string,
-      description: row.description as string | undefined,
-      instructions: row.instructions as string,
-      model: this.parseJson(row.model, 'model'),
-      tools: this.parseJson(row.tools, 'tools'),
-      defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
-      workflows: this.parseJson(row.workflows, 'workflows'),
-      agents: this.parseJson(row.agents, 'agents'),
-      inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
-      outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
-      memory: this.parseJson(row.memory, 'memory'),
-      scorers: this.parseJson(row.scorers, 'scorers'),
-      integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
-      ownerId: row.ownerId as string | undefined,
+      status: row.status as string,
       activeVersionId: row.activeVersionId as string | undefined,
+      authorId: row.authorId as string | undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
@@ -118,37 +106,61 @@ export class AgentsLibSQL extends AgentsStorage {
     try {
       const now = new Date();
 
+      // 1. Create thin agent record with status='draft'
       await this.#db.insert({
         tableName: TABLE_AGENTS,
         record: {
           id: agent.id,
-          name: agent.name,
-          description: agent.description ?? null,
-          instructions: agent.instructions,
-          model: agent.model,
-          tools: agent.tools ?? null,
-          defaultOptions: agent.defaultOptions ?? null,
-          workflows: agent.workflows ?? null,
-          agents: agent.agents ?? null,
-          inputProcessors: agent.inputProcessors ?? null,
-          outputProcessors: agent.outputProcessors ?? null,
-          memory: agent.memory ?? null,
-          scorers: agent.scorers ?? null,
-          integrationTools: agent.integrationTools ?? null,
-          ownerId: agent.ownerId ?? null,
-          activeVersionId: agent.activeVersionId ?? null,
+          status: 'draft',
+          activeVersionId: null,
+          authorId: agent.authorId ?? null,
           metadata: agent.metadata ?? null,
           createdAt: now,
           updatedAt: now,
         },
       });
 
-      return {
-        ...agent,
-        createdAt: now,
-        updatedAt: now,
-      };
+      // 2. Extract config fields from the flat input
+      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+
+      // Create version 1 from the config
+      const versionId = crypto.randomUUID();
+      await this.createVersion({
+        id: versionId,
+        agentId: agent.id,
+        versionNumber: 1,
+        ...snapshotConfig,
+        changedFields: Object.keys(snapshotConfig),
+        changeMessage: 'Initial version',
+      });
+
+      // 3. Set activeVersionId and status='published'
+      await this.#db.update({
+        tableName: TABLE_AGENTS,
+        keys: { id: agent.id },
+        data: {
+          activeVersionId: versionId,
+          status: 'published',
+          updatedAt: new Date(),
+        },
+      });
+
+      const created = await this.getAgentById({ id: agent.id });
+      if (!created) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'CREATE_AGENT', 'NOT_FOUND_AFTER_CREATE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: `Agent ${agent.id} not found after creation`,
+          details: { agentId: agent.id },
+        });
+      }
+
+      return created;
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_AGENT', 'FAILED'),
@@ -175,26 +187,16 @@ export class AgentsLibSQL extends AgentsStorage {
         });
       }
 
-      // Build the data object with only the fields that are being updated
+      // Build the data object with only metadata-level fields
       const data: Record<string, any> = {
         updatedAt: new Date(),
       };
 
-      if (updates.name !== undefined) data.name = updates.name;
-      if (updates.description !== undefined) data.description = updates.description;
-      if (updates.instructions !== undefined) data.instructions = updates.instructions;
-      if (updates.model !== undefined) data.model = updates.model;
-      if (updates.tools !== undefined) data.tools = updates.tools;
-      if (updates.defaultOptions !== undefined) data.defaultOptions = updates.defaultOptions;
-      if (updates.workflows !== undefined) data.workflows = updates.workflows;
-      if (updates.agents !== undefined) data.agents = updates.agents;
-      if (updates.inputProcessors !== undefined) data.inputProcessors = updates.inputProcessors;
-      if (updates.outputProcessors !== undefined) data.outputProcessors = updates.outputProcessors;
-      if (updates.memory !== undefined) data.memory = updates.memory;
-      if (updates.scorers !== undefined) data.scorers = updates.scorers;
-      if (updates.integrationTools !== undefined) data.integrationTools = updates.integrationTools;
-      if (updates.ownerId !== undefined) data.ownerId = updates.ownerId;
-      if (updates.activeVersionId !== undefined) data.activeVersionId = updates.activeVersionId;
+      if (updates.authorId !== undefined) data.authorId = updates.authorId;
+      if (updates.activeVersionId !== undefined) {
+        data.activeVersionId = updates.activeVersionId;
+        data.status = 'published';
+      }
       if (updates.metadata !== undefined) {
         // Merge metadata
         data.metadata = { ...existingAgent.metadata, ...updates.metadata };
@@ -339,7 +341,18 @@ export class AgentsLibSQL extends AgentsStorage {
           agentId: input.agentId,
           versionNumber: input.versionNumber,
           name: input.name ?? null,
-          snapshot: input.snapshot,
+          description: input.description ?? null,
+          instructions: input.instructions,
+          model: input.model,
+          tools: input.tools ?? null,
+          defaultOptions: input.defaultOptions ?? null,
+          workflows: input.workflows ?? null,
+          agents: input.agents ?? null,
+          integrationTools: input.integrationTools ?? null,
+          inputProcessors: input.inputProcessors ?? null,
+          outputProcessors: input.outputProcessors ?? null,
+          memory: input.memory ?? null,
+          scorers: input.scorers ?? null,
           changedFields: input.changedFields ?? null,
           changeMessage: input.changeMessage ?? null,
           createdAt: now,
@@ -604,8 +617,19 @@ export class AgentsLibSQL extends AgentsStorage {
       id: row.id as string,
       agentId: row.agentId as string,
       versionNumber: row.versionNumber as number,
-      name: row.name as string | undefined,
-      snapshot: this.parseJson(row.snapshot, 'snapshot'),
+      name: row.name as string,
+      description: row.description as string | undefined,
+      instructions: row.instructions as string,
+      model: this.parseJson(row.model, 'model'),
+      tools: this.parseJson(row.tools, 'tools'),
+      defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
+      workflows: this.parseJson(row.workflows, 'workflows'),
+      agents: this.parseJson(row.agents, 'agents'),
+      integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
+      inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
+      outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
+      memory: this.parseJson(row.memory, 'memory'),
+      scorers: this.parseJson(row.scorers, 'scorers'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAt as string),
