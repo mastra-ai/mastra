@@ -7,6 +7,7 @@
 import { serve } from '@hono/node-server';
 
 import { createSkillsApiServer } from './server.js';
+import { getStorageInfo } from './storage/index.js';
 
 const PORT = parseInt(process.env.PORT || '3456', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -24,6 +25,8 @@ const app = createSkillsApiServer({
 });
 
 const autoRefreshStatus = AUTO_REFRESH ? `${REFRESH_INTERVAL} min` : 'disabled';
+const storageInfo = getStorageInfo();
+const storageStatus = storageInfo.isExternal ? 'external' : 'bundled';
 
 console.info(`
 ╔═══════════════════════════════════════════════════════════╗
@@ -35,15 +38,20 @@ console.info(`
 ║                                                           ║
 ╠═══════════════════════════════════════════════════════════╣
 ║                                                           ║
-║   Server:    http://${HOST}:${PORT.toString().padEnd(27)}║
-║   API:       http://${HOST}:${PORT}/api/skills${' '.repeat(16)}║
-║   Admin:     http://${HOST}:${PORT}/api/admin${' '.repeat(17)}║
-║   Health:    http://${HOST}:${PORT}/health${' '.repeat(18)}║
+║   Server:       http://${HOST}:${PORT.toString().padEnd(24)}║
+║   API:          http://${HOST}:${PORT}/api/skills${' '.repeat(13)}║
+║   Admin:        http://${HOST}:${PORT}/api/admin${' '.repeat(14)}║
+║   Health:       http://${HOST}:${PORT}/health${' '.repeat(15)}║
 ║                                                           ║
 ║   Auto-refresh: ${autoRefreshStatus.padEnd(40)}║
+║   Storage:      ${storageStatus.padEnd(40)}║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
 `);
+
+if (storageInfo.dataDir) {
+  console.info(`[Storage] Using external data directory: ${storageInfo.dataDir}`);
+}
 
 serve({
   fetch: app.fetch,

@@ -34,13 +34,31 @@ The server runs on `http://localhost:3456` by default.
 
 ### Environment Variables
 
-| Variable           | Default   | Description                                     |
-| ------------------ | --------- | ----------------------------------------------- |
-| `PORT`             | `3456`    | Server port                                     |
-| `HOST`             | `0.0.0.0` | Server host                                     |
-| `CORS_ORIGIN`      | `*`       | CORS origin                                     |
+| Variable           | Default   | Description                                      |
+| ------------------ | --------- | ------------------------------------------------ |
+| `PORT`             | `3456`    | Server port                                      |
+| `HOST`             | `0.0.0.0` | Server host                                      |
+| `CORS_ORIGIN`      | `*`       | CORS origin                                      |
 | `AUTO_REFRESH`     | `false`   | Enable auto-refresh scheduler (`true` or `1`)   |
 | `REFRESH_INTERVAL` | `30`      | Refresh interval in minutes (minimum 5 minutes) |
+| `SKILLS_DATA_DIR`  | -         | External directory for persistent data storage  |
+
+### Persistent Storage
+
+By default, skills data is bundled with the build. For production deployments where you need persistent storage across restarts:
+
+```bash
+# Point to a persistent volume
+SKILLS_DATA_DIR=/data/skills pnpm start
+
+# Docker example
+docker run -v /host/data:/data/skills -e SKILLS_DATA_DIR=/data/skills skills-api
+```
+
+When `SKILLS_DATA_DIR` is set:
+- Data is saved to `$SKILLS_DATA_DIR/skills-data.json`
+- Falls back to bundled data if external file doesn't exist
+- Refresh operations write to the external location
 
 ## API Endpoints
 

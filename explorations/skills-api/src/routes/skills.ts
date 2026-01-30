@@ -7,8 +7,8 @@ import { Hono } from 'hono';
 
 import { fetchSkillFromGitHub } from '../github/index.js';
 import {
-  skills,
-  metadata,
+  getSkills,
+  getMetadata,
   getSources,
   getOwners,
   getTopSkills,
@@ -23,7 +23,7 @@ const skillsRouter = new Hono();
  * Helper to search skills based on query parameters
  */
 function searchSkills(params: SkillSearchParams): PaginatedSkillsResponse {
-  let filtered = [...skills];
+  let filtered = [...getSkills()];
 
   // Text search across name, displayName, source
   if (params.query) {
@@ -208,6 +208,8 @@ skillsRouter.get('/agents', c => {
  * Get registry statistics
  */
 skillsRouter.get('/stats', c => {
+  const skills = getSkills();
+  const metadata = getMetadata();
   const totalInstalls = skills.reduce((sum, s) => sum + s.installs, 0);
 
   return c.json({
@@ -228,7 +230,7 @@ skillsRouter.get('/by-source/:owner/:repo', c => {
   const repo = c.req.param('repo');
   const source = `${owner}/${repo}`;
 
-  const repoSkills = skills.filter(s => s.source === source);
+  const repoSkills = getSkills().filter(s => s.source === source);
 
   if (repoSkills.length === 0) {
     return c.json({ error: `No skills found for source "${source}"` }, 404);
@@ -250,7 +252,7 @@ skillsRouter.get('/by-source/:owner/:repo', c => {
  */
 skillsRouter.get('/:skillId', c => {
   const skillId = c.req.param('skillId');
-  const skill = skills.find(s => s.skillId === skillId || s.name === skillId);
+  const skill = getSkills().find(s => s.skillId === skillId || s.name === skillId);
 
   if (!skill) {
     return c.json({ error: `Skill "${skillId}" not found` }, 404);
@@ -269,7 +271,7 @@ skillsRouter.get('/:owner/:repo/:skillId', c => {
   const skillId = c.req.param('skillId');
   const source = `${owner}/${repo}`;
 
-  const skill = skills.find(s => s.source === source && (s.skillId === skillId || s.name === skillId));
+  const skill = getSkills().find(s => s.source === source && (s.skillId === skillId || s.name === skillId));
 
   if (!skill) {
     return c.json({ error: `Skill "${skillId}" not found in source "${source}"` }, 404);

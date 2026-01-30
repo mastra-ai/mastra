@@ -14,7 +14,26 @@ export type {
   Source,
 } from './registry/types.js';
 
-export { skills, metadata, getSources, getOwners, getTopSkills, getTopSources } from './registry/data.js';
+export {
+  skills,
+  metadata,
+  getSources,
+  getOwners,
+  getTopSkills,
+  getTopSources,
+  getSkills,
+  getMetadata,
+  reloadData,
+} from './registry/data.js';
+
+// Storage exports
+export {
+  loadSkillsData,
+  saveSkillsData,
+  getDataFilePath,
+  isUsingExternalStorage,
+  getStorageInfo,
+} from './storage/index.js';
 export { supportedAgents, getAgent } from './registry/agents.js';
 export type { SupportedAgent } from './registry/agents.js';
 

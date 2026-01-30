@@ -1,49 +1,86 @@
 /**
  * Skills Registry Data
- * Loaded from scraped skills.sh data
+ * Loaded from scraped skills.sh data with support for dynamic reloading
  */
 
-import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { loadSkillsData } from '../storage/index.js';
 import type { RegistrySkill, ScrapedData, Source } from './types.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// Cache for skills data
+let cachedData: ScrapedData | null = null;
 
 /**
- * Load scraped skills data from JSON file
+ * Get the current scraped data, loading if necessary
  */
-function loadScrapedData(): ScrapedData {
-  const filePath = join(__dirname, 'scraped-skills.json');
-  const content = readFileSync(filePath, 'utf-8');
-  return JSON.parse(content) as ScrapedData;
+function getData(): ScrapedData {
+  if (!cachedData) {
+    cachedData = loadSkillsData();
+  }
+  return cachedData;
 }
 
-// Load data once at module initialization
-const scrapedData = loadScrapedData();
+/**
+ * Reload data from storage (called after refresh)
+ */
+export function reloadData(): void {
+  cachedData = loadSkillsData();
+}
 
 /**
  * All skills from the registry
  */
-export const skills: RegistrySkill[] = scrapedData.skills;
+export function getSkills(): RegistrySkill[] {
+  return getData().skills;
+}
+
+/**
+ * Legacy export for backwards compatibility
+ */
+export const skills: RegistrySkill[] = new Proxy([] as RegistrySkill[], {
+  get(_, prop) {
+    const data = getSkills();
+    if (prop === 'length') return data.length;
+    if (typeof prop === 'string' && !isNaN(Number(prop))) {
+      return data[Number(prop)];
+    }
+    if (prop === Symbol.iterator) {
+      return data[Symbol.iterator].bind(data);
+    }
+    // @ts-expect-error - dynamic property access
+    return typeof data[prop] === 'function' ? data[prop].bind(data) : data[prop];
+  },
+});
 
 /**
  * Metadata about when the data was scraped
  */
-export const metadata = {
-  scrapedAt: scrapedData.scrapedAt,
-  totalSkills: scrapedData.totalSkills,
-  totalSources: scrapedData.totalSources,
-  totalOwners: scrapedData.totalOwners,
-};
+export function getMetadata() {
+  const data = getData();
+  return {
+    scrapedAt: data.scrapedAt,
+    totalSkills: data.totalSkills,
+    totalSources: data.totalSources,
+    totalOwners: data.totalOwners,
+  };
+}
+
+/**
+ * Legacy export for backwards compatibility
+ */
+export const metadata = new Proxy({} as ReturnType<typeof getMetadata>, {
+  get(_, prop) {
+    return getMetadata()[prop as keyof ReturnType<typeof getMetadata>];
+  },
+});
 
 /**
  * Get all unique sources (repositories) with counts
  */
 export function getSources(): Source[] {
   const sourceMap = new Map<string, Source>();
+  const skillsData = getSkills();
 
-  for (const skill of skills) {
+  for (const skill of skillsData) {
     const existing = sourceMap.get(skill.source);
     if (existing) {
       existing.skillCount++;
@@ -67,8 +104,9 @@ export function getSources(): Source[] {
  */
 export function getOwners(): Array<{ owner: string; skillCount: number; totalInstalls: number }> {
   const ownerMap = new Map<string, { owner: string; skillCount: number; totalInstalls: number }>();
+  const skillsData = getSkills();
 
-  for (const skill of skills) {
+  for (const skill of skillsData) {
     const existing = ownerMap.get(skill.owner);
     if (existing) {
       existing.skillCount++;
@@ -89,7 +127,7 @@ export function getOwners(): Array<{ owner: string; skillCount: number; totalIns
  * Get top skills by installs
  */
 export function getTopSkills(limit = 100): RegistrySkill[] {
-  return [...skills].sort((a, b) => b.installs - a.installs).slice(0, limit);
+  return [...getSkills()].sort((a, b) => b.installs - a.installs).slice(0, limit);
 }
 
 /**

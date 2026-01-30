@@ -14,6 +14,7 @@ import {
   getLastRefreshResult,
   getCurrentDataTimestamp,
 } from '../scheduler/index.js';
+import { getStorageInfo } from '../storage/index.js';
 
 const adminRouter = new Hono();
 
@@ -27,6 +28,7 @@ adminRouter.get('/status', c => {
       running: isSchedulerRunning(),
       refreshing: isRefreshInProgress(),
     },
+    storage: getStorageInfo(),
     data: {
       lastUpdated: getCurrentDataTimestamp(),
       lastRefresh: getLastRefreshResult(),

@@ -3,14 +3,9 @@
  * Periodically scrapes skills.sh to keep the registry up to date
  */
 
-import { writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { scrapeSkills, enrichSkills, getUniqueSources, getUniqueOwners } from '../scraper/scrape.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = join(__dirname, '..', 'registry', 'scraped-skills.json');
+import { saveSkillsData, loadSkillsData, getStorageInfo } from '../storage/index.js';
+import { reloadData } from '../registry/data.js';
 
 export interface RefreshResult {
   success: boolean;
@@ -20,6 +15,7 @@ export interface RefreshResult {
   ownerCount?: number;
   error?: string;
   durationMs?: number;
+  storagePath?: string;
 }
 
 export interface RefreshSchedulerOptions {
@@ -51,6 +47,7 @@ export async function refreshSkillsData(): Promise<RefreshResult> {
 
   isRefreshing = true;
   const startTime = Date.now();
+  const storageInfo = getStorageInfo();
 
   try {
     console.info('[Scheduler] Starting skills refresh...');
@@ -66,7 +63,11 @@ export async function refreshSkillsData(): Promise<RefreshResult> {
       skills: enriched,
     };
 
-    writeFileSync(DATA_FILE, JSON.stringify(output, null, 2));
+    // Save to storage
+    saveSkillsData(output);
+
+    // Reload the in-memory cache
+    reloadData();
 
     const result: RefreshResult = {
       success: true,
@@ -75,6 +76,7 @@ export async function refreshSkillsData(): Promise<RefreshResult> {
       sourceCount: output.totalSources,
       ownerCount: output.totalOwners,
       durationMs: Date.now() - startTime,
+      storagePath: storageInfo.dataFile,
     };
 
     lastRefreshResult = result;
@@ -111,7 +113,9 @@ export function startRefreshScheduler(options: RefreshSchedulerOptions = {}): vo
     return;
   }
 
+  const storageInfo = getStorageInfo();
   console.info(`[Scheduler] Starting scheduler with ${intervalMs / 1000 / 60} minute interval`);
+  console.info(`[Scheduler] Data storage: ${storageInfo.dataFile} (external: ${storageInfo.isExternal})`);
 
   // Optionally refresh immediately
   if (refreshOnStart) {
@@ -171,10 +175,7 @@ export function getLastRefreshResult(): RefreshResult | null {
  */
 export function getCurrentDataTimestamp(): string | null {
   try {
-    if (!existsSync(DATA_FILE)) {
-      return null;
-    }
-    const data = JSON.parse(readFileSync(DATA_FILE, 'utf-8'));
+    const data = loadSkillsData();
     return data.scrapedAt || null;
   } catch {
     return null;
