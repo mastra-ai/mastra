@@ -83,6 +83,7 @@ export * from './ds/icons/index';
 export * from './domains/voice/hooks/use-speech-recognition';
 export * from './hooks';
 export * from './lib/tanstack-query';
+export * from './lib/query-utils';
 export * from './domains/memory/hooks';
 export * from './store/playground-store';
 export * from './lib/framework';
