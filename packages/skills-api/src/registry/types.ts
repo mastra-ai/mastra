@@ -4,54 +4,36 @@
  */
 
 /**
- * Skill metadata from the registry
+ * Skill data scraped from skills.sh
  */
 export interface RegistrySkill {
-  /** Unique skill identifier (matches directory name) */
+  /** Source repository (owner/repo) */
+  source: string;
+  /** Unique skill identifier within the repository */
+  skillId: string;
+  /** Skill name (directory name) */
   name: string;
+  /** Install count */
+  installs: number;
+  /** GitHub owner */
+  owner: string;
+  /** GitHub repo name */
+  repo: string;
+  /** Full GitHub URL */
+  githubUrl: string;
   /** Human-readable display name */
   displayName: string;
-  /** Description of what the skill does */
-  description: string;
-  /** Version following semver */
-  version: string;
-  /** Author or organization */
-  author: string;
-  /** License (e.g., "MIT", "Apache-2.0") */
-  license: string;
-  /** Repository URL */
-  repository?: string;
-  /** Homepage URL */
-  homepage?: string;
-  /** Tags for categorization */
-  tags: string[];
-  /** Category (e.g., "development", "writing", "data") */
-  category: string;
-  /** Download/install count */
-  downloads?: number;
-  /** Star/rating count */
-  stars?: number;
-  /** When the skill was created */
-  createdAt: string;
-  /** When the skill was last updated */
-  updatedAt: string;
-  /** NPM package name if published to npm */
-  npmPackage?: string;
-  /** GitHub repository path (owner/repo) */
-  githubRepo?: string;
-  /** Whether this is a featured skill */
-  featured?: boolean;
-  /** Compatibility information */
-  compatibility?: {
-    /** Minimum Mastra version */
-    mastraVersion?: string;
-    /** Required model capabilities */
-    models?: string[];
-    /** Required tools */
-    tools?: string[];
-  };
-  /** Preview/example of the skill instructions */
-  preview?: string;
+}
+
+/**
+ * Scraped data file structure
+ */
+export interface ScrapedData {
+  scrapedAt: string;
+  totalSkills: number;
+  totalSources: number;
+  totalOwners: number;
+  skills: RegistrySkill[];
 }
 
 /**
@@ -71,30 +53,32 @@ export interface PaginatedSkillsResponse {
 export interface SkillSearchParams {
   /** Search query string */
   query?: string;
-  /** Filter by category */
-  category?: string;
-  /** Filter by tags */
-  tags?: string[];
-  /** Filter by author */
-  author?: string;
+  /** Filter by owner */
+  owner?: string;
+  /** Filter by repository */
+  repo?: string;
   /** Sort field */
-  sortBy?: 'name' | 'downloads' | 'stars' | 'createdAt' | 'updatedAt';
+  sortBy?: 'name' | 'installs';
   /** Sort order */
   sortOrder?: 'asc' | 'desc';
   /** Page number (1-indexed) */
   page?: number;
   /** Items per page */
   pageSize?: number;
-  /** Only show featured skills */
-  featured?: boolean;
 }
 
 /**
- * Category with skill counts
+ * Source (repository) with skill counts
  */
-export interface Category {
-  name: string;
-  displayName: string;
-  description: string;
+export interface Source {
+  /** GitHub path (owner/repo) */
+  source: string;
+  /** GitHub owner */
+  owner: string;
+  /** Repository name */
+  repo: string;
+  /** Number of skills in this repo */
   skillCount: number;
+  /** Total installs across all skills */
+  totalInstalls: number;
 }

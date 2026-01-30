@@ -6,6 +6,16 @@
 export { createSkillsApiServer, skillsRouter } from './server.js';
 export type { SkillsApiServerOptions } from './server.js';
 
-export type { RegistrySkill, PaginatedSkillsResponse, SkillSearchParams, Category } from './registry/types.js';
+export type {
+  RegistrySkill,
+  ScrapedData,
+  PaginatedSkillsResponse,
+  SkillSearchParams,
+  Source,
+} from './registry/types.js';
 
-export { skills, categories, getAllTags, getAllAuthors } from './registry/data.js';
+export { skills, metadata, getSources, getOwners, getTopSkills, getTopSources } from './registry/data.js';
+
+// Scraper exports
+export { scrapeSkills, enrichSkills, scrapeAndSave } from './scraper/scrape.js';
+export type { ScrapedSkill, EnrichedSkill } from './scraper/scrape.js';

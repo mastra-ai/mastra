@@ -31,6 +31,7 @@
     "build:watch": "pnpm build:lib --watch",
     "dev": "tsx watch src/bin.ts",
     "start": "node dist/bin.js",
+    "scrape": "tsx src/scraper/scrape.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },

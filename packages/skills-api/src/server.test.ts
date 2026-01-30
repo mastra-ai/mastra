@@ -44,15 +44,22 @@ describe('Skills API Server', () => {
 
       const body = await res.json();
       expect(body.skills.length).toBeGreaterThan(0);
-      expect(body.skills.some((s: any) => s.name.includes('react') || s.tags.includes('react'))).toBe(true);
+      expect(
+        body.skills.some(
+          (s: any) =>
+            s.name.toLowerCase().includes('react') ||
+            s.displayName.toLowerCase().includes('react') ||
+            s.source.toLowerCase().includes('react'),
+        ),
+      ).toBe(true);
     });
 
-    it('supports category filter', async () => {
-      const res = await app.request('/api/skills?category=development');
+    it('supports owner filter', async () => {
+      const res = await app.request('/api/skills?owner=vercel-labs');
       expect(res.status).toBe(200);
 
       const body = await res.json();
-      expect(body.skills.every((s: any) => s.category === 'development')).toBe(true);
+      expect(body.skills.every((s: any) => s.owner === 'vercel-labs')).toBe(true);
     });
 
     it('supports pagination', async () => {
@@ -63,48 +70,48 @@ describe('Skills API Server', () => {
       expect(body.skills.length).toBeLessThanOrEqual(5);
       expect(body.pageSize).toBe(5);
     });
-
-    it('supports featured filter', async () => {
-      const res = await app.request('/api/skills?featured=true');
-      expect(res.status).toBe(200);
-
-      const body = await res.json();
-      expect(body.skills.every((s: any) => s.featured === true)).toBe(true);
-    });
   });
 
-  describe('GET /api/skills/featured', () => {
-    it('returns featured skills', async () => {
-      const res = await app.request('/api/skills/featured');
+  describe('GET /api/skills/top', () => {
+    it('returns top skills by installs', async () => {
+      const res = await app.request('/api/skills/top');
       expect(res.status).toBe(200);
 
       const body = await res.json();
       expect(body.skills).toBeInstanceOf(Array);
-      expect(body.skills.every((s: any) => s.featured === true)).toBe(true);
+      expect(body.skills.length).toBeGreaterThan(0);
+
+      // Should be sorted by installs descending
+      for (let i = 1; i < body.skills.length; i++) {
+        expect(body.skills[i - 1].installs).toBeGreaterThanOrEqual(body.skills[i].installs);
+      }
     });
   });
 
-  describe('GET /api/skills/categories', () => {
-    it('returns categories', async () => {
-      const res = await app.request('/api/skills/categories');
+  describe('GET /api/skills/sources', () => {
+    it('returns sources with counts', async () => {
+      const res = await app.request('/api/skills/sources');
       expect(res.status).toBe(200);
 
       const body = await res.json();
-      expect(body.categories).toBeInstanceOf(Array);
-      expect(body.categories.length).toBeGreaterThan(0);
-      expect(body.categories[0]).toHaveProperty('name');
-      expect(body.categories[0]).toHaveProperty('displayName');
+      expect(body.sources).toBeInstanceOf(Array);
+      expect(body.sources.length).toBeGreaterThan(0);
+      expect(body.sources[0]).toHaveProperty('source');
+      expect(body.sources[0]).toHaveProperty('skillCount');
+      expect(body.sources[0]).toHaveProperty('totalInstalls');
     });
   });
 
-  describe('GET /api/skills/tags', () => {
-    it('returns tags', async () => {
-      const res = await app.request('/api/skills/tags');
+  describe('GET /api/skills/owners', () => {
+    it('returns owners with counts', async () => {
+      const res = await app.request('/api/skills/owners');
       expect(res.status).toBe(200);
 
       const body = await res.json();
-      expect(body.tags).toBeInstanceOf(Array);
-      expect(body.tags.length).toBeGreaterThan(0);
+      expect(body.owners).toBeInstanceOf(Array);
+      expect(body.owners.length).toBeGreaterThan(0);
+      expect(body.owners[0]).toHaveProperty('owner');
+      expect(body.owners[0]).toHaveProperty('skillCount');
     });
   });
 
@@ -115,37 +122,57 @@ describe('Skills API Server', () => {
 
       const body = await res.json();
       expect(body.totalSkills).toBeGreaterThan(0);
-      expect(body.totalDownloads).toBeGreaterThan(0);
-      expect(body.totalCategories).toBeGreaterThan(0);
+      expect(body.totalSources).toBeGreaterThan(0);
+      expect(body.totalOwners).toBeGreaterThan(0);
+      expect(body.totalInstalls).toBeGreaterThan(0);
+      expect(body.scrapedAt).toBeDefined();
     });
   });
 
-  describe('GET /api/skills/:name', () => {
-    it('returns skill details', async () => {
-      const res = await app.request('/api/skills/code-review');
+  describe('GET /api/skills/by-source/:owner/:repo', () => {
+    it('returns skills from a specific source', async () => {
+      const res = await app.request('/api/skills/by-source/vercel-labs/agent-skills');
       expect(res.status).toBe(200);
 
       const body = await res.json();
-      expect(body.name).toBe('code-review');
-      expect(body.description).toBeDefined();
-      expect(body.version).toBeDefined();
+      expect(body.source).toBe('vercel-labs/agent-skills');
+      expect(body.skills).toBeInstanceOf(Array);
+      expect(body.skills.length).toBeGreaterThan(0);
+      expect(body.skills.every((s: any) => s.source === 'vercel-labs/agent-skills')).toBe(true);
     });
 
-    it('returns 404 for unknown skill', async () => {
-      const res = await app.request('/api/skills/unknown-skill-xyz');
+    it('returns 404 for unknown source', async () => {
+      const res = await app.request('/api/skills/by-source/unknown-owner/unknown-repo-xyz');
       expect(res.status).toBe(404);
     });
   });
 
-  describe('GET /api/skills/:name/install', () => {
-    it('returns installation instructions', async () => {
-      const res = await app.request('/api/skills/code-review/install');
+  describe('GET /api/skills/:skillId', () => {
+    it('returns skill details', async () => {
+      const res = await app.request('/api/skills/vercel-react-best-practices');
       expect(res.status).toBe(200);
 
       const body = await res.json();
-      expect(body.skill).toBeDefined();
-      expect(body.instructions).toBeDefined();
-      expect(body.instructions.npm).toBeDefined();
+      expect(body.name).toBe('vercel-react-best-practices');
+      expect(body.source).toBeDefined();
+      expect(body.installs).toBeDefined();
+    });
+
+    it('returns 404 for unknown skill', async () => {
+      const res = await app.request('/api/skills/unknown-skill-xyz-123');
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('GET /api/skills/:owner/:repo/:skillId', () => {
+    it('returns specific skill with install command', async () => {
+      const res = await app.request('/api/skills/vercel-labs/agent-skills/vercel-react-best-practices');
+      expect(res.status).toBe(200);
+
+      const body = await res.json();
+      expect(body.source).toBe('vercel-labs/agent-skills');
+      expect(body.skillId).toBe('vercel-react-best-practices');
+      expect(body.installCommand).toContain('npx skills add');
     });
   });
 

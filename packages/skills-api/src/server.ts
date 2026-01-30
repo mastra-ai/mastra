@@ -74,14 +74,15 @@ export function createSkillsApiServer(options: SkillsApiServerOptions = {}): Hon
       name: 'Skills.sh API',
       description: 'API for the Agent Skills marketplace',
       version: '0.0.1',
-      documentation: 'https://skills.sh/docs/api',
+      specification: 'https://agentskills.io',
       endpoints: {
         skills: `${prefix}/skills`,
-        categories: `${prefix}/skills/categories`,
-        tags: `${prefix}/skills/tags`,
-        authors: `${prefix}/skills/authors`,
+        top: `${prefix}/skills/top`,
+        sources: `${prefix}/skills/sources`,
+        owners: `${prefix}/skills/owners`,
         stats: `${prefix}/skills/stats`,
-        featured: `${prefix}/skills/featured`,
+        bySource: `${prefix}/skills/by-source/:owner/:repo`,
+        skill: `${prefix}/skills/:owner/:repo/:skillId`,
       },
     });
   });

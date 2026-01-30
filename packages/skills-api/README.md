@@ -6,11 +6,12 @@ This package provides a standalone HTTP API for browsing, searching, and discove
 
 ## Features
 
+- **34,000+ skills** scraped from the skills.sh registry
 - List and search skills with pagination
-- Filter by category, tags, and author
-- Get detailed skill information
-- Installation instructions
+- Filter by owner and repository
+- Get skills by source repository
 - Statistics and metadata
+- Built-in scraper to update the registry
 
 ## Quick Start
 
@@ -24,10 +25,20 @@ pnpm install
 pnpm dev
 
 # Production mode
-pnpm build && pnpm start
+pnpm build:lib && pnpm start
 ```
 
 The server runs on `http://localhost:3456` by default.
+
+### Updating the Skills Data
+
+The skills data is scraped from skills.sh. To update:
+
+```bash
+pnpm scrape
+```
+
+This will fetch the latest skills and save them to `src/registry/scraped-skills.json`.
 
 ### Environment Variables
 
@@ -55,7 +66,7 @@ GET /
 
 Returns API information and available endpoints.
 
-### Skills
+### List Skills
 
 ```
 GET /api/skills
@@ -65,69 +76,94 @@ List and search skills with pagination.
 
 **Query Parameters:**
 
-| Parameter   | Type    | Description                                                        |
-| ----------- | ------- | ------------------------------------------------------------------ |
-| `query`     | string  | Search text                                                        |
-| `category`  | string  | Filter by category                                                 |
-| `tags`      | string  | Comma-separated tags                                               |
-| `author`    | string  | Filter by author                                                   |
-| `sortBy`    | string  | Sort field: `name`, `downloads`, `stars`, `createdAt`, `updatedAt` |
-| `sortOrder` | string  | Sort order: `asc`, `desc`                                          |
-| `page`      | number  | Page number (1-indexed)                                            |
-| `pageSize`  | number  | Items per page (default: 20, max: 100)                             |
-| `featured`  | boolean | Only featured skills                                               |
+| Parameter   | Type   | Description                              |
+| ----------- | ------ | ---------------------------------------- |
+| `query`     | string | Search text (name, displayName, source)  |
+| `owner`     | string | Filter by GitHub owner                   |
+| `repo`      | string | Filter by repository (owner/repo format) |
+| `sortBy`    | string | Sort field: `name`, `installs`           |
+| `sortOrder` | string | Sort order: `asc`, `desc`                |
+| `page`      | number | Page number (1-indexed)                  |
+| `pageSize`  | number | Items per page (default: 20, max: 100)   |
 
 **Response:**
 
 ```json
 {
-  "skills": [...],
-  "total": 12,
+  "skills": [
+    {
+      "source": "vercel-labs/agent-skills",
+      "skillId": "vercel-react-best-practices",
+      "name": "vercel-react-best-practices",
+      "installs": 69954,
+      "owner": "vercel-labs",
+      "repo": "agent-skills",
+      "githubUrl": "https://github.com/vercel-labs/agent-skills",
+      "displayName": "Vercel React Best Practices"
+    }
+  ],
+  "total": 34311,
   "page": 1,
   "pageSize": 20,
-  "totalPages": 1
+  "totalPages": 1716
 }
 ```
 
-### Get Skill
+### Top Skills
 
 ```
-GET /api/skills/:name
+GET /api/skills/top?limit=100
 ```
 
-Get detailed information about a specific skill.
+Get top skills by installs.
 
-### Featured Skills
-
-```
-GET /api/skills/featured
-```
-
-Get all featured skills.
-
-### Categories
+### Get Skill by ID
 
 ```
-GET /api/skills/categories
+GET /api/skills/:skillId
 ```
 
-Get all categories with skill counts.
+Get a skill by its ID. Note: skill IDs may not be unique across sources.
 
-### Tags
-
-```
-GET /api/skills/tags
-```
-
-Get all available tags.
-
-### Authors
+### Get Skill by Source
 
 ```
-GET /api/skills/authors
+GET /api/skills/:owner/:repo/:skillId
 ```
 
-Get all skill authors.
+Get a specific skill from a specific repository. Includes install command.
+
+### Skills by Repository
+
+```
+GET /api/skills/by-source/:owner/:repo
+```
+
+Get all skills from a specific GitHub repository.
+
+### Sources (Repositories)
+
+```
+GET /api/skills/sources
+```
+
+Get all source repositories with skill counts, sorted by total installs.
+
+### Top Sources
+
+```
+GET /api/skills/sources/top?limit=50
+```
+
+Get top repositories by total installs.
+
+### Owners
+
+```
+GET /api/skills/owners
+```
+
+Get all skill owners with counts.
 
 ### Statistics
 
@@ -135,15 +171,17 @@ Get all skill authors.
 GET /api/skills/stats
 ```
 
-Get registry statistics (total skills, downloads, stars, etc.).
+Get registry statistics.
 
-### Installation Instructions
-
+```json
+{
+  "scrapedAt": "2026-01-30T04:51:07.907Z",
+  "totalSkills": 34311,
+  "totalSources": 2843,
+  "totalOwners": 2451,
+  "totalInstalls": 123456789
+}
 ```
-GET /api/skills/:name/install
-```
-
-Get installation instructions for a specific skill.
 
 ## Usage as a Library
 
@@ -166,16 +204,30 @@ export default app;
 ### Accessing Registry Data
 
 ```typescript
-import { skills, categories, getAllTags, getAllAuthors } from '@mastra/skills-api';
+import { skills, metadata, getSources, getOwners } from '@mastra/skills-api';
 
 // Get all skills
-console.log(skills);
+console.log(`Total skills: ${skills.length}`);
 
-// Get all categories
-console.log(categories);
+// Get metadata
+console.log(`Scraped at: ${metadata.scrapedAt}`);
 
-// Get all tags
-console.log(getAllTags());
+// Get sources
+const sources = getSources();
+console.log(`Top source: ${sources[0].source}`);
+```
+
+### Using the Scraper
+
+```typescript
+import { scrapeSkills, enrichSkills, scrapeAndSave } from '@mastra/skills-api';
+
+// Scrape and save to default location
+await scrapeAndSave();
+
+// Or scrape and process manually
+const skills = await scrapeSkills();
+const enriched = enrichSkills(skills);
 ```
 
 ## Development
@@ -189,6 +241,9 @@ pnpm lint
 
 # Build
 pnpm build:lib
+
+# Update skills data
+pnpm scrape
 ```
 
 ## License

@@ -1,2 +1,2 @@
-export type { RegistrySkill, PaginatedSkillsResponse, SkillSearchParams, Category } from './types.js';
-export { skills, categories, getAllTags, getAllAuthors } from './data.js';
+export type { RegistrySkill, ScrapedData, PaginatedSkillsResponse, SkillSearchParams, Source } from './types.js';
+export { skills, metadata, getSources, getOwners, getTopSkills, getTopSources } from './data.js';

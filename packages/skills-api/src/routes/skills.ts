@@ -4,7 +4,7 @@
  */
 
 import { Hono } from 'hono';
-import { skills, categories, getAllTags, getAllAuthors } from '../registry/index.js';
+import { skills, metadata, getSources, getOwners, getTopSkills, getTopSources } from '../registry/index.js';
 import type { PaginatedSkillsResponse, SkillSearchParams } from '../registry/types.js';
 
 const skillsRouter = new Hono();
@@ -15,40 +15,30 @@ const skillsRouter = new Hono();
 function searchSkills(params: SkillSearchParams): PaginatedSkillsResponse {
   let filtered = [...skills];
 
-  // Text search across name, description, and tags
+  // Text search across name, displayName, source
   if (params.query) {
     const query = params.query.toLowerCase();
     filtered = filtered.filter(
       skill =>
         skill.name.toLowerCase().includes(query) ||
         skill.displayName.toLowerCase().includes(query) ||
-        skill.description.toLowerCase().includes(query) ||
-        skill.tags.some(tag => tag.toLowerCase().includes(query)),
+        skill.source.toLowerCase().includes(query) ||
+        skill.skillId.toLowerCase().includes(query),
     );
   }
 
-  // Filter by category
-  if (params.category) {
-    filtered = filtered.filter(skill => skill.category === params.category);
+  // Filter by owner
+  if (params.owner) {
+    filtered = filtered.filter(skill => skill.owner === params.owner);
   }
 
-  // Filter by tags
-  if (params.tags && params.tags.length > 0) {
-    filtered = filtered.filter(skill => params.tags!.some(tag => skill.tags.includes(tag)));
-  }
-
-  // Filter by author
-  if (params.author) {
-    filtered = filtered.filter(skill => skill.author === params.author);
-  }
-
-  // Filter by featured
-  if (params.featured) {
-    filtered = filtered.filter(skill => skill.featured === true);
+  // Filter by repo
+  if (params.repo) {
+    filtered = filtered.filter(skill => skill.source === params.repo);
   }
 
   // Sort
-  const sortBy = params.sortBy || 'downloads';
+  const sortBy = params.sortBy || 'installs';
   const sortOrder = params.sortOrder || 'desc';
 
   filtered.sort((a, b) => {
@@ -58,20 +48,11 @@ function searchSkills(params: SkillSearchParams): PaginatedSkillsResponse {
       case 'name':
         comparison = a.name.localeCompare(b.name);
         break;
-      case 'downloads':
-        comparison = (a.downloads || 0) - (b.downloads || 0);
-        break;
-      case 'stars':
-        comparison = (a.stars || 0) - (b.stars || 0);
-        break;
-      case 'createdAt':
-        comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        break;
-      case 'updatedAt':
-        comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+      case 'installs':
+        comparison = a.installs - b.installs;
         break;
       default:
-        comparison = (a.downloads || 0) - (b.downloads || 0);
+        comparison = a.installs - b.installs;
     }
 
     return sortOrder === 'desc' ? -comparison : comparison;
@@ -100,87 +81,104 @@ function searchSkills(params: SkillSearchParams): PaginatedSkillsResponse {
  *
  * Query Parameters:
  * - query: Search text
- * - category: Filter by category
- * - tags: Filter by tags (comma-separated)
- * - author: Filter by author
- * - sortBy: Sort field (name, downloads, stars, createdAt, updatedAt)
+ * - owner: Filter by GitHub owner
+ * - repo: Filter by repository (owner/repo format)
+ * - sortBy: Sort field (name, installs)
  * - sortOrder: Sort order (asc, desc)
  * - page: Page number (1-indexed)
  * - pageSize: Items per page (default: 20, max: 100)
- * - featured: Only show featured skills (true/false)
  */
 skillsRouter.get('/', c => {
   const query = c.req.query('query');
-  const category = c.req.query('category');
-  const tagsParam = c.req.query('tags');
-  const author = c.req.query('author');
+  const owner = c.req.query('owner');
+  const repo = c.req.query('repo');
   const sortBy = c.req.query('sortBy') as SkillSearchParams['sortBy'];
   const sortOrder = c.req.query('sortOrder') as SkillSearchParams['sortOrder'];
   const page = parseInt(c.req.query('page') || '1', 10);
   const pageSize = parseInt(c.req.query('pageSize') || '20', 10);
-  const featured = c.req.query('featured') === 'true';
-
-  const tags = tagsParam ? tagsParam.split(',').map(t => t.trim()) : undefined;
 
   const result = searchSkills({
     query,
-    category,
-    tags,
-    author,
+    owner,
+    repo,
     sortBy,
     sortOrder,
     page,
     pageSize,
-    featured: featured || undefined,
   });
 
   return c.json(result);
 });
 
 /**
- * GET /api/skills/featured
- * Get featured skills
+ * GET /api/skills/top
+ * Get top skills by installs
  */
-skillsRouter.get('/featured', c => {
-  const featuredSkills = skills.filter(s => s.featured === true);
+skillsRouter.get('/top', c => {
+  const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '100', 10)));
+  const topSkills = getTopSkills(limit);
   return c.json({
-    skills: featuredSkills,
-    total: featuredSkills.length,
+    skills: topSkills,
+    total: topSkills.length,
   });
 });
 
 /**
- * GET /api/skills/categories
- * Get all categories with skill counts
+ * GET /api/skills/sources
+ * Get all source repositories with skill counts
  */
-skillsRouter.get('/categories', c => {
+skillsRouter.get('/sources', c => {
+  const sources = getSources();
+  const page = Math.max(1, parseInt(c.req.query('page') || '1', 10));
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query('pageSize') || '50', 10)));
+
+  const total = sources.length;
+  const totalPages = Math.ceil(total / pageSize);
+  const startIndex = (page - 1) * pageSize;
+  const paginatedSources = sources.slice(startIndex, startIndex + pageSize);
+
   return c.json({
-    categories,
-    total: categories.length,
+    sources: paginatedSources,
+    total,
+    page,
+    pageSize,
+    totalPages,
   });
 });
 
 /**
- * GET /api/skills/tags
- * Get all available tags
+ * GET /api/skills/sources/top
+ * Get top sources by total installs
  */
-skillsRouter.get('/tags', c => {
-  const tags = getAllTags();
+skillsRouter.get('/sources/top', c => {
+  const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '50', 10)));
+  const topSources = getTopSources(limit);
   return c.json({
-    tags,
-    total: tags.length,
+    sources: topSources,
+    total: topSources.length,
   });
 });
 
 /**
- * GET /api/skills/authors
- * Get all skill authors
+ * GET /api/skills/owners
+ * Get all skill owners with counts
  */
-skillsRouter.get('/authors', c => {
-  const authors = getAllAuthors();
+skillsRouter.get('/owners', c => {
+  const owners = getOwners();
+  const page = Math.max(1, parseInt(c.req.query('page') || '1', 10));
+  const pageSize = Math.min(100, Math.max(1, parseInt(c.req.query('pageSize') || '50', 10)));
+
+  const total = owners.length;
+  const totalPages = Math.ceil(total / pageSize);
+  const startIndex = (page - 1) * pageSize;
+  const paginatedOwners = owners.slice(startIndex, startIndex + pageSize);
+
   return c.json({
-    authors,
-    total: authors.length,
+    owners: paginatedOwners,
+    total,
+    page,
+    pageSize,
+    totalPages,
   });
 });
 
@@ -189,82 +187,79 @@ skillsRouter.get('/authors', c => {
  * Get registry statistics
  */
 skillsRouter.get('/stats', c => {
-  const totalDownloads = skills.reduce((sum, s) => sum + (s.downloads || 0), 0);
-  const totalStars = skills.reduce((sum, s) => sum + (s.stars || 0), 0);
+  const totalInstalls = skills.reduce((sum, s) => sum + s.installs, 0);
 
   return c.json({
-    totalSkills: skills.length,
-    totalDownloads,
-    totalStars,
-    totalCategories: categories.length,
-    totalTags: getAllTags().length,
-    totalAuthors: getAllAuthors().length,
+    scrapedAt: metadata.scrapedAt,
+    totalSkills: metadata.totalSkills,
+    totalSources: metadata.totalSources,
+    totalOwners: metadata.totalOwners,
+    totalInstalls,
   });
 });
 
 /**
- * GET /api/skills/:name
- * Get a specific skill by name
+ * GET /api/skills/by-source/:owner/:repo
+ * Get all skills from a specific repository
  */
-skillsRouter.get('/:name', c => {
-  const name = c.req.param('name');
-  const skill = skills.find(s => s.name === name);
+skillsRouter.get('/by-source/:owner/:repo', c => {
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  const source = `${owner}/${repo}`;
+
+  const repoSkills = skills.filter(s => s.source === source);
+
+  if (repoSkills.length === 0) {
+    return c.json({ error: `No skills found for source "${source}"` }, 404);
+  }
+
+  return c.json({
+    source,
+    githubUrl: `https://github.com/${source}`,
+    skills: repoSkills.sort((a, b) => b.installs - a.installs),
+    total: repoSkills.length,
+    totalInstalls: repoSkills.reduce((sum, s) => sum + s.installs, 0),
+  });
+});
+
+/**
+ * GET /api/skills/:skillId
+ * Get a specific skill by ID
+ * Note: skillId may not be unique across sources, returns first match
+ */
+skillsRouter.get('/:skillId', c => {
+  const skillId = c.req.param('skillId');
+  const skill = skills.find(s => s.skillId === skillId || s.name === skillId);
 
   if (!skill) {
-    return c.json({ error: `Skill "${name}" not found` }, 404);
+    return c.json({ error: `Skill "${skillId}" not found` }, 404);
   }
 
   return c.json(skill);
 });
 
 /**
- * GET /api/skills/:name/install
- * Get installation instructions for a skill
+ * GET /api/skills/:owner/:repo/:skillId
+ * Get a specific skill by source and ID
  */
-skillsRouter.get('/:name/install', c => {
-  const name = c.req.param('name');
-  const skill = skills.find(s => s.name === name);
+skillsRouter.get('/:owner/:repo/:skillId', c => {
+  const owner = c.req.param('owner');
+  const repo = c.req.param('repo');
+  const skillId = c.req.param('skillId');
+  const source = `${owner}/${repo}`;
+
+  const skill = skills.find(s => s.source === source && (s.skillId === skillId || s.name === skillId));
 
   if (!skill) {
-    return c.json({ error: `Skill "${name}" not found` }, 404);
+    return c.json({ error: `Skill "${skillId}" not found in source "${source}"` }, 404);
   }
 
-  const instructions: {
-    npm?: string;
-    github?: string;
-    manual?: string;
-  } = {};
-
-  if (skill.npmPackage) {
-    instructions.npm = `npm install ${skill.npmPackage}`;
-  }
-
-  if (skill.githubRepo) {
-    instructions.github = `git clone https://github.com/${skill.githubRepo}.git`;
-  }
-
-  instructions.manual = `
-# Manual Installation
-
-1. Create a skills directory in your project:
-   mkdir -p .mastra/skills/${skill.name}
-
-2. Create SKILL.md with the skill definition:
-   # See https://agentskills.io for the full specification
-
-3. Configure in your Mastra workspace:
-   const workspace = new Workspace({
-     skills: ['.mastra/skills'],
-   });
-`.trim();
+  // Include install command
+  const installCommand = `npx skills add ${source}/${skillId}`;
 
   return c.json({
-    skill: {
-      name: skill.name,
-      displayName: skill.displayName,
-      version: skill.version,
-    },
-    instructions,
+    ...skill,
+    installCommand,
   });
 });
 
