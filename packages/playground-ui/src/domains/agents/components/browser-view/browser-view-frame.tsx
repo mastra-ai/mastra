@@ -17,7 +17,9 @@ interface BrowserViewFrameProps {
  */
 export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChange }: BrowserViewFrameProps) {
   const imgRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [hasFrame, setHasFrame] = useState(false);
+  const [isInteractive, setIsInteractive] = useState(false);
 
   // Memoize onFrame to avoid recreation
   const handleFrame = useCallback((data: string) => {
@@ -35,6 +37,16 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
     enabled: true,
     onFrame: handleFrame,
   });
+
+  const exitInteractive = useCallback(() => {
+    setIsInteractive(false);
+  }, []);
+
+  const handleFrameClick = useCallback(() => {
+    if (status === 'streaming') {
+      setIsInteractive(true);
+    }
+  }, [status]);
 
   useMouseInteraction({
     imgRef,
@@ -58,20 +70,58 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
     connect();
   }, [connect]);
 
+  // Exit interactive mode on click-outside or window blur
+  useEffect(() => {
+    if (!isInteractive) return;
+
+    function handleDocumentMouseDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsInteractive(false);
+      }
+    }
+
+    function handleWindowBlur() {
+      setIsInteractive(false);
+    }
+
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [isInteractive]);
+
+  // Reset interactive mode when status changes away from streaming
+  useEffect(() => {
+    if (status !== 'streaming') {
+      setIsInteractive(false);
+    }
+  }, [status]);
+
   const isLoading = (status === 'connecting' || status === 'browser_starting' || status === 'streaming') && !hasFrame;
   const isReconnecting = status === 'disconnected' && hasFrame;
   const hasError = status === 'error';
 
   return (
-    <div className={cn('relative w-full aspect-video bg-surface2 rounded-md overflow-hidden', className)}>
+    <div
+      ref={containerRef}
+      className={cn(
+        'relative w-full aspect-video bg-surface2 rounded-md overflow-hidden',
+        isInteractive && 'ring-2 ring-accent1',
+        className,
+      )}
+    >
       {/* Image element - always rendered, hidden via opacity until first frame loads */}
       <img
         ref={imgRef}
         alt="Browser screencast"
+        onClick={handleFrameClick}
         className={cn(
           'absolute inset-0 w-full h-full object-contain',
           hasFrame ? 'opacity-100' : 'opacity-0',
-          status === 'streaming' && 'cursor-pointer',
+          status === 'streaming' && (isInteractive ? 'cursor-text' : 'cursor-pointer'),
         )}
       />
 
