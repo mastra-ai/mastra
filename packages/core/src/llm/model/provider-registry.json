@@ -1488,7 +1488,8 @@
         "kimi-k2.5-free",
         "minimax-m2.1",
         "minimax-m2.1-free",
-        "qwen3-coder"
+        "qwen3-coder",
+        "trinity-large-preview-free"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
@@ -3851,7 +3852,8 @@
       "kimi-k2.5-free",
       "minimax-m2.1",
       "minimax-m2.1-free",
-      "qwen3-coder"
+      "qwen3-coder",
+      "trinity-large-preview-free"
     ],
     "fastrouter": [
       "anthropic/claude-opus-4.1",

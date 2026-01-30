@@ -1218,6 +1218,7 @@ export type ProviderModelsMap = {
     'minimax-m2.1',
     'minimax-m2.1-free',
     'qwen3-coder',
+    'trinity-large-preview-free',
   ];
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',
