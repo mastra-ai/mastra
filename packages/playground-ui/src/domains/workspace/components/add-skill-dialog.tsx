@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Search, Download, ExternalLink, Loader2, Package, AlertCircle, Wand2, Github } from 'lucide-react';
+import { Search, Download, ExternalLink, Loader2, Package, Wand2, Github } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,6 @@ import {
 import { Button } from '@/ds/components/Button';
 import { Input } from '@/ds/components/Input';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { cn } from '@/lib/utils';
 import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
 import type { SkillsShSkill } from '../types';
@@ -34,19 +33,25 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
   // Search mutation (via server proxy)
   const searchMutation = useSearchSkillsSh(workspaceId);
 
-  // Parse selected skill source for preview
+  // Parse selected skill source for install and preview URL
   const parsedSource = useMemo(() => {
     if (!selectedSkill?.topSource) return null;
     return parseSkillSource(selectedSkill.topSource, selectedSkill.name);
   }, [selectedSkill]);
 
-  // Fetch skill preview (via server proxy)
+  // Build skills.sh preview URL
+  const skillsShUrl = useMemo(() => {
+    if (!parsedSource || !selectedSkill) return null;
+    return `https://skills.sh/${parsedSource.owner}/${parsedSource.repo}/${selectedSkill.name}`;
+  }, [parsedSource, selectedSkill]);
+
+  // Fetch skill preview HTML (via server proxy to skills.sh)
   const { data: previewContent, isLoading: isLoadingPreview } = useSkillPreview(
     workspaceId,
     parsedSource?.owner,
     parsedSource?.repo,
-    parsedSource?.skillPath,
-    { enabled: !!parsedSource },
+    selectedSkill?.name,
+    { enabled: !!parsedSource && !!selectedSkill },
   );
 
   // Handle search with debounce
@@ -209,15 +214,25 @@ export function AddSkillDialog({ open, onOpenChange, workspaceId, onInstall, isI
                       </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
-                        <div className="p-4">
-                          <MarkdownRenderer>{previewContent}</MarkdownRenderer>
-                        </div>
+                        <div
+                          className="p-4 prose prose-sm prose-invert max-w-none"
+                          dangerouslySetInnerHTML={{ __html: previewContent }}
+                        />
                       </ScrollArea>
                     ) : (
                       <div className="flex-1 flex flex-col items-center justify-center text-icon4">
-                        <AlertCircle className="h-8 w-8 mb-2" />
+                        <Package className="h-8 w-8 mb-2" />
                         <p className="text-sm">Preview unavailable</p>
-                        <p className="text-xs mt-1">SKILL.md not found in repository</p>
+                        {skillsShUrl && (
+                          <a
+                            href={skillsShUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs mt-2 text-accent1 hover:underline flex items-center gap-1"
+                          >
+                            View on skills.sh <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
                       </div>
                     )}
                   </>

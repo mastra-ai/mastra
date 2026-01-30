@@ -33,12 +33,10 @@ export {
   useSkillPreview,
   useSandboxExecute,
   useInstallSkill,
-  useCheckSkillUpdates,
   useUpdateSkills,
   useRemoveSkill,
   parseSkillSource,
   type InstallSkillParams,
-  type CheckUpdatesParams,
   type UpdateSkillsParams,
   type RemoveSkillParams,
 } from './use-skills-sh';

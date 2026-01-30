@@ -133,6 +133,8 @@ export interface SkillMetadata {
   license?: string;
   compatibility?: unknown;
   metadata?: Record<string, unknown>;
+  /** True if skill was downloaded from skills.sh (lives in .agents/skills/) */
+  isDownloaded?: boolean;
 }
 
 export interface Skill extends SkillMetadata {
@@ -265,21 +267,6 @@ export interface SkillsShRemoveResponse {
   success: boolean;
   skillName: string;
   removedPath: string;
-}
-
-// =============================================================================
-// skills.sh Check Updates Types
-// =============================================================================
-
-export interface SkillUpdateStatus {
-  skillName: string;
-  currentVersion?: string;
-  hasUpdate: boolean;
-  latestCommit?: string;
-}
-
-export interface SkillsShCheckUpdatesResponse {
-  skills: SkillUpdateStatus[];
 }
 
 // =============================================================================

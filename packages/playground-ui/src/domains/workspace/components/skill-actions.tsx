@@ -1,56 +1,21 @@
-import { RefreshCw, Trash2, Loader2 } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
+import { Trash2, Loader2, Download } from 'lucide-react';
 import { IconButton } from '@/ds/components/IconButton';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 
-export interface SkillActionsHeaderProps {
-  onCheckUpdates?: () => void;
-  onUpdateAll?: () => void;
-  isCheckingUpdates?: boolean;
+export interface SkillUpdateButtonProps {
+  skillName: string;
+  onUpdate: () => void;
   isUpdating?: boolean;
 }
 
 /**
- * Header actions for the skills table (Check Updates, Update All)
+ * Update button for a single skill
  */
-export function SkillActionsHeader({
-  onCheckUpdates,
-  onUpdateAll,
-  isCheckingUpdates,
-  isUpdating,
-}: SkillActionsHeaderProps) {
+export function SkillUpdateButton({ skillName, onUpdate, isUpdating }: SkillUpdateButtonProps) {
   return (
-    <div className="flex items-center gap-2">
-      {onCheckUpdates && (
-        <Button variant="light" size="sm" onClick={onCheckUpdates} disabled={isCheckingUpdates || isUpdating}>
-          {isCheckingUpdates ? (
-            <Icon>
-              <Loader2 className="h-4 w-4 animate-spin" />
-            </Icon>
-          ) : (
-            <Icon>
-              <RefreshCw className="h-4 w-4" />
-            </Icon>
-          )}
-          Check Updates
-        </Button>
-      )}
-      {onUpdateAll && (
-        <Button variant="light" size="sm" onClick={onUpdateAll} disabled={isUpdating || isCheckingUpdates}>
-          {isUpdating ? (
-            <Icon>
-              <Loader2 className="h-4 w-4 animate-spin" />
-            </Icon>
-          ) : (
-            <Icon>
-              <RefreshCw className="h-4 w-4" />
-            </Icon>
-          )}
-          Update All
-        </Button>
-      )}
-    </div>
+    <IconButton variant="light" size="sm" disabled={isUpdating} tooltip={`Update ${skillName}`} onClick={onUpdate}>
+      {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+    </IconButton>
   );
 }
 

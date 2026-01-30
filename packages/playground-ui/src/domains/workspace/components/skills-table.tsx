@@ -2,9 +2,9 @@ import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { EntryList } from '@/ds/components/EntryList';
 import { useLinkComponent } from '@/lib/framework';
-import { Wand2, BookOpen, Package, Home, Server, Plus } from 'lucide-react';
-import type { SkillMetadata, SkillSource } from '../types';
-import { SkillActionsHeader, SkillRemoveButton } from './skill-actions';
+import { Wand2, BookOpen, Plus } from 'lucide-react';
+import type { SkillMetadata } from '../types';
+import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
 
 export interface SkillsTableProps {
   skills: SkillMetadata[];
@@ -14,16 +14,12 @@ export interface SkillsTableProps {
   basePath?: string;
   /** Callback when "Add Skill" is clicked (only shown if provided) */
   onAddSkill?: () => void;
-  /** Callback when "Check Updates" is clicked (only shown if provided) */
-  onCheckUpdates?: () => void;
-  /** Callback when "Update All" is clicked (only shown if provided) */
-  onUpdateAll?: () => void;
-  /** Callback when "Remove" is clicked on a skill (only shown if provided) */
+  /** Callback when "Update" is clicked on a downloaded skill (only shown for skills with isDownloaded=true) */
+  onUpdateSkill?: (skillName: string) => void;
+  /** Callback when "Remove" is clicked on a downloaded skill (only shown for skills with isDownloaded=true) */
   onRemoveSkill?: (skillName: string) => void;
-  /** Whether we're currently checking for updates */
-  isCheckingUpdates?: boolean;
-  /** Whether we're currently updating skills */
-  isUpdating?: boolean;
+  /** Name of the skill currently being updated (if any) */
+  updatingSkillName?: string;
   /** Name of the skill currently being removed (if any) */
   removingSkillName?: string;
 }
@@ -32,36 +28,6 @@ const columns = [
   { name: 'name', label: 'Skill', size: '1fr' },
   { name: 'description', label: 'Description', size: '2fr' },
 ];
-
-function getSourceIcon(source?: SkillSource) {
-  if (!source) return <Package className="h-3 w-3" />;
-
-  switch (source.type) {
-    case 'external':
-      return <Package className="h-3 w-3" />;
-    case 'local':
-      return <Home className="h-3 w-3" />;
-    case 'managed':
-      return <Server className="h-3 w-3" />;
-    default:
-      return <Package className="h-3 w-3" />;
-  }
-}
-
-function getSourceLabel(source?: SkillSource) {
-  if (!source) return 'Unknown';
-
-  switch (source.type) {
-    case 'external':
-      return 'External';
-    case 'local':
-      return 'Local';
-    case 'managed':
-      return 'Managed';
-    default:
-      return 'Unknown';
-  }
-}
 
 const columnsWithActions = [
   { name: 'name', label: 'Skill', size: '1fr' },
@@ -75,17 +41,16 @@ export function SkillsTable({
   isSkillsConfigured = true,
   basePath = '/workspace/skills',
   onAddSkill,
-  onCheckUpdates,
-  onUpdateAll,
+  onUpdateSkill,
   onRemoveSkill,
-  isCheckingUpdates,
-  isUpdating,
+  updatingSkillName,
   removingSkillName,
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
 
-  const hasActions = onAddSkill || onCheckUpdates || onUpdateAll;
-  const hasRowActions = !!onRemoveSkill;
+  // Check if any skill is downloaded (for determining if we need the actions column)
+  const hasDownloadedSkills = skills.some(skill => skill.isDownloaded);
+  const hasRowActions = (!!onRemoveSkill || !!onUpdateSkill) && hasDownloadedSkills;
   const effectiveColumns = hasRowActions ? columnsWithActions : columns;
 
   if (!isSkillsConfigured && !isLoading) {
@@ -99,24 +64,14 @@ export function SkillsTable({
   return (
     <div className="space-y-4">
       {/* Header Actions */}
-      {hasActions && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {onAddSkill && (
-              <Button variant="default" size="sm" onClick={onAddSkill}>
-                <Icon>
-                  <Plus className="h-4 w-4" />
-                </Icon>
-                Add Skill
-              </Button>
-            )}
-          </div>
-          <SkillActionsHeader
-            onCheckUpdates={onCheckUpdates}
-            onUpdateAll={onUpdateAll}
-            isCheckingUpdates={isCheckingUpdates}
-            isUpdating={isUpdating}
-          />
+      {onAddSkill && (
+        <div className="flex items-center">
+          <Button variant="default" size="sm" onClick={onAddSkill}>
+            <Icon>
+              <Plus className="h-4 w-4" />
+            </Icon>
+            Add Skill
+          </Button>
         </div>
       )}
 
@@ -150,12 +105,26 @@ export function SkillsTable({
                     </div>
                     <EntryList.EntryText>{skill.description || '—'}</EntryList.EntryText>
                     {hasRowActions && (
-                      <div className="flex justify-end" onClick={e => e.stopPropagation()}>
-                        <SkillRemoveButton
-                          skillName={skill.name}
-                          onRemove={() => onRemoveSkill?.(skill.name)}
-                          isRemoving={removingSkillName === skill.name}
-                        />
+                      <div className="flex justify-end gap-1" onClick={e => e.stopPropagation()}>
+                        {/* Only show actions for downloaded skills */}
+                        {skill.isDownloaded && (
+                          <>
+                            {onUpdateSkill && (
+                              <SkillUpdateButton
+                                skillName={skill.name}
+                                onUpdate={() => onUpdateSkill(skill.name)}
+                                isUpdating={updatingSkillName === skill.name}
+                              />
+                            )}
+                            {onRemoveSkill && (
+                              <SkillRemoveButton
+                                skillName={skill.name}
+                                onRemove={() => onRemoveSkill(skill.name)}
+                                isRemoving={removingSkillName === skill.name}
+                              />
+                            )}
+                          </>
+                        )}
                       </div>
                     )}
                   </EntryList.Entry>

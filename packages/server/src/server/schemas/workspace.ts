@@ -255,8 +255,12 @@ export const skillSchema = skillMetadataSchema.extend({
   assets: z.array(z.string()),
 });
 
+export const skillMetadataWithSourceSchema = skillMetadataSchema.extend({
+  isDownloaded: z.boolean().describe('True if skill was downloaded from skills.sh (lives in .agents/skills/)'),
+});
+
 export const listSkillsResponseSchema = z.object({
-  skills: z.array(skillMetadataSchema),
+  skills: z.array(skillMetadataWithSourceSchema),
   isSkillsConfigured: z.boolean().describe('Whether skills are configured in the workspace'),
 });
 
@@ -396,17 +400,6 @@ export const skillsShRemoveResponseSchema = z.object({
   success: z.boolean(),
   skillName: z.string(),
   removedPath: z.string(),
-});
-
-export const skillsShCheckUpdatesResponseSchema = z.object({
-  skills: z.array(
-    z.object({
-      skillName: z.string(),
-      currentVersion: z.string().optional(),
-      hasUpdate: z.boolean(),
-      latestCommit: z.string().optional(),
-    }),
-  ),
 });
 
 export const skillsShUpdateBodySchema = z.object({

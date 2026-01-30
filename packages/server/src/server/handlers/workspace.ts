@@ -56,7 +56,6 @@ import {
   skillsShPreviewResponseSchema,
   skillsShRemoveBodySchema,
   skillsShRemoveResponseSchema,
-  skillsShCheckUpdatesResponseSchema,
   skillsShUpdateBodySchema,
   skillsShUpdateResponseSchema,
 } from '../schemas/workspace';
@@ -700,14 +699,28 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
 
       const skillsList = await skills.list();
 
+      // Determine which skills are from .agents/skills/ (downloaded from skills.sh)
+      // We need to get full skill details to check the path
+      const skillsWithGitHubInfo = await Promise.all(
+        skillsList.map(async skillMeta => {
+          // Get full skill to access path
+          const fullSkill = await skills.get(skillMeta.name);
+          // Skills installed via skills.sh live in .agents/skills/
+          const isDownloaded = fullSkill?.path?.includes('.agents/skills/') ?? false;
+
+          return {
+            name: skillMeta.name,
+            description: skillMeta.description,
+            license: skillMeta.license,
+            compatibility: skillMeta.compatibility,
+            metadata: skillMeta.metadata,
+            isDownloaded,
+          };
+        }),
+      );
+
       return {
-        skills: skillsList.map(skill => ({
-          name: skill.name,
-          description: skill.description,
-          license: skill.license,
-          compatibility: skill.compatibility,
-          metadata: skill.metadata,
-        })),
+        skills: skillsWithGitHubInfo,
         isSkillsConfigured: true,
       };
     } catch (error) {
@@ -1035,79 +1048,8 @@ export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
   },
 });
 
-export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
-  method: 'GET',
-  path: '/workspaces/:workspaceId/skills-sh/preview',
-  responseType: 'json',
-  pathParamSchema: workspaceIdPathParams,
-  queryParamSchema: skillsShPreviewQuerySchema,
-  responseSchema: skillsShPreviewResponseSchema,
-  summary: 'Preview skill SKILL.md from GitHub',
-  description: 'Proxies GitHub raw content requests to fetch SKILL.md files and avoid CORS issues',
-  tags: ['Workspace', 'Skills'],
-  handler: async ({ owner, repo, path }) => {
-    try {
-      const branches = ['main', 'master'];
-
-      // Common vendor prefixes that skills.sh adds to skill names
-      const vendorPrefixes = ['vercel-', 'anthropic-', 'anthropics-'];
-
-      // Extract the base skill name by removing vendor prefix if present
-      let baseName = path;
-      for (const prefix of vendorPrefixes) {
-        if (path.startsWith(prefix)) {
-          baseName = path.slice(prefix.length);
-          break;
-        }
-      }
-
-      // Try multiple path patterns since skills.sh names may differ from actual paths
-      // Based on how the skills CLI discovers skills in repos
-      const pathVariants = [
-        // Direct path as provided
-        path,
-        // Common "skills/" directory pattern
-        `skills/${path}`,
-        `skills/${baseName}`,
-        // Root level with base name
-        baseName,
-        // Other common skill directory patterns (from skills CLI)
-        `.cursor/skills/${baseName}`,
-        `.windsurf/skills/${baseName}`,
-        `.agents/skills/${baseName}`,
-      ].filter((p, i, arr) => arr.indexOf(p) === i); // Remove duplicates
-
-      let lastError: Error | null = null;
-
-      for (const branch of branches) {
-        for (const pathVariant of pathVariants) {
-          const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${pathVariant}/SKILL.md`;
-          try {
-            const response = await fetch(url);
-            if (response.ok) {
-              const content = await response.text();
-              return { content };
-            }
-          } catch (e) {
-            lastError = e instanceof Error ? e : new Error(String(e));
-          }
-        }
-      }
-
-      throw new HTTPException(404, {
-        message: `Could not fetch SKILL.md: ${lastError?.message ?? 'Not found'}`,
-      });
-    } catch (error) {
-      if (error instanceof HTTPException) {
-        throw error;
-      }
-      return handleError(error, 'Error fetching skill preview from GitHub');
-    }
-  },
-});
-
 // =============================================================================
-// skills.sh Install Route (GitHub API-based, no sandbox required)
+// GitHub API Helpers for skills.sh routes
 // =============================================================================
 
 interface GitHubContentItem {
@@ -1151,6 +1093,98 @@ function parseSkillFrontmatter(content: string): { name?: string } {
   }
 
   return result;
+}
+
+/**
+ * Generate possible name variations for matching.
+ * skills.sh names often have vendor prefixes that the actual SKILL.md might not have.
+ */
+function getNameVariations(skillName: string): string[] {
+  const variations = [skillName];
+
+  // Common vendor prefixes used by skills.sh
+  const vendorPrefixes = ['vercel-', 'anthropic-', 'anthropics-'];
+
+  // If skillName has a vendor prefix, also try without it
+  for (const prefix of vendorPrefixes) {
+    if (skillName.startsWith(prefix)) {
+      variations.push(skillName.slice(prefix.length));
+    }
+  }
+
+  // Also try adding vendor prefixes (in case skills.sh name doesn't have it but frontmatter does)
+  for (const prefix of vendorPrefixes) {
+    if (!skillName.startsWith(prefix)) {
+      variations.push(`${prefix}${skillName}`);
+    }
+  }
+
+  return variations;
+}
+
+/**
+ * Find the actual skill path in a GitHub repo by searching for SKILL.md files
+ * and matching on the `name` field in frontmatter.
+ *
+ * Uses GitHub's Tree API to find all SKILL.md files, then fetches each one's
+ * frontmatter to find the matching skill name.
+ */
+async function findSkillPath(
+  owner: string,
+  repo: string,
+  skillName: string,
+): Promise<{ path: string; branch: string } | null> {
+  const branches = ['main', 'master'];
+  const nameVariations = getNameVariations(skillName);
+
+  for (const branch of branches) {
+    try {
+      // Get the entire repo tree to find all SKILL.md files
+      const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+      const treeResponse = await fetch(treeUrl, {
+        headers: {
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'Mastra-Skills-Installer',
+        },
+      });
+
+      if (!treeResponse.ok) {
+        continue; // Try next branch
+      }
+
+      const tree = (await treeResponse.json()) as GitHubTreeResponse;
+
+      // Find all SKILL.md files (both in subdirectories and at root level)
+      const skillFiles = tree.tree.filter(
+        item => item.type === 'blob' && (item.path.endsWith('/SKILL.md') || item.path === 'SKILL.md'),
+      );
+
+      // Check each SKILL.md's frontmatter for matching name
+      for (const skillFile of skillFiles) {
+        const contentUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${skillFile.path}`;
+        try {
+          const contentResponse = await fetch(contentUrl);
+          if (!contentResponse.ok) continue;
+
+          const content = await contentResponse.text();
+          const frontmatter = parseSkillFrontmatter(content);
+
+          // Match on the name field in frontmatter (try multiple variations)
+          if (frontmatter.name && nameVariations.includes(frontmatter.name)) {
+            // Return the directory path (remove /SKILL.md from the end, or empty for root)
+            const dirPath = skillFile.path.replace(/\/?SKILL\.md$/, '') || '.';
+            return { path: dirPath, branch };
+          }
+        } catch {
+          // Continue to next file
+        }
+      }
+    } catch {
+      // Continue to next branch
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -1200,67 +1234,103 @@ async function fetchGitHubDirectoryContents(
   return files;
 }
 
-/**
- * Find the actual skill path in a GitHub repo by searching for SKILL.md files
- * and matching on the `name` field in frontmatter.
- *
- * Uses GitHub's Tree API to find all SKILL.md files, then fetches each one's
- * frontmatter to find the matching skill name.
- */
-async function findSkillPath(
-  owner: string,
-  repo: string,
-  skillName: string,
-): Promise<{ path: string; branch: string } | null> {
-  const branches = ['main', 'master'];
+// =============================================================================
+// skills.sh Preview Route
+// =============================================================================
 
-  for (const branch of branches) {
+export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workspaces/:workspaceId/skills-sh/preview',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  queryParamSchema: skillsShPreviewQuerySchema,
+  responseSchema: skillsShPreviewResponseSchema,
+  summary: 'Preview skill from skills.sh',
+  description: 'Fetches the skill page from skills.sh and extracts the main content HTML.',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ owner, repo, path: skillName }) => {
     try {
-      // Get the entire repo tree to find all SKILL.md files
-      const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
-      const treeResponse = await fetch(treeUrl, {
+      // Fetch the skills.sh page directly
+      const skillsShUrl = `https://skills.sh/${owner}/${repo}/${skillName}`;
+      const response = await fetch(skillsShUrl, {
         headers: {
-          Accept: 'application/vnd.github.v3+json',
-          'User-Agent': 'Mastra-Skills-Installer',
+          'User-Agent': 'Mastra-Skills-Preview',
+          Accept: 'text/html',
         },
       });
 
-      if (!treeResponse.ok) {
-        continue; // Try next branch
+      if (!response.ok) {
+        throw new HTTPException(404, {
+          message: `Could not find skill "${skillName}" on skills.sh`,
+        });
       }
 
-      const tree = (await treeResponse.json()) as GitHubTreeResponse;
+      const html = await response.text();
 
-      // Find all SKILL.md files
-      const skillFiles = tree.tree.filter(item => item.type === 'blob' && item.path.endsWith('/SKILL.md'));
+      // Extract the main content - look for the article or main content div
+      // skills.sh uses a prose class for the markdown content
+      let content = '';
 
-      // Check each SKILL.md's frontmatter for matching name
-      for (const skillFile of skillFiles) {
-        const contentUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${skillFile.path}`;
-        try {
-          const contentResponse = await fetch(contentUrl);
-          if (!contentResponse.ok) continue;
-
-          const content = await contentResponse.text();
-          const frontmatter = parseSkillFrontmatter(content);
-
-          // Match on the name field in frontmatter
-          if (frontmatter.name === skillName) {
-            // Return the directory path (remove /SKILL.md from the end)
-            const dirPath = skillFile.path.replace(/\/SKILL\.md$/, '');
-            return { path: dirPath, branch };
+      // Try to find the main content area - typically in an article or div with prose class
+      const proseMatch = html.match(/<article[^>]*class="[^"]*prose[^"]*"[^>]*>([\s\S]*?)<\/article>/i);
+      if (proseMatch) {
+        content = proseMatch[0];
+      } else {
+        // Fallback: look for any element with prose class
+        const anyProseMatch = html.match(
+          /<(?:div|section|article)[^>]*class="[^"]*prose[^"]*"[^>]*>[\s\S]*?<\/(?:div|section|article)>/i,
+        );
+        if (anyProseMatch) {
+          content = anyProseMatch[0];
+        } else {
+          // Last fallback: look for main content area
+          const mainMatch = html.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+          if (mainMatch?.[1]) {
+            content = mainMatch[1];
           }
-        } catch {
-          // Continue to next file
         }
       }
-    } catch {
-      // Continue to next branch
-    }
-  }
 
-  return null;
-}
+      if (!content) {
+        throw new HTTPException(404, {
+          message: `Could not extract content from skills.sh page`,
+        });
+      }
+
+      // Clean up the HTML:
+      // 1. Remove their custom classes except 'prose' related ones
+      // 2. Remove inline styles
+      // 3. Fix relative URLs
+      content = content
+        // Remove class attributes except prose
+        .replace(/class="([^"]*)"/g, (match, classes) => {
+          const proseClasses = classes
+            .split(' ')
+            .filter((c: string) => c.includes('prose'))
+            .join(' ');
+          return proseClasses ? `class="${proseClasses}"` : '';
+        })
+        // Remove empty class attributes
+        .replace(/class=""\s*/g, '')
+        // Remove inline styles
+        .replace(/style="[^"]*"/g, '')
+        // Fix relative URLs to point to skills.sh
+        .replace(/href="\//g, 'href="https://skills.sh/')
+        .replace(/src="\//g, 'src="https://skills.sh/');
+
+      return { content };
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error fetching skill preview from skills.sh');
+    }
+  },
+});
+
+// =============================================================================
+// skills.sh Install Route
+// =============================================================================
 
 export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
   method: 'POST',
@@ -1436,99 +1506,6 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
   },
 });
 
-export const WORKSPACE_SKILLS_SH_CHECK_UPDATES_ROUTE = createRoute({
-  method: 'GET',
-  path: '/workspaces/:workspaceId/skills-sh/check-updates',
-  responseType: 'json',
-  pathParamSchema: workspaceIdPathParams,
-  responseSchema: skillsShCheckUpdatesResponseSchema,
-  summary: 'Check for skill updates',
-  description: 'Checks if any installed skills have updates available on GitHub.',
-  tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, workspaceId }) => {
-    try {
-      requireWorkspaceV1Support();
-
-      const workspace = await getWorkspaceById(mastra, workspaceId);
-      if (!workspace) {
-        throw new HTTPException(404, { message: 'Workspace not found' });
-      }
-
-      if (!workspace.fs) {
-        throw new HTTPException(400, { message: 'Workspace filesystem not available' });
-      }
-
-      const skillsPath = '.agents/skills';
-      const results: Array<{
-        skillName: string;
-        currentVersion?: string;
-        hasUpdate: boolean;
-        latestCommit?: string;
-      }> = [];
-
-      // List all skills directories
-      let skillDirs: Array<{ name: string; type: string }>;
-      try {
-        const entries = await workspace.fs.readdir(skillsPath);
-        skillDirs = entries.filter(e => e.type === 'directory');
-      } catch {
-        // Skills directory doesn't exist yet
-        return { skills: [] };
-      }
-
-      for (const dir of skillDirs) {
-        const metaPath = `${skillsPath}/${dir.name}/.meta.json`;
-        try {
-          const metaContent = await workspace.fs.readFile(metaPath, { encoding: 'utf-8' });
-          const meta: SkillMetaFile = JSON.parse(metaContent as string);
-
-          // Check GitHub for latest commit on the skill path
-          const apiUrl = `https://api.github.com/repos/${meta.owner}/${meta.repo}/commits?path=${encodeURIComponent(meta.path)}&per_page=1&sha=${meta.branch}`;
-          const response = await fetch(apiUrl, {
-            headers: {
-              Accept: 'application/vnd.github.v3+json',
-              'User-Agent': 'Mastra-Skills-Installer',
-            },
-          });
-
-          if (response.ok) {
-            const commits = (await response.json()) as Array<{ sha: string }>;
-            const latestCommit = commits[0]?.sha?.substring(0, 7);
-
-            // Note: For accurate update detection, we'd need to compare commit timestamps
-            // with installedAt date. For now, we just indicate if there's a latest commit.
-            results.push({
-              skillName: dir.name,
-              currentVersion: meta.installedAt,
-              hasUpdate: !!latestCommit, // We'd need commit dates for accurate comparison
-              latestCommit,
-            });
-          } else {
-            results.push({
-              skillName: dir.name,
-              currentVersion: meta.installedAt,
-              hasUpdate: false,
-            });
-          }
-        } catch {
-          // No metadata file - skill was installed manually or before metadata support
-          results.push({
-            skillName: dir.name,
-            hasUpdate: false,
-          });
-        }
-      }
-
-      return { skills: results };
-    } catch (error) {
-      if (error instanceof HTTPException) {
-        throw error;
-      }
-      return handleError(error, 'Error checking for updates');
-    }
-  },
-});
-
 export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
   method: 'POST',
   path: '/workspaces/:workspaceId/skills-sh/update',
@@ -1653,7 +1630,6 @@ export const WORKSPACE_SKILLS_SH_ROUTES = [
   WORKSPACE_SKILLS_SH_PREVIEW_ROUTE,
   WORKSPACE_SKILLS_SH_INSTALL_ROUTE,
   WORKSPACE_SKILLS_SH_REMOVE_ROUTE,
-  WORKSPACE_SKILLS_SH_CHECK_UPDATES_ROUTE,
   WORKSPACE_SKILLS_SH_UPDATE_ROUTE,
 ];
 

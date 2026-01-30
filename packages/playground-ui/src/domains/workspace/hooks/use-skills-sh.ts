@@ -1,13 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
 import type {
-  SkillsShSkill,
   SkillsShSearchResponse,
   SkillsShListResponse,
   SandboxExecuteParams,
   SandboxExecuteResponse,
   SkillsShRemoveResponse,
-  SkillsShCheckUpdatesResponse,
   SkillsShUpdateResponse,
 } from '../types';
 import { isWorkspaceV1Supported } from '../compatibility';
@@ -173,28 +171,6 @@ export const useInstallSkill = () => {
     onSuccess: (_, variables) => {
       // Invalidate skills list to refresh after installation
       queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
-    },
-  });
-};
-
-export interface CheckUpdatesParams {
-  workspaceId: string;
-}
-
-/**
- * Check for skill updates by comparing installed skills with GitHub.
- * Does NOT require sandbox - only requires filesystem access.
- */
-export const useCheckSkillUpdates = () => {
-  const client = useMastraClient();
-
-  return useMutation({
-    mutationFn: async (params: CheckUpdatesParams): Promise<SkillsShCheckUpdatesResponse> => {
-      if (!isWorkspaceV1Supported(client)) {
-        throw new Error('Workspace v1 not supported by core or client');
-      }
-      const workspace = (client as any).getWorkspace(params.workspaceId);
-      return workspace.skillsShCheckUpdates();
     },
   });
 };

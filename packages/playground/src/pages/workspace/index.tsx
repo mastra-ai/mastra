@@ -27,7 +27,6 @@ import {
   // Skills.sh
   AddSkillDialog,
   useInstallSkill,
-  useCheckSkillUpdates,
   useUpdateSkills,
   useRemoveSkill,
   toast,
@@ -47,6 +46,7 @@ export default function Workspace() {
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
   const [showAddSkillDialog, setShowAddSkillDialog] = useState(false);
   const [removingSkillName, setRemovingSkillName] = useState<string | null>(null);
+  const [updatingSkillName, setUpdatingSkillName] = useState<string | null>(null);
 
   // Get state from URL query params (path, file, tab are still query params)
   const pathFromUrl = searchParams.get('path') || '/';
@@ -139,7 +139,6 @@ export default function Workspace() {
 
   // Skills.sh hooks
   const installSkill = useInstallSkill();
-  const checkUpdates = useCheckSkillUpdates();
   const updateSkills = useUpdateSkills();
   const removeSkill = useRemoveSkill();
 
@@ -181,53 +180,33 @@ export default function Workspace() {
     [effectiveWorkspaceId, installSkill, refetchSkills],
   );
 
-  const handleCheckUpdates = useCallback(() => {
-    if (!effectiveWorkspaceId) return;
+  const handleUpdateSkill = useCallback(
+    (skillName: string) => {
+      if (!effectiveWorkspaceId) return;
 
-    checkUpdates.mutate(
-      { workspaceId: effectiveWorkspaceId },
-      {
-        onSuccess: result => {
-          const skillsWithUpdates = result.skills.filter(s => s.hasUpdate);
-          if (skillsWithUpdates.length > 0) {
-            toast.success(`${skillsWithUpdates.length} skill(s) have updates available`);
-          } else {
-            toast.success('All skills are up to date');
-          }
+      setUpdatingSkillName(skillName);
+      updateSkills.mutate(
+        { workspaceId: effectiveWorkspaceId, skillName },
+        {
+          onSuccess: result => {
+            setUpdatingSkillName(null);
+            const updated = result.updated[0];
+            if (updated?.success) {
+              toast.success(`Skill "${skillName}" updated successfully (${updated.filesWritten} files)`);
+              refetchSkills();
+            } else {
+              toast.error(`Failed to update skill: ${updated?.error ?? 'Unknown error'}`);
+            }
+          },
+          onError: error => {
+            setUpdatingSkillName(null);
+            toast.error(`Failed to update skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          },
         },
-        onError: error => {
-          toast.error(`Update check failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        },
-      },
-    );
-  }, [effectiveWorkspaceId, checkUpdates]);
-
-  const handleUpdateAll = useCallback(() => {
-    if (!effectiveWorkspaceId) return;
-
-    updateSkills.mutate(
-      { workspaceId: effectiveWorkspaceId },
-      {
-        onSuccess: result => {
-          const successful = result.updated.filter(s => s.success);
-          const failed = result.updated.filter(s => !s.success);
-          if (successful.length > 0) {
-            toast.success(`Updated ${successful.length} skill(s)`);
-            refetchSkills();
-          }
-          if (failed.length > 0) {
-            toast.error(`Failed to update ${failed.length} skill(s)`);
-          }
-          if (result.updated.length === 0) {
-            toast.success('No skills to update');
-          }
-        },
-        onError: error => {
-          toast.error(`Update failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        },
-      },
-    );
-  }, [effectiveWorkspaceId, updateSkills, refetchSkills]);
+      );
+    },
+    [effectiveWorkspaceId, updateSkills, refetchSkills],
+  );
 
   const handleRemoveSkill = useCallback(
     (skillName: string) => {
@@ -593,11 +572,9 @@ export default function Workspace() {
                 isSkillsConfigured={isSkillsConfigured}
                 basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
                 onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
-                onCheckUpdates={canManageSkills ? handleCheckUpdates : undefined}
-                onUpdateAll={canManageSkills ? handleUpdateAll : undefined}
+                onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
                 onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
-                isCheckingUpdates={checkUpdates.isPending}
-                isUpdating={updateSkills.isPending}
+                updatingSkillName={updatingSkillName ?? undefined}
                 removingSkillName={removingSkillName ?? undefined}
               />
             )}
