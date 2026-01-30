@@ -38,11 +38,11 @@ export class MemoryStorageD1 extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
-    // Add resourceId column for backwards compatibility
+    // Add resourceId and metadataJson columns for backwards compatibility
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
-      ifNotExists: ['resourceId'],
+      ifNotExists: ['resourceId', 'metadataJson'],
     });
   }
 
@@ -550,6 +550,14 @@ export class MemoryStorageD1 extends MemoryStorage {
       // Prepare all messages for insertion (set timestamps, thread_id, etc.)
       const messagesToInsert = messages.map(message => {
         const createdAt = message.createdAt ? new Date(message.createdAt) : now;
+        // Extract metadata for the metadataJson column (for JSON filtering)
+        let metadataJson: string | null = null;
+        if (typeof message.content === 'object' && message.content !== null) {
+          const content = message.content as { metadata?: Record<string, unknown> };
+          if (content.metadata) {
+            metadataJson = JSON.stringify(content.metadata);
+          }
+        }
         return {
           id: message.id,
           thread_id: message.threadId,
@@ -558,6 +566,7 @@ export class MemoryStorageD1 extends MemoryStorage {
           role: message.role,
           type: message.type || 'v2',
           resourceId: message.resourceId,
+          metadataJson,
         };
       });
 
@@ -778,6 +787,14 @@ export class MemoryStorageD1 extends MemoryStorage {
         queryParams.push(endDate);
       }
 
+      // Metadata filter using JSON functions
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          query += ` AND json_extract(metadataJson, '$.${key}') = ?`;
+          queryParams.push(typeof value === 'object' ? JSON.stringify(value) : value);
+        }
+      }
+
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       query += ` ORDER BY "${field}" ${direction}`;
@@ -825,6 +842,14 @@ export class MemoryStorageD1 extends MemoryStorage {
         const endOp = dateRange.endExclusive ? '<' : '<=';
         countQuery += ` AND createdAt ${endOp} ?`;
         countParams.push(endDate);
+      }
+
+      // Metadata filter using JSON functions
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          countQuery += ` AND json_extract(metadataJson, '$.${key}') = ?`;
+          countParams.push(typeof value === 'object' ? JSON.stringify(value) : value);
+        }
       }
 
       const countResult = (await this.#db.executeQuery({ sql: countQuery, params: countParams })) as {
@@ -1015,6 +1040,13 @@ export class MemoryStorageD1 extends MemoryStorage {
           };
           setClauses.push(`content = ?`);
           values.push(JSON.stringify(newContent));
+
+          // Sync metadataJson column if metadata was updated
+          if (updatableFields.content.metadata || newContent.metadata) {
+            setClauses.push(`metadataJson = ?`);
+            values.push(JSON.stringify(newContent.metadata || {}));
+          }
+
           delete updatableFields.content;
         }
 
