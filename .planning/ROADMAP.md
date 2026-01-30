@@ -15,6 +15,8 @@ Align the `@mastra/auth-cloud` plugin with Cloud's API specification through fou
 - [x] **Phase 2: API Paths + Methods** - Update all endpoints to `/api/v1/` and add token parameters
 - [x] **Phase 3: Provider Integration** - Wire `MastraCloudAuth` to use updated client signatures
 - [x] **Phase 4: Testing + Validation** - Verify TypeScript compiles and test against mocked API
+- [x] **Phase 5: RBAC 403 Error Handling** - Fix playground retry behavior and fallback on 403 RBAC errors
+- [x] **Phase 6: WorkOS Client Initialization** - Make WorkOS client initialization consistent between providers
 
 ## Phase Details
 
@@ -154,7 +156,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 06-01-PLAN.md — Update types, constructor, and package documentation
+- [x] 06-01-PLAN.md — Update types, constructor, and package documentation
 
 ## Progress
 
@@ -168,4 +170,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. Provider Integration    | 1/1            | ✓ Complete | 2026-01-29 |
 | 4. Testing + Validation    | 1/1            | ✓ Complete | 2026-01-28 |
 | 5. RBAC 403 Error Handling | 4/4            | ✓ Complete | 2026-01-30 |
-| 6. WorkOS Client Init      | 0/1            | Planned    | —          |
+| 6. WorkOS Client Init      | 1/1            | ✓ Complete | 2026-01-30 |
