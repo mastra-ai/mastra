@@ -21,28 +21,28 @@ const NameCell = ({ row, showSourceIcon }: { row: Row<AgentTableColumn>; showSou
   const { Link, paths } = useLinkComponent();
   const isStored = row.original.source === 'stored';
 
+  const sourceIcon = showSourceIcon ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {isStored ? (
+          <Database className="w-3.5 h-3.5 text-accent6 shrink-0" />
+        ) : (
+          <Code2 className="w-3.5 h-3.5 text-accent3 shrink-0" />
+        )}
+      </TooltipTrigger>
+      <TooltipContent>
+        {isStored ? 'Stored in database - can be edited in UI' : 'Defined in code - read-only in UI'}
+      </TooltipContent>
+    </Tooltip>
+  ) : undefined;
+
   return (
     <EntryCell
+      icon={sourceIcon}
       name={
-        <div className="flex items-center gap-2">
-          {showSourceIcon && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {isStored ? (
-                  <Database className="w-3.5 h-3.5 text-accent6 shrink-0" />
-                ) : (
-                  <Code2 className="w-3.5 h-3.5 text-accent3 shrink-0" />
-                )}
-              </TooltipTrigger>
-              <TooltipContent>
-                {isStored ? 'Stored in database - can be edited in UI' : 'Defined in code - read-only in UI'}
-              </TooltipContent>
-            </Tooltip>
-          )}
-          <Link className="w-full" href={paths.agentLink(row.original.id)}>
-            {row.original.name}
-          </Link>
-        </div>
+        <Link className="w-full" href={paths.agentLink(row.original.id)}>
+          {row.original.name}
+        </Link>
       }
       description={extractPrompt(row.original.instructions)}
     />
