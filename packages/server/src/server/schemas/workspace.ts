@@ -262,10 +262,6 @@ export const skillMetadataWithPathSchema = skillMetadataSchema.extend({
 export const listSkillsResponseSchema = z.object({
   skills: z.array(skillMetadataWithPathSchema),
   isSkillsConfigured: z.boolean().describe('Whether skills are configured in the workspace'),
-  hasUndiscoveredAgentSkills: z
-    .boolean()
-    .optional()
-    .describe('True if .agents/skills directory has skills that are not being discovered (missing skills path config)'),
 });
 
 export const getSkillResponseSchema = skillSchema;

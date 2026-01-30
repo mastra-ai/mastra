@@ -47,6 +47,8 @@ export default function Workspace() {
   const [showAddSkillDialog, setShowAddSkillDialog] = useState(false);
   const [removingSkillName, setRemovingSkillName] = useState<string | null>(null);
   const [updatingSkillName, setUpdatingSkillName] = useState<string | null>(null);
+  // Track if we installed a skill that wasn't discovered (client-side only, resets on refresh)
+  const [hasUndiscoveredInstall, setHasUndiscoveredInstall] = useState(false);
 
   // Get state from URL query params (path, file, tab are still query params)
   const pathFromUrl = searchParams.get('path') || '/';
@@ -175,6 +177,7 @@ export default function Workspace() {
                 toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
               } else {
                 // Skill was installed but not discovered - likely missing path config
+                setHasUndiscoveredInstall(true);
                 toast.warning(
                   `Skill "${result.skillName}" installed to .agents/skills but not discovered. Add .agents/skills to your workspace skills paths.`,
                 );
@@ -266,7 +269,6 @@ export default function Workspace() {
 
   const skills = skillsData?.skills ?? [];
   const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
-  const hasUndiscoveredAgentSkills = skillsData?.hasUndiscoveredAgentSkills ?? false;
   const files = filesData?.entries ?? [];
 
   // If workspace v1 is not supported by the server's @mastra/core version
@@ -590,7 +592,7 @@ export default function Workspace() {
                 skills={skills}
                 isLoading={isLoadingSkills}
                 isSkillsConfigured={isSkillsConfigured}
-                hasUndiscoveredAgentSkills={hasUndiscoveredAgentSkills}
+                hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
                 basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
                 onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
                 onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
