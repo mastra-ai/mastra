@@ -22,6 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: CSV Import** - Bulk item creation from CSV files ✓
 - [x] **Phase 8: Item Selection & Actions** - Bulk operations via item selection ✓
 - [x] **Phase 9: Dataset Items Detail View** - EntryList with SideDialog, edit/delete flows ✓
+- [ ] **Phase 10: Dataset Layout Update** - [To be planned]
 
 ## Phase Details
 
@@ -219,10 +220,33 @@ Plans:
 - [x] 09-04-PLAN.md — Delete confirmation with AlertDialog
 - [x] 09-05-PLAN.md — Integration into DatasetDetail page
 
+### Phase 10: Dataset Layout Update
+
+**Goal**: Master-detail layout with inline item viewing, reorganized header/toolbar, and split button components
+**Depends on**: Phase 9
+**Requirements**: None (UI/UX enhancement phase)
+**Success Criteria** (what must be TRUE):
+
+1. Header shows dataset name/description with three-dot menu (Edit, Duplicate disabled, Delete)
+2. Items toolbar has split button for "New Item" with import dropdown
+3. Clicking item opens inline detail panel (master-detail layout)
+4. Container expands from 50rem to 100rem max-width when detail panel opens
+5. Item detail panel has navigation + edit split button with delete/duplicate options
+6. Each column scrolls independently
+
+**Plans**: 5 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — SplitButton design system component
+- [ ] 10-02-PLAN.md — DatasetHeader with three-dot menu
+- [ ] 10-03-PLAN.md — ItemsToolbar with split button and reorganized actions
+- [ ] 10-04-PLAN.md — ItemDetailPanel and ItemDetailToolbar extraction
+- [ ] 10-05-PLAN.md — ItemsMasterDetail container and DatasetDetail integration
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
 
 | Phase                        | Plans Complete | Status     | Completed  |
 | ---------------------------- | -------------- | ---------- | ---------- |
@@ -235,3 +259,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. CSV Import                | 5/5            | ✓ Complete | 2026-01-27 |
 | 8. Item Selection & Actions  | 4/4            | ✓ Complete | 2026-01-27 |
 | 9. Dataset Items Detail View | 5/5            | ✓ Complete | 2026-01-29 |
+| 10. Dataset Layout Update    | 0/5            | ○ Pending  |            |
