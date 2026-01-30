@@ -525,11 +525,6 @@ export class Workspace {
       return this._initPromise;
     }
 
-    // Only allow init from 'pending' or 'error' (retry) states
-    if (this._status !== 'pending' && this._status !== 'error') {
-      return;
-    }
-
     this._initPromise = (async () => {
       this._status = 'initializing';
 
@@ -564,6 +559,7 @@ export class Workspace {
    */
   async destroy(): Promise<void> {
     this._status = 'destroying';
+    this._initPromise = null;
 
     try {
       if (this._sandbox?.destroy) {
