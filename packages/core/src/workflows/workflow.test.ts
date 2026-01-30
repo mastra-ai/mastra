@@ -21681,6 +21681,9 @@ describe('Workflow', () => {
       // Verify trackException was called
       expect(mockLogger.trackException).toHaveBeenCalled();
 
+      // Verify console.error was NOT called (errors go through custom logger instead)
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+
       // Clean up spy
       consoleErrorSpy.mockRestore();
     });
