@@ -12,10 +12,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover
 
 import { usePromptEnhancer } from '../../hooks/use-prompt-enhancer';
 import { useAgent } from '../../hooks/use-agent';
-import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers';
-import { cleanProviderId } from '../agent-metadata/utils';
-import { ProviderLogo } from '../agent-metadata/provider-logo';
-import { useAllModels, ModelInfo } from '../model-picker/use-model-picker';
+import { useLLMProviders, useAllModels, cleanProviderId, ProviderLogo } from '@/domains/llm';
+import type { ModelInfo } from '@/domains/llm';
 import { Provider } from '@mastra/client-js';
 
 interface EnhancerModelSelectorProps {
@@ -234,7 +232,7 @@ export function InstructionsEnhancer({
   // Fetch data - agent data only needed in edit mode, providers always needed
   const { mutateAsync: enhancePrompt, isPending } = usePromptEnhancer({ agentId, context });
   const { data: agent, isLoading: isAgentLoading, isError: isAgentError } = useAgent(agentId);
-  const { data: providersData, isLoading: isProvidersLoading } = useAgentsModelProviders();
+  const { data: providersData, isLoading: isProvidersLoading } = useLLMProviders();
 
   const providers = providersData?.providers || [];
   const allModels = useAllModels(providers);

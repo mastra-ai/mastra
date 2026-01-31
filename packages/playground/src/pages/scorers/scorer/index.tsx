@@ -19,7 +19,6 @@ import {
   getToPreviousEntryFn,
   useAgents,
   useWorkflows,
-  HeaderGroup,
   ScorerCombobox,
   toast,
   Spinner,
@@ -167,19 +166,16 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`} isCurrent>
+            <Crumb as={Link} to={`/scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
               Scorers
             </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              <ScorerCombobox value={scorerId} variant="ghost" />
+            </Crumb>
           </Breadcrumb>
-
-          <HeaderGroup>
-            <div className="w-48">
-              <ScorerCombobox value={scorerId} />
-            </div>
-          </HeaderGroup>
 
           <HeaderAction>
             {experimentalFeaturesEnabled && scorer?.isRegistered && (

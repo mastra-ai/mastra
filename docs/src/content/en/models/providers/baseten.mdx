@@ -11,11 +11,11 @@ Access 6 Baseten models through Mastra's model router. Authentication is handled
 
 Learn more in the [Baseten documentation](https://docs.baseten.co/development/model-apis/overview).
 
-```bash
+```bash title=".env"
 BASETEN_API_KEY=your-api-key
 ```
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts" {7}
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
@@ -124,7 +124,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ### Custom Headers
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -141,7 +141,7 @@ const agent = new Agent({
 
 ### Dynamic Model Selection
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

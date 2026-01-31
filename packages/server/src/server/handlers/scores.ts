@@ -17,6 +17,7 @@ import {
 } from '../schemas/scores';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
+import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 
 async function listScorersFromSystem({
@@ -300,16 +301,8 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
       let entityIdToUse = entityId;
 
       if (entityType === 'AGENT') {
-        let agent;
-        try {
-          agent = mastra.getAgentById(entityId);
-        } catch {
-          // Try stored agents if not found in code-defined agents
-          agent = await mastra.getStoredAgentById(entityId);
-        }
-        if (agent) {
-          entityIdToUse = agent.id;
-        }
+        const agent = await getAgentFromSystem({ mastra, agentId: entityId });
+        entityIdToUse = agent.id;
       } else if (entityType === 'WORKFLOW') {
         const workflow = mastra.getWorkflowById(entityId);
         entityIdToUse = workflow.id;

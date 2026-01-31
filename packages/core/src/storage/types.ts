@@ -250,14 +250,15 @@ export interface StorageScorerConfig {
 }
 
 /**
- * Stored agent configuration type.
- * Primitives (tools, workflows, agents, memory, scorers) are stored as references
- * that get resolved from Mastra's registries at runtime.
+ * Agent version snapshot type containing ALL agent configuration fields.
+ * These fields live exclusively in version snapshot rows, not on the agent record.
  */
-export interface StorageAgentType {
-  id: string;
+export interface StorageAgentSnapshotType {
+  /** Display name of the agent */
   name: string;
+  /** Purpose description */
   description?: string;
+  /** System instructions/prompt */
   instructions: string;
   /** Model configuration (provider, name, etc.) */
   model: Record<string, unknown>;
@@ -278,49 +279,63 @@ export interface StorageAgentType {
   inputProcessors?: Record<string, unknown>[];
   /** Output processor configurations */
   outputProcessors?: Record<string, unknown>[];
-  /** Memory key to resolve from Mastra's memory registry */
-  memory?: string;
+  /** Memory configuration object */
+  memory?: Record<string, unknown>;
   /** Scorer keys with optional sampling config, to resolve from Mastra's scorer registry */
   scorers?: Record<string, StorageScorerConfig>;
-  /** Additional metadata for the agent */
-  metadata?: Record<string, unknown>;
-  /** Owner identifier for multi-tenant filtering */
-  ownerId?: string;
+}
+
+/**
+ * Thin agent record type containing only metadata fields.
+ * All configuration lives in version snapshots (StorageAgentSnapshotType).
+ */
+export interface StorageAgentType {
+  /** Unique, immutable identifier */
+  id: string;
+  /** Agent status: 'draft' on creation, 'published' when a version is activated */
+  status: string;
   /** FK to agent_versions.id - the currently active version */
   activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the agent */
+  metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export type StorageCreateAgentInput = Omit<StorageAgentType, 'createdAt' | 'updatedAt'>;
+/**
+ * Resolved agent type that combines the thin agent record with version snapshot config.
+ * Returned by getAgentByIdResolved and listAgentsResolved.
+ */
+export type StorageResolvedAgentType = StorageAgentType & StorageAgentSnapshotType;
 
+/**
+ * Input for creating a new agent. Flat union of thin record fields
+ * and initial configuration (used to create version 1).
+ */
+export type StorageCreateAgentInput = {
+  /** Unique identifier for the agent */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the agent */
+  metadata?: Record<string, unknown>;
+} & StorageAgentSnapshotType;
+
+/**
+ * Input for updating an agent. Includes metadata-level fields and optional config fields.
+ * The handler layer separates these into agent-record updates vs new-version creation.
+ */
 export type StorageUpdateAgentInput = {
   id: string;
-  name?: string;
-  description?: string;
-  instructions?: string;
-  model?: Record<string, unknown>;
-  /** Array of tool keys to resolve from Mastra's tool registry */
-  tools?: string[];
-  defaultOptions?: Record<string, unknown>;
-  /** Array of workflow keys to resolve from Mastra's workflow registry */
-  workflows?: string[];
-  /** Array of agent keys to resolve from Mastra's agent registry */
-  agents?: string[];
-  /** Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug) */
-  integrationTools?: string[];
-  inputProcessors?: Record<string, unknown>[];
-  outputProcessors?: Record<string, unknown>[];
-  /** Memory key to resolve from Mastra's memory registry */
-  memory?: string;
-  /** Scorer keys with optional sampling config */
-  scorers?: Record<string, StorageScorerConfig>;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
-  /** Owner identifier for multi-tenant filtering */
-  ownerId?: string;
   /** FK to agent_versions.id - the currently active version */
   activeVersionId?: string;
-};
+} & Partial<StorageAgentSnapshotType>;
 
 export type StorageListAgentsInput = {
   /**
@@ -335,10 +350,10 @@ export type StorageListAgentsInput = {
   page?: number;
   orderBy?: StorageOrderBy;
   /**
-   * Filter agents by owner identifier (indexed for fast lookups).
-   * Only agents with matching ownerId will be returned.
+   * Filter agents by author identifier (indexed for fast lookups).
+   * Only agents with matching authorId will be returned.
    */
-  ownerId?: string;
+  authorId?: string;
   /**
    * Filter agents by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
@@ -453,6 +468,10 @@ export type StorageListScorersInput = {
 
 export type StorageListScorersOutput = PaginationInfo & {
   scorers: StoredScorerType[];
+};
+
+export type StorageListAgentsResolvedOutput = PaginationInfo & {
+  agents: StorageResolvedAgentType[];
 };
 
 // Basic Index Management Types
