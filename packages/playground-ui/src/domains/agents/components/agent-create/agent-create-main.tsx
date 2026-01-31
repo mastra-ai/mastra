@@ -1,6 +1,7 @@
 'use client';
 
-import { Controller } from 'react-hook-form';
+import type { RefObject } from 'react';
+import { Controller, UseFormReturn } from 'react-hook-form';
 
 import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
@@ -8,10 +9,14 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { cn } from '@/lib/utils';
 
 import { ModelPicker } from '../create-agent/model-picker';
-import { useAgentCreateContext } from './agent-create-context';
+import type { AgentFormValues } from '../create-agent/form-validation';
 
-export function AgentCreateMain() {
-  const { form, formRef } = useAgentCreateContext();
+interface AgentCreateMainProps {
+  form: UseFormReturn<AgentFormValues>;
+  formRef?: RefObject<HTMLFormElement | null>;
+}
+
+export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
   const {
     register,
     control,

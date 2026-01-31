@@ -1,22 +1,23 @@
+import { useCallback, useRef, useState } from 'react';
+
 import {
   MainContentLayout,
   toast,
   useLinkComponent,
   useStoredAgentMutations,
-  AgentCreateProvider,
   AgentCreateHeader,
   AgentCreateMain,
   AgentCreateSidebar,
   AgentLayout,
-  useAgentCreateContext,
+  useAgentCreateForm,
 } from '@mastra/playground-ui';
-import { useCallback, useState } from 'react';
 
-function AgentCreatePageContent() {
+function CmsAgentsCreatePage() {
   const { navigate, paths } = useLinkComponent();
   const { createStoredAgent } = useStoredAgentMutations();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { form, formRef } = useAgentCreateContext();
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const { form } = useAgentCreateForm();
 
   const handlePublish = useCallback(async () => {
     const isValid = await form.trigger();
@@ -56,20 +57,12 @@ function AgentCreatePageContent() {
   return (
     <MainContentLayout>
       <AgentCreateHeader onPublish={handlePublish} isSubmitting={isSubmitting} />
-      <AgentLayout agentId="agent-create" rightSlot={<AgentCreateSidebar />}>
+      <AgentLayout agentId="agent-create" rightSlot={<AgentCreateSidebar form={form} />}>
         <form ref={formRef} className="h-full">
-          <AgentCreateMain />
+          <AgentCreateMain form={form} formRef={formRef} />
         </form>
       </AgentLayout>
     </MainContentLayout>
-  );
-}
-
-function CmsAgentsCreatePage() {
-  return (
-    <AgentCreateProvider>
-      <AgentCreatePageContent />
-    </AgentCreateProvider>
   );
 }
 
