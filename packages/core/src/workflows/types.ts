@@ -429,7 +429,6 @@ export type WorkflowInfo = {
   inputSchema: string | undefined;
   outputSchema: string | undefined;
   stateSchema: string | undefined;
-  requestContextSchema: string | undefined;
   options?: WorkflowOptions;
   stepCount?: number;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
@@ -540,7 +539,6 @@ export type StepParams<
   TOutputSchema extends z.ZodTypeAny,
   TResumeSchema extends z.ZodTypeAny | undefined = undefined,
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
-  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 > = {
   id: TStepId;
   description?: string;
@@ -549,11 +547,6 @@ export type StepParams<
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
   stateSchema?: TStateSchema;
-  /**
-   * Optional schema for validating request context values.
-   * When provided, the request context will be validated against this schema before step execution.
-   */
-  requestContextSchema?: TRequestContextSchema;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
   execute: ExecuteFunction<
@@ -562,8 +555,7 @@ export type StepParams<
     z.infer<TOutputSchema>,
     TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
     TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
-    DefaultEngineType,
-    TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
+    DefaultEngineType
   >;
 };
 
@@ -571,15 +563,7 @@ export type StepParams<
  * Legacy StepParams type for backward compatibility.
  * Use the schema-based StepParams for new code.
  */
-export type StepParamsLegacy<
-  TStepId extends string,
-  TState,
-  TStepInput,
-  TStepOutput,
-  TResume,
-  TSuspend,
-  TRequestContext extends Record<string, any> | unknown = unknown,
-> = {
+export type StepParamsLegacy<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend> = {
   id: TStepId;
   description?: string;
   inputSchema: SchemaWithValidation<TStepInput>;
@@ -587,14 +571,9 @@ export type StepParamsLegacy<
   resumeSchema?: SchemaWithValidation<TResume>;
   suspendSchema?: SchemaWithValidation<TSuspend>;
   stateSchema?: SchemaWithValidation<TState>;
-  /**
-   * Optional schema for validating request context values.
-   * When provided, the request context will be validated against this schema before step execution.
-   */
-  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
-  execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType, TRequestContext>;
+  execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 };
 
 export type ToolStep<
@@ -714,26 +693,13 @@ export type WorkflowStreamResult<TState, TInput, TOutput, TSteps extends Step<st
       };
     };
 
-export type WorkflowConfig<
-  TWorkflowId extends string,
-  TState,
-  TInput,
-  TOutput,
-  TSteps extends Step[],
-  TRequestContext extends Record<string, any> | unknown = unknown,
-> = {
+export type WorkflowConfig<TWorkflowId extends string, TState, TInput, TOutput, TSteps extends Step[]> = {
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
   inputSchema: SchemaWithValidation<TInput>;
   outputSchema: SchemaWithValidation<TOutput>;
   stateSchema?: SchemaWithValidation<TState>;
-  /**
-   * Optional schema for validating request context values.
-   * When provided, the request context will be validated against this schema when the workflow starts.
-   * If validation fails, a validation error is thrown.
-   */
-  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {

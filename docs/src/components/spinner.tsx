@@ -1,6 +1,6 @@
-import { cn } from '@site/src/lib/utils'
+import { cn } from "@site/src/lib/utils";
 
-function Spinner({ className, ...props }: React.ComponentProps<'svg'>) {
+function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -14,12 +14,12 @@ function Spinner({ className, ...props }: React.ComponentProps<'svg'>) {
       strokeLinejoin="round"
       role="status"
       aria-label="Loading"
-      className={cn('size-4 animate-spin', className)}
+      className={cn("size-4 animate-spin", className)}
       {...props}
     >
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
     </svg>
-  )
+  );
 }
 
-export { Spinner }
+export { Spinner };

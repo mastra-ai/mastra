@@ -122,33 +122,16 @@ function syncGlobalCacheToLocal(): void {
     // Sync .d.ts file if global exists and differs from local
     if (globalDtsExists) {
       const globalDtsContent = fs.readFileSync(GLOBAL_PROVIDER_TYPES_DTS(), 'utf-8');
+      let shouldCopyDts = true;
 
-      // Validate .d.ts content: check for unquoted provider names that start with a digit
-      // (e.g. "readonly 302ai:" instead of "readonly '302ai':"), which produces invalid TypeScript.
-      // This can happen if the global cache was written by an older version without the quoting fix.
-      if (/readonly\s+\d/.test(globalDtsContent)) {
-        console.warn(
-          `[GatewayRegistry] Detected invalid provider-types in global cache at ${GLOBAL_PROVIDER_TYPES_DTS()}. ` +
-            `Deleting corrupted file.`,
-        );
-        try {
-          fs.unlinkSync(GLOBAL_PROVIDER_TYPES_DTS());
-        } catch {
-          // Ignore deletion errors
-        }
-        // Don't sync corrupted .d.ts file; fall through to keep existing local file
-      } else {
-        let shouldCopyDts = true;
+      if (fs.existsSync(localDtsPath)) {
+        const localDtsContent = fs.readFileSync(localDtsPath, 'utf-8');
+        shouldCopyDts = globalDtsContent !== localDtsContent;
+      }
 
-        if (fs.existsSync(localDtsPath)) {
-          const localDtsContent = fs.readFileSync(localDtsPath, 'utf-8');
-          shouldCopyDts = globalDtsContent !== localDtsContent;
-        }
-
-        if (shouldCopyDts) {
-          // Use atomic write to prevent corruption from concurrent writes
-          atomicWriteFileSync(localDtsPath, globalDtsContent, 'utf-8');
-        }
+      if (shouldCopyDts) {
+        // Use atomic write to prevent corruption from concurrent writes
+        atomicWriteFileSync(localDtsPath, globalDtsContent, 'utf-8');
       }
     }
   } catch (error) {

@@ -103,7 +103,7 @@ export class AgentBuilder extends BaseResource {
 
   /**
    * Creates a new agent builder action run and returns the runId.
-   * This calls `/agent-builder/:actionId/create-run`.
+   * This calls `/api/agent-builder/:actionId/create-run`.
    */
   async createRun(params?: { runId?: string }): Promise<{ runId: string }> {
     const searchParams = new URLSearchParams();
@@ -112,7 +112,7 @@ export class AgentBuilder extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    const url = `/agent-builder/${this.actionId}/create-run${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    const url = `/api/agent-builder/${this.actionId}/create-run${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     return this.request(url, {
       method: 'POST',
     });
@@ -120,7 +120,7 @@ export class AgentBuilder extends BaseResource {
 
   /**
    * Starts agent builder action asynchronously and waits for completion.
-   * This calls `/agent-builder/:actionId/start-async`.
+   * This calls `/api/agent-builder/:actionId/start-async`.
    */
   async startAsync(params: AgentBuilderActionRequest, runId?: string): Promise<AgentBuilderActionResult> {
     const searchParams = new URLSearchParams();
@@ -131,7 +131,7 @@ export class AgentBuilder extends BaseResource {
     const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...actionParams } = params;
 
-    const url = `/agent-builder/${this.actionId}/start-async${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    const url = `/api/agent-builder/${this.actionId}/start-async${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const result = await this.request(url, {
       method: 'POST',
       body: { ...actionParams, requestContext },
@@ -142,7 +142,7 @@ export class AgentBuilder extends BaseResource {
 
   /**
    * Starts an existing agent builder action run.
-   * This calls `/agent-builder/:actionId/start`.
+   * This calls `/api/agent-builder/:actionId/start`.
    */
   async startActionRun(params: AgentBuilderActionRequest, runId: string): Promise<{ message: string }> {
     const searchParams = new URLSearchParams();
@@ -151,7 +151,7 @@ export class AgentBuilder extends BaseResource {
     const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...actionParams } = params;
 
-    const url = `/agent-builder/${this.actionId}/start?${searchParams.toString()}`;
+    const url = `/api/agent-builder/${this.actionId}/start?${searchParams.toString()}`;
     return this.request(url, {
       method: 'POST',
       body: { ...actionParams, requestContext },
@@ -160,7 +160,7 @@ export class AgentBuilder extends BaseResource {
 
   /**
    * Resumes a suspended agent builder action step.
-   * This calls `/agent-builder/:actionId/resume`.
+   * This calls `/api/agent-builder/:actionId/resume`.
    */
   async resume(
     params: {
@@ -176,7 +176,7 @@ export class AgentBuilder extends BaseResource {
     const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...resumeParams } = params;
 
-    const url = `/agent-builder/${this.actionId}/resume?${searchParams.toString()}`;
+    const url = `/api/agent-builder/${this.actionId}/resume?${searchParams.toString()}`;
     return this.request(url, {
       method: 'POST',
       body: { ...resumeParams, requestContext },
@@ -185,7 +185,7 @@ export class AgentBuilder extends BaseResource {
 
   /**
    * Resumes a suspended agent builder action step asynchronously.
-   * This calls `/agent-builder/:actionId/resume-async`.
+   * This calls `/api/agent-builder/:actionId/resume-async`.
    */
   async resumeAsync(
     params: {
@@ -201,7 +201,7 @@ export class AgentBuilder extends BaseResource {
     const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...resumeParams } = params;
 
-    const url = `/agent-builder/${this.actionId}/resume-async?${searchParams.toString()}`;
+    const url = `/api/agent-builder/${this.actionId}/resume-async?${searchParams.toString()}`;
     const result = await this.request(url, {
       method: 'POST',
       body: { ...resumeParams, requestContext },
@@ -285,7 +285,7 @@ export class AgentBuilder extends BaseResource {
 
   /**
    * Streams agent builder action progress in real-time.
-   * This calls `/agent-builder/:actionId/stream`.
+   * This calls `/api/agent-builder/:actionId/stream`.
    */
   async stream(params: AgentBuilderActionRequest, runId?: string) {
     const searchParams = new URLSearchParams();
@@ -296,7 +296,7 @@ export class AgentBuilder extends BaseResource {
     const requestContext = parseClientRequestContext(params.requestContext);
     const { requestContext: _, ...actionParams } = params;
 
-    const url = `/agent-builder/${this.actionId}/stream${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    const url = `/api/agent-builder/${this.actionId}/stream${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const response: Response = await this.request(url, {
       method: 'POST',
       body: { ...actionParams, requestContext },
@@ -318,13 +318,13 @@ export class AgentBuilder extends BaseResource {
    * Observes an existing agent builder action run stream.
    * Replays cached execution from the beginning, then continues with live stream.
    * This is the recommended method for recovery after page refresh/hot reload.
-   * This calls `/agent-builder/:actionId/observe`
+   * This calls `/api/agent-builder/:actionId/observe`
    */
   async observeStream(params: { runId: string }) {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
 
-    const url = `/agent-builder/${this.actionId}/observe?${searchParams.toString()}`;
+    const url = `/api/agent-builder/${this.actionId}/observe?${searchParams.toString()}`;
     const response: Response = await this.request(url, {
       method: 'POST',
       stream: true,
@@ -344,13 +344,13 @@ export class AgentBuilder extends BaseResource {
   /**
    * Observes an existing agent builder action run stream using legacy streaming API.
    * Replays cached execution from the beginning, then continues with live stream.
-   * This calls `/agent-builder/:actionId/observe-stream-legacy`.
+   * This calls `/api/agent-builder/:actionId/observe-stream-legacy`.
    */
   async observeStreamLegacy(params: { runId: string }) {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
 
-    const url = `/agent-builder/${this.actionId}/observe-stream-legacy?${searchParams.toString()}`;
+    const url = `/api/agent-builder/${this.actionId}/observe-stream-legacy?${searchParams.toString()}`;
     const response: Response = await this.request(url, {
       method: 'POST',
       stream: true,
@@ -369,7 +369,7 @@ export class AgentBuilder extends BaseResource {
 
   /**
    * Resumes a suspended agent builder action and streams the results.
-   * This calls `/agent-builder/:actionId/resume-stream`.
+   * This calls `/api/agent-builder/:actionId/resume-stream`.
    */
   async resumeStream(params: {
     runId: string;
@@ -383,7 +383,7 @@ export class AgentBuilder extends BaseResource {
     const requestContext = parseClientRequestContext(params.requestContext);
     const { runId: _, requestContext: __, ...resumeParams } = params;
 
-    const url = `/agent-builder/${this.actionId}/resume-stream?${searchParams.toString()}`;
+    const url = `/api/agent-builder/${this.actionId}/resume-stream?${searchParams.toString()}`;
     const response: Response = await this.request(url, {
       method: 'POST',
       body: { ...resumeParams, requestContext },
@@ -403,7 +403,7 @@ export class AgentBuilder extends BaseResource {
 
   /**
    * Gets a specific action run by its ID.
-   * This calls `/agent-builder/:actionId/runs/:runId`.
+   * This calls `/api/agent-builder/:actionId/runs/:runId`.
    * @param runId - The ID of the action run to retrieve
    * @param options - Optional configuration
    * @param options.fields - Optional array of fields to return (e.g., ['result', 'steps']). Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.
@@ -428,7 +428,7 @@ export class AgentBuilder extends BaseResource {
     }
 
     const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
-    const url = `/agent-builder/${this.actionId}/runs/${runId}${queryString}`;
+    const url = `/api/agent-builder/${this.actionId}/runs/${runId}${queryString}`;
     return this.request(url, {
       method: 'GET',
     });
@@ -436,16 +436,16 @@ export class AgentBuilder extends BaseResource {
 
   /**
    * Gets details about this agent builder action.
-   * This calls `/agent-builder/:actionId`.
+   * This calls `/api/agent-builder/:actionId`.
    */
   async details(): Promise<WorkflowInfo> {
-    const result = await this.request<WorkflowInfo>(`/agent-builder/${this.actionId}`);
+    const result = await this.request<WorkflowInfo>(`/api/agent-builder/${this.actionId}`);
     return result;
   }
 
   /**
    * Gets all runs for this agent builder action.
-   * This calls `/agent-builder/:actionId/runs`.
+   * This calls `/api/agent-builder/:actionId/runs`.
    */
   async runs(params?: ListWorkflowRunsParams) {
     const searchParams = new URLSearchParams();
@@ -476,7 +476,7 @@ export class AgentBuilder extends BaseResource {
       searchParams.set('resourceId', params.resourceId);
     }
 
-    const url = `/agent-builder/${this.actionId}/runs${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    const url = `/api/agent-builder/${this.actionId}/runs${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     return this.request(url, {
       method: 'GET',
     });
@@ -484,10 +484,10 @@ export class AgentBuilder extends BaseResource {
 
   /**
    * Cancels an agent builder action run.
-   * This calls `/agent-builder/:actionId/runs/:runId/cancel`.
+   * This calls `/api/agent-builder/:actionId/runs/:runId/cancel`.
    */
   async cancelRun(runId: string): Promise<{ message: string }> {
-    const url = `/agent-builder/${this.actionId}/runs/${runId}/cancel`;
+    const url = `/api/agent-builder/${this.actionId}/runs/${runId}/cancel`;
     return this.request(url, {
       method: 'POST',
     });

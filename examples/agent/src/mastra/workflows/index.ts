@@ -7,9 +7,6 @@ export const myWorkflow = createWorkflow({
   inputSchema: z.object({
     ingredient: z.string(),
   }),
-  requestContextSchema: z.object({
-    userId: z.string(),
-  }),
   outputSchema: z.object({
     result: z.string(),
   }),
@@ -24,14 +21,10 @@ const step = createStep({
   outputSchema: z.object({
     result: z.string(),
   }),
-  requestContextSchema: z.object({
-    userId: z.string(),
-  }),
-  execute: async ({ inputData, requestContext }) => {
-    const userId = requestContext?.get('userId');
+  execute: async ({ inputData }) => {
     await new Promise(resolve => setTimeout(resolve, 3000));
     return {
-      result: inputData.ingredient + ' from ' + userId,
+      result: inputData.ingredient,
     };
   },
 });

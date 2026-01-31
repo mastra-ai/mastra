@@ -79,8 +79,8 @@ describe('ModelSpanTracker', () => {
     });
   });
 
-  describe('tool-output pass-through (no spans created)', () => {
-    it('should NOT create spans for tool-output chunks (streaming progress)', async () => {
+  describe('tool-output consolidation for sub-agent streaming', () => {
+    it('should consolidate multiple tool-output text-delta chunks into a single tool-result span', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -93,7 +93,7 @@ describe('ModelSpanTracker', () => {
       const toolName = 'agent-subAgent';
       const chunks = [
         { type: 'step-start', payload: { messageId: 'msg-1' } },
-        // tool-output chunks are streaming progress - no spans created
+        // First tool-output with text-delta
         {
           type: 'tool-output',
           runId: 'run-1',
@@ -104,16 +104,28 @@ describe('ModelSpanTracker', () => {
             toolName,
           },
         },
+        // More text-delta chunks
         {
           type: 'tool-output',
           runId: 'run-1',
           from: 'USER',
           payload: {
-            output: { type: 'text-delta', payload: { text: 'world!' } },
+            output: { type: 'text-delta', payload: { text: 'world' } },
             toolCallId,
             toolName,
           },
         },
+        {
+          type: 'tool-output',
+          runId: 'run-1',
+          from: 'USER',
+          payload: {
+            output: { type: 'text-delta', payload: { text: '!' } },
+            toolCallId,
+            toolName,
+          },
+        },
+        // Finish chunk ends the tool output
         {
           type: 'tool-output',
           runId: 'run-1',
@@ -122,15 +134,6 @@ describe('ModelSpanTracker', () => {
             output: { type: 'finish', payload: {} },
             toolCallId,
             toolName,
-          },
-        },
-        // tool-result is a point-in-time event with the final result
-        {
-          type: 'tool-result',
-          payload: {
-            toolCallId,
-            toolName,
-            result: { text: 'Hello world!' },
           },
         },
         { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
@@ -142,24 +145,24 @@ describe('ModelSpanTracker', () => {
 
       modelSpan.end();
 
-      // Should have exactly one tool-result span (from the tool-result chunk, not tool-output)
+      // Should have exactly one tool-result span (consolidated from multiple tool-output chunks)
       const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
       expect(toolResultSpans).toHaveLength(1);
 
-      // Should NOT have any tool-output spans (they are pass-through, no tracing)
+      // Should NOT have any individual tool-output spans (they should be consolidated)
       const toolOutputSpans = testExporter.getSpansByName("chunk: 'tool-output'");
       expect(toolOutputSpans).toHaveLength(0);
 
-      // The span should be an event span with the result
+      // The span should have accumulated text
       const span = toolResultSpans[0]!;
-      expect(span.isEvent).toBe(true);
-      // toolCallId and toolName are in metadata (tool-result specific fields)
-      expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ text: 'Hello world!' });
+      expect(span.output).toEqual({
+        toolCallId,
+        toolName,
+        text: 'Hello world!',
+      });
     });
 
-    it('should pass through tool-output chunks without creating spans', async () => {
+    it('should consolidate reasoning-delta chunks from sub-agent', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -171,7 +174,6 @@ describe('ModelSpanTracker', () => {
       const toolName = 'agent-reasoningAgent';
       const chunks = [
         { type: 'step-start', payload: { messageId: 'msg-1' } },
-        // tool-output chunks are pass-through (no spans)
         {
           type: 'tool-output',
           runId: 'run-1',
@@ -202,15 +204,6 @@ describe('ModelSpanTracker', () => {
             toolName,
           },
         },
-        // tool-result creates the event span
-        {
-          type: 'tool-result',
-          payload: {
-            toolCallId,
-            toolName,
-            result: { text: 'The answer is 42', reasoning: 'Let me think...' },
-          },
-        },
         { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
       ];
 
@@ -220,17 +213,19 @@ describe('ModelSpanTracker', () => {
 
       modelSpan.end();
 
-      // No tool-output spans created
-      const toolOutputSpans = testExporter.getSpansByName("chunk: 'tool-output'");
-      expect(toolOutputSpans).toHaveLength(0);
-
-      // Only tool-result event span
       const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
       expect(toolResultSpans).toHaveLength(1);
-      expect(toolResultSpans[0]!.isEvent).toBe(true);
+
+      const span = toolResultSpans[0]!;
+      expect(span.output).toEqual({
+        toolCallId,
+        toolName,
+        text: 'The answer is 42',
+        reasoning: 'Let me think...',
+      });
     });
 
-    it('should create event span for tool-result from workflow tools', async () => {
+    it('should handle workflow-finish as end of tool output', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -242,7 +237,6 @@ describe('ModelSpanTracker', () => {
       const toolName = 'workflow-myWorkflow';
       const chunks = [
         { type: 'step-start', payload: { messageId: 'msg-1' } },
-        // Workflow streaming output (no spans created)
         {
           type: 'tool-output',
           runId: 'run-1',
@@ -253,6 +247,7 @@ describe('ModelSpanTracker', () => {
             toolName,
           },
         },
+        // Workflows emit workflow-finish instead of finish
         {
           type: 'tool-output',
           runId: 'run-1',
@@ -261,15 +256,6 @@ describe('ModelSpanTracker', () => {
             output: { type: 'workflow-finish', payload: { workflowStatus: 'success' } },
             toolCallId,
             toolName,
-          },
-        },
-        // tool-result event span with the final result
-        {
-          type: 'tool-result',
-          payload: {
-            toolCallId,
-            toolName,
-            result: { output: 'Workflow result', status: 'success' },
           },
         },
         { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
@@ -285,16 +271,16 @@ describe('ModelSpanTracker', () => {
       expect(toolResultSpans).toHaveLength(1);
 
       const span = toolResultSpans[0]!;
-      expect(span.isEvent).toBe(true);
-      // toolCallId and toolName are in metadata
-      expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ output: 'Workflow result', status: 'success' });
+      expect(span.output).toEqual({
+        toolCallId,
+        toolName,
+        text: 'Workflow result',
+      });
     });
   });
 
-  describe('tool-result always creates event span', () => {
-    it('should always create tool-result event span regardless of prior tool-output chunks', async () => {
+  describe('tool-result deduplication', () => {
+    it('should skip tool-result span when tool-output streaming already tracked the same toolCallId', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -306,7 +292,7 @@ describe('ModelSpanTracker', () => {
       const toolName = 'agent-subAgent';
       const chunks = [
         { type: 'step-start', payload: { messageId: 'msg-1' } },
-        // Streaming tool-output chunks (no spans created)
+        // Streaming tool-output chunks
         {
           type: 'tool-output',
           runId: 'run-1',
@@ -327,7 +313,7 @@ describe('ModelSpanTracker', () => {
             toolName,
           },
         },
-        // tool-result always creates an event span (point-in-time)
+        // After streaming ends, a tool-result chunk arrives (should be skipped)
         {
           type: 'tool-result',
           payload: {
@@ -346,17 +332,17 @@ describe('ModelSpanTracker', () => {
 
       modelSpan.end();
 
-      // Should have exactly ONE tool-result event span
+      // Should have only ONE tool-result span (from streaming), not two
       const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
       expect(toolResultSpans).toHaveLength(1);
 
-      // The span should be an event span with the result (args stripped)
+      // The span should have the streamed content, not the tool-result payload
       const span = toolResultSpans[0]!;
-      expect(span.isEvent).toBe(true);
-      // toolCallId and toolName are in metadata
-      expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ text: 'Streamed content' });
+      expect(span.output).toEqual({
+        toolCallId,
+        toolName,
+        text: 'Streamed content',
+      });
     });
   });
 
@@ -396,18 +382,19 @@ describe('ModelSpanTracker', () => {
       expect(toolResultSpans).toHaveLength(1);
 
       const span = toolResultSpans[0]!;
-      // args should not be in the output or metadata
+      // args should not be in the output
       expect(span.output).not.toHaveProperty('args');
-      expect(span.metadata).not.toHaveProperty('args');
-      // toolCallId and toolName should be in metadata
-      expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ output: 'tool result' });
+      // Other fields should be preserved
+      expect(span.output).toEqual({
+        toolCallId,
+        toolName,
+        result: { output: 'tool result' },
+      });
     });
   });
 
   describe('multiple concurrent tool calls', () => {
-    it('should create separate event spans for multiple tool-result chunks', async () => {
+    it('should track multiple streaming tool calls independently', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -415,17 +402,38 @@ describe('ModelSpanTracker', () => {
 
       const tracker = new ModelSpanTracker(modelSpan);
 
-      // Simulate interleaved streaming from two sub-agents (no spans for tool-output)
-      // followed by their tool-result chunks (event spans created)
+      // Simulate interleaved streaming from two sub-agents
       const chunks = [
         { type: 'step-start', payload: { messageId: 'msg-1' } },
-        // Interleaved tool-output chunks (pass-through, no spans)
+        // First tool starts
         {
           type: 'tool-output',
           runId: 'run-1',
           from: 'USER',
           payload: {
-            output: { type: 'text-delta', payload: { text: 'Agent1: Hello' } },
+            output: { type: 'text-delta', payload: { text: 'Agent1: ' } },
+            toolCallId: 'call_agent1',
+            toolName: 'agent-first',
+          },
+        },
+        // Second tool starts
+        {
+          type: 'tool-output',
+          runId: 'run-2',
+          from: 'USER',
+          payload: {
+            output: { type: 'text-delta', payload: { text: 'Agent2: ' } },
+            toolCallId: 'call_agent2',
+            toolName: 'agent-second',
+          },
+        },
+        // Interleaved deltas
+        {
+          type: 'tool-output',
+          runId: 'run-1',
+          from: 'USER',
+          payload: {
+            output: { type: 'text-delta', payload: { text: 'Hello' } },
             toolCallId: 'call_agent1',
             toolName: 'agent-first',
           },
@@ -435,26 +443,31 @@ describe('ModelSpanTracker', () => {
           runId: 'run-2',
           from: 'USER',
           payload: {
-            output: { type: 'text-delta', payload: { text: 'Agent2: World' } },
+            output: { type: 'text-delta', payload: { text: 'World' } },
             toolCallId: 'call_agent2',
             toolName: 'agent-second',
           },
         },
-        // tool-result chunks create event spans
+        // First tool finishes
         {
-          type: 'tool-result',
+          type: 'tool-output',
+          runId: 'run-1',
+          from: 'USER',
           payload: {
+            output: { type: 'finish', payload: {} },
             toolCallId: 'call_agent1',
             toolName: 'agent-first',
-            result: { text: 'Agent1: Hello' },
           },
         },
+        // Second tool finishes
         {
-          type: 'tool-result',
+          type: 'tool-output',
+          runId: 'run-2',
+          from: 'USER',
           payload: {
+            output: { type: 'finish', payload: {} },
             toolCallId: 'call_agent2',
             toolName: 'agent-second',
-            result: { text: 'Agent2: World' },
           },
         },
         { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
@@ -466,37 +479,30 @@ describe('ModelSpanTracker', () => {
 
       modelSpan.end();
 
-      // Should have two tool-result event spans
       const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
       expect(toolResultSpans).toHaveLength(2);
 
-      // Should NOT have any tool-output spans (they are pass-through)
+      // Should NOT have any individual tool-output spans (6 chunks consolidated into 2 spans)
       const toolOutputSpans = testExporter.getSpansByName("chunk: 'tool-output'");
       expect(toolOutputSpans).toHaveLength(0);
 
-      // Both should be event spans
-      expect(toolResultSpans[0]!.isEvent).toBe(true);
-      expect(toolResultSpans[1]!.isEvent).toBe(true);
-
-      // Find spans by toolCallId (now in metadata)
-      const agent1Span = toolResultSpans.find(s => (s.metadata as any)?.toolCallId === 'call_agent1');
-      const agent2Span = toolResultSpans.find(s => (s.metadata as any)?.toolCallId === 'call_agent2');
+      // Find spans by toolCallId
+      const agent1Span = toolResultSpans.find(s => (s.output as any)?.toolCallId === 'call_agent1');
+      const agent2Span = toolResultSpans.find(s => (s.output as any)?.toolCallId === 'call_agent2');
 
       expect(agent1Span).toBeDefined();
-      // toolCallId and toolName are in metadata
-      expect(agent1Span!.metadata).toMatchObject({
+      expect(agent1Span!.output).toEqual({
         toolCallId: 'call_agent1',
         toolName: 'agent-first',
+        text: 'Agent1: Hello',
       });
-      // output contains only the result
-      expect(agent1Span!.output).toEqual({ text: 'Agent1: Hello' });
 
       expect(agent2Span).toBeDefined();
-      expect(agent2Span!.metadata).toMatchObject({
+      expect(agent2Span!.output).toEqual({
         toolCallId: 'call_agent2',
         toolName: 'agent-second',
+        text: 'Agent2: World',
       });
-      expect(agent2Span!.output).toEqual({ text: 'Agent2: World' });
     });
   });
 
@@ -520,6 +526,7 @@ describe('ModelSpanTracker', () => {
         { type: 'tripwire', payload: { reason: 'blocked' } },
         { type: 'watch', payload: {} },
         { type: 'tool-error', payload: { toolCallId: 'tc-1', toolName: 'test', error: 'failed' } },
+        { type: 'tool-call-approval', payload: { toolCallId: 'tc-2', toolName: 'test', args: {} } },
         { type: 'tool-call-suspended', payload: { toolCallId: 'tc-3', toolName: 'test', args: {} } },
         { type: 'reasoning-signature', payload: { id: 'r-1', signature: 'sig' } },
         { type: 'redacted-reasoning', payload: { id: 'r-2', data: {} } },
@@ -620,103 +627,6 @@ describe('ModelSpanTracker', () => {
 
       expect(toolCallSpan).toBeDefined();
       expect(toolCallSpan!.output).toHaveProperty('toolName', 'myTool');
-    });
-  });
-
-  describe('tool-call-approval tracing', () => {
-    it('should create a span for tool-call-approval chunks', async () => {
-      const modelSpan = tracing.startSpan({
-        type: SpanType.MODEL_GENERATION,
-        name: 'test-generation',
-      });
-
-      const tracker = new ModelSpanTracker(modelSpan);
-
-      const toolCallId = 'tc-approval-123';
-      const toolName = 'criticalAction';
-      const args = { param1: 'value1', param2: 42 };
-      const resumeSchema = '{"type":"object","properties":{"approved":{"type":"boolean"}}}';
-
-      const chunks = [
-        { type: 'step-start', payload: { messageId: 'msg-1' } },
-        {
-          type: 'tool-call-approval',
-          runId: 'run-1',
-          from: 'AGENT',
-          payload: {
-            toolCallId,
-            toolName,
-            args,
-            resumeSchema,
-          },
-        },
-        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
-      ];
-
-      const stream = createMockStream(chunks);
-      const wrappedStream = tracker.wrapStream(stream);
-      await consumeStream(wrappedStream);
-
-      modelSpan.end();
-
-      // Should have exactly one tool-call-approval chunk span
-      const approvalSpans = testExporter.getSpansByName("chunk: 'tool-call-approval'");
-      expect(approvalSpans).toHaveLength(1);
-
-      // Verify span attributes
-      const span = approvalSpans[0]!;
-      expect(span.type).toBe(SpanType.MODEL_CHUNK);
-      // MODEL_CHUNK attributes should only contain chunkType and sequenceNumber
-      expect(span.attributes).toMatchObject({
-        chunkType: 'tool-call-approval',
-      });
-
-      // Verify span output contains the full approval payload
-      expect(span.output).toEqual({
-        toolCallId,
-        toolName,
-        args,
-        resumeSchema,
-      });
-    });
-
-    it('should handle tool-call-approval without prior step-start', async () => {
-      const modelSpan = tracing.startSpan({
-        type: SpanType.MODEL_GENERATION,
-        name: 'test-generation',
-      });
-
-      const tracker = new ModelSpanTracker(modelSpan);
-
-      const chunks = [
-        // tool-call-approval before step-start - should auto-create step
-        {
-          type: 'tool-call-approval',
-          runId: 'run-1',
-          from: 'AGENT',
-          payload: {
-            toolCallId: 'tc-auto-step',
-            toolName: 'autoApprove',
-            args: {},
-            resumeSchema: '{}',
-          },
-        },
-        { type: 'step-start', payload: { messageId: 'msg-1' } },
-        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
-      ];
-
-      const stream = createMockStream(chunks);
-      const wrappedStream = tracker.wrapStream(stream);
-      await consumeStream(wrappedStream);
-
-      modelSpan.end();
-
-      // Should have the approval span and step span
-      const approvalSpans = testExporter.getSpansByName("chunk: 'tool-call-approval'");
-      expect(approvalSpans).toHaveLength(1);
-
-      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
-      expect(stepSpans).toHaveLength(1);
     });
   });
 });

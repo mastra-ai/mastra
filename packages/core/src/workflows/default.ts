@@ -327,7 +327,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       type: SpanType;
       input?: unknown;
       attributes?: Record<string, unknown>;
-      tracingPolicy?: TracingPolicy;
     };
     executionContext: ExecutionContext;
   }): Promise<Span<SpanType> | undefined> {

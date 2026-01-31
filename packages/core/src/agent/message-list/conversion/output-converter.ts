@@ -45,7 +45,7 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
 }
 
 /**
- * Sanitizes AIV5 UI messages by filtering out streaming states, data-* parts, and optionally incomplete tool calls.
+ * Sanitizes AIV5 UI messages by filtering out streaming states and optionally incomplete tool calls.
  */
 export function sanitizeV5UIMessages(
   messages: AIV5Type.UIMessage[],
@@ -56,14 +56,6 @@ export function sanitizeV5UIMessages(
       if (m.parts.length === 0) return false;
       // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
       const safeParts = m.parts.filter(p => {
-        // Filter out data-* parts (custom streaming data from writer.custom())
-        // These are Mastra extensions not supported by LLM providers.
-        // If not filtered, convertToModelMessages produces empty content arrays
-        // which causes some models to fail with "must include at least one parts field"
-        if (typeof p.type === 'string' && p.type.startsWith('data-')) {
-          return false;
-        }
-
         if (!AIV5.isToolUIPart(p)) return true;
 
         // When sending messages TO the LLM: only keep completed tool calls (output-available/output-error)

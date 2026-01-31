@@ -17,28 +17,11 @@ export type AgentTableColumn = {
   id: string;
 } & AgentTableData;
 
-const NameCell = ({ row, showSourceIcon }: { row: Row<AgentTableColumn>; showSourceIcon?: boolean }) => {
+const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
   const { Link, paths } = useLinkComponent();
-  const isStored = row.original.source === 'stored';
-
-  const sourceIcon = showSourceIcon ? (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {isStored ? (
-          <Database className="w-3.5 h-3.5 text-accent6 shrink-0" />
-        ) : (
-          <Code2 className="w-3.5 h-3.5 text-accent3 shrink-0" />
-        )}
-      </TooltipTrigger>
-      <TooltipContent>
-        {isStored ? 'Stored in database - can be edited in UI' : 'Defined in code - read-only in UI'}
-      </TooltipContent>
-    </Tooltip>
-  ) : undefined;
 
   return (
     <EntryCell
-      icon={sourceIcon}
       name={
         <Link className="w-full" href={paths.agentLink(row.original.id)}>
           {row.original.name}
@@ -49,105 +32,146 @@ const NameCell = ({ row, showSourceIcon }: { row: Row<AgentTableColumn>; showSou
   );
 };
 
-const modelColumn: ColumnDef<AgentTableColumn> = {
-  header: 'Model',
-  accessorKey: 'model',
-  cell: ({ row }) => {
-    return (
-      <Cell>
-        <Badge
-          variant="default"
-          icon={providerMapToIcon[row.original.provider as keyof typeof providerMapToIcon] || <OpenAIIcon />}
-          className="truncate"
-        >
-          {row.original.modelId || 'N/A'}
-        </Badge>
-        {row.original.modelList && row.original.modelList.length > 1 ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="info" className="ml-2">
-                + {row.original.modelList.length - 1} more
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent className="bg-surface5 flex flex-col gap-2">
-              {row.original.modelList.slice(1).map(mdl => (
-                <div key={mdl.id}>
-                  <Badge
-                    variant="default"
-                    icon={providerMapToIcon[mdl.model.provider as keyof typeof providerMapToIcon]}
-                  >
-                    {mdl.model.modelId}
-                  </Badge>
-                </div>
-              ))}
-            </TooltipContent>
-          </Tooltip>
-        ) : null}
-      </Cell>
-    );
-  },
+const SourceCell = ({ row }: { row: Row<AgentTableColumn> }) => {
+  const isStored = row.original.source === 'stored';
+
+  return (
+    <Cell>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="inline-flex items-center gap-1.5 text-sm">
+            {isStored ? (
+              <>
+                <Database className="w-3.5 h-3.5 text-accent6" />
+                <span className="text-text2">Storage</span>
+              </>
+            ) : (
+              <>
+                <Code2 className="w-3.5 h-3.5 text-accent3" />
+                <span className="text-text2">Code</span>
+              </>
+            )}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          {isStored ? 'Stored in database - can be edited in UI' : 'Defined in code - read-only in UI'}
+        </TooltipContent>
+      </Tooltip>
+    </Cell>
+  );
 };
 
-const attachedEntitiesColumn: ColumnDef<AgentTableColumn> = {
-  header: 'Attached entities',
-  accessorKey: 'attachedEntities',
-  cell: ({ row }) => {
-    const agent = row.original;
+const sourceColumn: ColumnDef<AgentTableColumn> = {
+  header: 'Source',
+  accessorKey: 'source',
+  cell: SourceCell,
+  size: 100,
+};
 
-    const agentsCount = Object.keys(agent.agents || {}).length;
-    const toolsCount = Object.keys(agent.tools || {}).length;
-    const workflowsCount = Object.keys(agent.workflows || {}).length;
-    const inputProcessorsCount = (agent.inputProcessors || []).length;
-    const outputProcessorsCount = (agent.outputProcessors || []).length;
-
-    return (
-      <Cell>
-        <span className="flex flex-row gap-2 w-full items-center flex-wrap">
-          <Badge variant="default" icon={<AgentIcon className="text-accent1" />}>
-            {agentsCount} agent{agentsCount !== 1 ? 's' : ''}
+const baseColumns: ColumnDef<AgentTableColumn>[] = [
+  {
+    header: 'Name',
+    accessorKey: 'name',
+    cell: NameCell,
+  },
+  {
+    header: 'Model',
+    accessorKey: 'model',
+    cell: ({ row }) => {
+      return (
+        <Cell>
+          <Badge
+            variant="default"
+            icon={providerMapToIcon[row.original.provider as keyof typeof providerMapToIcon] || <OpenAIIcon />}
+            className="truncate"
+          >
+            {row.original.modelId || 'N/A'}
           </Badge>
-          <Badge variant="default" icon={<ToolsIcon className="text-accent6" />}>
-            {toolsCount} tool{toolsCount !== 1 ? 's' : ''}
-          </Badge>
-          <Badge variant="default" icon={<WorkflowIcon className="text-accent3" />}>
-            {workflowsCount} workflow{workflowsCount !== 1 ? 's' : ''}
-          </Badge>
-          {(inputProcessorsCount > 0 || outputProcessorsCount > 0) && (
+          {row.original.modelList && row.original.modelList.length > 1 ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="default" icon={<ProcessorIcon className="text-accent4" />} />
+                <Badge variant="info" className="ml-2">
+                  + {row.original.modelList.length - 1} more
+                </Badge>
               </TooltipTrigger>
-              <TooltipContent className="flex flex-col gap-1">
-                <a
-                  href="https://mastra.ai/docs/agents/processors"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent1 hover:underline"
-                >
-                  Processors
-                </a>
-                <span className="text-icon3">
-                  {[inputProcessorsCount > 0 && 'input', outputProcessorsCount > 0 && 'output']
-                    .filter(Boolean)
-                    .join(', ')}
-                </span>
+              <TooltipContent className="bg-surface5 flex flex-col gap-2">
+                {row.original.modelList.slice(1).map(mdl => (
+                  <div key={mdl.id}>
+                    <Badge
+                      variant="default"
+                      icon={providerMapToIcon[mdl.model.provider as keyof typeof providerMapToIcon]}
+                    >
+                      {mdl.model.modelId}
+                    </Badge>
+                  </div>
+                ))}
               </TooltipContent>
             </Tooltip>
-          )}
-        </span>
-      </Cell>
-    );
+          ) : null}
+        </Cell>
+      );
+    },
   },
-};
+  {
+    header: 'Attached entities',
+    accessorKey: 'attachedEntities',
+    cell: ({ row }) => {
+      const agent = row.original;
+
+      const agentsCount = Object.keys(agent.agents || {}).length;
+      const toolsCount = Object.keys(agent.tools || {}).length;
+      const workflowsCount = Object.keys(agent.workflows || {}).length;
+      const inputProcessorsCount = (agent.inputProcessors || []).length;
+      const outputProcessorsCount = (agent.outputProcessors || []).length;
+
+      return (
+        <Cell>
+          <span className="flex flex-row gap-2 w-full items-center flex-wrap">
+            <Badge variant="default" icon={<AgentIcon className="text-accent1" />}>
+              {agentsCount} agent{agentsCount > 1 ? 's' : ''}
+            </Badge>
+            <Badge variant="default" icon={<ToolsIcon className="text-accent6" />}>
+              {toolsCount} tool{toolsCount > 1 ? 's' : ''}
+            </Badge>
+            <Badge variant="default" icon={<WorkflowIcon className="text-accent3" />}>
+              {workflowsCount} workflow{workflowsCount > 1 ? 's' : ''}
+            </Badge>
+            {(inputProcessorsCount > 0 || outputProcessorsCount > 0) && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="default" icon={<ProcessorIcon className="text-accent4" />} />
+                </TooltipTrigger>
+                <TooltipContent className="flex flex-col gap-1">
+                  <a
+                    href="https://mastra.ai/docs/agents/processors"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent1 hover:underline"
+                  >
+                    Processors
+                  </a>
+                  <span className="text-icon3">
+                    {[inputProcessorsCount > 0 && 'input', outputProcessorsCount > 0 && 'output']
+                      .filter(Boolean)
+                      .join(', ')}
+                  </span>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </span>
+        </Cell>
+      );
+    },
+  },
+];
+
+/** @deprecated Use getColumns() instead for conditional column support */
+export const columns = baseColumns;
 
 export const getColumns = (experimentalFeaturesEnabled: boolean): ColumnDef<AgentTableColumn>[] => {
-  return [
-    {
-      header: 'Name',
-      accessorKey: 'name',
-      cell: ({ row }) => <NameCell row={row} showSourceIcon={experimentalFeaturesEnabled} />,
-    },
-    modelColumn,
-    attachedEntitiesColumn,
-  ];
+  if (experimentalFeaturesEnabled) {
+    // Insert source column after Name column
+    return [baseColumns[0], sourceColumn, ...baseColumns.slice(1)];
+  }
+  return baseColumns;
 };

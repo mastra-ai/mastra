@@ -17,7 +17,7 @@ type MockMastraVector = {
   deleteIndex: Mock<MastraVector['deleteIndex']>;
 };
 describe('Vector Handlers', () => {
-  // @ts-expect-error - MastraVector constructor requires config but we're mocking it
+  // @ts-expect-error
   const mockVector: Omit<MastraVector, keyof MockMastraVector> & MockMastraVector = new MastraVector();
   mockVector.upsert = vi.fn();
   mockVector.createIndex = vi.fn();
@@ -58,7 +58,7 @@ describe('Vector Handlers', () => {
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
           indexName: 'test-index',
-          // @ts-expect-error - intentionally passing undefined to test validation
+          // @ts-expect-error
           vectors: undefined,
         }),
       ).rejects.toThrow('Invalid request index. indexName and vectors array are required.');
@@ -169,7 +169,7 @@ describe('Vector Handlers', () => {
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
           indexName: 'test-index',
-          // @ts-expect-error - intentionally passing undefined to test validation
+          // @ts-expect-error
           queryVector: undefined,
         }),
       ).rejects.toThrow('Invalid request query. indexName and queryVector array are required.');

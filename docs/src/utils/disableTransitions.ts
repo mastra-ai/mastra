@@ -1,7 +1,7 @@
 // Temporarily disables all CSS transitions on the page.
 // Based on: https://paco.me/writing/disable-theme-transitions
 export function disableTransitions(): () => void {
-  const css = document.createElement('style')
+  const css = document.createElement("style");
   css.appendChild(
     document.createTextNode(
       `* {
@@ -12,12 +12,12 @@ export function disableTransitions(): () => void {
         transition: none !important;
       }`,
     ),
-  )
-  document.head.appendChild(css)
+  );
+  document.head.appendChild(css);
 
   return () => {
     // @ts-expect-error
-    const _ = window.getComputedStyle(css).opacity
-    document.head.removeChild(css)
-  }
+    const _ = window.getComputedStyle(css).opacity;
+    document.head.removeChild(css);
+  };
 }

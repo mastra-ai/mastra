@@ -1,15 +1,16 @@
-import { pathToFileURL } from 'node:url';
-import type { IMastraLogger } from '@mastra/core/logger';
-import type { Config as MastraConfig } from '@mastra/core/mastra';
-import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import commonjs from '@rollup/plugin-commonjs';
-import json from '@rollup/plugin-json';
-import { rollup } from 'rollup';
-import type { RollupOutput } from 'rollup';
+import * as babel from '@babel/core';
+import { rollup, type RollupOutput } from 'rollup';
 import { esbuild } from '../plugins/esbuild';
-import { removeAllOptionsFromMastraExceptPlugin } from '../plugins/remove-all-except';
-import { recursiveRemoveNonReferencedNodes } from '../plugins/remove-unused-references';
+import commonjs from '@rollup/plugin-commonjs';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
+import { recursiveRemoveNonReferencedNodes } from '../plugins/remove-unused-references';
+import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
+import json from '@rollup/plugin-json';
+import type { IMastraLogger } from '@mastra/core/logger';
+import { pathToFileURL } from 'node:url';
+import { removeAllOptionsFromMastraExceptPlugin } from '../plugins/remove-all-except';
+
+import type { Config as MastraConfig } from '@mastra/core/mastra';
 
 export function extractMastraOptionBundler(
   name: keyof MastraConfig,

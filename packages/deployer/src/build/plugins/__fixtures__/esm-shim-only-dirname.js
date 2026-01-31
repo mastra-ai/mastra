@@ -1,6 +1,6 @@
 // Fixture: User declares only __dirname (issue #10054 scenario 3)
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

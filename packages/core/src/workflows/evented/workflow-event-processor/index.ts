@@ -852,9 +852,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
     requestContext = Object.fromEntries(rc.entries());
 
-    // @ts-expect-error - bailed status not in type
+    // @ts-expect-error
     if (stepResult.status === 'bailed') {
-      // @ts-expect-error - bailed status not in type
+      // @ts-expect-error
       stepResult.status = 'success';
 
       await this.endWorkflow({
@@ -1203,7 +1203,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             const res = stepResults?.[step.step.id];
             if (res && res.status === 'success') {
               acc[step.step.id] = res?.output;
-              // @ts-expect-error - skipped status not in type
+              // @ts-expect-error
             } else if (res?.status === 'skipped') {
               skippedCount++;
             }

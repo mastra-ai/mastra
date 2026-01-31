@@ -656,7 +656,7 @@ export class InngestRun<
 
     const writer = writable.getWriter();
     void writer.write({
-      // @ts-expect-error - stream event type mismatch
+      // @ts-expect-error
       type: 'start',
       payload: { runId: this.runId },
     });
@@ -680,7 +680,7 @@ export class InngestRun<
     this.closeStreamAction = async () => {
       await writer.write({
         type: 'finish',
-        // @ts-expect-error - stream event type mismatch
+        // @ts-expect-error
         payload: { runId: this.runId },
       });
       unwatch();

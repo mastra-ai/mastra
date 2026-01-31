@@ -22,7 +22,6 @@ import {
   STREAM_UI_MESSAGE_DEPRECATED_ROUTE,
   APPROVE_NETWORK_TOOL_CALL_ROUTE,
   DECLINE_NETWORK_TOOL_CALL_ROUTE,
-  GET_AGENT_SKILL_ROUTE,
 } from '../../handlers/agents';
 import { GET_AGENT_TOOL_ROUTE, EXECUTE_AGENT_TOOL_ROUTE } from '../../handlers/tools';
 import {
@@ -91,11 +90,6 @@ export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   // Agent Tool Routes
   // ============================================================================
   GET_AGENT_TOOL_ROUTE,
-
-  // ============================================================================
-  // Agent Skill Routes
-  // ============================================================================
-  GET_AGENT_SKILL_ROUTE,
 
   // ============================================================================
   // Voice/Speech Routes

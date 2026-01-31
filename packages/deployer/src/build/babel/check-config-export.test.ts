@@ -1,5 +1,5 @@
-import { transformSync } from '@babel/core';
 import { describe, it, expect } from 'vitest';
+import { transformSync } from '@babel/core';
 import { checkConfigExport } from './check-config-export';
 
 describe('checkConfigExport Babel plugin', () => {

@@ -1,6 +1,6 @@
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
@@ -30,42 +30,25 @@ export function ProcessorTable({ processors, isLoading }: ProcessorTableProps) {
     return Object.values(processors ?? {}).filter(p => p.phases && p.phases.length > 0);
   }, [processors]);
 
-  const filteredData = useMemo(() => {
-    const searchLower = search.toLowerCase();
-    return processorData.filter(p => {
-      const id = p.id.toLowerCase();
-      const name = (p.name || '').toLowerCase();
-      return id.includes(searchLower) || name.includes(searchLower);
-    });
-  }, [processorData, search]);
-
-  const { activeIndex } = useTableKeyboardNavigation({
-    itemCount: filteredData.length,
-    global: true,
-    onSelect: index => {
-      const processor = filteredData[index];
-      if (processor) {
-        if (processor.isWorkflow) {
-          navigate(paths.workflowLink(processor.id) + '/graph');
-        } else {
-          navigate(paths.processorLink(processor.id));
-        }
-      }
-    },
-  });
-
   const table = useReactTable({
-    data: filteredData,
+    data: processorData,
     columns: columns as ColumnDef<ProcessorRow>[],
     getCoreRowModel: getCoreRowModel(),
   });
 
   const ths = table.getHeaderGroups()[0];
-  const rows = table.getRowModel().rows;
+  const rows = table.getRowModel().rows.concat();
 
-  if (processorData.length === 0 && !isLoading) {
+  if (rows.length === 0 && !isLoading) {
     return <EmptyProcessorsTable />;
   }
+
+  const filteredRows = rows.filter(row => {
+    const id = row.original.id.toLowerCase();
+    const name = (row.original.name || '').toLowerCase();
+    const searchLower = search.toLowerCase();
+    return id.includes(searchLower) || name.includes(searchLower);
+  });
 
   return (
     <div>
@@ -86,26 +69,27 @@ export function ProcessorTable({ processors, isLoading }: ProcessorTableProps) {
                 ))}
               </Thead>
               <Tbody>
-                {rows.map((row, index) => (
-                  <Row
-                    key={row.id}
-                    isActive={index === activeIndex}
-                    onClick={() => {
-                      // Workflow processors should navigate to the workflow graph UI
-                      if (row.original.isWorkflow) {
-                        navigate(paths.workflowLink(row.original.id) + '/graph');
-                      } else {
-                        navigate(paths.processorLink(row.original.id));
-                      }
-                    }}
-                  >
-                    {row.getVisibleCells().map(cell => (
-                      <React.Fragment key={cell.id}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </React.Fragment>
-                    ))}
-                  </Row>
-                ))}
+                {filteredRows.map(row => {
+                  return (
+                    <Row
+                      key={row.id}
+                      onClick={() => {
+                        // Workflow processors should navigate to the workflow graph UI
+                        if (row.original.isWorkflow) {
+                          navigate(paths.workflowLink(row.original.id) + '/graph');
+                        } else {
+                          navigate(paths.processorLink(row.original.id));
+                        }
+                      }}
+                    >
+                      {row.getVisibleCells().map(cell => (
+                        <React.Fragment key={cell.id}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </React.Fragment>
+                      ))}
+                    </Row>
+                  );
+                })}
               </Tbody>
             </Table>
           </TooltipProvider>

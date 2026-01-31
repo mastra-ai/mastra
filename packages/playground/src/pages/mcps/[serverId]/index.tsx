@@ -10,6 +10,7 @@ import {
   DocsIcon,
   MCPDetail,
   useMCPServers,
+  HeaderGroup,
   MCPServerCombobox,
 } from '@mastra/playground-ui';
 
@@ -25,16 +26,19 @@ export const McpServerPage = () => {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to={`/mcps`}>
+          <Crumb as={Link} to={`/mcps`} isCurrent>
             <Icon>
               <McpServerIcon />
             </Icon>
             MCP Servers
           </Crumb>
-          <Crumb as="span" to="" isCurrent>
-            <MCPServerCombobox value={serverId} variant="ghost" />
-          </Crumb>
         </Breadcrumb>
+
+        <HeaderGroup>
+          <div className="w-48">
+            <MCPServerCombobox value={serverId} />
+          </div>
+        </HeaderGroup>
 
         <HeaderAction>
           <Button as={Link} to="https://mastra.ai/en/docs/tools-mcp/mcp-overview" target="_blank">

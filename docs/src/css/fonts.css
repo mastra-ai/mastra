@@ -1,48 +1,77 @@
+/* Geist Mono Regular */
 @font-face {
-  font-family: 'Inter';
-  src: url('/fonts/InterVF.woff2') format('woff2');
+  font-family: "Geist Mono";
+  src:
+    local("Geist Mono Regular"),
+    local("GeistMono-Regular"),
+    url("/fonts/GeistMono-Regular.woff2") format("woff2"),
+    url("/fonts/GeistMono-Regular.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
   font-display: swap;
-  font-weight: 400 900;
 }
 
+/* Geist Mono Medium */
 @font-face {
-  font-family: 'Inter Fallback';
-  src: local('Arial'), local('ArialMT');
-  ascent-override: 90.4365%;
-  descent-override: 22.518%;
-  line-gap-override: 0%;
-  size-adjust: 107.1194%;
-}
-
-/*
-@font-face {
-  font-family: 'Greed';
-  src: url('/fonts/GreedVF.woff2') format('woff2');
+  font-family: "Geist Mono";
+  src:
+    local("Geist Mono Medium"),
+    local("GeistMono-Medium"),
+    url("/fonts/GeistMono-Medium.woff2") format("woff2"),
+    url("/fonts/GeistMono-Medium.woff") format("woff");
+  font-weight: 500;
+  font-style: normal;
   font-display: swap;
-  font-weight: 400 900;
 }
 
+/* Inter Regular */
 @font-face {
-  font-family: 'Greed Fallback';
-  src: local('Arial'), local('ArialMT');
-  ascent-override: 96.0022%;
-  descent-override: 20.3123%;
-  size-adjust: 93.5395%;
-  line-gap-override: 0%;
-}
-*/
-
-@font-face {
-  font-family: 'Geist Mono';
-  src: url('/fonts/GeistMonoVF.woff2') format('woff2');
+  font-family: "Inter";
+  src:
+    local("Inter Regular"),
+    local("Inter-Regular"),
+    url("/fonts/Inter_28pt-Regular.woff2") format("woff2"),
+    url("/fonts/Inter_28pt-Regular.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
   font-display: swap;
-  font-weight: 400 800;
 }
 
+/* Inter Medium */
 @font-face {
-  font-family: 'Geist Mono Fallback';
-  src: local('Courier New'), local('CourierNewPSMT');
-  ascent-override: 100.5164%;
-  descent-override: 29.5048%;
-  size-adjust: 99.9837%;
+  font-family: "Inter";
+  src:
+    local("Inter Medium"),
+    local("Inter-Medium"),
+    url("/fonts/Inter_28pt-Medium.woff2") format("woff2"),
+    url("/fonts/Inter_28pt-Medium.woff") format("woff");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Inter SemiBold */
+@font-face {
+  font-family: "Inter";
+  src:
+    local("Inter SemiBold"),
+    local("Inter-SemiBold"),
+    url("/fonts/Inter_28pt-SemiBold.woff2") format("woff2"),
+    url("/fonts/Inter_28pt-SemiBold.woff") format("woff");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Inter Italic */
+@font-face {
+  font-family: "Inter";
+  src:
+    local("Inter Italic"),
+    local("Inter-Italic"),
+    url("/fonts/Inter_28pt-Italic.woff2") format("woff2"),
+    url("/fonts/Inter_28pt-Italic.woff") format("woff");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
 }

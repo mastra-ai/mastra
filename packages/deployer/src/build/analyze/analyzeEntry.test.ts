@@ -1,24 +1,22 @@
+import { analyzeEntry } from './analyzeEntry';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFile } from 'fs-extra';
 import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
-import { readFile } from 'fs-extra';
 import { resolveModule } from 'local-pkg';
-import type * as LocalPkgModule from 'local-pkg';
-import { rollup } from 'rollup';
-import type * as RollupModule from 'rollup';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import { analyzeEntry } from './analyzeEntry';
+import { rollup } from 'rollup';
 
 vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
 vi.mock('local-pkg', async () => {
-  const actual = await vi.importActual<typeof LocalPkgModule>('local-pkg');
+  const actual = await vi.importActual<typeof import('local-pkg')>('local-pkg');
   return {
     ...actual,
     resolveModule: vi.fn(),
   };
 });
 vi.mock('rollup', async () => {
-  const actual = await vi.importActual<typeof RollupModule>('rollup');
+  const actual = await vi.importActual<typeof import('rollup')>('rollup');
   return {
     ...actual,
     rollup: vi.fn(actual.rollup),
@@ -130,13 +128,13 @@ describe('analyzeEntry', () => {
   it('should handle dynamic imports', async () => {
     const entryWithDynamicImport = `
       import { Mastra } from '@mastra/core/mastra';
-
+      
       export async function loadAgent() {
         const { Agent } = await import('@mastra/core/agent');
         const externalModule = await import('lodash');
         return new Agent();
       }
-
+      
       export const mastra = new Mastra({});
     `;
 
@@ -181,11 +179,11 @@ describe('analyzeEntry', () => {
   it('should handle entry with no external dependencies', async () => {
     const entryWithNoDeps = `
       const message = "Hello World";
-
+      
       function greet(name) {
         return message + ", " + name + "!";
       }
-
+      
       export { greet };
     `;
 

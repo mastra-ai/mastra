@@ -1,10 +1,10 @@
-import { readFile } from 'node:fs/promises';
 import { join, isAbsolute } from 'node:path';
-import nodeResolve from '@rollup/plugin-node-resolve';
+import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'rollup';
-import type { PackageJson } from 'type-fest';
-import { getPackageRootPath } from '../package-info';
+import nodeResolve from '@rollup/plugin-node-resolve';
 import { getPackageName, isBuiltinModule } from '../utils';
+import { getPackageRootPath } from '../package-info';
+import type { PackageJson } from 'type-fest';
 
 /**
  * Check if a package has an exports field in its package.json.

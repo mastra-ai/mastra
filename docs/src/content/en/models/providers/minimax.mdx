@@ -11,11 +11,11 @@ Access 2 MiniMax (minimax.io) models through Mastra's model router. Authenticati
 
 Learn more in the [MiniMax (minimax.io) documentation](https://platform.minimax.io/docs/guides/quickstart).
 
-```bash title=".env"
+```bash
 MINIMAX_API_KEY=your-api-key
 ```
 
-```typescript title="src/mastra/agents/my-agent.ts" {7}
+```typescript
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
@@ -76,7 +76,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ### Custom Headers
 
-```typescript title="src/mastra/agents/my-agent.ts"
+```typescript
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -93,7 +93,7 @@ const agent = new Agent({
 
 ### Dynamic Model Selection
 
-```typescript title="src/mastra/agents/my-agent.ts"
+```typescript
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

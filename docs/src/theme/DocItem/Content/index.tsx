@@ -1,10 +1,10 @@
-import { useDoc } from '@docusaurus/plugin-content-docs/client'
-import { ThemeClassNames } from '@docusaurus/theme-common'
-import { cn } from '@site/src/lib/utils'
-import type { Props } from '@theme/DocItem/Content'
-import Heading from '@theme/Heading'
-import MDXContent from '@theme/MDXContent'
-import { type ReactNode } from 'react'
+import { useDoc } from "@docusaurus/plugin-content-docs/client";
+import { ThemeClassNames } from "@docusaurus/theme-common";
+import { cn } from "@site/src/lib/utils";
+import type { Props } from "@theme/DocItem/Content";
+import Heading from "@theme/Heading";
+import MDXContent from "@theme/MDXContent";
+import { type ReactNode } from "react";
 
 /**
  * TODO: Check if we can remove this logic altogether
@@ -19,18 +19,21 @@ import { type ReactNode } from 'react'
  - the markdown content does not already contain a top-level h1 heading
 */
 function useSyntheticTitle(): string | null {
-  const { metadata, frontMatter, contentTitle } = useDoc()
-  const shouldRender = !frontMatter.hide_title && typeof contentTitle === 'undefined'
+  const { metadata, frontMatter, contentTitle } = useDoc();
+  const shouldRender =
+    !frontMatter.hide_title && typeof contentTitle === "undefined";
   if (!shouldRender) {
-    return null
+    return null;
   }
-  return metadata.title
+  return metadata.title;
 }
 
 export default function DocItemContent({ children }: Props): ReactNode {
-  const syntheticTitle = useSyntheticTitle()
+  const syntheticTitle = useSyntheticTitle();
   return (
-    <div className={cn(ThemeClassNames.docs.docMarkdown, 'markdown @container')}>
+    <div
+      className={cn(ThemeClassNames.docs.docMarkdown, "markdown @container")}
+    >
       {syntheticTitle && (
         <header>
           <Heading as="h1">{syntheticTitle}</Heading>
@@ -38,5 +41,5 @@ export default function DocItemContent({ children }: Props): ReactNode {
       )}
       <MDXContent>{children}</MDXContent>
     </div>
-  )
+  );
 }

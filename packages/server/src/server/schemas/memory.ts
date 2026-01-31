@@ -204,11 +204,8 @@ export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
 /**
  * GET /memory/threads/:threadId
  * agentId is optional - can use storage fallback when not provided
- * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const getThreadByIdQuerySchema = optionalAgentIdQuerySchema.extend({
-  resourceId: z.string().optional(),
-});
+export const getThreadByIdQuerySchema = optionalAgentIdQuerySchema;
 
 /**
  * GET /memory/threads/:threadId/messages
@@ -229,24 +226,6 @@ export const getWorkingMemoryQuerySchema = z.object({
   agentId: z.string(),
   resourceId: z.string().optional(),
   memoryConfig: memoryConfigSchema,
-});
-
-/**
- * DELETE /memory/threads/:threadId
- * agentId is required
- * resourceId is optional - used for ownership validation fallback when not set via middleware
- */
-export const deleteThreadQuerySchema = agentIdQuerySchema.extend({
-  resourceId: z.string().optional(),
-});
-
-/**
- * POST /memory/messages/delete
- * agentId is required
- * resourceId is optional - used for ownership validation fallback when not set via middleware
- */
-export const deleteMessagesQuerySchema = agentIdQuerySchema.extend({
-  resourceId: z.string().optional(),
 });
 
 // ============================================================================
@@ -287,11 +266,8 @@ export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).ext
 /**
  * GET /memory/network/threads/:threadId
  * agentId is optional - can use storage fallback when not provided
- * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const getThreadByIdNetworkQuerySchema = optionalAgentIdQuerySchema.extend({
-  resourceId: z.string().optional(),
-});
+export const getThreadByIdNetworkQuerySchema = optionalAgentIdQuerySchema;
 
 /**
  * GET /memory/network/threads/:threadId/messages
@@ -322,19 +298,13 @@ export const updateThreadNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * DELETE /memory/network/threads/:threadId
- * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const deleteThreadNetworkQuerySchema = agentIdQuerySchema.extend({
-  resourceId: z.string().optional(),
-});
+export const deleteThreadNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * POST /memory/network/messages/delete
- * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema.extend({
-  resourceId: z.string().optional(),
-});
+export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema;
 
 // ============================================================================
 // Response Schemas

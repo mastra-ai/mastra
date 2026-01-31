@@ -16,7 +16,7 @@
   color: white;
 }
 
-[data-theme='dark'] .tag {
+[data-theme="dark"] .tag {
   background: var(--mastra-green-accent);
   color: var(--ifm-background-color);
 }

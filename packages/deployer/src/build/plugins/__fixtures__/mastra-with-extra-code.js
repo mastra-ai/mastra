@@ -1,10 +1,10 @@
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { testDeployer } from '@mastra/deployer/test';
+import { Agent } from '@mastra/core/agent';
 import { PgVector } from '@mastra/pg';
 import { createVectorQueryTool, MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
+import { testDeployer } from '@mastra/deployer/test';
 
 function getDeployer() {
   return testDeployer;

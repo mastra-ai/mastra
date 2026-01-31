@@ -14,7 +14,6 @@ import {
   Txt,
   TracingSettingsProvider,
   WorkflowLayout as WorkflowLayoutUI,
-  SchemaRequestContextProvider,
 } from '@mastra/playground-ui';
 
 import { WorkflowHeader } from './workflow-header';
@@ -62,7 +61,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
           context: {
             input: runExecutionResult?.payload,
             ...runExecutionResult?.steps,
-          },
+          } as any,
           status: runExecutionResult?.status,
           result: runExecutionResult?.result,
           error: runExecutionResult?.error,
@@ -73,20 +72,18 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
-      <SchemaRequestContextProvider>
-        <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
-          <MainContentLayout>
-            <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
-            <WorkflowLayoutUI
-              workflowId={workflowId!}
-              leftSlot={<WorkflowRunList workflowId={workflowId} runId={runId} />}
-              rightSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
-            >
-              {children}
-            </WorkflowLayoutUI>
-          </MainContentLayout>
-        </WorkflowRunProvider>
-      </SchemaRequestContextProvider>
+      <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
+        <MainContentLayout>
+          <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
+          <WorkflowLayoutUI
+            workflowId={workflowId!}
+            leftSlot={<WorkflowRunList workflowId={workflowId} runId={runId} />}
+            rightSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
+          >
+            {children}
+          </WorkflowLayoutUI>
+        </MainContentLayout>
+      </WorkflowRunProvider>
     </TracingSettingsProvider>
   );
 };

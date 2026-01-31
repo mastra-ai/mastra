@@ -55,7 +55,7 @@ export type NetworkOptions<OUTPUT = undefined> = {
   runId?: string;
 
   /** Request Context containing dynamic configuration and state */
-  requestContext?: RequestContext<any>;
+  requestContext?: RequestContext;
 
   /** Maximum number of iterations to run */
   maxSteps?: number;
@@ -133,14 +133,6 @@ export type NetworkOptions<OUTPUT = undefined> = {
    * ```
    */
   structuredOutput?: StructuredOutputOptions<OUTPUT extends {} ? OUTPUT : never>;
-
-  /** Callback fired when streaming is aborted */
-  onAbort?: LoopConfig<OUTPUT>['onAbort'];
-
-  /**
-   * Signal to abort the streaming operation
-   */
-  abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
 };
 
 /**
@@ -168,7 +160,7 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   savePerStep?: boolean;
 
   /** Request Context containing dynamic configuration and state */
-  requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
+  requestContext?: RequestContext;
 
   /** Maximum number of steps to run */
   maxSteps?: number;

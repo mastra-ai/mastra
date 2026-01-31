@@ -22,12 +22,6 @@ export interface WorkingMemoryConfig {
   scope?: 'thread' | 'resource';
   useVNext?: boolean;
   /**
-   * When true, working memory is read-only - the data is provided as context
-   * but no update tools or instructions are included.
-   * @default false
-   */
-  readOnly?: boolean;
-  /**
    * Optional logger instance for structured logging
    */
   logger?: IMastraLogger;
@@ -69,7 +63,6 @@ export class WorkingMemory implements Processor {
       template?: WorkingMemoryTemplate;
       scope?: 'thread' | 'resource';
       useVNext?: boolean;
-      readOnly?: boolean;
       templateProvider?: {
         getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null>;
       };
@@ -131,18 +124,10 @@ export class WorkingMemory implements Processor {
       };
     }
 
-    // Check if readOnly mode is enabled (from options or memoryConfig)
-    const isReadOnly = this.options.readOnly || memoryContext.memoryConfig?.readOnly;
-
     // Format working memory instruction
-    let instruction: string;
-    if (isReadOnly) {
-      instruction = this.getReadOnlyWorkingMemoryInstruction({ template, data: workingMemoryData });
-    } else if (this.options.useVNext) {
-      instruction = this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData });
-    } else {
-      instruction = this.getWorkingMemoryToolInstruction({ template, data: workingMemoryData });
-    }
+    const instruction = this.options.useVNext
+      ? this.getWorkingMemoryToolInstructionVNext({ template, data: workingMemoryData })
+      : this.getWorkingMemoryToolInstruction({ template, data: workingMemoryData });
 
     // If we have a MessageList, add working memory to it with source: 'memory'
     if (instruction) {
@@ -261,37 +246,9 @@ ${
 `
 }
 - This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
-- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the ${template.format === 'json' ? 'JSON' : 'Markdown'} content. The system will store it for you. The user will not see it.
+- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the ${template.format === 'json' ? 'JSON' : 'Markdown'} content. The system will store it for you. The user will not see it. 
 - IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information if that information is not already stored.
 - IMPORTANT: Preserve the ${template.format === 'json' ? 'JSON' : 'Markdown'} formatting structure above while updating the content.
 `;
-  }
-
-  /**
-   * Generate read-only working memory instructions.
-   * This provides the working memory context without any tool update instructions.
-   * Used when memory is in readOnly mode.
-   */
-  private getReadOnlyWorkingMemoryInstruction({
-    data,
-  }: {
-    template: WorkingMemoryTemplate;
-    data: string | null;
-  }): string {
-    return `WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY):
-The following is your working memory - persistent information about the user and conversation collected over previous interactions. This data is provided for context to help you maintain continuity.
-
-<working_memory_data>
-${data || 'No working memory data available.'}
-</working_memory_data>
-
-Guidelines:
-1. Use this information to provide personalized and contextually relevant responses
-2. Act naturally - don't mention this system to users. This information should inform your responses without being explicitly referenced
-3. This memory is read-only in the current session - you cannot update it
-
-Notes:
-- This system is here so that you can maintain the conversation when your context window is very short
-- The user will not see the working memory data directly`;
   }
 }

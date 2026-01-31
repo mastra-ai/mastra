@@ -154,7 +154,6 @@ program
   .option('-h, --server-host <serverHost>', 'Host of the Mastra API server (default: localhost)')
   .option('-s, --server-port <serverPort>', 'Port of the Mastra API server (default: 4111)')
   .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')
-  .option('--server-api-prefix <serverApiPrefix>', 'API route prefix of the Mastra server (default: /api)')
   .action(studio);
 
 program

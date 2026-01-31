@@ -1,14 +1,17 @@
-import React, { type ReactNode } from 'react'
-import clsx from 'clsx'
-import { useDocsSidebar } from '@docusaurus/plugin-content-docs/client'
-import type { Props } from '@theme/DocRoot/Layout/Main'
-import { useChatbotSidebar } from '../ChatbotSidebar/context'
+import React, { type ReactNode } from "react";
+import clsx from "clsx";
+import { useDocsSidebar } from "@docusaurus/plugin-content-docs/client";
+import type { Props } from "@theme/DocRoot/Layout/Main";
+import { useChatbotSidebar } from "../ChatbotSidebar/context";
 
-import styles from './styles.module.css'
+import styles from "./styles.module.css";
 
-export default function DocRootLayoutMain({ hiddenSidebarContainer, children }: Props): ReactNode {
-  const sidebar = useDocsSidebar()
-  const { isHidden: hiddenChatbotSidebar } = useChatbotSidebar()
+export default function DocRootLayoutMain({
+  hiddenSidebarContainer,
+  children,
+}: Props): ReactNode {
+  const sidebar = useDocsSidebar();
+  const { isHidden: hiddenChatbotSidebar } = useChatbotSidebar();
 
   return (
     <main
@@ -16,18 +19,18 @@ export default function DocRootLayoutMain({ hiddenSidebarContainer, children }: 
         styles.docMainContainer,
         (hiddenSidebarContainer || !sidebar) && styles.docMainContainerEnhanced,
         hiddenChatbotSidebar && styles.docMainContainerChatbotHidden,
-        'doc-main-container',
+        "doc-main-container",
         // TODO: Remove again once banner is away
-        'flex-col justify-start!',
+        "flex-col justify-start!",
       )}
     >
-      <div className="border-b-[0.5px] border-green-200 bg-green-50 px-4 py-2 dark:border-green-900 dark:bg-green-600/10">
-        <div className="text-center text-[--mastra-text-secondary]! lg:mx-auto lg:max-w-250 lg:px-4 lg:text-left">
-          Mastra 1.0 is available 🎉{' '}
+      <div className="bg-green-50 dark:bg-green-600/10 py-2 px-4 border-b-[0.5px] border-green-200 dark:border-green-900">
+        <div className="text-center lg:text-left lg:max-w-250 lg:mx-auto lg:px-4 text-[--mastra-text-secondary]!">
+          Mastra 1.0 is available 🎉{" "}
           <a
             href="https://mastra.ai/blog/announcing-mastra-1"
             target="_blank"
-            className="ml-4 text-green-700! underline! hover:no-underline! dark:text-green-400!"
+            className="ml-4 underline! text-green-700! hover:no-underline! dark:text-green-400!"
           >
             Read announcement
           </a>
@@ -35,7 +38,7 @@ export default function DocRootLayoutMain({ hiddenSidebarContainer, children }: 
       </div>
       <div
         className={clsx(
-          'padding-top--md padding-bottom--lg container',
+          "container padding-top--md padding-bottom--lg",
           styles.docItemWrapper,
           hiddenSidebarContainer && styles.docItemWrapperEnhanced,
           hiddenChatbotSidebar && styles.docItemWrapperChatbotHidden,
@@ -44,5 +47,5 @@ export default function DocRootLayoutMain({ hiddenSidebarContainer, children }: 
         {children}
       </div>
     </main>
-  )
+  );
 }

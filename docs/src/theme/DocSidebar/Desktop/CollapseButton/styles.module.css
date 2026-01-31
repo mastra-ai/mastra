@@ -3,7 +3,7 @@
   --docusaurus-collapse-button-bg-hover: rgb(0 0 0 / 10%);
 }
 
-[data-theme='dark']:root {
+[data-theme="dark"]:root {
   --docusaurus-collapse-button-bg: rgb(255 255 255 / 5%);
   --docusaurus-collapse-button-bg-hover: rgb(255 255 255 / 10%);
 }
@@ -24,7 +24,7 @@
     margin-top: 4px;
   }
 
-  [dir='rtl'] .collapseSidebarButtonIcon {
+  [dir="rtl"] .collapseSidebarButtonIcon {
     transform: rotate(0);
   }
 

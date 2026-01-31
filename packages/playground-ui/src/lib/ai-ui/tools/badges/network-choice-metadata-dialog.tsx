@@ -8,7 +8,7 @@ import {
 } from '@/ds/components/Dialog';
 import { Txt } from '@/ds/components/Txt';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { IconButton } from '@/ds/components/IconButton';
+import { TooltipIconButton } from '../../tooltip-icon-button';
 import { Share2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -68,9 +68,9 @@ export const NetworkChoiceMetadataDialogTrigger = ({
   const [isOpen, setIsOpen] = useState(false);
   return (
     <>
-      <IconButton variant="light" size="md" tooltip="Show selection reason" onClick={() => setIsOpen(s => !s)}>
+      <TooltipIconButton tooltip="Show selection reason" side="top" onClick={() => setIsOpen(s => !s)}>
         <Share2 className="text-neutral3 size-5" />
-      </IconButton>
+      </TooltipIconButton>
 
       <NetworkChoiceMetadata
         selectionReason={selectionReason || ''}

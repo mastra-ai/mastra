@@ -1,16 +1,15 @@
-import { dirname, posix } from 'node:path';
-import { noopLogger } from '@mastra/core/logger';
-import * as pkg from 'empathic/package';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
-import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
-import { analyzeBundle } from './analyze';
+import { dirname, posix } from 'node:path';
+import * as pkg from 'empathic/package';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
-import { getPackageName, slash } from './utils';
-import type { BundlerPlatform } from './utils';
+import { noopLogger } from '@mastra/core/logger';
+import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
+import { analyzeBundle } from './analyze';
+import { getPackageName, slash, type BundlerPlatform } from './utils';
 
 export async function getInputOptions(
   entryFile: string,

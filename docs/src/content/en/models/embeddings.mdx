@@ -36,7 +36,8 @@ const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
 
 ### Google
 
-- `gemini-embedding-001` - 768 dimensions, 2048 max tokens
+- `gemini-embedding-001` - 768 dimensions (recommended), 2048 max tokens
+- `text-embedding-004` - 768 dimensions, 3072 max tokens
 
 ```typescript
 const embedder = new ModelRouterEmbeddingModel("google/gemini-embedding-001");

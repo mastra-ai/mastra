@@ -1,6 +1,6 @@
-import type { IMastraLogger } from '@mastra/core/logger';
 import type { Config } from '@mastra/core/mastra';
 import { extractMastraOption, extractMastraOptionBundler } from './shared/extract-mastra-option';
+import type { IMastraLogger } from '@mastra/core/logger';
 
 export function getDeployerBundler(
   entryFile: string,

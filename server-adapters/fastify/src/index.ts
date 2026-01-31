@@ -141,7 +141,6 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // Fastify's request.query can contain string | string[] for repeated params
     const queryParams = normalizeQueryParams((request.query || {}) as Record<string, unknown>);
     let body: unknown;
-    let bodyParseError: { message: string } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
       const contentType = request.headers['content-type'] || '';
@@ -156,16 +155,13 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
           }
-          bodyParseError = {
-            message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
-          };
         }
       } else {
         body = request.body;
       }
     }
 
-    return { urlParams, queryParams, body, bodyParseError };
+    return { urlParams, queryParams, body };
   }
 
   /**
@@ -233,10 +229,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     reply: FastifyReply,
     result: unknown,
     request?: FastifyRequest,
-    prefix?: string,
   ): Promise<void> {
-    const resolvedPrefix = prefix ?? this.prefix ?? '';
-
     if (route.responseType === 'json') {
       await reply.send(result);
     } else if (route.responseType === 'stream') {
@@ -267,7 +260,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         return;
       }
 
-      const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
+      const { server, httpPath } = result as MCPHttpTransportResult;
 
       try {
         // Hijack the response to bypass Fastify's response handling
@@ -281,15 +274,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           rawReq.body = request.body;
         }
 
-        // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
-
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath: `${resolvedPrefix}${httpPath}`,
+          httpPath: `${this.prefix ?? ''}${httpPath}`,
           req: rawReq,
           res: reply.raw,
-          options: Object.keys(options).length > 0 ? options : undefined,
         });
         // Response handled by startHTTP
       } catch {
@@ -327,8 +316,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath: `${resolvedPrefix}${ssePath}`,
-          messagePath: `${resolvedPrefix}${messagePath}`,
+          ssePath: `${this.prefix ?? ''}${ssePath}`,
+          messagePath: `${this.prefix ?? ''}${messagePath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -344,14 +333,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     }
   }
 
-  async registerRoute(
-    app: FastifyInstance,
-    route: ServerRoute,
-    { prefix: prefixParam }: { prefix?: string } = {},
-  ): Promise<void> {
-    // Default prefix to this.prefix if not provided, or empty string
-    const prefix = prefixParam ?? this.prefix ?? '';
-
+  async registerRoute(app: FastifyInstance, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
     const fullPath = `${prefix}${route.path}`;
 
     // Convert Express-style :param to Fastify-style :param (they're the same, but ensure consistency)
@@ -373,14 +355,6 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       }
 
       const params = await this.getParams(route, request);
-
-      // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
-      if (params.bodyParseError) {
-        return reply.status(400).send({
-          error: 'Invalid request body',
-          issues: [{ field: 'body', message: params.bodyParseError.message }],
-        });
-      }
 
       if (params.queryParams) {
         try {
@@ -423,12 +397,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         tools: request.tools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
-        routePrefix: prefix,
+        routePrefix: this.prefix,
       };
 
       try {
         const result = await route.handler(handlerParams);
-        await this.sendResponse(route, reply, result, request, prefix);
+        await this.sendResponse(route, reply, result, request);
       } catch (error) {
         console.error('Error calling handler', error);
         // Check if it's an HTTPException or MastraError with a status code

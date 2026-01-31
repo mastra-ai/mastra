@@ -504,8 +504,8 @@ export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
   storage: new LibSQLStore({
     id: "mastra-storage",
-    // stores observability, scores, ... into persistent file storage
-    url: "file:./mastra.db",
+    // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    url: ":memory:",
   }),
   logger: new PinoLogger({
     name: 'Mastra',

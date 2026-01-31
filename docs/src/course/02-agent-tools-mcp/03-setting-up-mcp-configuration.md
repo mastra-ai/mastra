@@ -3,7 +3,7 @@
 Now, let's create a basic MCP configuration in your agent file. Open your `src/mastra/agents/index.ts` file and add the following imports:
 
 ```typescript
-import { MCPClient } from '@mastra/mcp'
+import { MCPClient } from "@mastra/mcp";
 ```
 
 Then, create a basic MCP configuration object:
@@ -13,7 +13,7 @@ const mcp = new MCPClient({
   servers: {
     // We'll add servers in the next steps
   },
-})
+});
 ```
 
 This configuration object will be used to specify which MCP servers your agent should connect to. The `servers` property is an object where each key is a unique identifier for a server, and the value contains the configuration for that server.

@@ -1,8 +1,8 @@
-import { createLogger } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
-import { createApiRoute } from '@mastra/core/server';
-import { TestDeployer } from '@mastra/deployer/test';
+import { createLogger } from '@mastra/core/logger';
 import { weatherAgent } from '@/agents';
+import { TestDeployer } from '@mastra/deployer/test';
+import { createApiRoute } from '@mastra/core/server';
 export const mastra = new Mastra({
   agents: { weatherAgent },
   logger: createLogger({

@@ -136,26 +136,15 @@ describe('Template Workflow Integration Tests', () => {
     expect(branches).toContain('feat/install-template-csv-to-questions');
 
     // Verify expected template files were created
-    // Note: AI discovery is non-deterministic and may return either export names (e.g., csvToQuestionsWorkflow)
-    // or filename-based IDs (e.g., csv-to-questions-workflow), so we check for either naming convention
-    const expectedPatterns = [
-      { dir: 'src/mastra/agents', patterns: ['csvQuestionAgent.ts', 'csv-question-agent.ts'] },
-      {
-        dir: 'src/mastra/tools',
-        // AI discovery may return export name (csvFetcherTool) or filename-based ID (download-csv-tool),
-        // and convertNaming then adapts to the target project's convention
-        patterns: ['csvFetcherTool.ts', 'csv-fetcher-tool.ts', 'download-csv-tool.ts', 'downloadCsvTool.ts'],
-      },
-      {
-        dir: 'src/mastra/workflows',
-        patterns: ['csvToQuestionsWorkflow.ts', 'csv-to-questions-workflow.ts'],
-      },
+    const expectedPaths = [
+      'src/mastra/agents/csvQuestionAgent.ts',
+      'src/mastra/tools/csvFetcherTool.ts',
+      'src/mastra/workflows/csvToQuestionsWorkflow.ts',
     ];
 
-    for (const { dir, patterns } of expectedPatterns) {
-      const dirPath = join(targetRepo, dir);
-      const foundMatch = patterns.some(pattern => existsSync(join(dirPath, pattern)));
-      expect(foundMatch, `Expected one of ${patterns.join(' or ')} to exist in ${dir}`).toBe(true);
+    for (const expectedPath of expectedPaths) {
+      const fullPath = join(targetRepo, expectedPath);
+      expect(existsSync(fullPath), `Expected ${expectedPath} to exist`).toBe(true);
     }
 
     // Verify package.json was updated
@@ -287,11 +276,9 @@ describe('Template Workflow Integration Tests', () => {
   it('should validate git history shows proper template integration', async () => {
     // Check git log for template commits
     const gitLog = exec('git log --oneline', targetRepo);
-    // The copy step always creates this commit
+    expect(gitLog).toContain('feat(template): register components from csv-to-questions@');
     expect(gitLog).toContain('feat(template): copy 7 files from csv-to-questions@');
-    // These commits are created by AI agents and may not always appear (non-deterministic)
-    // - feat(template): resolve conflicts for csv-to-questions@
-    // - fix(template): resolve validation errors for csv-to-questions@
+    expect(gitLog).toContain('fix(template): resolve validation errors for csv-to-questions@');
 
     // Verify we're on the template branch
     const currentBranch = exec('git branch --show-current', targetRepo);

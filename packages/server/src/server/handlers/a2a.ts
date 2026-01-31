@@ -23,7 +23,6 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { convertInstructionsToString } from '../utils';
-import { getAgentFromSystem } from './agents';
 
 const messageSendParamsSchema = z.object({
   message: z.object({
@@ -64,7 +63,11 @@ export async function getAgentCardByIdHandler({
     url: string;
   };
 }): Promise<AgentCard> {
-  const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
+  const agent = mastra.getAgentById(agentId);
+
+  if (!agent) {
+    throw new Error(`Agent with ID ${agentId} not found`);
+  }
 
   const [instructions, tools]: [
     Awaited<ReturnType<typeof agent.getInstructions>>,
@@ -73,7 +76,7 @@ export async function getAgentCardByIdHandler({
 
   // Extract agent information to create the AgentCard
   const agentCard: AgentCard = {
-    name: agent.id || (agentId as string),
+    name: agent.id || agentId,
     description: convertInstructionsToString(instructions),
     url: executionUrl,
     provider,
@@ -365,7 +368,7 @@ export async function getAgentExecutionHandler({
   taskStore: InMemoryTaskStore;
   logger?: IMastraLogger;
 }): Promise<any> {
-  const agent = await getAgentFromSystem({ mastra, agentId });
+  const agent = mastra.getAgentById(agentId);
 
   let taskId: string | undefined; // For error context
 
@@ -452,7 +455,11 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
     };
     const version = '1.0';
 
-    const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
+    const agent = mastra.getAgentById(agentId as string);
+
+    if (!agent) {
+      throw new Error(`Agent with ID ${agentId} not found`);
+    }
 
     const [instructions, tools]: [
       Awaited<ReturnType<typeof agent.getInstructions>>,

@@ -112,13 +112,6 @@ app.listen({ port: 3000 }, (err, address) => {
       description: "Task store for A2A (Agent-to-Agent) operations",
       isOptional: true,
     },
-    {
-      name: "mcpOptions",
-      type: "MCPOptions",
-      typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
-      description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
-      isOptional: true,
-    },
   ]}
 />
 

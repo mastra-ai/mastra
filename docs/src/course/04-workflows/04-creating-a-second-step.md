@@ -8,8 +8,8 @@ Add this step to your workflow file:
 
 ```typescript
 const enhanceContentStep = createStep({
-  id: 'enhance-content',
-  description: 'Adds metadata to validated content',
+  id: "enhance-content",
+  description: "Adds metadata to validated content",
   inputSchema: z.object({
     content: z.string(),
     type: z.string(),
@@ -22,20 +22,20 @@ const enhanceContentStep = createStep({
     wordCount: z.number(),
     metadata: z.object({
       readingTime: z.number(),
-      difficulty: z.enum(['easy', 'medium', 'hard']),
+      difficulty: z.enum(["easy", "medium", "hard"]),
       processedAt: z.string(),
     }),
   }),
   execute: async ({ inputData }) => {
-    const { content, type, wordCount } = inputData
+    const { content, type, wordCount } = inputData;
 
     // Calculate reading time (200 words per minute)
-    const readingTime = Math.ceil(wordCount / 200)
+    const readingTime = Math.ceil(wordCount / 200);
 
     // Determine difficulty based on word count
-    let difficulty: 'easy' | 'medium' | 'hard' = 'easy'
-    if (wordCount > 100) difficulty = 'medium'
-    if (wordCount > 300) difficulty = 'hard'
+    let difficulty: "easy" | "medium" | "hard" = "easy";
+    if (wordCount > 100) difficulty = "medium";
+    if (wordCount > 300) difficulty = "hard";
 
     return {
       content,
@@ -46,9 +46,9 @@ const enhanceContentStep = createStep({
         difficulty,
         processedAt: new Date().toISOString(),
       },
-    }
+    };
   },
-})
+});
 ```
 
 ## Notice the Input Schema

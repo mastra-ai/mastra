@@ -535,26 +535,6 @@ interface NetworkValidationEndPayload {
   maxIterationReached: boolean;
 }
 
-interface RoutingAgentAbortPayload {
-  primitiveType: 'routing';
-  primitiveId: string;
-}
-
-interface AgentExecutionAbortPayload {
-  primitiveType: 'agent';
-  primitiveId: string;
-}
-
-interface WorkflowExecutionAbortPayload {
-  primitiveType: 'workflow';
-  primitiveId: string;
-}
-
-interface ToolExecutionAbortPayload {
-  primitiveType: 'tool';
-  primitiveId: string;
-}
-
 interface ToolCallApprovalPayload {
   toolCallId: string;
   toolName: string;
@@ -581,21 +561,17 @@ export type NetworkChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'routing-agent-text-delta'; payload: RoutingAgentTextDeltaPayload })
   | (BaseChunkType & { type: 'routing-agent-text-start'; payload: RoutingAgentTextStartPayload })
   | (BaseChunkType & { type: 'routing-agent-end'; payload: RoutingAgentEndPayload })
-  | (BaseChunkType & { type: 'routing-agent-abort'; payload: RoutingAgentAbortPayload })
   | (BaseChunkType & { type: 'agent-execution-start'; payload: AgentExecutionStartPayload })
   | (BaseChunkType & { type: 'agent-execution-approval'; payload: AgentExecutionApprovalPayload })
   | (BaseChunkType & { type: 'agent-execution-suspended'; payload: AgentExecutionSuspendedPayload })
   | (BaseChunkType & { type: 'agent-execution-end'; payload: AgentExecutionEndPayload })
-  | (BaseChunkType & { type: 'agent-execution-abort'; payload: AgentExecutionAbortPayload })
   | (BaseChunkType & { type: 'workflow-execution-start'; payload: WorkflowExecutionStartPayload })
   | (BaseChunkType & { type: 'workflow-execution-end'; payload: WorkflowExecutionEndPayload })
   | (BaseChunkType & { type: 'workflow-execution-suspended'; payload: WorkflowExecutionSuspendPayload })
-  | (BaseChunkType & { type: 'workflow-execution-abort'; payload: WorkflowExecutionAbortPayload })
   | (BaseChunkType & { type: 'tool-execution-start'; payload: ToolExecutionStartPayload })
   | (BaseChunkType & { type: 'tool-execution-end'; payload: ToolExecutionEndPayload })
   | (BaseChunkType & { type: 'tool-execution-approval'; payload: ToolExecutionApprovalPayload })
   | (BaseChunkType & { type: 'tool-execution-suspended'; payload: ToolExecutionSuspendedPayload })
-  | (BaseChunkType & { type: 'tool-execution-abort'; payload: ToolExecutionAbortPayload })
   | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
   | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload<OUTPUT> })
   | (BaseChunkType & { type: 'network-validation-start'; payload: NetworkValidationStartPayload })

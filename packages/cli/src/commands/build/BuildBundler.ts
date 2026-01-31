@@ -1,9 +1,10 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
 import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
+import type { Config } from '@mastra/core/mastra';
 import { copy } from 'fs-extra';
+
 import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class BuildBundler extends Bundler {
@@ -45,7 +46,7 @@ export class BuildBundler extends Bundler {
       const envFile = fileService.getFirstExistingFile(possibleFiles);
 
       return Promise.resolve([envFile]);
-    } catch {
+    } catch (err) {
       // ignore
     }
 

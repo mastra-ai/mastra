@@ -4,10 +4,10 @@ When using memory in your own application (outside the playground), you need to 
 
 ```typescript
 // Example of using memory in your application
-const response = await memoryAgent.stream('Hello, my name is Alice.', {
-  resourceId: 'user_alice',
-  threadId: 'conversation_123',
-})
+const response = await memoryAgent.stream("Hello, my name is Alice.", {
+  resourceId: "user_alice",
+  threadId: "conversation_123",
+});
 ```
 
 **Important:** Without these IDs, your agent will not use memory, even if memory is properly configured. The playground handles this for you, but you need to add IDs yourself when using memory in your application.

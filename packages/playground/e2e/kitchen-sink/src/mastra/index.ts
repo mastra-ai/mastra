@@ -6,8 +6,6 @@ import { weatherAgent } from './agents';
 import { complexWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
 import { simpleMcpServer } from './mcps';
 import { registerApiRoute } from '@mastra/core/server';
-import { responseQualityScorer, responseTimeScorer } from './scorers';
-import { loggingProcessor, contentFilterProcessor } from './processors';
 
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow },
@@ -19,14 +17,6 @@ export const mastra = new Mastra({
   storage,
   mcpServers: {
     simpleMcpServer,
-  },
-  scorers: {
-    responseQualityScorer,
-    responseTimeScorer,
-  },
-  processors: {
-    loggingProcessor,
-    contentFilterProcessor,
   },
   server: {
     apiRoutes: [

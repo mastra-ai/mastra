@@ -1,6 +1,4 @@
-.docusaurus/**
-build/**
-node_modules/**
-static/**
-# Temporary until Prettier supports MDX properly
 **/*.mdx
+.docusaurus
+build
+node_modules

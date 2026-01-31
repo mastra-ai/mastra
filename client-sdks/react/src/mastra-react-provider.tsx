@@ -1,9 +1,9 @@
 import { MastraClientProvider, MastraClientProviderProps } from '@/mastra-client-context';
 type MastraReactProviderProps = MastraClientProviderProps;
 
-export const MastraReactProvider = ({ children, baseUrl, headers, apiPrefix }: MastraReactProviderProps) => {
+export const MastraReactProvider = ({ children, baseUrl, headers }: MastraReactProviderProps) => {
   return (
-    <MastraClientProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
+    <MastraClientProvider baseUrl={baseUrl} headers={headers}>
       {children}
     </MastraClientProvider>
   );

@@ -30,7 +30,7 @@ jobs:
         if: steps.mdx-changes.outputs.has_changes == 'true'
         uses: actions/setup-node@v5
         with:
-          node-version: '22.13.0'
+          node-version: '20.19.5'
           package-manager-cache: false
 
       - name: Check for removed pages without redirects
@@ -98,7 +98,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '22.13.0'
+          node-version: '20.19.5'
           cache: 'npm'
           cache-dependency-path: docs/package-lock.json
 

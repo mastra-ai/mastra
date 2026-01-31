@@ -2,7 +2,6 @@ import type { Context, Handler, MiddlewareHandler } from 'hono';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
-import type { RequestContext } from '../request-context';
 import type { ApiRoute, MastraAuthConfig, Methods } from './types';
 
 export type { MastraAuthConfig, ContextWithMastra, ApiRoute } from './types';
@@ -21,21 +20,14 @@ type ParamsFromPath<P extends string> = {
 type RegisterApiRoutePathError = `Param 'path' must not start with '/api', it is reserved for internal API routes.`;
 type ValidatePath<P extends string, T> = P extends `/api/${string}` ? RegisterApiRoutePathError : T;
 
-/**
- * Variables available in the Hono context for custom API route handlers.
- * These are set by the server middleware and available via c.get().
- */
-type CustomRouteVariables = {
-  mastra: Mastra;
-  requestContext: RequestContext;
-};
-
 type RegisterApiRouteOptions<P extends string> = {
   method: Methods;
   openapi?: DescribeRouteOptions;
   handler?: Handler<
     {
-      Variables: CustomRouteVariables;
+      Variables: {
+        mastra: Mastra;
+      };
     },
     P,
     ParamsFromPath<P>
@@ -43,7 +35,9 @@ type RegisterApiRouteOptions<P extends string> = {
   createHandler?: (c: Context) => Promise<
     Handler<
       {
-        Variables: CustomRouteVariables;
+        Variables: {
+          mastra: Mastra;
+        };
       },
       P,
       ParamsFromPath<P>

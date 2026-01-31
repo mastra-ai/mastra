@@ -72,7 +72,7 @@ export class Observability extends BaseResource {
    * @returns Promise containing the trace with all its spans
    */
   getTrace(traceId: string): Promise<TraceRecord> {
-    return this.request(`/observability/traces/${traceId}`);
+    return this.request(`/api/observability/traces/${traceId}`);
   }
 
   /**
@@ -115,7 +115,7 @@ export class Observability extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/observability/traces${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -127,7 +127,7 @@ export class Observability extends BaseResource {
    */
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
-    return this.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/api/observability/traces${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -139,7 +139,7 @@ export class Observability extends BaseResource {
     const { traceId, spanId, ...pagination } = params;
     const queryString = toQueryParams(pagination);
     return this.request(
-      `/observability/traces/${encodeURIComponent(traceId)}/${encodeURIComponent(spanId)}/scores${queryString ? `?${queryString}` : ''}`,
+      `/api/observability/traces/${encodeURIComponent(traceId)}/${encodeURIComponent(spanId)}/scores${queryString ? `?${queryString}` : ''}`,
     );
   }
 
@@ -149,7 +149,7 @@ export class Observability extends BaseResource {
    * @returns Promise containing the scoring status
    */
   score(params: ScoreTracesRequest): Promise<ScoreTracesResponse> {
-    return this.request(`/observability/traces/score`, {
+    return this.request(`/api/observability/traces/score`, {
       method: 'POST',
       body: { ...params },
     });

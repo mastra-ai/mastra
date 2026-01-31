@@ -32,8 +32,7 @@ export function MainSidebarNavLink({
   const { Link } = useLinkComponent();
   const isCollapsed = state === 'collapsed';
   const isFeatured = link?.variant === 'featured';
-  const isExternal = link?.url?.startsWith('http');
-  const linkParams = isExternal ? { target: '_blank', rel: 'noreferrer' } : {};
+  const linkParams = link?.url?.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {};
 
   return (
     <li
@@ -73,7 +72,7 @@ export function MainSidebarNavLink({
                   {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
                 </Link>
               </TooltipTrigger>
-              <TooltipContent side="right" align="center" className="ml-4">
+              <TooltipContent side="right" align="center" className="bg-border1 text-neutral6 ml-4">
                 {link.tooltipMsg ? (
                   <>
                     {isCollapsed && `${link.name} | `} {link.tooltipMsg}

@@ -7,6 +7,7 @@ import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
+import { DATASETS_ROUTES } from './datasets';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -20,7 +21,6 @@ import { SYSTEM_ROUTES } from './system';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
-import { WORKSPACE_ROUTES } from './workspace';
 
 /**
  * Server context fields that are available to route handlers.
@@ -97,12 +97,12 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...PROCESSORS_ROUTES,
   ...MEMORY_ROUTES,
   ...SCORES_ROUTES,
+  ...DATASETS_ROUTES,
   ...OBSERVABILITY_ROUTES,
   ...LOGS_ROUTES,
   ...VECTORS_ROUTES,
   ...A2A_ROUTES,
   ...AGENT_BUILDER_ROUTES,
-  ...WORKSPACE_ROUTES,
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,

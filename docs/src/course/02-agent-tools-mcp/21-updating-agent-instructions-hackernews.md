@@ -4,7 +4,7 @@ Next, let's update your agent's instructions to include information about the Ha
 
 ```typescript
 export const personalAssistantAgent = new Agent({
-  name: 'Personal Assistant',
+  name: "Personal Assistant",
   instructions: `
     You are a helpful personal assistant that can help with various tasks such as email, 
     monitoring github activity, scheduling social media posts, and providing tech news.
@@ -27,10 +27,10 @@ export const personalAssistantAgent = new Agent({
     
     Keep your responses concise and friendly.
   `,
-  model: 'openai/gpt-4.1-mini',
+  model: "openai/gpt-4.1-mini",
   tools: { ...mcpTools },
   memory,
-})
+});
 ```
 
 By updating your agent's instructions to include information about the Hacker News tools, you're helping it understand when and how to use these tools. The instructions provide context about what the Hacker News tools can do, such as searching for stories, retrieving top stories, and accessing comments.

@@ -52,36 +52,12 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
     const now = new Date();
     const newAgent: StorageAgentType = {
-      id: agent.id,
-      status: 'draft',
-      activeVersionId: undefined,
-      authorId: agent.authorId,
-      metadata: agent.metadata,
+      ...agent,
       createdAt: now,
       updatedAt: now,
     };
 
     this.db.agents.set(agent.id, newAgent);
-
-    // Extract config fields from the flat input (everything except agent-record fields)
-    const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
-
-    // Create version 1 from the config
-    const versionId = crypto.randomUUID();
-    await this.createVersion({
-      id: versionId,
-      agentId: agent.id,
-      versionNumber: 1,
-      ...snapshotConfig,
-      changedFields: Object.keys(snapshotConfig),
-      changeMessage: 'Initial version',
-    });
-
-    // Set the active version
-    newAgent.activeVersionId = versionId;
-    newAgent.status = 'published';
-    this.db.agents.set(agent.id, newAgent);
-
     return { ...newAgent };
   }
 
@@ -95,18 +71,28 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
     const updatedAgent: StorageAgentType = {
       ...existingAgent,
-      ...(updates.authorId !== undefined && { authorId: updates.authorId }),
-      ...(updates.activeVersionId !== undefined && { activeVersionId: updates.activeVersionId }),
+      ...(updates.name !== undefined && { name: updates.name }),
+      ...(updates.description !== undefined && { description: updates.description }),
+      ...(updates.instructions !== undefined && { instructions: updates.instructions }),
+      ...(updates.model !== undefined && { model: updates.model }),
+      ...(updates.tools !== undefined && { tools: updates.tools }),
+      ...(updates.defaultOptions !== undefined && {
+        defaultOptions: updates.defaultOptions,
+      }),
+      ...(updates.workflows !== undefined && { workflows: updates.workflows }),
+      ...(updates.agents !== undefined && { agents: updates.agents }),
+      ...(updates.inputProcessors !== undefined && { inputProcessors: updates.inputProcessors }),
+      ...(updates.outputProcessors !== undefined && { outputProcessors: updates.outputProcessors }),
+      ...(updates.memory !== undefined && { memory: updates.memory }),
+      ...(updates.scorers !== undefined && { scorers: updates.scorers }),
       ...(updates.metadata !== undefined && {
         metadata: { ...existingAgent.metadata, ...updates.metadata },
       }),
+      ...(updates.ownerId !== undefined && { ownerId: updates.ownerId }),
+      ...(updates.activeVersionId !== undefined && { activeVersionId: updates.activeVersionId }),
+      ...(updates.integrationTools !== undefined && { integrationTools: updates.integrationTools }),
       updatedAt: new Date(),
     };
-
-    // If activeVersionId is set, mark as published
-    if (updates.activeVersionId !== undefined) {
-      updatedAgent.status = 'published';
-    }
 
     this.db.agents.set(id, updatedAgent);
     return { ...updatedAgent };
@@ -121,7 +107,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, ownerId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryAgentsStorage: listAgents called`);
@@ -142,9 +128,9 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     // Get all agents and apply filters
     let agents = Array.from(this.db.agents.values());
 
-    // Filter by authorId if provided
-    if (authorId !== undefined) {
-      agents = agents.filter(agent => agent.authorId === authorId);
+    // Filter by ownerId if provided
+    if (ownerId !== undefined) {
+      agents = agents.filter(agent => agent.ownerId === ownerId);
     }
 
     // Filter by metadata if provided (AND logic - all key-value pairs must match)
@@ -311,12 +297,21 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   // ==========================================================================
 
   /**
-   * Deep copy a thin agent record to prevent external mutation of stored data
+   * Deep copy an agent to prevent external mutation of stored data
    */
   private deepCopyAgent(agent: StorageAgentType): StorageAgentType {
     return {
       ...agent,
       metadata: agent.metadata ? { ...agent.metadata } : agent.metadata,
+      model: { ...agent.model },
+      tools: agent.tools ? [...agent.tools] : agent.tools,
+      defaultOptions: agent.defaultOptions ? { ...agent.defaultOptions } : agent.defaultOptions,
+      workflows: agent.workflows ? [...agent.workflows] : agent.workflows,
+      agents: agent.agents ? [...agent.agents] : agent.agents,
+      integrationTools: agent.integrationTools ? [...agent.integrationTools] : agent.integrationTools,
+      inputProcessors: agent.inputProcessors ? agent.inputProcessors.map(p => ({ ...p })) : agent.inputProcessors,
+      outputProcessors: agent.outputProcessors ? agent.outputProcessors.map(p => ({ ...p })) : agent.outputProcessors,
+      scorers: agent.scorers ? { ...agent.scorers } : agent.scorers,
     };
   }
 
@@ -326,18 +321,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   private deepCopyVersion(version: AgentVersion): AgentVersion {
     return {
       ...version,
-      model: { ...version.model },
-      tools: version.tools ? [...version.tools] : version.tools,
-      defaultOptions: version.defaultOptions ? { ...version.defaultOptions } : version.defaultOptions,
-      workflows: version.workflows ? [...version.workflows] : version.workflows,
-      agents: version.agents ? [...version.agents] : version.agents,
-      integrationTools: version.integrationTools ? [...version.integrationTools] : version.integrationTools,
-      inputProcessors: version.inputProcessors ? version.inputProcessors.map(p => ({ ...p })) : version.inputProcessors,
-      outputProcessors: version.outputProcessors
-        ? version.outputProcessors.map(p => ({ ...p }))
-        : version.outputProcessors,
-      memory: version.memory ? { ...version.memory } : version.memory,
-      scorers: version.scorers ? { ...version.scorers } : version.scorers,
+      snapshot: this.deepCopyAgent(version.snapshot),
       changedFields: version.changedFields ? [...version.changedFields] : version.changedFields,
     };
   }

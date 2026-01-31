@@ -4,5 +4,11 @@
     "baseUrl": ".",
     "types": ["@docusaurus/module-type-aliases", "@docusaurus/theme-classic"]
   },
-  "include": ["src/**/*", "config/docs"]
+  "include": [
+    "src/**/*",
+    "scripts/build-llms-txt.ts",
+    "scripts/build-eval-context.ts",
+    "scripts/build-cursor-context.ts",
+    "config/docs"
+  ]
 }

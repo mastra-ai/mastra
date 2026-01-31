@@ -1,15 +1,15 @@
-import { useThemeConfig } from '@docusaurus/theme-common'
-import type { Props } from '@theme/DocSidebar/Desktop'
-import CollapseButton from '@theme/DocSidebar/Desktop/CollapseButton'
-import Content from '@theme/DocSidebar/Desktop/Content'
-import Logo from '@theme/Logo'
-import clsx from 'clsx'
-import React from 'react'
+import { useThemeConfig } from "@docusaurus/theme-common";
+import type { Props } from "@theme/DocSidebar/Desktop";
+import CollapseButton from "@theme/DocSidebar/Desktop/CollapseButton";
+import Content from "@theme/DocSidebar/Desktop/Content";
+import Logo from "@theme/Logo";
+import clsx from "clsx";
+import React from "react";
 
-import { ThemeSwitcher } from '@site/src/components/theme-switcher'
+import { ThemeSwitcher } from "@site/src/components/theme-switcher";
 
-import styles from './styles.module.css'
-import VersionControl from '@site/src/components/version-control'
+import styles from "./styles.module.css";
+import VersionControl from "@site/src/components/version-control";
 
 function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
   const {
@@ -17,7 +17,7 @@ function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
     docs: {
       sidebar: { hideable },
     },
-  } = useThemeConfig()
+  } = useThemeConfig();
   return (
     <div
       className={clsx(
@@ -26,17 +26,17 @@ function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
         isHidden && styles.sidebarHidden,
       )}
     >
-      <div className="my-4 mr-[7px] mb-2">
+      <div className="mr-[7px] my-4 mb-2">
         <VersionControl />
       </div>
       {hideOnScroll && <Logo tabIndex={-1} className={styles.sidebarLogo} />}
       <Content path={path} sidebar={sidebar} />
-      <footer className="mr-4 flex justify-end border-t-[0.5px] border-(--border) py-2 pr-0.5">
+      <footer className="py-2 pr-0.5 mr-4 flex justify-end border-t-[0.5px] border-(--border)">
         <ThemeSwitcher />
       </footer>
       {hideable && <CollapseButton onClick={onCollapse} />}
     </div>
-  )
+  );
 }
 
-export default React.memo(DocSidebarDesktop)
+export default React.memo(DocSidebarDesktop);

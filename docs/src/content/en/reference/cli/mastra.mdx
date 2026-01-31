@@ -39,16 +39,6 @@ Comma-separated list of custom arguments to pass to the development server. You 
 
 You can set certain environment variables to modify the behavior of `mastra dev`.
 
-#### Skip peer dependency check
-
-Set `MASTRA_SKIP_PEERDEP_CHECK=1` to skip the peer dependency version mismatch check at startup:
-
-```bash
-MASTRA_SKIP_PEERDEP_CHECK=1 mastra dev
-```
-
-This is useful during monorepo development when peer dependencies may be bumped but packages are not yet published.
-
 #### Disable build caching
 
 Set `MASTRA_DEV_NO_CACHE=1` to force a full rebuild rather than using the cached assets under `.mastra/`:
@@ -111,14 +101,6 @@ Bundle the Studio UI with the build.
 ### Configs
 
 You can set certain environment variables to modify the behavior of `mastra build`.
-
-#### Skip peer dependency check
-
-Set `MASTRA_SKIP_PEERDEP_CHECK=1` to skip the peer dependency version mismatch check:
-
-```bash
-MASTRA_SKIP_PEERDEP_CHECK=1 mastra build
-```
 
 #### Limit parallelism
 

@@ -158,20 +158,20 @@ describe('MCPServer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // @ts-expect-error - accessing internal for testing - Mocking Date completely
+    // @ts-expect-error - Mocking Date completely
     // Must use a regular function (not arrow function) to support `new Date()` constructor calls
     global.Date = vi.fn(function (this: any, ...args: any[]) {
       if (args.length === 0) {
         // new Date()
         return mockDate;
       }
-      // @ts-expect-error - accessing internal for testing
+      // @ts-expect-error
       return new OriginalDate(...args); // new Date('some-string') or new Date(timestamp)
     }) as any;
 
-    // @ts-expect-error - accessing internal for testing
+    // @ts-expect-error
     global.Date.now = vi.fn(() => mockDate.getTime());
-    // @ts-expect-error - accessing internal for testing
+    // @ts-expect-error
     global.Date.prototype = OriginalDate.prototype;
   });
 
@@ -248,7 +248,7 @@ describe('MCPServer', () => {
       const sdkServer = server.getServer();
 
       // Check that the SDK Server was initialized with instructions
-      // @ts-expect-error - accessing internal for testing - accessing private property for testing
+      // @ts-expect-error - accessing private property for testing
       expect(sdkServer._instructions).toBe(instructions);
     });
   });
@@ -1146,7 +1146,7 @@ describe('MCPServer', () => {
 
       const serverInstance = server.getServer();
 
-      // @ts-expect-error - accessing internal for testing - this is a private property, but we need to access it to test the request handler
+      // @ts-expect-error - this is a private property, but we need to access it to test the request handler
       const requestHandlers = serverInstance._requestHandlers;
       const callToolHandler = requestHandlers.get('tools/call');
 
@@ -1658,7 +1658,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     });
 
     const serverInstance = server.getServer();
-    // @ts-expect-error - accessing internal for testing
+    // @ts-expect-error
     const requestHandlers = serverInstance._requestHandlers;
     const callToolHandler = requestHandlers.get('tools/call');
 
@@ -1789,7 +1789,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     });
 
     const serverInstance2 = server.getServer();
-    // @ts-expect-error - accessing internal for testing
+    // @ts-expect-error
     const requestHandlers2 = serverInstance2._requestHandlers;
     const callToolHandler2 = requestHandlers2.get('tools/call');
 
@@ -2006,7 +2006,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
     });
 
     const serverInstance = server.getServer();
-    // @ts-expect-error - accessing internal for testing - accessing private property for testing
+    // @ts-expect-error - accessing private property for testing
     const requestHandlers = serverInstance._requestHandlers;
     const callToolHandler = requestHandlers.get('tools/call');
 

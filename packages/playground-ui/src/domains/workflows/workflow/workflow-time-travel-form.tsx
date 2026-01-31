@@ -16,7 +16,7 @@ import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { z } from 'zod';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { cn } from '@/lib/utils';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 const buttonClass = 'text-neutral3 hover:text-neutral6';
 
@@ -209,8 +209,7 @@ export const WorkflowTimeTravelForm = ({
     workflowId,
     setDebugMode,
   } = useContext(WorkflowRunContext);
-
-  const requestContext = useMergedRequestContext();
+  const { requestContext } = usePlaygroundStore();
   const stepResult = inputData ? { payload: inputData } : result?.steps?.[stepKey];
   const [resumeData, setResumeData] = useState(() => '{}');
   const [contextValue, setContextValue] = useState(() => '{}');

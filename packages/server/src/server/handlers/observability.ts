@@ -134,7 +134,7 @@ export const LIST_TRACES_ROUTE = createRoute({
       const observabilityStore = await getObservabilityStore(mastra);
       return await observabilityStore.listTraces({ filters, pagination, orderBy });
     } catch (error) {
-      return handleError(error, 'Error listing traces');
+      handleError(error, 'Error listing traces');
     }
   },
 });
@@ -160,7 +160,7 @@ export const GET_TRACE_ROUTE = createRoute({
 
       return trace;
     } catch (error) {
-      return handleError(error, 'Error getting trace');
+      handleError(error, 'Error getting trace');
     }
   },
 });
@@ -202,7 +202,7 @@ export const SCORE_TRACES_ROUTE = createRoute({
         traceCount: targets.length,
       };
     } catch (error) {
-      return handleError(error, 'Error processing trace scoring');
+      handleError(error, 'Error processing trace scoring');
     }
   },
 });
@@ -230,7 +230,7 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
         pagination,
       });
     } catch (error) {
-      return handleError(error, 'Error getting scores by span');
+      handleError(error, 'Error getting scores by span');
     }
   },
 });

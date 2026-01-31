@@ -5,14 +5,12 @@ import {
   ObservabilityStorage,
   TABLE_SCHEMAS,
   TABLE_SPANS,
-  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TracingStorageStrategy,
   ListTracesArgs,
-  ListTracesResponse,
   UpdateSpanArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
@@ -24,6 +22,7 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  ListTracesResponse,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig } from '../../db';
@@ -628,13 +627,11 @@ export class ObservabilityPG extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < count,
         },
-        spans: toTraceSpans(
-          spans.map(span =>
-            transformFromSqlRow<SpanRecord>({
-              tableName: TABLE_SPANS,
-              sqlRow: span,
-            }),
-          ),
+        spans: spans.map(span =>
+          transformFromSqlRow<SpanRecord>({
+            tableName: TABLE_SPANS,
+            sqlRow: span,
+          }),
         ),
       };
     } catch (error) {

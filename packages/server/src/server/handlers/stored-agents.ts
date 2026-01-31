@@ -32,7 +32,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, ownerId, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -45,11 +45,11 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      const result = await agentsStore.listAgentsResolved({
+      const result = await agentsStore.listAgents({
         page,
         perPage,
         orderBy,
-        authorId,
+        ownerId,
         metadata,
       });
 
@@ -70,7 +70,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
   pathParamSchema: storedAgentIdPathParams,
   responseSchema: getStoredAgentResponseSchema,
   summary: 'Get stored agent by ID',
-  description: 'Returns a specific agent from storage by its unique identifier (resolved with active version config)',
+  description: 'Returns a specific agent from storage by its unique identifier',
   tags: ['Stored Agents'],
   requiresAuth: true,
   handler: async ({ mastra, storedAgentId }) => {
@@ -87,7 +87,6 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       }
 
       // Use getAgentByIdResolved to automatically resolve from active version
-      // Returns StorageResolvedAgentType (thin record + version config)
       const agent = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
 
       if (!agent) {
@@ -117,8 +116,6 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
   handler: async ({
     mastra,
     id,
-    authorId,
-    metadata,
     name,
     description,
     instructions,
@@ -132,6 +129,8 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
     outputProcessors,
     memory,
     scorers,
+    metadata,
+    ownerId,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -151,16 +150,13 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
 
-      // Only include tools/integrationTools if they're actually arrays from the body (not {} from adapter)
+      // Only include tools if it's actually an array from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
       const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
-      // Create agent with flat StorageCreateAgentInput
-      await agentsStore.createAgent({
+      const agent = await agentsStore.createAgent({
         agent: {
           id,
-          authorId,
-          metadata,
           name,
           description,
           instructions,
@@ -174,15 +170,12 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           outputProcessors,
           memory,
           scorers,
+          metadata,
+          ownerId,
         },
       });
 
-      // Return the resolved agent (thin record + version config)
-      const resolved = await agentsStore.getAgentByIdResolved({ id });
-      if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve created agent' });
-      }
-      return resolved;
+      return agent;
     } catch (error) {
       return handleError(error, 'Error creating stored agent');
     }
@@ -206,10 +199,6 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
   handler: async ({
     mastra,
     storedAgentId,
-    // Metadata-level fields
-    authorId,
-    metadata,
-    // Config fields (snapshot-level)
     name,
     description,
     instructions,
@@ -223,6 +212,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     outputProcessors,
     memory,
     scorers,
+    metadata,
+    ownerId,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -246,12 +237,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
       const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
-      // Update the agent with both metadata-level and config-level fields
-      // The storage layer handles separating these into agent-record updates vs new-version creation
       const updatedAgent = await agentsStore.updateAgent({
         id: storedAgentId,
-        authorId,
-        metadata,
         name,
         description,
         instructions,
@@ -265,41 +252,18 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         outputProcessors,
         memory,
         scorers,
+        metadata,
+        ownerId,
       });
 
-      // Build the snapshot config for auto-versioning comparison
-      const configFields = {
-        name,
-        description,
-        instructions,
-        model,
-        tools: toolsFromBody,
-        defaultOptions,
-        workflows,
-        agents,
-        integrationTools: integrationToolsFromBody,
-        inputProcessors,
-        outputProcessors,
-        memory,
-        scorers,
-      };
-
-      // Filter out undefined values to get only the config fields that were provided
-      const providedConfigFields = Object.fromEntries(Object.entries(configFields).filter(([_, v]) => v !== undefined));
-
       // Handle auto-versioning with retry logic for race conditions
-      // This creates a version if there are meaningful config changes and updates activeVersionId
-      await handleAutoVersioning(agentsStore, storedAgentId, existing, updatedAgent, providedConfigFields);
+      // This creates a version if there are meaningful changes and updates activeVersionId
+      const { agent } = await handleAutoVersioning(agentsStore, storedAgentId, existing, updatedAgent);
 
       // Clear the cached agent instance so the next request gets the updated config
       mastra.clearStoredAgentCache(storedAgentId);
 
-      // Return the resolved agent (thin record + version config)
-      const resolved = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
-      if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
-      }
-      return resolved;
+      return agent;
     } catch (error) {
       return handleError(error, 'Error updating stored agent');
     }

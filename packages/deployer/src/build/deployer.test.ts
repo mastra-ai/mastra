@@ -1,6 +1,6 @@
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { getDeployerBundler } from './deployer';
 
 describe('getDeployer', () => {

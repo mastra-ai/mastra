@@ -8,9 +8,10 @@
  * ```ts
  * import { coreFeatures } from "@mastra/core/features"
  *
- * if (coreFeatures.has('workspaces-v1')) {
- *   // Workspace features available
+ * if (coreFeatures.has('someNewThing')) {
+ *   doWhatever()
  * }
  * ```
  */
-export const coreFeatures = new Set<string>(['workspaces-v1']);
+// Add feature flags here as new features are introduced
+export const coreFeatures = new Set<string>();

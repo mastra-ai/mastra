@@ -5,7 +5,7 @@ import { LinkComponent, LinkComponentProps } from '@mastra/playground-ui';
 export const Link: LinkComponent = forwardRef<HTMLAnchorElement, LinkComponentProps>(
   ({ children, href, ...props }, ref) => {
     return (
-      <RouterLink ref={ref} to={href} viewTransition {...props}>
+      <RouterLink ref={ref} to={href} {...props}>
         {children}
       </RouterLink>
     );

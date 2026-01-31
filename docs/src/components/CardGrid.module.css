@@ -37,6 +37,6 @@
   color: var(--mastra-text-tertiary);
 }
 
-[data-theme='dark'] .cardGridItem:hover {
+[data-theme="dark"] .cardGridItem:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }

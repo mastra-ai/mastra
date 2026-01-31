@@ -72,13 +72,6 @@ const processor = new WorkingMemory({
       isOptional: true,
     },
     {
-      name: "readOnly",
-      type: "boolean",
-      description: "When true, working memory is provided as read-only context. The data is injected into the conversation but without the updateWorkingMemory tool or update instructions. Useful for agents that should reference working memory without modifying it.",
-      isOptional: true,
-      default: "false",
-    },
-    {
       name: "templateProvider",
       type: "{ getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null> }",
       description: "Dynamic template provider for runtime template resolution",
@@ -210,9 +203,10 @@ const processor = new WorkingMemory({
    - Thread metadata (`scope: 'thread'`)
    - Resource record (`scope: 'resource'`)
 3. Resolves the template (from provider, options, or default)
-4. Generates system instructions based on mode:
-   - **Normal mode**: Includes guidelines for storing/updating information, template structure, and current data
-   - **Read-only mode** (`readOnly: true`): Includes only the current data as context without update instructions
+4. Generates system instructions that include:
+   - Guidelines for the LLM on storing and updating information
+   - The template structure
+   - Current working memory data
 5. Adds the instruction as a system message with `source: 'memory'` tag
 
 ### Working memory updates

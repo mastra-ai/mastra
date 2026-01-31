@@ -1,8 +1,8 @@
-import { createLogger } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
 import { createApiRoute } from '@mastra/core/server';
-import { testDeployer } from '@mastra/deployer/test';
 import { weatherAgent } from '@/agents';
+import { testDeployer } from '@mastra/deployer/test';
 
 function getDeployer() {
   return testDeployer;

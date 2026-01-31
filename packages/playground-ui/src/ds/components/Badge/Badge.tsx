@@ -31,9 +31,9 @@ export const Badge = ({ icon, variant = 'default', className, children, ...props
   return (
     <div
       className={cn(
-        'font-mono text-ui-sm gap-1 h-badge-default inline-flex items-center rounded-full border border-border1 shrink-0',
+        'font-mono text-ui-sm gap-1 h-badge-default inline-flex items-center rounded-md shrink-0',
         transitions.colors,
-        icon ? 'pl-2 pr-2.5' : 'px-2.5',
+        icon ? 'pl-1 pr-1.5' : 'px-1.5',
         variant === 'default' && icon ? 'bg-surface4 text-neutral5' : variantClasses[variant],
         className,
       )}

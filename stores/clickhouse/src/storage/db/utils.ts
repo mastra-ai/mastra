@@ -9,6 +9,10 @@ import {
   safelyParseJSON,
   TABLE_SPANS,
   TABLE_AGENT_VERSIONS,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
+  TABLE_DATASET_RUNS,
+  TABLE_DATASET_RUN_RESULTS,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -24,6 +28,10 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_SPANS]: `ReplacingMergeTree(updatedAt)`,
   mastra_agents: `ReplacingMergeTree()`,
   [TABLE_AGENT_VERSIONS]: `MergeTree()`,
+  [TABLE_DATASETS]: `ReplacingMergeTree()`,
+  [TABLE_DATASET_ITEMS]: `ReplacingMergeTree()`,
+  [TABLE_DATASET_RUNS]: `ReplacingMergeTree()`,
+  [TABLE_DATASET_RUN_RESULTS]: `MergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

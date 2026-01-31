@@ -222,9 +222,7 @@ const storage = new MastraCompositeStore({
 
 ### Specialized storage for observability
 
-Observability data can quickly overwhelm general-purpose databases in production. A single agent interaction can generate hundreds of spans, and high-traffic applications can produce thousands of traces per day.
-
-**ClickHouse** is recommended for production observability because it's optimized for high-volume, write-heavy analytics workloads. Use composite storage to route observability to ClickHouse while keeping other data in your primary database:
+Use a time-series database for traces while keeping other data in PostgreSQL:
 
 ```typescript
 import { MastraCompositeStore } from "@mastra/core/storage";
@@ -245,9 +243,3 @@ const storage = new MastraCompositeStore({
   },
 });
 ```
-
-:::info
-
-This approach is also required when using storage providers that don't support observability (like Convex, DynamoDB, or Cloudflare). See the [DefaultExporter documentation](/docs/observability/tracing/exporters/default#storage-provider-support) for the full list of supported providers.
-
-:::

@@ -7,36 +7,6 @@ import type { ZodType } from 'zod';
 import type { z as zv4 } from 'zod/v4';
 
 /**
- * Normalizes a route path to ensure consistent formatting.
- * - Removes leading/trailing whitespace
- * - Validates no path traversal (..), query strings (?), or fragments (#)
- * - Collapses multiple consecutive slashes
- * - Removes trailing slashes
- * - Ensures leading slash (unless empty)
- *
- * @param path - The route path to normalize
- * @returns The normalized path (empty string for root paths)
- * @throws Error if path contains invalid characters
- */
-export function normalizeRoutePath(path: string): string {
-  let normalized = path.trim();
-  if (normalized.includes('..') || normalized.includes('?') || normalized.includes('#')) {
-    throw new Error(`Invalid route path: "${path}". Path cannot contain '..', '?', or '#'`);
-  }
-  normalized = normalized.replace(/\/+/g, '/');
-  if (normalized === '/' || normalized === '') {
-    return '';
-  }
-  if (normalized.endsWith('/')) {
-    normalized = normalized.slice(0, -1);
-  }
-  if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`;
-  }
-  return normalized;
-}
-
-/**
  * Check if a schema looks like a processor step schema.
  * Processor step schemas are discriminated unions on 'phase' with specific values.
  */
@@ -126,9 +96,6 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
         resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
         suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
         stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
-        requestContextSchema: step.requestContextSchema
-          ? stringify(zodToJsonSchema(step.requestContextSchema))
-          : undefined,
         component: step.component,
       };
       return acc;
@@ -138,9 +105,6 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
     inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     stateSchema: workflow.stateSchema ? stringify(zodToJsonSchema(workflow.stateSchema)) : undefined,
-    requestContextSchema: workflow.requestContextSchema
-      ? stringify(zodToJsonSchema(workflow.requestContextSchema))
-      : undefined,
     options: workflow.options,
     isProcessorWorkflow: workflow.type === 'processor' || looksLikeProcessorStepSchema(workflow.inputSchema),
   };

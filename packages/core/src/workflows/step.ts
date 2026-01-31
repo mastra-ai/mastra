@@ -20,20 +20,12 @@ declare const SuspendBrand: unique symbol;
 // Create a branded type that can ONLY be produced by suspend()
 export type InnerOutput = void & { readonly [SuspendBrand]: never };
 
-export type ExecuteFunctionParams<
-  TState,
-  TStepInput,
-  TStepOutput,
-  TResume,
-  TSuspend,
-  EngineType,
-  TRequestContext extends Record<string, any> | unknown = unknown,
-> = {
+export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSuspend, EngineType> = {
   runId: string;
   resourceId?: string;
   workflowId: string;
   mastra: Mastra;
-  requestContext: RequestContext<TRequestContext>;
+  requestContext: RequestContext;
   inputData: TStepInput;
   state: TState;
   setState(state: TState): Promise<void>;
@@ -49,8 +41,7 @@ export type ExecuteFunctionParams<
   suspend: unknown extends TSuspend
     ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>
     : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
-  bail(result: TStepOutput): InnerOutput;
-  bail(result?: unknown): InnerOutput;
+  bail: (result: TStepOutput) => InnerOutput;
   abort(): void;
   resume?: {
     steps: string[];
@@ -65,77 +56,21 @@ export type ExecuteFunctionParams<
   validateSchemas?: boolean;
 };
 
-export type ConditionFunctionParams<
-  TState,
-  TStepInput,
-  TStepOutput,
-  TResumeSchema,
-  TSuspendSchema,
-  EngineType,
-  TRequestContext extends Record<string, any> | unknown = unknown,
-> = Omit<
-  ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext>,
+export type ConditionFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = Omit<
+  ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType>,
   'setState' | 'suspend'
 >;
 
-export type ExecuteFunction<
-  TState,
-  TStepInput,
-  TStepOutput,
-  TResumeSchema,
-  TSuspendSchema,
-  EngineType,
-  TRequestContext extends Record<string, any> | unknown = unknown,
-> = (
-  params: ExecuteFunctionParams<
-    TState,
-    TStepInput,
-    TStepOutput,
-    TResumeSchema,
-    TSuspendSchema,
-    EngineType,
-    TRequestContext
-  >,
+export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
+  params: ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType>,
 ) => Promise<TStepOutput | InnerOutput>;
 
-export type ConditionFunction<
-  TState,
-  TStepInput,
-  TStepOutput,
-  TResumeSchema,
-  TSuspendSchema,
-  EngineType,
-  TRequestContext extends Record<string, any> | unknown = unknown,
-> = (
-  params: ConditionFunctionParams<
-    TState,
-    TStepInput,
-    TStepOutput,
-    TResumeSchema,
-    TSuspendSchema,
-    EngineType,
-    TRequestContext
-  >,
+export type ConditionFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
+  params: ConditionFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType>,
 ) => Promise<boolean>;
 
-export type LoopConditionFunction<
-  TState,
-  TStepInput,
-  TStepOutput,
-  TResumeSchema,
-  TSuspendSchema,
-  EngineType,
-  TRequestContext extends Record<string, any> | unknown = unknown,
-> = (
-  params: ConditionFunctionParams<
-    TState,
-    TStepInput,
-    TStepOutput,
-    TResumeSchema,
-    TSuspendSchema,
-    EngineType,
-    TRequestContext
-  > & {
+export type LoopConditionFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
+  params: ConditionFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> & {
     iterationCount: number;
   },
 ) => Promise<boolean>;
@@ -149,7 +84,6 @@ export interface Step<
   TResume = unknown,
   TSuspend = unknown,
   TEngineType = any,
-  TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   id: TStepId;
   description?: string;
@@ -158,12 +92,7 @@ export interface Step<
   resumeSchema?: SchemaWithValidation<TResume>;
   suspendSchema?: SchemaWithValidation<TSuspend>;
   stateSchema?: SchemaWithValidation<TState>;
-  /**
-   * Optional schema for validating request context values.
-   * When provided, the request context will be validated against this schema before step execution.
-   */
-  requestContextSchema?: SchemaWithValidation<TRequestContext>;
-  execute: ExecuteFunction<TState, TInput, TOutput, TResume, TSuspend, TEngineType, TRequestContext>;
+  execute: ExecuteFunction<TState, TInput, TOutput, TResume, TSuspend, TEngineType>;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
   component?: string;

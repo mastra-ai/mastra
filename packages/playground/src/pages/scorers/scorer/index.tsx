@@ -19,6 +19,7 @@ import {
   getToPreviousEntryFn,
   useAgents,
   useWorkflows,
+  HeaderGroup,
   ScorerCombobox,
   toast,
   Spinner,
@@ -161,16 +162,19 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`}>
+            <Crumb as={Link} to={`/scorers`} isCurrent>
               <Icon>
                 <GaugeIcon />
               </Icon>
               Scorers
             </Crumb>
-            <Crumb as="span" to="" isCurrent>
-              <ScorerCombobox value={scorerId} variant="ghost" />
-            </Crumb>
           </Breadcrumb>
+
+          <HeaderGroup>
+            <div className="w-48">
+              <ScorerCombobox value={scorerId} />
+            </div>
+          </HeaderGroup>
 
           <HeaderAction>
             <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">

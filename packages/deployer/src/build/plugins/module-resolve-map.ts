@@ -1,7 +1,7 @@
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import type { Plugin } from 'rollup';
 import { isDependencyPartOfPackage, slash } from '../utils';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 export function moduleResolveMap(externals: string[], projectRoot: string): Plugin {
   const importMap = new Map<string, string>();

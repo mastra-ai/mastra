@@ -238,40 +238,17 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
 // ============================================================================
 
 /**
- * MCP transport options that can be passed to startHTTP() or startSSE().
- * Includes serverless mode for running in stateless environments like Cloudflare Workers or Vercel Edge.
- */
-export interface MCPTransportOptions {
-  /**
-   * When true, runs in stateless mode without session management.
-   * Ideal for serverless environments where you can't maintain persistent connections.
-   */
-  serverless?: boolean;
-  /**
-   * Custom session ID generator function.
-   */
-  sessionIdGenerator?: () => string;
-}
-
-/**
  * MCP HTTP Transport response type.
  * Adapters use this to set up the HTTP transport via MCPServer.startHTTP()
  */
 export interface MCPHttpTransportResult {
   server: MastraMCPServerImplementation;
   httpPath: string;
-  /**
-   * Optional MCP transport options for this specific route.
-   * These override any class-level mcpOptions configured on the adapter.
-   */
-  mcpOptions?: MCPTransportOptions;
 }
 
 /**
  * MCP SSE Transport response type.
  * Adapters use this to set up the SSE transport via MCPServer.startSSE() or startHonoSSE()
- *
- * Note: SSE transport is inherently stateful and doesn't support serverless mode.
  */
 export interface MCPSseTransportResult {
   server: MastraMCPServerImplementation;

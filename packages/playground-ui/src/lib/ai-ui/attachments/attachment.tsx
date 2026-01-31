@@ -3,7 +3,7 @@ import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { CircleXIcon, PaperclipIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { IconButton } from '@/ds/components/IconButton';
+import { TooltipIconButton } from '../tooltip-icon-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 import { Icon } from '@/ds/icons';
@@ -99,16 +99,15 @@ const AttachmentThumbnail = () => {
 const AttachmentRemove = () => {
   return (
     <AttachmentPrimitive.Remove asChild>
-      <IconButton
-        variant="light"
-        size="md"
+      <TooltipIconButton
         tooltip="Remove file"
         className="absolute -right-3 -top-3 text-neutral3 hover:text-neutral6 rounded-full bg-surface1 hover:bg-surface2 rounded-full p-1"
+        side="top"
       >
         <Icon>
           <CircleXIcon />
         </Icon>
-      </IconButton>
+      </TooltipIconButton>
     </AttachmentPrimitive.Remove>
   );
 };
@@ -128,14 +127,9 @@ export const ComposerAttachments = () => {
 const ComposerAddAttachment = () => {
   return (
     <ComposerPrimitive.AddAttachment asChild>
-      <IconButton
-        variant="light"
-        size="md"
-        className="my-2.5 size-8 p-2 transition-opacity ease-in"
-        tooltip="Add Attachment"
-      >
+      <TooltipIconButton className="my-2.5 size-8 p-2 transition-opacity ease-in" tooltip="Add Attachment">
         <PaperclipIcon />
-      </IconButton>
+      </TooltipIconButton>
     </ComposerPrimitive.AddAttachment>
   );
 };

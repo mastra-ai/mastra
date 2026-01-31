@@ -1,10 +1,10 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic.js 1`] = `
-"import { createLogger } from '@mastra/core/logger';
-import { Mastra } from '@mastra/core/mastra';
-import { createApiRoute } from '@mastra/core/server';
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
 import { weatherAgent } from '@/agents';
+import { createApiRoute } from '@mastra/core/server';
 
 const mastra = new Mastra({
   agents: {
@@ -41,8 +41,8 @@ export { mastra };
 `;
 
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-const.js 1`] = `
-"import { createLogger } from '@mastra/core/logger';
-import { Mastra } from '@mastra/core/mastra';
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
 import { createApiRoute } from '@mastra/core/server';
 import { weatherAgent } from '@/agents';
 
@@ -83,8 +83,8 @@ export { mastra };
 `;
 
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-function.js 1`] = `
-"import { createLogger } from '@mastra/core/logger';
-import { Mastra } from '@mastra/core/mastra';
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
 import { createApiRoute } from '@mastra/core/server';
 import { weatherAgent } from '@/agents';
 
@@ -129,11 +129,11 @@ export { mastra };
 `;
 
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-import.js 1`] = `
-"import { createLogger } from '@mastra/core/logger';
-import { Mastra } from '@mastra/core/mastra';
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
 import { weatherAgent } from '@/agents';
-import { serverOptions } from '@/server';
 import { telemetryConfig } from '@/telemetry';
+import { serverOptions } from '@/server';
 
 const mastra = new Mastra({
   agents: {
@@ -152,8 +152,8 @@ export { mastra };
 `;
 
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-spread.js 1`] = `
-"import { createLogger } from '@mastra/core/logger';
-import { Mastra } from '@mastra/core/mastra';
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
 
 const configLogger = {
   logger: createLogger({

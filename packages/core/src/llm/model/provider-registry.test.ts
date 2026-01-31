@@ -761,33 +761,6 @@ describe('Corrupted JSON recovery', () => {
     // Clean up
     originalRmSync(tempDir, { recursive: true, force: true });
   });
-
-  it('should detect unquoted numeric provider names in .d.ts content', () => {
-    // The validation regex used in syncGlobalCacheToLocal to detect corrupted .d.ts files
-    const validationRegex = /readonly\s+\d/;
-
-    // Corrupted content: unquoted "302ai" starts with a digit - invalid TypeScript
-    const corruptedDtsContent = `export type ProviderModelsMap = {
-  readonly openai: readonly ['gpt-4o'];
-  readonly 302ai: readonly ['model-1'];
-};`;
-
-    // Valid content: "302ai" is properly quoted
-    const validDtsContent = `export type ProviderModelsMap = {
-  readonly openai: readonly ['gpt-4o'];
-  readonly '302ai': readonly ['model-1'];
-};`;
-
-    // Content with no numeric providers at all
-    const nothingToQuote = `export type ProviderModelsMap = {
-  readonly openai: readonly ['gpt-4o'];
-  readonly anthropic: readonly ['claude-3'];
-};`;
-
-    expect(validationRegex.test(corruptedDtsContent)).toBe(true);
-    expect(validationRegex.test(validDtsContent)).toBe(false);
-    expect(validationRegex.test(nothingToQuote)).toBe(false);
-  });
 });
 
 describe('Issue #10434: Concurrent write corruption', () => {

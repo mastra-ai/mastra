@@ -1,0 +1,87 @@
+---
+status: complete
+phase: 07-csv-import
+source: [07-01-SUMMARY.md, 07-02-SUMMARY.md, 07-03-SUMMARY.md, 07-04-SUMMARY.md, 07-05-SUMMARY.md]
+started: 2026-01-27T05:30:00Z
+updated: 2026-01-27T14:30:00Z
+---
+
+## Current Test
+
+[testing complete]
+
+## Tests
+
+### 1. Import CSV Button Visible
+
+expected: In dataset detail page, "Import CSV" button appears next to "Add Item" button in items list header. In empty dataset, button also appears below Add Item.
+result: pass
+
+### 2. Open CSV Import Dialog
+
+expected: Clicking "Import CSV" button opens a dialog with file upload interface.
+result: pass
+
+### 3. Upload CSV via Click
+
+expected: Clicking the upload area opens file picker. Selecting a CSV file parses it and shows preview.
+result: pass
+
+### 4. Upload CSV via Drag-Drop
+
+expected: Dragging a CSV file onto the upload area parses it and shows preview.
+result: pass
+
+### 5. Preview Shows Parsed Data
+
+expected: After upload, preview step shows first 5 rows of CSV data in a table with column headers. Shows "(showing N of M rows)" below table.
+result: pass
+
+### 6. Column Mapping Zones
+
+expected: Mapping step shows four drop zones: Input (required), Expected Output, Metadata, and Ignore. All CSV columns start in Ignore zone.
+result: pass
+note: Fixed in 07-05 gap closure
+
+### 7. Drag Columns Between Zones
+
+expected: Dragging a column chip from one zone to another moves it. Dropping on Input zone marks that column for import.
+result: pass
+
+### 8. Validation Blocks Without Input
+
+expected: Clicking "Validate & Import" without any column mapped to Input shows error: must map at least one column to Input.
+result: pass
+
+### 9. Validation Reports Empty Rows
+
+expected: If CSV has rows with empty/null values in mapped Input column, validation shows row numbers with errors (e.g., "Row 3: missing input value").
+result: pass
+
+### 10. Import Progress Display
+
+expected: During import, dialog shows progress: "Importing X of Y items..." with count incrementing as items are added.
+result: pass
+
+### 11. Successful Import Closes Dialog
+
+expected: After all items imported, dialog shows success message with count. Clicking "Done" closes dialog and items appear in list.
+result: pass
+
+### 12. JSON Cell Auto-Parsing
+
+expected: CSV cells containing JSON (starting with { or [) are automatically parsed as objects/arrays, not kept as strings.
+result: skipped
+reason: Can't verify - metadata not displayed in item view
+
+## Summary
+
+total: 12
+passed: 11
+issues: 0
+pending: 0
+skipped: 1
+
+## Gaps
+
+[none - original issue fixed in 07-05]

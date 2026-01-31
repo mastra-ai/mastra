@@ -1,7 +1,7 @@
-import { readFile } from 'node:fs/promises';
-import { getPackageInfo } from 'local-pkg';
-import type { Plugin, PluginContext } from 'rollup';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Plugin, PluginContext } from 'rollup';
+import { getPackageInfo } from 'local-pkg';
+import { readFile } from 'node:fs/promises';
 
 const mockNodeResolveHandler = vi.fn();
 
@@ -204,8 +204,7 @@ describe('nodeModulesExtensionResolver', () => {
 
   describe('edge cases', () => {
     it('handles package.json read failure gracefully', async () => {
-      // ts-expect-error @typescript-eslint/no-unused-vars
-      const _pkgJson = { name: '@my/lodash' };
+      const pkgJson = { name: '@my/lodash' };
       // @ts-expect-error parital is fine
       vi.mocked(getPackageInfo).mockResolvedValue({ name: '@my/lodash', rootPath: '/project/node_modules/@my/lodash' });
 

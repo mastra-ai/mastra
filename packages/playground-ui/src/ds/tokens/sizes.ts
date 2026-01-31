@@ -9,7 +9,7 @@ export const Sizes = {
   'table-header': '28px',
   'table-row': '56px',
   'table-row-small': '40px',
-  'badge-default': '28px',
+  'badge-default': '20px',
   'avatar-sm': '24px',
   'avatar-md': '32px',
   'avatar-lg': '40px',

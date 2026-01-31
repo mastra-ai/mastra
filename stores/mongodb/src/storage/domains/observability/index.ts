@@ -4,14 +4,13 @@ import {
   listTracesArgsSchema,
   ObservabilityStorage,
   TABLE_SPANS,
-  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
   SpanRecord,
   UpdateSpanRecord,
+  PaginationInfo,
   ListTracesArgs,
-  ListTracesResponse,
   TracingStorageStrategy,
   UpdateSpanArgs,
   BatchDeleteTracesArgs,
@@ -542,7 +541,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
+  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
     const { page, perPage } = pagination;
@@ -763,7 +762,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
             perPage,
             hasMore: (page + 1) * perPage < count,
           },
-          spans: toTraceSpans(spans.map((span: any) => this.transformSpanFromMongo(span))),
+          spans: spans.map((span: any) => this.transformSpanFromMongo(span)),
         };
       }
 
@@ -825,7 +824,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < count,
         },
-        spans: toTraceSpans(spans.map((span: any) => this.transformSpanFromMongo(span))),
+        spans: spans.map((span: any) => this.transformSpanFromMongo(span)),
       };
     } catch (error) {
       throw new MastraError(

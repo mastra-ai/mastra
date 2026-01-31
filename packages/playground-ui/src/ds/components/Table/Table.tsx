@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useRef } from 'react';
+import React, { forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface TableProps {
@@ -53,17 +53,13 @@ export const Th = ({ className, children, ...props }: ThProps) => {
   );
 };
 
-export interface TbodyProps extends React.HTMLAttributes<HTMLTableSectionElement> {
+export interface TbodyProps {
   className?: string;
   children: React.ReactNode;
 }
 
-export const Tbody = ({ className, children, ...props }: TbodyProps) => {
-  return (
-    <tbody className={cn('', className)} {...props}>
-      {children}
-    </tbody>
-  );
+export const Tbody = ({ className, children }: TbodyProps) => {
+  return <tbody className={cn('', className)}>{children}</tbody>;
 };
 
 export interface RowProps {
@@ -73,32 +69,10 @@ export interface RowProps {
   style?: React.CSSProperties;
   onClick?: () => void;
   tabIndex?: number;
-  /** When true, row receives focus and scrolls into view */
-  isActive?: boolean;
 }
 
 export const Row = forwardRef<HTMLTableRowElement, RowProps>(
-  ({ className, children, selected = false, style, onClick, isActive = false, ...props }, ref) => {
-    const internalRef = useRef<HTMLTableRowElement>(null);
-
-    // Merge forwarded ref with internal ref
-    useEffect(() => {
-      if (!ref) return;
-      if (typeof ref === 'function') {
-        ref(internalRef.current);
-      } else {
-        ref.current = internalRef.current;
-      }
-    }, [ref]);
-
-    // Focus and scroll into view when active
-    useEffect(() => {
-      if (isActive && internalRef.current) {
-        internalRef.current.focus();
-        internalRef.current.scrollIntoView({ block: 'nearest' });
-      }
-    }, [isActive]);
-
+  ({ className, children, selected = false, style, onClick, ...props }, ref) => {
     const handleKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
       if (event.key === 'Enter' && onClick) {
         onClick();
@@ -120,10 +94,9 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
         )}
         style={style}
         onClick={onClick}
-        ref={internalRef}
+        ref={ref}
         tabIndex={onClick ? 0 : undefined}
         onKeyDown={handleKeyDown}
-        data-active={isActive || undefined}
         {...props}
       >
         {children}

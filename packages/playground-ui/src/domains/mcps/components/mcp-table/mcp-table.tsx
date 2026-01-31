@@ -1,11 +1,11 @@
 import { McpServerListResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
 
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 
 import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { Skeleton } from '@/ds/components/Skeleton';
@@ -24,35 +24,20 @@ export interface MCPTableProps {
 export function MCPTable({ mcpServers, isLoading }: MCPTableProps) {
   const { navigate, paths } = useLinkComponent();
   const [search, setSearch] = useState('');
-
-  const filteredData = useMemo(
-    () => mcpServers.filter(server => server.name.toLowerCase().includes(search.toLowerCase())),
-    [mcpServers, search],
-  );
-
-  const { activeIndex } = useTableKeyboardNavigation({
-    itemCount: filteredData.length,
-    global: true,
-    onSelect: index => {
-      const server = filteredData[index];
-      if (server) {
-        navigate(paths.mcpServerLink(server.id));
-      }
-    },
-  });
-
   const table = useReactTable({
-    data: filteredData,
+    data: mcpServers,
     columns: columns as ColumnDef<McpServerListResponse['servers'][number]>[],
     getCoreRowModel: getCoreRowModel(),
   });
 
   const ths = table.getHeaderGroups()[0];
-  const rows = table.getRowModel().rows;
+  const rows = table.getRowModel().rows.concat();
 
-  if (mcpServers.length === 0 && !isLoading) {
+  if (rows.length === 0 && !isLoading) {
     return <EmptyMCPTable />;
   }
+
+  const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div>
@@ -74,12 +59,8 @@ export function MCPTable({ mcpServers, isLoading }: MCPTableProps) {
                 ))}
               </Thead>
               <Tbody>
-                {rows.map((row, index) => (
-                  <Row
-                    key={row.id}
-                    isActive={index === activeIndex}
-                    onClick={() => navigate(paths.mcpServerLink(row.original.id))}
-                  >
+                {filteredRows.map(row => (
+                  <Row key={row.id} onClick={() => navigate(paths.mcpServerLink(row.original.id))}>
                     {row.getVisibleCells().map(cell => (
                       <React.Fragment key={cell.id}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}

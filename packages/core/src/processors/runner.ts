@@ -32,9 +32,7 @@ import type {
  * Used by both legacy processors and workflow processors.
  */
 export class ProcessorState<OUTPUT = undefined> {
-  private inputAccumulatedText = '';
-  private outputAccumulatedText = '';
-  private outputChunkCount = 0;
+  private accumulatedText = '';
   public customState: Record<string, unknown> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
   public span?: Span<SpanType.PROCESSOR_RUN>;
@@ -63,43 +61,28 @@ export class ProcessorState<OUTPUT = undefined> {
         processorIndex: options.processorIndex ?? 0,
       },
       input: {
+        streamParts: [],
+        state: {},
         totalChunks: 0,
       },
     });
   }
 
-  /** Track incoming chunk (before processor transformation) */
-  addInputPart(part: ChunkType<OUTPUT>): void {
+  addPart(part: ChunkType<OUTPUT>): void {
     // Extract text from text-delta chunks for accumulated text
     if (part.type === 'text-delta') {
-      this.inputAccumulatedText += part.payload.text;
+      this.accumulatedText += part.payload.text;
     }
     this.streamParts.push(part);
 
     if (this.span) {
       this.span.input = {
+        streamParts: this.streamParts,
+        state: this.customState,
         totalChunks: this.streamParts.length,
-        accumulatedText: this.inputAccumulatedText,
+        accumulatedText: this.accumulatedText,
       };
     }
-  }
-
-  /** Track outgoing chunk (after processor transformation) */
-  addOutputPart(part: ChunkType<OUTPUT> | null | undefined): void {
-    if (!part) return;
-    this.outputChunkCount++;
-    // Extract text from text-delta chunks for accumulated text
-    if (part.type === 'text-delta') {
-      this.outputAccumulatedText += part.payload.text;
-    }
-  }
-
-  /** Get final output for span */
-  getFinalOutput(): { totalChunks: number; accumulatedText: string } {
-    return {
-      totalChunks: this.outputChunkCount,
-      accumulatedText: this.outputAccumulatedText,
-    };
   }
 }
 
@@ -344,8 +327,8 @@ export class ProcessorRunner {
             processorStates.set(workflowId, state);
           }
 
-          // Track input chunk (before processor transformation)
-          state.addInputPart(processedPart);
+          // Add the current part to accumulated state
+          state.addPart(processedPart);
 
           try {
             const result = await this.executeWorkflowAsProcessor(
@@ -366,8 +349,6 @@ export class ProcessorRunner {
             if ('part' in result) {
               processedPart = result.part as ChunkType<OUTPUT> | null | undefined;
             }
-            // Track output chunk (after processor transformation or passthrough)
-            state.addOutputPart(processedPart);
           } catch (error) {
             if (error instanceof TripWire) {
               return {
@@ -398,8 +379,8 @@ export class ProcessorRunner {
               processorStates.set(processor.id, state);
             }
 
-            // Track input chunk (before processor transformation)
-            state.addInputPart(processedPart);
+            // Add the current part to accumulated text
+            state.addPart(processedPart);
 
             const result = await processor.processOutputStream({
               part: processedPart as ChunkType,
@@ -414,9 +395,12 @@ export class ProcessorRunner {
               retryCount,
             });
 
-            // Track output chunk and update processedPart
+            if (state.span && !state.span.isEvent) {
+              state.span.output = result;
+            }
+
+            // If result is null, or undefined, don't emit
             processedPart = result as ChunkType<OUTPUT> | null | undefined;
-            state.addOutputPart(processedPart);
           }
         } catch (error) {
           if (error instanceof TripWire) {
@@ -445,8 +429,13 @@ export class ProcessorRunner {
       if (isFinishChunk) {
         for (const state of processorStates.values()) {
           if (state.span) {
-            // Set output with accumulated text and chunk count from processor's output
-            state.span.end({ output: state.getFinalOutput() });
+            // Preserve the existing output (last processed part) and add metadata
+            const finalOutput = {
+              ...state.span.output,
+              totalChunks: state.streamParts.length,
+              finalState: state.customState,
+            };
+            state.span.end({ output: finalOutput });
           }
         }
       }

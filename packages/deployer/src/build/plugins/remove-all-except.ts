@@ -1,8 +1,8 @@
 import * as babel from '@babel/core';
-import type { IMastraLogger } from '@mastra/core/logger';
-import type { Config as MastraConfig } from '@mastra/core/mastra';
 import type { Plugin } from 'rollup';
+import type { Config as MastraConfig } from '@mastra/core/mastra';
 import { removeAllOptionsFromMastraExcept } from '../babel/remove-all-options-except';
+import type { IMastraLogger } from '@mastra/core/logger';
 
 export function removeAllOptionsFromMastraExceptPlugin(
   mastraEntry: string,

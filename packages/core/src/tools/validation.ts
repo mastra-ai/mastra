@@ -1,40 +1,6 @@
 import type { z } from 'zod';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
-import type { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import { isZodArray, isZodObject } from '../utils/zod-utils';
-
-/**
- * Keys that should be redacted from error messages to prevent sensitive data leakage.
- */
-const SENSITIVE_KEYS = new Set([
-  MASTRA_RESOURCE_ID_KEY,
-  MASTRA_THREAD_ID_KEY,
-  'apiKey',
-  'api_key',
-  'token',
-  'secret',
-  'password',
-  'credential',
-  'authorization',
-]);
-
-/**
- * Redacts sensitive keys from an object before logging.
- * @param data The data to redact
- * @returns A new object with sensitive values replaced with '[REDACTED]'
- */
-function redactSensitiveKeys(data: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (SENSITIVE_KEYS.has(key) || key.toLowerCase().includes('secret') || key.toLowerCase().includes('password')) {
-      result[key] = '[REDACTED]';
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
 
 export interface ValidationError<T = any> {
   error: true;
@@ -141,57 +107,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Recursively strips null and undefined values from object properties.
- * This handles LLMs (e.g. Gemini) that send null for optional fields,
- * since Zod's .optional() only accepts undefined, not null. (GitHub #12362)
- *
- * When a property value is null or undefined, it is omitted from the result
- * object entirely, which is equivalent to "not provided" for Zod validation.
- *
- * Only recurses into plain objects to preserve class instances and built-in objects
- * like Date, Map, URL, etc.
- *
- * NOTE: This function should NOT be called unconditionally because it breaks
- * schemas that use .nullable() (where null is a valid value). It is used as
- * a fallback when initial validation fails. See validateToolInput for usage.
- *
- * @param input The input to process
- * @returns The processed input with null/undefined values stripped
- */
-function stripNullishValues(input: unknown): unknown {
-  // Top-level null/undefined becomes undefined
-  if (input === null || input === undefined) {
-    return undefined;
-  }
-
-  if (typeof input !== 'object') {
-    return input;
-  }
-
-  if (Array.isArray(input)) {
-    // For arrays, recursively process elements but keep nulls in arrays
-    // (array elements with null may be intentional)
-    return input.map(item => (item === null ? null : stripNullishValues(item)));
-  }
-
-  // Only recurse into plain objects - preserve class instances, built-in objects
-  if (!isPlainObject(input)) {
-    return input;
-  }
-
-  // It's a plain object - recursively process all properties, omitting null/undefined values
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(input)) {
-    if (value === null || value === undefined) {
-      // Omit null/undefined values - equivalent to "not provided" for optional fields
-      continue;
-    }
-    result[key] = stripNullishValues(value);
-  }
-  return result;
-}
-
-/**
  * Recursively converts undefined values to null in an object.
  * This is needed for OpenAI compat layers which convert .optional() to .nullable()
  * for strict mode compliance. When fields are omitted (undefined), we convert them
@@ -249,49 +164,25 @@ export function validateToolInput<T = any>(
     return { data: input };
   }
 
-  // Validation pipeline:
-  //
-  // 1. normalizeNullishInput: Convert top-level null/undefined to {} or [] based on schema type.
-  //    Handles LLMs that send undefined instead of {} or [] for all-optional parameters.
-  //
-  // 2. convertUndefinedToNull: Convert undefined values to null in object properties.
-  //    Needed for OpenAI compat layers that convert .optional() to .nullable() for
-  //    strict mode compliance. The schema's transform converts null back to undefined.
-  //    (GitHub #11457)
-  //
-  // 3. First validation attempt with null values preserved. This handles .nullable()
-  //    schemas correctly (where null is a valid value).
-  //
-  // 4. If validation fails, retry with null values stripped from object properties.
-  //    This handles LLMs (e.g. Gemini) that send null for .optional() fields, where
-  //    Zod expects undefined, not null. (GitHub #12362)
-
-  // Step 1: Normalize top-level null/undefined to appropriate default
+  // Normalize undefined/null input to appropriate default for the schema type
+  // This handles LLMs that send undefined instead of {} or [] for optional parameters
   let normalizedInput = normalizeNullishInput(schema, input);
 
-  // Step 2: Convert undefined values to null recursively (GitHub #11457)
+  // Convert undefined values to null recursively (GitHub #11457)
+  // This is needed because OpenAI compat layers convert .optional() to .nullable()
+  // for strict mode compliance. When fields are omitted (undefined), we convert them
+  // to null so the schema validation passes. The schema's transform will then convert
+  // null back to undefined to match the original .optional() semantics.
   normalizedInput = convertUndefinedToNull(normalizedInput);
 
-  // Step 3: Try validation with null values preserved
+  // Validate the normalized input
   const validation = schema.safeParse(normalizedInput);
+
   if (validation.success) {
     return { data: validation.data };
   }
 
-  // Step 4: Retry with null values stripped (GitHub #12362)
-  // LLMs like Gemini send null for optional fields, but Zod's .optional() only
-  // accepts undefined, not null. By stripping nullish values and retrying, we
-  // handle this case without breaking .nullable() schemas that passed in step 3.
-  const strippedInput = stripNullishValues(input);
-  const normalizedStripped = normalizeNullishInput(schema, strippedInput);
-  const retryValidation = schema.safeParse(normalizedStripped);
-
-  if (retryValidation.success) {
-    return { data: retryValidation.data };
-  }
-
-  // Both attempts failed - return the original (non-stripped) error since it's
-  // more informative about what the schema actually expects
+  // Validation failed, return error
   const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   const error: ValidationError<T> = {
@@ -339,47 +230,4 @@ export function validateToolOutput<T = any>(
   };
 
   return { data: output, error };
-}
-
-/**
- * Validates request context values against a Zod schema.
- *
- * @param schema The Zod schema to validate against
- * @param requestContext The RequestContext instance to validate
- * @param identifier Optional identifier for better error messages (e.g., tool ID, agent ID)
- * @returns The validated data or a validation error
- */
-export function validateRequestContext<T = any>(
-  schema: SchemaWithValidation<T> | undefined,
-  requestContext: RequestContext | undefined,
-  identifier?: string,
-): { data: T | Record<string, any>; error?: ValidationError<T> } {
-  // Get all values from the requestContext
-  const contextValues = requestContext?.all ?? {};
-
-  // If no schema, return context values as-is
-  if (!schema || !('safeParse' in schema)) {
-    return { data: contextValues };
-  }
-
-  // Validate the context values
-  const validation = schema.safeParse(contextValues);
-
-  if (validation.success) {
-    return { data: validation.data };
-  }
-
-  // Validation failed, return error
-  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
-
-  // Redact sensitive keys before including in error message
-  const redactedContextValues = redactSensitiveKeys(contextValues);
-
-  const error: ValidationError<T> = {
-    error: true,
-    message: `Request context validation failed${identifier ? ` for ${identifier}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided context: ${truncateForLogging(redactedContextValues)}`,
-    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
-  };
-
-  return { data: contextValues, error };
 }

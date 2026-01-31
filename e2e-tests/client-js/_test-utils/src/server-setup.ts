@@ -101,7 +101,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
 
     // Create a simple test agent
     const testAgent = new Agent({
-      id: 'testAgent',
+      id: 'test-agent',
       name: 'testAgent',
       instructions: 'You are a helpful test assistant.',
       model: 'openai/gpt-4.1-mini',
@@ -116,9 +116,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
           default: {
             serviceName,
             exporters: [
-              // Use realtime strategy for tests to ensure spans are persisted immediately
-              // (default batch strategy has 5 second flush interval which is too slow for tests)
-              new DefaultExporter({ strategy: 'realtime' }),
+              new DefaultExporter(), // Persists traces to storage
             ],
           },
         },

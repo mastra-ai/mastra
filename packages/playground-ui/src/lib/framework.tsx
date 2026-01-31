@@ -17,7 +17,6 @@ type LinkComponentPaths = {
   agentLink: (agentId: string) => string;
   agentsLink: () => string;
   agentToolLink: (agentId: string, toolId: string) => string;
-  agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) => string;
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) => string;
   agentNewThreadLink: (agentId: string) => string;
 
@@ -31,16 +30,15 @@ type LinkComponentPaths = {
   scorerLink: (scorerId: string) => string;
 
   toolLink: (toolId: string) => string;
-  skillLink: (skillName: string, workspaceId?: string) => string;
-  workspacesLink: () => string;
-  workspaceLink: (workspaceId?: string) => string;
-  workspaceSkillLink: (skillName: string, workspaceId?: string) => string;
   processorsLink: () => string;
   processorLink: (processorId: string) => string;
 
   mcpServerLink: (serverId: string) => string;
   mcpServerToolLink: (serverId: string, toolId: string) => string;
   workflowRunLink: (workflowId: string, runId: string) => string;
+
+  datasetLink: (datasetId: string) => string;
+  datasetRunLink: (datasetId: string, runId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -54,7 +52,6 @@ const LinkComponentContext = createContext<{
     agentLink: () => '',
     agentsLink: () => '',
     agentToolLink: () => '',
-    agentSkillLink: () => '',
     agentThreadLink: () => '',
     agentNewThreadLink: () => '',
     workflowsLink: () => '',
@@ -64,15 +61,13 @@ const LinkComponentContext = createContext<{
     networkThreadLink: () => '',
     scorerLink: () => '',
     toolLink: () => '',
-    skillLink: () => '',
-    workspacesLink: () => '',
-    workspaceLink: () => '',
-    workspaceSkillLink: () => '',
     processorsLink: () => '',
     processorLink: () => '',
     mcpServerLink: () => '',
     mcpServerToolLink: () => '',
     workflowRunLink: () => '',
+    datasetLink: () => '',
+    datasetRunLink: () => '',
   },
 });
 

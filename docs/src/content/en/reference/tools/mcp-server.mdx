@@ -1389,35 +1389,6 @@ execute: async (inputData, context) => {
 };
 ```
 
-### Passing `RequestContext` through to agent
-
-```typescript
-execute: async (inputData, context) => {
-  // Access the auth data you set in middleware
-  const authInfo = context?.mcp?.extra?.authInfo;
-
-  const requestContext = context.requestContext || new RequestContext().set('someKey', authInfo)
-
-  if (!authInfo?.extra?.userId) {
-    return { error: "Authentication required" };
-  }
-
-  // Use the auth data
-  console.log("User ID:", authInfo.extra.userId);
-  console.log("Email:", authInfo.extra.email);
-
-  const agent = context?.mastra?.getAgentById('some-agent-id');
-
-  if (!agent) {
-    return { error: "Agent 'some-agent-id' not found" }
-  }
-
-  const response = await agent.generate(prompt, { requestContext })
-
-  return response.text
-};
-```
-
 ### The `extra` Object
 
 The full `context.mcp.extra` object contains:

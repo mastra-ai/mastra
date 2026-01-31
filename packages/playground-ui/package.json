@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "8.0.0",
+  "version": "7.0.1",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -37,18 +37,7 @@
         "types": "./dist/tailwind.preset.d.ts",
         "default": "./dist/tailwind.preset.cjs.js"
       }
-    },
-    "./utils": {
-      "import": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.es.js"
-      },
-      "require": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.cjs.js"
-      }
-    },
-    "./package.json": "./package.json"
+    }
   },
   "scripts": {
     "build": "tsc && vite build",
@@ -74,7 +63,6 @@
     "@autoform/core": "^3.0.0",
     "@autoform/react": "^4.0.0",
     "@autoform/zod": "^4.0.0",
-    "@base-ui/react": "^1.1.0",
     "@codemirror/lang-javascript": "^6.2.2",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-markdown": "^6.5.0",
@@ -103,13 +91,14 @@
     "@radix-ui/react-tooltip": "^1.2.7",
     "@radix-ui/react-visually-hidden": "^1.2.3",
     "@tanstack/react-table": "^8.21.3",
+    "@types/papaparse": "^5.5.2",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@uiw/codemirror-theme-dracula": "^4.23.14",
     "@uiw/codemirror-theme-github": "^4.25.3",
     "@uiw/react-codemirror": "^4.23.14",
     "@xyflow/react": "^12.9.3",
-    "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "papaparse": "^5.5.3",
     "prettier": "^3.6.2",
     "prism-react-renderer": "^2.4.1",
     "react-day-picker": "^8.10.1",
@@ -148,7 +137,6 @@
     "@storybook/addon-docs": "^9.1.16",
     "@storybook/react-vite": "^9.1.16",
     "@tailwindcss/container-queries": "^0.1.1",
-    "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.90.9",
     "@types/node": "22.19.7",
     "@types/react": "^19.1.9",

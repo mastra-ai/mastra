@@ -115,9 +115,8 @@ export function generateTypesContent(models: Record<string, string[]>): string {
     .map(([provider, modelList]) => {
       const modelsList = modelList.map(m => `'${m}'`);
 
-      // Quote provider key if it's not a valid JavaScript identifier
-      // Valid identifiers must start with a letter, underscore, or dollar sign
-      const needsQuotes = !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(provider);
+      // Only quote provider key if it contains special characters (like dashes)
+      const needsQuotes = /[^a-zA-Z0-9_$]/.test(provider);
       const providerKey = needsQuotes ? `'${provider}'` : provider;
 
       // Format array based on length (prettier printWidth: 120)

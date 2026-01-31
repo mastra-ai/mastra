@@ -1,9 +1,9 @@
-import React from 'react'
+import React from "react";
 
 export interface AudioPlaybackProps {
-  audio: string
+  audio: string;
 }
 
 export const AudioPlayback = ({ audio }: AudioPlaybackProps) => {
-  return <audio src={audio} controls />
-}
+  return <audio src={audio} controls />;
+};

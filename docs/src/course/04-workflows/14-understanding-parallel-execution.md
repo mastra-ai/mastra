@@ -25,7 +25,7 @@ These can all run at the same time since they don't depend on each other!
 The .parallel() method on a workflow executes multiple steps in parallel.
 
 ```typescript
-workflow.parallel([stepOne, stepTwo])
+workflow.parallel([stepOne, stepTwo]);
 ```
 
 ## Performance Benefits

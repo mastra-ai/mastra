@@ -1,8 +1,8 @@
-import React from 'react'
-import styles from './Steps.module.css'
+import React from "react";
+import styles from "./Steps.module.css";
 
 export interface StepsProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export function Steps({ children }: StepsProps) {
@@ -10,7 +10,7 @@ export function Steps({ children }: StepsProps) {
     <ol role="list" className={styles.container}>
       {children}
     </ol>
-  )
+  );
 }
 
-export default Steps
+export default Steps;

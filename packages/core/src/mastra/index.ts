@@ -20,7 +20,7 @@ import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraCompositeStore, WorkflowRuns, StorageResolvedAgentType, StorageScorerConfig } from '../storage';
+import type { MastraCompositeStore, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
@@ -30,7 +30,6 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -216,13 +215,6 @@ export interface Config<
   memory?: TMemory;
 
   /**
-   * Global workspace for file storage, skills, and code execution.
-   * Agents inherit this workspace unless they have their own configured.
-   * Skills are accessed via workspace.skills when skills is configured.
-   */
-  workspace?: Workspace;
-
-  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -310,7 +302,6 @@ export class Mastra<
   #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
     new Map();
   #memory?: TMemory;
-  #workspace?: Workspace;
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -563,10 +554,6 @@ export class Mastra<
       });
     }
 
-    if (config?.workspace) {
-      this.#workspace = config.workspace;
-    }
-
     if (config?.scorers) {
       Object.entries(config.scorers).forEach(([key, scorer]) => {
         if (scorer != null) {
@@ -798,11 +785,11 @@ export class Mastra<
   public async getStoredAgentById(
     id: string,
     options: { raw: true; versionId?: string; versionNumber?: number },
-  ): Promise<StorageResolvedAgentType | null>;
+  ): Promise<StorageAgentType | null>;
   public async getStoredAgentById(
     id: string,
     options?: { raw?: boolean; versionId?: string; versionNumber?: number },
-  ): Promise<Agent | StorageResolvedAgentType | null> {
+  ): Promise<Agent | StorageAgentType | null> {
     const storage = this.#storage;
 
     if (!storage) {
@@ -845,28 +832,10 @@ export class Mastra<
       if (version.agentId !== id) {
         return null;
       }
-      // Extract snapshot config fields from the version (strip version-specific metadata)
-      const {
-        id: _versionId,
-        agentId: _agentId,
-        versionNumber: _versionNumber,
-        changedFields: _changedFields,
-        changeMessage: _changeMessage,
-        createdAt: _createdAt,
-        ...snapshotConfig
-      } = version;
-
-      // Fetch the thin agent record to build a resolved agent
-      const agentRecord = await agentsStore.getAgentById({ id });
-      if (!agentRecord) {
-        return null;
-      }
-
-      const resolvedAgent: StorageResolvedAgentType = { ...agentRecord, ...snapshotConfig };
       if (options?.raw) {
-        return resolvedAgent;
+        return version.snapshot;
       }
-      return this.#createAgentFromStoredConfig(resolvedAgent);
+      return this.#createAgentFromStoredConfig(version.snapshot);
     }
 
     if (options?.versionNumber !== undefined) {
@@ -875,28 +844,10 @@ export class Mastra<
       if (!version) {
         return null;
       }
-      // Extract snapshot config fields from the version (strip version-specific metadata)
-      const {
-        id: _versionId,
-        agentId: _agentId,
-        versionNumber: _versionNumber,
-        changedFields: _changedFields,
-        changeMessage: _changeMessage,
-        createdAt: _createdAt,
-        ...snapshotConfig
-      } = version;
-
-      // Fetch the thin agent record to build a resolved agent
-      const agentRecord = await agentsStore.getAgentById({ id });
-      if (!agentRecord) {
-        return null;
-      }
-
-      const resolvedAgent: StorageResolvedAgentType = { ...agentRecord, ...snapshotConfig };
       if (options?.raw) {
-        return resolvedAgent;
+        return version.snapshot;
       }
-      return this.#createAgentFromStoredConfig(resolvedAgent);
+      return this.#createAgentFromStoredConfig(version.snapshot);
     }
 
     // Default behavior: get the current agent config with version resolution
@@ -995,7 +946,7 @@ export class Mastra<
     orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
     raw: true;
   }): Promise<{
-    agents: StorageResolvedAgentType[];
+    agents: StorageAgentType[];
     total: number;
     page: number;
     perPage: number | false;
@@ -1007,7 +958,7 @@ export class Mastra<
     orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
     raw?: boolean;
   }): Promise<{
-    agents: Agent[] | StorageResolvedAgentType[];
+    agents: Agent[] | StorageAgentType[];
     total: number;
     page: number;
     perPage: number | false;
@@ -1067,7 +1018,7 @@ export class Mastra<
    * Creates an Agent instance from a stored agent configuration.
    * @private
    */
-  #createAgentFromStoredConfig(storedAgent: StorageResolvedAgentType): Agent {
+  #createAgentFromStoredConfig(storedAgent: StorageAgentType): Agent {
     // Build model config from stored data
     // The model field stores { provider, name, ...otherConfig }
     const modelConfig = storedAgent.model as { provider?: string; name?: string; [key: string]: unknown };
@@ -1222,27 +1173,20 @@ export class Mastra<
    * Resolves memory reference from stored configuration to actual memory instance.
    * @private
    */
-  #resolveStoredMemory(memoryConfig?: Record<string, unknown>): MastraMemory | undefined {
-    if (!memoryConfig) {
-      return undefined;
-    }
-
-    // Extract the memory key from the config object
-    const memoryKey = memoryConfig.key as string | undefined;
-    if (!memoryKey) {
-      this.#logger?.warn(`Stored agent memory config missing "key" field: ${JSON.stringify(memoryConfig)}`);
+  #resolveStoredMemory(storedMemory?: string): MastraMemory | undefined {
+    if (!storedMemory) {
       return undefined;
     }
 
     // Try by key first
     try {
-      return this.getMemory(memoryKey as keyof TMemory);
+      return this.getMemory(storedMemory as keyof TMemory);
     } catch {
       // Try by id
       try {
-        return this.getMemoryById(memoryKey);
+        return this.getMemoryById(storedMemory);
       } catch {
-        this.#logger?.warn(`Memory "${memoryKey}" referenced in stored agent but not registered in Mastra`);
+        this.#logger?.warn(`Memory "${storedMemory}" referenced in stored agent but not registered in Mastra`);
       }
     }
 
@@ -1551,23 +1495,6 @@ export class Mastra<
    */
   public getDeployer() {
     return this.#deployer;
-  }
-
-  /**
-   * Gets the global workspace instance.
-   * Workspace provides file storage, skills, and code execution capabilities.
-   * Agents inherit this workspace unless they have their own configured.
-   *
-   * @example
-   * ```typescript
-   * const workspace = mastra.getWorkspace();
-   * if (workspace?.skills) {
-   *   const skills = await workspace.skills.list();
-   * }
-   * ```
-   */
-  public getWorkspace(): Workspace | undefined {
-    return this.#workspace;
   }
 
   /**
@@ -2268,11 +2195,6 @@ export class Mastra<
       const logger = this.getLogger();
       logger.debug(`Processor with key ${processorKey} already exists. Skipping addition.`);
       return;
-    }
-
-    // Register Mastra with the processor if it supports it
-    if (typeof processor.__registerMastra === 'function') {
-      processor.__registerMastra(this);
     }
 
     processors[processorKey] = processor;

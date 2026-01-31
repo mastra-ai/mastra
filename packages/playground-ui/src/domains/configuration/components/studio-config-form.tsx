@@ -25,8 +25,6 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
 
     const formData = new FormData(e.target as HTMLFormElement);
     const url = formData.get('url') as string;
-    const rawApiPrefix = ((formData.get('apiPrefix') as string) ?? '').trim();
-    const apiPrefix = rawApiPrefix.length ? rawApiPrefix : undefined;
 
     const formHeaders: Record<string, string> = {};
     for (let i = 0; i < headers.length; i++) {
@@ -35,7 +33,7 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
       formHeaders[headerName] = headerValue;
     }
 
-    setConfig({ headers: formHeaders, baseUrl: url, apiPrefix });
+    setConfig({ headers: formHeaders, baseUrl: url });
     toast.success('Configuration saved');
   };
 
@@ -55,13 +53,6 @@ export const StudioConfigForm = ({ initialConfig }: StudioConfigFormProps) => {
         placeholder="e.g: http://localhost:4111"
         required
         defaultValue={initialConfig?.baseUrl}
-      />
-
-      <InputField
-        name="apiPrefix"
-        label="API prefix"
-        placeholder="e.g: /api (default)"
-        defaultValue={initialConfig?.apiPrefix || ''}
       />
 
       <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />

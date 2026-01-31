@@ -107,7 +107,7 @@ You only need to include the fields that have new information - existing data is
       });
 
       afterEach(async () => {
-        // @ts-expect-error - accessing client for cleanup
+        // @ts-expect-error
         await storage.client.close();
       });
 
@@ -212,7 +212,7 @@ You only need to include fields that have changed - existing data is automatical
       });
 
       afterEach(async () => {
-        // @ts-expect-error - accessing client for cleanup
+        // @ts-expect-error
         await storage.client.close();
       });
 
@@ -380,7 +380,7 @@ Schema structure reminder:
       });
 
       afterEach(async () => {
-        // @ts-expect-error - accessing client for cleanup
+        // @ts-expect-error
         await storage.client.close();
       });
 

@@ -27,7 +27,7 @@ export class Workflow extends BaseResource {
    * @returns Promise containing workflow details including steps and graphs
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<GetWorkflowResponse> {
-    return this.request(`/workflows/${this.workflowId}${requestContextQueryString(requestContext)}`);
+    return this.request(`/api/workflows/${this.workflowId}${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -77,9 +77,9 @@ export class Workflow extends BaseResource {
     }
 
     if (searchParams.size) {
-      return this.request(`/workflows/${this.workflowId}/runs?${searchParams}`);
+      return this.request(`/api/workflows/${this.workflowId}/runs?${searchParams}`);
     } else {
-      return this.request(`/workflows/${this.workflowId}/runs`);
+      return this.request(`/api/workflows/${this.workflowId}/runs`);
     }
   }
 
@@ -116,7 +116,7 @@ export class Workflow extends BaseResource {
     }
 
     const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
-    return this.request(`/workflows/${this.workflowId}/runs/${runId}${queryString}`);
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}${queryString}`);
   }
 
   /**
@@ -125,7 +125,7 @@ export class Workflow extends BaseResource {
    * @returns Promise containing a success message
    */
   deleteRunById(runId: string): Promise<{ message: string }> {
-    return this.request(`/workflows/${this.workflowId}/runs/${runId}`, {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}`, {
       method: 'DELETE',
     });
   }
@@ -143,7 +143,7 @@ export class Workflow extends BaseResource {
     }
 
     const res = await this.request<{ runId: string }>(
-      `/workflows/${this.workflowId}/create-run?${searchParams.toString()}`,
+      `/api/workflows/${this.workflowId}/create-run?${searchParams.toString()}`,
       {
         method: 'POST',
         body: {

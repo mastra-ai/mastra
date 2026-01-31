@@ -563,31 +563,27 @@ const programmaticFileCopyStep = createStep({
         const baseName = basename(name, extname(name));
         const ext = extname(name);
 
-        // Helper: split a name into words by hyphens, underscores, or camelCase boundaries
-        const toWords = (s: string): string[] => {
-          return (
-            s
-              .replace(/[-_]/g, ' ')
-              // split "HTTPServer" -> "HTTP Server"
-              .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-              .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-              .split(/\s+/)
-              .filter(Boolean)
-              .map(w => w.toLowerCase())
-          );
-        };
-
-        const words = toWords(baseName);
-
         switch (convention) {
           case 'camelCase':
-            return words.map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('') + ext;
+            return (
+              baseName
+                .replace(/[-_]/g, '')
+                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? p1.toLowerCase() : p1)) + ext
+            );
           case 'snake_case':
-            return words.join('_') + ext;
+            return (
+              baseName
+                .replace(/[-]/g, '_')
+                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '_') + p1.toLowerCase()) + ext
+            );
           case 'kebab-case':
-            return words.join('-') + ext;
+            return (
+              baseName
+                .replace(/[_]/g, '-')
+                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '-') + p1.toLowerCase()) + ext
+            );
           case 'PascalCase':
-            return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('') + ext;
+            return baseName.replace(/[-_]/g, '').replace(/^[a-z]/, match => match.toUpperCase()) + ext;
           default:
             return name;
         }

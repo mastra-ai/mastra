@@ -1,11 +1,11 @@
-import React from 'react'
+import React from "react";
 
 export interface StepsProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export function StepItem({ children }: StepsProps) {
-  return <li className="step-item">{children}</li>
+  return <li className="step-item">{children}</li>;
 }
 
-export default StepItem
+export default StepItem;

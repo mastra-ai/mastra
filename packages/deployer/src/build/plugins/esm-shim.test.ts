@@ -1,8 +1,8 @@
-import { dirname, join } from 'node:path';
+import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
-import { describe, it, expect } from 'vitest';
 import { esmShim } from './esm-shim';
 
 async function buildWithEsmShim(fixturePath: string) {

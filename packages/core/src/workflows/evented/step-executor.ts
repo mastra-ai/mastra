@@ -164,7 +164,7 @@ export class StepExecutor extends MastraBase {
       } else if (bailed) {
         finalResult = {
           ...stepInfo,
-          // @ts-expect-error - bailed status not in type
+          // @ts-expect-error
           status: 'bailed',
           endedAt,
           output: bailed.payload,

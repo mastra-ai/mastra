@@ -11,6 +11,10 @@ export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
+export const TABLE_DATASETS = 'mastra_datasets';
+export const TABLE_DATASET_ITEMS = 'mastra_dataset_items';
+export const TABLE_DATASET_RUNS = 'mastra_dataset_runs';
+export const TABLE_DATASET_RUN_RESULTS = 'mastra_dataset_run_results';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -21,7 +25,11 @@ export type TABLE_NAMES =
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
-  | typeof TABLE_AGENT_VERSIONS;
+  | typeof TABLE_AGENT_VERSIONS
+  | typeof TABLE_DATASETS
+  | typeof TABLE_DATASET_ITEMS
+  | typeof TABLE_DATASET_RUNS
+  | typeof TABLE_DATASET_RUN_RESULTS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -90,10 +98,22 @@ export const OLD_SPAN_SCHEMA: Record<string, StorageColumn> = {
 
 export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  status: { type: 'text', nullable: false }, // 'draft' or 'published'
-  activeVersionId: { type: 'text', nullable: true }, // FK to agent_versions.id
-  authorId: { type: 'text', nullable: true }, // Author identifier for multi-tenant filtering
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  instructions: { type: 'text', nullable: false }, // System instructions for the agent
+  model: { type: 'jsonb', nullable: false }, // Model configuration (provider, name, etc.)
+  tools: { type: 'jsonb', nullable: true }, // Serialized tool references/configurations
+  defaultOptions: { type: 'jsonb', nullable: true }, // Default options for generate/stream calls
+  workflows: { type: 'jsonb', nullable: true }, // Workflow references (IDs or configurations)
+  agents: { type: 'jsonb', nullable: true }, // Sub-agent references (IDs or configurations)
+  integrationTools: { type: 'jsonb', nullable: true }, // Specific integration tool IDs (provider_toolkit_tool format)
+  inputProcessors: { type: 'jsonb', nullable: true }, // Input processor configurations
+  outputProcessors: { type: 'jsonb', nullable: true }, // Output processor configurations
+  memory: { type: 'jsonb', nullable: true }, // Memory configuration
+  scorers: { type: 'jsonb', nullable: true }, // Scorer configurations
   metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
+  ownerId: { type: 'text', nullable: true }, // Owner identifier for multi-tenant filtering
+  activeVersionId: { type: 'text', nullable: true }, // FK to agent_versions.id
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -102,23 +122,65 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true }, // UUID
   agentId: { type: 'text', nullable: false },
   versionNumber: { type: 'integer', nullable: false },
-  // Agent config fields
-  name: { type: 'text', nullable: false }, // Agent display name
-  description: { type: 'text', nullable: true },
-  instructions: { type: 'text', nullable: false },
-  model: { type: 'jsonb', nullable: false },
-  tools: { type: 'jsonb', nullable: true },
-  defaultOptions: { type: 'jsonb', nullable: true },
-  workflows: { type: 'jsonb', nullable: true },
-  agents: { type: 'jsonb', nullable: true },
-  integrationTools: { type: 'jsonb', nullable: true },
-  inputProcessors: { type: 'jsonb', nullable: true },
-  outputProcessors: { type: 'jsonb', nullable: true },
-  memory: { type: 'jsonb', nullable: true },
-  scorers: { type: 'jsonb', nullable: true },
-  // Version metadata
+  name: { type: 'text', nullable: true }, // Vanity name
+  snapshot: { type: 'jsonb', nullable: false }, // Full agent config
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
   changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  version: { type: 'timestamp', nullable: false }, // Timestamp-based versioning
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  datasetId: { type: 'text', nullable: false },
+  version: { type: 'timestamp', nullable: false }, // Timestamp when item was added/modified
+  input: { type: 'jsonb', nullable: false },
+  expectedOutput: { type: 'jsonb', nullable: true },
+  context: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const DATASET_RUNS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  datasetId: { type: 'text', nullable: false },
+  datasetVersion: { type: 'timestamp', nullable: false },
+  targetType: { type: 'text', nullable: false },
+  targetId: { type: 'text', nullable: false },
+  status: { type: 'text', nullable: false },
+  totalItems: { type: 'integer', nullable: false },
+  succeededCount: { type: 'integer', nullable: false },
+  failedCount: { type: 'integer', nullable: false },
+  startedAt: { type: 'timestamp', nullable: true },
+  completedAt: { type: 'timestamp', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const DATASET_RUN_RESULTS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  runId: { type: 'text', nullable: false },
+  itemId: { type: 'text', nullable: false },
+  itemVersion: { type: 'timestamp', nullable: false },
+  input: { type: 'jsonb', nullable: false },
+  output: { type: 'jsonb', nullable: true },
+  expectedOutput: { type: 'jsonb', nullable: true },
+  latency: { type: 'float', nullable: false },
+  error: { type: 'text', nullable: true },
+  startedAt: { type: 'timestamp', nullable: false },
+  completedAt: { type: 'timestamp', nullable: false },
+  retryCount: { type: 'integer', nullable: false },
+  traceId: { type: 'text', nullable: true },
+  scores: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
 
@@ -185,4 +247,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+  [TABLE_DATASETS]: DATASETS_SCHEMA,
+  [TABLE_DATASET_ITEMS]: DATASET_ITEMS_SCHEMA,
+  [TABLE_DATASET_RUNS]: DATASET_RUNS_SCHEMA,
+  [TABLE_DATASET_RUN_RESULTS]: DATASET_RUN_RESULTS_SCHEMA,
 };

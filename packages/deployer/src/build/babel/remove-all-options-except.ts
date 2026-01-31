@@ -1,7 +1,7 @@
 import babel from '@babel/core';
 import type { NodePath, types } from '@babel/core';
-import type { IMastraLogger } from '@mastra/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
+import type { IMastraLogger } from '@mastra/core/logger';
 
 export function removeAllOptionsFromMastraExcept(
   result: { hasCustomConfig: boolean },

@@ -1,9 +1,9 @@
-import { existsSync } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { mkdir, rm } from 'node:fs/promises';
 import { extractMastraOption } from './extract-mastra-option';
+import { existsSync } from 'node:fs';
 
 describe('Extract Mastra option', () => {
   const _dirname = dirname(fileURLToPath(import.meta.url));
@@ -28,7 +28,7 @@ describe('Extract Mastra option', () => {
       ['../plugins/__fixtures__/basic-with-spread.js'],
       ['../plugins/__fixtures__/basic-with-function.js'],
     ])('should extract the %s option from %s', async ([fileName]) => {
-      const _file = join(_dirname, fileName);
+      const file = join(_dirname, fileName);
 
       await mkdir(testOutputDir, { recursive: true });
 

@@ -4,7 +4,7 @@ Next, let's update your agent's instructions to include information about the Fi
 
 ```typescript
 export const personalAssistantAgent = new Agent({
-  name: 'Personal Assistant',
+  name: "Personal Assistant",
   instructions: `
     You are a helpful personal assistant that can help with various tasks such as email, 
     monitoring github activity, scheduling social media posts, providing tech news,
@@ -30,14 +30,14 @@ export const personalAssistantAgent = new Agent({
        - You also have filesystem read/write access to a notes directory. 
        - You can use that to store info for later use or organize info for the user.
        - You can use this notes directory to keep track of to-do list items for the user.
-       - Notes dir: ${path.join(process.cwd(), 'notes')}
+       - Notes dir: ${path.join(process.cwd(), "notes")}
     
     Keep your responses concise and friendly.
   `,
-  model: 'openai/gpt-4.1-mini',
+  model: "openai/gpt-4.1-mini",
   tools: { ...mcpTools },
   memory,
-})
+});
 ```
 
 By updating your agent's instructions to include information about the Filesystem tools, you're helping it understand when and how to use these tools. The instructions provide context about what the Filesystem tools can do, such as storing information for later use and keeping track of to-do list items.

@@ -14,10 +14,6 @@ export const agentToolPathParams = agentIdPathParams.extend({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
 
-export const agentSkillPathParams = agentIdPathParams.extend({
-  skillName: z.string().describe('Name of the skill'),
-});
-
 export const modelConfigIdPathParams = agentIdPathParams.extend({
   modelConfigId: z.string().describe('Unique identifier for the model configuration'),
 });

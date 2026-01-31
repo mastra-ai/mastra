@@ -8,20 +8,20 @@ Let's create a comprehensive agent that utilizes conversation history, semantic 
 
 ```typescript
 // src/mastra/agents/memory-agent.ts
-import { Agent } from '@mastra/core/agent'
-import { Memory } from '@mastra/memory'
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 // Create a comprehensive memory configuration
 const memory = new Memory({
   storage: new LibSQLStore({
-    id: 'learning-memory-storage',
-    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
+    id: "learning-memory-storage",
+    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
   }),
   vector: new LibSQLVector({
-    url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
+    url: "file:../../vector.db", // relative path from the `.mastra/output` directory
   }),
-  embedder: 'openai/text-embedding-3-small',
+  embedder: "openai/text-embedding-3-small",
   options: {
     // Conversation history configuration
     lastMessages: 20, // Include the last 20 messages in the context
@@ -68,7 +68,7 @@ const memory = new Memory({
 `,
     },
   },
-})
+});
 ```
 
 This comprehensive memory configuration combines all three memory features we've explored:

@@ -1,9 +1,9 @@
-import { createLogger } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
-import { testDeployer } from '@mastra/deployer/test';
+import { createLogger } from '@mastra/core/logger';
 import { weatherAgent } from '@/agents';
-import { serverOptions } from '@/server';
+import { testDeployer } from '@mastra/deployer/test';
 import { telemetryConfig } from '@/telemetry';
+import { serverOptions } from '@/server';
 
 export const mastra = new Mastra({
   agents: { weatherAgent },

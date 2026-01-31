@@ -7,7 +7,7 @@ import {
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 
-import { IconButton } from '@/ds/components/IconButton';
+import { TooltipIconButton } from './tooltip-icon-button';
 import { Avatar } from '@/ds/components/Avatar';
 
 import { AssistantMessage } from './messages/assistant-message';
@@ -19,7 +19,6 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
-import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
 
 export interface ThreadProps {
   agentName?: string;
@@ -56,7 +55,7 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} agentId={agentId} hasModelList={hasModelList} />
+      <Composer hasMemory={hasMemory} agentId={agentId} />
     </ThreadWrapper>
   );
 };
@@ -87,11 +86,11 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 interface ComposerProps {
   hasMemory?: boolean;
   agentId?: string;
-  hasModelList?: boolean;
 }
 
-const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
+const Composer = ({ hasMemory, agentId }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -99,23 +98,26 @@ const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
           <ComposerAttachments />
         </div>
 
-        <div className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2">
+        <div
+          className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2"
+          onClick={() => {
+            textareaRef.current?.focus();
+          }}
+        >
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
-              autoFocus
+              ref={textareaRef}
               className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none"
+              autoFocus={document.activeElement === document.body}
               placeholder="Enter your message..."
               name=""
               id=""
               onChange={e => setThreadInput?.(e.target.value)}
             />
           </ComposerPrimitive.Input>
-          <div className="flex items-center justify-between gap-2">
-            {agentId && !hasModelList && <ComposerModelSwitcher agentId={agentId} />}
-            <div className="flex items-center gap-2 ml-auto">
-              <SpeechInput agentId={agentId} />
-              <ComposerAction />
-            </div>
+          <div className="flex justify-end gap-2">
+            <SpeechInput agentId={agentId} />
+            <ComposerAction />
           </div>
         </div>
       </ComposerPrimitive.Root>
@@ -134,16 +136,14 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
   }, [composerRuntime, transcript]);
 
   return (
-    <IconButton
-      variant="light"
-      size="md"
+    <TooltipIconButton
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       className="rounded-full"
       onClick={() => (isListening ? stop() : start())}
     >
       {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-neutral3 hover:text-neutral6" />}
-    </IconButton>
+    </TooltipIconButton>
   );
 };
 
@@ -152,36 +152,33 @@ const ComposerAction = () => {
 
   return (
     <>
-      <IconButton
-        variant="light"
-        size="md"
+      <TooltipIconButton
         type="button"
         tooltip="Add attachment"
         className="rounded-full"
         onClick={() => setIsAddAttachmentDialogOpen(true)}
       >
         <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-      </IconButton>
+      </TooltipIconButton>
 
       <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
 
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send asChild>
-          <IconButton
-            variant="light"
-            size="md"
+          <TooltipIconButton
             tooltip="Send"
+            variant="default"
             className="rounded-full border border-border1 bg-surface5"
           >
             <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-          </IconButton>
+          </TooltipIconButton>
         </ComposerPrimitive.Send>
       </ThreadPrimitive.If>
       <ThreadPrimitive.If running>
         <ComposerPrimitive.Cancel asChild>
-          <IconButton variant="light" size="md" tooltip="Cancel">
+          <TooltipIconButton tooltip="Cancel" variant="default">
             <CircleStopIcon />
-          </IconButton>
+          </TooltipIconButton>
         </ComposerPrimitive.Cancel>
       </ThreadPrimitive.If>
     </>

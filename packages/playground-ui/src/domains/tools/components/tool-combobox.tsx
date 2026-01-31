@@ -13,7 +13,6 @@ export interface ToolComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
 }
 
 export function ToolCombobox({
@@ -24,7 +23,6 @@ export function ToolCombobox({
   emptyText = 'No tools found.',
   className,
   disabled = false,
-  variant = 'default',
 }: ToolComboboxProps) {
   const { data: tools = {}, isLoading: isLoadingTools, isError: isErrorTools, error: errorTools } = useTools();
   const { data: agents = {}, isLoading: isLoadingAgents, isError: isErrorAgents, error: errorAgents } = useAgents();
@@ -87,7 +85,6 @@ export function ToolCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoadingTools || isLoadingAgents || isErrorTools || isErrorAgents}
-      variant={variant}
     />
   );
 }

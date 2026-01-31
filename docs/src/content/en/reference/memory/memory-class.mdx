@@ -85,7 +85,7 @@ export const agent = new Agent({
       name: "readOnly",
       type: "boolean",
       description:
-        "When true, prevents memory from saving new messages and provides working memory as read-only context (without the updateWorkingMemory tool). Useful for read-only operations like previews, internal routing agents, or sub agents that should reference but not modify memory.",
+        "When true, prevents memory from saving new messages. Useful for read-only operations like previews or internal routing agents.",
       isOptional: true,
       defaultValue: "false",
     },

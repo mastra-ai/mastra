@@ -250,15 +250,14 @@ export interface StorageScorerConfig {
 }
 
 /**
- * Agent version snapshot type containing ALL agent configuration fields.
- * These fields live exclusively in version snapshot rows, not on the agent record.
+ * Stored agent configuration type.
+ * Primitives (tools, workflows, agents, memory, scorers) are stored as references
+ * that get resolved from Mastra's registries at runtime.
  */
-export interface StorageAgentSnapshotType {
-  /** Display name of the agent */
+export interface StorageAgentType {
+  id: string;
   name: string;
-  /** Purpose description */
   description?: string;
-  /** System instructions/prompt */
   instructions: string;
   /** Model configuration (provider, name, etc.) */
   model: Record<string, unknown>;
@@ -279,63 +278,49 @@ export interface StorageAgentSnapshotType {
   inputProcessors?: Record<string, unknown>[];
   /** Output processor configurations */
   outputProcessors?: Record<string, unknown>[];
-  /** Memory configuration object */
-  memory?: Record<string, unknown>;
+  /** Memory key to resolve from Mastra's memory registry */
+  memory?: string;
   /** Scorer keys with optional sampling config, to resolve from Mastra's scorer registry */
   scorers?: Record<string, StorageScorerConfig>;
-}
-
-/**
- * Thin agent record type containing only metadata fields.
- * All configuration lives in version snapshots (StorageAgentSnapshotType).
- */
-export interface StorageAgentType {
-  /** Unique, immutable identifier */
-  id: string;
-  /** Agent status: 'draft' on creation, 'published' when a version is activated */
-  status: string;
-  /** FK to agent_versions.id - the currently active version */
-  activeVersionId?: string;
-  /** Author identifier for multi-tenant filtering */
-  authorId?: string;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
+  /** Owner identifier for multi-tenant filtering */
+  ownerId?: string;
+  /** FK to agent_versions.id - the currently active version */
+  activeVersionId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-/**
- * Resolved agent type that combines the thin agent record with version snapshot config.
- * Returned by getAgentByIdResolved and listAgentsResolved.
- */
-export type StorageResolvedAgentType = StorageAgentType & StorageAgentSnapshotType;
+export type StorageCreateAgentInput = Omit<StorageAgentType, 'createdAt' | 'updatedAt'>;
 
-/**
- * Input for creating a new agent. Flat union of thin record fields
- * and initial configuration (used to create version 1).
- */
-export type StorageCreateAgentInput = {
-  /** Unique identifier for the agent */
-  id: string;
-  /** Author identifier for multi-tenant filtering */
-  authorId?: string;
-  /** Additional metadata for the agent */
-  metadata?: Record<string, unknown>;
-} & StorageAgentSnapshotType;
-
-/**
- * Input for updating an agent. Includes metadata-level fields and optional config fields.
- * The handler layer separates these into agent-record updates vs new-version creation.
- */
 export type StorageUpdateAgentInput = {
   id: string;
-  /** Author identifier for multi-tenant filtering */
-  authorId?: string;
-  /** Additional metadata for the agent */
+  name?: string;
+  description?: string;
+  instructions?: string;
+  model?: Record<string, unknown>;
+  /** Array of tool keys to resolve from Mastra's tool registry */
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  /** Array of workflow keys to resolve from Mastra's workflow registry */
+  workflows?: string[];
+  /** Array of agent keys to resolve from Mastra's agent registry */
+  agents?: string[];
+  /** Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug) */
+  integrationTools?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  /** Memory key to resolve from Mastra's memory registry */
+  memory?: string;
+  /** Scorer keys with optional sampling config */
+  scorers?: Record<string, StorageScorerConfig>;
   metadata?: Record<string, unknown>;
+  /** Owner identifier for multi-tenant filtering */
+  ownerId?: string;
   /** FK to agent_versions.id - the currently active version */
   activeVersionId?: string;
-} & Partial<StorageAgentSnapshotType>;
+};
 
 export type StorageListAgentsInput = {
   /**
@@ -350,10 +335,10 @@ export type StorageListAgentsInput = {
   page?: number;
   orderBy?: StorageOrderBy;
   /**
-   * Filter agents by author identifier (indexed for fast lookups).
-   * Only agents with matching authorId will be returned.
+   * Filter agents by owner identifier (indexed for fast lookups).
+   * Only agents with matching ownerId will be returned.
    */
-  authorId?: string;
+  ownerId?: string;
   /**
    * Filter agents by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
@@ -363,10 +348,6 @@ export type StorageListAgentsInput = {
 
 export type StorageListAgentsOutput = PaginationInfo & {
   agents: StorageAgentType[];
-};
-
-export type StorageListAgentsResolvedOutput = PaginationInfo & {
-  agents: StorageResolvedAgentType[];
 };
 
 // Basic Index Management Types
@@ -566,4 +547,211 @@ export function buildStorageSchema<Shape extends z.ZodRawShape>(
   }
 
   return result as Record<keyof Shape & string, StorageColumn>;
+}
+
+// Dataset Types
+
+/** Dataset entity */
+export interface Dataset {
+  id: string;
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  /** Timestamp-based versioning (Langfuse pattern) */
+  version: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Dataset item entity */
+export interface DatasetItem {
+  id: string;
+  datasetId: string;
+  /** Timestamp when item was added/modified */
+  version: Date;
+  /** Any JSON - string for simple prompts, object for structured */
+  input: unknown;
+  /** Any JSON */
+  expectedOutput?: unknown;
+  context?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Input for creating a dataset */
+export interface CreateDatasetInput {
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Input for updating a dataset */
+export interface UpdateDatasetInput {
+  id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Input for adding an item to a dataset */
+export interface AddDatasetItemInput {
+  datasetId: string;
+  input: unknown;
+  expectedOutput?: unknown;
+  context?: Record<string, unknown>;
+}
+
+/** Input for updating a dataset item */
+export interface UpdateDatasetItemInput {
+  id: string;
+  datasetId: string;
+  input?: unknown;
+  expectedOutput?: unknown;
+  context?: Record<string, unknown>;
+}
+
+/** Input for listing datasets */
+export interface ListDatasetsInput {
+  pagination: StoragePagination;
+}
+
+/** Output for listing datasets */
+export interface ListDatasetsOutput {
+  datasets: Dataset[];
+  pagination: PaginationInfo;
+}
+
+/** Input for listing dataset items */
+export interface ListDatasetItemsInput {
+  datasetId: string;
+  pagination: StoragePagination;
+  /** Optional: filter items at or before this version timestamp */
+  version?: Date;
+}
+
+/** Output for listing dataset items */
+export interface ListDatasetItemsOutput {
+  items: DatasetItem[];
+  pagination: PaginationInfo;
+}
+
+// Run Types (Dataset execution tracking)
+
+/** Run record - tracks overall run state */
+export interface Run {
+  id: string;
+  datasetId: string;
+  /** Version snapshot at run start */
+  datasetVersion: Date;
+  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
+  targetId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  totalItems: number;
+  succeededCount: number;
+  failedCount: number;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Score result from a single scorer */
+export interface ScorerResult {
+  scorerId: string;
+  scorerName: string;
+  score: number | null;
+  reason: string | null;
+  error: string | null;
+}
+
+/** Per-item result record */
+export interface RunResult {
+  id: string;
+  runId: string;
+  itemId: string;
+  itemVersion: Date;
+  input: unknown;
+  output: unknown | null;
+  expectedOutput: unknown | null;
+  /** Latency in milliseconds */
+  latency: number;
+  error: string | null;
+  startedAt: Date;
+  completedAt: Date;
+  retryCount: number;
+  /** Trace ID from agent/workflow execution */
+  traceId: string | null;
+  /** Scores from scorers applied during run */
+  scores: ScorerResult[];
+  createdAt: Date;
+}
+
+/** Target type for runs */
+export type TargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
+
+/** Run status */
+export type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+/** Input for creating a run */
+export interface CreateRunInput {
+  id?: string;
+  datasetId: string;
+  datasetVersion: Date;
+  targetType: TargetType;
+  targetId: string;
+  totalItems: number;
+}
+
+/** Input for updating a run */
+export interface UpdateRunInput {
+  id: string;
+  status?: RunStatus;
+  succeededCount?: number;
+  failedCount?: number;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+/** Input for adding a run result */
+export interface AddRunResultInput {
+  id?: string;
+  runId: string;
+  itemId: string;
+  itemVersion: Date;
+  input: unknown;
+  output: unknown | null;
+  expectedOutput: unknown | null;
+  latency: number;
+  error: string | null;
+  startedAt: Date;
+  completedAt: Date;
+  retryCount: number;
+  /** Trace ID from agent/workflow execution */
+  traceId?: string | null;
+  /** Scores from scorers applied during run */
+  scores?: ScorerResult[];
+}
+
+/** Input for listing runs */
+export interface ListRunsInput {
+  datasetId?: string;
+  pagination: StoragePagination;
+}
+
+/** Output for listing runs */
+export interface ListRunsOutput {
+  runs: Run[];
+  pagination: PaginationInfo;
+}
+
+/** Input for listing run results */
+export interface ListRunResultsInput {
+  runId: string;
+  pagination: StoragePagination;
+}
+
+/** Output for listing run results */
+export interface ListRunResultsOutput {
+  results: RunResult[];
+  pagination: PaginationInfo;
 }

@@ -1,6 +1,9 @@
+import path from 'node:path';
 import type { OutputChunk, Plugin } from 'rollup';
 
 export function pino() {
+  let emittedChunks = new Map();
+
   const workerFiles = [
     {
       id: 'thread-stream-worker',

@@ -1,36 +1,38 @@
-import React from 'react'
+import React from "react";
 
 export interface YouTubeProps {
-  id: string
-  title?: string
+  id: string;
+  title?: string;
 }
 
-export default function YouTube({ id, title = 'YouTube video player' }: YouTubeProps) {
+export default function YouTube({
+  id,
+  title = "YouTube video player",
+}: YouTubeProps) {
   return (
     <div
       style={{
-        position: 'relative',
-        paddingBottom: '56.25%',
+        position: "relative",
+        paddingBottom: "56.25%",
         height: 0,
-        overflow: 'hidden',
-        maxWidth: '100%',
-        marginBottom: '1rem',
+        overflow: "hidden",
+        maxWidth: "100%",
+        marginBottom: "1rem",
       }}
     >
       <iframe
         style={{
-          position: 'absolute',
+          position: "absolute",
           top: 0,
           left: 0,
-          width: '100%',
-          height: '100%',
+          width: "100%",
+          height: "100%",
         }}
-        src={`https://www.youtube-nocookie.com/embed/${id}`}
+        src={`https://www.youtube.com/embed/${id}`}
         title={title}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
-        loading="lazy"
       />
     </div>
-  )
+  );
 }

@@ -13,7 +13,7 @@ import {
   aiContentWorkflow,
   parallelAnalysisWorkflow,
   conditionalWorkflow,
-} from './workflows/content-workflow'
+} from "./workflows/content-workflow";
 
 export const mastra = new Mastra({
   workflows: {
@@ -23,7 +23,7 @@ export const mastra = new Mastra({
     conditionalWorkflow, // Add the conditional workflow
   },
   // ... rest of configuration
-})
+});
 ```
 
 ## Testing the conditional workflow

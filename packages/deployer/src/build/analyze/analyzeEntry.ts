@@ -1,22 +1,20 @@
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { noopLogger } from '@mastra/core/logger';
-import type { IMastraLogger } from '@mastra/core/logger';
+import { noopLogger, type IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
-import { readJSON } from 'fs-extra/esm';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { rollup, type OutputChunk, type Plugin, type SourceMap } from 'rollup';
 import { resolveModule } from 'local-pkg';
-import { rollup } from 'rollup';
-import type { OutputChunk, Plugin, SourceMap } from 'rollup';
-import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import { isNodeBuiltin } from '../isNodeBuiltin';
-import { getPackageRootPath } from '../package-info';
+import { readJSON } from 'fs-extra/esm';
 import { esbuild } from '../plugins/esbuild';
-import { removeDeployer } from '../plugins/remove-deployer';
+import { isNodeBuiltin } from '../isNodeBuiltin';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import type { DependencyMetadata } from '../types';
 import { getPackageName, slash } from '../utils';
+import { getPackageRootPath } from '../package-info';
+import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
+import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE } from './constants';
+import { removeDeployer } from '../plugins/remove-deployer';
 
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.

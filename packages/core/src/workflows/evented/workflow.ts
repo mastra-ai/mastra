@@ -200,13 +200,12 @@ export function createStep<
   TSuspend,
   TResume,
   TSchemaOut,
-  TContext extends ToolExecutionContext<TSuspend, TResume, any>,
+  TContext extends ToolExecutionContext<TSuspend, TResume>,
   TId extends string,
-  TRequestContext extends Record<string, any> | unknown = unknown,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
-): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
+): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType>;
 
 /**
  * Creates a step from a Processor - wraps a Processor as a workflow step
@@ -295,7 +294,6 @@ function createStepFromParams(
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
-    requestContextSchema: params.requestContextSchema,
     scorers: params.scorers,
     retries: params.retries,
     execute: params.execute.bind(params),
@@ -1319,10 +1317,10 @@ export class EventedRun<
   async resume<TResumeSchema>(params: {
     resumeData?: TResumeSchema;
     step:
-      | Step<string, any, any, TResumeSchema, any, any, TEngineType, any>
+      | Step<string, any, any, TResumeSchema, any, any, TEngineType>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType, any>[],
-          Step<string, any, any, TResumeSchema, any, any, TEngineType, any>,
+          ...Step<string, any, any, any, any, any, TEngineType>[],
+          Step<string, any, any, TResumeSchema, any, any, TEngineType>,
         ]
       | string
       | string[];

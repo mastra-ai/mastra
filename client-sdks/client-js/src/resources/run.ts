@@ -74,7 +74,7 @@ export class Run extends BaseResource {
    * @deprecated Use `cancel()` instead
    */
   cancelRun(): Promise<{ message: string }> {
-    return this.request(`/workflows/${this.workflowId}/runs/${this.runId}/cancel`, {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${this.runId}/cancel`, {
       method: 'POST',
     });
   }
@@ -141,7 +141,7 @@ export class Run extends BaseResource {
    * ```
    */
   cancel(): Promise<{ message: string }> {
-    return this.request(`/workflows/${this.workflowId}/runs/${this.runId}/cancel`, {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${this.runId}/cancel`, {
       method: 'POST',
     });
   }
@@ -159,7 +159,7 @@ export class Run extends BaseResource {
     perStep?: boolean;
   }): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(params.requestContext);
-    return this.request(`/workflows/${this.workflowId}/start?runId=${this.runId}`, {
+    return this.request(`/api/workflows/${this.workflowId}/start?runId=${this.runId}`, {
       method: 'POST',
       body: {
         inputData: params?.inputData,
@@ -190,7 +190,7 @@ export class Run extends BaseResource {
     perStep?: boolean;
   }): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(rest.requestContext);
-    return this.request(`/workflows/${this.workflowId}/resume?runId=${this.runId}`, {
+    return this.request(`/api/workflows/${this.workflowId}/resume?runId=${this.runId}`, {
       method: 'POST',
       body: {
         step,
@@ -221,7 +221,7 @@ export class Run extends BaseResource {
 
     const requestContext = parseClientRequestContext(params.requestContext);
 
-    return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
+    return this.request<WorkflowRunResult>(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
       body: {
         inputData: params.inputData,
@@ -253,19 +253,22 @@ export class Run extends BaseResource {
     searchParams.set('runId', this.runId);
 
     const requestContext = parseClientRequestContext(params.requestContext);
-    const response: Response = await this.request(`/workflows/${this.workflowId}/stream?${searchParams.toString()}`, {
-      method: 'POST',
-      body: {
-        inputData: params.inputData,
-        initialState: params.initialState,
-        requestContext,
-        tracingOptions: params.tracingOptions,
-        resourceId: params.resourceId,
-        perStep: params.perStep,
-        closeOnSuspend: params.closeOnSuspend,
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        body: {
+          inputData: params.inputData,
+          initialState: params.initialState,
+          requestContext,
+          tracingOptions: params.tracingOptions,
+          resourceId: params.resourceId,
+          perStep: params.perStep,
+          closeOnSuspend: params.closeOnSuspend,
+        },
+        stream: true,
       },
-      stream: true,
-    });
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to stream workflow: ${response.statusText}`);
@@ -287,7 +290,7 @@ export class Run extends BaseResource {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', this.runId);
     const response: Response = await this.request(
-      `/workflows/${this.workflowId}/observe-stream?${searchParams.toString()}`,
+      `/api/workflows/${this.workflowId}/observe-stream?${searchParams.toString()}`,
       {
         method: 'POST',
         stream: true,
@@ -319,7 +322,7 @@ export class Run extends BaseResource {
     perStep?: boolean;
   }): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(params.requestContext);
-    return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/resume-async?runId=${this.runId}`, {
+    return this.request<WorkflowRunResult>(`/api/workflows/${this.workflowId}/resume-async?runId=${this.runId}`, {
       method: 'POST',
       body: {
         step: params.step,
@@ -347,7 +350,7 @@ export class Run extends BaseResource {
     searchParams.set('runId', this.runId);
     const requestContext = parseClientRequestContext(params.requestContext);
     const response: Response = await this.request(
-      `/workflows/${this.workflowId}/resume-stream?${searchParams.toString()}`,
+      `/api/workflows/${this.workflowId}/resume-stream?${searchParams.toString()}`,
       {
         method: 'POST',
         body: {
@@ -383,7 +386,7 @@ export class Run extends BaseResource {
     tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(params.requestContext);
-    return this.request(`/workflows/${this.workflowId}/restart?runId=${this.runId}`, {
+    return this.request(`/api/workflows/${this.workflowId}/restart?runId=${this.runId}`, {
       method: 'POST',
       body: {
         requestContext,
@@ -402,7 +405,7 @@ export class Run extends BaseResource {
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(params?.requestContext);
-    return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/restart-async?runId=${this.runId}`, {
+    return this.request<WorkflowRunResult>(`/api/workflows/${this.workflowId}/restart-async?runId=${this.runId}`, {
       method: 'POST',
       body: {
         requestContext,
@@ -418,7 +421,7 @@ export class Run extends BaseResource {
    */
   timeTravel({ requestContext: paramsRequestContext, ...params }: TimeTravelParams): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(paramsRequestContext);
-    return this.request(`/workflows/${this.workflowId}/time-travel?runId=${this.runId}`, {
+    return this.request(`/api/workflows/${this.workflowId}/time-travel?runId=${this.runId}`, {
       method: 'POST',
       body: {
         ...params,
@@ -434,7 +437,7 @@ export class Run extends BaseResource {
    */
   timeTravelAsync({ requestContext: paramsRequestContext, ...params }: TimeTravelParams): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(paramsRequestContext);
-    return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/time-travel-async?runId=${this.runId}`, {
+    return this.request<WorkflowRunResult>(`/api/workflows/${this.workflowId}/time-travel-async?runId=${this.runId}`, {
       method: 'POST',
       body: {
         ...params,
@@ -451,7 +454,7 @@ export class Run extends BaseResource {
   async timeTravelStream({ requestContext: paramsRequestContext, ...params }: TimeTravelParams) {
     const requestContext = parseClientRequestContext(paramsRequestContext);
     const response: Response = await this.request(
-      `/workflows/${this.workflowId}/time-travel-stream?runId=${this.runId}`,
+      `/api/workflows/${this.workflowId}/time-travel-stream?runId=${this.runId}`,
       {
         method: 'POST',
         body: {
