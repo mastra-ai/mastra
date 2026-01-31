@@ -2,9 +2,10 @@
 
 import { Controller } from 'react-hook-form';
 
-import { Section } from '@/ds/components/Section';
+import { Section } from '@/domains/cms';
 import { Spinner } from '@/ds/components/Spinner';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { ToolsIcon, WorkflowIcon, AgentIcon, MemoryIcon, JudgeIcon } from '@/ds/icons';
 
 import { MultiSelectPicker } from '../create-agent/multi-select-picker';
 import { ScorersPicker } from '../create-agent/scorers-picker';
@@ -38,10 +39,7 @@ export function AgentCreateSidebar() {
         )}
 
         {/* Tools */}
-        <Section>
-          <Section.Header>
-            <Section.Heading headingLevel="h3">Tools</Section.Heading>
-          </Section.Header>
+        <Section title={<Section.Title icon={<ToolsIcon />}>Tools</Section.Title>}>
           <Controller
             name="tools"
             control={control}
@@ -65,10 +63,7 @@ export function AgentCreateSidebar() {
         </Section>
 
         {/* Workflows */}
-        <Section>
-          <Section.Header>
-            <Section.Heading headingLevel="h3">Workflows</Section.Heading>
-          </Section.Header>
+        <Section title={<Section.Title icon={<WorkflowIcon />}>Workflows</Section.Title>}>
           <Controller
             name="workflows"
             control={control}
@@ -92,10 +87,7 @@ export function AgentCreateSidebar() {
         </Section>
 
         {/* Sub-Agents */}
-        <Section>
-          <Section.Header>
-            <Section.Heading headingLevel="h3">Sub-Agents</Section.Heading>
-          </Section.Header>
+        <Section title={<Section.Title icon={<AgentIcon />}>Sub-Agents</Section.Title>}>
           <Controller
             name="agents"
             control={control}
@@ -119,10 +111,7 @@ export function AgentCreateSidebar() {
         </Section>
 
         {/* Memory */}
-        <Section>
-          <Section.Header>
-            <Section.Heading headingLevel="h3">Memory</Section.Heading>
-          </Section.Header>
+        <Section title={<Section.Title icon={<MemoryIcon />}>Memory</Section.Title>}>
           <Controller
             name="memory"
             control={control}
@@ -147,10 +136,7 @@ export function AgentCreateSidebar() {
         </Section>
 
         {/* Scorers */}
-        <Section>
-          <Section.Header>
-            <Section.Heading headingLevel="h3">Scorers</Section.Heading>
-          </Section.Header>
+        <Section title={<Section.Title icon={<JudgeIcon />}>Scorers</Section.Title>}>
           <Controller
             name="scorers"
             control={control}
