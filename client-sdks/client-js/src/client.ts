@@ -836,7 +836,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing list of providers and their connection status
    */
   public listProviders(): Promise<ListProvidersResponse> {
-    return this.request('/api/integrations/providers');
+    return this.request('/integrations/providers');
   }
 
   /**
@@ -865,7 +865,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/integrations/${provider}/toolkits${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/integrations/${provider}/toolkits${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -914,7 +914,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/integrations/${provider}/tools${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/integrations/${provider}/tools${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -950,7 +950,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/integrations${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/integrations${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -959,7 +959,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the integration configuration
    */
   public getIntegration(integrationId: string): Promise<IntegrationConfig> {
-    return this.request(`/api/integrations/${integrationId}`);
+    return this.request(`/integrations/${integrationId}`);
   }
 
   /**
@@ -968,7 +968,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the created integration
    */
   public createIntegration(params: CreateIntegrationParams): Promise<IntegrationConfig> {
-    return this.request('/api/integrations', {
+    return this.request('/integrations', {
       method: 'POST',
       body: params,
     });
@@ -981,7 +981,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the updated integration
    */
   public updateIntegration(integrationId: string, params: UpdateIntegrationParams): Promise<IntegrationConfig> {
-    return this.request(`/api/integrations/${integrationId}`, {
+    return this.request(`/integrations/${integrationId}`, {
       method: 'PATCH',
       body: params,
     });
@@ -993,7 +993,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing success status
    */
   public deleteIntegration(integrationId: string): Promise<DeleteIntegrationResponse> {
-    return this.request(`/api/integrations/${integrationId}`, {
+    return this.request(`/integrations/${integrationId}`, {
       method: 'DELETE',
     });
   }
@@ -1004,7 +1004,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing refresh status and count of tools updated
    */
   public refreshIntegrationTools(integrationId: string): Promise<RefreshIntegrationResponse> {
-    return this.request(`/api/integrations/${integrationId}/refresh`, {
+    return this.request(`/integrations/${integrationId}/refresh`, {
       method: 'POST',
     });
   }
@@ -1016,7 +1016,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing success status
    */
   public deleteIntegrationTool(integrationId: string, toolId: string): Promise<{ success: boolean; message: string }> {
-    return this.request(`/api/integrations/${integrationId}/tools/${toolId}`, {
+    return this.request(`/integrations/${integrationId}/tools/${toolId}`, {
       method: 'DELETE',
     });
   }
@@ -1027,7 +1027,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing validation result with tool count
    */
   public validateMCPConnection(params: ValidateMCPParams): Promise<ValidateMCPResponse> {
-    return this.request('/api/integrations/mcp/validate', {
+    return this.request('/integrations/mcp/validate', {
       method: 'POST',
       body: params,
     });
@@ -1056,7 +1056,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/integrations/smithery/servers${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/integrations/smithery/servers${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -1065,7 +1065,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing server details including connection information
    */
   public getSmitheryServer(qualifiedName: string): Promise<GetSmitheryServerResponse> {
-    return this.request(`/api/integrations/smithery/servers/${encodeURIComponent(qualifiedName)}`);
+    return this.request(`/integrations/smithery/servers/${encodeURIComponent(qualifiedName)}`);
   }
 
   // ============================================================================

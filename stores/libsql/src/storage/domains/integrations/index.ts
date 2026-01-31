@@ -10,6 +10,7 @@ import {
   CACHED_TOOLS_SCHEMA,
 } from '@mastra/core/storage';
 import type {
+  IntegrationProvider,
   StorageIntegrationConfig,
   StorageCreateIntegrationInput,
   StorageUpdateIntegrationInput,
@@ -75,7 +76,7 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
   private parseIntegrationRow(row: any): StorageIntegrationConfig {
     return {
       id: row.id as string,
-      provider: row.provider as 'composio' | 'arcade',
+      provider: row.provider as IntegrationProvider,
       name: row.name as string,
       enabled: Boolean(row.enabled),
       selectedToolkits: this.parseJson(row.selectedToolkits, 'selectedToolkits') as string[],
@@ -90,7 +91,7 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
     return {
       id: row.id as string,
       integrationId: row.integrationId as string,
-      provider: row.provider as 'composio' | 'arcade',
+      provider: row.provider as IntegrationProvider,
       toolkitSlug: row.toolkitSlug as string,
       toolSlug: row.toolSlug as string,
       name: row.name as string,
@@ -125,7 +126,11 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
     }
   }
 
-  async createIntegration({ integration }: { integration: StorageCreateIntegrationInput }): Promise<StorageIntegrationConfig> {
+  async createIntegration({
+    integration,
+  }: {
+    integration: StorageCreateIntegrationInput;
+  }): Promise<StorageIntegrationConfig> {
     try {
       const now = new Date();
 
@@ -450,7 +455,13 @@ export class IntegrationsLibSQL extends IntegrationsStorage {
     }
   }
 
-  async getCachedToolBySlug({ integrationId, toolSlug }: { integrationId: string; toolSlug: string }): Promise<StorageCachedTool | null> {
+  async getCachedToolBySlug({
+    integrationId,
+    toolSlug,
+  }: {
+    integrationId: string;
+    toolSlug: string;
+  }): Promise<StorageCachedTool | null> {
     try {
       const rows = await this.#db.selectMany<Record<string, any>>({
         tableName: TABLE_CACHED_TOOLS,

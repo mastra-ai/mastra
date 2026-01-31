@@ -255,61 +255,62 @@ export const CREATE_INTEGRATION_ROUTE = createRoute({
               env: mcpMetadata.env,
             });
 
-        // Validate connection
-        const validation = await mcpProvider.validateConnection();
-        if (!validation.valid) {
-          await mcpProvider.disconnect();
-          throw new HTTPException(400, {
-            message: `Failed to connect to MCP server: ${validation.error}`,
-          });
-        }
-
-        // Create the integration
-        const integration = await integrationsStore.createIntegration({
-          integration: {
-            id: id || crypto.randomUUID(),
-            name,
-            provider,
-            enabled: enabled ?? true,
-            selectedToolkits: ['mcp-server'], // MCP/Smithery uses a single virtual toolkit
-            metadata: metadata as ProviderMetadata | undefined,
-            ownerId,
-          },
-        });
-
-        // Fetch and cache tools from MCP server
+        // Validate connection and create integration within try/finally to ensure cleanup
         try {
-          const toolsResponse = await mcpProvider.listTools({ limit: 1000 });
-
-          // Filter by selectedTools if provided
-          const toolsToCache = selectedTools
-            ? toolsResponse.tools.filter(tool => selectedTools.includes(tool.slug))
-            : toolsResponse.tools;
-
-          const cachedTools = toolsToCache.map(tool => ({
-            id: crypto.randomUUID(),
-            integrationId: integration.id,
-            provider: provider as IntegrationProvider, // Use actual provider (mcp or smithery)
-            toolkitSlug: 'mcp-server',
-            toolSlug: tool.slug,
-            name: tool.name,
-            description: tool.description,
-            inputSchema: tool.inputSchema || {},
-            outputSchema: tool.outputSchema,
-            rawDefinition: tool.metadata || {},
-            createdAt: new Date(),
-          }));
-
-          if (cachedTools.length > 0) {
-            await integrationsStore.cacheTools({ tools: cachedTools });
+          const validation = await mcpProvider.validateConnection();
+          if (!validation.valid) {
+            throw new HTTPException(400, {
+              message: `Failed to connect to MCP server: ${validation.error}`,
+            });
           }
-        } catch (toolError) {
-          console.error(`Error caching tools for ${provider} integration ${integration.id}:`, toolError);
+
+          // Create the integration
+          const integration = await integrationsStore.createIntegration({
+            integration: {
+              id: id || crypto.randomUUID(),
+              name,
+              provider,
+              enabled: enabled ?? true,
+              selectedToolkits: ['mcp-server'], // MCP/Smithery uses a single virtual toolkit
+              metadata: metadata as ProviderMetadata | undefined,
+              ownerId,
+            },
+          });
+
+          // Fetch and cache tools from MCP server
+          try {
+            const toolsResponse = await mcpProvider.listTools({ limit: 1000 });
+
+            // Filter by selectedTools if provided
+            const toolsToCache = selectedTools
+              ? toolsResponse.tools.filter(tool => selectedTools.includes(tool.slug))
+              : toolsResponse.tools;
+
+            const cachedTools = toolsToCache.map(tool => ({
+              id: crypto.randomUUID(),
+              integrationId: integration.id,
+              provider: provider as IntegrationProvider, // Use actual provider (mcp or smithery)
+              toolkitSlug: 'mcp-server',
+              toolSlug: tool.slug,
+              name: tool.name,
+              description: tool.description,
+              inputSchema: tool.inputSchema || {},
+              outputSchema: tool.outputSchema,
+              rawDefinition: tool.metadata || {},
+              createdAt: new Date(),
+            }));
+
+            if (cachedTools.length > 0) {
+              await integrationsStore.cacheTools({ tools: cachedTools });
+            }
+          } catch (toolError) {
+            console.error(`Error caching tools for ${provider} integration ${integration.id}:`, toolError);
+          }
+
+          return integration;
         } finally {
           await mcpProvider.disconnect();
         }
-
-        return integration;
       }
 
       // Get the provider (Composio/Arcade)
