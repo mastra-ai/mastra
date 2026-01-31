@@ -6,6 +6,7 @@ import {
   ThreadInputProvider,
   BrowserToolCallsProvider,
   BrowserSessionProvider,
+  BrowserViewPanel,
   useAgent,
   useMemory,
   useThreads,
@@ -105,6 +106,7 @@ function Agent() {
                         />
                       )
                     }
+                    browserSlot={<BrowserViewPanel agentId={agentId!} />}
                     rightSlot={<AgentInformation agentId={agentId!} threadId={threadId!} />}
                   >
                     <AgentChat

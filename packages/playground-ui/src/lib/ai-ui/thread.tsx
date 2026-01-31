@@ -19,7 +19,6 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
-import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 
 export interface ThreadProps {
   agentName?: string;
@@ -38,28 +37,23 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
 
   return (
     <ThreadWrapper>
-      <div className="relative h-full overflow-hidden">
-        <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
-          <ThreadWelcome agentName={agentName} />
+      <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
+        <ThreadWelcome agentName={agentName} />
 
-          <div className="max-w-3xl w-full mx-auto px-4 pb-7">
-            <ThreadPrimitive.Messages
-              components={{
-                UserMessage: UserMessage,
-                EditComposer: EditComposer,
-                AssistantMessage: WrappedAssistantMessage,
-              }}
-            />
-          </div>
+        <div className="max-w-3xl w-full mx-auto px-4 pb-7">
+          <ThreadPrimitive.Messages
+            components={{
+              UserMessage: UserMessage,
+              EditComposer: EditComposer,
+              AssistantMessage: WrappedAssistantMessage,
+            }}
+          />
+        </div>
 
-          <ThreadPrimitive.If empty={false}>
-            <div />
-          </ThreadPrimitive.If>
-        </ThreadPrimitive.Viewport>
-
-        {/* Browser panel - outside Viewport to survive message re-renders */}
-        {agentId && <BrowserViewPanel agentId={agentId} />}
-      </div>
+        <ThreadPrimitive.If empty={false}>
+          <div />
+        </ThreadPrimitive.If>
+      </ThreadPrimitive.Viewport>
 
       <Composer hasMemory={hasMemory} agentId={agentId} />
     </ThreadWrapper>

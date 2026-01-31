@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { cn } from '@/lib/utils';
 import { BrowserViewFrame } from './browser-view-frame';
 import { BrowserViewHeader } from './browser-view-header';
 import { BrowserToolCallHistory } from './browser-tool-call-history';
@@ -8,19 +7,18 @@ import type { StreamStatus } from '../../hooks/use-browser-stream';
 
 interface BrowserViewPanelProps {
   agentId: string;
-  className?: string;
 }
 
 /**
  * Browser view panel that assembles frame and header components.
+ * Renders inside a collapsible layout panel (collapsedSize=0) in AgentLayout.
  * Auto-shows when browser activity starts, hides only on explicit user close (X button).
- * Collapsible and sticky-positioned at the top-left of the chat scroll area.
  *
  * IMPORTANT: Renders a single BrowserViewFrame instance that never unmounts.
- * This keeps the WebSocket connection stable across visibility/collapse toggles
- * and prevents screencast stop/start churn on the server.
+ * The parent Panel uses collapsedSize=0 to hide content at zero width while
+ * keeping this component mounted, preserving the WebSocket connection.
  */
-export function BrowserViewPanel({ agentId, className }: BrowserViewPanelProps) {
+export function BrowserViewPanel({ agentId }: BrowserViewPanelProps) {
   const { isActive, status, currentUrl, show, hide, setStatus, setCurrentUrl } = useBrowserSession();
   const [isClosing, setIsClosing] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -77,35 +75,21 @@ export function BrowserViewPanel({ agentId, className }: BrowserViewPanelProps) 
 
   // Single render path — BrowserViewFrame is always at the same tree position
   // so it never unmounts/remounts (stable WebSocket connection).
-  // Outer wrapper switches between off-screen (hidden) and sticky (visible) via CSS.
+  // Parent Panel's collapsedSize=0 handles hiding at zero width.
   return (
-    <div
-      className={
-        isActive
-          ? 'absolute top-4 left-0 z-10 max-w-3xl w-full px-4'
-          : 'fixed -left-[9999px] -top-[9999px] w-0 h-0 overflow-hidden'
-      }
-      aria-hidden={!isActive}
-    >
-      <div
-        className={cn(
-          isActive && 'flex flex-col bg-surface2 rounded-lg border border-border1 overflow-hidden',
-          className,
-        )}
-      >
-        {isActive && (
-          <BrowserViewHeader
-            url={currentUrl}
-            status={status}
-            isCollapsed={isCollapsed}
-            onClose={handleClose}
-            onToggleCollapse={handleToggleCollapse}
-          />
-        )}
-        <div className={isActive && !isCollapsed ? 'p-2' : 'hidden'}>
+    <div className="flex flex-col h-full w-full overflow-hidden">
+      <div className="flex flex-col bg-surface2 h-full overflow-hidden">
+        <BrowserViewHeader
+          url={currentUrl}
+          status={status}
+          isCollapsed={isCollapsed}
+          onClose={handleClose}
+          onToggleCollapse={handleToggleCollapse}
+        />
+        <div className="flex-1 min-h-0 p-2">
           <BrowserViewFrame agentId={agentId} onStatusChange={handleStatusChange} onUrlChange={handleUrlChange} />
         </div>
-        {isActive && !isCollapsed && <BrowserToolCallHistory />}
+        <BrowserToolCallHistory />
       </div>
     </div>
   );
