@@ -584,7 +584,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult,
           activeSteps,
           requestContext,
-          state,
+          // Use currentState (resolved from stepResults.__state and state) instead of
+          // the possibly-undefined state parameter, to ensure final state is preserved
+          state: currentState,
           outputOptions,
         });
       }
