@@ -321,13 +321,6 @@ export class Workspace {
   }
 
   /**
-   * Alias for filesystem.
-   */
-  get fs(): WorkspaceFilesystem | undefined {
-    return this._fs;
-  }
-
-  /**
    * The sandbox provider (if configured).
    */
   get sandbox(): WorkspaceSandbox | undefined {
@@ -348,19 +341,11 @@ export class Workspace {
    *
    * Returns undefined if no skillPaths are configured.
    *
-   * When filesystem is available, skills support full CRUD operations.
-   * Without filesystem, skills are loaded read-only via LocalSkillSource.
-   *
    * @example
    * ```typescript
    * const skills = await workspace.skills?.list();
    * const skill = await workspace.skills?.get('brand-guidelines');
    * const results = await workspace.skills?.search('brand colors');
-   *
-   * // CRUD operations (only available with filesystem)
-   * if (workspace.skills?.isWritable) {
-   *   await workspace.skills.create({ ... });
-   * }
    * ```
    */
   get skills(): WorkspaceSkills | undefined {
@@ -371,7 +356,7 @@ export class Workspace {
 
     // Lazy initialization
     if (!this._skills) {
-      // Use filesystem if available (full CRUD), otherwise use LocalSkillSource (read-only)
+      // Use filesystem if available, otherwise use LocalSkillSource (read-only from local disk)
       const source = this._fs ?? new LocalSkillSource();
 
       this._skills = new WorkspaceSkillsImpl({

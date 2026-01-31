@@ -1,17 +1,6 @@
 import { useState } from 'react';
-import {
-  Wand2,
-  FileText,
-  Code,
-  Image,
-  Package,
-  Home,
-  Server,
-  ChevronRight,
-  ChevronDown,
-  Eye,
-  FileCode2,
-} from 'lucide-react';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
+import { FileText, Code, Image, Package, Home, Server, ChevronRight, ChevronDown, Eye, FileCode2 } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
@@ -19,6 +8,8 @@ import type { Skill, SkillSource } from '../types';
 
 export interface SkillDetailProps {
   skill: Skill;
+  /** Raw SKILL.md file contents to show in "Source" view. Falls back to skill.instructions if not provided. */
+  rawSkillMd?: string;
   onReferenceClick?: (referencePath: string) => void;
 }
 
@@ -45,7 +36,7 @@ function getSourceInfo(source: SkillSource): { icon: React.ReactNode; label: str
   }
 }
 
-export function SkillDetail({ skill, onReferenceClick }: SkillDetailProps) {
+export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetailProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['instructions']));
   const [showRawInstructions, setShowRawInstructions] = useState(false);
   const sourceInfo = getSourceInfo(skill.source);
@@ -67,7 +58,7 @@ export function SkillDetail({ skill, onReferenceClick }: SkillDetailProps) {
       {/* Header */}
       <div className="flex items-start gap-4">
         <div className="p-3 rounded-lg bg-surface5">
-          <Wand2 className="h-6 w-6 text-icon4" />
+          <SkillIcon className="h-6 w-6 text-icon4" />
         </div>
         <div className="flex-1">
           <h1 className="text-xl font-semibold text-icon6">{skill.name}</h1>
@@ -79,7 +70,7 @@ export function SkillDetail({ skill, onReferenceClick }: SkillDetailProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetadataCard label="Source" value={sourceInfo.label} icon={sourceInfo.icon} />
         {skill.license && <MetadataCard label="License" value={skill.license} />}
-        {skill.compatibility && <MetadataCard label="Compatibility" value={skill.compatibility} />}
+        {skill.compatibility != null && <MetadataCard label="Compatibility" value={skill.compatibility} />}
         <MetadataCard
           label="References"
           value={`${skill.references.length} files`}
@@ -118,7 +109,7 @@ export function SkillDetail({ skill, onReferenceClick }: SkillDetailProps) {
                 fontSize: '0.875rem',
               }}
             >
-              {skill.instructions}
+              {rawSkillMd ?? skill.instructions}
             </SyntaxHighlighter>
           </div>
         ) : (
@@ -194,13 +185,46 @@ export function SkillDetail({ skill, onReferenceClick }: SkillDetailProps) {
   );
 }
 
-function MetadataCard({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+/**
+ * Format a value for display, handling strings, objects, and arrays.
+ */
+function formatDisplayValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(v => (typeof v === 'string' ? v : JSON.stringify(v))).join(', ');
+  }
+  if (typeof value === 'object' && value !== null) {
+    // For objects, show a compact summary
+    const keys = Object.keys(value);
+    if (keys.length === 0) return '{}';
+    if (keys.length === 1) {
+      const key = keys[0];
+      const val = (value as Record<string, unknown>)[key];
+      if (Array.isArray(val)) {
+        return `${key}: ${val.join(', ')}`;
+      }
+      return `${key}: ${formatDisplayValue(val)}`;
+    }
+    return `{${keys.join(', ')}}`;
+  }
+  return String(value);
+}
+
+function MetadataCard({ label, value, icon }: { label: string; value: unknown; icon?: React.ReactNode }) {
+  const displayValue = formatDisplayValue(value);
   return (
     <div className="p-3 rounded-lg bg-surface3">
       <p className="text-xs text-icon3 mb-1">{label}</p>
       <div className="flex items-center gap-1.5">
         {icon && <span className="text-icon4">{icon}</span>}
-        <p className="text-sm font-medium text-icon5">{value}</p>
+        <p className="text-sm font-medium text-icon5 truncate" title={displayValue}>
+          {displayValue}
+        </p>
       </div>
     </div>
   );

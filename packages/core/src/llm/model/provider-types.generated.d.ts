@@ -24,8 +24,6 @@ export type ProviderModelsMap = {
     'kimi-k2.5',
   ];
   readonly firmware: readonly [
-    'cerebras-gpt-oss-120b',
-    'cerebras-zai-glm-4.7',
     'claude-haiku-4-5',
     'claude-opus-4-5',
     'claude-sonnet-4-5',
@@ -40,10 +38,16 @@ export type ProviderModelsMap = {
     'gpt-5-mini',
     'gpt-5-nano',
     'gpt-5.2',
+    'gpt-oss-120b',
     'grok-4-fast-non-reasoning',
     'grok-4-fast-reasoning',
     'grok-code-fast-1',
+    'kimi-k2-thinking',
+    'kimi-k2-thinking-turbo',
+    'kimi-k2.5',
+    'zai-glm-4.7',
   ];
+  readonly nova: readonly ['nova-2-lite-v1', 'nova-2-pro-v1'];
   readonly lucidquery: readonly ['lucidnova-rf1-100b', 'lucidquery-nexus-coder'];
   readonly moonshotai: readonly [
     'kimi-k2-0711-preview',
@@ -1211,9 +1215,11 @@ export type ProviderModelsMap = {
     'kimi-k2',
     'kimi-k2-thinking',
     'kimi-k2.5',
+    'kimi-k2.5-free',
     'minimax-m2.1',
     'minimax-m2.1-free',
     'qwen3-coder',
+    'trinity-large-preview-free',
   ];
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',
@@ -1542,6 +1548,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.6',
     'z-ai/glm-4.6:exacto',
     'z-ai/glm-4.7',
+    'z-ai/glm-4.7-flash',
   ];
   readonly zenmux: readonly [
     'anthropic/claude-haiku-4.5',

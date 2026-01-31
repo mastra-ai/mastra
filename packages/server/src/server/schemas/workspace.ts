@@ -236,8 +236,8 @@ export const skillMetadataSchema = z.object({
   name: z.string(),
   description: z.string(),
   license: z.string().optional(),
-  compatibility: z.string().optional(),
-  metadata: z.record(z.string()).optional(),
+  compatibility: z.unknown().optional(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 export const skillSourceSchema = z.discriminatedUnion('type', [
@@ -255,8 +255,12 @@ export const skillSchema = skillMetadataSchema.extend({
   assets: z.array(z.string()),
 });
 
+export const skillMetadataWithPathSchema = skillMetadataSchema.extend({
+  path: z.string().describe('Path to the skill directory'),
+});
+
 export const listSkillsResponseSchema = z.object({
-  skills: z.array(skillMetadataSchema),
+  skills: z.array(skillMetadataWithPathSchema),
   isSkillsConfigured: z.boolean().describe('Whether skills are configured in the workspace'),
 });
 
@@ -309,4 +313,87 @@ export const skillSearchResultSchema = z.object({
 export const searchSkillsResponseSchema = z.object({
   results: z.array(skillSearchResultSchema),
   query: z.string(),
+});
+
+// =============================================================================
+// skills.sh Proxy Schemas
+// =============================================================================
+
+export const skillsShSearchQuerySchema = z.object({
+  q: z.string().describe('Search query'),
+  limit: z.coerce.number().optional().default(10).describe('Maximum number of results'),
+});
+
+export const skillsShPopularQuerySchema = z.object({
+  limit: z.coerce.number().optional().default(10).describe('Maximum number of results'),
+  offset: z.coerce.number().optional().default(0).describe('Offset for pagination'),
+});
+
+export const skillsShSkillSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  installs: z.number(),
+  topSource: z.string(),
+});
+
+export const skillsShSearchResponseSchema = z.object({
+  query: z.string(),
+  searchType: z.string(),
+  skills: z.array(skillsShSkillSchema),
+  count: z.number(),
+});
+
+export const skillsShListResponseSchema = z.object({
+  skills: z.array(skillsShSkillSchema),
+  count: z.number(),
+  limit: z.number(),
+  offset: z.number(),
+});
+
+export const skillsShPreviewQuerySchema = z.object({
+  owner: z.string().describe('GitHub repository owner'),
+  repo: z.string().describe('GitHub repository name'),
+  path: z.string().describe('Path to skill within repo'),
+});
+
+export const skillsShPreviewResponseSchema = z.object({
+  content: z.string(),
+});
+
+export const skillsShInstallBodySchema = z.object({
+  owner: z.string().describe('GitHub repository owner'),
+  repo: z.string().describe('GitHub repository name'),
+  skillName: z.string().describe('Skill name from skills.sh'),
+});
+
+export const skillsShInstallResponseSchema = z.object({
+  success: z.boolean(),
+  skillName: z.string(),
+  installedPath: z.string(),
+  filesWritten: z.number(),
+});
+
+export const skillsShRemoveBodySchema = z.object({
+  skillName: z.string().describe('Name of the installed skill to remove'),
+});
+
+export const skillsShRemoveResponseSchema = z.object({
+  success: z.boolean(),
+  skillName: z.string(),
+  removedPath: z.string(),
+});
+
+export const skillsShUpdateBodySchema = z.object({
+  skillName: z.string().optional().describe('Specific skill to update, or omit to update all'),
+});
+
+export const skillsShUpdateResponseSchema = z.object({
+  updated: z.array(
+    z.object({
+      skillName: z.string(),
+      success: z.boolean(),
+      filesWritten: z.number().optional(),
+      error: z.string().optional(),
+    }),
+  ),
 });

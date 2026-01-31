@@ -15,25 +15,31 @@ For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/
 
 :::
 
-## Installation
-
-`LocalFilesystem` is included in `@mastra/core`:
-
-```bash npm2yarn
-npm install @mastra/core@latest
-```
-
 ## Usage
 
-```typescript
-import { LocalFilesystem } from '@mastra/core/workspace';
+Add a `LocalFilesystem` to a workspace and assign it to an agent. The agent can then read, write, and manage files as part of its tasks:
 
-const filesystem = new LocalFilesystem({
-  basePath: './workspace',
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
 });
+
+const agent = new Agent({
+  id: 'file-agent',
+  model: 'openai/gpt-4o',
+  workspace,
+});
+
+// The agent now has filesystem tools available
+const response = await agent.generate('List all files in the workspace');
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -93,6 +99,302 @@ const filesystem = new LocalFilesystem({
 
 ## Methods
 
+### `init()`
+
+Initialize the filesystem. Creates the base directory if it doesn't exist.
+
+```typescript
+await filesystem.init();
+```
+
+Called by `workspace.init()`.
+
+### `destroy()`
+
+Clean up filesystem resources.
+
+```typescript
+await filesystem.destroy();
+```
+
+Called by `workspace.destroy()`.
+
+### `readFile(path, options?)`
+
+Read file contents.
+
+```typescript
+const content = await filesystem.readFile('/docs/guide.md');
+const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' });
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "File path relative to basePath",
+    },
+    {
+      name: "options.encoding",
+      type: "'utf-8' | 'binary'",
+      description: "Text or binary encoding",
+      isOptional: true,
+      defaultValue: "'utf-8'",
+    },
+  ]}
+/>
+
+### `writeFile(path, content, options?)`
+
+Write content to a file.
+
+```typescript
+await filesystem.writeFile('/docs/new.md', '# New Document');
+await filesystem.writeFile('/nested/path/file.md', content, { recursive: true });
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "File path relative to basePath",
+    },
+    {
+      name: "content",
+      type: "string | Buffer",
+      description: "File content",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "Create parent directories if they don't exist",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "options.overwrite",
+      type: "boolean",
+      description: "Overwrite existing file",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
+### `appendFile(path, content)`
+
+Append content to an existing file.
+
+```typescript
+await filesystem.appendFile('/logs/app.log', 'New log entry\n');
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "File path relative to basePath",
+    },
+    {
+      name: "content",
+      type: "string | Buffer",
+      description: "Content to append",
+    },
+  ]}
+/>
+
+### `deleteFile(path, options?)`
+
+Delete a file.
+
+```typescript
+await filesystem.deleteFile('/docs/old.md');
+await filesystem.deleteFile('/docs/maybe.md', { force: true }); // Don't throw if missing
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "File path",
+    },
+    {
+      name: "options.force",
+      type: "boolean",
+      description: "Don't throw error if file doesn't exist",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### `copyFile(src, dest, options?)`
+
+Copy a file to a new location.
+
+```typescript
+await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md');
+await filesystem.copyFile('/src/config.json', '/backup/config.json', { overwrite: false });
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "src",
+      type: "string",
+      description: "Source file path",
+    },
+    {
+      name: "dest",
+      type: "string",
+      description: "Destination file path",
+    },
+    {
+      name: "options.overwrite",
+      type: "boolean",
+      description: "Overwrite destination if it exists",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
+### `moveFile(src, dest, options?)`
+
+Move or rename a file.
+
+```typescript
+await filesystem.moveFile('/docs/draft.md', '/docs/final.md');
+await filesystem.moveFile('/temp/upload.txt', '/files/document.txt');
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "src",
+      type: "string",
+      description: "Source file path",
+    },
+    {
+      name: "dest",
+      type: "string",
+      description: "Destination file path",
+    },
+    {
+      name: "options.overwrite",
+      type: "boolean",
+      description: "Overwrite destination if it exists",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
+### `mkdir(path, options?)`
+
+Create a directory.
+
+```typescript
+await filesystem.mkdir('/docs/api');
+await filesystem.mkdir('/deeply/nested/path', { recursive: true });
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "Directory path",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "Create parent directories",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### `rmdir(path, options?)`
+
+Remove a directory.
+
+```typescript
+await filesystem.rmdir('/docs/old');
+await filesystem.rmdir('/docs/nested', { recursive: true });
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "Directory path",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "Remove contents recursively",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "options.force",
+      type: "boolean",
+      description: "Don't throw if directory doesn't exist",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### `readdir(path, options?)`
+
+List directory contents.
+
+```typescript
+const entries = await filesystem.readdir('/docs');
+// [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
+```
+
+### `exists(path)`
+
+Check if a path exists.
+
+```typescript
+const exists = await filesystem.exists('/docs/guide.md');
+```
+
+### `stat(path)`
+
+Get file or directory metadata.
+
+```typescript
+const stat = await filesystem.stat('/docs/guide.md');
+// { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date, path: '/docs/guide.md' }
+```
+
 ### `getInfo()`
 
 Returns metadata about this filesystem instance.
@@ -111,7 +413,7 @@ const instructions = filesystem.getInstructions();
 // 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
 ```
 
-## Path Resolution
+## Path resolution
 
 ### How basePath works
 
@@ -159,6 +461,6 @@ Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my
 
 ## Related
 
-- [WorkspaceFilesystem Interface](/reference/workspace/filesystem)
-- [Workspace Class](/reference/workspace/workspace-class)
-- [Workspace Overview](/docs/workspace/overview)
+- [WorkspaceFilesystem interface](/reference/workspace/filesystem)
+- [Workspace class](/reference/workspace/workspace-class)
+- [Workspace overview](/docs/workspace/overview)

@@ -47,6 +47,16 @@ const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
     url: 'https://ai-gateway.vercel.sh/v1',
     apiKeyEnvVar: 'AI_GATEWAY_API_KEY',
   },
+  // moonshotai uses Anthropic-compatible API, not OpenAI-compatible
+  moonshotai: {
+    url: 'https://api.moonshot.ai/anthropic/v1',
+    npm: '@ai-sdk/anthropic',
+  },
+  // moonshotai-cn (China version) also uses Anthropic-compatible API
+  'moonshotai-cn': {
+    url: 'https://api.moonshot.cn/anthropic/v1',
+    npm: '@ai-sdk/anthropic',
+  },
 };
 
 export class ModelsDevGateway extends MastraModelGateway {
@@ -220,6 +230,12 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createTogetherAI({ apiKey })(modelId);
       case 'deepinfra':
         return createDeepInfra({ apiKey })(modelId);
+      case 'moonshotai':
+      case 'moonshotai-cn': {
+        // moonshotai uses Anthropic-compatible API endpoint
+        if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
+        return createAnthropic({ apiKey, baseURL })(modelId);
+      }
       default: {
         // Check if this provider uses a specific SDK package (e.g., kimi-for-coding uses @ai-sdk/anthropic)
         const config = this.providerConfigs[providerId];

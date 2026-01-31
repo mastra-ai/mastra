@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 
 import { getPackageInfo } from 'local-pkg';
 import pc from 'picocolors';
-import { satisfies } from 'semver';
+import { satisfies, gtr } from 'semver';
 
 import type { MastraPackageInfo } from './mastra-packages.js';
 
@@ -56,7 +56,8 @@ export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promis
         }
 
         // Check if the installed version satisfies the peer dep range
-        if (!satisfies(installedVersion, requiredRange)) {
+        // includePrerelease: true so that 1.1.0-alpha.1 satisfies >=1.0.0-0 <2.0.0-0
+        if (!satisfies(installedVersion, requiredRange, { includePrerelease: true })) {
           mismatches.push({
             package: pkg.name,
             packageVersion: pkg.version,
@@ -85,6 +86,9 @@ export function detectPackageManager(): 'pnpm' | 'npm' | 'yarn' {
 
 /**
  * Returns the command to update mismatched packages, or null if no mismatches.
+ *
+ * - If peer dep is BELOW the required range → upgrade the peer dep (e.g., @mastra/core)
+ * - If peer dep is ABOVE the required range → upgrade the package requiring it (e.g., @mastra/libsql)
  */
 export function getUpdateCommand(mismatches: PeerDepMismatch[]): string | null {
   if (mismatches.length === 0) {
@@ -92,8 +96,22 @@ export function getUpdateCommand(mismatches: PeerDepMismatch[]): string | null {
   }
 
   const pm = detectPackageManager();
-  const packagesToUpdate = [...new Set(mismatches.map(m => m.package))];
-  const packagesWithLatest = packagesToUpdate.map(pkg => `${pkg}@latest`);
+  const packagesToUpdate = new Set<string>();
+
+  for (const m of mismatches) {
+    // Check if installed version is above the range (too new) or below (too old)
+    const isAboveRange = gtr(m.installedVersion, m.requiredRange, { includePrerelease: true });
+
+    if (isAboveRange) {
+      // Peer dep is too new - upgrade the package that requires it
+      packagesToUpdate.add(m.package);
+    } else {
+      // Peer dep is too old - upgrade the peer dep itself
+      packagesToUpdate.add(m.peerDep);
+    }
+  }
+
+  const packagesWithLatest = [...packagesToUpdate].map(pkg => `${pkg}@latest`);
   return `${pm} add ${packagesWithLatest.join(' ')}`;
 }
 

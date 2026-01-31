@@ -484,6 +484,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // Add test stored agent for stored agents routes
     const agents = await storage.getStore('agents');
     if (agents) {
+      // createAgent automatically creates version 1 with the initial config
       const storedAgent = await agents.createAgent({
         agent: {
           id: 'test-stored-agent',
@@ -494,40 +495,26 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         },
       });
 
-      // Create test versions for version-specific routes
-      // Version 1: Will be the active version
-      const version1 = await agents.createVersion({
-        id: 'test-version-1',
-        agentId: 'test-stored-agent',
-        versionNumber: 1,
-        name: 'Test Version 1',
-        snapshot: storedAgent,
-        changedFields: ['name', 'instructions'],
-        changeMessage: 'Initial test version',
-      });
-
-      // Update the agent to have some changes for version 2
-      const updatedAgent = await agents.updateAgent({
-        id: 'test-stored-agent',
-        instructions: 'Updated test instructions for version 2',
-      });
+      // Version 1 was auto-created by createAgent; its ID is the activeVersionId
+      const version1Id = storedAgent.activeVersionId!;
 
       // Version 2: Non-active version that can be deleted or used in comparisons
+      // Config fields are top-level (no snapshot object)
       await agents.createVersion({
         id: 'test-version-id',
         agentId: 'test-stored-agent',
         versionNumber: 2,
-        name: 'Test Version 2',
-        snapshot: updatedAgent,
+        name: 'Test Stored Agent',
+        instructions: 'Updated test instructions for version 2',
+        model: { provider: 'openai', name: 'gpt-4o' },
         changedFields: ['instructions'],
         changeMessage: 'Second test version',
       });
 
-      // Update the agent's activeVersionId to version 1
-      // This leaves version 2 (test-version-id) as non-active and deletable
+      // Ensure version 1 stays active, leaving version 2 (test-version-id) as non-active and deletable
       await agents.updateAgent({
         id: 'test-stored-agent',
-        activeVersionId: version1.id,
+        activeVersionId: version1Id,
       });
     }
 
@@ -681,6 +668,23 @@ Follow these instructions for the test skill.
   const testDir = path.join(tempDir, 'test-dir');
   fs.mkdirSync(testDir, { recursive: true });
   fs.writeFileSync(path.join(testDir, 'nested-file.txt'), 'Nested file content');
+
+  // Create .agents/skills/ structure for skills-sh routes (remove, check-updates, update)
+  const agentSkillsDir = path.join(tempDir, '.agents', 'skills', 'test-skill');
+  fs.mkdirSync(agentSkillsDir, { recursive: true });
+  fs.writeFileSync(path.join(agentSkillsDir, 'SKILL.md'), skillContent);
+
+  // Create .meta.json for the installed skill (used by update routes)
+  // Use a fixed timestamp for deterministic tests
+  const installedAt = new Date('2024-01-01T00:00:00.000Z').toISOString();
+  const metaJson = {
+    skillName: 'test-skill',
+    owner: 'test-owner',
+    repo: 'test-repo',
+    branch: 'main',
+    installedAt,
+  };
+  fs.writeFileSync(path.join(agentSkillsDir, '.meta.json'), JSON.stringify(metaJson, null, 2));
 
   // Create the workspace with local filesystem and BM25 search
   // Use 'test-workspace' as the ID to match test utilities' getDefaultValidPathParams

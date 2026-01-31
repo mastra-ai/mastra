@@ -9,8 +9,6 @@ packages:
 
 Filesystem providers give agents the ability to read, write, and manage files. When you configure a filesystem on a workspace, agents receive tools for file operations.
 
-## How it works
-
 A filesystem provider handles all file operations for a workspace:
 
 - **Read** - Read file contents
@@ -19,21 +17,24 @@ A filesystem provider handles all file operations for a workspace:
 - **Delete** - Remove files and directories
 - **Stat** - Get file metadata
 
-When you assign a workspace with a filesystem to an agent, Mastra automatically includes the corresponding tools in the agent's toolset.
-
 ## Supported providers
 
-Each provider page includes configuration options and usage examples:
+Available providers:
 
-- [LocalFilesystem](/reference/workspace/local-filesystem) - Stores files in a directory on disk
+- [`LocalFilesystem`](/reference/workspace/local-filesystem) - Stores files in a directory on disk
 
 :::tip
-LocalFilesystem is the simplest way to get started - it requires no external services.
+
+`LocalFilesystem` is the simplest way to get started as it requires no external services.
+
 :::
 
 ## Basic usage
 
-```typescript
+Create a workspace with a filesystem and assign it to an agent. The agent can then read, write, and manage files as part of its tasks:
+
+```typescript title="src/mastra/agents/file-agent.ts"
+import { Agent } from '@mastra/core/agent';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
@@ -41,6 +42,16 @@ const workspace = new Workspace({
     basePath: './workspace',
   }),
 });
+
+const agent = new Agent({
+  id: 'file-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a helpful file management assistant.',
+  workspace,
+});
+
+// The agent now has filesystem tools available
+const response = await agent.generate('List all files in the workspace');
 ```
 
 ## Read-only mode
@@ -51,6 +62,7 @@ To prevent agents from modifying files, enable read-only mode:
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
+    // highlight-next-line
     readOnly: true,
   }),
 });
@@ -60,10 +72,10 @@ When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are n
 
 ## Agent tools
 
-When you configure a filesystem on a workspace, agents receive tools for reading, writing, listing, and deleting files. See [Workspace Class Reference](/reference/workspace/workspace-class#filesystem-tools) for details.
+When you configure a filesystem on a workspace, agents receive tools for reading, writing, listing, and deleting files. See [workspace class reference](/reference/workspace/workspace-class#filesystem-tools) for details.
 
 ## Related
 
-- [LocalFilesystem Reference](/reference/workspace/local-filesystem)
-- [Workspace Overview](/docs/workspace/overview)
+- [LocalFilesystem reference](/reference/workspace/local-filesystem)
+- [Workspace overview](/docs/workspace/overview)
 - [Sandbox](/docs/workspace/sandbox)

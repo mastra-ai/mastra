@@ -9,8 +9,6 @@ packages:
 
 Sandbox providers give agents the ability to execute shell commands. When you configure a sandbox on a workspace, agents can run commands as part of their tasks.
 
-## How it works
-
 A sandbox provider executes commands in a controlled environment:
 
 - **Command execution** - Run shell commands with arguments
@@ -23,15 +21,16 @@ When you assign a workspace with a sandbox to an agent, Mastra automatically inc
 
 ## Supported providers
 
-Each provider page includes configuration options and usage examples:
+Available providers:
 
-- [LocalSandbox](/reference/workspace/local-sandbox) - Executes commands on the local machine
+- [`LocalSandbox`](/reference/workspace/local-sandbox) - Executes commands on the local machine
 
 ## Basic usage
 
-Create a workspace with a sandbox and execute commands:
+Create a workspace with a sandbox and assign it to an agent. The agent can then execute shell commands:
 
-```typescript
+```typescript title="src/mastra/agents/dev-agent.ts"
+import { Agent } from '@mastra/core/agent';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
@@ -43,19 +42,25 @@ const workspace = new Workspace({
   }),
 });
 
-// Execute a command
-const result = await workspace.sandbox.executeCommand('ls', ['-la']);
-console.log(result.stdout);
+const agent = new Agent({
+  id: 'dev-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a helpful development assistant.',
+  workspace,
+});
+
+// The agent now has the execute_command tool available
+const response = await agent.generate('Run `ls -la` in the workspace directory');
 ```
 
-See [LocalSandbox Reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
+See [`LocalSandbox` reference](/reference/workspace/local-sandbox) for configuration options including environment isolation and native OS sandboxing.
 
 ## Agent tools
 
-When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands. See [Workspace Class Reference](/reference/workspace/workspace-class#sandbox-tools) for details.
+When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands. See [workspace class reference](/reference/workspace/workspace-class#sandbox-tools) for details.
 
 ## Related
 
-- [LocalSandbox Reference](/reference/workspace/local-sandbox)
-- [Workspace Overview](/docs/workspace/overview)
+- [`LocalSandbox` reference](/reference/workspace/local-sandbox)
+- [Workspace overview](/docs/workspace/overview)
 - [Filesystem](/docs/workspace/filesystem)
