@@ -2441,21 +2441,10 @@ export class Workflow<
       }
       // Strip __state from steps (internal implementation detail for state propagation)
       const { __state: _removedTopLevelState, ...stepsWithoutTopLevelState } = rawSteps;
-      // Also strip __state and nestedRunId from each individual step result (only for objects, not arrays)
+      // Recursively clean each step result to remove internal properties (__state, nestedRunId)
+      // This handles both object and array step results (e.g., forEach outputs)
       for (const [stepId, stepResult] of Object.entries(stepsWithoutTopLevelState)) {
-        if (stepResult && typeof stepResult === 'object' && !Array.isArray(stepResult)) {
-          const { __state: _stepState, metadata, ...cleanStepResult } = stepResult as any;
-          // Strip nestedRunId from metadata (internal tracking for nested workflow retrieval)
-          if (metadata) {
-            const { nestedRunId: _nestedRunId, ...userMetadata } = metadata;
-            if (Object.keys(userMetadata).length > 0) {
-              (cleanStepResult as any).metadata = userMetadata;
-            }
-          }
-          steps[stepId] = cleanStepResult;
-        } else {
-          steps[stepId] = stepResult;
-        }
+        steps[stepId] = cleanStepResultRecursively(stepResult);
       }
     }
 
@@ -2494,6 +2483,76 @@ export class Workflow<
 
     return result;
   }
+}
+
+/**
+ * Recursively cleans step result data by removing internal properties.
+ *
+ * This function traverses objects and arrays to:
+ * - Remove `__state` properties (internal workflow state, not meant for user output)
+ * - Strip `nestedRunId` from `metadata` objects (internal tracking for nested workflows)
+ *   while preserving other user-defined metadata fields
+ *
+ * This is necessary because forEach and other array-producing steps can have
+ * nested objects that contain these internal properties, and a shallow cleanup
+ * would leak them to the user.
+ *
+ * Note: Error objects and other special objects (Date, RegExp, etc.) are preserved as-is
+ * since they have non-enumerable properties that would be lost if we reconstructed them.
+ */
+function cleanStepResultRecursively(value: unknown): unknown {
+  // Handle null/undefined
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  // Handle arrays - recursively clean each element
+  if (Array.isArray(value)) {
+    return value.map(cleanStepResultRecursively);
+  }
+
+  // Handle objects
+  if (typeof value === 'object') {
+    // Preserve Error objects as-is - they have non-enumerable properties (message, stack)
+    // that would be lost if we iterated over Object.entries()
+    if (value instanceof Error) {
+      return value;
+    }
+
+    // Preserve other special built-in objects that shouldn't be reconstructed
+    if (value instanceof Date || value instanceof RegExp || value instanceof Map || value instanceof Set) {
+      return value;
+    }
+
+    const obj = value as Record<string, unknown>;
+    const cleaned: Record<string, unknown> = {};
+
+    for (const [key, val] of Object.entries(obj)) {
+      // Skip __state property entirely
+      if (key === '__state') {
+        continue;
+      }
+
+      // Special handling for metadata - strip nestedRunId but keep other fields
+      if (key === 'metadata' && val && typeof val === 'object' && !Array.isArray(val)) {
+        const { nestedRunId: _nestedRunId, ...userMetadata } = val as Record<string, unknown>;
+        if (Object.keys(userMetadata).length > 0) {
+          // Recursively clean the remaining metadata in case it has nested structures
+          cleaned.metadata = cleanStepResultRecursively(userMetadata);
+        }
+        // If metadata is now empty, don't include it
+        continue;
+      }
+
+      // Recursively clean nested values
+      cleaned[key] = cleanStepResultRecursively(val);
+    }
+
+    return cleaned;
+  }
+
+  // Primitives (string, number, boolean, etc.) - return as-is
+  return value;
 }
 
 /**
