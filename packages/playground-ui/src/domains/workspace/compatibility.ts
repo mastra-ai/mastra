@@ -16,24 +16,36 @@ export const isWorkspaceV1Supported = (client: MastraClient) => {
 };
 
 /**
- * Checks if an error is a "Not Implemented" (501) error from the server.
- * This indicates the server's @mastra/core version doesn't support workspaces.
+ * Checks if an error has a specific HTTP status code.
+ * Supports MastraClientError, fetch Response, and other HTTP client error formats.
  */
-export const isWorkspaceNotSupportedError = (error: unknown): boolean => {
+const hasStatusCode = (error: unknown, statusCode: number): boolean => {
   if (!error || typeof error !== 'object') return false;
 
-  // Check for status property (from fetch Response or similar)
-  if ('status' in error && (error as { status: number }).status === 501) {
+  // Check for status property (MastraClientError, fetch Response, etc.)
+  if ('status' in error && (error as { status: number }).status === statusCode) {
     return true;
   }
 
   // Check for statusCode property (from some HTTP clients)
-  if ('statusCode' in error && (error as { statusCode: number }).statusCode === 501) {
+  if ('statusCode' in error && (error as { statusCode: number }).statusCode === statusCode) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
+ * Checks if an error is a "Not Implemented" (501) error from the server.
+ * This indicates the server's @mastra/core version doesn't support workspaces.
+ */
+export const isWorkspaceNotSupportedError = (error: unknown): boolean => {
+  if (hasStatusCode(error, 501)) {
     return true;
   }
 
   // Check error message for our specific error
-  if ('message' in error) {
+  if (error && typeof error === 'object' && 'message' in error) {
     const message = (error as { message: string }).message;
     return message.includes('Workspace v1 not supported') || message.includes('501');
   }
@@ -42,10 +54,32 @@ export const isWorkspaceNotSupportedError = (error: unknown): boolean => {
 };
 
 /**
- * React Query retry function that doesn't retry on 501 errors.
- * Use this to prevent infinite retries when workspaces aren't supported.
+ * Checks if an error is a "Not Found" (404) error from the server.
+ * This indicates the requested resource doesn't exist (e.g., file not found).
+ */
+export const isNotFoundError = (error: unknown): boolean => {
+  if (hasStatusCode(error, 404)) {
+    return true;
+  }
+
+  // Check error message for status code (client-js throws Error with message like "HTTP error! status: 404 - ...")
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message: string }).message;
+    return message.includes('status: 404');
+  }
+
+  return false;
+};
+
+/**
+ * React Query retry function that doesn't retry on 404 or 501 errors.
+ * Use this to prevent infinite retries when resources don't exist or workspaces aren't supported.
  */
 export const shouldRetryWorkspaceQuery = (failureCount: number, error: unknown): boolean => {
+  // Don't retry 404 "Not Found" errors - the resource doesn't exist
+  if (isNotFoundError(error)) {
+    return false;
+  }
   // Don't retry 501 "Not Implemented" errors - they won't resolve with retries
   if (isWorkspaceNotSupportedError(error)) {
     return false;

@@ -102,9 +102,6 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
   /** Provider type identifier */
   readonly provider: string;
 
-  /** Current status */
-  readonly status: ProviderStatus;
-
   /**
    * Working directory for command execution (if applicable).
    * Not all sandbox implementations have a fixed working directory.
