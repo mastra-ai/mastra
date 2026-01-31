@@ -5,11 +5,13 @@ This directory contains example agents demonstrating various Mastra features.
 ## Getting Started
 
 1. Install dependencies (from the repository root):
+
    ```bash
    pnpm install
    ```
 
 2. Set up environment variables:
+
    ```bash
    cp .env.example .env
    # Edit .env with your API keys
@@ -149,6 +151,7 @@ You can create custom presets for your own use cases:
 ```
 
 Requirements:
+
 - The file must contain a valid JSON object
 - Each preset must be an object (not a string, number, or array)
 - Preset values can contain any valid JSON structure
