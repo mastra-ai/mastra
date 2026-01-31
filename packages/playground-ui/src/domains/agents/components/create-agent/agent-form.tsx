@@ -66,6 +66,7 @@ export interface AgentFormProps {
   isSubmitting?: boolean;
   isDeleting?: boolean;
   excludeAgentId?: string;
+  container?: React.RefObject<HTMLElement | null>;
 }
 
 export function AgentForm({
@@ -78,7 +79,10 @@ export function AgentForm({
   isSubmitting = false,
   isDeleting = false,
   excludeAgentId,
+  container,
 }: AgentFormProps) {
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const portalContainer = container ?? formRef;
   const [showAdvanced, setShowAdvanced] = React.useState(false);
 
   // Data fetching
@@ -175,7 +179,7 @@ export function AgentForm({
   const isLoading = toolsLoading || workflowsLoading || agentsLoading || memoryConfigsLoading || scorersLoading;
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4 px-6">
+    <form ref={formRef} onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4 px-6">
       {/* Agent ID badge in edit mode */}
       {mode === 'edit' && agentId && (
         <div className="flex items-center gap-2">
@@ -232,6 +236,7 @@ export function AgentForm({
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.model?.provider?.message || errors.model?.name?.message}
+                container={portalContainer}
               />
             )}
           />

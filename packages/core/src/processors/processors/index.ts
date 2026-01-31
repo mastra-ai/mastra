@@ -41,3 +41,5 @@ export {
 } from './system-prompt-scrubber';
 
 export { ToolCallFilter } from './tool-call-filter';
+
+export { SkillsProcessor, type SkillsProcessorOptions } from './skills';

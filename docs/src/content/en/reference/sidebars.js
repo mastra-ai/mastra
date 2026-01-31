@@ -476,6 +476,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'processors/message-history-processor',
+          label: 'MessageHistory',
+        },
+        {
+          type: 'doc',
           id: 'processors/moderation-processor',
           label: 'ModerationProcessor',
         },
@@ -496,6 +501,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'processors/semantic-recall-processor',
+          label: 'SemanticRecall',
+        },
+        {
+          type: 'doc',
           id: 'processors/system-prompt-scrubber',
           label: 'SystemPromptScrubber',
         },
@@ -506,8 +516,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'processors/tool-call-filter',
+          label: 'ToolCallFilter',
+        },
+        {
+          type: 'doc',
           id: 'processors/unicode-normalizer',
           label: 'UnicodeNormalizer',
+        },
+        {
+          type: 'doc',
+          id: 'processors/working-memory-processor',
+          label: 'WorkingMemory',
         },
       ],
     },
@@ -522,7 +542,7 @@ const sidebars = {
         { type: 'doc', id: 'rag/graph-rag', label: 'GraphRAG' },
         { type: 'doc', id: 'rag/document', label: 'MDocument' },
         { type: 'doc', id: 'rag/metadata-filters', label: 'Metadata Filters' },
-        { type: 'doc', id: 'rag/chunk', label: 'Reference: .chunk()' },
+        { type: 'doc', id: 'rag/chunk', label: '.chunk()' },
         { type: 'doc', id: 'rag/rerank', label: 'rerank()' },
         {
           type: 'doc',
@@ -582,6 +602,33 @@ const sidebars = {
         { type: 'doc', id: 'storage/mssql', label: 'MSSQL Storage' },
         { type: 'doc', id: 'storage/postgresql', label: 'PostgreSQL Storage' },
         { type: 'doc', id: 'storage/upstash', label: 'Upstash Storage' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Workspace',
+      collapsed: true,
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'workspace/workspace-class',
+          label: 'Workspace Class',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/local-filesystem',
+          label: 'LocalFilesystem',
+        },
+        { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
+        {
+          type: 'doc',
+          id: 'workspace/filesystem',
+          label: 'WorkspaceFilesystem',
+        },
+        { type: 'doc', id: 'workspace/sandbox', label: 'WorkspaceSandbox' },
       ],
     },
     {

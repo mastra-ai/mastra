@@ -395,6 +395,27 @@ await memory.updateWorkingMemory({
 });
 ```
 
+## Read-Only Working Memory
+
+In some scenarios, you may want an agent to have access to working memory data without the ability to modify it. This is useful for:
+
+- **Routing agents** that need context but shouldn't update user profiles
+- **Sub agents** in a multi-agent system that should reference but not own the memory
+
+To enable read-only mode, set `readOnly: true` in the memory options:
+
+```typescript
+const response = await agent.generate("What do you know about me?", {
+  memory: {
+    thread: "conversation-123",
+    resource: "user-alice-456",
+    options: {
+      readOnly: true, // Working memory is provided but cannot be updated
+    },
+  },
+});
+```
+
 ## Examples
 
 - [Working memory with template](https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-template)
