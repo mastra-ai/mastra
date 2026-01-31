@@ -80,8 +80,7 @@ export function TestInstructionDialog({ open, onOpenChange, instructions, partia
           </div>
 
           {/* Right: Compiled Output */}
-          <div className="flex flex-col gap-2 min-h-0 px-6 pb-6 bg-surface2 border-l border-border1">
-            <span className="text-sm text-icon5">Compiled Output</span>
+          <div className="flex flex-col min-h-0 p-6 bg-surface2 border-l border-border1">
             <CodeEditor value={compiledOutput} language="markdown" showCopyButton={true} className="flex-1 min-h-[300px]" />
           </div>
         </div>

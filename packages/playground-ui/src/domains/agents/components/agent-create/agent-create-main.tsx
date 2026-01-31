@@ -1,6 +1,6 @@
 'use client';
 
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import { type RefObject, useEffect, useState } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
 import { Play } from 'lucide-react';
 
@@ -37,31 +37,29 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
   // State for test dialog
   const [testDialogOpen, setTestDialogOpen] = useState(false);
 
-  // Track previous keys to avoid unnecessary updates
-  const prevKeysRef = useRef<string>('');
-
-  // Auto-sync partials when instructions change
+  // Auto-add new partials when detected in instructions (but never remove existing ones)
   useEffect(() => {
     const detectedNames = extractPartialNames(instructions || '');
     const currentPartials = getValues('partials') || {};
 
-    // Build new partials object
-    const newPartials: Record<string, string> = {};
+    // Add newly detected partials while keeping all existing ones
+    let hasNewPartials = false;
+    const newPartials = { ...currentPartials };
     for (const name of detectedNames) {
-      // Preserve existing content, or empty string for new partials
-      newPartials[name] = currentPartials[name] ?? '';
+      if (!(name in newPartials)) {
+        newPartials[name] = '';
+        hasNewPartials = true;
+      }
     }
 
-    // Only update if keys changed (avoid infinite loops)
-    const newKeys = Object.keys(newPartials).sort().join(',');
-    if (prevKeysRef.current !== newKeys) {
-      prevKeysRef.current = newKeys;
+    // Only update if we found new partials
+    if (hasNewPartials) {
       setValue('partials', newPartials);
     }
   }, [instructions, setValue, getValues]);
 
-  // Get detected partial names for display
-  const detectedPartialNames = extractPartialNames(instructions || '');
+  // Get all partial names (from form state, which persists even when removed from instructions)
+  const partialNames = Object.keys(partials);
 
   return (
     <div className="flex flex-col gap-4 h-full px-4">
@@ -146,7 +144,7 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
       </div>
 
       {/* Partials - only show if there are detected partials */}
-      {detectedPartialNames.length > 0 && (
+      {partialNames.length > 0 && (
         <Controller
           name="partials"
           control={control}
@@ -154,7 +152,7 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
             <PartialsEditor
               value={field.value || {}}
               onChange={field.onChange}
-              detectedNames={detectedPartialNames}
+              partialNames={partialNames}
             />
           )}
         />
