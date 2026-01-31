@@ -72,7 +72,8 @@ function collectPartialNames(nodes: HbsNode[], result: Set<string>): void {
   }
 }
 
-export function extractPartialNames(instructions: string): string[] {
+// Returns null if parsing fails (e.g., incomplete template while typing)
+export function extractPartialNames(instructions: string): string[] | null {
   if (!instructions) return [];
 
   try {
@@ -81,7 +82,7 @@ export function extractPartialNames(instructions: string): string[] {
     collectPartialNames(ast.body as HbsNode[], partialNames);
     return [...partialNames];
   } catch {
-    // If parsing fails, return empty array
-    return [];
+    // If parsing fails, return null to indicate we should preserve existing state
+    return null;
   }
 }

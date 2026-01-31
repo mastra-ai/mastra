@@ -43,6 +43,10 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
   // Auto-sync partials when instructions change
   useEffect(() => {
     const detectedNames = extractPartialNames(instructions || '');
+
+    // If parsing failed (null), preserve existing partials
+    if (detectedNames === null) return;
+
     const currentPartials = getValues('partials') || {};
 
     // Build new partials object
@@ -60,8 +64,8 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
     }
   }, [instructions, setValue, getValues]);
 
-  // Get detected partial names for display
-  const detectedPartialNames = extractPartialNames(instructions || '');
+  // Get detected partial names for display (use current partials keys if parsing fails)
+  const detectedPartialNames = extractPartialNames(instructions || '') ?? Object.keys(partials);
 
   return (
     <div className="flex flex-col gap-4 h-full px-4">
@@ -112,8 +116,8 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
         />
       </div>
 
-      {/* Instructions - CodeEditor taking remaining height */}
-      <div className="flex flex-col gap-1.5 flex-1 min-h-0">
+      {/* Instructions - CodeEditor taking remaining height only when no partials */}
+      <div className={cn('flex flex-col gap-1.5', detectedPartialNames.length === 0 && 'flex-1 min-h-0')}>
         <div className="flex items-center justify-between">
           <Label htmlFor="instructions" className="text-xs text-icon5">
             Instructions <span className="text-accent2">*</span>
