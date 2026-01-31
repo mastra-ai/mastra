@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Panel, useDefaultLayout, Group, usePanelRef } from 'react-resizable-panels';
 import { getMainContentContentClassName } from '@/ds/components/MainContent';
 import { PanelSeparator } from '@/lib/resize/separator';
@@ -27,10 +27,18 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserSlo
     sessionPanelRef.current = browserPanelRef.current;
   });
 
-  // Auto-expand/collapse browser panel based on session activity
+  // Auto-expand/collapse browser panel based on isActive changes.
+  // Skip when value hasn't changed (including initial mount where panel
+  // starts collapsed via defaultSize={0} and isActive starts false).
+  const prevIsActiveRef = useRef(isActive);
   useEffect(() => {
     if (!browserSlot) return;
     if (!browserPanelRef.current) return;
+
+    const prev = prevIsActiveRef.current;
+    prevIsActiveRef.current = isActive;
+
+    if (prev === isActive) return;
 
     if (isActive) {
       browserPanelRef.current.expand();
