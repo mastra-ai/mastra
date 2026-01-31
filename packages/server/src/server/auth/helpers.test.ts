@@ -5,6 +5,8 @@ import {
   canAccessPublicly,
   checkRules,
   isCustomRoutePublic,
+  isDevPlaygroundRequest,
+  isProtectedCustomRoute,
   matchesOrIncludes,
   pathMatchesPattern,
   pathMatchesRule,
@@ -249,6 +251,152 @@ describe('auth helpers', () => {
         expect(isCustomRoutePublic('/webhooks/github', 'GET', config)).toBe(true);
         expect(isCustomRoutePublic('/webhooks/stripe', 'POST', config)).toBe(true);
       });
+    });
+  });
+
+  describe('isProtectedCustomRoute', () => {
+    it('should return false when customRouteAuthConfig is undefined', () => {
+      expect(isProtectedCustomRoute('/api/test', 'GET', undefined)).toBe(false);
+    });
+
+    it('should return false when customRouteAuthConfig is empty', () => {
+      const config = new Map<string, boolean>();
+      expect(isProtectedCustomRoute('/api/test', 'GET', config)).toBe(false);
+    });
+
+    it('should return true for routes with requiresAuth set to true', () => {
+      const config = new Map<string, boolean>();
+      config.set('GET:/custom/protected', true);
+      expect(isProtectedCustomRoute('/custom/protected', 'GET', config)).toBe(true);
+    });
+
+    it('should return false for routes with requiresAuth set to false', () => {
+      const config = new Map<string, boolean>();
+      config.set('GET:/custom/public', false);
+      expect(isProtectedCustomRoute('/custom/public', 'GET', config)).toBe(false);
+    });
+
+    it('should return false for routes not in the config', () => {
+      const config = new Map<string, boolean>();
+      config.set('GET:/custom/protected', true);
+      expect(isProtectedCustomRoute('/unknown/route', 'GET', config)).toBe(false);
+    });
+
+    it('should handle path parameters correctly', () => {
+      const config = new Map<string, boolean>();
+      config.set('GET:/custom/:id/details', true);
+
+      expect(isProtectedCustomRoute('/custom/123/details', 'GET', config)).toBe(true);
+      expect(isProtectedCustomRoute('/custom/abc/details', 'GET', config)).toBe(true);
+    });
+
+    it('should respect method matching', () => {
+      const config = new Map<string, boolean>();
+      config.set('GET:/custom/endpoint', true);
+      config.set('POST:/custom/endpoint', false);
+
+      expect(isProtectedCustomRoute('/custom/endpoint', 'GET', config)).toBe(true);
+      expect(isProtectedCustomRoute('/custom/endpoint', 'POST', config)).toBe(false);
+    });
+
+    it('should handle ALL method', () => {
+      const config = new Map<string, boolean>();
+      config.set('ALL:/custom/all', true);
+
+      expect(isProtectedCustomRoute('/custom/all', 'GET', config)).toBe(true);
+      expect(isProtectedCustomRoute('/custom/all', 'POST', config)).toBe(true);
+    });
+  });
+
+  describe('isDevPlaygroundRequest', () => {
+    const authConfig: MastraAuthConfig = {
+      protected: ['/api/*'],
+    };
+
+    it('should return false when MASTRA_DEV is not true', () => {
+      const originalEnv = process.env.MASTRA_DEV;
+      delete process.env.MASTRA_DEV;
+
+      try {
+        expect(isDevPlaygroundRequest('/custom/test', 'GET', () => undefined, authConfig)).toBe(false);
+      } finally {
+        process.env.MASTRA_DEV = originalEnv;
+      }
+    });
+
+    it('should bypass auth for non-protected paths in dev mode', () => {
+      const originalEnv = process.env.MASTRA_DEV;
+      process.env.MASTRA_DEV = 'true';
+
+      try {
+        // Path that doesn't match /api/* and is not a protected custom route
+        expect(isDevPlaygroundRequest('/custom/test', 'GET', () => undefined, authConfig)).toBe(true);
+      } finally {
+        process.env.MASTRA_DEV = originalEnv;
+      }
+    });
+
+    it('should NOT bypass auth for protected custom routes in dev mode (GitHub issue #12286)', () => {
+      const originalEnv = process.env.MASTRA_DEV;
+      process.env.MASTRA_DEV = 'true';
+
+      const customRouteAuthConfig = new Map<string, boolean>();
+      customRouteAuthConfig.set('GET:/custom/test', true); // requiresAuth = true
+
+      try {
+        // Even in dev mode, this route should NOT bypass auth because it's a protected custom route
+        expect(isDevPlaygroundRequest('/custom/test', 'GET', () => undefined, authConfig, customRouteAuthConfig)).toBe(
+          false,
+        );
+      } finally {
+        process.env.MASTRA_DEV = originalEnv;
+      }
+    });
+
+    it('should bypass auth for public custom routes in dev mode', () => {
+      const originalEnv = process.env.MASTRA_DEV;
+      process.env.MASTRA_DEV = 'true';
+
+      const customRouteAuthConfig = new Map<string, boolean>();
+      customRouteAuthConfig.set('GET:/custom/public', false); // requiresAuth = false (public)
+
+      try {
+        // Public custom route should bypass auth in dev mode
+        expect(
+          isDevPlaygroundRequest('/custom/public', 'GET', () => undefined, authConfig, customRouteAuthConfig),
+        ).toBe(true);
+      } finally {
+        process.env.MASTRA_DEV = originalEnv;
+      }
+    });
+
+    it('should bypass auth with playground header even for protected routes', () => {
+      const originalEnv = process.env.MASTRA_DEV;
+      process.env.MASTRA_DEV = 'true';
+
+      const customRouteAuthConfig = new Map<string, boolean>();
+      customRouteAuthConfig.set('GET:/custom/test', true); // requiresAuth = true
+
+      const getHeader = (name: string) => (name === 'x-mastra-dev-playground' ? 'true' : undefined);
+
+      try {
+        // With playground header, should bypass auth even for protected custom routes
+        expect(isDevPlaygroundRequest('/custom/test', 'GET', getHeader, authConfig, customRouteAuthConfig)).toBe(true);
+      } finally {
+        process.env.MASTRA_DEV = originalEnv;
+      }
+    });
+
+    it('should require auth for /api/* routes in dev mode without playground header', () => {
+      const originalEnv = process.env.MASTRA_DEV;
+      process.env.MASTRA_DEV = 'true';
+
+      try {
+        // /api/* routes should require auth even in dev mode
+        expect(isDevPlaygroundRequest('/api/agents', 'GET', () => undefined, authConfig)).toBe(false);
+      } finally {
+        process.env.MASTRA_DEV = originalEnv;
+      }
     });
   });
 });

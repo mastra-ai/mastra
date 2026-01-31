@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto';
  */
 export const createSampleAgent = ({
   id = `agent-${randomUUID()}`,
+  authorId,
+  metadata,
   name = 'Test Agent',
   description,
   instructions = 'You are a helpful assistant',
@@ -19,13 +21,14 @@ export const createSampleAgent = ({
   outputProcessors,
   memory,
   scorers,
-  metadata,
 }: Partial<StorageCreateAgentInput> = {}): StorageCreateAgentInput => ({
   id,
   name,
-  ...(description && { description }),
   instructions,
   model,
+  ...(authorId && { authorId }),
+  ...(metadata && { metadata }),
+  ...(description && { description }),
   ...(tools && { tools }),
   ...(defaultOptions && { defaultOptions }),
   ...(workflows && { workflows }),
@@ -34,7 +37,6 @@ export const createSampleAgent = ({
   ...(outputProcessors && { outputProcessors }),
   ...(memory && { memory }),
   ...(scorers && { scorers }),
-  ...(metadata && { metadata }),
 });
 
 /**
@@ -64,7 +66,7 @@ export const createFullSampleAgent = ({
   agents: ['helper-agent'],
   inputProcessors: [{ type: 'sanitize', config: { stripHtml: true } }],
   outputProcessors: [{ type: 'format', config: { style: 'markdown' } }],
-  memory: 'thread-memory',
+  memory: { key: 'thread-memory' },
   scorers: {
     relevance: { sampling: { type: 'ratio', rate: 0.8 } },
   },

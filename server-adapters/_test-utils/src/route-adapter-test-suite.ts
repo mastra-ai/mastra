@@ -73,6 +73,16 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       'POST /api/integrations',
       'POST /api/integrations/:integrationId/refresh',
     ];
+    // Skip routes that require external dependencies (APIs)
+    const routesRequiringExternalDeps = [
+      // skills-sh routes that require external API calls (GitHub, skills.sh)
+      '/workspaces/:workspaceId/skills-sh/search',
+      '/workspaces/:workspaceId/skills-sh/popular',
+      '/workspaces/:workspaceId/skills-sh/preview',
+      '/workspaces/:workspaceId/skills-sh/install',
+      '/workspaces/:workspaceId/skills-sh/remove',
+      '/workspaces/:workspaceId/skills-sh/update',
+    ];
     const activeRoutes = SERVER_ROUTES.filter(
       r =>
         !r.deprecated &&
@@ -82,7 +92,8 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         !r.path.includes('/composio/') &&
         !r.path.includes('/smithery/') &&
         !r.path.includes(':provider') &&
-        !routesRequiringProviderConnection.includes(`${r.method} ${r.path}`),
+        !routesRequiringProviderConnection.includes(`${r.method} ${r.path}`) &&
+        !routesRequiringExternalDeps.includes(r.path),
     );
     activeRoutes.forEach(route => {
       const testName = `${route.method} ${route.path}`;
@@ -510,6 +521,51 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         });
 
         // Should return 404 - this path should not exist
+        expect(response.status).toBe(404);
+      });
+
+      it('should normalize prefix with trailing slash', async () => {
+        // Create adapter with trailing slash in prefix
+        const prefixedSetup = await setupAdapter(context, { prefix: '/mastra/' });
+        const prefixedApp = prefixedSetup.app;
+
+        // Request should work at normalized path /mastra/agents (not /mastra//agents)
+        const response = await executeHttpRequest(prefixedApp, {
+          method: 'GET',
+          path: '/mastra/agents',
+        });
+
+        // Should succeed - trailing slash should be normalized
+        expect(response.status).toBeLessThan(400);
+      });
+
+      it('should normalize prefix without leading slash', async () => {
+        // Create adapter without leading slash in prefix
+        const prefixedSetup = await setupAdapter(context, { prefix: 'mastra' });
+        const prefixedApp = prefixedSetup.app;
+
+        // Request should work at normalized path /mastra/agents
+        const response = await executeHttpRequest(prefixedApp, {
+          method: 'GET',
+          path: '/mastra/agents',
+        });
+
+        // Should succeed - leading slash should be added
+        expect(response.status).toBeLessThan(400);
+      });
+
+      it('should not have routes at double-slash path when prefix has trailing slash', async () => {
+        // Create adapter with trailing slash in prefix
+        const prefixedSetup = await setupAdapter(context, { prefix: '/mastra/' });
+        const prefixedApp = prefixedSetup.app;
+
+        // The double-slash path /mastra//agents should NOT work
+        const response = await executeHttpRequest(prefixedApp, {
+          method: 'GET',
+          path: '/mastra//agents',
+        });
+
+        // Should return 404 - double-slash path should not exist
         expect(response.status).toBe(404);
       });
     });
