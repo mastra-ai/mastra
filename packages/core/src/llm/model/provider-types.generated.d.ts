@@ -47,6 +47,7 @@ export type ProviderModelsMap = {
     'kimi-k2.5',
     'zai-glm-4.7',
   ];
+  readonly nova: readonly ['nova-2-lite-v1', 'nova-2-pro-v1'];
   readonly lucidquery: readonly ['lucidnova-rf1-100b', 'lucidquery-nexus-coder'];
   readonly moonshotai: readonly [
     'kimi-k2-0711-preview',
@@ -1547,6 +1548,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.6',
     'z-ai/glm-4.6:exacto',
     'z-ai/glm-4.7',
+    'z-ai/glm-4.7-flash',
   ];
   readonly zenmux: readonly [
     'anthropic/claude-haiku-4.5',
