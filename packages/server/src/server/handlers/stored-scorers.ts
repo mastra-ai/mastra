@@ -53,7 +53,7 @@ export const LIST_STORED_SCORERS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Stored scorers storage domain is not available' });
       }
 
-      const result = await scorersStore.listScorers({
+      const result = await scorersStore.listScorersResolved({
         page,
         perPage,
         orderBy,

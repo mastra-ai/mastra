@@ -172,6 +172,13 @@ export class InMemoryStoredScorersStorage extends StoredScorersStorage {
       throw new Error(`Version with id ${input.id} already exists`);
     }
 
+    // Enforce unique (scorerId, versionNumber) constraint
+    for (const version of this.db.scorerVersions.values()) {
+      if (version.scorerId === input.scorerId && version.versionNumber === input.versionNumber) {
+        throw new Error(`Version ${input.versionNumber} already exists for scorer ${input.scorerId}`);
+      }
+    }
+
     const version: StoredScorerVersionType = {
       ...input,
       createdAt: new Date(),

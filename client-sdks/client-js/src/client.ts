@@ -859,10 +859,10 @@ export class MastraClient extends BaseResource {
       searchParams.set('metadata', JSON.stringify(params.metadata));
     }
 
-    const rcQueryString = requestContextQueryString(requestContext);
     const queryString = searchParams.toString();
-    const separator = rcQueryString && queryString ? '&' : '';
-    return this.request(`/api/stored/scorers${rcQueryString}${separator}${queryString ? `${queryString}` : ''}`);
+    return this.request(
+      `/stored/scorers${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`,
+    );
   }
 
   /**
@@ -876,7 +876,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<StoredScorerResponse> {
     return this.request(
-      `/api/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
+      `/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
     );
   }
 
@@ -890,7 +890,7 @@ export class MastraClient extends BaseResource {
     params: CreateStoredScorerParams,
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<StoredScorerResponse> {
-    return this.request(`/api/stored/scorers${requestContextQueryString(requestContext)}`, {
+    return this.request(`/stored/scorers${requestContextQueryString(requestContext)}`, {
       method: 'POST',
       body: params,
     });
@@ -909,7 +909,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<StoredScorerResponse> {
     return this.request(
-      `/api/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
+      `/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
       {
         method: 'PATCH',
         body: params,
@@ -928,7 +928,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<DeleteStoredScorerResponse> {
     return this.request(
-      `/api/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
+      `/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },
@@ -968,11 +968,9 @@ export class MastraClient extends BaseResource {
       }
     }
 
-    const rcQueryString = requestContextQueryString(requestContext);
     const queryString = searchParams.toString();
-    const separator = rcQueryString && queryString ? '&' : '';
     return this.request(
-      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions${rcQueryString}${separator}${queryString ? `${queryString}` : ''}`,
+      `/stored/scorers/${encodeURIComponent(scorerId)}/versions${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`,
     );
   }
 
@@ -989,7 +987,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<ScorerVersionResponse> {
     return this.request(
-      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
+      `/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
     );
   }
 
@@ -1006,7 +1004,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<ScorerVersionResponse> {
     return this.request(
-      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions${requestContextQueryString(requestContext)}`,
+      `/stored/scorers/${encodeURIComponent(scorerId)}/versions${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
         body: params || {},
@@ -1027,7 +1025,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<ActivateScorerVersionResponse> {
     return this.request(
-      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
+      `/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
       },
@@ -1047,7 +1045,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<RestoreScorerVersionResponse> {
     return this.request(
-      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}/restore${requestContextQueryString(requestContext)}`,
+      `/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}/restore${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
       },
@@ -1067,7 +1065,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<DeleteScorerVersionResponse> {
     return this.request(
-      `/api/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
+      `/stored/scorers/${encodeURIComponent(scorerId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },

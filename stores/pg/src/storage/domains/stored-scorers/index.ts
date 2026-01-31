@@ -380,7 +380,11 @@ export class StoredScorersPG extends StoredScorersStorage {
       }
 
       if (metadata) {
+        const SAFE_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
         Object.entries(metadata).forEach(([key, value]) => {
+          if (!SAFE_KEY_PATTERN.test(key)) {
+            throw new Error(`Invalid metadata key: "${key}". Keys must be alphanumeric with underscores.`);
+          }
           whereClauses.push(`metadata->>'${key}' = $${paramIndex++}`);
           whereValues.push(value);
         });
