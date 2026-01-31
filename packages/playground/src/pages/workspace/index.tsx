@@ -169,18 +169,23 @@ export default function Workspace() {
             if (result.success) {
               setShowAddSkillDialog(false);
 
-              // Refetch skills and check if the installed skill appears in the list
-              const { data: refreshedData } = await refetchSkills();
-              const installedSkillFound = refreshedData?.skills.some(s => s.name === result.skillName);
+              try {
+                // Refetch skills and check if the installed skill appears in the list
+                const { data: refreshedData } = await refetchSkills();
+                const installedSkillFound = refreshedData?.skills.some(s => s.name === result.skillName);
 
-              if (installedSkillFound) {
+                if (installedSkillFound) {
+                  toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
+                } else {
+                  // Skill was installed but not discovered - likely missing path config
+                  setHasUndiscoveredInstall(true);
+                  toast.warning(
+                    `Skill "${result.skillName}" installed to .agents/skills but not discovered. Add .agents/skills to your workspace skills paths.`,
+                  );
+                }
+              } catch {
+                // Refetch failed - show success but can't verify discovery
                 toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
-              } else {
-                // Skill was installed but not discovered - likely missing path config
-                setHasUndiscoveredInstall(true);
-                toast.warning(
-                  `Skill "${result.skillName}" installed to .agents/skills but not discovered. Add .agents/skills to your workspace skills paths.`,
-                );
               }
             } else {
               toast.error('Failed to install skill');
