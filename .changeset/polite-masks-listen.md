@@ -20,7 +20,7 @@ const toolSearch = new ToolSearchProcessor({
     // ... hundreds of tools
   },
   search: {
-    topK: 5,        // Return top 5 results (default: 10)
+    topK: 5,        // Return top 5 results (default: 5)
     minScore: 0.1,  // Filter results below this score (default: 0)
   },
 });
@@ -36,7 +36,7 @@ const agent = new Agent({
 **How it works:**
 
 The processor automatically provides two meta-tools to the agent:
-- `search_tools` - Search for available tools using BM25 ranking
+- `search_tools` - Search for available tools by keyword relevance
 - `load_tool` - Load a specific tool into the conversation
 
 The agent discovers what it needs via search and loads tools on demand. Loaded tools are available immediately and persist within the conversation thread.
