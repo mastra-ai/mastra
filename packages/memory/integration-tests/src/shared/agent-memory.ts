@@ -8,11 +8,19 @@ import { Mastra } from '@mastra/core/mastra';
 import { ToolCallFilter } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
+import {
+  useLLMRecording,
+  getLLMTestMode,
+  getModelRecordingName,
+  setupDummyApiKeys,
+} from '@internal/test-utils';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 export function getAgentMemoryTests({
   model,
@@ -24,7 +32,11 @@ export function getAgentMemoryTests({
   reasoningModel?: MastraModelConfig;
 }) {
   const dbFile = 'file:mastra-agent.db';
+  const recordingName = `agent-memory-${getModelRecordingName(model)}`;
+
   describe('Agent Memory Tests', () => {
+    // Set up LLM recording/replay for fast, deterministic CI tests
+    useLLMRecording(recordingName);
     it(`inherits storage from Mastra instance`, async () => {
       const agent = new Agent({
         id: 'test-agent',

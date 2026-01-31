@@ -7,12 +7,34 @@ import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { MastraDBMessage } from '@mastra/core/memory';
 import { createTool } from '@mastra/core/tools';
+import {
+  useLLMRecording,
+  getLLMTestMode,
+  getModelRecordingName,
+  isV5PlusModel,
+  agentGenerate as baseAgentGenerate,
+  setupDummyApiKeys,
+  type MastraModelConfig as TestUtilsModelConfig,
+} from '@internal/test-utils';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
+
+// Local wrapper to handle Agent type compatibility
+// (Agent has complex generic types that don't play well with the shared helper)
+async function agentGenerate(
+  agent: Agent,
+  message: string | unknown[],
+  options: { threadId?: string; resourceId?: string; [key: string]: unknown },
+  model: MastraModelConfig,
+): Promise<any> {
+  return baseAgentGenerate(agent as any, message, options, model as TestUtilsModelConfig);
+}
 
 const resourceId = 'test-resource';
 let messageCounter = 0;
@@ -85,31 +107,14 @@ function getErrorDetails(error: any): string | undefined {
   return JSON.stringify(error);
 }
 
-// Helper to check if model is v5+ (string or specificationVersion v2/v3)
-function isV5PlusModel(model: MastraModelConfig): boolean {
-  return (
-    typeof model === 'string' || ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
-  );
-}
-
-// Helper to generate with the appropriate API
-async function agentGenerate(agent: Agent, message: string | any[], options: any, model: MastraModelConfig) {
-  if (isV5PlusModel(model)) {
-    // Transform deprecated threadId/resourceId to memory format for v5+
-    const { threadId, resourceId, ...rest } = options;
-    const transformedOptions = {
-      ...rest,
-      ...(threadId || resourceId ? { memory: { thread: threadId, resource: resourceId } } : {}),
-    };
-    return agent.generate(message, transformedOptions);
-  } else {
-    return agent.generateLegacy(message, options);
-  }
-}
 
 export function getWorkingMemoryTests(model: MastraModelConfig) {
   const modelName = typeof model === 'string' ? model : (model as any).modelId || (model as any).id || 'sdk-model';
+  const recordingName = `working-memory-${getModelRecordingName(model)}`;
+
   describe(`Working Memory Tests (${modelName})`, () => {
+    // Set up LLM recording/replay for fast, deterministic CI tests
+    useLLMRecording(recordingName);
     let memory: Memory;
     let thread: any;
     let storage: LibSQLStore;

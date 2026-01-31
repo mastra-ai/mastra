@@ -22,7 +22,8 @@ getAgentMemoryTests({
     get_weather: weatherToolV5,
     get_weather_city: weatherToolCityV5,
   },
-  reasoningModel: 'openrouter/openai/gpt-oss-20b',
+  // Only include reasoningModel if OPENROUTER_API_KEY is available
+  ...(process.env.OPENROUTER_API_KEY ? { reasoningModel: 'openrouter/openai/gpt-oss-20b' } : {}),
 });
 // v6
 getAgentMemoryTests({

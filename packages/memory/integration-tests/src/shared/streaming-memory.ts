@@ -6,15 +6,16 @@ import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
+import {
+  useLLMRecording,
+  getLLMTestMode,
+  getModelRecordingName,
+  isV5PlusModel,
+  setupDummyApiKeys,
+} from '@internal/test-utils';
 import { describe, expect, it } from 'vitest';
 
-function isV5PlusModel(model: MastraModelConfig): boolean {
-  if (typeof model === 'string') return true;
-  if (typeof model === 'object' && 'specificationVersion' in model) {
-    return model.specificationVersion === 'v2' || model.specificationVersion === 'v3';
-  }
-  return false;
-}
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 export async function setupStreamingMemoryTest({
   model,
@@ -25,7 +26,11 @@ export async function setupStreamingMemoryTest({
   model: MastraModelConfig;
   tools: any;
 }) {
+  const recordingName = `streaming-memory-${getModelRecordingName(model)}`;
+
   describe('Memory Streaming Tests', () => {
+    // Set up LLM recording/replay for fast, deterministic CI tests
+    useLLMRecording(recordingName);
     it('should handle multiple tool calls in memory thread history', async () => {
       // Create agent with memory and tools
       const agent = new Agent({
