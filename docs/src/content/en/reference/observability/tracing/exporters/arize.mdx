@@ -218,6 +218,7 @@ The `createArizeConfig` function returns a configuration object with default `se
 The `exporters` field accepts an array of exporter instances. Each `ArizeExporter` in the `exporters` array can be configured with either an `endpoint` (for Phoenix/collectors) or `spaceId` (for Arize AX):
 
 ```typescript
+import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 import { createArizeConfig, ArizeExporter } from "@mastra/arize";
 
@@ -237,9 +238,15 @@ const mastra = new Mastra({
     },
   }),
 });
+```
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { createArizeConfig, ArizeExporter } from "@mastra/arize";
 
 // For Arize AX: use spaceId in the exporters array
-const mastra = new Mastra({
+const mastraArize = new Mastra({
   observability: new Observability({
     configs: {
       arize: createArizeConfig({
@@ -261,6 +268,7 @@ const mastra = new Mastra({
 The `exporters` field accepts multiple exporter instances in an array:
 
 ```typescript
+import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 import { createArizeConfig, ArizeExporter } from "@mastra/arize";
 import { DefaultExporter } from "@mastra/observability";
@@ -286,6 +294,7 @@ const mastra = new Mastra({
 The `serializationOptions` field defaults to `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS`. To override specific limits, pass a `serializationOptions` object that will be merged with the defaults:
 
 ```typescript
+import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 import { createArizeConfig, ArizeExporter, ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS } from "@mastra/arize";
 

@@ -56,7 +56,7 @@ export function createArizeConfig(
     serviceName,
     serializationOptions: serializationOptions
       ? { ...ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS, ...serializationOptions }
-      : ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS,
+      : { ...ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS },
   };
 }
 

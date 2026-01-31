@@ -234,6 +234,7 @@ The `createArizeConfig` function returns a configuration object with default `se
 Pass an array of exporters to send traces to different destinations:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 import { createArizeConfig, ArizeExporter } from "@mastra/arize";
 import { DefaultExporter } from "@mastra/observability";
@@ -260,6 +261,7 @@ export const mastra = new Mastra({
 By default, `createArizeConfig` sets `serializationOptions` to `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS`, which defines the following limits: `maxStringLength: 9999999`, `maxDepth: 9999999`, `maxArrayLength: 9999999`, `maxObjectKeys: 9999999`. These limits prevent truncation of span data (input, output, and attributes). You can override specific values by passing a `serializationOptions` object that will be merged with these defaults:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 import { createArizeConfig, ArizeExporter, ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS } from "@mastra/arize";
 
@@ -297,6 +299,7 @@ The `ARIZE_RECOMMENDED_SERIALIZATION_OPTIONS` constant provides these defaults:
 You can add custom span output processors via the `spanOutputProcessors` field. All properties from `ObservabilityInstanceConfig` (except `name`) can be passed through `createArizeConfig`, including `spanOutputProcessors`, `sampling`, `bridge`, `includeInternalSpans`, and `requestContextKeys`. The `spanOutputProcessors` field accepts an array of span output processors that are used as-is without any default processors added.
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 import { createArizeConfig, ArizeExporter } from "@mastra/arize";
 
