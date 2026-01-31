@@ -2,6 +2,12 @@
 
 Mastra's unified observability system for AI applications.
 
+## Overview
+
+Mastra Observability provides three complementary signals for understanding AI application behavior (Tracing, Metrics, Logging), plus quality evaluation through Datasets and Experiments.
+
+---
+
 ## Contents
 
 ### Core Documentation
@@ -19,11 +25,10 @@ Mastra's unified observability system for AI applications.
 - [Plan / Analysis](./plan-analysis.md) - Langfuse comparison and feature gap analysis
 - [User Anecdotes](./user-anecdotes.md) - User feedback on observability needs
 
----
+*These documents inform design decisions but are not implementation specs.*
 
-## Overview
-
-Mastra Observability provides three complementary signals for understanding AI application behavior, plus quality evaluation through datasets and experiments.
+### Future Vision
+- [Mastra Pulse](./mastra-pulse.md) - Unified causal observability (experimental research)
 
 ---
 
@@ -47,33 +52,39 @@ Logs capture specific events and context from user code. Each log auto-correlate
 
 → See [Logging](./logging.md) for log levels, auto-correlation, and the Logger API
 
-### HTTP Server Instrumentation
-
-All HTTP requests to the Mastra server are automatically instrumented with traces, metrics, and logs (Sentry-style). User-added endpoints get observability for free.
-
-→ See [Observability Architecture & Configuration](./architecture-configuration.md) for auto-instrumentation details
-
----
-
-## Design Principles
-
-- **Automatic when enabled** — Enable observability → automatically get traces + metrics + logs
-- **Zero-config instrumentation** — Built-in metrics emitted without additional configuration
-- **Correlation by design** — All signals share common dimensions for cross-signal navigation
-- **Pluggable storage** — Same storage domain pattern as other Mastra components
-- **Export flexibility** — Support for Mastra Cloud, Grafana, OTLP, and custom exporters
-
 ---
 
 ## Datasets & Experiments
+
+While the three signals answer *"what happened"*, datasets and experiments answer *"is it working correctly?"*
 
 **Datasets** are collections of test cases for systematically evaluating AI agents and workflows. They enable teams to catch quality issues before production and compare different approaches objectively.
 
 **Experiments** run datasets against agents or workflows, scoring each result and persisting outcomes for analysis. Experiments can be compared across versions to track quality trajectory over time.
 
-Together, datasets and experiments provide the "quality" dimension—while traces, metrics, and logs answer "what happened", experiments answer "is it working correctly?"
-
 → See [Datasets](./datasets/README.md) and [Experiments](./experiments.md) for details
+
+---
+
+## Design Principles
+
+- **Single configuration** — All observability (traces, metrics, logs) in one place
+- **Automatic when enabled** — Enable observability → automatically get traces + metrics + logs
+- **Zero-config instrumentation** — Built-in metrics emitted without additional configuration
+- **Exporters declare capabilities** — Each exporter specifies which signals it supports
+- **Correlation by design** — All signals share common dimensions for cross-signal navigation
+- **Pluggable storage** — Same storage domain pattern as other Mastra components
+- **Export flexibility** — Support for Mastra Cloud, Grafana, OTLP, and custom exporters
+
+→ See [Architecture & Configuration](./architecture-configuration.md) for configuration API, storage backends, and technical details
+
+---
+
+## Future: Mastra Pulse
+
+Experimental exploration of unified causal observability — replacing separate T/M/L with a single "Moment" model and first-class causality links.
+
+→ See [Mastra Pulse](./mastra-pulse.md) for the vision and internal experimentation plan
 
 ---
 

@@ -10,6 +10,85 @@ Metrics provide aggregate health and trend data. Counters track totals (requests
 
 ---
 
+## Metrics Architecture
+
+Mastra uses a **hybrid approach** for metrics:
+
+1. **Auto-extracted from traces** - Built-in metrics are automatically extracted from span lifecycle events
+2. **Direct API** - Custom metrics can be emitted via context-aware or direct APIs
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        METRIC SOURCES                               │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────────────┐         ┌──────────────────────────────┐  │
+│  │   Span Lifecycle     │         │   Context-Aware Metrics API  │  │
+│  │   Events             │         │   context.metrics.counter()  │  │
+│  │   (start, end)       │         │   mastra.metrics.counter()   │  │
+│  └──────────┬───────────┘         └──────────────┬───────────────┘  │
+│             │                                    │                  │
+│             │ extract built-in                   │ emit custom      │
+│             │ metrics + auto-labels              │ + auto-labels    │
+│             ▼                                    ▼                  │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │              Metric Events (unified format)                  │   │
+│  │         { name, type, value, labels, timestamp }             │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+                    Exporters (that support metrics)
+```
+
+### Why Hybrid?
+
+- **Metrics outlive traces** - Traces have short retention (10 days), metrics can be kept longer (90 days aggregated)
+- **Built-in metrics are free** - No instrumentation needed for standard metrics
+- **Custom metrics for business logic** - Direct API for metrics that don't map to traces
+
+---
+
+## Metrics API
+
+### ObservabilityContext API (Inside Tools/Workflows)
+
+Metrics methods are flattened directly on the observability context. Auto-captures labels from trace context (tool, agent, workflow, env):
+
+```typescript
+execute: async (input, { observability }) => {
+  // Auto-labels: { tool: 'search', agent: 'support', env: 'prod' }
+  observability.counter('my_custom_counter').add(1, {
+    custom_label: 'foo'  // User adds only custom labels
+  });
+
+  observability.histogram('my_latency_ms').record(elapsed, {
+    operation: 'fetch'
+  });
+}
+```
+
+**With destructuring:**
+
+```typescript
+execute: async (input, { observability: obs }) => {
+  obs.counter('items_processed').add(1);
+  obs.histogram('processing_time_ms').record(elapsed);
+}
+```
+
+### Direct API (Outside Trace Context)
+
+For background jobs, startup metrics, or other non-trace scenarios:
+
+```typescript
+mastra.metrics.counter('background_jobs_total').add(1, { job_type: 'cleanup' });
+mastra.metrics.gauge('queue_depth').set(42, { queue: 'high_priority' });
+```
+
+---
+
 ## Metric Types
 
 Mastra supports the modern standard metric types used across OpenTelemetry and Prometheus ecosystems:
@@ -19,9 +98,8 @@ Mastra supports the modern standard metric types used across OpenTelemetry and P
 Monotonic "only goes up" metric for totals and rates.
 
 **Examples:**
-- `mastra.workflow.runs_total{workflow="support_agent", env="prod"}`
-- `mastra_tool_calls_total`
-- `mastra_llm_requests_total`
+- `mastra_workflow_runs_started{workflow="support_agent", env="prod"}`
+- `mastra_workflow_runs_ended{workflow="support_agent", status="ok", env="prod"}`
 - `mastra_errors_total`
 
 ### Gauge
@@ -45,33 +123,80 @@ Distribution metric for latency, sizes, and token distributions.
 
 ---
 
-## UpDownCounter
+## Built-in Metrics Catalog
 
-An UpDownCounter is like a counter that can go up **and down** via positive/negative deltas.
+These metrics are automatically extracted from span lifecycle events when observability is enabled.
 
-- Counter: monotonic (+ only)
-- UpDownCounter: can apply + and - deltas
-- Gauge: absolute "set value"
+### Workflow Metrics
 
-### Use Cases
+| Metric | Type | Labels | Extracted On |
+|--------|------|--------|--------------|
+| `mastra_workflow_runs_started` | Counter | workflow, env | Span start |
+| `mastra_workflow_runs_ended` | Counter | workflow, status, env | Span end |
+| `mastra_workflow_duration_ms` | Histogram | workflow, status, env | Span end |
+| `mastra_workflow_errors_total` | Counter | workflow, error_type, env | Error |
 
-Primarily for concurrency / inflight tracking via start/end events:
-- `+1` when a run starts
-- `-1` when a run ends
+### Agent Metrics
 
-**Examples:**
-- `mastra.workflow.active{workflow="support_agent", env="prod"}`
-- Active LLM generations
-- Inflight tool calls
-- Inflight workflow runs
-- Open streaming responses
-- "Slots used" / capacity consumption
+| Metric | Type | Labels | Extracted On |
+|--------|------|--------|--------------|
+| `mastra_agent_runs_started` | Counter | agent, env | Span start |
+| `mastra_agent_runs_ended` | Counter | agent, status, env | Span end |
+| `mastra_agent_duration_ms` | Histogram | agent, env | Span end |
+| `mastra_agent_errors_total` | Counter | agent, error_type, env | Error |
 
-### Important Notes
+### Tool Metrics
 
-- UpDownCounters do **not** have reset semantics in standard models (Prometheus/OTel)
-- Resetting breaks aggregation semantics and is not reliable in distributed systems
-- If you need "reset-to-truth", use a **Gauge** instead
+| Metric | Type | Labels | Extracted On |
+|--------|------|--------|--------------|
+| `mastra_tool_calls_started` | Counter | tool, agent, env | Span start |
+| `mastra_tool_calls_ended` | Counter | tool, agent, status, env | Span end |
+| `mastra_tool_duration_ms` | Histogram | tool, agent, env | Span end |
+| `mastra_tool_errors_total` | Counter | tool, agent, error_type | Error |
+
+### Model/LLM Metrics
+
+| Metric | Type | Labels | Extracted On |
+|--------|------|--------|--------------|
+| `mastra_model_requests_started` | Counter | model, agent | Span start |
+| `mastra_model_requests_ended` | Counter | model, agent, status | Span end |
+| `mastra_model_duration_ms` | Histogram | model, agent | Span end |
+| `mastra_model_input_tokens` | Counter | model, agent, type | Span end |
+| `mastra_model_output_tokens` | Counter | model, agent, type | Span end |
+
+**Token type labels:**
+- Input: `text`, `cache_read`, `cache_write`, `audio`, `image`
+- Output: `text`, `reasoning`, `audio`, `image`
+
+### Processor Metrics
+
+| Metric | Type | Labels | Extracted On |
+|--------|------|--------|--------------|
+| `mastra_processor_calls_started` | Counter | processor, env | Span start |
+| `mastra_processor_calls_ended` | Counter | processor, status, env | Span end |
+| `mastra_processor_duration_ms` | Histogram | processor, env | Span end |
+| `mastra_processor_errors_total` | Counter | processor, error_type, env | Error |
+
+---
+
+## Naming Conventions
+
+**Pattern:** `mastra_{domain}_{metric}_{unit}`
+
+**Suffixes:**
+
+| Type | Suffix | Example |
+|------|--------|---------|
+| Counter (started) | `_started` | `mastra_workflow_runs_started` |
+| Counter (ended) | `_ended` | `mastra_workflow_runs_ended` |
+| Counter (generic) | `_total` | `mastra_errors_total` |
+| Duration | `_ms` | `mastra_tool_duration_ms` |
+| Bytes | `_bytes` | `mastra_response_size_bytes` |
+| Tokens | `_tokens` | `mastra_model_input_tokens` |
+
+**Labels:** snake_case throughout
+
+**OTLP export:** Convert `_` to `.` (e.g., `mastra_workflow_runs_started` → `mastra.workflow.runs.started`)
 
 ---
 
@@ -102,6 +227,8 @@ The Mastra domain makes certain metrics unusually important:
 - Estimated cost (USD)
 - Retries per request
 
+→ See [Cost Tracking](#cost-tracking) for implementation details
+
 ### Reliability Metrics
 
 - Error rate
@@ -109,7 +236,7 @@ The Mastra domain makes certain metrics unusually important:
 - Tool failure rate
 - Model failure / invalid output rate
 
-### Concurrency Metrics (UpDownCounter candidates)
+### Concurrency Metrics
 
 - Active workflows
 - Active steps
@@ -136,14 +263,34 @@ To make metrics useful and avoid "multi-writer chaos":
 
 ### Cardinality Controls
 
-Telemetry systems die by label cardinality. Mastra needs:
+Telemetry systems die by label cardinality. Mastra enforces guardrails on metric labels only (logs and traces can have these fields in metadata).
 
-**Ban by default:**
+**Blocked label keys (rejected):**
 - `trace_id`, `span_id`, `run_id`, `request_id`, `user_id`
-- Free-form strings as labels
+- Free-form strings, UUIDs
 
-**Prefer:**
-- Small, stable dimensions like: `workflow`, `agent`, `step`, `tool`, `model`, `status`, `env`, `service`
+**Allowed labels (bounded cardinality):**
+- `workflow`, `agent`, `step`, `tool`, `model`, `status`, `env`, `service`
+
+**Rejection behavior:**
+- First occurrence: Reject + log warning
+- Subsequent: Reject silently (no log spam)
+
+**Override config:**
+```typescript
+metrics: {
+  // ⚠️ Use with caution - high cardinality degrades query performance
+  allowedLabels: ['user_id'],
+}
+```
+
+**Guardrails:**
+- Denylist of blocked keys (hard reject)
+- UUID pattern detection (reject)
+- Runtime cardinality monitoring (warn at threshold)
+- Value length cap (128 chars)
+
+**Note:** Step labels in workflow mapping operations may need special handling to avoid cardinality explosion.
 
 ---
 
@@ -160,44 +307,37 @@ This aligns well with both Prometheus and OTel.
 
 ### Bucket Representation
 
-**Option A (recommended v1): Explicit bucket boundaries**
+Mastra uses **explicit bucket boundaries** for histograms:
 
-Bounds: `[5, 10, 25, 50, 100, 250, 500, 1000, +Inf]` (example in ms)
-
-Pros:
 - Easy to understand
 - Easy to merge and roll up
 - Maps well to Prometheus
 
-Cons:
-- Bucket choice matters (standardize it)
+### Default Bucket Sets
 
-**Option B: Exponential histogram / sketch**
-
-Pros:
-- Compact
-- Dynamic range
-
-Cons:
-- Harder to implement/query
-- Less universally supported across backends
-
-### Recommended Default Bucket Sets
-
-**Latency (ms):**
+**Duration (ms) — 12 buckets:**
 ```
-[1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, +Inf]
+[10, 50, 100, 500, 1000, 5000, 15000, 60000, 300000, 900000, 3600000, +Inf]
 ```
+Or readable: `[10ms, 50ms, 100ms, 500ms, 1s, 5s, 15s, 1min, 5min, 15min, 1hr, +Inf]`
 
-**Tokens:**
-```
-[16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, +Inf]
-```
+Covers AI workloads: fast tools (10-100ms), quick responses (100ms-1s), model calls (1-15s), agent runs (15s-5min), long workflows (5min-1hr).
 
-**Bytes:**
+**Tokens (12 buckets, 4x jumps, future-proofed for large context windows):**
 ```
-[256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, +Inf]
+[128, 512, 2048, 8192, 32768, 131072, 524288, 2097152, 8388608, 33554432, 134217728, +Inf]
 ```
+Or in readable form: `[128, 512, 2K, 8K, 32K, 128K, 512K, 2M, 8M, 32M, 128M, +Inf]`
+
+Covers small completions through 128M+ token contexts (future models).
+
+**Bytes — 12 buckets:**
+```
+[256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, +Inf]
+```
+Or readable: `[256B, 1KB, 4KB, 16KB, 64KB, 256KB, 1MB, 4MB, 16MB, 64MB, 256MB, +Inf]`
+
+Covers small tool responses up to large file attachments/PDFs.
 
 ### Merge Rules
 
@@ -212,109 +352,174 @@ If boundaries differ:
 
 ---
 
-## Multi-Writer Considerations
+## Concurrency Tracking
 
-### Gauges: Multi-writer is usually bad
+Real-world deployments need visibility into concurrent load—concurrent users chatting with agents, parallel requests being processed, tools executing in parallel.
 
-A gauge is absolute. If multiple components call `set()` on the same series, you get "last write wins" chaos.
+→ See [User Anecdotes](./user-anecdotes.md) for specific user requirements
 
-**Avoid "global shared gauges"** written by multiple components.
+### Why Not UpDownCounter?
 
-Solutions:
-- Enforce single-writer ownership per series, or
-- Add a label like `component` and aggregate in query
+An UpDownCounter can increment and decrement, but has a critical flaw: if a process crashes before emitting `-1`, the counter drifts upward forever.
 
-**Example:**
-```
-mastra_inflight_runs{workflow="X", component="worker"}
-mastra_inflight_runs{workflow="X", component="scheduler"}
-```
-Then sum in query.
+### Started + Ended Counters
 
-### Counters: Multi-writer is fine
+Instead, Mastra uses paired counters:
+- `mastra_{entity}_runs_started` - Incremented when span starts
+- `mastra_{entity}_runs_ended` - Incremented when span ends (with status label)
 
-Counters are additive by design, so multiple writers are safe. This is why "started_total / finished_total" is often the best base signal.
-
-### Histograms: Multi-writer is fine with constraints
-
-Histograms merge well when:
-- Bucket schema matches
-- Label set is controlled
-
----
-
-## Better Patterns for Inflight Tracking
-
-### Pattern 1: Started + Finished Counters (recommended)
-
-Emit two monotonic counters:
-- `mastra_runs_started_total`
-- `mastra_runs_finished_total{status="ok|error|canceled|timeout"}`
-
-Then derive: `inflight = started - finished`
-
-Why it's robust:
-- Multi-writer safe
+**Why this is robust:**
+- Multi-writer safe (counters are additive)
 - Crash-safe (unfinished work remains unfinished, which is true)
 - No reliance on symmetric +1/-1 inside one process lifetime
 
-### Pattern 2: Gauge Computed from Truth (recommended)
+### Example Queries
 
-Maintain actual local state (e.g., a map of active runs) and export:
-- `mastra_runs_inflight` (gauge) = `active.size`
+**Current active runs:**
+```promql
+mastra_agent_runs_started - mastra_agent_runs_ended
+```
 
-If the process crashes, its series disappears naturally.
+**Concurrent tool calls:**
+```promql
+mastra_tool_calls_started - mastra_tool_calls_ended
+```
 
-### Pattern 3: Coordinator Leases/Heartbeats with TTL
+**Peak concurrency over time window:**
+```promql
+max_over_time((mastra_agent_runs_started - mastra_agent_runs_ended)[1h])
+```
 
-If you have a control plane:
-- Create a lease with `expires_at`
-- Refresh while running
-- Inflight is derived from active leases
+These metrics integrate with external alerting systems to catch capacity issues before user impact.
 
----
-
-## Spec Language
-
-### Gauges Must Be Owned
-
-> Gauges MUST have a single authoritative writer per `(metric name + attribute set)` time series. Distributed "global truth" values MUST be expressed as per-instance gauges and aggregated at query time, or computed centrally by a designated control-plane component.
-
-### Counters and Histograms Are Mergeable
-
-> Counters and histograms MAY be emitted by multiple components for the same time series. Aggregation is performed by summation across writers.
-
-### Histogram Schema Control
-
-> Histogram metrics MUST define a canonical bucket schema per metric name. Ingestion MUST reject or normalize incompatible bucket layouts to ensure histograms remain mergeable across instances and time rollups.
+→ See [Alerting](#alerting) for alert configuration guidance
 
 ---
 
-## Temporality
+## Multi-Writer Considerations
 
-OTel supports:
-- **Delta**: change since last export
-- **Cumulative**: total since process start
+| Type | Multi-Writer Safe? | Notes |
+|------|-------------------|-------|
+| **Counters** | ✓ Yes | Additive by design |
+| **Histograms** | ✓ Yes | If bucket schema matches |
+| **Gauges** | ✗ No | "Last write wins" chaos |
 
-**Design recommendation:**
-- SDK exports **delta per flush interval**
-- Ingestion can accept cumulative and convert to delta
-- Storage uses a canonical temporality consistently
+**Gauge ownership:** If multiple components need to report the same gauge, add a `component` label and aggregate in query:
+```
+sum(mastra_inflight_runs{workflow="X"}) by (workflow)
+```
 
 ---
 
-## Storage Provider Considerations
+## Cost Tracking
 
-Metrics should only be stored in backends designed for high-volume telemetry ingestion:
-- Bursty writes
-- Heavy cardinality
-- High retention needs
-- Read patterns: "scan & aggregate"
+Cost tracking derives monetary values from token counts combined with model pricing.
 
-**Recommended:**
-- LibSQL for local installs
-- PostgreSQL for mid-size
-- ClickHouse for large/cloud/distributed
+### Model Pricing Configuration
+
+```typescript
+interface ModelPricing {
+  modelId: string;           // e.g., 'gpt-4', 'claude-3-opus'
+  provider: string;          // e.g., 'openai', 'anthropic'
+  inputPricePerMillion: number;   // USD per 1M input tokens
+  outputPricePerMillion: number;  // USD per 1M output tokens
+  // Optional: tiered pricing for high-volume
+  tiers?: {
+    threshold: number;       // Token threshold
+    inputPrice: number;
+    outputPrice: number;
+  }[];
+}
+```
+
+### Cost Calculation
+
+Cost is calculated at query time from token usage captured in `MODEL_GENERATION` spans:
+
+```
+cost = (inputTokens × inputPrice / 1_000_000) + (outputTokens × outputPrice / 1_000_000)
+```
+
+**Approach:** Query-time calculation with cached pricing tables. This allows price corrections and updates without re-processing historical data.
+
+### Built-in Pricing
+
+Mastra includes default pricing for common models (OpenAI, Anthropic, Google, etc.) that is periodically updated.
+
+### Cost Metrics
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `mastra_model_cost_usd` | Counter | model, agent | Cumulative cost in USD |
+
+**Note:** Cost can also be computed from existing token metrics at query time using Grafana/Prometheus recording rules.
+
+→ See [Plan Analysis](./plan-analysis.md) for competitive comparison with Langfuse cost tracking
+
+---
+
+## Alerting
+
+Mastra exports metrics to observability backends; **alerting is configured in those backends** rather than in Mastra itself. For the first iteration, Mastra will not implement any alerting functionality—we rely entirely on third-party systems.
+
+This approach:
+- Leverages mature alerting infrastructure (Grafana, Datadog, PagerDuty)
+- Avoids reinventing alert routing, escalation, silencing
+- Allows teams to use their existing on-call workflows
+
+### Recommended Setup
+
+1. **Export metrics** via GrafanaCloudExporter, DatadogExporter, or OtelExporter
+2. **Configure alert rules** in your observability platform
+3. **Route alerts** to PagerDuty, OpsGenie, Slack, email, etc.
+
+### Example Alert Rules
+
+**High error rate:**
+```yaml
+# Grafana alert rule
+alert: MastraHighErrorRate
+expr: rate(mastra_agent_errors_total[5m]) / rate(mastra_agent_runs_ended[5m]) > 0.05
+for: 5m
+labels:
+  severity: warning
+annotations:
+  summary: "Agent error rate above 5%"
+```
+
+**Capacity warning:**
+```yaml
+alert: MastraHighConcurrency
+expr: (mastra_agent_runs_started - mastra_agent_runs_ended) > 100
+for: 2m
+labels:
+  severity: warning
+annotations:
+  summary: "More than 100 concurrent agent runs"
+```
+
+**Latency degradation:**
+```yaml
+alert: MastraSlowAgentRuns
+expr: histogram_quantile(0.95, rate(mastra_agent_duration_ms_bucket[5m])) > 30000
+for: 5m
+labels:
+  severity: warning
+annotations:
+  summary: "p95 agent latency above 30 seconds"
+```
+
+### External Alerting Platforms
+
+| Platform | Integration |
+|----------|-------------|
+| Grafana Cloud | GrafanaCloudExporter → built-in alerting |
+| Datadog | DatadogExporter → Monitors |
+| PagerDuty | Via Grafana/Datadog alert routing |
+| OpsGenie | Via Grafana/Datadog alert routing |
+| Slack | Via Grafana/Datadog notifications |
+
+→ See [Exporters](./exporters.md) for exporter configuration
 
 ---
 
@@ -324,3 +529,5 @@ Metrics should only be stored in backends designed for high-volume telemetry ing
 - [Tracing](./tracing.md)
 - [Logging](./logging.md)
 - [Architecture & Configuration](./architecture-configuration.md)
+- [Plan Analysis](./plan-analysis.md) - Competitive analysis and feature gaps
+- [User Anecdotes](./user-anecdotes.md) - User feedback on observability needs

@@ -6,6 +6,8 @@ System architecture and configuration for Mastra's unified observability platfor
 
 ## Design Principles
 
+- **Single configuration** - All observability (traces, metrics, logs) configured in one place
+- **Exporters declare capabilities** - Each exporter specifies which signals (T/M/L) it supports
 - **Automatic when enabled** - Enable observability to automatically get traces + metrics + logs
 - **Zero-config instrumentation** - Built-in metrics emitted without additional configuration
 - **Correlation by design** - All signals share common dimensions for cross-signal navigation
@@ -14,29 +16,113 @@ System architecture and configuration for Mastra's unified observability platfor
 
 ---
 
-## HTTP Server Instrumentation
-
-All HTTP requests to the Mastra server are automatically instrumented with traces, metrics, and logs (Sentry-style). User-added endpoints get observability for free.
-
----
-
 ## Unified Telemetry API
 
-A single mental model for:
-- Trace spans
-- Log events
-- Metric points
+A single mental model for all three signals, with context-aware APIs that auto-capture correlation data.
 
-**But** preserve backend-specific exporters.
+### ObservabilityContext (Inside Tools/Workflows)
 
-### Instrumentation Example
+All three signals accessed through a unified `observability` context with flattened API:
 
 ```typescript
-trace(...);
-log.info(...);
-metrics.counter(...).add(1);
-metrics.histogram(...).record(value);
+interface ObservabilityContext {
+  // === Tracing ===
+  currentSpan?: Span;
+  createChildSpan(opts: SpanOptions): Span;
+
+  // === Logging (flattened) ===
+  debug(message: string, data?: Record<string, unknown>): void;
+  info(message: string, data?: Record<string, unknown>): void;
+  warn(message: string, data?: Record<string, unknown>): void;
+  error(message: string, data?: Record<string, unknown>): void;
+
+  // === Metrics (flattened) ===
+  counter(name: string): Counter;
+  gauge(name: string): Gauge;
+  histogram(name: string): Histogram;
+
+  // === Correlation context (read-only) ===
+  traceId?: string;
+  spanId?: string;
+
+  // === Underlying systems (for advanced use) ===
+  logger: Logger;
+  metrics: MetricsAPI;
+}
 ```
+
+**Usage:**
+
+```typescript
+execute: async (input, { observability }) => {
+  // Logging - auto-correlates with traceId, spanId, tool, agent, etc.
+  observability.info("Processing input", { inputSize: input.length });
+
+  // Metrics - auto-labels with tool, agent, workflow, env
+  observability.counter('my_custom_counter').add(1, {
+    custom_label: 'foo'
+  });
+
+  // Tracing - child spans inherit context
+  const span = observability.createChildSpan({
+    name: "custom-operation",
+  });
+  // ... work ...
+  span.end();
+
+  return result;
+}
+```
+
+**With destructuring:**
+
+```typescript
+execute: async (input, { observability: obs }) => {
+  obs.info("Starting");
+  obs.counter("calls").add(1);
+}
+```
+
+### Direct APIs (Outside Trace Context)
+
+```typescript
+// Logging without trace correlation
+mastra.logger.info("Application started", { version: "1.0.0" });
+
+// Metrics without auto-labels
+mastra.metrics.counter('background_jobs_total').add(1, { job_type: 'cleanup' });
+```
+
+### Event Bus Architecture
+
+Each signal has its own event bus, similar to the existing tracing bus:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Observability                               │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │
+│  │ TracingBus   │  │ MetricsBus   │  │ LogsBus      │               │
+│  │              │  │              │  │              │               │
+│  │ span.start ──┼──│→ metric.emit │  │ log.emit     │               │
+│  │ span.end   ──┼──│→             │  │              │               │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘               │
+│         │                 │                 │                       │
+│         └─────────────────┼─────────────────┘                       │
+│                           ▼                                         │
+│                    ┌─────────────┐                                  │
+│                    │  Exporters  │                                  │
+│                    │ (T/M/L)     │                                  │
+│                    └─────────────┘                                  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Key points:**
+- TracingBus emits to MetricsBus on span lifecycle (for built-in metric extraction)
+- Each exporter receives only the signals it supports
+- Buses are decoupled for independent scaling and failure isolation
 
 ---
 
@@ -68,56 +154,138 @@ Telemetry has unique traits that not all databases handle well:
 
 **Principle:** Observability ingestion should not be enabled on backends that can't cope with telemetry volume.
 
-### Recommended Storage Tiers
+### Supported Storage Backends
 
-| Use Case | Recommended Storage |
-|----------|---------------------|
-| Local development | LibSQL |
-| Mid-size production | PostgreSQL |
-| Large/cloud/distributed | ClickHouse |
+| Backend | Tracing | Metrics | Logs | Role |
+|---------|:-------:|:-------:|:----:|------|
+| **DuckDB** | ✓ | ✓ | ✓ | Recommended local dev (columnar, good perf, npm-only) |
+| **LibSQL** | ✓ | ✓ | ✓ | Legacy / simple demos |
+| **PostgreSQL** | ✓ | ✓ | ✓ | MVP / low-volume production |
+| **ClickHouse** | ✓ | ✓ | ✓ | Large scale production (recommended) |
+| **MongoDB** | ✓ | ✗ | ✗ | Legacy tracing only - not recommended |
+| **MSSQL** | ✓ | ✗ | ✗ | Legacy tracing only - not recommended |
 
----
+**Recommendation hierarchy:** DuckDB (local) → ClickHouse (production)
 
-## Query Language Goals
-
-### Desired Portability
-
-Support "same QL" across multiple backends:
-- SQL counts as a QL for you
-- PromQL is highly desirable (especially for Grafana)
-
-### Grafana Integration Paths
-
-| Path | Description |
-|------|-------------|
-| PromQL support | Prometheus-compatible storage layer |
-| Grafana via SQL | ClickHouse/PG SQL queries shaped into time series |
-| OTLP Pipeline | OTLP -> Grafana Alloy -> Mimir/Loki/Tempo |
+**Note:** DuckDB is embedded (npm package only, no CLI required) with columnar storage, providing good analytical query performance for local development. DuckDB complements LibSQL well: use DuckDB for observability (OLAP workloads) and LibSQL for everything else (transactional data).
 
 ---
 
 ## Exporter Configuration
 
-### Basic Configuration
+### Unified Configuration Model
+
+All observability is configured through a single `Observability` instance. Exporters declare which signals they support.
 
 ```typescript
-observability: new Observability({
-  configs: {
-    default: {
-      serviceName: "my-app",
-      exporters: [
-        new DefaultExporter(),     // Local storage
-        new CloudExporter(),       // Mastra Cloud
-        new LangfuseExporter(),    // Langfuse for LLM analytics
-      ],
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-app",
+        logLevel: 'info',  // Root level - ceiling for all log exporters
+        exporters: [
+          new DefaultExporter(),       // T ✓  M ✓  L ✓  → Storage
+          new CloudExporter(),         // T ✓  M ✓  L ✓  → Mastra Cloud
+          new PinoExporter({           // T ✗  M ✗  L ✓  → Console (pretty)
+            level: 'debug',            // Adjusted to 'info' ⚠ (can't exceed root)
+            pretty: true,
+          }),
+          new BraintrustExporter(),    // T ✓  M ✗  L ✓  → Braintrust
+        ],
+      },
     },
-  },
-})
+  }),
+});
 ```
+
+### Log Level Filtering
+
+Log levels follow a ceiling model:
+
+- **Root `logLevel`** is the ceiling - filters before events enter the observability system
+- **Per-exporter `level`** filters down from root (can be more restrictive, not less)
+- If exporter level < root level → warn on startup, auto-adjust exporter up to root level
+
+```typescript
+// Root: info
+// ├── PinoExporter: debug  → adjusted to info ⚠
+// ├── DefaultExporter: info → ok
+// └── CloudExporter: warn  → ok (filtering down)
+```
+
+To get debug logs to a specific exporter, set root to 'debug' and let other exporters filter down.
+
+### Exporter Signal Support
+
+Each exporter declares which signals it handles:
+
+| Exporter | Traces | Metrics | Logs | Destination |
+|----------|--------|---------|------|-------------|
+| **DefaultExporter** | ✓ | ✓ | ✓ | Storage (LibSQL/PG/ClickHouse) |
+| **CloudExporter** | ✓ | ✓ | ✓ | Mastra Cloud |
+| **PinoExporter** | ✗ | ✗ | ✓ | Console (pretty) / File |
+| **ConsoleExporter** | ✓ | ✗ | ✓ | Console (debug) |
+| **OtelExporter** | ✓ | ✓ | ✓ | Any OTLP endpoint |
+| **DatadogExporter** | ✓ | ✓ | ✓ | Datadog |
+| **LangfuseExporter** | ✓ | ✗ | ✗ | Langfuse |
+| **BraintrustExporter** | ✓ | ✗ | ✓ | Braintrust |
+| **SentryExporter** | ✓ | ✗ | ✓ | Sentry |
 
 ### Multiple Exporters
 
-You can use multiple exporters simultaneously to send telemetry to different backends.
+You can use multiple exporters simultaneously. Each signal is sent to all exporters that support it. This allows mixing:
+- Storage for Studio/querying
+- Cloud for managed observability
+- Console for dev visibility
+- External platforms for specific features
+
+### Exporter Interface
+
+```typescript
+interface ObservabilityExporter {
+  readonly name: string;
+
+  // Declare supported signals
+  readonly supportsTraces: boolean;
+  readonly supportsMetrics: boolean;
+  readonly supportsLogs: boolean;
+
+  // Signal-specific export methods (implement those you support)
+  exportSpans?(spans: Span[]): Promise<void>;
+  exportMetrics?(metrics: MetricEvent[]): Promise<void>;
+  exportLogs?(logs: LogRecord[]): Promise<void>;
+
+  flush?(): Promise<void>;
+  shutdown?(): Promise<void>;
+}
+```
+
+### Migration from Top-Level Logger
+
+The `logger` property at the Mastra config level is deprecated. Users should migrate to using a log exporter.
+
+```typescript
+// BEFORE (deprecated)
+const mastra = new Mastra({
+  logger: new PinoLogger({ level: 'info' }),
+  observability: new Observability({ ... }),
+});
+
+// AFTER
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        exporters: [
+          new DefaultExporter(),
+          new PinoExporter({ level: 'info' }),  // Replaces top-level logger
+        ],
+      },
+    },
+  }),
+});
+```
 
 ---
 
@@ -131,19 +299,43 @@ To make metrics useful and avoid "multi-writer chaos":
 
 ### Cardinality Management
 
-Telemetry systems die by label cardinality.
+Telemetry systems die by label cardinality. Mastra enforces guardrails on **metric labels only** (logs and traces can have these fields in metadata).
 
-**Recommended attribute keys:**
-- workflow name
-- step name
-- tool name
-- model provider / model name
-- environment (dev/staging/prod)
-- app/service name
-- instance ID / process ID
+**Blocked label keys (rejected):**
+- `trace_id`, `span_id`, `run_id`, `request_id`, `user_id`
+- Free-form strings, UUIDs
 
-**Careful with:**
-- user/org (high cardinality!)
+**Allowed labels (bounded cardinality):**
+- `workflow`, `agent`, `tool`, `model`, `status`, `env`, `service`
+- `step` (with caveats - see note below)
+
+**Rejection behavior:**
+- First occurrence: Reject + log warning
+- Subsequent: Reject silently (no log spam)
+
+**Override config (use with caution):**
+```typescript
+observability: new Observability({
+  configs: {
+    default: {
+      exporters: [...],
+      metrics: {
+        // ⚠️ Allowing high-cardinality labels can severely degrade
+        // query performance and storage efficiency. Use with caution.
+        allowedLabels: ['user_id'],
+      },
+    },
+  },
+})
+```
+
+**Guardrails:**
+- Denylist of blocked keys (hard reject)
+- UUID pattern detection (reject)
+- Runtime cardinality monitoring (warn at threshold)
+- Value length cap (128 chars)
+
+**Note:** Step labels in workflow mapping operations may need special handling - IDs/names can be generated and change on each run, causing cardinality explosion. This is flagged for deeper investigation during workflow implementation.
 
 ---
 
@@ -164,143 +356,192 @@ Use "shape-based" expectations rather than fragile exact byte matches:
 
 ---
 
-## ObservabilityProvider Interface
+## ObservabilityStorage Interface
+
+The observability storage follows the standard Mastra storage domain pattern, extending `StorageDomain`.
+
+**Location:** `packages/core/src/storage/domains/observability/`
+
+### Current API (Tracing)
 
 ```typescript
-abstract class ObservabilityProvider {
-  abstract init(): Promise<void>;
-  abstract shutdown(): Promise<void>;
+abstract class ObservabilityStorage extends StorageDomain {
+  // Strategy hint for storage adapters
+  readonly tracingStorageStrategy: 'realtime' | 'batch-with-updates' | 'insert-only';
 
-  // Traces
-  abstract createTrace(trace: CreateTraceInput): Promise<Trace>;
-  abstract updateTrace(id: string, input: UpdateTraceInput): Promise<Trace>;
-  abstract getTrace(id: string): Promise<Trace | null>;
-  abstract listTraces(filter: TraceFilter): Promise<PaginatedResult<Trace>>;
+  // Span Creation
+  abstract createSpan(args: CreateSpanArgs): Promise<SpanRecord>;
+  abstract batchCreateSpans(args: BatchCreateSpansArgs): Promise<SpanRecord[]>;
 
-  // Spans
-  abstract createSpan(span: CreateSpanInput): Promise<Span>;
-  abstract listSpans(traceId: string): Promise<Span[]>;
+  // Span Retrieval
+  abstract getSpan(args: GetSpanArgs): Promise<TraceSpan | null>;
+  abstract getRootSpan(args: GetRootSpanArgs): Promise<TraceSpan | null>;
+  abstract getTrace(args: GetTraceArgs): Promise<TraceSpan[]>;
 
-  // Logs
-  abstract ingestLogs(logs: CreateLogInput[]): Promise<void>;
-  abstract queryLogs(filter: LogFilter): Promise<PaginatedResult<Log>>;
-  abstract streamLogs(filter: LogFilter): AsyncIterable<Log>;
+  // Span Updates
+  abstract updateSpan(args: UpdateSpanArgs): Promise<SpanRecord>;
+  abstract batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<SpanRecord[]>;
 
-  // Metrics
-  abstract recordMetrics(metrics: CreateMetricInput[]): Promise<void>;
-  abstract queryMetrics(query: MetricQuery): Promise<MetricResult[]>;
+  // Trace Listing (with filtering, pagination, ordering)
+  abstract listTraces(args: ListTracesArgs): Promise<PaginatedResult<TraceSpan>>;
 
-  // Scores
-  abstract createScore(score: CreateScoreInput): Promise<Score>;
-  abstract listScores(filter: ScoreFilter): Promise<PaginatedResult<Score>>;
+  // Deletion
+  abstract batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void>;
 
-  // Analytics
-  abstract getProjectStats(projectId: string, timeRange: TimeRange): Promise<ProjectStats>;
-  abstract getUsageByModel(projectId: string, timeRange: TimeRange): Promise<ModelUsage[]>;
-  abstract getCostBreakdown(projectId: string, timeRange: TimeRange): Promise<CostBreakdown>;
-
-  // Retention
-  abstract applyRetentionPolicy(projectId: string, retentionDays: number): Promise<number>;
+  // Admin
+  abstract dangerouslyClearAll(): Promise<void>;
 }
+```
+
+### Filtering Support
+
+`listTraces` supports comprehensive filtering:
+
+```typescript
+interface TracesFilter {
+  // Time range
+  startedAt?: { start?: Date; end?: Date };
+  endedAt?: { start?: Date; end?: Date };
+
+  // Span properties
+  spanType?: SpanType;
+  status?: 'ERROR' | 'RUNNING' | 'SUCCESS';
+  hasChildError?: boolean;
+
+  // Entity
+  entityType?: EntityType;
+  entityId?: string;
+  entityName?: string;
+
+  // Multi-tenancy
+  userId?: string;
+  organizationId?: string;
+  resourceId?: string;
+
+  // Correlation
+  runId?: string;
+  sessionId?: string;
+  threadId?: string;
+  requestId?: string;
+
+  // Deployment
+  environment?: string;
+  source?: string;
+  serviceName?: string;
+
+  // Partial matching
+  scope?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  tags?: string[];  // All must match
+}
+```
+
+### Planned: Logs API
+
+```typescript
+abstract class ObservabilityStorage extends StorageDomain {
+  // ... existing tracing methods ...
+
+  // Log Creation
+  abstract createLog(args: CreateLogArgs): Promise<LogRecord>;
+  abstract batchCreateLogs(args: BatchCreateLogsArgs): Promise<LogRecord[]>;
+
+  // Log Retrieval
+  abstract getLog(args: GetLogArgs): Promise<LogRecord | null>;
+  abstract listLogs(args: ListLogsArgs): Promise<PaginatedResult<LogRecord>>;
+
+  // Log Search
+  abstract searchLogs(args: SearchLogsArgs): Promise<PaginatedResult<LogRecord>>;
+
+  // Deletion
+  abstract batchDeleteLogs(args: BatchDeleteLogsArgs): Promise<void>;
+}
+```
+
+### Planned: Metrics API
+
+```typescript
+abstract class ObservabilityStorage extends StorageDomain {
+  // ... existing tracing and logs methods ...
+
+  // Metric Recording
+  abstract recordMetric(args: RecordMetricArgs): Promise<MetricRecord>;
+  abstract batchRecordMetrics(args: BatchRecordMetricsArgs): Promise<MetricRecord[]>;
+
+  // Metric Querying
+  abstract queryMetrics(args: QueryMetricsArgs): Promise<MetricResult[]>;
+  abstract getMetricSeries(args: GetMetricSeriesArgs): Promise<MetricSeries>;
+
+  // Aggregation
+  abstract aggregateMetrics(args: AggregateMetricsArgs): Promise<void>;
+
+  // Deletion
+  abstract batchDeleteMetrics(args: BatchDeleteMetricsArgs): Promise<void>;
+}
+```
+
+### Storage Strategy Hints
+
+Adapters communicate their preferred tracing strategy:
+
+| Strategy | Description | Use Case |
+|----------|-------------|----------|
+| `realtime` | Immediate writes, supports updates | Development, low volume |
+| `batch-with-updates` | Batched writes, supports updates | Production with moderate volume |
+| `insert-only` | Append-only, no updates | High volume, ClickHouse |
+
+### Implementations
+
+| Backend | Status | Notes |
+|---------|--------|-------|
+| In-Memory | ✓ Implemented | Testing, development |
+| PostgreSQL | ✓ Implemented | MVP / low-volume production |
+| LibSQL | ✓ Implemented | Legacy / simple demos |
+| DuckDB | Planned | Local dev (OLAP) |
+| ClickHouse | Planned | Production scale |
+
+---
+
+## Retention Policies
+
+**Default retention periods:**
+
+| Signal | Retention |
+|--------|-----------|
+| Traces | 10 days |
+| Metrics (raw) | 10 days |
+| Metrics (aggregated) | 90 days |
+| Logs | 10 days |
+
+**Enforcement:** Manual via CLI only (no background job infrastructure yet)
+
+**CLI commands:**
+```bash
+mastra traces cleanup --older-than 10d
+mastra logs cleanup --older-than 10d
+mastra metrics cleanup --older-than 10d
+mastra metrics aggregate --older-than 3d
+```
+
+**Future CLI expansion:**
+```bash
+mastra logs --search 'error'
+mastra logs --trace-id abc123
+mastra traces list --status error --since 24h
 ```
 
 ---
 
-## Metric Entity Schema
+## Server Adapter Instrumentation
 
-```typescript
-interface Metric {
-  id: string;
-  projectId: string;
-  name: string;
-  type: 'counter' | 'gauge' | 'histogram';
-  value: number;
-  unit?: string;
-  tags: Record<string, string>;
-  timestamp: Date;
-}
-```
+**Status:** Deferred for initial implementation
 
-### ClickHouse Schema
-
-```sql
-CREATE TABLE metrics (
-  id String,
-  project_id String,
-  name String,
-  type Enum8('counter' = 1, 'gauge' = 2, 'histogram' = 3),
-  value Float64,
-  unit Nullable(String),
-  tags Map(String, String),
-  timestamp DateTime64(3),
-  created_at DateTime64(3) DEFAULT now64(3)
-)
-ENGINE = MergeTree()
-PARTITION BY toYYYYMM(timestamp)
-ORDER BY (project_id, name, timestamp)
-TTL timestamp + INTERVAL 90 DAY;
-```
-
----
-
-## Score Entity Schema
-
-```typescript
-interface Score {
-  id: string;
-  projectId: string;
-  traceId: string;
-  name: string;
-  value: number;
-  source: 'manual' | 'automatic' | 'user_feedback';
-  createdAt: Date;
-}
-```
-
-### ClickHouse Schema
-
-```sql
-CREATE TABLE scores (
-  id String,
-  project_id String,
-  trace_id String,
-  name String,
-  value Float64,
-  source Enum8('manual' = 1, 'automatic' = 2, 'user_feedback' = 3),
-  created_at DateTime64(3) DEFAULT now64(3)
-)
-ENGINE = MergeTree()
-PARTITION BY toYYYYMM(created_at)
-ORDER BY (project_id, trace_id, created_at, id)
-TTL created_at + INTERVAL 365 DAY;
-```
-
----
-
-## Open Questions
-
-### Minimum Viable Metric Set
-
-- Standard system metrics?
-- LLM-specific metrics?
-- Do we provide "built-in dashboards"?
-
-### Raw vs Aggregated Storage
-
-- Raw: flexible but expensive
-- Aggregated: smaller but less flexible
-
-### Metric Identity
-
-- name + attributes
-- Do we enforce a naming convention?
-- Do we namespace metrics per workflow/package?
-
-### Grafana Integration
-
-- PromQL support?
-- "Grafana via SQL" patterns (ClickHouse/PG)
-- OTLP -> Grafana Alloy -> Mimir/Loki/Tempo pipeline?
+**Future goal:** Add observability middleware to server adapters:
+- Auto-create trace for each HTTP request
+- Emit HTTP metrics (`mastra_http_requests_total`, `mastra_http_duration_ms`)
+- Capture request/response logs
+- User-added endpoints get observability for free
+- Handle path cardinality (`/users/:id` not `/users/123`)
 
 ---
 
@@ -311,3 +552,5 @@ TTL created_at + INTERVAL 365 DAY;
 - [Tracing](./tracing.md)
 - [Logging](./logging.md)
 - [Exporters](./exporters.md)
+- [Plan Analysis](./plan-analysis.md) - Competitive analysis informing design
+- [User Anecdotes](./user-anecdotes.md) - User feedback driving requirements

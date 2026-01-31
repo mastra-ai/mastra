@@ -21,23 +21,44 @@ Mastra logging exists alongside tracing and metrics, but avoids:
 
 ## Log Structure
 
-Logs in Mastra are structured events (JSON) tied to spans/workflows:
+Logs in Mastra are structured events with full correlation fields:
 
 ```typescript
-interface Log {
+interface LogRecord {
+  // Core fields
   id: string;
-  projectId: string;
-  buildId?: string;
-  traceId?: string;
   timestamp: Date;
   level: 'debug' | 'info' | 'warn' | 'error' | 'fatal';
   message: string;
-  logger?: string;
-  attributes?: Record<string, unknown>;
+
+  // Auto-correlation (captured from trace context)
+  traceId?: string;
+  spanId?: string;
+  entityType?: 'agent' | 'workflow' | 'tool' | 'processor';
+  entityId?: string;
+  entityName?: string;
+  runId?: string;
+  sessionId?: string;
+  threadId?: string;
+  userId?: string;
+  environment?: string;
+  serviceName?: string;
+
+  // User data
+  data?: Record<string, unknown>;
+
+  // Error details
   errorStack?: string;
-  createdAt: Date;
 }
 ```
+
+### Why Full Correlation?
+
+All correlation fields are captured automatically when logging inside tools/workflows. This enables:
+- Jump from log → trace
+- Filter logs by agent/tool/workflow
+- Group logs by session or thread
+- Correlate with metrics via shared dimensions
 
 ---
 
@@ -55,25 +76,30 @@ interface Log {
 
 ## Trace Correlation
 
-A clean strategy for logs:
-- "Logs are events attached to spans" (span events)
-- Optionally exported to a separate log pipeline
+Logs are stored separately from traces but include correlation IDs for cross-referencing:
+
+- **traceId** and **spanId** are automatically captured when logging inside tools/workflows
+- Logs are NOT attached to spans as span events (separate storage)
+- Correlation enables "jump from log → trace" in the UI
 
 This provides:
-- Correlation by trace/span IDs
-- A natural place to store "what happened" without bloating spans
+- Independent retention for logs vs traces
+- No bloating of trace data with verbose logs
+- Full correlation when needed via shared IDs
 
-### Log Event Example (Span Event)
+### Log Record Example
 
 ```json
 {
-  "ts": "2026-01-26T12:34:56Z",
+  "id": "log_123",
+  "timestamp": "2026-01-26T12:34:56Z",
   "level": "warn",
   "message": "Tool call took longer than expected",
   "traceId": "abc...",
   "spanId": "def...",
-  "attributes": {
-    "tool": "http_request",
+  "entityType": "tool",
+  "entityName": "http_request",
+  "data": {
     "latency_ms": 9832
   }
 }
@@ -83,13 +109,77 @@ This provides:
 
 ## Logger API
 
-Developers can emit logs using a simple API:
+### ObservabilityContext API (Inside Tools/Workflows)
+
+Logging methods are flattened directly on the observability context for convenience:
 
 ```typescript
-log.info("Processing request", { userId: "123" });
-log.warn("Tool call slow", { latency_ms: 5000 });
-log.error("Failed to connect", { error: e.message });
+execute: async (input, { observability }) => {
+  // Auto-captures: traceId, spanId, tool, agent, runId, etc.
+  observability.info("Processing input", { inputSize: input.length });
+  observability.warn("Slow external call", { latency_ms: 5000 });
+  observability.error("Failed to connect", { error: e.message });
+
+  // Or access underlying logger for advanced use
+  observability.logger.debug("Detailed info");
+}
 ```
+
+**With destructuring:**
+
+```typescript
+execute: async (input, { observability: obs }) => {
+  obs.info("Starting");
+  obs.warn("Slow operation");
+}
+```
+
+### Direct API (Outside Trace Context)
+
+For startup logs, background jobs, or other non-trace scenarios:
+
+```typescript
+mastra.logger.info("Application started", { version: "1.0.0" });
+mastra.logger.warn("Config missing, using defaults");
+```
+
+### Unified Exporter Model
+
+Logs flow through the observability exporter system. Different exporters handle logs differently:
+
+```typescript
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        logLevel: 'info',  // Root level - ceiling for all log exporters
+        exporters: [
+          new DefaultExporter(),   // T ✓  M ✓  L ✓  → Storage (queryable)
+          new PinoExporter({       // T ✗  M ✗  L ✓  → Console (pretty)
+            level: 'debug',        // Adjusted to 'info' ⚠ (can't exceed root)
+            pretty: true,
+          }),
+          new CloudExporter({      // T ✓  M ✓  L ✓  → Mastra Cloud
+            level: 'warn',         // Filters down to warn+ only
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+**Note:** The top-level `logger` config in Mastra is deprecated. Use `PinoExporter` or `WinstonExporter` in the observability config instead.
+
+### Log Level Filtering
+
+Log levels follow a ceiling model:
+
+- **Root `logLevel`** is the ceiling - filters before events enter the observability system
+- **Per-exporter `level`** filters down from root (can be more restrictive, not less)
+- If exporter level < root level → warn on startup, auto-adjust exporter up to root level
+
+To get debug logs to a specific exporter, set root to 'debug' and let other exporters filter down.
 
 ---
 
@@ -123,18 +213,22 @@ CREATE TABLE logs (
   project_id String,
   build_id Nullable(String),
   trace_id Nullable(String),
+  span_id Nullable(String),
+  entity_type Nullable(Enum8('agent'=1, 'workflow'=2, 'tool'=3, 'processor'=4)),
+  entity_name Nullable(String),
+  run_id Nullable(String),
+  session_id Nullable(String),
   timestamp DateTime64(3),
   level Enum8('debug'=1, 'info'=2, 'warn'=3, 'error'=4, 'fatal'=5),
   message String,
-  logger Nullable(String),
-  attributes Nullable(String),
+  data Nullable(String),
   error_stack Nullable(String),
   created_at DateTime64(3) DEFAULT now64(3)
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (project_id, timestamp, id)
-TTL timestamp + INTERVAL 30 DAY;
+TTL timestamp + INTERVAL 10 DAY;
 ```
 
 ---
@@ -154,16 +248,25 @@ This approach:
 
 ---
 
-## Retention Considerations
+## Retention
 
-### Questions to Answer
+**Default retention:** 10 days
 
-- Do we index everything?
-- Do we store logs as trace span events only?
-- Do we allow full-text search?
+**Enforcement:** Manual via CLI (no background job infrastructure yet)
 
-### Recommendations
+```bash
+mastra logs cleanup --older-than 10d
+```
 
+**Future CLI expansion:**
+
+```bash
+mastra logs --search 'error'
+mastra logs --trace-id abc123
+mastra logs --level error --since 1h
+```
+
+**Considerations:**
 - Configure retention policies per environment
 - Consider log level-based retention (keep errors longer)
 - Use sampling for high-volume debug logs
@@ -176,3 +279,5 @@ This approach:
 - [Metrics](./metrics.md)
 - [Tracing](./tracing.md)
 - [Architecture & Configuration](./architecture-configuration.md)
+- [Plan Analysis](./plan-analysis.md) - Feature gap analysis
+- [User Anecdotes](./user-anecdotes.md) - User feedback on observability needs
