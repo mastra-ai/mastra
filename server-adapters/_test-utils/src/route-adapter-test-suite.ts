@@ -75,12 +75,23 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/auth/credentials/sign-in',
       '/auth/credentials/sign-up',
     ];
+    // Skip routes that require external dependencies (APIs)
+    const routesRequiringExternalDeps = [
+      // skills-sh routes that require external API calls (GitHub, skills.sh)
+      '/workspaces/:workspaceId/skills-sh/search',
+      '/workspaces/:workspaceId/skills-sh/popular',
+      '/workspaces/:workspaceId/skills-sh/preview',
+      '/workspaces/:workspaceId/skills-sh/install',
+      '/workspaces/:workspaceId/skills-sh/remove',
+      '/workspaces/:workspaceId/skills-sh/update',
+    ];
     const activeRoutes = SERVER_ROUTES.filter(
       r =>
         !r.deprecated &&
         r.responseType !== 'mcp-http' &&
         r.responseType !== 'mcp-sse' &&
-        !authRoutesRequiringProviders.includes(r.path),
+        !authRoutesRequiringProviders.includes(r.path) &&
+        !routesRequiringExternalDeps.includes(r.path),
     );
     activeRoutes.forEach(route => {
       const testName = `${route.method} ${route.path}`;

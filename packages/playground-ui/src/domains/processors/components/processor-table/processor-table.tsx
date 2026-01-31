@@ -1,6 +1,8 @@
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { is403ForbiddenError } from '@/lib/query-utils';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
@@ -17,11 +19,12 @@ import type { ProcessorInfo } from '../../hooks/use-processors';
 export interface ProcessorTableProps {
   processors: Record<string, ProcessorInfo>;
   isLoading: boolean;
+  error?: Error | null;
 }
 
 export type ProcessorRow = ProcessorInfo;
 
-export function ProcessorTable({ processors, isLoading }: ProcessorTableProps) {
+export function ProcessorTable({ processors, isLoading, error }: ProcessorTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
 
@@ -62,6 +65,15 @@ export function ProcessorTable({ processors, isLoading }: ProcessorTableProps) {
 
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows;
+
+  // 403 check BEFORE empty state - permission denied takes precedence
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="processors" />
+      </div>
+    );
+  }
 
   if (processorData.length === 0 && !isLoading) {
     return <EmptyProcessorsTable />;
