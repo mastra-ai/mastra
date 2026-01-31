@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-30)
 ## Current Position
 
 Phase: 16 of 18 (Context Infrastructure)
-Plan: --
-Status: Ready to plan
-Last activity: 2026-01-30 -- Roadmap created for v1.3
+Plan: 01 of 01
+Status: Phase complete
+Last activity: 2026-01-31 -- Completed 16-01-PLAN.md
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
@@ -32,12 +32,12 @@ Progress: [░░░░░░░░░░] 0%
 - Requirements: 27
 
 **v1.3 Milestone:**
-- Total plans completed: 0
+- Total plans completed: 1
 - Phases: 3 (16-18)
 - Requirements: 11
 - Estimated plans: 4
 
-**Cumulative:** 24 plans, 15 phases, 3 milestones shipped
+**Cumulative:** 25 plans, 15 phases, 3 milestones shipped
 
 ## Accumulated Context
 
@@ -50,6 +50,8 @@ v1.3 context:
 - Collapsible panel with collapsedSize=0 (not conditional rendering) to preserve WebSocket
 - BrowserSessionContext hoisted to layout level for auto-expand/collapse control
 - BrowserToolCallsProvider must move from Thread to Agent page level
+- BrowserToolCallsProvider outermost at Agent page level (no dependency on BrowserSessionProvider)
+- isClosing and isCollapsed remain local state in BrowserViewPanel (panel-internal UI concerns)
 
 ### Pending Todos
 
@@ -67,8 +69,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-30
-Stopped at: v1.3 roadmap created
+Last session: 2026-01-31
+Stopped at: Completed 16-01-PLAN.md
 Resume file: None
 
-**Next action:** Plan Phase 16 (Context Infrastructure)
+**Next action:** Plan Phase 17 (Collapsible Panel)
