@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-30)
 
 **Core value:** Agents can browse real websites and users can watch and assist them in real-time
-**Current focus:** v1.3 Browser View Layout -- Phase 16
+**Current focus:** v1.3 Browser View Layout -- Phase 17
 
 ## Current Position
 
-Phase: 16 of 18 (Context Infrastructure)
-Plan: 01 of 01
-Status: Phase complete
-Last activity: 2026-01-31 -- Completed 16-01-PLAN.md
+Phase: 17 of 18 (Split-Pane Layout)
+Plan: 01 of 02
+Status: In progress
+Last activity: 2026-01-31 -- Completed 17-01-PLAN.md
 
-Progress: [███░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -32,12 +32,12 @@ Progress: [███░░░░░░░] 25%
 - Requirements: 27
 
 **v1.3 Milestone:**
-- Total plans completed: 1
+- Total plans completed: 2
 - Phases: 3 (16-18)
 - Requirements: 11
 - Estimated plans: 4
 
-**Cumulative:** 25 plans, 15 phases, 3 milestones shipped
+**Cumulative:** 26 plans, 15 phases, 3 milestones shipped
 
 ## Accumulated Context
 
@@ -52,6 +52,9 @@ v1.3 context:
 - BrowserToolCallsProvider must move from Thread to Agent page level
 - BrowserToolCallsProvider outermost at Agent page level (no dependency on BrowserSessionProvider)
 - isClosing and isCollapsed remain local state in BrowserViewPanel (panel-internal UI concerns)
+- Raw Panel used instead of CollapsiblePanel for browser slot (CollapsiblePanel unmounts children when collapsed)
+- Layout storage key bumped to agent-layout-v2 to avoid 3-panel/4-panel size collision
+- BrowserViewPanel uses flex layout instead of absolute/fixed overlay positioning
 
 ### Pending Todos
 
@@ -59,7 +62,7 @@ None.
 
 ### Blockers/Concerns
 
-None.
+- Pre-existing `provider-types.generated.d.ts` bug in core: unquoted numeric identifier `302ai` breaks tsc. Does not affect vite builds or runtime behavior.
 
 ## Milestone History
 
@@ -70,7 +73,7 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-31
-Stopped at: Completed 16-01-PLAN.md
+Stopped at: Completed 17-01-PLAN.md
 Resume file: None
 
-**Next action:** Plan Phase 17 (Split-Pane Layout)
+**Next action:** Execute 17-02-PLAN.md (auto-expand/collapse wiring)
