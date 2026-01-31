@@ -12,9 +12,8 @@ import { selectFixture } from '../__utils__/select-fixture';
  * 2. Progress bars update in real-time during streaming
  * 3. Observation markers appear in chat history
  * 4. Observations persist after page reload
- * 5. Failed observations show error state
- * 6. Reflections are distinguished from observations
- * 7. Adaptive threshold adjusts progress bar display
+ * 5. Reflections are distinguished from observations
+ * 6. Adaptive threshold adjusts progress bar display
  */
 
 test.describe('Observational Memory - Behavior Tests', () => {
@@ -166,46 +165,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await expect(observationMarker).toBeVisible({ timeout: 15000 });
     });
 
-    /**
-     * BEHAVIOR: Failed observation shows error state
-     * OUTCOME: User sees that observation failed (e.g., "Observation failed" or "interrupted")
-     *
-     * Uses om-fail-agent which has a mock observer that returns an error stream
-     * (mimicking the router's behavior when API key is missing).
-     */
-    // TODO: This test is skipped because the workflow engine's "Tool test not found" error
-    // disrupts the stream before the data-om-observation-failed marker can render.
-    // The OM processor correctly catches observer errors (verified in integration tests),
-    // but the E2E environment has a known tool serialization issue.
-    test.skip('should show error state when observation fails', async ({ page }) => {
-      // ARRANGE
-      await selectFixture(page, 'om-observation-success');
-      await page.goto('/agents/om-fail-agent/chat?new=true');
 
-      // Wait for page to load
-      await expect(page.locator('h2')).toContainText('OM Fail Agent');
-
-      const chatInput = page.locator('textarea[placeholder*="message"]').first();
-      const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
-
-      // ACT: Send first message to start conversation
-      await chatInput.fill('Hello, I need help with something important today.');
-      await chatInput.press('Enter');
-      await page.waitForTimeout(2000);
-
-      // ACT: Send second message to accumulate tokens and trigger observation
-      await chatInput.fill('Can you also tell me about the weather forecast for tomorrow?');
-      await chatInput.press('Enter');
-      await page.waitForTimeout(3000);
-
-      // ASSERT: The thread wrapper should show the response
-      await expect(threadWrapper).toBeVisible({ timeout: 15000 });
-
-      // ASSERT: Failed observation marker should be visible
-      // The mock observer throws an error, so we expect "Observation failed"
-      const failedMarker = threadWrapper.getByText(/Observation failed/i);
-      await expect(failedMarker).toBeVisible({ timeout: 15000 });
-    });
   });
 
   test.describe('Observation Persistence', () => {

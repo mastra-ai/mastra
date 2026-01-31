@@ -69,24 +69,6 @@ const mockReflectorModel = new aiTest.MockLanguageModelV2({
   }),
 });
 
-// Mock observer that returns an error stream (for testing failed observation UI)
-// Mimics how the router handles missing API keys - returns { stream: error } from doGenerate
-// instead of throwing, which is the real-world failure path.
-const mockFailingObserverModel = {
-  specificationVersion: 'v2' as const,
-  provider: 'mock',
-  modelId: 'mock-failing-observer',
-  defaultObjectGenerationMode: undefined,
-  supportsImageUrls: false,
-  supportedUrls: {},
-  async doGenerate() {
-    throw new Error('Observer model failed: simulated API error for E2E testing');
-  },
-  async doStream() {
-    throw new Error('Observer model failed: simulated API error for E2E testing');
-  },
-} as any;
-
 // Memory with Observational Memory enabled for testing OM UI
 // Using very low thresholds so observations trigger quickly in E2E tests
 // Using mock models for observation/reflection to avoid real API calls
@@ -102,24 +84,6 @@ const omMemory = new Memory({
       reflection: {
         model: mockReflectorModel,
         observationTokens: 50, // Low enough that mock observer output (~100 tokens) triggers reflection
-      },
-    },
-  },
-});
-
-// Memory with a failing observer model (for testing error UI)
-const omFailMemory = new Memory({
-  storage,
-  options: {
-    generateTitle: true,
-    observationalMemory: {
-      observation: {
-        model: mockFailingObserverModel,
-        messageTokens: 20,
-      },
-      reflection: {
-        model: mockReflectorModel,
-        observationTokens: 200,
       },
     },
   },
@@ -313,28 +277,4 @@ Always use the test tool first before responding to the user.`,
   }),
   tools: { 'test': omTriggerTool },
   memory: omAdaptiveMemory,
-});
-
-/**
- * Agent with a failing observer model
- * Used for testing error state UI when observation fails
- *
- * Uses the same multi-step mock model approach, but the observer throws an error.
- */
-export const omFailAgent = new Agent({
-  id: 'om-fail-agent',
-  name: 'OM Fail Agent',
-  instructions: `You are a helpful assistant with observational memory enabled.
-Your memory system automatically observes and compresses conversation history.
-Always use the test tool first before responding to the user.`,
-  model: createMockOmModel({
-    provider: 'mock',
-    modelId: 'gpt-4o-mini',
-    toolName: 'test',
-    toolInput: { action: 'trigger-observation' },
-    responseText: omResponseText,
-    delayMs: 10,
-  }),
-  tools: { 'test': omTriggerTool },
-  memory: omFailMemory,
 });
