@@ -19,9 +19,8 @@ interface BrowserViewPanelProps {
  * keeping this component mounted, preserving the WebSocket connection.
  */
 export function BrowserViewPanel({ agentId }: BrowserViewPanelProps) {
-  const { isActive, status, currentUrl, show, hide, setStatus, setCurrentUrl } = useBrowserSession();
+  const { status, currentUrl, show, hide, setStatus, setCurrentUrl } = useBrowserSession();
   const [isClosing, setIsClosing] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Handle status changes - manage visibility
   const handleStatusChange = useCallback(
@@ -69,10 +68,6 @@ export function BrowserViewPanel({ agentId }: BrowserViewPanelProps) {
     }
   }, [agentId, isClosing, hide]);
 
-  const handleToggleCollapse = useCallback(() => {
-    setIsCollapsed(prev => !prev);
-  }, []);
-
   // Single render path — BrowserViewFrame is always at the same tree position
   // so it never unmounts/remounts (stable WebSocket connection).
   // Parent Panel's collapsedSize=0 handles hiding at zero width.
@@ -82,9 +77,7 @@ export function BrowserViewPanel({ agentId }: BrowserViewPanelProps) {
         <BrowserViewHeader
           url={currentUrl}
           status={status}
-          isCollapsed={isCollapsed}
           onClose={handleClose}
-          onToggleCollapse={handleToggleCollapse}
         />
         <div className="flex-1 min-h-0 p-2">
           <BrowserViewFrame agentId={agentId} onStatusChange={handleStatusChange} onUrlChange={handleUrlChange} />
