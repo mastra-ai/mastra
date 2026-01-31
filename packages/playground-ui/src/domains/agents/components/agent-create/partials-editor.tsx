@@ -1,48 +1,12 @@
 'use client';
 
-import Handlebars from 'handlebars';
-
 import { Label } from '@/ds/components/Label';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Section } from '@/domains/cms';
 import { BranchIcon } from '@/ds/icons';
 
-type HbsNode = {
-  type: string;
-  name?: { original?: string };
-  body?: HbsNode[];
-  program?: { body?: HbsNode[] };
-  inverse?: { body?: HbsNode[] };
-};
-
-function collectPartialNames(nodes: HbsNode[], result: Set<string>): void {
-  for (const node of nodes) {
-    if (node.type === 'PartialStatement' && node.name?.original) {
-      result.add(node.name.original);
-    }
-    // Recurse into block statements (if/each/with/etc.)
-    if (node.program?.body) {
-      collectPartialNames(node.program.body, result);
-    }
-    if (node.inverse?.body) {
-      collectPartialNames(node.inverse.body, result);
-    }
-  }
-}
-
-export function extractPartialNames(instructions: string): string[] {
-  if (!instructions) return [];
-
-  try {
-    const ast = Handlebars.parse(instructions);
-    const partialNames = new Set<string>();
-    collectPartialNames(ast.body as HbsNode[], partialNames);
-    return [...partialNames];
-  } catch {
-    // If parsing fails, return empty array
-    return [];
-  }
-}
+// Re-export for consumers
+export { extractPartialNames } from './template-utils';
 
 interface PartialsEditorProps {
   value: Record<string, string>;

@@ -1,16 +1,19 @@
 'use client';
 
-import { type RefObject, useEffect, useRef } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
+import { Play } from 'lucide-react';
 
 import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { IconButton } from '@/ds/components/IconButton';
 import { cn } from '@/lib/utils';
 
 import { ModelPicker } from '../create-agent/model-picker';
 import type { AgentFormValues } from '../create-agent/form-validation';
 import { PartialsEditor, extractPartialNames } from './partials-editor';
+import { TestInstructionDialog } from './test-instruction-dialog';
 
 interface AgentCreateMainProps {
   form: UseFormReturn<AgentFormValues>;
@@ -29,6 +32,10 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
 
   // Watch instructions for partial detection
   const instructions = watch('instructions');
+  const partials = watch('partials') || {};
+
+  // State for test dialog
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
 
   // Track previous keys to avoid unnecessary updates
   const prevKeysRef = useRef<string>('');
@@ -107,9 +114,20 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
 
       {/* Instructions - CodeEditor taking remaining height */}
       <div className="flex flex-col gap-1.5 flex-1 min-h-0">
-        <Label htmlFor="instructions" className="text-xs text-icon5">
-          Instructions <span className="text-accent2">*</span>
-        </Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="instructions" className="text-xs text-icon5">
+            Instructions <span className="text-accent2">*</span>
+          </Label>
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="sm"
+            tooltip="Test instructions"
+            onClick={() => setTestDialogOpen(true)}
+          >
+            <Play className="h-4 w-4" />
+          </IconButton>
+        </div>
         <Controller
           name="instructions"
           control={control}
@@ -141,6 +159,14 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
           )}
         />
       )}
+
+      {/* Test Instructions Dialog */}
+      <TestInstructionDialog
+        open={testDialogOpen}
+        onOpenChange={setTestDialogOpen}
+        instructions={instructions || ''}
+        partials={partials}
+      />
     </div>
   );
 }
