@@ -13,7 +13,11 @@ packages:
 The DynamoDB storage implementation provides a scalable and performant NoSQL database solution for Mastra, leveraging a single-table design pattern with [ElectroDB](https://electrodb.dev/).
 
 :::warning[Observability Not Supported]
-DynamoDB storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to DynamoDB, and Mastra Studio's observability features won't work with DynamoDB as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+DynamoDB storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to DynamoDB, and Mastra Studio's observability features won't work with DynamoDB as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+:::
+
+:::warning[Item Size Limit]
+DynamoDB enforces a **400 KB maximum item size**. This limit can be exceeded when storing messages with base64-encoded attachments such as images. See [Handling large attachments](/docs/memory/storage#handling-large-attachments) for workarounds including uploading attachments to external storage.
 :::
 
 ## Features

@@ -169,6 +169,36 @@ export class MessageList {
     });
   }
 
+  /**
+   * Custom serialization for tracing/observability spans.
+   * Returns a clean representation with just the essential data,
+   * excluding internal state tracking, methods, and implementation details.
+   *
+   * This is automatically called by the span serialization system when
+   * a MessageList instance appears in span input/output/attributes.
+   */
+  public serializeForSpan(): {
+    messages: Array<{ role: string; content: unknown }>;
+    systemMessages: Array<{ role: string; content: unknown; tag?: string }>;
+  } {
+    const coreMessages = this.all.aiV4.core();
+
+    return {
+      messages: coreMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+      systemMessages: [
+        // Untagged first (base instructions)
+        ...this.systemMessages.map(m => ({ role: m.role, content: m.content })),
+        // Tagged after (contextual additions)
+        ...Object.entries(this.taggedSystemMessages).flatMap(([tag, msgs]) =>
+          msgs.map(m => ({ role: m.role, content: m.content, tag })),
+        ),
+      ],
+    };
+  }
+
   public deserialize(state: SerializedMessageListState) {
     const data = this.stateManager.deserializeAll(state);
     this.messages = data.messages;

@@ -14,3 +14,4 @@ export * from './cloud';
 export * from './console';
 export * from './default';
 export * from './test';
+export * from './json';

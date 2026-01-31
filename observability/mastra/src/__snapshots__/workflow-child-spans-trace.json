@@ -1,0 +1,80 @@
+{
+  "__structure__": [
+    "workflow_run: \"workflow run: 'child-span-workflow'\"",
+    "└── workflow_step: \"workflow step: 'child-span'\"",
+    "    └── generic: \"custom-child-operation\""
+  ],
+  "spans": [
+    {
+      "span": {
+        "id": "<span-1>",
+        "traceId": "<trace-1>",
+        "name": "workflow run: 'child-span-workflow'",
+        "type": "workflow_run",
+        "completed": true,
+        "isEvent": false,
+        "isRootSpan": true,
+        "entityType": "workflow_run",
+        "entityId": "child-span-workflow",
+        "attributes": {
+          "status": "success"
+        },
+        "metadata": {
+          "runId": "<runId-1>"
+        },
+        "input": {
+          "value": "child-span-test"
+        },
+        "output": {
+          "output": "Child processed: child-span-test"
+        }
+      },
+      "children": [
+        {
+          "span": {
+            "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "workflow step: 'child-span'",
+            "type": "workflow_step",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "workflow_step",
+            "entityId": "child-span",
+            "attributes": {
+              "status": "success"
+            },
+            "input": {
+              "value": "child-span-test"
+            },
+            "output": {
+              "output": "Child processed: child-span-test"
+            }
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-3>",
+                "traceId": "<trace-1>",
+                "name": "custom-child-operation",
+                "type": "generic",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-2>",
+                "entityType": "workflow_step",
+                "entityId": "child-span",
+                "metadata": {
+                  "childOperation": "processing",
+                  "inputValue": "child-span-test",
+                  "endValue": "pizza"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

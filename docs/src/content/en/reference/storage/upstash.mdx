@@ -16,7 +16,7 @@ When using Mastra with Upstash, the pay-as-you-go model can result in unexpected
 :::
 
 :::warning[Observability Not Supported]
-Upstash storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to Upstash, and Mastra Studio's observability features won't work with Upstash as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+Upstash storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to Upstash, and Mastra Studio's observability features won't work with Upstash as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
 :::
 
 ## Installation
