@@ -292,8 +292,8 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
 // ============================================
 
 function createStepFromParams(
-  params: StepParams<any, any, any, any, any, any>,
-): Step<any, any, any, any, any, any, DefaultEngineType> {
+  params: StepParams<any, any, any, any, any, any, any>,
+): Step<any, any, any, any, any, any, DefaultEngineType, any> {
   return {
     id: params.id,
     description: params.description,
