@@ -37,6 +37,39 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   _internal,
   logger,
 }: OuterLLMRun<Tools, OUTPUT>) {
+  // ✅ NEW: Helper function to pipe events from sub-agent streams
+  async function pipeSubAgentStream(subStream: any, parentController: any, agentName: string): Promise<void> {
+    for await (const chunk of subStream.fullStream) {
+      // Enrich chunks with hierarchy context
+      const enrichedChunk = {
+        ...chunk,
+        payload: {
+          ...chunk.payload,
+          _agentHierarchy: [agentName, ...(chunk.payload?._agentHierarchy || [])],
+        },
+      };
+
+      // Handle approval events specially
+      if (chunk.type === 'tool-call-approval') {
+        // Emit approval event to parent stream
+        parentController.enqueue(enrichedChunk);
+
+        // Wait for approval from parent stream
+        // The approval will be resolved via the stream's approval mechanism
+        if (subStream.waitForApproval) {
+          const approved = await subStream.waitForApproval(chunk.payload.toolCallId);
+
+          if (!approved) {
+            throw new Error(`Sub-agent tool execution rejected: ${chunk.payload.toolName}`);
+          }
+        }
+      } else {
+        // Pass through all other events
+        parentController.enqueue(enrichedChunk);
+      }
+    }
+  }
+
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
@@ -403,7 +436,41 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           resumeData: resumeDataToPassToToolOptions,
         };
 
-        const result = await tool.execute(args, toolOptions);
+        // ✅ NEW: Check if this tool is actually a sub-agent
+        // Sub-agents are detected by checking if the tool has a 'stream' method
+        const isSubAgent = tool && typeof (tool as any).stream === 'function';
+
+        let result;
+
+        if (isSubAgent) {
+          // ✅ NEW: Execute sub-agent using stream() instead of execute()
+          // This allows approval events to propagate up to the parent
+          try {
+            // Convert args to messages format that the sub-agent expects
+            const subAgentMessages =
+              typeof args === 'string' ? args : args?.message || args?.prompt || JSON.stringify(args);
+
+            // Stream the sub-agent
+            const subStream = await (tool as any).stream(subAgentMessages, {
+              ...toolOptions,
+              _parentRunId: runId,
+              _isSubAgent: true,
+            });
+
+            // ✅ NEW: Pipe all events from sub-agent to parent stream
+            await pipeSubAgentStream(subStream, controller, inputData.toolName);
+
+            // Get the final result from the stream
+            result = await subStream.text();
+          } catch (error) {
+            logger?.error(`Error streaming sub-agent ${inputData.toolName}:`, error);
+            // Fallback to regular execution if streaming fails
+            result = await tool.execute(args, toolOptions);
+          }
+        } else {
+          // Regular tool execution (not a sub-agent)
+          result = await tool.execute(args, toolOptions);
+        }
 
         // Call onOutput hook after successful execution
         if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {
