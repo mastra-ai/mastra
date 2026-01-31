@@ -13,7 +13,7 @@ Replace the floating browser overlay with a side-by-side split-pane layout so th
 
 ## Phases
 
-- [ ] **Phase 16: Context Infrastructure** - Session state context and provider hoisting for layout-level coordination
+- [x] **Phase 16: Context Infrastructure** - Session state context and provider hoisting for layout-level coordination
 - [ ] **Phase 17: Split-Pane Layout** - Browser panel as collapsible side-by-side pane with auto-expand/collapse
 - [ ] **Phase 18: Interaction Hardening** - Keyboard capture scoping, click-outside fixes, and coordinate recalculation
 
@@ -30,7 +30,7 @@ Replace the floating browser overlay with a side-by-side split-pane layout so th
 **Plans**: 1 plan
 
 Plans:
-- [ ] 16-01: BrowserSessionContext provider, BrowserToolCallsProvider hoisting, and Agent page wiring
+- [x] 16-01: BrowserSessionContext provider, BrowserToolCallsProvider hoisting, and Agent page wiring
 
 ---
 
@@ -73,6 +73,6 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 16. Context Infrastructure | 0/1 | Not started | - |
+| 16. Context Infrastructure | 1/1 | Complete | 2026-01-31 |
 | 17. Split-Pane Layout | 0/2 | Not started | - |
 | 18. Interaction Hardening | 0/1 | Not started | - |

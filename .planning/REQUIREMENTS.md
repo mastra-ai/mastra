@@ -12,8 +12,8 @@ Requirements for Browser View Layout milestone. Each maps to roadmap phases.
 
 ## State Management
 
-- [ ] **STATE-01**: BrowserSessionContext created to share browser session visibility/status between BrowserViewPanel and AgentLayout
-- [ ] **STATE-02**: BrowserToolCallsProvider hoisted from inside Thread to Agent page level (above both Thread and BrowserViewPanel)
+- [x] **STATE-01**: BrowserSessionContext created to share browser session visibility/status between BrowserViewPanel and AgentLayout
+- [x] **STATE-02**: BrowserToolCallsProvider hoisted from inside Thread to Agent page level (above both Thread and BrowserViewPanel)
 - [ ] **STATE-03**: BrowserViewFrame never unmounts during collapse/expand (WebSocket connection preserved via collapsible panel with collapsedSize=0)
 
 ## Interaction Fixes
@@ -31,8 +31,8 @@ Requirements for Browser View Layout milestone. Each maps to roadmap phases.
 | LAYOUT-03 | Phase 17 | Pending |
 | LAYOUT-04 | Phase 17 | Pending |
 | LAYOUT-05 | Phase 17 | Pending |
-| STATE-01 | Phase 16 | Pending |
-| STATE-02 | Phase 16 | Pending |
+| STATE-01 | Phase 16 | Complete |
+| STATE-02 | Phase 16 | Complete |
 | STATE-03 | Phase 17 | Pending |
 | FIX-01 | Phase 18 | Pending |
 | FIX-02 | Phase 18 | Pending |

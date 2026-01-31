@@ -73,4 +73,4 @@ Last session: 2026-01-31
 Stopped at: Completed 16-01-PLAN.md
 Resume file: None
 
-**Next action:** Plan Phase 17 (Collapsible Panel)
+**Next action:** Plan Phase 17 (Split-Pane Layout)
