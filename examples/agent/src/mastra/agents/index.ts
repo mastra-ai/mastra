@@ -5,39 +5,12 @@ import { z } from 'zod';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
-import { cookingTool } from '../tools/index.js';
+import { cookingTool, weatherInfo } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 
 const memory = new Memory();
-
-// Define schema directly compatible with OpenAI's requirements
-const mySchema = jsonSchema({
-  type: 'object',
-  properties: {
-    city: {
-      type: 'string',
-      description: 'The city to get weather information for',
-    },
-  },
-  required: ['city'],
-});
-
-export const weatherInfo = tool({
-  description: 'Fetches the current weather information for a given city',
-  parameters: mySchema,
-  execute: async ({ city }) => {
-    return {
-      city,
-      weather: 'sunny',
-      temperature_celsius: 19,
-      temperature_fahrenheit: 66,
-      humidity: 50,
-      wind: '10 mph',
-    };
-  },
-});
 
 export const chefAgent = new Agent({
   id: 'chef-agent',
@@ -237,6 +210,33 @@ export const evalAgent = new Agent({
   scorers: {
     answerRelevance: {
       scorer: answerRelevance,
+    },
+  },
+});
+
+// Same as evalAgent but with temperature array for testing scorer temperature variations
+export const evalAgentWithTemperatures = new Agent({
+  id: 'eval-agent-with-temperatures',
+  name: 'Eval Agent (With Temperatures)',
+  instructions: `
+    You are a helpful assistant with a weather tool.
+    `,
+  model: openai('gpt-4o'),
+  tools: {
+    weatherInfo,
+  },
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+      },
+    },
+  }),
+  scorers: {
+    answerRelevance: {
+      scorer: answerRelevance,
+      // Run the scorer at multiple temperatures to get varied LLM judge opinions
+      temperatures: [0.0, 0.5, 1.0],
     },
   },
 });

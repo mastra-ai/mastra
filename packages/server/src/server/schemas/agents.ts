@@ -220,19 +220,8 @@ export const agentExecutionBodySchema = z
     toolChoice: toolChoiceSchema.optional(),
     requireToolApproval: z.boolean().optional(),
 
-    // Evaluation
-    scorers: z
-      .union([
-        z.record(z.string(), z.any()),
-        z.record(
-          z.string(),
-          z.object({
-            scorer: z.string(),
-            sampling: z.any().optional(),
-          }),
-        ),
-      ])
-      .optional(),
+    // Evaluation - Using Record<string, any> for flexibility with MastraScorerEntry types
+    scorers: z.record(z.string(), z.any()).optional(),
     returnScorerData: z.boolean().optional(),
 
     // Observability

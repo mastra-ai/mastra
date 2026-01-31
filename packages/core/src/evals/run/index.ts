@@ -1,4 +1,5 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
+import type { CallSettings } from '@internal/ai-sdk-v5';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
@@ -7,7 +8,7 @@ import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { Workflow } from '../../workflows';
 import type { WorkflowResult, StepResult } from '../../workflows';
-import type { MastraScorer } from '../base';
+import type { MastraScorer, MastraScorerEntry } from '../base';
 import { ScoreAccumulator } from './scorerAccumulator';
 
 type RunEvalsDataItem<TTarget = unknown> = {
@@ -33,28 +34,28 @@ type RunEvalsResult = {
   };
 };
 
-// Agent with scorers array
+// Agent with scorers array (bare scorers or with config)
 export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
-  scorers: MastraScorer<any, any, any, any>[];
+  scorers: (MastraScorer<any, any, any, any> | MastraScorerEntry)[];
   target: TAgent;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
     targetResult: Awaited<ReturnType<Agent['generate']>>;
-    scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
+    scorerResults: Record<string, any>; // Flat structure: { scorerName: result } or { scorerName@temp: result }
   }) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult>;
 
-// Workflow with scorers array
+// Workflow with scorers array (bare scorers or with config)
 export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any, any>>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
-  scorers: MastraScorer<any, any, any, any>[];
+  scorers: (MastraScorer<any, any, any, any> | MastraScorerEntry)[];
   target: TWorkflow;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TWorkflow>;
     targetResult: WorkflowResult<any, any, any, any>;
-    scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
+    scorerResults: Record<string, any>; // Flat structure: { scorerName: result } or { scorerName@temp: result }
   }) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult>;
@@ -76,7 +77,7 @@ export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any
 }): Promise<RunEvalsResult>;
 export async function runEvals(config: {
   data: RunEvalsDataItem<any>[];
-  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig;
+  scorers: (MastraScorer<any, any, any, any> | MastraScorerEntry)[] | WorkflowScorerConfig;
   target: Agent | Workflow;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<any>;
@@ -147,7 +148,7 @@ function isWorkflowScorerConfig(scorers: any): scorers is WorkflowScorerConfig {
 
 function validateEvalsInputs(
   data: RunEvalsDataItem<any>[],
-  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig,
+  scorers: (MastraScorer<any, any, any, any> | MastraScorerEntry)[] | WorkflowScorerConfig,
   target: Agent | Workflow,
 ): void {
   if (data.length === 0) {
@@ -259,39 +260,68 @@ async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>) {
   }
 }
 
+/**
+ * Helper to check if a scorer item is a MastraScorerEntry object
+ */
+function isMastraScorerEntry(item: MastraScorer<any, any, any, any> | MastraScorerEntry): item is MastraScorerEntry {
+  return item !== null && typeof item === 'object' && 'scorer' in item;
+}
+
 async function runScorers(
-  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig,
+  scorers: (MastraScorer<any, any, any, any> | MastraScorerEntry)[] | WorkflowScorerConfig,
   targetResult: any,
   item: RunEvalsDataItem<any>,
 ): Promise<Record<string, any>> {
   const scorerResults: Record<string, any> = {};
 
   if (Array.isArray(scorers)) {
-    for (const scorer of scorers) {
-      try {
-        const score = await scorer.run({
-          input: targetResult.scoringData?.input,
-          output: targetResult.scoringData?.output,
-          groundTruth: item.groundTruth,
-          requestContext: item.requestContext,
-          tracingContext: item.tracingContext,
-        });
+    for (const scorerItem of scorers) {
+      // Normalize to MastraScorerEntry format
+      const scorerConfig: MastraScorerEntry = isMastraScorerEntry(scorerItem) ? scorerItem : { scorer: scorerItem };
 
-        scorerResults[scorer.id] = score;
-      } catch (error) {
-        throw new MastraError(
-          {
-            domain: 'SCORER',
-            id: 'RUN_EXPERIMENT_SCORER_FAILED_TO_SCORE_RESULT',
-            category: 'USER',
-            text: `Failed to run experiment: Error running scorer ${scorer.id}`,
-            details: {
-              scorerId: scorer.id,
-              item: JSON.stringify(item),
+      const { scorer, modelSettings, temperatures } = scorerConfig;
+
+      // If temperatures array is provided, run scorer for each temperature
+      // Otherwise, run once with the base modelSettings (or no modelSettings)
+      const tempsToRun: (number | undefined)[] = temperatures?.length ? temperatures : [undefined];
+
+      for (const temperature of tempsToRun) {
+        try {
+          // Build effective modelSettings: base settings + temperature override
+          let effectiveModelSettings: Omit<CallSettings, 'abortSignal'> | undefined = modelSettings;
+          if (temperature !== undefined) {
+            effectiveModelSettings = { ...modelSettings, temperature };
+          }
+
+          const score = await scorer.run({
+            input: targetResult.scoringData?.input,
+            output: targetResult.scoringData?.output,
+            groundTruth: item.groundTruth,
+            requestContext: item.requestContext,
+            tracingContext: item.tracingContext,
+            modelSettings: effectiveModelSettings,
+          });
+
+          // Key by scorer ID + temperature (if temperature was specified)
+          const resultKey = temperature !== undefined ? `${scorer.id}@${temperature}` : scorer.id;
+          // Store base scorer ID for lookups (needed when resultKey has temperature suffix)
+          scorerResults[resultKey] = { ...score, temperature, baseScorerId: scorer.id };
+        } catch (error) {
+          throw new MastraError(
+            {
+              domain: 'SCORER',
+              id: 'RUN_EXPERIMENT_SCORER_FAILED_TO_SCORE_RESULT',
+              category: 'USER',
+              text: `Failed to run experiment: Error running scorer ${scorer.id}${temperature !== undefined ? ` at temperature ${temperature}` : ''}`,
+              details: {
+                scorerId: scorer.id,
+                ...(temperature !== undefined ? { temperature } : {}),
+                item: JSON.stringify(item),
+              },
             },
-          },
-          error,
-        );
+            error,
+          );
+        }
       }
     }
   } else {
@@ -458,15 +488,16 @@ async function saveSingleScore({
   item: RunEvalsDataItem<any>;
 }): Promise<void> {
   try {
-    // Get scorer information
-    let scorer = mastra?.getScorerById?.(scorerId);
+    // Get scorer information using base scorer ID if available (handles temperature-suffixed keys)
+    const lookupId = scoreResult.baseScorerId || scorerId;
+    let scorer = mastra?.getScorerById?.(lookupId);
 
     if (!scorer) {
       // Try to get from target's scorers
       const targetScorers = await (target as any).listScorers?.();
       if (targetScorers) {
         for (const [_, scorerEntry] of Object.entries(targetScorers)) {
-          if ((scorerEntry as any).scorer?.id === scorerId) {
+          if ((scorerEntry as any).scorer?.id === lookupId) {
             scorer = (scorerEntry as any).scorer;
             break;
           }
@@ -488,8 +519,11 @@ async function saveSingleScore({
       additionalContext.groundTruth = item.groundTruth;
     }
 
+    // Exclude internal baseScorerId field from persistence payload
+    const { baseScorerId: _, ...scoreResultForPayload } = scoreResult;
+
     const payload = {
-      ...scoreResult,
+      ...scoreResultForPayload,
       scorerId,
       entityId,
       entityType,

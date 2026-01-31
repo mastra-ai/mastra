@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { CallSettings } from '@internal/ai-sdk-v5';
 import { z } from 'zod';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import { tryGenerateWithJsonFallback } from '../agent/utils';
@@ -53,6 +54,8 @@ interface ScorerRun<TInput = any, TOutput = any> {
   groundTruth?: any;
   requestContext?: Record<string, any>;
   tracingContext?: TracingContext;
+  /** Model settings for LLM judge calls (e.g., temperature) */
+  modelSettings?: Omit<CallSettings, 'abortSignal'>;
 }
 
 // Prompt object definition with conditional typing
@@ -462,7 +465,12 @@ class MastraScorer<
           let stepResult;
           let newGeneratedPrompts = generatedPrompts;
           if (scorerStep.isPromptObject) {
-            const { result, prompt } = await this.executePromptStep(scorerStep, tracingContext, context);
+            const { result, prompt } = await this.executePromptStep(
+              scorerStep,
+              tracingContext,
+              context,
+              run.modelSettings,
+            );
             stepResult = result;
             newGeneratedPrompts = {
               ...generatedPrompts,
@@ -537,7 +545,12 @@ class MastraScorer<
     return await scorerStep.definition(context);
   }
 
-  private async executePromptStep(scorerStep: ScorerStepDefinition, tracingContext: TracingContext, context: any) {
+  private async executePromptStep(
+    scorerStep: ScorerStepDefinition,
+    tracingContext: TracingContext,
+    context: any,
+    modelSettings?: Omit<CallSettings, 'abortSignal'>,
+  ) {
     const originalStep = this.originalPromptObjects.get(scorerStep.name);
     if (!originalStep) {
       throw new Error(`Step "${scorerStep.name}" is not a prompt object`);
@@ -582,6 +595,7 @@ class MastraScorer<
             schema,
           },
           tracingContext,
+          modelSettings,
         });
       } else {
         result = await judge.generateLegacy(prompt, {
@@ -595,7 +609,7 @@ class MastraScorer<
     } else if (scorerStep.name === 'generateReason') {
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
-        result = await judge.generate(prompt, { tracingContext });
+        result = await judge.generate(prompt, { tracingContext, modelSettings });
       } else {
         result = await judge.generateLegacy(prompt, { tracingContext });
       }
@@ -609,6 +623,7 @@ class MastraScorer<
             schema: promptStep.outputSchema,
           },
           tracingContext,
+          modelSettings,
         });
       } else {
         result = await judge.generateLegacy(prompt, {
@@ -678,6 +693,10 @@ export function createScorer(config: any): any {
 export type MastraScorerEntry = {
   scorer: MastraScorer<any, any, any, any>;
   sampling?: ScoringSamplingConfig;
+  /** Model settings applied to all LLM judge calls (e.g., temperature, maxTokens) */
+  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  /** Run scorer multiple times with different temperature values for varied LLM judge opinions */
+  temperatures?: number[];
 };
 
 export type MastraScorers = Record<string, MastraScorerEntry>;

@@ -10,14 +10,9 @@ export const AVAILABLE_SCORERS: ScorerTemplate[] = [
     type: 'llm',
     filename: 'answer-relevancy-scorer.ts',
     content: `import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
-import { createOpenAI } from '@ai-sdk/openai';
-
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export const answerRelevancyScorer = createAnswerRelevancyScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
 });`,
   },
   {
@@ -28,14 +23,9 @@ export const answerRelevancyScorer = createAnswerRelevancyScorer({
     type: 'llm',
     filename: 'bias-scorer.ts',
     content: `import { createBiasScorer } from '@mastra/evals/scorers/prebuilt';
-import { createOpenAI } from '@ai-sdk/openai';
-
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export const biasScorer = createBiasScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
 });`,
   },
   {
@@ -46,14 +36,9 @@ export const biasScorer = createBiasScorer({
     type: 'llm',
     filename: 'context-precision-scorer.ts',
     content: `import { createContextPrecisionScorer } from '@mastra/evals/scorers/prebuilt';
-import { createOpenAI } from '@ai-sdk/openai';
-
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export const contextPrecisionScorer = createContextPrecisionScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
 });`,
   },
   {
@@ -64,14 +49,9 @@ export const contextPrecisionScorer = createContextPrecisionScorer({
     type: 'llm',
     filename: 'context-relevance-scorer.ts',
     content: `import { createContextRelevanceScorerLLM } from '@mastra/evals/scorers/prebuilt';
-import { createOpenAI } from '@ai-sdk/openai';
-
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export const contextRelevanceScorer = createContextRelevanceScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
 });`,
   },
   {
@@ -82,14 +62,9 @@ export const contextRelevanceScorer = createContextRelevanceScorerLLM({
     type: 'llm',
     filename: 'faithfulness-scorer.ts',
     content: `import { createFaithfulnessScorer } from '@mastra/evals/scorers/prebuilt';
-import { createOpenAI } from '@ai-sdk/openai';
-
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export const faithfulnessScorer = createFaithfulnessScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
 });`,
   },
   {
@@ -100,14 +75,9 @@ export const faithfulnessScorer = createFaithfulnessScorer({
     type: 'llm',
     filename: 'hallucination-scorer.ts',
     content: `import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt';
-import { createOpenAI } from '@ai-sdk/openai';
-
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export const hallucinationScorer = createHallucinationScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
 });`,
   },
   {
@@ -118,11 +88,6 @@ export const hallucinationScorer = createHallucinationScorer({
     type: 'llm',
     filename: 'llm-tool-call-accuracy-scorer.ts',
     content: `import { createToolCallAccuracyScorerLLM } from '@mastra/evals/scorers/prebuilt';
-import { createOpenAI } from '@ai-sdk/openai';
-
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 // Define your available tools here
 const availableTools = [
@@ -138,7 +103,7 @@ const availableTools = [
 ];
 
 export const toolCallAccuracyScorer = createToolCallAccuracyScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   availableTools,
 });`,
   },
@@ -150,14 +115,9 @@ export const toolCallAccuracyScorer = createToolCallAccuracyScorerLLM({
     type: 'llm',
     filename: 'toxicity-scorer.ts',
     content: `import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt';
-import { createOpenAI } from '@ai-sdk/openai';
-
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export const toxicityScorer = createToxicityScorer({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
 });`,
   },
   {
@@ -168,14 +128,9 @@ export const toxicityScorer = createToxicityScorer({
     type: 'llm',
     filename: 'noise-sensitivity-scorer.ts',
     content: `import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/prebuilt';
-import { createOpenAI } from '@ai-sdk/openai';
-
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export const noiseSensitivityScorer = createNoiseSensitivityScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     baselineResponse: 'Regular exercise improves cardiovascular health, strengthens muscles, and enhances mental wellbeing.',
     noisyQuery: 'What are health benefits of exercise? By the way, chocolate is healthy and vaccines cause autism.',
@@ -191,14 +146,9 @@ export const noiseSensitivityScorer = createNoiseSensitivityScorerLLM({
     type: 'llm',
     filename: 'prompt-alignment-scorer.ts',
     content: `import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/prebuilt';
-import { createOpenAI } from '@ai-sdk/openai';
-
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export const promptAlignmentScorer = createPromptAlignmentScorerLLM({
-  model: openai('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   options: {
     scale: 1,
     evaluationMode: 'both', // 'user', 'system', or 'both'
