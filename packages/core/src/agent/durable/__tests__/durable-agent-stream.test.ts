@@ -11,8 +11,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
+import { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
-import { DurableAgent } from '../durable-agent';
+import { createDurableAgent } from '../create-durable-agent';
 import type { AgentStreamEvent } from '../types';
 
 // ============================================================================
@@ -151,15 +152,16 @@ describe('DurableAgent streaming execution', () => {
       const mockModel = createTextStreamModel('Hello, world!');
       const chunks: any[] = [];
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'stream-test-agent',
         name: 'Stream Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const { output, runId, cleanup } = await agent.stream('Say hello', {
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, runId, cleanup } = await durableAgent.stream('Say hello', {
         onChunk: chunk => {
           chunks.push(chunk);
         },
@@ -178,15 +180,16 @@ describe('DurableAgent streaming execution', () => {
       const mockModel = createMultiChunkStreamModel(['Hello', ', ', 'world', '!']);
       const chunks: any[] = [];
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'multi-chunk-agent',
         name: 'Multi Chunk Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const { cleanup } = await agent.stream('Say hello in parts', {
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { cleanup } = await durableAgent.stream('Say hello in parts', {
         onChunk: chunk => {
           chunks.push(chunk);
         },
@@ -199,26 +202,27 @@ describe('DurableAgent streaming execution', () => {
     it('should return runId and allow cleanup', async () => {
       const mockModel = createTextStreamModel('Test response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'cleanup-test-agent',
         name: 'Cleanup Test Agent',
         instructions: 'Test',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const { runId, cleanup } = await agent.stream('Test');
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { runId, cleanup } = await durableAgent.stream('Test');
 
       expect(runId).toBeDefined();
       expect(typeof runId).toBe('string');
       expect(runId.length).toBeGreaterThan(0);
 
       // Registry should have the run
-      expect(agent.runRegistry.has(runId)).toBe(true);
+      expect(durableAgent.runRegistry.has(runId)).toBe(true);
 
       // Cleanup should remove from registry
       cleanup();
-      expect(agent.runRegistry.has(runId)).toBe(false);
+      expect(durableAgent.runRegistry.has(runId)).toBe(false);
     });
   });
 
@@ -227,15 +231,16 @@ describe('DurableAgent streaming execution', () => {
       const mockModel = createTextStreamModel('Complete response');
       let _finishData: any = null;
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'finish-callback-agent',
         name: 'Finish Callback Agent',
         instructions: 'Test',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const { runId: _runId, cleanup } = await agent.stream('Test', {
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { runId: _runId, cleanup } = await durableAgent.stream('Test', {
         onFinish: data => {
           _finishData = data;
         },
@@ -256,15 +261,16 @@ describe('DurableAgent streaming execution', () => {
 
       let _errorReceived: Error | null = null;
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'error-callback-agent',
         name: 'Error Callback Agent',
         instructions: 'Test',
         model: errorModel as LanguageModelV2,
-        pubsub,
       });
 
-      const { cleanup } = await agent.stream('Test', {
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { cleanup } = await durableAgent.stream('Test', {
         onError: error => {
           _errorReceived = error;
         },
@@ -280,15 +286,16 @@ describe('DurableAgent streaming execution', () => {
       const mockModel = createTextStreamModel('Step complete');
       const stepResults: any[] = [];
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'step-callback-agent',
         name: 'Step Callback Agent',
         instructions: 'Test',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const { cleanup } = await agent.stream('Test', {
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { cleanup } = await durableAgent.stream('Test', {
         onStepFinish: result => {
           stepResults.push(result);
         },
@@ -304,16 +311,17 @@ describe('DurableAgent streaming execution', () => {
       const mockModel = createTextStreamModel('Pubsub test');
       const receivedEvents: AgentStreamEvent[] = [];
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'pubsub-test-agent',
         name: 'Pubsub Test Agent',
         instructions: 'Test',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
       // Prepare to get the runId first
-      const preparation = await agent.prepare('Test message');
+      const preparation = await durableAgent.prepare('Test message');
 
       // Subscribe to events for this run
       await pubsub.subscribe(AGENT_STREAM_TOPIC(preparation.runId), event => {
@@ -339,16 +347,17 @@ describe('DurableAgent streaming execution', () => {
       const eventsRun1: AgentStreamEvent[] = [];
       const eventsRun2: AgentStreamEvent[] = [];
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'isolation-test-agent',
         name: 'Isolation Test Agent',
         instructions: 'Test',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const prep1 = await agent.prepare('Message 1');
-      const prep2 = await agent.prepare('Message 2');
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const prep1 = await durableAgent.prepare('Message 1');
+      const prep2 = await durableAgent.prepare('Message 2');
 
       await pubsub.subscribe(AGENT_STREAM_TOPIC(prep1.runId), event => {
         eventsRun1.push(event as unknown as AgentStreamEvent);
@@ -391,15 +400,16 @@ describe('DurableAgent memory integration', () => {
   it('should track threadId and resourceId in stream result', async () => {
     const mockModel = createTextStreamModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'memory-test-agent',
       name: 'Memory Test Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const { threadId, resourceId, cleanup } = await agent.stream('Test', {
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { threadId, resourceId, cleanup } = await durableAgent.stream('Test', {
       memory: {
         thread: 'thread-123',
         resource: 'user-456',
@@ -415,22 +425,23 @@ describe('DurableAgent memory integration', () => {
   it('should store memory info in extended registry', async () => {
     const mockModel = createTextStreamModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'registry-memory-agent',
       name: 'Registry Memory Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const { runId, cleanup } = await agent.stream('Test', {
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { runId, cleanup } = await durableAgent.stream('Test', {
       memory: {
         thread: 'my-thread',
         resource: 'my-user',
       },
     });
 
-    const memoryInfo = agent.runRegistry.getMemoryInfo(runId);
+    const memoryInfo = durableAgent.runRegistry.getMemoryInfo(runId);
     expect(memoryInfo).toEqual({
       threadId: 'my-thread',
       resourceId: 'my-user',
@@ -442,15 +453,16 @@ describe('DurableAgent memory integration', () => {
   it('should handle streaming without memory options', async () => {
     const mockModel = createTextStreamModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'no-memory-agent',
       name: 'No Memory Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const { threadId, resourceId, cleanup } = await agent.stream('Test');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { threadId, resourceId, cleanup } = await durableAgent.stream('Test');
 
     expect(threadId).toBeUndefined();
     expect(resourceId).toBeUndefined();
@@ -461,15 +473,16 @@ describe('DurableAgent memory integration', () => {
   it('should handle thread object with id', async () => {
     const mockModel = createTextStreamModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'thread-object-agent',
       name: 'Thread Object Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const { threadId, cleanup } = await agent.stream('Test', {
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { threadId, cleanup } = await durableAgent.stream('Test', {
       memory: {
         thread: { id: 'thread-from-object' },
         resource: 'user-123',
@@ -506,15 +519,16 @@ describe('DurableAgent error handling', () => {
 
     let _errorReceived: Error | null = null;
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'error-model-agent',
       name: 'Error Model Agent',
       instructions: 'Test',
       model: errorModel as LanguageModelV2,
-      pubsub,
     });
 
-    const { cleanup } = await agent.stream('Test', {
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { cleanup } = await durableAgent.stream('Test', {
       onError: error => {
         _errorReceived = error;
       },
@@ -555,24 +569,25 @@ describe('DurableAgent error handling', () => {
       },
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'cleanup-error-agent',
       name: 'Cleanup Error Agent',
       instructions: 'Test',
       model: errorModel as LanguageModelV2,
-      pubsub,
     });
 
-    const { runId, cleanup } = await agent.stream('Test');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { runId, cleanup } = await durableAgent.stream('Test');
 
     // Run should be registered initially
-    expect(agent.runRegistry.has(runId)).toBe(true);
+    expect(durableAgent.runRegistry.has(runId)).toBe(true);
 
     await new Promise(resolve => setTimeout(resolve, 200));
 
     // Manual cleanup should work
     cleanup();
-    expect(agent.runRegistry.has(runId)).toBe(false);
+    expect(durableAgent.runRegistry.has(runId)).toBe(false);
   });
 });
 
@@ -594,15 +609,16 @@ describe('DurableAgent workflow input serialization', () => {
   it('should create fully serializable workflow input', async () => {
     const mockModel = createTextStreamModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'serialization-agent',
       name: 'Serialization Agent',
       instructions: 'You are helpful',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const result = await agent.prepare('Test message');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Test message');
 
     // Verify all fields are serializable
     const serialized = JSON.stringify(result.workflowInput);
@@ -626,38 +642,40 @@ describe('DurableAgent workflow input serialization', () => {
       execute: async ({ input }) => `Result: ${input}`,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'tool-serialization-agent',
       name: 'Tool Serialization Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
       tools: { testTool },
-      pubsub,
     });
 
-    const result = await agent.prepare('Use the tool');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Use the tool');
 
     // Tool metadata should be serializable
     const serialized = JSON.stringify(result.workflowInput.toolsMetadata);
     expect(() => JSON.parse(serialized)).not.toThrow();
 
     // But the actual tools in registry should have execute functions
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(typeof tools.testTool?.execute).toBe('function');
   });
 
   it('should serialize execution options', async () => {
     const mockModel = createTextStreamModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'options-agent',
       name: 'Options Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const result = await agent.prepare('Test', {
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Test', {
       maxSteps: 5,
       toolChoice: 'auto',
       modelSettings: { temperature: 0.7 },

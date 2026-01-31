@@ -10,7 +10,8 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -141,15 +142,15 @@ describe('DurableAgent reasoning features', () => {
     it('should accept model that supports reasoning', async () => {
       const mockModel = createReasoningModel('Let me think about this step by step...', 'The answer is 42.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'reasoning-agent',
         name: 'Reasoning Agent',
         instructions: 'Think through problems carefully.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('What is the meaning of life?');
+      const result = await durableAgent.prepare('What is the meaning of life?');
 
       expect(result.runId).toBeDefined();
       expect(result.workflowInput.modelConfig).toBeDefined();
@@ -158,15 +159,15 @@ describe('DurableAgent reasoning features', () => {
     it('should work with model that returns reasoning tokens in usage', async () => {
       const mockModel = createReasoningUsageModel('Based on my analysis, the answer is clear.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'reasoning-usage-agent',
         name: 'Reasoning Usage Agent',
         instructions: 'Analyze and respond.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Analyze this problem');
+      const result = await durableAgent.prepare('Analyze this problem');
 
       expect(result.runId).toBeDefined();
     });
@@ -176,15 +177,15 @@ describe('DurableAgent reasoning features', () => {
     it('should stream reasoning-capable responses', async () => {
       const mockModel = createReasoningModel('Thinking...', 'Here is my response.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'stream-reasoning-agent',
         name: 'Stream Reasoning Agent',
         instructions: 'Think and respond.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await agent.stream('Give me a thoughtful answer');
+      const { runId, cleanup } = await durableAgent.stream('Give me a thoughtful answer');
 
       expect(runId).toBeDefined();
       cleanup();
@@ -198,15 +199,15 @@ describe('DurableAgent reasoning features', () => {
         'The answer is clear.',
       ]);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'interleaved-agent',
         name: 'Interleaved Agent',
         instructions: 'Process information.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await agent.stream('Process this');
+      const { runId, cleanup } = await durableAgent.stream('Process this');
 
       expect(runId).toBeDefined();
       cleanup();
@@ -217,15 +218,15 @@ describe('DurableAgent reasoning features', () => {
     it('should serialize workflow input for reasoning models', async () => {
       const mockModel = createReasoningModel('Thinking...', 'Answer');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'serialize-reasoning-agent',
         name: 'Serialize Reasoning Agent',
         instructions: 'Think through problems.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Think about this');
+      const result = await durableAgent.prepare('Think about this');
 
       // Verify workflow input is JSON-serializable
       const serialized = JSON.stringify(result.workflowInput);
@@ -239,15 +240,15 @@ describe('DurableAgent reasoning features', () => {
     it('should preserve model configuration through preparation', async () => {
       const mockModel = createReasoningModel('Analysis...', 'Result');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'model-config-agent',
         name: 'Model Config Agent',
         instructions: 'Analyze carefully.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Analyze', {
+      const result = await durableAgent.prepare('Analyze', {
         modelSettings: {
           temperature: 0.7,
         },
@@ -264,15 +265,15 @@ describe('DurableAgent reasoning features', () => {
         'Based on our conversation, here is my answer.',
       );
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'reasoning-memory-agent',
         name: 'Reasoning Memory Agent',
         instructions: 'Think with context.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Continue our discussion', {
+      const result = await durableAgent.prepare('Continue our discussion', {
         memory: {
           thread: 'reasoning-thread',
           resource: 'reasoning-user',
@@ -291,15 +292,15 @@ describe('DurableAgent reasoning features', () => {
     it('should handle empty reasoning response', async () => {
       const mockModel = createTextModel('');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'empty-reasoning-agent',
         name: 'Empty Reasoning Agent',
         instructions: 'Respond.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       expect(result.runId).toBeDefined();
     });
@@ -308,15 +309,15 @@ describe('DurableAgent reasoning features', () => {
       const longText = 'This is a detailed analysis. '.repeat(100);
       const mockModel = createReasoningModel(longText, 'Conclusion.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'long-reasoning-agent',
         name: 'Long Reasoning Agent',
         instructions: 'Analyze thoroughly.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Give me a detailed analysis');
+      const result = await durableAgent.prepare('Give me a detailed analysis');
 
       expect(result.runId).toBeDefined();
 
@@ -329,15 +330,15 @@ describe('DurableAgent reasoning features', () => {
       const specialText = 'Analysis: "quotes", \'apostrophes\', <tags>, & ampersands, emoji: 🤔';
       const mockModel = createReasoningModel(specialText, 'Done.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'special-chars-reasoning-agent',
         name: 'Special Chars Reasoning Agent',
         instructions: 'Handle special characters.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Test special characters');
+      const result = await durableAgent.prepare('Test special characters');
 
       expect(result.runId).toBeDefined();
     });
@@ -380,15 +381,15 @@ describe('DurableAgent V3 usage format', () => {
       }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'v3-usage-agent',
       name: 'V3 Usage Agent',
       instructions: 'Process with V3 usage.',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { runId, cleanup } = await agent.stream('Test V3 usage');
+    const { runId, cleanup } = await durableAgent.stream('Test V3 usage');
 
     expect(runId).toBeDefined();
     cleanup();

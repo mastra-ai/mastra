@@ -11,7 +11,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import '../../../tools';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -93,15 +94,15 @@ describe('DurableAgent usage tracking', () => {
         totalTokens: 150,
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'usage-test-agent',
         name: 'Usage Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Test message');
+      const result = await durableAgent.prepare('Test message');
 
       // Workflow input should be prepared
       expect(result.workflowInput).toBeDefined();
@@ -115,15 +116,15 @@ describe('DurableAgent usage tracking', () => {
         totalTokens: 30,
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'model-config-agent',
         name: 'Model Config Agent',
         instructions: 'Test',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Test');
+      const result = await durableAgent.prepare('Test');
 
       expect(result.workflowInput.modelConfig).toBeDefined();
       expect(result.workflowInput.modelConfig.provider).toBeDefined();
@@ -139,15 +140,15 @@ describe('DurableAgent usage tracking', () => {
         totalTokens: 30,
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'raw-chunks-agent',
         name: 'Raw Chunks Agent',
         instructions: 'Test',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Test', {
+      const result = await durableAgent.prepare('Test', {
         includeRawChunks: true,
       });
 
@@ -161,15 +162,15 @@ describe('DurableAgent usage tracking', () => {
         totalTokens: 30,
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'temperature-agent',
         name: 'Temperature Agent',
         instructions: 'Test',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Test', {
+      const result = await durableAgent.prepare('Test', {
         modelSettings: {
           temperature: 0.7,
         },
@@ -187,16 +188,16 @@ describe('DurableAgent usage tracking', () => {
         totalTokens: 30,
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'init-usage-agent',
         name: 'Init Usage Agent',
         instructions: 'Test',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       // Get the workflow to inspect its structure
-      const workflow = agent.getWorkflow();
+      const workflow = durableAgent.getWorkflow();
       expect(workflow).toBeDefined();
       expect(workflow.id).toBe('durable-agentic-loop');
     });
@@ -225,15 +226,15 @@ describe('DurableAgent usage accumulation', () => {
       totalTokens: 30,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'accumulation-agent',
       name: 'Accumulation Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
     // The workflow input should have all required fields
     expect(result.workflowInput.runId).toBeDefined();
@@ -251,17 +252,17 @@ describe('DurableAgent usage accumulation', () => {
       totalTokens: 30,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'multi-prepare-agent',
       name: 'Multi Prepare Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result1 = await agent.prepare('First message');
-    const result2 = await agent.prepare('Second message');
-    const result3 = await agent.prepare('Third message');
+    const result1 = await durableAgent.prepare('First message');
+    const result2 = await durableAgent.prepare('Second message');
+    const result3 = await durableAgent.prepare('Third message');
 
     // Each should have unique runId
     expect(result1.runId).not.toBe(result2.runId);
@@ -273,9 +274,9 @@ describe('DurableAgent usage accumulation', () => {
     expect(result2.messageId).not.toBe(result3.messageId);
 
     // All should be in registry
-    expect(agent.runRegistry.has(result1.runId)).toBe(true);
-    expect(agent.runRegistry.has(result2.runId)).toBe(true);
-    expect(agent.runRegistry.has(result3.runId)).toBe(true);
+    expect(durableAgent.runRegistry.has(result1.runId)).toBe(true);
+    expect(durableAgent.runRegistry.has(result2.runId)).toBe(true);
+    expect(durableAgent.runRegistry.has(result3.runId)).toBe(true);
   });
 });
 
@@ -301,15 +302,15 @@ describe('DurableAgent model settings', () => {
       totalTokens: 30,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'temp-setting-agent',
       name: 'Temp Setting Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test', {
+    const result = await durableAgent.prepare('Test', {
       modelSettings: { temperature: 0.5 },
     });
 
@@ -323,15 +324,15 @@ describe('DurableAgent model settings', () => {
       totalTokens: 30,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'no-settings-agent',
       name: 'No Settings Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
     // Should not throw and temperature should be undefined
     expect(result.workflowInput.options.temperature).toBeUndefined();
@@ -344,15 +345,15 @@ describe('DurableAgent model settings', () => {
       totalTokens: 30,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'serialize-config-agent',
       name: 'Serialize Config Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
     // Model config should be serializable
     const serialized = JSON.stringify(result.workflowInput.modelConfig);
@@ -385,15 +386,15 @@ describe('DurableAgent processor retry configuration', () => {
       totalTokens: 30,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'retry-config-agent',
       name: 'Retry Config Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test', {
+    const result = await durableAgent.prepare('Test', {
       maxProcessorRetries: 3,
     });
 
@@ -407,15 +408,15 @@ describe('DurableAgent processor retry configuration', () => {
       totalTokens: 30,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'default-retry-agent',
       name: 'Default Retry Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
     expect(result.workflowInput.options.maxProcessorRetries).toBeUndefined();
   });

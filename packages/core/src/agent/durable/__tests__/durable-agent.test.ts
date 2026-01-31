@@ -4,9 +4,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
+import { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
-import { DurableAgent } from '../durable-agent';
+import { createDurableAgent } from '../create-durable-agent';
 import { RunRegistry, ExtendedRunRegistry } from '../run-registry';
 import type { AgentStreamEvent } from '../types';
 
@@ -37,21 +38,22 @@ describe('DurableAgent', () => {
         }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      // id and name are available synchronously from config
-      expect(agent.id).toBe('test-agent');
-      expect(agent.name).toBe('Test Agent');
-      expect(agent.runRegistry).toBeDefined();
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      // DurableAgent now extends Agent, so agent getter returns this
-      expect(agent.agent).toBe(agent);
+      // id and name are available synchronously from config
+      expect(durableAgent.id).toBe('test-agent');
+      expect(durableAgent.name).toBe('Test Agent');
+      expect(durableAgent.runRegistry).toBeDefined();
+
+      // DurableAgent wraps the base agent
+      expect(durableAgent.agent).toBe(baseAgent);
     });
 
     it('should provide agent instance after async initialization', async () => {
@@ -65,15 +67,16 @@ describe('DurableAgent', () => {
         }),
       });
 
-      const durableAgent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      // After calling prepare (async), agent should be available
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      // After calling prepare (async), agent should still be available
       await durableAgent.prepare('Hello');
       expect(durableAgent.agent).toBeDefined();
       expect(durableAgent.agent.id).toBe('test-agent');
@@ -90,14 +93,15 @@ describe('DurableAgent', () => {
         }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'my-agent-id',
         instructions: 'You are a test assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      expect(agent.name).toBe('my-agent-id');
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      expect(durableAgent.name).toBe('my-agent-id');
     });
   });
 
@@ -113,15 +117,16 @@ describe('DurableAgent', () => {
         }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const result = await agent.prepare('Hello!');
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.prepare('Hello!');
 
       expect(result.runId).toBeDefined();
       expect(result.messageId).toBeDefined();
@@ -133,7 +138,7 @@ describe('DurableAgent', () => {
       expect(result.workflowInput.options).toBeDefined();
 
       // Verify entry was registered
-      expect(agent.runRegistry.has(result.runId)).toBe(true);
+      expect(durableAgent.runRegistry.has(result.runId)).toBe(true);
     });
 
     it('should accept string messages', async () => {
@@ -147,19 +152,20 @@ describe('DurableAgent', () => {
         }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const result = await agent.prepare('Hello, world!');
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.prepare('Hello, world!');
 
       expect(result.workflowInput.messageListState).toBeDefined();
       // Verify messages were added to message list
-      expect(agent.runRegistry.has(result.runId)).toBe(true);
+      expect(durableAgent.runRegistry.has(result.runId)).toBe(true);
     });
 
     it('should accept array of string messages', async () => {
@@ -173,18 +179,19 @@ describe('DurableAgent', () => {
         }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const result = await agent.prepare(['First message', 'Second message']);
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.prepare(['First message', 'Second message']);
 
       expect(result.workflowInput.messageListState).toBeDefined();
-      expect(agent.runRegistry.has(result.runId)).toBe(true);
+      expect(durableAgent.runRegistry.has(result.runId)).toBe(true);
     });
 
     it('should accept message objects', async () => {
@@ -198,22 +205,23 @@ describe('DurableAgent', () => {
         }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const result = await agent.prepare([
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.prepare([
         { role: 'user', content: 'Hello!' },
         { role: 'assistant', content: 'Hi there!' },
         { role: 'user', content: 'How are you?' },
       ]);
 
       expect(result.workflowInput.messageListState).toBeDefined();
-      expect(agent.runRegistry.has(result.runId)).toBe(true);
+      expect(durableAgent.runRegistry.has(result.runId)).toBe(true);
     });
   });
 
@@ -229,15 +237,16 @@ describe('DurableAgent', () => {
         }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const workflow = agent.getWorkflow();
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const workflow = durableAgent.getWorkflow();
 
       expect(workflow).toBeDefined();
       expect(workflow.id).toBe('durable-agentic-loop');
@@ -254,16 +263,17 @@ describe('DurableAgent', () => {
         }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      const workflow1 = agent.getWorkflow();
-      const workflow2 = agent.getWorkflow();
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const workflow1 = durableAgent.getWorkflow();
+      const workflow2 = durableAgent.getWorkflow();
 
       expect(workflow1).toBe(workflow2);
     });
@@ -281,25 +291,26 @@ describe('DurableAgent', () => {
         }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
       // Initially empty
-      expect(agent.runRegistry.size).toBe(0);
+      expect(durableAgent.runRegistry.size).toBe(0);
 
       // After prepare, should have one entry
-      const result = await agent.prepare('Hello!');
-      expect(agent.runRegistry.size).toBe(1);
-      expect(agent.runRegistry.has(result.runId)).toBe(true);
+      const result = await durableAgent.prepare('Hello!');
+      expect(durableAgent.runRegistry.size).toBe(1);
+      expect(durableAgent.runRegistry.has(result.runId)).toBe(true);
 
       // After cleanup, should be empty again
-      agent.runRegistry.cleanup(result.runId);
-      expect(agent.runRegistry.size).toBe(0);
+      durableAgent.runRegistry.cleanup(result.runId);
+      expect(durableAgent.runRegistry.size).toBe(0);
     });
 
     it('should track multiple concurrent runs', async () => {
@@ -313,28 +324,29 @@ describe('DurableAgent', () => {
         }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a test assistant',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      // Create multiple runs
-      const result1 = await agent.prepare('First message');
-      const result2 = await agent.prepare('Second message');
-      const result3 = await agent.prepare('Third message');
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      expect(agent.runRegistry.size).toBe(3);
-      expect(agent.runRegistry.has(result1.runId)).toBe(true);
-      expect(agent.runRegistry.has(result2.runId)).toBe(true);
-      expect(agent.runRegistry.has(result3.runId)).toBe(true);
+      // Create multiple runs
+      const result1 = await durableAgent.prepare('First message');
+      const result2 = await durableAgent.prepare('Second message');
+      const result3 = await durableAgent.prepare('Third message');
+
+      expect(durableAgent.runRegistry.size).toBe(3);
+      expect(durableAgent.runRegistry.has(result1.runId)).toBe(true);
+      expect(durableAgent.runRegistry.has(result2.runId)).toBe(true);
+      expect(durableAgent.runRegistry.has(result3.runId)).toBe(true);
 
       // Cleanup one
-      agent.runRegistry.cleanup(result2.runId);
-      expect(agent.runRegistry.size).toBe(2);
-      expect(agent.runRegistry.has(result2.runId)).toBe(false);
+      durableAgent.runRegistry.cleanup(result2.runId);
+      expect(durableAgent.runRegistry.size).toBe(2);
+      expect(durableAgent.runRegistry.has(result2.runId)).toBe(false);
     });
   });
 });
@@ -365,7 +377,7 @@ describe('DurableAgent preparation', () => {
       }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are a test assistant',
@@ -383,17 +395,18 @@ describe('DurableAgent preparation', () => {
           execute: async ({ name }: { name: string }) => `Hello, ${name}!`,
         },
       },
-      pubsub,
     });
 
-    const result = await agent.prepare('Say hello to Alice');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Say hello to Alice');
 
     // Check that tool metadata is serialized
     expect(result.workflowInput.toolsMetadata).toBeDefined();
     expect(result.workflowInput.toolsMetadata.length).toBeGreaterThanOrEqual(0);
 
     // Verify tools are stored in registry (with execute functions)
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(tools).toBeDefined();
   });
 
@@ -408,15 +421,16 @@ describe('DurableAgent preparation', () => {
       }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are a test assistant',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const result = await agent.prepare('Hello!', {
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Hello!', {
       memory: {
         thread: 'thread-123',
         resource: 'user-456',
@@ -440,18 +454,19 @@ describe('DurableAgent preparation', () => {
       }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are a test assistant',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const result = await agent.prepare('Hello!');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Hello!');
 
     // Model should be stored in registry
-    const model = agent.runRegistry.getModel(result.runId);
+    const model = durableAgent.runRegistry.getModel(result.runId);
     expect(model).toBeDefined();
   });
 
@@ -480,18 +495,19 @@ describe('DurableAgent preparation', () => {
       execute: async ({ text }) => text.toUpperCase(),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are a test assistant',
       model: mockModel as LanguageModelV2,
       tools: { echo: echoTool, uppercase: uppercaseTool },
-      pubsub,
     });
 
-    const result = await agent.prepare('Use both tools');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const tools = agent.runRegistry.getTools(result.runId);
+    const result = await durableAgent.prepare('Use both tools');
+
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(Object.keys(tools)).toContain('echo');
     expect(Object.keys(tools)).toContain('uppercase');
   });
@@ -809,19 +825,20 @@ describe('DurableAgent with tools', () => {
       execute: async ({ value }) => `Executed with: ${value}`,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'tool-agent',
       name: 'Tool Agent',
       instructions: 'Use tools',
       model: mockModel as LanguageModelV2,
       tools: { test: testTool },
-      pubsub,
     });
 
-    const result = await agent.prepare('Use the test tool');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Use the test tool');
 
     // Tools should be in registry
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(tools.test).toBeDefined();
     expect(typeof tools.test.execute).toBe('function');
 
@@ -841,7 +858,7 @@ describe('DurableAgent with tools', () => {
       }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'tool-agent',
       name: 'Tool Agent',
       instructions: 'Use tools',
@@ -857,12 +874,13 @@ describe('DurableAgent with tools', () => {
           execute: async ({ input }: { input: string }) => `Result: ${input}`,
         },
       },
-      pubsub,
     });
 
-    const result = await agent.prepare('Test');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const tools = agent.runRegistry.getTools(result.runId);
+    const result = await durableAgent.prepare('Test');
+
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(tools.simpleTool).toBeDefined();
   });
 });

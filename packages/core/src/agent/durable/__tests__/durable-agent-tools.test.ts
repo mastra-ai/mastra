@@ -12,7 +12,8 @@ import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
 import '../constants';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 import '../types';
 
 // ============================================================================
@@ -146,18 +147,18 @@ describe('DurableAgent tool registration', () => {
       execute: async ({ message }) => `Echo: ${message}`,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'tool-registration-agent',
       name: 'Tool Registration Agent',
       instructions: 'Use tools',
       model: mockModel as LanguageModelV2,
       tools: { echo: echoTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(tools.echo).toBeDefined();
     expect(typeof tools.echo.execute).toBe('function');
 
@@ -191,18 +192,18 @@ describe('DurableAgent tool registration', () => {
       execute: async ({ a, b }) => a * b,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'multi-tool-agent',
       name: 'Multi Tool Agent',
       instructions: 'Calculate',
       model: mockModel as LanguageModelV2,
       tools: { add: addTool, multiply: multiplyTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Calculate something');
+    const result = await durableAgent.prepare('Calculate something');
 
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(Object.keys(tools)).toHaveLength(2);
     expect(tools.add).toBeDefined();
     expect(tools.multiply).toBeDefined();
@@ -240,18 +241,18 @@ describe('DurableAgent tool registration', () => {
       execute: async input => ({ received: input }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'complex-tool-agent',
       name: 'Complex Tool Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
       tools: { complex: complexTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     const execResult = await tools.complex.execute!(
       {
         name: 'test',
@@ -298,22 +299,22 @@ describe('DurableAgent tool execution through workflow', () => {
       execute: async ({ name }) => `Hello, ${name}!`,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'tool-workflow-agent',
       name: 'Tool Workflow Agent',
       instructions: 'Greet users',
       model: mockModel as LanguageModelV2,
       tools: { greet: greetTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Greet Alice');
+    const result = await durableAgent.prepare('Greet Alice');
 
     // Tools metadata should be in workflow input
     expect(result.workflowInput.toolsMetadata).toBeDefined();
 
     // Tools with execute should be in registry
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(tools.greet).toBeDefined();
   });
 
@@ -338,18 +339,18 @@ describe('DurableAgent tool execution through workflow', () => {
       },
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'async-tool-agent',
       name: 'Async Tool Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
       tools: { asyncTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     const execResult = await tools.asyncTool.execute!({ delay: 10 }, {} as any);
     expect(execResult).toBe('Completed after 10ms');
   });
@@ -377,18 +378,18 @@ describe('DurableAgent tool execution through workflow', () => {
       },
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'error-tool-agent',
       name: 'Error Tool Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
       tools: { errorTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
 
     // Should succeed when shouldFail is false
     const successResult = await tools.errorTool.execute!({ shouldFail: false }, {} as any);
@@ -448,16 +449,16 @@ describe('DurableAgent tool metadata serialization', () => {
       execute: async ({ param1, param2 }) => `${param1}-${param2}`,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'serialization-agent',
       name: 'Serialization Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
       tools: { testTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
     // Serialize and deserialize to verify no functions
     const serialized = JSON.stringify(result.workflowInput);
@@ -486,19 +487,19 @@ describe('DurableAgent tool metadata serialization', () => {
       execute: async ({ input }) => input,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'description-agent',
       name: 'Description Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
       tools: { describedTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
     // The tools in registry should have description
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(tools.describedTool.description).toBe('This is a detailed description of what this tool does');
   });
 });
@@ -529,15 +530,15 @@ describe('DurableAgent multi-step execution', () => {
       }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'max-steps-agent',
       name: 'Max Steps Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test', { maxSteps: 3 });
+    const result = await durableAgent.prepare('Test', { maxSteps: 3 });
 
     expect(result.workflowInput.options.maxSteps).toBe(3);
   });
@@ -562,18 +563,18 @@ describe('DurableAgent multi-step execution', () => {
       execute: async ({ b }) => `tool2: ${b}`,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'multi-tool-exec-agent',
       name: 'Multi Tool Exec Agent',
       instructions: 'Use multiple tools',
       model: mockModel as LanguageModelV2,
       tools: { tool1, tool2 },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Use both tools');
+    const result = await durableAgent.prepare('Use both tools');
 
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(tools.tool1).toBeDefined();
     expect(tools.tool2).toBeDefined();
 
@@ -609,15 +610,15 @@ describe('DurableAgent tool choice configuration', () => {
       }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'tool-choice-auto-agent',
       name: 'Tool Choice Auto Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test', { toolChoice: 'auto' });
+    const result = await durableAgent.prepare('Test', { toolChoice: 'auto' });
 
     expect(result.workflowInput.options.toolChoice).toBe('auto');
   });
@@ -633,15 +634,15 @@ describe('DurableAgent tool choice configuration', () => {
       }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'tool-choice-none-agent',
       name: 'Tool Choice None Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test', { toolChoice: 'none' });
+    const result = await durableAgent.prepare('Test', { toolChoice: 'none' });
 
     expect(result.workflowInput.options.toolChoice).toBe('none');
   });
@@ -657,15 +658,15 @@ describe('DurableAgent tool choice configuration', () => {
       }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'tool-choice-required-agent',
       name: 'Tool Choice Required Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test', { toolChoice: 'required' });
+    const result = await durableAgent.prepare('Test', { toolChoice: 'required' });
 
     expect(result.workflowInput.options.toolChoice).toBe('required');
   });
@@ -697,15 +698,15 @@ describe('DurableAgent tool approval configuration', () => {
       }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'approval-config-agent',
       name: 'Approval Config Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test', { requireToolApproval: true });
+    const result = await durableAgent.prepare('Test', { requireToolApproval: true });
 
     expect(result.workflowInput.options.requireToolApproval).toBe(true);
   });
@@ -729,18 +730,18 @@ describe('DurableAgent tool approval configuration', () => {
       execute: async ({ action }) => `Executed: ${action}`,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'approval-tool-agent',
       name: 'Approval Tool Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
       tools: { approvalTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(tools.approvalTool).toBeDefined();
     // The tool itself has requireApproval flag
     expect((tools.approvalTool as any).requireApproval).toBe(true);
@@ -773,15 +774,15 @@ describe('DurableAgent tool concurrency configuration', () => {
       }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'concurrency-agent',
       name: 'Concurrency Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test', { toolCallConcurrency: 5 });
+    const result = await durableAgent.prepare('Test', { toolCallConcurrency: 5 });
 
     expect(result.workflowInput.options.toolCallConcurrency).toBe(5);
   });

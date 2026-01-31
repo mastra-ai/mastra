@@ -11,7 +11,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -160,16 +161,16 @@ describe('DurableAgent tool approval', () => {
         execute: mockExecute,
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'approval-agent',
         name: 'Approval Agent',
         instructions: 'You can find users',
         model: mockModel as LanguageModelV2,
         tools: { findUser: findUserTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Find user Alice', {
+      const result = await durableAgent.prepare('Find user Alice', {
         requireToolApproval: true,
       });
 
@@ -186,16 +187,16 @@ describe('DurableAgent tool approval', () => {
         execute: async () => ({ name: 'Alice' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'no-approval-agent',
         name: 'No Approval Agent',
         instructions: 'You can find users',
         model: mockModel as LanguageModelV2,
         tools: { findUser: findUserTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Find user Alice');
+      const result = await durableAgent.prepare('Find user Alice');
 
       // Should be undefined or false by default
       expect(result.workflowInput.options.requireToolApproval).toBeFalsy();
@@ -214,19 +215,19 @@ describe('DurableAgent tool approval', () => {
         execute: async () => ({ name: 'Alice', email: 'alice@test.com' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'tool-approval-agent',
         name: 'Tool Approval Agent',
         instructions: 'You can find users',
         model: mockModel as LanguageModelV2,
         tools: { findUser: findUserTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Find user Alice');
+      const result = await durableAgent.prepare('Find user Alice');
 
       // Tool should be registered in registry
-      const tools = agent.runRegistry.getTools(result.runId);
+      const tools = durableAgent.runRegistry.getTools(result.runId);
       expect(tools).toBeDefined();
       expect(tools.findUser).toBeDefined();
     });
@@ -253,18 +254,18 @@ describe('DurableAgent tool approval', () => {
         execute: async () => ({ sent: true }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'mixed-approval-agent',
         name: 'Mixed Approval Agent',
         instructions: 'You can find users and send emails',
         model: mockModel as LanguageModelV2,
         tools: { findUser: findUserTool, sendEmail: sendEmailTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Find Alice and send her an email');
+      const result = await durableAgent.prepare('Find Alice and send her an email');
 
-      const tools = agent.runRegistry.getTools(result.runId);
+      const tools = durableAgent.runRegistry.getTools(result.runId);
       expect(tools.findUser).toBeDefined();
       expect(tools.sendEmail).toBeDefined();
     });
@@ -282,16 +283,16 @@ describe('DurableAgent tool approval', () => {
         execute: async () => ({ result: 'completed' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'dangerous-op-agent',
         name: 'Dangerous Operation Agent',
         instructions: 'You can perform dangerous operations',
         model: mockModel as LanguageModelV2,
         tools: { dangerousTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Delete all data', {
+      const result = await durableAgent.prepare('Delete all data', {
         requireToolApproval: true,
       });
 
@@ -314,16 +315,16 @@ describe('DurableAgent tool approval', () => {
         execute: async () => ({ output: 'result' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'interactive-agent',
         name: 'Interactive Agent',
         instructions: 'You can use interactive tools',
         model: mockModel as LanguageModelV2,
         tools: { interactiveTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use the interactive tool', {
+      const result = await durableAgent.prepare('Use the interactive tool', {
         requireToolApproval: true,
         autoResumeSuspendedTools: true,
       });
@@ -344,16 +345,16 @@ describe('DurableAgent tool approval', () => {
         execute: async () => ({ results: ['result1', 'result2'] }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'search-agent',
         name: 'Search Agent',
         instructions: 'You can search for information',
         model: mockModel as LanguageModelV2,
         tools: { searchTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await agent.stream('Search for test', {
+      const { runId, cleanup } = await durableAgent.stream('Search for test', {
         requireToolApproval: true,
       });
 
@@ -373,16 +374,16 @@ describe('DurableAgent tool approval', () => {
         execute: async () => ({ results: ['result1'] }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'text-then-tool-agent',
         name: 'Text Then Tool Agent',
         instructions: 'You can search for information',
         model: mockModel as LanguageModelV2,
         tools: { searchTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await agent.stream('Search for test', {
+      const { runId, cleanup } = await durableAgent.stream('Search for test', {
         requireToolApproval: true,
       });
 
@@ -403,18 +404,18 @@ describe('DurableAgent tool approval', () => {
         execute: async () => ({ result: 'done' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'callback-agent',
         name: 'Callback Agent',
         instructions: 'You can use approvable tools',
         model: mockModel as LanguageModelV2,
         tools: { approvableTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const onSuspended = vi.fn();
 
-      const { runId, cleanup } = await agent.stream('Use the tool', {
+      const { runId, cleanup } = await durableAgent.stream('Use the tool', {
         requireToolApproval: true,
         onSuspended,
       });
@@ -443,16 +444,16 @@ describe('DurableAgent tool approval', () => {
         execute: async () => ({ result: 'success' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'metadata-agent',
         name: 'Metadata Agent',
         instructions: 'You use tools with metadata',
         model: mockModel as LanguageModelV2,
         tools: { metadataTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use the metadata tool');
+      const result = await durableAgent.prepare('Use the metadata tool');
 
       // Tool metadata should be serialized
       expect(result.workflowInput.toolsMetadata).toBeDefined();
@@ -485,7 +486,7 @@ describe('DurableAgent tool approval with workflows as tools', () => {
       execute: async () => ({ output: 'result' }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'workflow-tool-agent',
       name: 'Workflow Tool Agent',
       instructions: 'You can use workflow tools',
@@ -494,11 +495,11 @@ describe('DurableAgent tool approval with workflows as tools', () => {
       defaultOptions: {
         requireToolApproval: true,
       },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     // Default options should be reflected when no options are passed
-    const result = await agent.prepare('Use the workflow tool');
+    const result = await durableAgent.prepare('Use the workflow tool');
 
     // Note: Default options are applied at the agent level, not workflow input level
     // This test verifies the agent accepts defaultOptions config

@@ -13,7 +13,8 @@ import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../../request-context';
 import { createTool } from '../../../tools';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -98,18 +99,18 @@ describe('DurableAgent RequestContext reserved keys', () => {
     it('should accept requestContext option in prepare', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'request-context-agent',
         name: 'RequestContext Agent',
         instructions: 'Test requestContext',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const requestContext = new RequestContext();
       requestContext.set('customKey', 'customValue');
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         requestContext,
       });
 
@@ -119,18 +120,18 @@ describe('DurableAgent RequestContext reserved keys', () => {
     it('should accept requestContext option in stream', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'stream-request-context-agent',
         name: 'Stream RequestContext Agent',
         instructions: 'Test requestContext',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const requestContext = new RequestContext();
       requestContext.set('userInfo', { role: 'admin' });
 
-      const { runId, cleanup } = await agent.stream('Hello', {
+      const { runId, cleanup } = await durableAgent.stream('Hello', {
         requestContext,
       });
 
@@ -143,19 +144,19 @@ describe('DurableAgent RequestContext reserved keys', () => {
     it('should use mastra__resourceId and mastra__threadId from RequestContext', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'reserved-keys-agent',
         name: 'Reserved Keys Agent',
         instructions: 'Test reserved keys',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'context-user-123');
       requestContext.set(MASTRA_THREAD_ID_KEY, 'context-thread-456');
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         requestContext,
         // Not passing memory options - should use RequestContext values
       });
@@ -167,19 +168,19 @@ describe('DurableAgent RequestContext reserved keys', () => {
     it('should handle RequestContext with memory options', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'context-memory-agent',
         name: 'Context Memory Agent',
         instructions: 'Test context with memory',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const requestContext = new RequestContext();
       requestContext.set(MASTRA_RESOURCE_ID_KEY, 'middleware-user');
       requestContext.set(MASTRA_THREAD_ID_KEY, 'middleware-thread');
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         requestContext,
         memory: {
           thread: 'body-thread',
@@ -208,24 +209,24 @@ describe('DurableAgent RequestContext reserved keys', () => {
         },
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'tool-context-agent',
         name: 'Tool Context Agent',
         instructions: 'Use tools with context',
         model: mockModel as LanguageModelV2,
         tools: { contextTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const requestContext = new RequestContext();
       requestContext.set('userId', 'user-123');
 
-      const result = await agent.prepare('Use the tool', {
+      const result = await durableAgent.prepare('Use the tool', {
         requestContext,
       });
 
       // Tool should be registered
-      const tools = agent.runRegistry.getTools(result.runId);
+      const tools = durableAgent.runRegistry.getTools(result.runId);
       expect(tools.contextTool).toBeDefined();
     });
   });
@@ -234,18 +235,18 @@ describe('DurableAgent RequestContext reserved keys', () => {
     it('should not include requestContext in serialized workflow input', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'serialize-context-agent',
         name: 'Serialize Context Agent',
         instructions: 'Test serialization',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const requestContext = new RequestContext();
       requestContext.set('sensitiveData', 'should-not-serialize');
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         requestContext,
       });
 
@@ -273,18 +274,18 @@ describe('DurableAgent RequestContext edge cases', () => {
   it('should handle empty RequestContext', async () => {
     const mockModel = createTextModel('Hello!');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'empty-context-agent',
       name: 'Empty Context Agent',
       instructions: 'Test empty context',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const requestContext = new RequestContext();
     // Empty context - no values set
 
-    const result = await agent.prepare('Hello', {
+    const result = await durableAgent.prepare('Hello', {
       requestContext,
     });
 
@@ -294,13 +295,13 @@ describe('DurableAgent RequestContext edge cases', () => {
   it('should handle RequestContext with complex values', async () => {
     const mockModel = createTextModel('Hello!');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'complex-context-agent',
       name: 'Complex Context Agent',
       instructions: 'Test complex context',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const requestContext = new RequestContext();
     requestContext.set('user', {
@@ -312,7 +313,7 @@ describe('DurableAgent RequestContext edge cases', () => {
       },
     });
 
-    const result = await agent.prepare('Hello', {
+    const result = await durableAgent.prepare('Hello', {
       requestContext,
     });
 
@@ -322,15 +323,15 @@ describe('DurableAgent RequestContext edge cases', () => {
   it('should handle undefined requestContext', async () => {
     const mockModel = createTextModel('Hello!');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'undefined-context-agent',
       name: 'Undefined Context Agent',
       instructions: 'Test undefined context',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Hello', {
+    const result = await durableAgent.prepare('Hello', {
       // requestContext is not provided
     });
 
@@ -340,20 +341,20 @@ describe('DurableAgent RequestContext edge cases', () => {
   it('should handle RequestContext with special characters in keys', async () => {
     const mockModel = createTextModel('Hello!');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'special-keys-agent',
       name: 'Special Keys Agent',
       instructions: 'Test special keys',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const requestContext = new RequestContext();
     requestContext.set('key-with-dashes', 'value1');
     requestContext.set('key_with_underscores', 'value2');
     requestContext.set('key.with.dots', 'value3');
 
-    const result = await agent.prepare('Hello', {
+    const result = await durableAgent.prepare('Hello', {
       requestContext,
     });
 

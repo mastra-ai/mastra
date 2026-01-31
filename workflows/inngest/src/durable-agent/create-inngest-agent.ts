@@ -298,10 +298,35 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   // Mastra's addWorkflow handles deduplication, so creating multiple times is fine
   const workflow = createInngestDurableAgenticWorkflow({ inngest });
 
-  // Create pubsub (default to InngestPubSub)
-  // Wrap with CachingPubSub if cache is provided (enables resumable streams)
+  // Track whether user provided a custom cache (if not, we'll inherit from mastra)
+  let _customCache = cache;
+
+  // Set up pubsub with lazy CachingPubSub creation
+  // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
   const innerPubsub = customPubsub ?? new InngestPubSub(inngest, DurableStepIds.AGENTIC_LOOP);
-  const pubsub: PubSub = cache ? new CachingPubSub(innerPubsub, cache) : innerPubsub;
+  let _cachingPubsub: PubSub | null = null;
+
+  // Lazily create CachingPubSub - this allows inheriting cache from mastra if not provided
+  function getPubsub(): PubSub {
+    if (!_cachingPubsub) {
+      // Resolve cache: user-provided > mastra's cache > no caching (just use inner pubsub)
+      const resolvedCache = _customCache ?? mastra?.serverCache;
+      if (resolvedCache) {
+        _customCache = resolvedCache; // Store for the cache getter
+        _cachingPubsub = new CachingPubSub(innerPubsub, resolvedCache);
+      } else {
+        _cachingPubsub = innerPubsub;
+      }
+    }
+    return _cachingPubsub;
+  }
+
+  // Lazily resolve cache
+  function getCache(): MastraServerCache | undefined {
+    // Ensure pubsub is initialized (which resolves cache)
+    getPubsub();
+    return _customCache;
+  }
 
   /**
    * Trigger the workflow via Inngest event
@@ -329,7 +354,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * Emit an error event to pubsub
    */
   async function emitError(runId: string, error: Error): Promise<void> {
-    await emitErrorEvent(pubsub, runId, error);
+    await emitErrorEvent(getPubsub(), runId, error);
   }
 
   // Return the InngestAgent object
@@ -351,7 +376,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
 
     get cache() {
-      return cache;
+      return getCache();
     },
 
     async stream(messages, streamOptions): Promise<InngestAgentStreamResult<TOutput>> {
@@ -415,7 +440,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       // 2. Create the durable agent stream (subscribes to pubsub)
       const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
-        pubsub,
+        pubsub: getPubsub(),
         runId,
         messageId,
         model: {
@@ -465,7 +490,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     async resume(runId, resumeData, resumeOptions): Promise<InngestAgentStreamResult<TOutput>> {
       // Re-subscribe to the stream
       const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
-        pubsub,
+        pubsub: getPubsub(),
         runId,
         messageId: crypto.randomUUID(),
         model: {
@@ -532,7 +557,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     async observe(runId, observeOptions) {
       // Create the stream subscription with fromIndex support
       const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
-        pubsub,
+        pubsub: getPubsub(),
         runId,
         messageId: crypto.randomUUID(),
         model: {

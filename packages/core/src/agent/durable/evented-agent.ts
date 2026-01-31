@@ -1,5 +1,5 @@
 /**
- * EventedAgent - A durable agent that uses the built-in evented workflow engine.
+ * EventedAgent - A durable agent that uses fire-and-forget execution.
  *
  * EventedAgent extends DurableAgent and overrides the execution strategy to use
  * fire-and-forget execution via the workflow engine's startAsync() method.
@@ -16,7 +16,7 @@ import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';
 
 /**
- * Configuration for EventedAgent
+ * Configuration for EventedAgent - wraps an existing Agent with fire-and-forget execution
  */
 export interface EventedAgentConfig<
   TAgentId extends string = string,
@@ -40,20 +40,18 @@ export interface EventedAgentConfig<
  *
  * @example
  * ```typescript
+ * import { Agent } from '@mastra/core/agent';
  * import { EventedAgent } from '@mastra/core/agent/durable';
- * import { EventEmitterPubSub } from '@mastra/core/events';
  *
- * const pubsub = new EventEmitterPubSub();
- *
- * const agent = new EventedAgent({
- *   id: 'my-evented-agent',
- *   name: 'My Evented Agent',
+ * const agent = new Agent({
+ *   id: 'my-agent',
  *   instructions: 'You are a helpful assistant',
  *   model: openai('gpt-4'),
- *   pubsub,
  * });
  *
- * const { output, runId, cleanup } = await agent.stream('Hello!');
+ * const eventedAgent = new EventedAgent({ agent });
+ *
+ * const { output, runId, cleanup } = await eventedAgent.stream('Hello!');
  * const text = await output.text;
  * cleanup();
  * ```
@@ -64,7 +62,7 @@ export class EventedAgent<
   TOutput = undefined,
 > extends DurableAgent<TAgentId, TTools, TOutput> {
   /**
-   * Create a new EventedAgent
+   * Create a new EventedAgent that wraps an existing Agent
    */
   constructor(config: EventedAgentConfig<TAgentId, TTools, TOutput>) {
     // Pass config to DurableAgent, but don't use executor
@@ -101,7 +99,7 @@ export class EventedAgent<
 }
 
 /**
- * Check if an object is an EventedAgent
+ * Check if an object is an EventedAgent class instance
  */
 export function isEventedAgentClass(obj: any): obj is EventedAgent {
   return obj instanceof EventedAgent;

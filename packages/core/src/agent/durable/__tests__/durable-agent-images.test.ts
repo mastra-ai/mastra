@@ -9,7 +9,8 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -63,15 +64,15 @@ describe('DurableAgent image handling', () => {
     it('should accept raw base64 image in message content', async () => {
       const mockModel = createTextModel('I see a red pixel.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'base64-image-agent',
         name: 'Base64 Image Agent',
         instructions: 'Describe images.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           role: 'user',
           content: [
@@ -88,15 +89,15 @@ describe('DurableAgent image handling', () => {
     it('should handle data URI format images', async () => {
       const mockModel = createTextModel('I see a red pixel.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'data-uri-image-agent',
         name: 'Data URI Image Agent',
         instructions: 'Describe images.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           role: 'user',
           content: [
@@ -114,15 +115,15 @@ describe('DurableAgent image handling', () => {
     it('should accept HTTP URL images in message content', async () => {
       const mockModel = createTextModel('I see an image from the URL.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'url-image-agent',
         name: 'URL Image Agent',
         instructions: 'Describe images.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           role: 'user',
           content: [
@@ -138,15 +139,15 @@ describe('DurableAgent image handling', () => {
     it('should handle HTTPS URL images', async () => {
       const mockModel = createTextModel('I see an image.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'https-image-agent',
         name: 'HTTPS Image Agent',
         instructions: 'Describe images.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           role: 'user',
           content: [
@@ -164,15 +165,15 @@ describe('DurableAgent image handling', () => {
     it('should handle multiple images in different formats', async () => {
       const mockModel = createTextModel('I see multiple images.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'mixed-images-agent',
         name: 'Mixed Images Agent',
         instructions: 'Describe images.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           role: 'user',
           content: [
@@ -190,15 +191,15 @@ describe('DurableAgent image handling', () => {
     it('should handle text and image interleaved', async () => {
       const mockModel = createTextModel('Comparing the images...');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'interleaved-images-agent',
         name: 'Interleaved Images Agent',
         instructions: 'Describe images.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           role: 'user',
           content: [
@@ -219,15 +220,15 @@ describe('DurableAgent image handling', () => {
     it('should serialize image content in workflow input', async () => {
       const mockModel = createTextModel('Image processed.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'serialize-image-agent',
         name: 'Serialize Image Agent',
         instructions: 'Process images.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           role: 'user',
           content: [
@@ -250,15 +251,15 @@ describe('DurableAgent image handling', () => {
       // Create a larger base64 string (still valid, just repeated)
       const largeBase64 = SAMPLE_BASE64_IMAGE.repeat(100);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'large-image-agent',
         name: 'Large Image Agent',
         instructions: 'Process images.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           role: 'user',
           content: [
@@ -280,15 +281,15 @@ describe('DurableAgent image handling', () => {
     it('should handle images with memory configuration', async () => {
       const mockModel = createTextModel('I remember this image.');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'image-memory-agent',
         name: 'Image Memory Agent',
         instructions: 'Remember and describe images.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare(
+      const result = await durableAgent.prepare(
         [
           {
             role: 'user',
@@ -326,15 +327,15 @@ describe('DurableAgent image edge cases', () => {
   it('should handle empty image content gracefully', async () => {
     const mockModel = createTextModel('No image data.');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'empty-image-agent',
       name: 'Empty Image Agent',
       instructions: 'Process images.',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare([
+    const result = await durableAgent.prepare([
       {
         role: 'user',
         content: [
@@ -350,15 +351,15 @@ describe('DurableAgent image edge cases', () => {
   it('should handle message with only image (no text)', async () => {
     const mockModel = createTextModel('I see an image.');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'only-image-agent',
       name: 'Only Image Agent',
       instructions: 'Describe images.',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare([
+    const result = await durableAgent.prepare([
       {
         role: 'user',
         content: [{ type: 'image', image: SAMPLE_BASE64_IMAGE }],
@@ -371,15 +372,15 @@ describe('DurableAgent image edge cases', () => {
   it('should handle special characters in image URLs', async () => {
     const mockModel = createTextModel('Processing URL image.');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'special-url-agent',
       name: 'Special URL Agent',
       instructions: 'Process images.',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare([
+    const result = await durableAgent.prepare([
       {
         role: 'user',
         content: [

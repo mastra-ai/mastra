@@ -15,8 +15,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
+import { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
-import { DurableAgent } from '../durable-agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -93,15 +94,15 @@ describe('DurableAgent instructions handling', () => {
   it('should include agent instructions in workflow input', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'instructions-agent',
       name: 'Instructions Agent',
       instructions: 'You are a helpful assistant that speaks formally.',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Hello');
+    const result = await durableAgent.prepare('Hello');
 
     // MessageList state should include the instructions
     expect(result.workflowInput.messageListState).toBeDefined();
@@ -111,15 +112,15 @@ describe('DurableAgent instructions handling', () => {
   it('should handle array instructions', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'array-instructions-agent',
       name: 'Array Instructions Agent',
       instructions: ['First instruction.', 'Second instruction.', 'Third instruction.'],
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Hello');
+    const result = await durableAgent.prepare('Hello');
 
     expect(result.workflowInput.messageListState).toBeDefined();
   });
@@ -127,15 +128,15 @@ describe('DurableAgent instructions handling', () => {
   it('should handle empty instructions', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'no-instructions-agent',
       name: 'No Instructions Agent',
       instructions: '',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Hello');
+    const result = await durableAgent.prepare('Hello');
 
     expect(result.workflowInput.messageListState).toBeDefined();
   });
@@ -143,15 +144,15 @@ describe('DurableAgent instructions handling', () => {
   it('should handle instructions override in stream options', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'override-instructions-agent',
       name: 'Override Instructions Agent',
       instructions: 'Default instructions',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Hello', {
+    const result = await durableAgent.prepare('Hello', {
       instructions: 'Override instructions for this request',
     });
 
@@ -173,15 +174,15 @@ describe('DurableAgent context handling', () => {
   it('should include context messages in workflow input', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'context-agent',
       name: 'Context Agent',
       instructions: 'You are helpful',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Hello', {
+    const result = await durableAgent.prepare('Hello', {
       context: [{ role: 'user', content: 'Previous context message' }],
     });
 
@@ -191,15 +192,15 @@ describe('DurableAgent context handling', () => {
   it('should handle string context', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'string-context-agent',
       name: 'String Context Agent',
       instructions: 'You are helpful',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Hello', {
+    const result = await durableAgent.prepare('Hello', {
       context: 'Some context information',
     });
 
@@ -225,15 +226,15 @@ describe('DurableAgent message format handling', () => {
   it('should handle string message input', async () => {
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'string-message-agent',
       name: 'String Message Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Simple string message');
+    const result = await durableAgent.prepare('Simple string message');
 
     expect(result.workflowInput.messageListState).toBeDefined();
     expect(result.runId).toBeDefined();
@@ -242,15 +243,15 @@ describe('DurableAgent message format handling', () => {
   it('should handle array of strings', async () => {
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'array-string-agent',
       name: 'Array String Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare(['First message', 'Second message', 'Third message']);
+    const result = await durableAgent.prepare(['First message', 'Second message', 'Third message']);
 
     expect(result.workflowInput.messageListState).toBeDefined();
   });
@@ -258,15 +259,15 @@ describe('DurableAgent message format handling', () => {
   it('should handle message objects with role and content', async () => {
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'message-object-agent',
       name: 'Message Object Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare([
+    const result = await durableAgent.prepare([
       { role: 'user', content: 'Hello' },
       { role: 'assistant', content: 'Hi there!' },
       { role: 'user', content: 'How are you?' },
@@ -278,16 +279,16 @@ describe('DurableAgent message format handling', () => {
   it('should handle mixed message formats', async () => {
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'mixed-format-agent',
       name: 'Mixed Format Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     // Mix of string and object messages
-    const result = await agent.prepare([{ role: 'user', content: 'First as object' }]);
+    const result = await durableAgent.prepare([{ role: 'user', content: 'First as object' }]);
 
     expect(result.workflowInput.messageListState).toBeDefined();
   });
@@ -295,15 +296,15 @@ describe('DurableAgent message format handling', () => {
   it('should handle empty content messages', async () => {
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'empty-content-agent',
       name: 'Empty Content Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare({ role: 'user', content: '' });
+    const result = await durableAgent.prepare({ role: 'user', content: '' });
 
     expect(result.workflowInput.messageListState).toBeDefined();
   });
@@ -311,15 +312,15 @@ describe('DurableAgent message format handling', () => {
   it('should handle multi-part content messages', async () => {
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'multipart-agent',
       name: 'Multipart Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare({
+    const result = await durableAgent.prepare({
       role: 'user',
       content: [
         { type: 'text', text: 'First part' },
@@ -356,16 +357,16 @@ describe('DurableAgent workflow state serialization', () => {
       execute: async ({ value }) => value,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'serialization-test-agent',
       name: 'Serialization Test Agent',
       instructions: 'Test instructions',
       model: mockModel as LanguageModelV2,
       tools: { testTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test message', {
+    const result = await durableAgent.prepare('Test message', {
       maxSteps: 5,
       toolChoice: 'auto',
       memory: {
@@ -393,15 +394,15 @@ describe('DurableAgent workflow state serialization', () => {
   it('should serialize model configuration correctly', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'model-config-agent',
       name: 'Model Config Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
     const serialized = JSON.stringify(result.workflowInput.modelConfig);
     const deserialized = JSON.parse(serialized);
@@ -415,15 +416,15 @@ describe('DurableAgent workflow state serialization', () => {
   it('should serialize state with memory info correctly', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'state-serialize-agent',
       name: 'State Serialize Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test', {
+    const result = await durableAgent.prepare('Test', {
       memory: {
         thread: 'thread-abc',
         resource: 'user-xyz',
@@ -440,15 +441,15 @@ describe('DurableAgent workflow state serialization', () => {
   it('should serialize options correctly', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'options-serialize-agent',
       name: 'Options Serialize Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test', {
+    const result = await durableAgent.prepare('Test', {
       maxSteps: 10,
       toolChoice: 'required',
       requireToolApproval: true,
@@ -491,16 +492,16 @@ describe('DurableAgent workflow state serialization', () => {
       execute: async input => ({ results: [], query: input.query }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'complex-tool-agent',
       name: 'Complex Tool Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
       tools: { complexTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
     // Tools metadata should be serializable
     const serialized = JSON.stringify(result.workflowInput.toolsMetadata);
@@ -510,15 +511,15 @@ describe('DurableAgent workflow state serialization', () => {
   it('should handle MessageList serialization and deserialization', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'messagelist-agent',
       name: 'MessageList Agent',
       instructions: 'Test instructions',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare([
+    const result = await durableAgent.prepare([
       { role: 'user', content: 'First message' },
       { role: 'assistant', content: 'Response' },
       { role: 'user', content: 'Follow-up' },
@@ -556,15 +557,15 @@ describe('DurableAgent model configuration', () => {
   it('should extract model provider and modelId', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'model-extract-agent',
       name: 'Model Extract Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
     expect(result.workflowInput.modelConfig.provider).toBeDefined();
     expect(result.workflowInput.modelConfig.modelId).toBeDefined();
@@ -573,19 +574,19 @@ describe('DurableAgent model configuration', () => {
   it('should store model in registry for runtime access', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'model-registry-agent',
       name: 'Model Registry Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
 
     // Model should be stored in registry
     // Note: The model may be wrapped (e.g., in AISDKV5LanguageModel), so we check properties
-    const storedModel = agent.runRegistry.getModel(result.runId);
+    const storedModel = durableAgent.runRegistry.getModel(result.runId);
     expect(storedModel).toBeDefined();
     expect(storedModel?.modelId).toBe('mock-model-id');
     expect(storedModel?.provider).toBe('mock-provider');
@@ -610,18 +611,18 @@ describe('DurableAgent ID and name handling', () => {
   it('should use explicit name when provided', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'agent-id',
       name: 'Explicit Name',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    expect(agent.id).toBe('agent-id');
-    expect(agent.name).toBe('Explicit Name');
+    expect(durableAgent.id).toBe('agent-id');
+    expect(durableAgent.name).toBe('Explicit Name');
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
     expect(result.workflowInput.agentId).toBe('agent-id');
     expect(result.workflowInput.agentName).toBe('Explicit Name');
   });
@@ -629,31 +630,31 @@ describe('DurableAgent ID and name handling', () => {
   it('should use ID as name when name not provided', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'agent-id-as-name',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    expect(agent.id).toBe('agent-id-as-name');
-    expect(agent.name).toBe('agent-id-as-name');
+    expect(durableAgent.id).toBe('agent-id-as-name');
+    expect(durableAgent.name).toBe('agent-id-as-name');
   });
 
   it('should handle special characters in ID', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'agent-with-dashes_and_underscores',
       name: 'Special ID Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    expect(agent.id).toBe('agent-with-dashes_and_underscores');
+    expect(durableAgent.id).toBe('agent-with-dashes_and_underscores');
 
-    const result = await agent.prepare('Test');
+    const result = await durableAgent.prepare('Test');
     expect(result.workflowInput.agentId).toBe('agent-with-dashes_and_underscores');
   });
 });
@@ -676,20 +677,20 @@ describe('DurableAgent ID generation', () => {
   it('should generate unique runIds for each prepare call', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'unique-id-agent',
       name: 'Unique ID Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const results = await Promise.all([
-      agent.prepare('Message 1'),
-      agent.prepare('Message 2'),
-      agent.prepare('Message 3'),
-      agent.prepare('Message 4'),
-      agent.prepare('Message 5'),
+      durableAgent.prepare('Message 1'),
+      durableAgent.prepare('Message 2'),
+      durableAgent.prepare('Message 3'),
+      durableAgent.prepare('Message 4'),
+      durableAgent.prepare('Message 5'),
     ]);
 
     const runIds = results.map(r => r.runId);
@@ -701,18 +702,18 @@ describe('DurableAgent ID generation', () => {
   it('should generate unique messageIds for each prepare call', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'unique-messageid-agent',
       name: 'Unique MessageID Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const results = await Promise.all([
-      agent.prepare('Message 1'),
-      agent.prepare('Message 2'),
-      agent.prepare('Message 3'),
+      durableAgent.prepare('Message 1'),
+      durableAgent.prepare('Message 2'),
+      durableAgent.prepare('Message 3'),
     ]);
 
     const messageIds = results.map(r => r.messageId);
@@ -724,16 +725,16 @@ describe('DurableAgent ID generation', () => {
   it('should allow custom runId via options', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'custom-runid-agent',
       name: 'Custom RunID Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     const customRunId = 'my-custom-run-id-12345';
-    const { runId, cleanup } = await agent.stream('Test', {
+    const { runId, cleanup } = await durableAgent.stream('Test', {
       runId: customRunId,
     });
 
@@ -760,16 +761,16 @@ describe('DurableAgent concurrent operations', () => {
   it('should handle multiple concurrent prepare calls', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'concurrent-agent',
       name: 'Concurrent Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     // Fire off multiple prepare calls concurrently
-    const preparePromises = Array.from({ length: 10 }, (_, i) => agent.prepare(`Message ${i}`));
+    const preparePromises = Array.from({ length: 10 }, (_, i) => durableAgent.prepare(`Message ${i}`));
 
     const results = await Promise.all(preparePromises);
 
@@ -779,7 +780,7 @@ describe('DurableAgent concurrent operations', () => {
 
     // All should be registered
     for (const result of results) {
-      expect(agent.runRegistry.has(result.runId)).toBe(true);
+      expect(durableAgent.runRegistry.has(result.runId)).toBe(true);
     }
   });
 
@@ -793,30 +794,30 @@ describe('DurableAgent concurrent operations', () => {
       execute: async ({ x }) => x * 2,
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'isolation-agent',
       name: 'Isolation Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
       tools: { tool1 },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result1 = await agent.prepare('First');
-    const result2 = await agent.prepare('Second');
+    const result1 = await durableAgent.prepare('First');
+    const result2 = await durableAgent.prepare('Second');
 
     // Both should have their own registry entries
-    const tools1 = agent.runRegistry.getTools(result1.runId);
-    const tools2 = agent.runRegistry.getTools(result2.runId);
+    const tools1 = durableAgent.runRegistry.getTools(result1.runId);
+    const tools2 = durableAgent.runRegistry.getTools(result2.runId);
 
     expect(tools1.tool1).toBeDefined();
     expect(tools2.tool1).toBeDefined();
 
     // Cleanup one shouldn't affect the other
-    agent.runRegistry.cleanup(result1.runId);
-    expect(agent.runRegistry.has(result1.runId)).toBe(false);
-    expect(agent.runRegistry.has(result2.runId)).toBe(true);
-    expect(agent.runRegistry.getTools(result2.runId).tool1).toBeDefined();
+    durableAgent.runRegistry.cleanup(result1.runId);
+    expect(durableAgent.runRegistry.has(result1.runId)).toBe(false);
+    expect(durableAgent.runRegistry.has(result2.runId)).toBe(true);
+    expect(durableAgent.runRegistry.getTools(result2.runId).tool1).toBeDefined();
   });
 });
 
@@ -838,82 +839,86 @@ describe('DurableAgent lazy initialization', () => {
   it('should not initialize Agent until first async method call', () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'lazy-init-agent',
       name: 'Lazy Init Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     // Synchronous properties should work
-    expect(agent.id).toBe('lazy-init-agent');
-    expect(agent.name).toBe('Lazy Init Agent');
-    expect(agent.runRegistry).toBeDefined();
+    expect(durableAgent.id).toBe('lazy-init-agent');
+    expect(durableAgent.name).toBe('Lazy Init Agent');
+    expect(durableAgent.runRegistry).toBeDefined();
 
-    // DurableAgent now extends Agent, so agent getter returns this
-    expect(agent.agent).toBe(agent);
+    // DurableAgent wraps the base agent
+    expect(durableAgent.agent).toBe(baseAgent);
   });
 
   it('should be fully initialized at construction time', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'init-after-prepare-agent',
       name: 'Init After Prepare Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    // DurableAgent extends Agent, so it's immediately usable
-    expect(agent.agent).toBe(agent);
-    expect(agent.id).toBe('init-after-prepare-agent');
+    // DurableAgent wraps the base agent, so it's immediately usable
+    expect(durableAgent.agent).toBe(baseAgent);
+    expect(durableAgent.id).toBe('init-after-prepare-agent');
 
     // prepare() should still work
-    await agent.prepare('Test');
-    expect(agent.agent.id).toBe('init-after-prepare-agent');
+    await durableAgent.prepare('Test');
+    expect(durableAgent.agent.id).toBe('init-after-prepare-agent');
   });
 
   it('should work with stream without prior initialization', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'init-after-stream-agent',
       name: 'Init After Stream Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    // DurableAgent extends Agent, so agent is already available
-    expect(agent.agent).toBe(agent);
+    // DurableAgent wraps the base agent, so agent is already available
+    expect(durableAgent.agent).toBe(baseAgent);
 
     // stream() should work
-    const { cleanup } = await agent.stream('Test');
-    expect(agent.agent).toBeDefined();
+    const { cleanup } = await durableAgent.stream('Test');
+    expect(durableAgent.agent).toBeDefined();
     cleanup();
   });
 
   it('should only initialize once even with multiple concurrent calls', async () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'single-init-agent',
       name: 'Single Init Agent',
       instructions: 'Test',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
     // Multiple concurrent prepare calls
-    const results = await Promise.all([agent.prepare('Test 1'), agent.prepare('Test 2'), agent.prepare('Test 3')]);
+    const results = await Promise.all([
+      durableAgent.prepare('Test 1'),
+      durableAgent.prepare('Test 2'),
+      durableAgent.prepare('Test 3'),
+    ]);
 
     // All should succeed and return different runIds
     expect(results.length).toBe(3);
     expect(new Set(results.map(r => r.runId)).size).toBe(3);
 
     // Agent should be initialized
-    expect(agent.agent).toBeDefined();
+    expect(durableAgent.agent).toBeDefined();
   });
 });

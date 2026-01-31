@@ -10,7 +10,8 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -66,16 +67,16 @@ describe('DurableAgent UIMessage handling', () => {
     it('should accept UIMessageWithMetadata in prepare', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'uimessage-agent',
         name: 'UIMessage Agent',
         instructions: 'Process messages with metadata.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       // UIMessageWithMetadata format
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           id: 'msg-1',
           role: 'user',
@@ -94,15 +95,15 @@ describe('DurableAgent UIMessage handling', () => {
     it('should handle messages with and without metadata', async () => {
       const mockModel = createTextModel('Response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'mixed-metadata-agent',
         name: 'Mixed Metadata Agent',
         instructions: 'Process messages.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           id: 'msg-with-metadata',
           role: 'user',
@@ -121,13 +122,13 @@ describe('DurableAgent UIMessage handling', () => {
     it('should preserve metadata through workflow serialization', async () => {
       const mockModel = createTextModel('Response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'preserve-metadata-agent',
         name: 'Preserve Metadata Agent',
         instructions: 'Process messages.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const metadata = {
         userId: 'user-123',
@@ -135,7 +136,7 @@ describe('DurableAgent UIMessage handling', () => {
         customData: { key: 'value' },
       };
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           id: 'metadata-msg',
           role: 'user',
@@ -157,15 +158,15 @@ describe('DurableAgent UIMessage handling', () => {
     it('should handle content as string', async () => {
       const mockModel = createTextModel('Response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'string-content-agent',
         name: 'String Content Agent',
         instructions: 'Process messages.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           role: 'user',
           content: 'Simple string content',
@@ -178,15 +179,15 @@ describe('DurableAgent UIMessage handling', () => {
     it('should handle content as array of parts', async () => {
       const mockModel = createTextModel('Response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'parts-content-agent',
         name: 'Parts Content Agent',
         instructions: 'Process messages.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           role: 'user',
           content: [
@@ -202,15 +203,15 @@ describe('DurableAgent UIMessage handling', () => {
     it('should handle empty content', async () => {
       const mockModel = createTextModel('Response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'empty-content-agent',
         name: 'Empty Content Agent',
         instructions: 'Process messages.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare([
+      const result = await durableAgent.prepare([
         {
           role: 'user',
           content: '',
@@ -225,15 +226,15 @@ describe('DurableAgent UIMessage handling', () => {
     it('should stream with UIMessageWithMetadata input', async () => {
       const mockModel = createTextModel('Streaming response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'stream-uimessage-agent',
         name: 'Stream UIMessage Agent',
         instructions: 'Process and stream.',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await agent.stream([
+      const { runId, cleanup } = await durableAgent.stream([
         {
           id: 'stream-msg',
           role: 'user',
@@ -262,15 +263,15 @@ describe('DurableAgent UIMessage edge cases', () => {
   it('should handle metadata with nested objects', async () => {
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'nested-metadata-agent',
       name: 'Nested Metadata Agent',
       instructions: 'Process messages.',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare([
+    const result = await durableAgent.prepare([
       {
         id: 'nested-msg',
         role: 'user',
@@ -302,15 +303,15 @@ describe('DurableAgent UIMessage edge cases', () => {
   it('should handle metadata with special characters', async () => {
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'special-metadata-agent',
       name: 'Special Metadata Agent',
       instructions: 'Process messages.',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare([
+    const result = await durableAgent.prepare([
       {
         id: 'special-msg',
         role: 'user',
@@ -331,15 +332,15 @@ describe('DurableAgent UIMessage edge cases', () => {
   it('should handle null/undefined metadata values', async () => {
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'null-metadata-agent',
       name: 'Null Metadata Agent',
       instructions: 'Process messages.',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare([
+    const result = await durableAgent.prepare([
       {
         id: 'null-msg',
         role: 'user',
@@ -360,15 +361,15 @@ describe('DurableAgent UIMessage edge cases', () => {
   it('should handle message ID variations', async () => {
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'id-variations-agent',
       name: 'ID Variations Agent',
       instructions: 'Process messages.',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare([
+    const result = await durableAgent.prepare([
       {
         id: 'simple-id',
         role: 'user',
@@ -397,15 +398,15 @@ describe('DurableAgent UIMessage edge cases', () => {
   it('should handle assistant messages with metadata', async () => {
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'assistant-metadata-agent',
       name: 'Assistant Metadata Agent',
       instructions: 'Process messages.',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare([
+    const result = await durableAgent.prepare([
       {
         id: 'user-msg',
         role: 'user',

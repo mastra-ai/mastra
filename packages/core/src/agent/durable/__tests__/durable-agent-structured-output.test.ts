@@ -10,7 +10,8 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -152,16 +153,16 @@ describe('DurableAgent structured output', () => {
 
       const mockModel = createStructuredOutputModel(expectedOutput);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'election-agent',
         name: 'US Election Agent',
         instructions: 'You know about past US elections',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       // Prepare with structured output schema
-      const result = await agent.prepare('Give me the winners of 2012 and 2016 US presidential elections', {
+      const result = await durableAgent.prepare('Give me the winners of 2012 and 2016 US presidential elections', {
         structuredOutput: {
           schema: z.object({
             elements: z.array(
@@ -193,15 +194,15 @@ describe('DurableAgent structured output', () => {
 
       const mockModel = createStructuredOutputModel(expectedOutput);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'array-schema-agent',
         name: 'Array Schema Agent',
         instructions: 'Return user data',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('List all users', {
+      const result = await durableAgent.prepare('List all users', {
         structuredOutput: {
           schema: z.array(
             z.object({
@@ -228,15 +229,15 @@ describe('DurableAgent structured output', () => {
 
       const mockModel = createStructuredOutputModel(expectedOutput);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'json-schema-agent',
         name: 'JSON Schema Agent',
         instructions: 'You know about past US elections',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Give me the winners of 2012 and 2016 US presidential elections', {
+      const result = await durableAgent.prepare('Give me the winners of 2012 and 2016 US presidential elections', {
         structuredOutput: {
           schema: {
             type: 'object',
@@ -273,15 +274,15 @@ describe('DurableAgent structured output', () => {
 
       const mockModel = createChunkedStructuredOutputModel(expectedOutput);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'streaming-schema-agent',
         name: 'Streaming Schema Agent',
         instructions: 'Return user profile',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await agent.stream('Get user profile', {
+      const { runId, cleanup } = await durableAgent.stream('Get user profile', {
         structuredOutput: {
           schema: z.object({
             name: z.string(),
@@ -316,15 +317,15 @@ describe('DurableAgent structured output', () => {
 
       const mockModel = createStructuredOutputModel(expectedOutput);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'nested-schema-agent',
         name: 'Nested Schema Agent',
         instructions: 'Return nested user data',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await agent.stream('Get complete user data', {
+      const { runId, cleanup } = await durableAgent.stream('Get complete user data', {
         structuredOutput: {
           schema: z.object({
             user: z.object({
@@ -360,13 +361,13 @@ describe('DurableAgent structured output', () => {
 
       const mockModel = createBedrockStyleModel(expectedOutput);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'routing-agent',
         name: 'Routing Agent',
         instructions: 'Route requests to appropriate agents',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const responseSchema = z.object({
         primitiveId: z.string(),
@@ -375,7 +376,7 @@ describe('DurableAgent structured output', () => {
         selectionReason: z.string(),
       });
 
-      const { runId, cleanup } = await agent.stream('What is the weather?', {
+      const { runId, cleanup } = await durableAgent.stream('What is the weather?', {
         structuredOutput: {
           schema: responseSchema,
         },
@@ -390,15 +391,15 @@ describe('DurableAgent structured output', () => {
 
       const mockModel = createStructuredOutputModel(expectedOutput);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'empty-schema-agent',
         name: 'Empty Schema Agent',
         instructions: 'Return empty object',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Get empty data', {
+      const result = await durableAgent.prepare('Get empty data', {
         structuredOutput: {
           schema: z.object({}),
         },
@@ -415,15 +416,15 @@ describe('DurableAgent structured output', () => {
 
       const mockModel = createStructuredOutputModel(expectedOutput);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'optional-fields-agent',
         name: 'Optional Fields Agent',
         instructions: 'Return user with optional fields',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Get user data', {
+      const result = await durableAgent.prepare('Get user data', {
         structuredOutput: {
           schema: z.object({
             name: z.string(),
@@ -443,15 +444,15 @@ describe('DurableAgent structured output', () => {
 
       const mockModel = createStructuredOutputModel(expectedOutput);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'union-schema-agent',
         name: 'Union Schema Agent',
         instructions: 'Return result with union type',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Get result', {
+      const result = await durableAgent.prepare('Get result', {
         structuredOutput: {
           schema: z.object({
             result: z.union([
@@ -487,15 +488,15 @@ describe('DurableAgent structured output workflow integration', () => {
       items: z.array(z.string()),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'serialization-test-agent',
       name: 'Serialization Test Agent',
       instructions: 'Test serialization',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Get data', {
+    const result = await durableAgent.prepare('Get data', {
       structuredOutput: {
         schema,
       },
@@ -519,15 +520,15 @@ describe('DurableAgent structured output workflow integration', () => {
       status: z.enum(['active', 'inactive', 'pending']).describe('Current user status'),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'described-schema-agent',
       name: 'Described Schema Agent',
       instructions: 'Test described schemas',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Get status', {
+    const result = await durableAgent.prepare('Get status', {
       structuredOutput: {
         schema,
       },

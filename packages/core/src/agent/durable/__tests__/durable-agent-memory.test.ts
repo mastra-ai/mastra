@@ -11,7 +11,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -96,15 +97,15 @@ describe('DurableAgent memory configuration', () => {
     it('should handle memory.thread as string', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'thread-string-agent',
         name: 'Thread String Agent',
         instructions: 'Test thread string',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         memory: {
           thread: 'my-thread-id',
           resource: 'user-123',
@@ -120,15 +121,15 @@ describe('DurableAgent memory configuration', () => {
     it('should handle memory.thread as object with id', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'thread-object-agent',
         name: 'Thread Object Agent',
         instructions: 'Test thread object',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         memory: {
           thread: { id: 'thread-from-object' },
           resource: 'user-456',
@@ -142,15 +143,15 @@ describe('DurableAgent memory configuration', () => {
     it('should handle missing memory options gracefully', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'no-memory-agent',
         name: 'No Memory Agent',
         instructions: 'Test without memory',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       expect(result.threadId).toBeUndefined();
       expect(result.resourceId).toBeUndefined();
@@ -161,15 +162,15 @@ describe('DurableAgent memory configuration', () => {
     it('should include readOnly option in workflow state', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'readonly-agent',
         name: 'ReadOnly Agent',
         instructions: 'Test readonly',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         memory: {
           thread: 'thread-readonly',
           resource: 'user-readonly',
@@ -185,15 +186,15 @@ describe('DurableAgent memory configuration', () => {
     it('should include lastMessages option in workflow state', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'lastmessages-agent',
         name: 'LastMessages Agent',
         instructions: 'Test lastMessages',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         memory: {
           thread: 'thread-lastmsg',
           resource: 'user-lastmsg',
@@ -209,15 +210,15 @@ describe('DurableAgent memory configuration', () => {
     it('should include semanticRecall options in workflow state', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'semantic-agent',
         name: 'Semantic Agent',
         instructions: 'Test semantic recall',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         memory: {
           thread: 'thread-semantic',
           resource: 'user-semantic',
@@ -237,15 +238,15 @@ describe('DurableAgent memory configuration', () => {
     it('should combine multiple memory options', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'combined-memory-agent',
         name: 'Combined Memory Agent',
         instructions: 'Test combined options',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         memory: {
           thread: 'thread-combined',
           resource: 'user-combined',
@@ -270,15 +271,15 @@ describe('DurableAgent memory configuration', () => {
     it('should serialize memory config as JSON', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'serialization-agent',
         name: 'Serialization Agent',
         instructions: 'Test serialization',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         memory: {
           thread: 'thread-serialize',
           resource: 'user-serialize',
@@ -303,15 +304,15 @@ describe('DurableAgent memory configuration', () => {
     it('should handle undefined memory config values', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'undefined-config-agent',
         name: 'Undefined Config Agent',
         instructions: 'Test undefined values',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         memory: {
           thread: 'thread-undefined',
           resource: 'user-undefined',
@@ -332,15 +333,15 @@ describe('DurableAgent memory configuration', () => {
     it('should pass memory options through stream()', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'stream-memory-agent',
         name: 'Stream Memory Agent',
         instructions: 'Test stream memory',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, threadId, resourceId, cleanup } = await agent.stream('Hello', {
+      const { runId, threadId, resourceId, cleanup } = await durableAgent.stream('Hello', {
         memory: {
           thread: 'stream-thread-123',
           resource: 'stream-user-456',
@@ -356,15 +357,15 @@ describe('DurableAgent memory configuration', () => {
     it('should handle memory options with readOnly in stream()', async () => {
       const mockModel = createTextModel('Hello!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'readonly-stream-agent',
         name: 'ReadOnly Stream Agent',
         instructions: 'Test readonly stream',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await agent.stream('Hello', {
+      const { runId, cleanup } = await durableAgent.stream('Hello', {
         memory: {
           thread: 'readonly-stream-thread',
           resource: 'readonly-stream-user',
@@ -390,16 +391,16 @@ describe('DurableAgent memory configuration', () => {
         execute: async () => ({ results: ['result1'] }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'tool-memory-agent',
         name: 'Tool Memory Agent',
         instructions: 'Search with memory',
         model: mockModel as LanguageModelV2,
         tools: { searchTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Search for test', {
+      const result = await durableAgent.prepare('Search for test', {
         memory: {
           thread: 'tool-thread',
           resource: 'tool-user',
@@ -413,7 +414,7 @@ describe('DurableAgent memory configuration', () => {
       expect(result.workflowInput.state.memoryConfig?.lastMessages).toBe(5);
 
       // Tools should be registered
-      const tools = agent.runRegistry.getTools(result.runId);
+      const tools = durableAgent.runRegistry.getTools(result.runId);
       expect(tools.searchTool).toBeDefined();
     });
 
@@ -428,16 +429,16 @@ describe('DurableAgent memory configuration', () => {
         execute: async () => ({ approved: true }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'approval-memory-agent',
         name: 'Approval Memory Agent',
         instructions: 'Use approval tool with memory',
         model: mockModel as LanguageModelV2,
         tools: { approvalTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use the approval tool', {
+      const result = await durableAgent.prepare('Use the approval tool', {
         memory: {
           thread: 'approval-thread',
           resource: 'approval-user',
@@ -465,15 +466,15 @@ describe('DurableAgent memory edge cases', () => {
   it('should handle empty thread ID string', async () => {
     const mockModel = createTextModel('Hello!');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'empty-thread-agent',
       name: 'Empty Thread Agent',
       instructions: 'Test empty thread',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Hello', {
+    const result = await durableAgent.prepare('Hello', {
       memory: {
         thread: '',
         resource: 'user-empty-thread',
@@ -487,15 +488,15 @@ describe('DurableAgent memory edge cases', () => {
   it('should handle special characters in thread/resource IDs', async () => {
     const mockModel = createTextModel('Hello!');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'special-chars-agent',
       name: 'Special Chars Agent',
       instructions: 'Test special characters',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Hello', {
+    const result = await durableAgent.prepare('Hello', {
       memory: {
         thread: 'thread-with-special-chars_123-abc',
         resource: 'user@example.com',
@@ -510,15 +511,15 @@ describe('DurableAgent memory edge cases', () => {
     const mockModel = createTextModel('Hello!');
     const longId = 'a'.repeat(1000);
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'long-id-agent',
       name: 'Long ID Agent',
       instructions: 'Test long IDs',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Hello', {
+    const result = await durableAgent.prepare('Hello', {
       memory: {
         thread: `thread-${longId}`,
         resource: `user-${longId}`,
@@ -536,15 +537,15 @@ describe('DurableAgent memory edge cases', () => {
   it('should handle memory options with zero values', async () => {
     const mockModel = createTextModel('Hello!');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'zero-values-agent',
       name: 'Zero Values Agent',
       instructions: 'Test zero values',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Hello', {
+    const result = await durableAgent.prepare('Hello', {
       memory: {
         thread: 'thread-zero',
         resource: 'user-zero',

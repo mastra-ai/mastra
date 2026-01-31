@@ -12,7 +12,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -109,16 +110,16 @@ describe('DurableAgent tool concurrency', () => {
         execute: async () => ({ result: 'tool2' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'concurrency-agent',
         name: 'Concurrency Agent',
         instructions: 'Use both tools',
         model: mockModel as LanguageModelV2,
         tools: { tool1, tool2 },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use both tools', {
+      const result = await durableAgent.prepare('Use both tools', {
         toolCallConcurrency: 5,
       });
 
@@ -135,16 +136,16 @@ describe('DurableAgent tool concurrency', () => {
         execute: async () => ({ result: 'done' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'default-concurrency-agent',
         name: 'Default Concurrency Agent',
         instructions: 'Use tool',
         model: mockModel as LanguageModelV2,
         tools: { tool1 },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use the tool');
+      const result = await durableAgent.prepare('Use the tool');
 
       // Should be undefined or a default value when not specified
       // The actual default is handled by the workflow execution
@@ -171,16 +172,16 @@ describe('DurableAgent tool concurrency', () => {
         execute: async () => ({ result: 'tool2' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'sequential-agent',
         name: 'Sequential Agent',
         instructions: 'Use tools sequentially',
         model: mockModel as LanguageModelV2,
         tools: { tool1, tool2 },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use both tools', {
+      const result = await durableAgent.prepare('Use both tools', {
         toolCallConcurrency: 1,
       });
 
@@ -209,18 +210,18 @@ describe('DurableAgent tool concurrency', () => {
         execute: async () => ({ result: 'tool2' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'approval-concurrency-agent',
         name: 'Approval Concurrency Agent',
         instructions: 'Use tools with approval',
         model: mockModel as LanguageModelV2,
         tools: { tool1, tool2 },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       // When requireToolApproval is true, tools must be executed sequentially
       // even if toolCallConcurrency is set to a higher value
-      const result = await agent.prepare('Use both tools', {
+      const result = await durableAgent.prepare('Use both tools', {
         requireToolApproval: true,
         toolCallConcurrency: 10, // This should be overridden to 1
       });
@@ -251,19 +252,19 @@ describe('DurableAgent tool concurrency', () => {
         execute: async () => ({ result: 'approved' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'mixed-approval-concurrency-agent',
         name: 'Mixed Approval Concurrency Agent',
         instructions: 'Use mixed tools',
         model: mockModel as LanguageModelV2,
         tools: { normalTool, approvalTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use both tools');
+      const result = await durableAgent.prepare('Use both tools');
 
       // Both tools should be registered
-      const tools = agent.runRegistry.getTools(result.runId);
+      const tools = durableAgent.runRegistry.getTools(result.runId);
       expect(tools.normalTool).toBeDefined();
       expect(tools.approvalTool).toBeDefined();
     });
@@ -292,18 +293,18 @@ describe('DurableAgent tool concurrency', () => {
         execute: async () => ({ result: 'suspended' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'suspend-concurrency-agent',
         name: 'Suspend Concurrency Agent',
         instructions: 'Use both tools',
         model: mockModel as LanguageModelV2,
         tools: { quickTool, suspendTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use both tools');
+      const result = await durableAgent.prepare('Use both tools');
 
-      const tools = agent.runRegistry.getTools(result.runId);
+      const tools = durableAgent.runRegistry.getTools(result.runId);
       expect(tools.quickTool).toBeDefined();
       expect(tools.suspendTool).toBeDefined();
     });
@@ -313,15 +314,15 @@ describe('DurableAgent tool concurrency', () => {
     it('should handle negative toolCallConcurrency gracefully', async () => {
       const mockModel = createTextModel('Hello');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'negative-concurrency-agent',
         name: 'Negative Concurrency Agent',
         instructions: 'Test negative value',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         toolCallConcurrency: -5,
       });
 
@@ -332,15 +333,15 @@ describe('DurableAgent tool concurrency', () => {
     it('should handle zero toolCallConcurrency', async () => {
       const mockModel = createTextModel('Hello');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'zero-concurrency-agent',
         name: 'Zero Concurrency Agent',
         instructions: 'Test zero value',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         toolCallConcurrency: 0,
       });
 
@@ -375,16 +376,16 @@ describe('DurableAgent tool concurrency', () => {
         execute: async () => ({ result: 3 }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'high-concurrency-agent',
         name: 'High Concurrency Agent',
         instructions: 'Use many tools',
         model: mockModel as LanguageModelV2,
         tools: { tool1, tool2, tool3 },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use all tools', {
+      const result = await durableAgent.prepare('Use all tools', {
         toolCallConcurrency: 100,
       });
 
@@ -403,16 +404,16 @@ describe('DurableAgent tool concurrency', () => {
         execute: async () => ({ result: 'done' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'serialize-concurrency-agent',
         name: 'Serialize Concurrency Agent',
         instructions: 'Test serialization',
         model: mockModel as LanguageModelV2,
         tools: { tool1 },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use tool', {
+      const result = await durableAgent.prepare('Use tool', {
         toolCallConcurrency: 3,
       });
 

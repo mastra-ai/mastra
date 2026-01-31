@@ -197,6 +197,18 @@ export interface Config<
   pubsub?: PubSub;
 
   /**
+   * Server cache for storing stream events and other temporary data.
+   * Used by durable agents for resumable streams - clients can disconnect
+   * and reconnect without missing events.
+   *
+   * When provided, durable agents created without their own cache will
+   * inherit this cache instance.
+   *
+   * @default InMemoryServerCache
+   */
+  cache?: MastraServerCache;
+
+  /**
    * Scorers help assess the quality of agent responses and workflow outputs.
    */
   scorers?: TScorers;
@@ -316,7 +328,7 @@ export class Mastra<
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
   #internalMastraWorkflows: Record<string, Workflow> = {};
-  // This is only used internally for server handlers that require temporary persistence
+  // Server cache for temporary persistence and durable agent resumable streams
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
@@ -434,8 +446,8 @@ export class Mastra<
   constructor(
     config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors, TMemory>,
   ) {
-    // This is only used internally for server handlers that require temporary persistence
-    this.#serverCache = new InMemoryServerCache();
+    // Server cache for temporary persistence and durable agent resumable streams
+    this.#serverCache = config?.cache ?? new InMemoryServerCache();
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;

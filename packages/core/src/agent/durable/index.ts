@@ -8,14 +8,21 @@
  * ## Factory Functions
  *
  * - `createDurableAgent({ agent })` - Local execution with resumable streams
- * - `createEventedAgent({ agent, pubsub })` - Built-in evented workflow engine
+ * - `createEventedAgent({ agent })` - Built-in evented workflow engine (fire-and-forget)
  * - `createInngestAgent({ agent, inngest })` - Inngest durable execution (from @mastra/inngest)
+ *
+ * ## Class Hierarchy
+ *
+ * - `DurableAgent` extends `Agent` - Base durable agent with resumable streams
+ * - `EventedAgent` extends `DurableAgent` - Fire-and-forget execution
+ * - `InngestAgent` extends `DurableAgent` - Inngest-powered execution (from @mastra/inngest)
  *
  * ## Features
  *
  * 1. **Resumable Streams**: Events are cached, allowing reconnection without missing data
  * 2. **Pluggable Cache**: Use InMemoryServerCache (default) or custom backends (Redis, etc.)
- * 3. **Durable Execution**: Run agentic loops on workflow engines (Inngest, evented, etc.)
+ * 3. **Cache Inheritance**: Durable agents inherit cache from Mastra if not explicitly provided
+ * 4. **Durable Execution**: Run agentic loops on workflow engines (Inngest, evented, etc.)
  *
  * @example Basic usage with resumable streams
  * ```typescript
@@ -45,19 +52,28 @@
  *   cache: new RedisServerCache({ url: 'redis://...' }),
  * });
  * ```
+ *
+ * @example Cache inheritance from Mastra
+ * ```typescript
+ * const mastra = new Mastra({
+ *   cache: new RedisServerCache({ url: 'redis://...' }),
+ *   agents: {
+ *     myAgent: createDurableAgent({ agent }), // Inherits Redis cache from Mastra
+ *   },
+ * });
+ * ```
  */
 
 // Main factory function for durable agents with resumable streams
 export {
   createDurableAgent,
-  isLocalDurableAgent,
+  isDurableAgent,
+  isLocalDurableAgent, // Backwards compatibility alias
   type CreateDurableAgentOptions,
-  type LocalDurableAgent,
-  type LocalDurableAgentStreamOptions,
-  type LocalDurableAgentStreamResult,
+  type LocalDurableAgent, // Backwards compatibility alias
 } from './create-durable-agent';
 
-// Legacy DurableAgent class (prefer createDurableAgent factory)
+// DurableAgent class (base class for durable agents)
 export {
   DurableAgent,
   type DurableAgentConfig,
@@ -68,15 +84,8 @@ export {
 // EventedAgent class (extends DurableAgent with fire-and-forget execution)
 export { EventedAgent, isEventedAgentClass, type EventedAgentConfig } from './evented-agent';
 
-// Evented Agent factory (backwards compatibility - wraps Agent with EventedAgent-like behavior)
-export {
-  createEventedAgent,
-  isEventedAgent,
-  type CreateEventedAgentOptions,
-  type EventedAgent as EventedAgentInterface,
-  type EventedAgentStreamOptions,
-  type EventedAgentStreamResult,
-} from './create-evented-agent';
+// Evented Agent factory
+export { createEventedAgent, isEventedAgent, type CreateEventedAgentOptions } from './create-evented-agent';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';

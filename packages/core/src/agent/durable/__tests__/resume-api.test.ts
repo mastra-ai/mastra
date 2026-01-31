@@ -1,7 +1,7 @@
 /**
  * Resume API Tests
  *
- * Tests for the resume() method on DurableAgent and LocalDurableAgent.
+ * Tests for the resume() method on DurableAgent.
  * Validates:
  * - Basic resume functionality
  * - Event replay during reconnection (using CachingPubSub)
@@ -18,8 +18,8 @@ import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
 import { createTool } from '../../../tools';
+import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
-import { DurableAgent } from '../durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -97,33 +97,35 @@ describe('Resume API', () => {
     it('should have resume method available', () => {
       const mockModel = createTextModel('Hello');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'resume-test-agent',
         name: 'Resume Test Agent',
         instructions: 'Test resume',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
-      expect(typeof agent.resume).toBe('function');
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      expect(typeof durableAgent.resume).toBe('function');
     });
 
     it('should accept runId and resumeData', async () => {
       const mockModel = createTextModel('Resumed!');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'resume-data-agent',
         name: 'Resume Data Agent',
         instructions: 'Test resume with data',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
       // First, prepare a run
-      const { runId } = await agent.prepare('Start something');
+      const { runId } = await durableAgent.prepare('Start something');
 
       // Resume should accept runId and data
-      const result = await agent.resume(runId, { approved: true });
+      const result = await durableAgent.resume(runId, { approved: true });
 
       expect(result.runId).toBe(runId);
       expect(typeof result.cleanup).toBe('function');
@@ -133,16 +135,17 @@ describe('Resume API', () => {
     it('should preserve threadId and resourceId from prepare through resume', async () => {
       const mockModel = createTextModel('Done');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'context-resume-agent',
         name: 'Context Resume Agent',
         instructions: 'Test context preservation',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
 
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
       // Prepare with memory context
-      const { runId, threadId, resourceId } = await agent.prepare('Initial', {
+      const { runId, threadId, resourceId } = await durableAgent.prepare('Initial', {
         memory: {
           thread: 'thread-123',
           resource: 'resource-456',
@@ -153,7 +156,7 @@ describe('Resume API', () => {
       expect(resourceId).toBe('resource-456');
 
       // Resume should preserve the same context from registry
-      const result = await agent.resume(runId, { data: 'test' });
+      const result = await durableAgent.resume(runId, { data: 'test' });
 
       expect(result.threadId).toBe('thread-123');
       expect(result.resourceId).toBe('resource-456');
@@ -162,19 +165,17 @@ describe('Resume API', () => {
   });
 
   describe('createDurableAgent resume()', () => {
-    it('should have resume method on LocalDurableAgent', () => {
+    it('should have resume method on DurableAgent from factory', () => {
       const mockModel = createTextModel('Hello');
 
-      const agent = new (class TestAgent {
-        id = 'test-agent';
-        name = 'Test Agent';
-        instructions = 'Test';
-        model = mockModel;
-      })();
-
-      const durableAgent = createDurableAgent({
-        agent: agent as any,
+      const baseAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model: mockModel as LanguageModelV2,
       });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent });
 
       expect(typeof durableAgent.resume).toBe('function');
     });
@@ -182,19 +183,21 @@ describe('Resume API', () => {
     it('should return stream result from resume', async () => {
       const mockModel = createTextModel('Resumed successfully');
 
-      // Use DurableAgent directly instead of createDurableAgent with mock agent
-      // since createDurableAgent requires a real Agent with getModel()
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'factory-resume-agent',
         name: 'Factory Resume Agent',
         instructions: 'Test factory resume',
         model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({
+        agent: baseAgent,
         pubsub: new EventEmitterPubSub(),
       });
 
-      const { runId } = await agent.prepare('Hello');
+      const { runId } = await durableAgent.prepare('Hello');
 
-      const result = await agent.resume(runId, { action: 'continue' });
+      const result = await durableAgent.resume(runId, { action: 'continue' });
 
       expect(result.runId).toBe(runId);
       expect(result.output).toBeDefined();
@@ -236,17 +239,21 @@ describe('Resume with CachingPubSub Event Replay', () => {
       },
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'replay-resume-agent',
       name: 'Replay Resume Agent',
       instructions: 'Test replay on resume',
       model: mockModel as LanguageModelV2,
       tools: { approvalTool },
+    });
+
+    const durableAgent = createDurableAgent({
+      agent: baseAgent,
       pubsub: cachingPubsub,
     });
 
     // Start streaming - this will emit some events before suspending
-    const { runId, cleanup: initialCleanup } = await agent.stream('Delete the file');
+    const { runId, cleanup: initialCleanup } = await durableAgent.stream('Delete the file');
 
     // Wait a bit for events to be cached
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -266,16 +273,20 @@ describe('Resume with CachingPubSub Event Replay', () => {
     const receivedEvents: Event[] = [];
     const mockModel = createTextModel('Response');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'dedup-agent',
       name: 'Dedup Agent',
       instructions: 'Test deduplication',
       model: mockModel as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({
+      agent: baseAgent,
       pubsub: cachingPubsub,
     });
 
     // Start and get runId
-    const { runId, cleanup } = await agent.stream('Hello');
+    const { runId, cleanup } = await durableAgent.stream('Hello');
 
     // Wait for events
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -309,17 +320,18 @@ describe('Resume with Tool Approval', () => {
     const mockModel = createTextModel('Done');
     const onSuspended = vi.fn();
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'suspended-callback-agent',
       name: 'Suspended Callback Agent',
       instructions: 'Test suspended callback',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const { runId } = await agent.prepare('Start');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.resume(
+    const { runId } = await durableAgent.prepare('Start');
+
+    const result = await durableAgent.resume(
       runId,
       { approved: true },
       {
@@ -335,17 +347,18 @@ describe('Resume with Tool Approval', () => {
     const mockModel = createTextModel('Completed');
     const onFinish = vi.fn();
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'finish-callback-agent',
       name: 'Finish Callback Agent',
       instructions: 'Test finish callback',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const { runId } = await agent.prepare('Start');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.resume(
+    const { runId } = await durableAgent.prepare('Start');
+
+    const result = await durableAgent.resume(
       runId,
       { data: 'resume-data' },
       {
@@ -361,17 +374,18 @@ describe('Resume with Tool Approval', () => {
     const mockModel = createTextModel('Error test');
     const onError = vi.fn();
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'error-callback-agent',
       name: 'Error Callback Agent',
       instructions: 'Test error callback',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const { runId } = await agent.prepare('Start');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.resume(
+    const { runId } = await durableAgent.prepare('Start');
+
+    const result = await durableAgent.resume(
       runId,
       {},
       {
@@ -405,26 +419,27 @@ describe('Resume State Preservation', () => {
       execute: async () => ({ stored: true }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'registry-agent',
       name: 'Registry Agent',
       instructions: 'Test registry',
       model: mockModel as LanguageModelV2,
       tools: { statefulTool },
-      pubsub,
     });
 
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
     // Prepare creates registry entry
-    const { runId } = await agent.prepare('Store something');
+    const { runId } = await durableAgent.prepare('Store something');
 
     // Tools should be in registry
-    const toolsBefore = agent.runRegistry.getTools(runId);
+    const toolsBefore = durableAgent.runRegistry.getTools(runId);
     expect(toolsBefore.statefulTool).toBeDefined();
 
     // Resume should still have access to registry
-    const { cleanup } = await agent.resume(runId, { continue: true });
+    const { cleanup } = await durableAgent.resume(runId, { continue: true });
 
-    const toolsAfter = agent.runRegistry.getTools(runId);
+    const toolsAfter = durableAgent.runRegistry.getTools(runId);
     expect(toolsAfter.statefulTool).toBeDefined();
 
     cleanup();
@@ -433,15 +448,16 @@ describe('Resume State Preservation', () => {
   it('should clean up registry on cleanup', async () => {
     const mockModel = createTextModel('Cleanup test');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'cleanup-registry-agent',
       name: 'Cleanup Registry Agent',
       instructions: 'Test cleanup',
       model: mockModel as LanguageModelV2,
-      pubsub,
     });
 
-    const { cleanup } = await agent.stream('Test message');
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { cleanup } = await durableAgent.stream('Test message');
 
     // Wait for stream to complete
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -469,37 +485,45 @@ describe('Observe API', () => {
   it('should have observe method available', () => {
     const mockModel = createTextModel('Hello');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'observe-test-agent',
       name: 'Observe Test Agent',
       instructions: 'Test observe',
       model: mockModel as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({
+      agent: baseAgent,
       pubsub: cachingPubsub,
     });
 
-    expect(typeof agent.observe).toBe('function');
+    expect(typeof durableAgent.observe).toBe('function');
   });
 
   it('should return stream result from observe', async () => {
     const mockModel = createTextModel('Hello from observe');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'observe-result-agent',
       name: 'Observe Result Agent',
       instructions: 'Test observe result',
       model: mockModel as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({
+      agent: baseAgent,
       pubsub: cachingPubsub,
     });
 
     // Start a stream first
-    const { runId, cleanup: streamCleanup } = await agent.stream('Start stream');
+    const { runId, cleanup: streamCleanup } = await durableAgent.stream('Start stream');
 
     // Wait for events to be cached
     await new Promise(resolve => setTimeout(resolve, 100));
     streamCleanup();
 
     // Observe should return a stream result
-    const result = await agent.observe(runId);
+    const result = await durableAgent.observe(runId);
 
     expect(result.runId).toBe(runId);
     expect(result.output).toBeDefined();
@@ -510,23 +534,27 @@ describe('Observe API', () => {
   it('should support fromIndex for efficient resume', async () => {
     const mockModel = createTextModel('Indexed stream');
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'observe-index-agent',
       name: 'Observe Index Agent',
       instructions: 'Test indexed observe',
       model: mockModel as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({
+      agent: baseAgent,
       pubsub: cachingPubsub,
     });
 
     // Start a stream
-    const { runId, cleanup: streamCleanup } = await agent.stream('Generate events');
+    const { runId, cleanup: streamCleanup } = await durableAgent.stream('Generate events');
 
     // Wait for events
     await new Promise(resolve => setTimeout(resolve, 100));
     streamCleanup();
 
     // Observe from a specific index (should not throw)
-    const result = await agent.observe(runId, { fromIndex: 0 });
+    const result = await durableAgent.observe(runId, { fromIndex: 0 });
 
     expect(result.runId).toBe(runId);
     result.cleanup();
@@ -537,19 +565,23 @@ describe('Observe API', () => {
     const onChunk = vi.fn();
     const onFinish = vi.fn();
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'observe-callbacks-agent',
       name: 'Observe Callbacks Agent',
       instructions: 'Test observe callbacks',
       model: mockModel as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({
+      agent: baseAgent,
       pubsub: cachingPubsub,
     });
 
-    const { runId, cleanup: streamCleanup } = await agent.stream('Hello');
+    const { runId, cleanup: streamCleanup } = await durableAgent.stream('Hello');
     await new Promise(resolve => setTimeout(resolve, 100));
     streamCleanup();
 
-    const result = await agent.observe(runId, {
+    const result = await durableAgent.observe(runId, {
       onChunk,
       onFinish,
     });

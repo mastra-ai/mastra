@@ -3,14 +3,13 @@ import { InMemoryServerCache } from '../../cache/inmemory';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
+import type { Mastra } from '../../mastra';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
-// Import directly from agent file to avoid circular dependency
-// (../agent/index.ts used to re-export from ./durable which caused cycles)
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageListInput } from '../message-list';
-import type { AgentConfig, ToolsInput } from '../types';
+import type { ToolsInput } from '../types';
 
 import { localExecutor } from './executors';
 import type { WorkflowExecutor } from './executors';
@@ -83,20 +82,32 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
 }
 
 /**
- * Configuration for DurableAgent
+ * Configuration for DurableAgent - wraps an existing Agent with durable execution
  */
 export interface DurableAgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
-> extends AgentConfig<TAgentId, TTools, TOutput> {
+> {
+  /**
+   * The Agent to wrap with durable execution capabilities.
+   * All agent methods (getModel, listTools, etc.) delegate to this agent.
+   */
+  agent: Agent<TAgentId, TTools, TOutput>;
+
+  /**
+   * Optional ID override. Defaults to agent.id.
+   */
+  id?: TAgentId;
+
+  /**
+   * Optional name override. Defaults to agent.name.
+   */
+  name?: string;
+
   /**
    * PubSub instance for streaming events.
-   * Optional - if not provided, defaults to EventEmitterPubSub wrapped
-   * with CachingPubSub for resumable streams.
-   *
-   * If provided, it will be wrapped with CachingPubSub unless
-   * `cache` is explicitly set to `false`.
+   * Optional - if not provided, defaults to EventEmitterPubSub.
    */
   pubsub?: PubSub;
 
@@ -105,7 +116,7 @@ export interface DurableAgentConfig<
    * Enables resumable streams - clients can disconnect and reconnect
    * without missing events.
    *
-   * - If not provided: Uses InMemoryServerCache (default)
+   * - If not provided: Inherits from Mastra instance, or uses InMemoryServerCache
    * - If provided: Uses the provided cache backend (e.g., Redis)
    * - If set to `false`: Disables caching (streams are not resumable)
    */
@@ -114,9 +125,6 @@ export interface DurableAgentConfig<
   /**
    * Workflow executor for running the durable workflow.
    * Defaults to LocalWorkflowExecutor (direct execution).
-   *
-   * For fire-and-forget execution, use createEventedAgent() factory
-   * which uses the built-in workflow engine with startAsync().
    */
   executor?: WorkflowExecutor;
 
@@ -128,72 +136,35 @@ export interface DurableAgentConfig<
 }
 
 /**
- * DurableAgent extends Agent to support durable execution patterns.
+ * DurableAgent wraps an existing Agent with durable execution capabilities.
  *
- * Unlike the standard Agent, DurableAgent:
- * 1. Separates preparation (non-durable) from execution (durable)
- * 2. Uses pubsub for streaming instead of closures
- * 3. Stores non-serializable state in a registry keyed by runId
- * 4. Creates fully serializable workflow inputs
+ * Key features:
+ * 1. Resumable streams - clients can disconnect and reconnect without missing events
+ * 2. Serializable workflow inputs - works with durable execution engines
+ * 3. PubSub-based streaming - events flow through pubsub for distribution
  *
- * This enables the agent to work with durable execution engines like
- * Cloudflare Workflows, Inngest, Temporal, etc. that replay workflow
- * code and require serializable state.
+ * DurableAgent extends Agent, delegating most methods to the wrapped agent.
+ * It overrides stream() to use durable execution with the agentic workflow.
  *
- * DurableAgent extends Agent, so it has all the same methods (getModel,
- * listTools, getInstructions, etc.) and can be used anywhere an Agent is expected.
- *
- * Subclasses (EventedAgent, InngestAgent) can override the protected methods
- * `executeWorkflow()` and `createWorkflow()` to customize execution behavior.
+ * Subclasses (EventedAgent, InngestAgent) override executeWorkflow() to
+ * customize how the workflow is executed.
  *
  * @example
  * ```typescript
+ * import { Agent } from '@mastra/core/agent';
  * import { DurableAgent } from '@mastra/core/agent/durable';
  *
- * // DurableAgent automatically uses CachingPubSub for resumable streams
- * const durableAgent = new DurableAgent({
- *   id: 'my-durable-agent',
- *   name: 'My Durable Agent',
+ * const agent = new Agent({
+ *   id: 'my-agent',
  *   instructions: 'You are a helpful assistant',
- *   model: 'openai/gpt-4',
- *   tools: { ... },
+ *   model: openai('gpt-4'),
  * });
  *
- * const { output, runId, cleanup } = await durableAgent.stream(
- *   'Hello!',
- *   {
- *     onChunk: (chunk) => console.log('Chunk:', chunk),
- *     onFinish: (result) => console.log('Done:', result),
- *   }
- * );
+ * const durableAgent = new DurableAgent({ agent });
  *
- * // Consume the stream
+ * const { output, runId, cleanup } = await durableAgent.stream('Hello!');
  * const text = await output.text;
- * console.log('Final text:', text);
- *
- * // Cleanup when done
  * cleanup();
- * ```
- *
- * @example Custom cache backend (e.g., Redis)
- * ```typescript
- * import { DurableAgent } from '@mastra/core/agent/durable';
- * import { RedisServerCache } from '@mastra/redis'; // hypothetical
- *
- * const durableAgent = new DurableAgent({
- *   id: 'my-durable-agent',
- *   model: 'openai/gpt-4',
- *   cache: new RedisServerCache({ url: 'redis://...' }),
- * });
- * ```
- *
- * @example Disable caching (non-resumable streams)
- * ```typescript
- * const durableAgent = new DurableAgent({
- *   id: 'my-durable-agent',
- *   model: 'openai/gpt-4',
- *   cache: false, // Streams are not resumable
- * });
  * ```
  */
 export class DurableAgent<
@@ -201,8 +172,8 @@ export class DurableAgent<
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
 > extends Agent<TAgentId, TTools, TOutput> {
-  /** PubSub instance for streaming events */
-  readonly #pubsub: PubSub;
+  /** The wrapped agent */
+  readonly #wrappedAgent: Agent<TAgentId, TTools, TOutput>;
 
   /** Workflow executor for running the durable workflow */
   readonly #executor: WorkflowExecutor;
@@ -213,58 +184,100 @@ export class DurableAgent<
   /** The durable workflow for agent execution */
   #workflow: ReturnType<typeof createDurableAgenticWorkflow> | null = null;
 
-  /** Cache instance (if caching is enabled) */
-  readonly #cache: MastraServerCache | null;
-
   /** Maximum steps for the agentic loop */
   readonly #maxSteps?: number;
 
+  /** Inner pubsub (before CachingPubSub wrapper) */
+  readonly #innerPubsub: PubSub;
+
+  /** User-provided cache (undefined = inherit from mastra, false = disabled) */
+  #cacheConfig: MastraServerCache | false | undefined;
+
+  /** Resolved cache instance (lazily initialized) */
+  #resolvedCache: MastraServerCache | null = null;
+
+  /** CachingPubSub instance (lazily initialized) */
+  #cachingPubsub: PubSub | null = null;
+
+  /** Mastra instance (set via __setMastra when registered) */
+  #mastra: Mastra | undefined;
+
   /**
-   * Create a new DurableAgent
+   * Create a new DurableAgent that wraps an existing Agent
    */
   constructor(config: DurableAgentConfig<TAgentId, TTools, TOutput>) {
-    // Extract durable-specific config and pass the rest to Agent
-    const { pubsub, executor, cache, maxSteps, ...agentConfig } = config;
+    const { agent, id: idOverride, name: nameOverride, pubsub, executor, cache, maxSteps } = config;
 
-    // Default name to id if not provided (backwards compatibility)
-    if (!agentConfig.name) {
-      agentConfig.name = agentConfig.id;
-    }
+    // Use provided id/name or fall back to agent.id/agent.name
+    const agentId = idOverride ?? agent.id;
+    const agentName = nameOverride ?? agent.name ?? agent.id;
 
-    // Call the Agent constructor
-    super(agentConfig);
+    // Call Agent constructor with minimal config - we delegate to the wrapped agent
+    super({
+      id: agentId as TAgentId,
+      name: agentName,
+      // We need to provide model to satisfy the base class, but we'll delegate to wrapped agent
+      model: (agent as any).__model ?? agent.getModel(),
+    });
 
+    this.#wrappedAgent = agent;
     this.#executor = executor ?? localExecutor;
     this.#runRegistry = new ExtendedRunRegistry();
     this.#maxSteps = maxSteps;
+    this.#innerPubsub = pubsub ?? new EventEmitterPubSub();
+    this.#cacheConfig = cache;
+  }
 
-    // Set up PubSub with caching for resumable streams
-    // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
-    if (cache === false) {
-      // Caching explicitly disabled
-      this.#pubsub = pubsub ?? new EventEmitterPubSub();
-      this.#cache = null;
-    } else {
-      // Wrap pubsub with CachingPubSub
-      const cacheInstance = cache ?? new InMemoryServerCache();
-      const innerPubsub = pubsub ?? new EventEmitterPubSub();
-      this.#cache = cacheInstance;
-      this.#pubsub = new CachingPubSub(innerPubsub, cacheInstance);
-    }
+  // ===========================================================================
+  // Lazy PubSub/Cache initialization (allows inheriting cache from Mastra)
+  // ===========================================================================
+
+  /**
+   * Get the resolved cache instance.
+   * Lazily initialized to allow inheriting from Mastra.
+   */
+  get cache(): MastraServerCache | null {
+    this.#ensurePubsubInitialized();
+    return this.#resolvedCache;
   }
 
   /**
-   * Get the underlying agent instance.
-   * For DurableAgent, this returns `this` since DurableAgent extends Agent.
-   *
-   * @deprecated This property is deprecated. DurableAgent now extends Agent,
-   * so you can use DurableAgent directly wherever an Agent is expected.
+   * Get the PubSub instance.
+   * Returns CachingPubSub if caching is enabled, otherwise the inner pubsub.
+   */
+  get pubsub(): PubSub {
+    this.#ensurePubsubInitialized();
+    return this.#cachingPubsub!;
+  }
+
+  /**
+   * Ensure pubsub and cache are initialized.
+   * Called lazily on first access to allow inheriting cache from Mastra.
+   */
+  #ensurePubsubInitialized(): void {
+    if (this.#cachingPubsub) return;
+
+    if (this.#cacheConfig === false) {
+      // Caching explicitly disabled
+      this.#cachingPubsub = this.#innerPubsub;
+      this.#resolvedCache = null;
+    } else {
+      // Resolve cache: user-provided > mastra's cache > default InMemoryServerCache
+      const resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? new InMemoryServerCache();
+      this.#resolvedCache = resolvedCache;
+      this.#cachingPubsub = new CachingPubSub(this.#innerPubsub, resolvedCache);
+    }
+  }
+
+  // ===========================================================================
+  // Delegate to wrapped agent
+  // ===========================================================================
+
+  /**
+   * Get the wrapped agent instance.
    */
   get agent(): Agent<TAgentId, TTools, TOutput> {
-    // Type assertion needed because DurableAgent.stream() has a different signature
-    // than Agent.stream(). This is intentional - DurableAgent provides a durable
-    // execution API with different options and return types.
-    return this as unknown as Agent<TAgentId, TTools, TOutput>;
+    return this.#wrappedAgent;
   }
 
   /**
@@ -275,26 +288,31 @@ export class DurableAgent<
   }
 
   /**
-   * Get the cache instance (if caching is enabled).
-   * Returns null if caching was disabled via `cache: false`.
-   */
-  get cache(): MastraServerCache | null {
-    return this.#cache;
-  }
-
-  /**
-   * Get the PubSub instance.
-   * This will be a CachingPubSub if caching is enabled.
-   */
-  get pubsub(): PubSub {
-    return this.#pubsub;
-  }
-
-  /**
    * Get the max steps configured for this agent
    */
   get maxSteps(): number | undefined {
     return this.#maxSteps;
+  }
+
+  // Delegate Agent methods to wrapped agent
+  override getModel(options?: any) {
+    return this.#wrappedAgent.getModel(options);
+  }
+
+  override getInstructions(options?: any) {
+    return this.#wrappedAgent.getInstructions(options);
+  }
+
+  override listTools(options?: any) {
+    return this.#wrappedAgent.listTools(options);
+  }
+
+  override getMemory() {
+    return this.#wrappedAgent.getMemory();
+  }
+
+  override getVoice() {
+    return this.#wrappedAgent.getVoice();
   }
 
   // ===========================================================================
@@ -306,7 +324,7 @@ export class DurableAgent<
    * @internal
    */
   protected get pubsubInternal(): PubSub {
-    return this.#pubsub;
+    return this.pubsub;
   }
 
   /**
@@ -331,7 +349,7 @@ export class DurableAgent<
    */
   protected async executeWorkflow(runId: string, workflowInput: any): Promise<void> {
     const workflow = this.getWorkflow();
-    const result = await this.#executor.execute(workflow, workflowInput, this.#pubsub, runId);
+    const result = await this.#executor.execute(workflow, workflowInput, this.pubsub, runId);
 
     if (!result.success && result.error) {
       await this.emitError(runId, result.error);
@@ -361,7 +379,7 @@ export class DurableAgent<
    * @internal
    */
   protected async emitError(runId: string, error: Error): Promise<void> {
-    await emitErrorEvent(this.#pubsub, runId, error);
+    await emitErrorEvent(this.pubsub, runId, error);
   }
 
   // ===========================================================================
@@ -370,20 +388,6 @@ export class DurableAgent<
 
   /**
    * Stream a response from the agent using durable execution.
-   *
-   * This method:
-   * 1. Prepares for execution (non-durable phase)
-   * 2. Sets up pubsub subscription for streaming
-   * 3. Executes the durable workflow
-   * 4. Returns a MastraModelOutput that streams from pubsub events
-   *
-   * Note: This method has a different signature than Agent.stream() because
-   * durable execution requires different options (callbacks, cleanup) and
-   * returns additional metadata (runId, threadId, resourceId, cleanup).
-   *
-   * @param messages - User messages to process
-   * @param options - Execution options including callbacks
-   * @returns Promise containing the streaming output and run metadata
    */
   // @ts-expect-error - Intentionally different signature for durable execution
   async stream(
@@ -391,9 +395,8 @@ export class DurableAgent<
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
     // 1. Prepare for durable execution (non-durable phase)
-    // Note: We use `this` directly since DurableAgent extends Agent
     const preparation = await prepareForDurableExecution<TOutput>({
-      agent: this as unknown as Agent<string, any, TOutput>,
+      agent: this.#wrappedAgent as Agent<string, any, TOutput>,
       messages,
       options: options as AgentExecutionOptions<TOutput>,
       runId: options?.runId,
@@ -408,13 +411,13 @@ export class DurableAgent<
 
     // 3. Create the durable agent stream (subscribes to pubsub)
     const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
-      pubsub: this.#pubsub,
+      pubsub: this.pubsub,
       runId,
       messageId,
       model: {
         modelId: workflowInput.modelConfig.modelId,
         provider: workflowInput.modelConfig.provider,
-        version: 'v3', // Using v3 for the new streaming format
+        version: 'v3',
       },
       threadId,
       resourceId,
@@ -426,9 +429,7 @@ export class DurableAgent<
     });
 
     // 4. Execute the workflow (async, don't await)
-    // The workflow will emit events to pubsub as it executes
     this.executeWorkflow(runId, workflowInput).catch(error => {
-      // Emit error to pubsub so the stream receives it
       void this.emitError(runId, error);
     });
 
@@ -450,13 +451,6 @@ export class DurableAgent<
 
   /**
    * Resume a suspended workflow execution.
-   *
-   * When a workflow suspends (e.g., for tool approval), you can resume it
-   * by calling this method with the run ID and resume data.
-   *
-   * @param runId - The run ID of the suspended workflow
-   * @param resumeData - Data to provide to the workflow on resume
-   * @param options - Additional options for the resume operation
    */
   async resume(
     runId: string,
@@ -469,7 +463,6 @@ export class DurableAgent<
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    // Check if we have state for this run
     const entry = this.#runRegistry.get(runId);
     if (!entry) {
       throw new Error(`No registry entry found for run ${runId}. Cannot resume.`);
@@ -477,13 +470,12 @@ export class DurableAgent<
 
     const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
 
-    // Re-subscribe to the stream
     const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
-      pubsub: this.#pubsub,
+      pubsub: this.pubsub,
       runId,
-      messageId: crypto.randomUUID(), // New message ID for resume
+      messageId: crypto.randomUUID(),
       model: {
-        modelId: undefined, // Will be determined by workflow
+        modelId: undefined,
         provider: undefined,
         version: 'v3',
       },
@@ -496,9 +488,8 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
     });
 
-    // Resume the workflow using the executor
     const workflow = this.getWorkflow();
-    void this.#executor.resume(workflow, this.#pubsub, runId, resumeData).then(result => {
+    void this.#executor.resume(workflow, this.pubsub, runId, resumeData).then(result => {
       if (!result.success && result.error) {
         void this.emitError(runId, result.error);
       }
@@ -520,30 +511,7 @@ export class DurableAgent<
 
   /**
    * Observe an existing stream.
-   *
    * Use this to reconnect to a stream after a network disconnection.
-   * Unlike `resume()`, this does NOT re-execute the workflow - it only
-   * subscribes to receive events.
-   *
-   * @param runId - The run ID to observe
-   * @param options - Observation options
-   * @param options.fromIndex - Resume from this position (0 = full replay, default)
-   * @param options.onChunk - Callback for each chunk
-   * @param options.onFinish - Callback when stream completes
-   * @param options.onError - Callback on error
-   *
-   * @example
-   * ```typescript
-   * // Start a stream
-   * const { output, runId } = await agent.stream('Hello');
-   *
-   * // ... connection drops ...
-   *
-   * // Reconnect to the same stream
-   * const { output: resumed } = await agent.observe(runId, {
-   *   fromIndex: lastReceivedIndex + 1,
-   * });
-   * ```
    */
   async observe(
     runId: string,
@@ -556,12 +524,10 @@ export class DurableAgent<
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }> {
-    // Get memory info if available
     const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
 
-    // Create the stream subscription with fromIndex support
     const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
-      pubsub: this.#pubsub,
+      pubsub: this.pubsub,
       runId,
       messageId: crypto.randomUUID(),
       model: {
@@ -579,26 +545,17 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
     });
 
-    const cleanup = () => {
-      streamCleanup();
-    };
-
     return {
       output,
       runId,
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
-      cleanup,
+      cleanup: streamCleanup,
     };
   }
 
   /**
    * Get the workflow instance for direct execution.
-   *
-   * This is useful when you want to integrate the durable workflow
-   * into a larger workflow or use it with a specific execution engine.
-   *
-   * @returns The durable agentic workflow
    */
   getWorkflow() {
     if (!this.#workflow) {
@@ -609,24 +566,15 @@ export class DurableAgent<
 
   /**
    * Prepare for durable execution without starting it.
-   *
-   * This is useful when you want to:
-   * 1. Prepare the workflow input in one process
-   * 2. Execute the workflow in another process (e.g., Cloudflare Worker)
-   *
-   * @param messages - User messages to process
-   * @param options - Execution options
-   * @returns The serialized workflow input and metadata
    */
   async prepare(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>) {
     const preparation = await prepareForDurableExecution<TOutput>({
-      agent: this as unknown as Agent<string, any, TOutput>,
+      agent: this.#wrappedAgent as Agent<string, any, TOutput>,
       messages,
       options,
       requestContext: options?.requestContext,
     });
 
-    // Register the entry for later execution
     this.#runRegistry.registerWithMessageList(preparation.runId, preparation.registryEntry, preparation.messageList, {
       threadId: preparation.threadId,
       resourceId: preparation.resourceId,
@@ -639,5 +587,25 @@ export class DurableAgent<
       threadId: preparation.threadId,
       resourceId: preparation.resourceId,
     };
+  }
+
+  /**
+   * Get the durable workflows required by this agent.
+   * Called by Mastra during agent registration.
+   * @internal
+   */
+  getDurableWorkflows() {
+    return [this.getWorkflow()];
+  }
+
+  /**
+   * Set the Mastra instance.
+   * Called by Mastra during agent registration.
+   * @internal
+   */
+  override __setMastra(mastra: Mastra): void {
+    this.#mastra = mastra;
+    // Also set on wrapped agent
+    this.#wrappedAgent.__registerMastra(mastra);
   }
 }

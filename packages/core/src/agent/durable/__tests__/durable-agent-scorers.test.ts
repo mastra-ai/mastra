@@ -3,7 +3,8 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createScorer } from '../../../evals';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // DurableAgent Scorer Tests
@@ -39,7 +40,7 @@ describe('DurableAgent Scorers', () => {
         description: 'Test Scorer',
       }).generateScore(() => 0.95);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -49,10 +50,10 @@ describe('DurableAgent Scorers', () => {
             scorer: testScorer,
           },
         },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       expect(result.workflowInput.scorers).toBeDefined();
       expect(result.workflowInput.scorers).toHaveProperty('testScorer');
@@ -66,7 +67,7 @@ describe('DurableAgent Scorers', () => {
         description: 'Test Scorer',
       }).generateScore(() => 0.95);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -77,10 +78,10 @@ describe('DurableAgent Scorers', () => {
             sampling: { type: 'ratio', rate: 0.5 },
           },
         },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       expect(result.workflowInput.scorers).toBeDefined();
       expect(result.workflowInput.scorers!.testScorer!.sampling).toEqual({
@@ -90,15 +91,15 @@ describe('DurableAgent Scorers', () => {
     });
 
     it('should not include scorers in workflow input when not configured', async () => {
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       expect(result.workflowInput.scorers).toBeUndefined();
     });
@@ -118,7 +119,7 @@ describe('DurableAgent Scorers', () => {
         description: 'Override Scorer',
       }).generateScore(() => 0.9);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -128,11 +129,11 @@ describe('DurableAgent Scorers', () => {
             scorer: defaultScorer,
           },
         },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       // Override scorers in execution options
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         scorers: {
           overrideScorer: {
             scorer: overrideScorer,
@@ -155,7 +156,7 @@ describe('DurableAgent Scorers', () => {
         description: 'Test Scorer',
       }).generateScore(() => 0.95);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -165,10 +166,10 @@ describe('DurableAgent Scorers', () => {
             scorer: testScorer,
           },
         },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       // The scorer config should contain the name, not the object
       expect(result.workflowInput.scorers!.myScorer!.scorerName).toBe('testScorer');
@@ -187,7 +188,7 @@ describe('DurableAgent Scorers', () => {
         description: 'Second Scorer',
       }).generateScore(() => 0.9);
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -196,10 +197,10 @@ describe('DurableAgent Scorers', () => {
           first: { scorer: scorer1 },
           second: { scorer: scorer2, sampling: { type: 'none' } },
         },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       expect(result.workflowInput.scorers).toBeDefined();
       expect(Object.keys(result.workflowInput.scorers!)).toHaveLength(2);
@@ -211,15 +212,15 @@ describe('DurableAgent Scorers', () => {
 
   describe('returnScorerData option', () => {
     it('should serialize returnScorerData option in workflow input', async () => {
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello', {
+      const result = await durableAgent.prepare('Hello', {
         returnScorerData: true,
       } as any);
 
@@ -227,15 +228,15 @@ describe('DurableAgent Scorers', () => {
     });
 
     it('should default returnScorerData to undefined when not specified', async () => {
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
         model: mockModel as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       expect(result.workflowInput.options.returnScorerData).toBeUndefined();
     });

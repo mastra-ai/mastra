@@ -2,7 +2,8 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // DurableAgent Model Fallback Tests
@@ -85,7 +86,7 @@ describe('DurableAgent Model Fallback', () => {
       const model1 = createSuccessModel('Model 1 response');
       const model2 = createSuccessModel('Model 2 response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -93,10 +94,10 @@ describe('DurableAgent Model Fallback', () => {
           { model: model1 as LanguageModelV2, maxRetries: 2 },
           { model: model2 as LanguageModelV2, maxRetries: 1 },
         ],
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       expect(result.workflowInput.modelList).toBeDefined();
       expect(result.workflowInput.modelList).toHaveLength(2);
@@ -107,15 +108,15 @@ describe('DurableAgent Model Fallback', () => {
     it('should serialize primary model config even without model list', async () => {
       const model = createSuccessModel('Single model response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
         model: model as LanguageModelV2,
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       expect(result.workflowInput.modelConfig).toBeDefined();
       expect(result.workflowInput.modelConfig.provider).toBe('mock-provider');
@@ -131,7 +132,7 @@ describe('DurableAgent Model Fallback', () => {
       const model2 = createSuccessModel('Model 2 response');
       const model3 = createSuccessModel('Model 3 response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -140,10 +141,10 @@ describe('DurableAgent Model Fallback', () => {
           { model: model2 as LanguageModelV2, enabled: true },
           { model: model3 as LanguageModelV2 }, // enabled by default
         ],
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       // Disabled models are filtered out at serialization time
       expect(result.workflowInput.modelList).toBeDefined();
@@ -157,7 +158,7 @@ describe('DurableAgent Model Fallback', () => {
       const model1 = createSuccessModel('Model 1');
       const model2 = createSuccessModel('Model 2');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -165,10 +166,10 @@ describe('DurableAgent Model Fallback', () => {
           { model: model1 as LanguageModelV2, maxRetries: 5 },
           { model: model2 as LanguageModelV2, maxRetries: 0 },
         ],
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       expect(result.workflowInput.modelList![0]!.maxRetries).toBe(5);
       expect(result.workflowInput.modelList![1]!.maxRetries).toBe(0);
@@ -178,15 +179,15 @@ describe('DurableAgent Model Fallback', () => {
       const model1 = createSuccessModel('Model 1');
       const model2 = createSuccessModel('Model 2');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
         model: [{ model: model1 as LanguageModelV2 }, { model: model2 as LanguageModelV2 }],
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Hello');
+      const result = await durableAgent.prepare('Hello');
 
       expect(result.workflowInput.modelList![0]!.id).toBeDefined();
       expect(result.workflowInput.modelList![1]!.id).toBeDefined();
@@ -200,7 +201,7 @@ describe('DurableAgent Model Fallback', () => {
       const failingModel = createFailingModel();
       const successModel = createSuccessModel('Fallback response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -208,11 +209,11 @@ describe('DurableAgent Model Fallback', () => {
           { id: 'primary', model: failingModel as LanguageModelV2, maxRetries: 0 },
           { id: 'fallback', model: successModel as LanguageModelV2, maxRetries: 0 },
         ],
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       let text = '';
-      const { cleanup } = await agent.stream('Hello', {
+      const { cleanup } = await durableAgent.stream('Hello', {
         onChunk: chunk => {
           if (chunk.type === 'text-delta') {
             text += (chunk.payload as any).text;
@@ -232,7 +233,7 @@ describe('DurableAgent Model Fallback', () => {
       const flakyModel = createFlakyModel(2, 'Success after retries');
       const fallbackModel = createSuccessModel('Fallback response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -240,11 +241,11 @@ describe('DurableAgent Model Fallback', () => {
           { id: 'primary', model: flakyModel as LanguageModelV2, maxRetries: 2 },
           { id: 'fallback', model: fallbackModel as LanguageModelV2, maxRetries: 0 },
         ],
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       let text = '';
-      const { cleanup } = await agent.stream('Hello', {
+      const { cleanup } = await durableAgent.stream('Hello', {
         onChunk: chunk => {
           if (chunk.type === 'text-delta') {
             text += (chunk.payload as any).text;
@@ -270,7 +271,7 @@ describe('DurableAgent Model Fallback', () => {
       });
       const enabledModel = createSuccessModel('Enabled model response');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -278,11 +279,11 @@ describe('DurableAgent Model Fallback', () => {
           { id: 'disabled', model: disabledModel as LanguageModelV2, enabled: false },
           { id: 'enabled', model: enabledModel as LanguageModelV2, enabled: true },
         ],
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       let text = '';
-      const { cleanup } = await agent.stream('Hello', {
+      const { cleanup } = await durableAgent.stream('Hello', {
         onChunk: chunk => {
           if (chunk.type === 'text-delta') {
             text += (chunk.payload as any).text;
@@ -302,7 +303,7 @@ describe('DurableAgent Model Fallback', () => {
       const failingModel1 = createFailingModel();
       const failingModel2 = createFailingModel();
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -310,11 +311,11 @@ describe('DurableAgent Model Fallback', () => {
           { id: 'model1', model: failingModel1 as LanguageModelV2, maxRetries: 0 },
           { id: 'model2', model: failingModel2 as LanguageModelV2, maxRetries: 0 },
         ],
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       let errorReceived: Error | null = null;
-      const { cleanup } = await agent.stream('Hello', {
+      const { cleanup } = await durableAgent.stream('Hello', {
         onError: error => {
           errorReceived = error;
         },
@@ -333,7 +334,7 @@ describe('DurableAgent Model Fallback', () => {
       const flakyModel = createFlakyModel(5, 'Should not reach');
       const fallbackModel = createSuccessModel('Fallback used');
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'Test instructions',
@@ -341,11 +342,11 @@ describe('DurableAgent Model Fallback', () => {
           { id: 'primary', model: flakyModel as LanguageModelV2, maxRetries: 2 }, // Will fail after 3 attempts
           { id: 'fallback', model: fallbackModel as LanguageModelV2, maxRetries: 0 },
         ],
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       let text = '';
-      const { cleanup } = await agent.stream('Hello', {
+      const { cleanup } = await durableAgent.stream('Hello', {
         onChunk: chunk => {
           if (chunk.type === 'text-delta') {
             text += (chunk.payload as any).text;

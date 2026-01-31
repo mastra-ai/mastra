@@ -11,7 +11,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
-import { DurableAgent } from '../durable-agent';
+import { Agent } from '../../agent';
+import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
 // Helper Functions
@@ -141,19 +142,19 @@ describe('DurableAgent tool suspension', () => {
         },
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'suspension-agent',
         name: 'Suspension Agent',
         instructions: 'You can use interactive tools',
         model: mockModel as LanguageModelV2,
         tools: { interactiveTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use the interactive tool');
+      const result = await durableAgent.prepare('Use the interactive tool');
 
       // Tool should be registered with suspend/resume schemas
-      const tools = agent.runRegistry.getTools(result.runId);
+      const tools = durableAgent.runRegistry.getTools(result.runId);
       expect(tools).toBeDefined();
       expect(tools.interactiveTool).toBeDefined();
     });
@@ -175,16 +176,16 @@ describe('DurableAgent tool suspension', () => {
         execute: async () => ({ done: true }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'schema-suspension-agent',
         name: 'Schema Suspension Agent',
         instructions: 'Use suspendable tools',
         model: mockModel as LanguageModelV2,
         tools: { suspendableTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Use the suspendable tool');
+      const result = await durableAgent.prepare('Use the suspendable tool');
 
       // Workflow input should be JSON-serializable
       const serialized = JSON.stringify(result.workflowInput);
@@ -213,16 +214,16 @@ describe('DurableAgent tool suspension', () => {
         },
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'confirmation-agent',
         name: 'Confirmation Agent',
         instructions: 'Ask for confirmation when needed',
         model: mockModel as LanguageModelV2,
         tools: { askForConfirmation: confirmationTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await agent.stream('Please confirm this action');
+      const { runId, cleanup } = await durableAgent.stream('Please confirm this action');
 
       expect(runId).toBeDefined();
       cleanup();
@@ -240,16 +241,16 @@ describe('DurableAgent tool suspension', () => {
         execute: async () => ({ result: 'auto-resumed' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'auto-resume-agent',
         name: 'Auto Resume Agent',
         instructions: 'Use auto-resuming tools',
         model: mockModel as LanguageModelV2,
         tools: { autoResumeTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Test auto resume', {
+      const result = await durableAgent.prepare('Test auto resume', {
         autoResumeSuspendedTools: true,
       });
 
@@ -285,18 +286,18 @@ describe('DurableAgent tool suspension', () => {
         },
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'multi-tool-agent',
         name: 'Multi Tool Agent',
         instructions: 'Validate then process data',
         model: mockModel as LanguageModelV2,
         tools: { validateData: validateTool, processData: processTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Validate and process the data');
+      const result = await durableAgent.prepare('Validate and process the data');
 
-      const tools = agent.runRegistry.getTools(result.runId);
+      const tools = durableAgent.runRegistry.getTools(result.runId);
       expect(tools.validateData).toBeDefined();
       expect(tools.processData).toBeDefined();
     });
@@ -323,16 +324,16 @@ describe('DurableAgent tool suspension', () => {
         },
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'chained-agent',
         name: 'Chained Agent',
         instructions: 'Execute tool chain',
         model: mockModel as LanguageModelV2,
         tools: { chainedTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId, cleanup } = await agent.stream('Start the chain');
+      const { runId, cleanup } = await durableAgent.stream('Start the chain');
 
       expect(runId).toBeDefined();
       cleanup();
@@ -352,16 +353,16 @@ describe('DurableAgent tool suspension', () => {
         execute: async () => ({ found: true }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'memory-suspension-agent',
         name: 'Memory Suspension Agent',
         instructions: 'Use memory with suspension',
         model: mockModel as LanguageModelV2,
         tools: { memoryTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Search with memory', {
+      const result = await durableAgent.prepare('Search with memory', {
         memory: {
           thread: 'thread-suspension-test',
           resource: 'user-456',
@@ -388,16 +389,16 @@ describe('DurableAgent tool suspension', () => {
         execute: async () => ({ state: 'completed' }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'stateful-agent',
         name: 'Stateful Agent',
         instructions: 'Manage state',
         model: mockModel as LanguageModelV2,
         tools: { statefulTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Start stateful operation', {
+      const result = await durableAgent.prepare('Start stateful operation', {
         autoResumeSuspendedTools: false,
         maxSteps: 10,
       });
@@ -430,16 +431,16 @@ describe('DurableAgent tool suspension', () => {
         execute: async () => ({ done: true }),
       });
 
-      const agent = new DurableAgent({
+      const baseAgent = new Agent({
         id: 'complex-schema-agent',
         name: 'Complex Schema Agent',
         instructions: 'Handle complex schemas',
         model: mockModel as LanguageModelV2,
         tools: { complexTool },
-        pubsub,
       });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const result = await agent.prepare('Execute complex operation');
+      const result = await durableAgent.prepare('Execute complex operation');
 
       // Verify workflow input is still JSON-serializable with complex schemas
       const serialized = JSON.stringify(result.workflowInput);
@@ -472,19 +473,19 @@ describe('DurableAgent suspension edge cases', () => {
       execute: async input => ({ echoed: input.value }),
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'normal-tool-agent',
       name: 'Normal Tool Agent',
       instructions: 'Use normal tools',
       model: mockModel as LanguageModelV2,
       tools: { normalTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Echo the value');
+    const result = await durableAgent.prepare('Echo the value');
 
     expect(result.runId).toBeDefined();
-    expect(agent.runRegistry.getTools(result.runId).normalTool).toBeDefined();
+    expect(durableAgent.runRegistry.getTools(result.runId).normalTool).toBeDefined();
   });
 
   it('should handle mixed tools - some with suspension, some without', async () => {
@@ -514,18 +515,18 @@ describe('DurableAgent suspension edge cases', () => {
       },
     });
 
-    const agent = new DurableAgent({
+    const baseAgent = new Agent({
       id: 'mixed-suspension-agent',
       name: 'Mixed Suspension Agent',
       instructions: 'Use both quick and slow tools',
       model: mockModel as LanguageModelV2,
       tools: { quickTool, slowTool },
-      pubsub,
     });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const result = await agent.prepare('Run both tools');
+    const result = await durableAgent.prepare('Run both tools');
 
-    const tools = agent.runRegistry.getTools(result.runId);
+    const tools = durableAgent.runRegistry.getTools(result.runId);
     expect(tools.quickTool).toBeDefined();
     expect(tools.slowTool).toBeDefined();
   });
