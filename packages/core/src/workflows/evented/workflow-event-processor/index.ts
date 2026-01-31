@@ -1271,7 +1271,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         const iterationResults = foreachResult?.output ?? [];
         const targetLen = foreachResult?.payload?.length ?? 0;
 
-        // Count iterations by status
+        // Count iterations by status - pending iterations appear as null in stepResults after
+        // storage merge (pending markers are converted to null by the storage layer).
         const pendingCount = iterationResults.filter((r: any) => r === null).length;
         const suspendedCount = iterationResults.filter(
           (r: any) => r && typeof r === 'object' && r.status === 'suspended',
