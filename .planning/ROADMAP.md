@@ -44,11 +44,11 @@ Plans:
   3. User can collapse the browser panel via a header button and chat reclaims full width
   4. User can drag the separator handle to resize the browser panel width
   5. BrowserViewFrame WebSocket connection stays alive through collapse/expand cycles (never unmounts)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 17-01: AgentLayout browserSlot, collapsible panel wiring, and BrowserViewPanel extraction from Thread
-- [ ] 17-02: Auto-expand on session start, collapse on close, header button toggle
+- [ ] 17-01-PLAN.md -- AgentLayout browserSlot with collapsible panel (collapsedSize=0), BrowserViewPanel extraction from Thread to layout slot
+- [ ] 17-02-PLAN.md -- Auto-expand on session start via panelRef in BrowserSessionContext, collapse on close, human verification
 
 ---
 
