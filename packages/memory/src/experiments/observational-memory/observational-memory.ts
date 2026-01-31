@@ -9,8 +9,8 @@ import type {
   ProcessOutputResultArgs,
   ProcessorStreamWriter,
 } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
 import { MessageHistory } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
@@ -1134,11 +1134,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     const result: MastraDBMessage[] = [];
-    let messagesWithCompletedObs = 0;
-    let messagesWithUnobservedParts = 0;
-    let messagesFullyObserved = 0;
-    let messagesWithoutObs = 0;
-    let messagesInProgress = 0;
 
     for (const msg of allMessages) {
       // Check if this message has a completed observation
@@ -1146,23 +1141,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       const inProgress = this.hasInProgressObservation(msg);
 
       if (inProgress) {
-        messagesInProgress++;
         // Include the full message for in-progress observations
         // The Observer is currently working on this
         result.push(msg);
       } else if (endMarkerIndex !== -1) {
         // Message has a completed observation - only include parts after it
-        messagesWithCompletedObs++;
         const virtualMsg = this.createUnobservedMessage(msg);
         if (virtualMsg) {
           result.push(virtualMsg);
-          messagesWithUnobservedParts++;
-        } else {
-          messagesFullyObserved++;
         }
       } else {
         // No observation markers - fall back to timestamp-based filtering
-        messagesWithoutObs++;
         if (!msg.createdAt) {
           // Messages without timestamps are always included
           result.push(msg);
@@ -1407,7 +1396,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     patterns?: Record<string, string[]>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
-
     const agent = this.getReflectorAgent();
 
     // Format patterns into the observations if present
@@ -1461,7 +1449,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     // Check if compression was successful (reflected tokens should be below target threshold)
     if (!validateCompression(reflectedTokens, targetThreshold)) {
-
       // Emit failed marker for first attempt, then start marker for retry
       if (streamContext?.writer) {
         const failedMarker = this.createObservationFailedMarker({
@@ -1517,7 +1504,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
       parsed = parseReflectorOutput(result.text);
       reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
-
     }
 
     return {
@@ -1653,7 +1639,7 @@ ${suggestedResponse}
    * 5. Filter out already-observed messages
    */
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, messages, requestContext, stepNumber, state, writer, abortSignal, abort } = args;
+    const { messageList, requestContext, stepNumber, state, writer, abortSignal, abort } = args;
 
     const context = this.getThreadContext(requestContext, messageList);
     if (!context) {
@@ -1686,11 +1672,9 @@ ${suggestedResponse}
         const currentThreadMessages = await this.loadUnobservedMessages(threadId, undefined, lastObservedAt);
 
         // Add only current thread's messages to messageList (skip fully observed)
-        let skippedFullyObserved = 0;
         for (const msg of currentThreadMessages) {
           if (msg.role !== 'system') {
             if (!this.hasUnobservedParts(msg) && this.findLastCompletedObservationBoundary(msg) !== -1) {
-              skippedFullyObserved++;
               continue;
             }
             messageList.add(msg, 'memory');
@@ -1701,7 +1685,6 @@ ${suggestedResponse}
         const historicalMessages = await this.loadUnobservedMessages(threadId, resourceId, lastObservedAt);
 
         if (historicalMessages.length > 0) {
-
           // Thread scope: add all messages (skip fully observed)
           for (const msg of historicalMessages) {
             if (msg.role !== 'system') {
@@ -1736,9 +1719,7 @@ ${suggestedResponse}
       // In resource scope, also count tokens from other threads' unobserved context blocks.
       // These are injected as a system message but not included in messageList,
       // so they'd otherwise be invisible to the threshold check.
-      const otherThreadTokens = unobservedContextBlocks
-        ? this.tokenCounter.countString(unobservedContextBlocks)
-        : 0;
+      const otherThreadTokens = unobservedContextBlocks ? this.tokenCounter.countString(unobservedContextBlocks) : 0;
       const currentObservationTokens = record.observationTokenCount ?? 0;
       const pendingTokens = record.pendingMessageTokens ?? 0;
       const totalPendingTokens = pendingTokens + currentSessionTokens + otherThreadTokens;
@@ -1801,7 +1782,6 @@ ${suggestedResponse}
       const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
 
       if (stepNumber > 0 && totalPendingTokens >= threshold) {
-
         const lockKey = this.getLockKey(threadId, resourceId);
         let observationSucceeded = false;
         await this.withLock(lockKey, async () => {
@@ -1858,6 +1838,10 @@ ${suggestedResponse}
               // If the abort signal fired, use tripwire to cleanly exit
               if (abortSignal?.aborted) {
                 abort('Agent execution was aborted');
+              } else {
+                abort(
+                  `Encountered error during memory observation ${error instanceof Error ? error.message : JSON.stringify(error, null, 2)}`,
+                );
               }
               // Observation failed - don't clear messages
               observationSucceeded = false;
@@ -2026,7 +2010,6 @@ NOTE: Any messages following this system reminder are newer than your memories.
     // ════════════════════════════════════════════════════════════════════════
     if (stepNumber === 0) {
       const allMessages = messageList.get.all.db();
-      let removedCount = 0;
 
       // Find the message with the last observation end marker
       let markerMessageIndex = -1;
@@ -2053,7 +2036,6 @@ NOTE: Any messages following this system reminder are newer than your memories.
 
         if (messagesToRemove.length > 0) {
           messageList.removeByIds(messagesToRemove);
-          removedCount = messagesToRemove.length;
         }
 
         // Filter marker message to only unobserved parts
@@ -2061,7 +2043,6 @@ NOTE: Any messages following this system reminder are newer than your memories.
         if (unobservedParts.length === 0) {
           if (markerMessage.id) {
             messageList.removeByIds([markerMessage.id]);
-            removedCount++;
           }
         } else if (unobservedParts.length < (markerMessage.content?.parts?.length ?? 0)) {
           markerMessage.content.parts = unobservedParts;
@@ -2129,12 +2110,9 @@ NOTE: Any messages following this system reminder are newer than your memories.
   ): Promise<void> {
     // Regenerate IDs for messages that were already saved with observation markers
     // This prevents overwriting sealed messages in the DB
-    let regeneratedIds = 0;
     for (const msg of messagesToSave) {
       if (sealedIds.has(msg.id)) {
-        const oldId = msg.id;
         msg.id = crypto.randomUUID();
-        regeneratedIds++;
       }
     }
 
@@ -2670,7 +2648,6 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter,
     abortSignal?: AbortSignal,
   ): Promise<void> {
-
     // Clear debug entries at start of observation cycle
 
     // ════════════════════════════════════════════════════════════
@@ -2689,7 +2666,6 @@ ${formattedMessages}
 
     // Load messages per-thread using each thread's own cursor
     const messagesByThread = new Map<string, MastraDBMessage[]>();
-    let totalDbMessages = 0;
 
     for (const thread of allThreads) {
       const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
@@ -2708,7 +2684,6 @@ ${formattedMessages}
 
       if (result.messages.length > 0) {
         messagesByThread.set(thread.id, result.messages);
-        totalDbMessages += result.messages.length;
       }
     }
 
@@ -2926,7 +2901,7 @@ ${formattedMessages}
       }
 
       // Process batches in parallel
-      const batchPromises = batches.map(async (batch, batchIndex) => {
+      const batchPromises = batches.map(async batch => {
         const batchResult = await this.callMultiThreadObserver(
           existingObservations,
           batch.threadMap,
@@ -3170,7 +3145,6 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter,
     abortSignal?: AbortSignal,
   ): Promise<void> {
-
     if (!this.shouldReflect(observationTokens)) {
       return;
     }
@@ -3352,7 +3326,6 @@ ${formattedMessages}
 
       // Note: Thread metadata (currentTask, suggestedResponse) is preserved on each thread
       // and doesn't need to be updated during reflection - it was set during observation
-
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
     }
