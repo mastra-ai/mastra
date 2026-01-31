@@ -123,11 +123,13 @@ export abstract class StoredScorersStorage extends StorageDomain {
     if (scorer.activeVersionId) {
       const activeVersion = await this.getScorerVersion(scorer.activeVersionId);
       if (activeVersion) {
-        // Return the snapshot with id and activeVersionId preserved from the current scorer record
+        // Return the snapshot with id, activeVersionId, and timestamps preserved from the current scorer record
         return {
           ...(activeVersion.snapshot as unknown as StoredScorerType),
           id: scorer.id,
           activeVersionId: scorer.activeVersionId,
+          createdAt: scorer.createdAt,
+          updatedAt: scorer.updatedAt,
         };
       }
     }
@@ -153,9 +155,11 @@ export abstract class StoredScorersStorage extends StorageDomain {
           if (activeVersion) {
             return {
               ...(activeVersion.snapshot as unknown as StoredScorerType),
-              // Ensure id and activeVersionId are preserved from the current scorer record
+              // Ensure id, activeVersionId, and timestamps are preserved from the current scorer record
               id: scorer.id,
               activeVersionId: scorer.activeVersionId,
+              createdAt: scorer.createdAt,
+              updatedAt: scorer.updatedAt,
             };
           }
         }
