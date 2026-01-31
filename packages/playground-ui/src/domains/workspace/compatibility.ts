@@ -1,6 +1,7 @@
 import { coreFeatures } from '@mastra/core/features';
 import { MastraClient } from '@mastra/client-js';
 import { hasMethod } from './client-utils';
+import { isNonRetryableError } from '../../lib/query-utils';
 
 /**
  * Checks if workspace v1 features are supported by both core and client.
@@ -42,12 +43,16 @@ export const isWorkspaceNotSupportedError = (error: unknown): boolean => {
 };
 
 /**
- * React Query retry function that doesn't retry on 501 errors.
- * Use this to prevent infinite retries when workspaces aren't supported.
+ * React Query retry function that doesn't retry on 501 or 4xx client errors.
+ * Use this to prevent infinite retries when workspaces aren't supported or access is denied.
  */
 export const shouldRetryWorkspaceQuery = (failureCount: number, error: unknown): boolean => {
   // Don't retry 501 "Not Implemented" errors - they won't resolve with retries
   if (isWorkspaceNotSupportedError(error)) {
+    return false;
+  }
+  // Don't retry 4xx client errors (400, 401, 403, 404)
+  if (isNonRetryableError(error)) {
     return false;
   }
   // Default retry behavior: retry up to 3 times
