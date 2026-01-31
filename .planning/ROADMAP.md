@@ -27,7 +27,7 @@ Replace the floating browser overlay with a side-by-side split-pane layout so th
   1. BrowserSessionContext provides isActive, status, and control methods (show/hide/setStatus) accessible from both AgentLayout and BrowserViewPanel
   2. BrowserToolCallsProvider wraps both Thread and BrowserViewPanel (hoisted to Agent page level), so tool call history renders in the browser panel and chat messages simultaneously
   3. All existing tests pass and zero visual changes occur -- the overlay still renders as before
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
 - [ ] 16-01: BrowserSessionContext provider, BrowserToolCallsProvider hoisting, and Agent page wiring
