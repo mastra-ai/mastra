@@ -26,6 +26,7 @@ export type ComboboxProps = {
   size?: FormElementSize;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
 };
 
 export function Combobox({
@@ -41,6 +42,7 @@ export function Combobox({
   size = 'md',
   open,
   onOpenChange,
+  container,
 }: ComboboxProps) {
   const selectedOption = options.find(option => option.value === value) ?? null;
 
@@ -69,8 +71,8 @@ export function Combobox({
         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </BaseCombobox.Trigger>
 
-      <BaseCombobox.Portal>
-        <BaseCombobox.Positioner align="start" sideOffset={4} className="z-50">
+      <BaseCombobox.Portal container={container}>
+        <BaseCombobox.Positioner align="start" sideOffset={4} className="z-[100]">
           <BaseCombobox.Popup
             className={cn(
               'min-w-[var(--anchor-width)] w-max rounded-md bg-surface3 text-neutral5',

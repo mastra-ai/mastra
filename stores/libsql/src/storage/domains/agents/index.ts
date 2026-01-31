@@ -1,3 +1,4 @@
+import type { Client } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -25,16 +26,154 @@ import type { LibSQLDomainConfig } from '../../db';
 
 export class AgentsLibSQL extends AgentsStorage {
   #db: LibSQLDB;
+  #client: Client;
 
   constructor(config: LibSQLDomainConfig) {
     super();
     const client = resolveClient(config);
+    this.#client = client;
     this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
   }
 
   async init(): Promise<void> {
+    // Migrate from legacy schemas before creating tables
+    await this.#migrateFromLegacySchema();
+    await this.#migrateVersionsSchema();
+
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: AGENTS_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: AGENT_VERSIONS_SCHEMA });
+    // Add new columns for backwards compatibility with intermediate schema versions
+    await this.#db.alterTable({
+      tableName: TABLE_AGENTS,
+      schema: AGENTS_SCHEMA,
+      ifNotExists: ['status', 'authorId'],
+    });
+
+    // Clean up any stale draft records from previously failed createAgent calls
+    await this.#cleanupStaleDrafts();
+  }
+
+  /**
+   * Migrates from the legacy flat agent schema (where config fields like name, instructions, model
+   * were stored directly on mastra_agents) to the new versioned schema (thin agent record + versions table).
+   * SQLite cannot drop columns or alter NOT NULL constraints, so we must recreate the table.
+   */
+  async #migrateFromLegacySchema(): Promise<void> {
+    const legacyTable = `${TABLE_AGENTS}_legacy`;
+    const hasLegacyColumns = await this.#db.hasColumn(TABLE_AGENTS, 'name');
+
+    if (hasLegacyColumns) {
+      // Current table has legacy schema — rename it and drop old versions table
+      await this.#client.execute({
+        sql: `ALTER TABLE "${TABLE_AGENTS}" RENAME TO "${legacyTable}"`,
+      });
+      await this.#client.execute({
+        sql: `DROP TABLE IF EXISTS "${TABLE_AGENT_VERSIONS}"`,
+      });
+    }
+
+    // Check if legacy table exists (either just renamed, or left behind by a previous partial migration)
+    const legacyExists = await this.#db.hasColumn(legacyTable, 'name');
+    if (!legacyExists) return;
+
+    // Read all existing agents from the legacy table
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM "${legacyTable}"`,
+    });
+    const oldAgents = result.rows || [];
+
+    // Create new tables (CREATE TABLE IF NOT EXISTS handles idempotency on resume)
+    await this.#db.createTable({ tableName: TABLE_AGENTS, schema: AGENTS_SCHEMA });
+    await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: AGENT_VERSIONS_SCHEMA });
+
+    // INSERT OR REPLACE (used by #db.insert) is safe for resumed partial migrations
+    for (const row of oldAgents) {
+      const agentId = row.id as string;
+      if (!agentId) continue;
+
+      const versionId = crypto.randomUUID();
+      const now = new Date();
+
+      await this.#db.insert({
+        tableName: TABLE_AGENTS,
+        record: {
+          id: agentId,
+          status: 'published',
+          activeVersionId: versionId,
+          authorId: (row.ownerId as string) ?? (row.authorId as string) ?? null,
+          metadata: row.metadata ?? null,
+          createdAt: row.createdAt ?? now,
+          updatedAt: row.updatedAt ?? now,
+        },
+      });
+
+      await this.#db.insert({
+        tableName: TABLE_AGENT_VERSIONS,
+        record: {
+          id: versionId,
+          agentId,
+          versionNumber: 1,
+          name: (row.name as string) ?? agentId,
+          description: row.description ?? null,
+          instructions: (row.instructions as string) ?? '',
+          model: row.model ?? '{}',
+          tools: row.tools ?? null,
+          defaultOptions: row.defaultOptions ?? null,
+          workflows: row.workflows ?? null,
+          agents: row.agents ?? null,
+          integrationTools: row.integrationTools ?? null,
+          inputProcessors: row.inputProcessors ?? null,
+          outputProcessors: row.outputProcessors ?? null,
+          memory: row.memory ?? null,
+          scorers: row.scorers ?? null,
+          changedFields: null,
+          changeMessage: 'Migrated from legacy schema',
+          createdAt: row.createdAt ?? now,
+        },
+      });
+    }
+
+    // Drop legacy table only after all inserts succeed
+    await this.#client.execute({
+      sql: `DROP TABLE IF EXISTS "${legacyTable}"`,
+    });
+  }
+
+  /**
+   * Migrates the agent_versions table from the old snapshot-based schema (single `snapshot` JSON column)
+   * to the new flat schema (individual config columns). This handles the case where the agents table
+   * was already migrated but the versions table still has the old schema.
+   */
+  async #migrateVersionsSchema(): Promise<void> {
+    const hasSnapshotColumn = await this.#db.hasColumn(TABLE_AGENT_VERSIONS, 'snapshot');
+    if (!hasSnapshotColumn) return;
+
+    // Drop the old versions table - the new schema will be created by init()
+    // Any existing version data in snapshot format is not preserved since
+    // the snapshot schema predates the stable versioning system
+    await this.#client.execute({
+      sql: `DROP TABLE IF EXISTS "${TABLE_AGENT_VERSIONS}"`,
+    });
+
+    // Also clean up any lingering legacy table from a partial migration
+    await this.#client.execute({
+      sql: `DROP TABLE IF EXISTS "${TABLE_AGENTS}_legacy"`,
+    });
+  }
+
+  /**
+   * Removes stale draft agent records that have no activeVersionId.
+   * These are left behind when createAgent partially fails (inserts thin record
+   * but fails to create the version due to schema mismatch).
+   */
+  async #cleanupStaleDrafts(): Promise<void> {
+    try {
+      await this.#client.execute({
+        sql: `DELETE FROM "${TABLE_AGENTS}" WHERE status = 'draft' AND activeVersionId IS NULL`,
+      });
+    } catch {
+      // Non-critical cleanup, ignore errors
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
