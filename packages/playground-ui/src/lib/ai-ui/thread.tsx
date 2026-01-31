@@ -20,7 +20,6 @@ import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
-import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 
 export interface ThreadProps {
   agentName?: string;
@@ -37,7 +36,7 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
     return <AssistantMessage {...props} hasModelList={hasModelList} />;
   };
 
-  const threadContent = (
+  return (
     <ThreadWrapper>
       <div className="relative h-full overflow-hidden">
         <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
@@ -65,12 +64,6 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
       <Composer hasMemory={hasMemory} agentId={agentId} />
     </ThreadWrapper>
   );
-
-  // Wrap with BrowserToolCallsProvider when agent context exists
-  if (agentId) {
-    return <BrowserToolCallsProvider>{threadContent}</BrowserToolCallsProvider>;
-  }
-  return threadContent;
 };
 
 const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {
