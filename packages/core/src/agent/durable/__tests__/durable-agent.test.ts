@@ -50,8 +50,8 @@ describe('DurableAgent', () => {
       expect(agent.name).toBe('Test Agent');
       expect(agent.runRegistry).toBeDefined();
 
-      // agent getter throws before initialization
-      expect(() => agent.agent).toThrow('DurableAgent not initialized');
+      // DurableAgent now extends Agent, so agent getter returns this
+      expect(agent.agent).toBe(agent);
     });
 
     it('should provide agent instance after async initialization', async () => {

@@ -121,6 +121,20 @@ describe('createInngestAgent factory function', () => {
     expect(result.workflowInput).toBeDefined();
     expect(result.workflowInput.agentId).toBe('prepare-test');
   });
+
+  it('should have observe method for reconnecting to streams', () => {
+    const agent = new Agent({
+      id: 'observe-test',
+      name: 'Observe Test',
+      instructions: 'Test',
+      model: createMockModel() as any,
+    });
+
+    const durableAgent = createInngestAgent({ agent, inngest });
+
+    // Verify observe method exists and is a function
+    expect(typeof durableAgent.observe).toBe('function');
+  });
 });
 
 describe('createInngestAgent with Mastra auto-registration', () => {

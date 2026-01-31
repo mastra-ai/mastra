@@ -851,11 +851,11 @@ describe('DurableAgent lazy initialization', () => {
     expect(agent.name).toBe('Lazy Init Agent');
     expect(agent.runRegistry).toBeDefined();
 
-    // But agent getter should throw before initialization
-    expect(() => agent.agent).toThrow('DurableAgent not initialized');
+    // DurableAgent now extends Agent, so agent getter returns this
+    expect(agent.agent).toBe(agent);
   });
 
-  it('should initialize Agent after prepare call', async () => {
+  it('should be fully initialized at construction time', async () => {
     const mockModel = createTextModel('Hello');
 
     const agent = new DurableAgent({
@@ -866,16 +866,16 @@ describe('DurableAgent lazy initialization', () => {
       pubsub,
     });
 
-    // Before prepare
-    expect(() => agent.agent).toThrow();
+    // DurableAgent extends Agent, so it's immediately usable
+    expect(agent.agent).toBe(agent);
+    expect(agent.id).toBe('init-after-prepare-agent');
 
-    // After prepare
+    // prepare() should still work
     await agent.prepare('Test');
-    expect(agent.agent).toBeDefined();
     expect(agent.agent.id).toBe('init-after-prepare-agent');
   });
 
-  it('should initialize Agent after stream call', async () => {
+  it('should work with stream without prior initialization', async () => {
     const mockModel = createTextModel('Hello');
 
     const agent = new DurableAgent({
@@ -886,10 +886,10 @@ describe('DurableAgent lazy initialization', () => {
       pubsub,
     });
 
-    // Before stream
-    expect(() => agent.agent).toThrow();
+    // DurableAgent extends Agent, so agent is already available
+    expect(agent.agent).toBe(agent);
 
-    // After stream
+    // stream() should work
     const { cleanup } = await agent.stream('Test');
     expect(agent.agent).toBeDefined();
     cleanup();

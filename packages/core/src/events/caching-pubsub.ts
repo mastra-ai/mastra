@@ -40,6 +40,11 @@ export interface CachingPubSubOptions {
  */
 export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
+  /**
+   * Track the next index for each topic.
+   * This enables sequential indexing of events for position tracking.
+   */
+  private readonly topicIndices: Map<string, number> = new Map();
 
   constructor(
     private readonly inner: PubSub,
@@ -51,6 +56,28 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
+   * Get the next index for a topic and increment the counter.
+   * If the topic has cached events but no in-memory index,
+   * initialize from the cache length.
+   */
+  private async getNextIndex(topic: string): Promise<number> {
+    if (!this.topicIndices.has(topic)) {
+      // Initialize from cache if we have existing events
+      const cacheKey = this.getCacheKey(topic);
+      try {
+        const length = await this.cache.listLength(cacheKey);
+        this.topicIndices.set(topic, length);
+      } catch {
+        // Key doesn't exist yet, start from 0
+        this.topicIndices.set(topic, 0);
+      }
+    }
+    const current = this.topicIndices.get(topic)!;
+    this.topicIndices.set(topic, current + 1);
+    return current;
+  }
+
+  /**
    * Get the cache key for a topic
    */
   private getCacheKey(topic: string): string {
@@ -59,13 +86,14 @@ export class CachingPubSub extends PubSub {
 
   /**
    * Publish an event to a topic.
-   * The event is cached before being published to the inner PubSub.
+   * The event is cached with a sequential index before being published to the inner PubSub.
    */
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt' | 'index'>): Promise<void> {
     const fullEvent: Event = {
       ...event,
       id: crypto.randomUUID(),
       createdAt: new Date(),
+      index: await this.getNextIndex(topic),
     };
 
     // Cache the event (non-blocking, errors are logged but don't fail publish)
@@ -74,8 +102,8 @@ export class CachingPubSub extends PubSub {
       console.error(`[CachingPubSub] Failed to cache event for topic ${topic}:`, err);
     });
 
-    // Publish to inner PubSub
-    await this.inner.publish(topic, event);
+    // Publish to inner PubSub with the full event (including index)
+    await this.inner.publish(topic, fullEvent);
   }
 
   /**
@@ -124,6 +152,39 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
+   * Subscribe to a topic with replay starting from a specific index.
+   * More efficient than full replay when the client knows their last position.
+   *
+   * @param topic - The topic to subscribe to
+   * @param fromIndex - Start replaying from this index (0-based)
+   * @param cb - Callback invoked for each event
+   */
+  async subscribeFromIndex(topic: string, fromIndex: number, cb: EventCallback): Promise<void> {
+    // Each subscriber gets its own seen set for deduplication
+    const seen = new Set<string>();
+
+    // Wrap callback to deduplicate events by ID
+    const wrappedCb: EventCallback = (event, ack) => {
+      if (!seen.has(event.id)) {
+        seen.add(event.id);
+        cb(event, ack);
+      }
+    };
+
+    // 1. Subscribe to live events FIRST to avoid race condition
+    await this.inner.subscribe(topic, wrappedCb);
+
+    // 2. Fetch and replay cached history FROM the specified index
+    const history = await this.getHistory(topic, fromIndex);
+    for (const event of history) {
+      if (!seen.has(event.id)) {
+        seen.add(event.id);
+        cb(event);
+      }
+    }
+  }
+
+  /**
    * Unsubscribe from a topic.
    */
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
@@ -149,10 +210,12 @@ export class CachingPubSub extends PubSub {
   /**
    * Clear cached events for a specific topic.
    * Call this when a stream completes to free memory.
+   * Also resets the index counter for the topic.
    */
   async clearTopic(topic: string): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
     await this.cache.delete(cacheKey);
+    this.topicIndices.delete(topic);
   }
 
   /**

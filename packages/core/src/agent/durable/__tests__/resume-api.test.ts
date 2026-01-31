@@ -450,3 +450,114 @@ describe('Resume State Preservation', () => {
     cleanup();
   });
 });
+
+describe('Observe API', () => {
+  let cache: InMemoryServerCache;
+  let innerPubsub: EventEmitterPubSub;
+  let cachingPubsub: CachingPubSub;
+
+  beforeEach(() => {
+    cache = new InMemoryServerCache();
+    innerPubsub = new EventEmitterPubSub();
+    cachingPubsub = new CachingPubSub(innerPubsub, cache);
+  });
+
+  afterEach(async () => {
+    await innerPubsub.close();
+  });
+
+  it('should have observe method available', () => {
+    const mockModel = createTextModel('Hello');
+
+    const agent = new DurableAgent({
+      id: 'observe-test-agent',
+      name: 'Observe Test Agent',
+      instructions: 'Test observe',
+      model: mockModel as LanguageModelV2,
+      pubsub: cachingPubsub,
+    });
+
+    expect(typeof agent.observe).toBe('function');
+  });
+
+  it('should return stream result from observe', async () => {
+    const mockModel = createTextModel('Hello from observe');
+
+    const agent = new DurableAgent({
+      id: 'observe-result-agent',
+      name: 'Observe Result Agent',
+      instructions: 'Test observe result',
+      model: mockModel as LanguageModelV2,
+      pubsub: cachingPubsub,
+    });
+
+    // Start a stream first
+    const { runId, cleanup: streamCleanup } = await agent.stream('Start stream');
+
+    // Wait for events to be cached
+    await new Promise(resolve => setTimeout(resolve, 100));
+    streamCleanup();
+
+    // Observe should return a stream result
+    const result = await agent.observe(runId);
+
+    expect(result.runId).toBe(runId);
+    expect(result.output).toBeDefined();
+    expect(typeof result.cleanup).toBe('function');
+    result.cleanup();
+  });
+
+  it('should support fromIndex for efficient resume', async () => {
+    const mockModel = createTextModel('Indexed stream');
+
+    const agent = new DurableAgent({
+      id: 'observe-index-agent',
+      name: 'Observe Index Agent',
+      instructions: 'Test indexed observe',
+      model: mockModel as LanguageModelV2,
+      pubsub: cachingPubsub,
+    });
+
+    // Start a stream
+    const { runId, cleanup: streamCleanup } = await agent.stream('Generate events');
+
+    // Wait for events
+    await new Promise(resolve => setTimeout(resolve, 100));
+    streamCleanup();
+
+    // Observe from a specific index (should not throw)
+    const result = await agent.observe(runId, { fromIndex: 0 });
+
+    expect(result.runId).toBe(runId);
+    result.cleanup();
+  });
+
+  it('should support callbacks in observe', async () => {
+    const mockModel = createTextModel('Callback test');
+    const onChunk = vi.fn();
+    const onFinish = vi.fn();
+
+    const agent = new DurableAgent({
+      id: 'observe-callbacks-agent',
+      name: 'Observe Callbacks Agent',
+      instructions: 'Test observe callbacks',
+      model: mockModel as LanguageModelV2,
+      pubsub: cachingPubsub,
+    });
+
+    const { runId, cleanup: streamCleanup } = await agent.stream('Hello');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    streamCleanup();
+
+    const result = await agent.observe(runId, {
+      onChunk,
+      onFinish,
+    });
+
+    // Wait for replay
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(result.runId).toBe(runId);
+    result.cleanup();
+  });
+});

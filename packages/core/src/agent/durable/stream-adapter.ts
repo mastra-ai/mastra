@@ -34,6 +34,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   threadId?: string;
   /** Resource ID for memory */
   resourceId?: string;
+  /**
+   * Start replay from this index (0-based).
+   * If undefined, uses full replay (subscribeWithReplay).
+   * If specified, uses efficient indexed replay (subscribeFromIndex).
+   */
+  fromIndex?: number;
   /** Callback when chunk is received */
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
@@ -73,6 +79,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     model,
     threadId,
     resourceId,
+    fromIndex,
     onChunk,
     onStepFinish,
     onFinish,
@@ -172,11 +179,15 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       controller = ctrl;
 
       // Subscribe to pubsub with replay support for resumable streams
-      // If the PubSub supports caching (e.g., CachingPubSub), this will
-      // replay any cached events before receiving live events
+      // If fromIndex is specified, use indexed replay for efficiency
+      // Otherwise use full replay
       const topic = AGENT_STREAM_TOPIC(runId);
-      pubsub
-        .subscribeWithReplay(topic, handleEvent)
+      const subscribePromise =
+        fromIndex !== undefined
+          ? pubsub.subscribeFromIndex(topic, fromIndex, handleEvent)
+          : pubsub.subscribeWithReplay(topic, handleEvent);
+
+      subscribePromise
         .then(() => {
           isSubscribed = true;
         })

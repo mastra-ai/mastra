@@ -5,7 +5,9 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
-import type { Agent } from '../agent';
+// Import directly from agent file to avoid circular dependency
+// (../agent/index.ts used to re-export from ./durable which caused cycles)
+import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageListInput } from '../message-list';
 import type { AgentConfig, ToolsInput } from '../types';
@@ -14,7 +16,7 @@ import { localExecutor } from './executors';
 import type { WorkflowExecutor } from './executors';
 import { prepareForDurableExecution } from './preparation';
 import { ExtendedRunRegistry, globalRunRegistry } from './run-registry';
-import { createDurableAgentStream } from './stream-adapter';
+import { createDurableAgentStream, emitErrorEvent } from './stream-adapter';
 import type { AgentFinishEventData, AgentStepFinishEventData, AgentSuspendedEventData } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 
@@ -117,6 +119,12 @@ export interface DurableAgentConfig<
    * which uses the built-in workflow engine with startAsync().
    */
   executor?: WorkflowExecutor;
+
+  /**
+   * Maximum steps for the agentic loop.
+   * Defaults to the workflow default if not specified.
+   */
+  maxSteps?: number;
 }
 
 /**
@@ -131,6 +139,12 @@ export interface DurableAgentConfig<
  * This enables the agent to work with durable execution engines like
  * Cloudflare Workflows, Inngest, Temporal, etc. that replay workflow
  * code and require serializable state.
+ *
+ * DurableAgent extends Agent, so it has all the same methods (getModel,
+ * listTools, getInstructions, etc.) and can be used anywhere an Agent is expected.
+ *
+ * Subclasses (EventedAgent, InngestAgent) can override the protected methods
+ * `executeWorkflow()` and `createWorkflow()` to customize execution behavior.
  *
  * @example
  * ```typescript
@@ -186,10 +200,7 @@ export class DurableAgent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
-> {
-  /** The underlying agent instance (lazily initialized) */
-  #agent!: Agent<TAgentId, TTools, TOutput> | null;
-
+> extends Agent<TAgentId, TTools, TOutput> {
   /** PubSub instance for streaming events */
   readonly #pubsub: PubSub;
 
@@ -202,26 +213,30 @@ export class DurableAgent<
   /** The durable workflow for agent execution */
   #workflow: ReturnType<typeof createDurableAgenticWorkflow> | null = null;
 
-  /** Whether the agent has been initialized */
-  #initialized = false;
-  /** Pending initialization promise */
-  #initPromise: Promise<void> | null = null;
-  /** Agent config stored for deferred initialization */
-  readonly #agentConfig: Omit<DurableAgentConfig<TAgentId, TTools, TOutput>, 'pubsub' | 'executor' | 'cache'>;
-
   /** Cache instance (if caching is enabled) */
   readonly #cache: MastraServerCache | null;
+
+  /** Maximum steps for the agentic loop */
+  readonly #maxSteps?: number;
 
   /**
    * Create a new DurableAgent
    */
   constructor(config: DurableAgentConfig<TAgentId, TTools, TOutput>) {
-    const { pubsub, executor, cache, ...agentConfig } = config;
+    // Extract durable-specific config and pass the rest to Agent
+    const { pubsub, executor, cache, maxSteps, ...agentConfig } = config;
 
-    this.#agentConfig = agentConfig;
+    // Default name to id if not provided (backwards compatibility)
+    if (!agentConfig.name) {
+      agentConfig.name = agentConfig.id;
+    }
+
+    // Call the Agent constructor
+    super(agentConfig);
+
     this.#executor = executor ?? localExecutor;
     this.#runRegistry = new ExtendedRunRegistry();
-    this.#agent = null; // Agent will be initialized lazily on first use
+    this.#maxSteps = maxSteps;
 
     // Set up PubSub with caching for resumable streams
     if (cache === false) {
@@ -240,57 +255,17 @@ export class DurableAgent<
   }
 
   /**
-   * Initialize the underlying Agent (lazy initialization to handle ESM)
-   */
-  async #ensureInitialized(): Promise<void> {
-    if (this.#initialized) return;
-
-    if (!this.#initPromise) {
-      this.#initPromise = (async () => {
-        // Use dynamic import for ESM compatibility
-        const { Agent } = await import('../agent');
-        this.#agent = new Agent(this.#agentConfig);
-        this.#initialized = true;
-      })();
-    }
-
-    await this.#initPromise;
-  }
-
-  /**
-   * Get the underlying agent (must be called after initialization)
-   * @throws Error if called before async initialization
-   */
-  #getAgent(): Agent<TAgentId, TTools, TOutput> {
-    if (!this.#initialized || !this.#agent) {
-      throw new Error('DurableAgent not initialized. Call an async method first (stream, prepare, etc).');
-    }
-    return this.#agent;
-  }
-
-  /**
    * Get the underlying agent instance.
-   * Note: This will throw if called before any async method (stream, prepare, etc).
-   * For synchronous access to agent properties, use `id` or `name` from the config.
+   * For DurableAgent, this returns `this` since DurableAgent extends Agent.
+   *
+   * @deprecated This property is deprecated. DurableAgent now extends Agent,
+   * so you can use DurableAgent directly wherever an Agent is expected.
    */
   get agent(): Agent<TAgentId, TTools, TOutput> {
-    return this.#getAgent();
-  }
-
-  /**
-   * Get the agent ID.
-   * This is available synchronously from the config.
-   */
-  get id(): TAgentId {
-    return this.#agentConfig.id;
-  }
-
-  /**
-   * Get the agent name.
-   * This is available synchronously from the config.
-   */
-  get name(): string {
-    return this.#agentConfig.name || this.#agentConfig.id;
+    // Type assertion needed because DurableAgent.stream() has a different signature
+    // than Agent.stream(). This is intentional - DurableAgent provides a durable
+    // execution API with different options and return types.
+    return this as unknown as Agent<TAgentId, TTools, TOutput>;
   }
 
   /**
@@ -317,6 +292,84 @@ export class DurableAgent<
   }
 
   /**
+   * Get the max steps configured for this agent
+   */
+  get maxSteps(): number | undefined {
+    return this.#maxSteps;
+  }
+
+  // ===========================================================================
+  // Protected methods for subclass overrides
+  // ===========================================================================
+
+  /**
+   * Get the PubSub instance for use by subclasses.
+   * @internal
+   */
+  protected get pubsubInternal(): PubSub {
+    return this.#pubsub;
+  }
+
+  /**
+   * Get the run registry for use by subclasses.
+   * @internal
+   */
+  protected get runRegistryInternal(): ExtendedRunRegistry {
+    return this.#runRegistry;
+  }
+
+  /**
+   * Execute the durable workflow.
+   *
+   * Subclasses override this method to customize how the workflow is executed:
+   * - DurableAgent (this): Uses executor.execute() for direct local execution
+   * - EventedAgent: Uses run.startAsync() for fire-and-forget execution
+   * - InngestAgent: Uses inngest.send() to trigger Inngest function
+   *
+   * @param runId - The unique run ID
+   * @param workflowInput - The serialized workflow input
+   * @internal
+   */
+  protected async executeWorkflow(runId: string, workflowInput: any): Promise<void> {
+    const workflow = this.getWorkflow();
+    const result = await this.#executor.execute(workflow, workflowInput, this.#pubsub, runId);
+
+    if (!result.success && result.error) {
+      await this.emitError(runId, result.error);
+    }
+  }
+
+  /**
+   * Create the durable workflow for this agent.
+   *
+   * Subclasses can override this method to use a different workflow implementation:
+   * - DurableAgent (this): Uses createDurableAgenticWorkflow()
+   * - InngestAgent: Uses createInngestDurableAgenticWorkflow()
+   *
+   * @internal
+   */
+  protected createWorkflow(): ReturnType<typeof createDurableAgenticWorkflow> {
+    return createDurableAgenticWorkflow({
+      maxSteps: this.#maxSteps,
+    });
+  }
+
+  /**
+   * Emit an error event to pubsub.
+   *
+   * @param runId - The run ID
+   * @param error - The error to emit
+   * @internal
+   */
+  protected async emitError(runId: string, error: Error): Promise<void> {
+    await emitErrorEvent(this.#pubsub, runId, error);
+  }
+
+  // ===========================================================================
+  // Public API
+  // ===========================================================================
+
+  /**
    * Stream a response from the agent using durable execution.
    *
    * This method:
@@ -325,20 +378,23 @@ export class DurableAgent<
    * 3. Executes the durable workflow
    * 4. Returns a MastraModelOutput that streams from pubsub events
    *
+   * Note: This method has a different signature than Agent.stream() because
+   * durable execution requires different options (callbacks, cleanup) and
+   * returns additional metadata (runId, threadId, resourceId, cleanup).
+   *
    * @param messages - User messages to process
    * @param options - Execution options including callbacks
    * @returns Promise containing the streaming output and run metadata
    */
+  // @ts-expect-error - Intentionally different signature for durable execution
   async stream(
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    // Ensure the agent is initialized
-    await this.#ensureInitialized();
-
     // 1. Prepare for durable execution (non-durable phase)
+    // Note: We use `this` directly since DurableAgent extends Agent
     const preparation = await prepareForDurableExecution<TOutput>({
-      agent: this.#getAgent() as Agent<string, any, TOutput>,
+      agent: this as unknown as Agent<string, any, TOutput>,
       messages,
       options: options as AgentExecutionOptions<TOutput>,
       runId: options?.runId,
@@ -370,21 +426,14 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
     });
 
-    // 4. Get or create the durable workflow
-    if (!this.#workflow) {
-      this.#workflow = createDurableAgenticWorkflow({
-        maxSteps: options?.maxSteps,
-      });
-    }
-
-    // 5. Execute the workflow (async, don't await)
+    // 4. Execute the workflow (async, don't await)
     // The workflow will emit events to pubsub as it executes
-    this.#executeWorkflow(runId, workflowInput).catch(error => {
+    this.executeWorkflow(runId, workflowInput).catch(error => {
       // Emit error to pubsub so the stream receives it
-      void this.#emitError(runId, error);
+      void this.emitError(runId, error);
     });
 
-    // 6. Create cleanup function
+    // 5. Create cleanup function
     const cleanup = () => {
       streamCleanup();
       this.#runRegistry.cleanup(runId);
@@ -398,30 +447,6 @@ export class DurableAgent<
       resourceId,
       cleanup,
     };
-  }
-
-  /**
-   * Execute the durable workflow using the configured executor.
-   * This is called asynchronously after stream() returns.
-   */
-  async #executeWorkflow(runId: string, workflowInput: any): Promise<void> {
-    if (!this.#workflow) {
-      throw new Error('Workflow not initialized');
-    }
-
-    const result = await this.#executor.execute(this.#workflow, workflowInput, this.#pubsub, runId);
-
-    if (!result.success && result.error) {
-      await this.#emitError(runId, result.error);
-    }
-  }
-
-  /**
-   * Emit an error event to pubsub
-   */
-  async #emitError(runId: string, error: Error): Promise<void> {
-    const { emitErrorEvent } = await import('./stream-adapter');
-    await emitErrorEvent(this.#pubsub, runId, error);
   }
 
   /**
@@ -473,17 +498,90 @@ export class DurableAgent<
     });
 
     // Resume the workflow using the executor
-    if (this.#workflow) {
-      void this.#executor.resume(this.#workflow, this.#pubsub, runId, resumeData).then(result => {
-        if (!result.success && result.error) {
-          void this.#emitError(runId, result.error);
-        }
-      });
-    }
+    const workflow = this.getWorkflow();
+    void this.#executor.resume(workflow, this.#pubsub, runId, resumeData).then(result => {
+      if (!result.success && result.error) {
+        void this.emitError(runId, result.error);
+      }
+    });
 
     const cleanup = () => {
       streamCleanup();
       this.#runRegistry.cleanup(runId);
+    };
+
+    return {
+      output,
+      runId,
+      threadId: memoryInfo?.threadId,
+      resourceId: memoryInfo?.resourceId,
+      cleanup,
+    };
+  }
+
+  /**
+   * Observe an existing stream.
+   *
+   * Use this to reconnect to a stream after a network disconnection.
+   * Unlike `resume()`, this does NOT re-execute the workflow - it only
+   * subscribes to receive events.
+   *
+   * @param runId - The run ID to observe
+   * @param options - Observation options
+   * @param options.fromIndex - Resume from this position (0 = full replay, default)
+   * @param options.onChunk - Callback for each chunk
+   * @param options.onFinish - Callback when stream completes
+   * @param options.onError - Callback on error
+   *
+   * @example
+   * ```typescript
+   * // Start a stream
+   * const { output, runId } = await agent.stream('Hello');
+   *
+   * // ... connection drops ...
+   *
+   * // Reconnect to the same stream
+   * const { output: resumed } = await agent.observe(runId, {
+   *   fromIndex: lastReceivedIndex + 1,
+   * });
+   * ```
+   */
+  async observe(
+    runId: string,
+    options?: {
+      fromIndex?: number;
+      onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
+      onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+      onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+      onError?: (error: Error) => void | Promise<void>;
+      onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+    },
+  ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }> {
+    // Get memory info if available
+    const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
+
+    // Create the stream subscription with fromIndex support
+    const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
+      pubsub: this.#pubsub,
+      runId,
+      messageId: crypto.randomUUID(),
+      model: {
+        modelId: undefined,
+        provider: undefined,
+        version: 'v3',
+      },
+      threadId: memoryInfo?.threadId,
+      resourceId: memoryInfo?.resourceId,
+      fromIndex: options?.fromIndex,
+      onChunk: options?.onChunk,
+      onStepFinish: options?.onStepFinish,
+      onFinish: options?.onFinish,
+      onError: options?.onError,
+      onSuspended: options?.onSuspended,
+    });
+
+    const cleanup = () => {
+      streamCleanup();
     };
 
     return {
@@ -505,7 +603,7 @@ export class DurableAgent<
    */
   getWorkflow() {
     if (!this.#workflow) {
-      this.#workflow = createDurableAgenticWorkflow();
+      this.#workflow = this.createWorkflow();
     }
     return this.#workflow;
   }
@@ -522,11 +620,8 @@ export class DurableAgent<
    * @returns The serialized workflow input and metadata
    */
   async prepare(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>) {
-    // Ensure the agent is initialized
-    await this.#ensureInitialized();
-
     const preparation = await prepareForDurableExecution<TOutput>({
-      agent: this.#getAgent() as Agent<string, any, TOutput>,
+      agent: this as unknown as Agent<string, any, TOutput>,
       messages,
       options,
       requestContext: options?.requestContext,

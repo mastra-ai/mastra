@@ -36,6 +36,8 @@ import {
   // Model fallback test creators
   createModelFallbackTests,
   createModelFallbackRuntimeTests,
+  // Observe test creators
+  createObserveTests,
 } from './domains';
 
 const DEFAULT_EVENT_PROPAGATION_DELAY = 100;
@@ -205,6 +207,11 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
     // Model fallback runtime tests (DurableAgent only - requires registry)
     if (!skip.modelFallbackRuntime) {
       createModelFallbackRuntimeTests(context);
+    }
+
+    // Observe tests (resumable streams)
+    if (!skip.observe) {
+      createObserveTests(context);
     }
   });
 }

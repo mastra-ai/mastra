@@ -6,6 +6,8 @@
  * so test isolation is achieved through unique agent IDs and run IDs
  * rather than separate Inngest apps.
  */
+import type { ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
@@ -28,6 +30,7 @@ export const HANDLER_PORT = 4101;
 let sharedInngest: Inngest | null = null;
 let sharedMastra: Mastra | null = null;
 let sharedServer: ServerType | null = null;
+let inngestDevServer: ChildProcess | null = null;
 
 /**
  * Generate unique test ID to isolate each test.
@@ -71,10 +74,108 @@ export async function waitForInngestSync(ms = 500): Promise<void> {
 }
 
 /**
+ * Start the Inngest dev server using npx inngest-cli.
+ * Returns a promise that resolves when the server is ready.
+ */
+async function startInngestDevServer(): Promise<ChildProcess> {
+  return new Promise((resolve, reject) => {
+    const args = [
+      'inngest-cli',
+      'dev',
+      '-p',
+      String(INNGEST_PORT),
+      '-u',
+      `http://localhost:${HANDLER_PORT}/inngest/api`,
+      '--poll-interval=1',
+      '--no-discovery',
+    ];
+
+    const proc = spawn('npx', args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: false,
+    });
+
+    let started = false;
+    const timeout = setTimeout(() => {
+      if (!started) {
+        proc.kill();
+        reject(new Error('Inngest dev server failed to start within 30s'));
+      }
+    }, 30000);
+
+    const checkOutput = (output: string) => {
+      // Inngest dev server outputs JSON logs - look for the API server starting
+      // Example: {"time":"...","level":"INFO","msg":"starting server","caller":"api","addr":"0.0.0.0:4100"}
+      if (output.includes('"starting server"') && output.includes(`"addr":"0.0.0.0:${INNGEST_PORT}"`)) {
+        if (!started) {
+          started = true;
+          clearTimeout(timeout);
+          resolve(proc);
+        }
+      }
+    };
+
+    proc.stdout?.on('data', (data: Buffer) => {
+      checkOutput(data.toString());
+    });
+
+    proc.stderr?.on('data', (data: Buffer) => {
+      // JSON output often goes to stderr
+      checkOutput(data.toString());
+    });
+
+    proc.on('error', err => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+
+    proc.on('exit', code => {
+      if (!started) {
+        clearTimeout(timeout);
+        reject(new Error(`Inngest dev server exited with code ${code}`));
+      }
+    });
+  });
+}
+
+/**
+ * Wait for Inngest dev server to be reachable.
+ */
+async function waitForInngestReady(maxAttempts = 30, intervalMs = 1000): Promise<void> {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const response = await fetch(`http://localhost:${INNGEST_PORT}/health`);
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // Server not ready yet
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`Inngest dev server not ready after ${maxAttempts} attempts`);
+}
+
+/**
  * Initialize shared test infrastructure.
  * Call this once in beforeAll for the test suite.
+ *
+ * This starts the Inngest dev server using npx (no Docker required).
  */
 export async function setupSharedTestInfrastructure(): Promise<void> {
+  // Start Inngest dev server first (needs to be running before we create the app server)
+  // Skip if INNGEST_DEV_EXTERNAL=true (for running against Docker or existing server)
+  if (process.env.INNGEST_DEV_EXTERNAL !== 'true') {
+    try {
+      inngestDevServer = await startInngestDevServer();
+      // Give it a moment to fully initialize
+      await waitForInngestReady();
+    } catch (error) {
+      console.error('Failed to start Inngest dev server:', error);
+      throw error;
+    }
+  }
+
   // Create shared Inngest client
   const inngest = getSharedInngest();
 
@@ -110,8 +211,8 @@ export async function setupSharedTestInfrastructure(): Promise<void> {
     port: HANDLER_PORT,
   });
 
-  // Wait for Inngest to sync
-  await waitForInngestSync(1000);
+  // Wait for Inngest to sync with our app
+  await waitForInngestSync(2000);
 }
 
 /**
@@ -119,12 +220,26 @@ export async function setupSharedTestInfrastructure(): Promise<void> {
  * Call this once in afterAll for the test suite.
  */
 export async function teardownSharedTestInfrastructure(): Promise<void> {
+  // Stop the app server first
   if (sharedServer) {
     await new Promise<void>(resolve => {
       sharedServer!.close(() => resolve());
     });
     sharedServer = null;
   }
+
+  // Stop the Inngest dev server
+  if (inngestDevServer) {
+    inngestDevServer.kill('SIGTERM');
+    // Wait a bit for graceful shutdown
+    await new Promise(resolve => setTimeout(resolve, 500));
+    // Force kill if still running
+    if (!inngestDevServer.killed) {
+      inngestDevServer.kill('SIGKILL');
+    }
+    inngestDevServer = null;
+  }
+
   sharedMastra = null;
   sharedInngest = null;
 }

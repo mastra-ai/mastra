@@ -21,6 +21,21 @@ export interface DurableAgentLike<TOutput = undefined> {
     cleanup: () => void;
   }>;
   prepare(messages: any, options?: any): Promise<any>;
+  observe?(
+    runId: string,
+    options?: {
+      fromIndex?: number;
+      onChunk?: (chunk: any) => void | Promise<void>;
+      onStepFinish?: (result: any) => void | Promise<void>;
+      onFinish?: (result: any) => void | Promise<void>;
+      onError?: (error: Error) => void | Promise<void>;
+      onSuspended?: (data: any) => void | Promise<void>;
+    },
+  ): Promise<{
+    output: any;
+    runId: string;
+    cleanup: () => void;
+  }>;
 }
 
 /**
@@ -65,7 +80,9 @@ export type DurableAgentTestDomain =
   | 'usage'
   // Model fallback domains
   | 'modelFallback'
-  | 'modelFallbackRuntime';
+  | 'modelFallbackRuntime'
+  // Observe domain (resumable streams)
+  | 'observe';
 
 /**
  * Configuration for creating a DurableAgent test suite

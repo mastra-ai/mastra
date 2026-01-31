@@ -65,12 +65,15 @@ export {
   type DurableAgentStreamResult,
 } from './durable-agent';
 
-// Evented Agent factory (like createInngestAgent but for built-in workflow engine)
+// EventedAgent class (extends DurableAgent with fire-and-forget execution)
+export { EventedAgent, isEventedAgentClass, type EventedAgentConfig } from './evented-agent';
+
+// Evented Agent factory (backwards compatibility - wraps Agent with EventedAgent-like behavior)
 export {
   createEventedAgent,
   isEventedAgent,
   type CreateEventedAgentOptions,
-  type EventedAgent,
+  type EventedAgent as EventedAgentInterface,
   type EventedAgentStreamOptions,
   type EventedAgentStreamResult,
 } from './create-evented-agent';

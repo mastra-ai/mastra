@@ -214,6 +214,25 @@ export interface InngestAgent<TOutput = undefined> {
   }>;
 
   /**
+   * Observe (reconnect to) an existing stream.
+   * Use this to resume receiving events after a disconnection.
+   *
+   * @param runId - The run ID to observe
+   * @param options.fromIndex - Resume from this event index (0-based). If omitted, replays all events.
+   */
+  observe(
+    runId: string,
+    options?: {
+      fromIndex?: number;
+      onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
+      onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+      onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+      onError?: (error: Error) => void | Promise<void>;
+      onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+    },
+  ): Promise<Omit<InngestAgentStreamResult<TOutput>, 'threadId' | 'resourceId'> & { runId: string }>;
+
+  /**
    * Get the durable workflows required by this agent.
    * Called by Mastra during agent registration.
    * @internal
@@ -507,6 +526,32 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         workflowInput: preparation.workflowInput,
         threadId: preparation.threadId,
         resourceId: preparation.resourceId,
+      };
+    },
+
+    async observe(runId, observeOptions) {
+      // Create the stream subscription with fromIndex support
+      const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
+        pubsub,
+        runId,
+        messageId: crypto.randomUUID(),
+        model: {
+          modelId: undefined,
+          provider: undefined,
+          version: 'v3',
+        },
+        fromIndex: observeOptions?.fromIndex,
+        onChunk: observeOptions?.onChunk,
+        onStepFinish: observeOptions?.onStepFinish,
+        onFinish: observeOptions?.onFinish,
+        onError: observeOptions?.onError,
+        onSuspended: observeOptions?.onSuspended,
+      });
+
+      return {
+        output,
+        runId,
+        cleanup: streamCleanup,
       };
     },
 

@@ -38,4 +38,18 @@ export abstract class PubSub {
   subscribeWithReplay(topic: string, cb: EventCallback): Promise<void> {
     return this.subscribe(topic, cb);
   }
+
+  /**
+   * Subscribe to a topic with replay starting from a specific index.
+   * This is more efficient than full replay when the client knows their last position.
+   * Default implementation falls back to subscribeWithReplay (full replay).
+   * Override in implementations that support indexed event caching.
+   *
+   * @param topic - The topic to subscribe to
+   * @param fromIndex - Start replaying from this index (0-based)
+   * @param cb - Callback invoked for each event
+   */
+  subscribeFromIndex(topic: string, _fromIndex: number, cb: EventCallback): Promise<void> {
+    return this.subscribeWithReplay(topic, cb);
+  }
 }

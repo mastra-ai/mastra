@@ -30,3 +30,6 @@ export { createUsageTests } from './usage';
 // Model fallback tests
 export { createModelFallbackTests } from './model-fallback';
 export { createModelFallbackRuntimeTests } from './model-fallback-runtime';
+
+// Observe tests (resumable streams)
+export { createObserveTests } from './observe';

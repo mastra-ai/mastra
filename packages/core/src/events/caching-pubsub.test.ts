@@ -69,6 +69,80 @@ describe('CachingPubSub', () => {
       expect(history[1].type).toBe('second');
       expect(history[2].type).toBe('third');
     });
+
+    it('should assign sequential indices to events', async () => {
+      const topic = 'index-topic';
+
+      await cachingPubsub.publish(topic, { type: 'first', runId: 'run-1', data: {} });
+      await cachingPubsub.publish(topic, { type: 'second', runId: 'run-1', data: {} });
+      await cachingPubsub.publish(topic, { type: 'third', runId: 'run-1', data: {} });
+
+      // Wait for async cache writes
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      const history = await cachingPubsub.getHistory(topic);
+      expect(history).toHaveLength(3);
+      expect(history[0].index).toBe(0);
+      expect(history[1].index).toBe(1);
+      expect(history[2].index).toBe(2);
+    });
+
+    it('should include index in live events', async () => {
+      const topic = 'live-index-topic';
+      const receivedEvents: Event[] = [];
+
+      await cachingPubsub.subscribe(topic, event => {
+        receivedEvents.push(event);
+      });
+
+      await cachingPubsub.publish(topic, { type: 'first', runId: 'run-1', data: {} });
+      await cachingPubsub.publish(topic, { type: 'second', runId: 'run-1', data: {} });
+
+      expect(receivedEvents).toHaveLength(2);
+      expect(receivedEvents[0].index).toBe(0);
+      expect(receivedEvents[1].index).toBe(1);
+    });
+
+    it('should recover index from cache after restart', async () => {
+      const topic = 'recovery-topic';
+
+      // Simulate first session - publish some events
+      await cachingPubsub.publish(topic, { type: 'first', runId: 'run-1', data: {} });
+      await cachingPubsub.publish(topic, { type: 'second', runId: 'run-1', data: {} });
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Simulate restart - create new CachingPubSub with same cache
+      const newPubsub = new CachingPubSub(new EventEmitterPubSub(), cache);
+
+      // Publish more events - should continue from index 2
+      await newPubsub.publish(topic, { type: 'third', runId: 'run-1', data: {} });
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      const history = await newPubsub.getHistory(topic);
+      expect(history).toHaveLength(3);
+      expect(history[0].index).toBe(0);
+      expect(history[1].index).toBe(1);
+      expect(history[2].index).toBe(2);
+    });
+
+    it('should reset index when topic is cleared', async () => {
+      const topic = 'clear-topic';
+
+      await cachingPubsub.publish(topic, { type: 'first', runId: 'run-1', data: {} });
+      await cachingPubsub.publish(topic, { type: 'second', runId: 'run-1', data: {} });
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      await cachingPubsub.clearTopic(topic);
+
+      // Publish after clear - should start from index 0
+      await cachingPubsub.publish(topic, { type: 'new-first', runId: 'run-2', data: {} });
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      const history = await cachingPubsub.getHistory(topic);
+      expect(history).toHaveLength(1);
+      expect(history[0].index).toBe(0);
+      expect(history[0].type).toBe('new-first');
+    });
   });
 
   describe('subscribe', () => {
