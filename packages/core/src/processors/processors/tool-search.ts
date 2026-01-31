@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { MASTRA_THREAD_ID_KEY } from '../../request-context';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
+import { BM25Index } from '../../workspace/search/bm25';
+import type { TokenizeOptions } from '../../workspace/search/bm25';
 import type { ProcessInputStepArgs, Processor } from '../index';
 
 /**
@@ -49,16 +51,6 @@ export interface ToolSearchProcessorOptions {
 }
 
 /**
- * Internal interface for indexed tool entries
- */
-interface ToolEntry {
-  tool: Tool<any, any>;
-  name: string;
-  description: string;
-  tokens: string[];
-}
-
-/**
  * Search result with ranking score
  */
 interface SearchResult {
@@ -68,15 +60,17 @@ interface SearchResult {
 }
 
 /**
- * Tokenize text into searchable terms.
- * Splits on whitespace and special characters, lowercases, and filters short tokens.
+ * Tokenization options tuned for tool names and descriptions.
+ * Splits on underscores, hyphens, and punctuation (common in tool IDs).
+ * No stopwords filtering since tool descriptions are short.
  */
-function tokenize(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[\s\-_.,;:!?()[\]{}'"]+/)
-    .filter(token => token.length > 1);
-}
+const TOOL_SEARCH_TOKENIZE_OPTIONS: TokenizeOptions = {
+  lowercase: true,
+  removePunctuation: false,
+  minLength: 2,
+  stopwords: new Set(),
+  splitPattern: /[\s\-_.,;:!?()[\]{}'"]+/,
+};
 
 /**
  * Processor that enables dynamic tool discovery and loading.
@@ -115,8 +109,12 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
   private allTools: Record<string, Tool<any, any>>;
   private searchConfig: Required<NonNullable<ToolSearchProcessorOptions['search']>>;
-  private toolEntries: ToolEntry[] = [];
   private ttl: number;
+
+  /** BM25 index for tool search */
+  private bm25Index: BM25Index;
+  /** Map from tool ID to full description (for result formatting) */
+  private toolDescriptions = new Map<string, string>();
 
   /**
    * Thread-scoped state management for loaded tools with TTL support.
@@ -124,10 +122,6 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    * Maps threadId -> ThreadState (tools + timestamp)
    */
   private threadLoadedTools = new Map<string, ThreadState>();
-
-  // BM25 parameters
-  private readonly k1 = 1.5; // Term frequency saturation
-  private readonly b = 0.75; // Length normalization factor
 
   constructor(options: ToolSearchProcessorOptions) {
     this.allTools = options.tools;
@@ -137,7 +131,10 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     };
     this.ttl = options.ttl ?? 3600000; // Default: 1 hour
 
-    // Index all tools for BM25 search
+    // Create BM25 index with tool-search-specific tokenization
+    this.bm25Index = new BM25Index({}, TOOL_SEARCH_TOKENIZE_OPTIONS);
+
+    // Index all tools
     this.indexTools();
 
     // Start periodic cleanup if TTL is enabled
@@ -276,99 +273,66 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   }
 
   /**
-   * Index all tools for BM25 search
+   * Index all tools into the BM25 index
    */
   private indexTools(): void {
-    this.toolEntries = Object.values(this.allTools).map(tool => ({
-      tool,
-      name: tool.id,
-      description: tool.description || '',
-      tokens: tokenize(`${tool.id} ${tool.description || ''}`),
-    }));
+    for (const tool of Object.values(this.allTools)) {
+      const name = tool.id;
+      const description = tool.description || '';
+      this.bm25Index.add(name, `${name} ${description}`);
+      this.toolDescriptions.set(name, description);
+    }
   }
 
   /**
-   * Calculate average document length across all entries
-   */
-  private getAverageDocLength(): number {
-    if (this.toolEntries.length === 0) return 0;
-    const totalLength = this.toolEntries.reduce((sum, entry) => sum + entry.tokens.length, 0);
-    return totalLength / this.toolEntries.length;
-  }
-
-  /**
-   * Calculate IDF (Inverse Document Frequency) for a term.
-   * Rarer terms get higher scores.
-   */
-  private calculateIDF(term: string): number {
-    const N = this.toolEntries.length;
-    const n = this.toolEntries.filter(entry => entry.tokens.includes(term)).length;
-
-    if (n === 0) return 0;
-
-    // Standard IDF formula with smoothing
-    return Math.log((N - n + 0.5) / (n + 0.5) + 1);
-  }
-
-  /**
-   * Calculate BM25 score for a single term in a document
-   */
-  private calculateTermScore(term: string, entry: ToolEntry, avgDl: number): number {
-    const tf = entry.tokens.filter(t => t === term).length;
-    if (tf === 0) return 0;
-
-    const idf = this.calculateIDF(term);
-    const dl = entry.tokens.length;
-
-    // BM25 formula
-    const numerator = tf * (this.k1 + 1);
-    const denominator = tf + this.k1 * (1 - this.b + this.b * (dl / avgDl));
-
-    return idf * (numerator / denominator);
-  }
-
-  /**
-   * Search for tools matching the query using BM25 ranking.
+   * Search for tools matching the query using BM25 ranking
+   * with name-match boosting.
    *
    * @param query - Search keywords
    * @returns Array of matching tools with scores, sorted by relevance
    */
   private searchTools(query: string): SearchResult[] {
-    if (this.toolEntries.length === 0) return [];
+    if (this.bm25Index.size === 0) return [];
 
-    const queryTokens = tokenize(query);
-    if (queryTokens.length === 0) return [];
+    // Get BM25 results (request more than topK to allow for re-ranking after boosting)
+    const bm25Results = this.bm25Index.search(query, this.searchConfig.topK * 2, 0);
 
-    const avgDl = this.getAverageDocLength();
+    if (bm25Results.length === 0) return [];
 
-    // Score each document
-    const scored = this.toolEntries.map(entry => {
-      let score = 0;
+    // Apply name-match boosting on top of BM25 scores
+    const queryTokens = query
+      .toLowerCase()
+      .split(/[\s\-_.,;:!?()[\]{}'"]+/)
+      .filter(t => t.length > 1);
+
+    const boostedResults = bm25Results.map(result => {
+      let score = result.score;
+      const nameLower = result.id.toLowerCase();
 
       for (const term of queryTokens) {
-        score += this.calculateTermScore(term, entry, avgDl);
-
-        // Boost exact name matches significantly
-        if (entry.name.toLowerCase() === term) {
+        if (nameLower === term) {
           score += 5;
-        } else if (entry.name.toLowerCase().includes(term)) {
+        } else if (nameLower.includes(term)) {
           score += 2;
         }
       }
 
-      return { entry, score };
+      return { id: result.id, score };
     });
 
-    // Filter by minScore, sort by relevance, apply topK limit
-    return scored
-      .filter(s => s.score > this.searchConfig.minScore)
+    // Re-sort after boosting, filter by minScore, apply topK
+    return boostedResults
       .sort((a, b) => b.score - a.score)
+      .filter(r => r.score > this.searchConfig.minScore)
       .slice(0, this.searchConfig.topK)
-      .map(s => ({
-        name: s.entry.name,
-        description: s.entry.description.length > 150 ? s.entry.description.slice(0, 147) + '...' : s.entry.description,
-        score: Math.round(s.score * 100) / 100,
-      }));
+      .map(r => {
+        const description = this.toolDescriptions.get(r.id) || '';
+        return {
+          name: r.id,
+          description: description.length > 150 ? description.slice(0, 147) + '...' : description,
+          score: Math.round(r.score * 100) / 100,
+        };
+      });
   }
 
   async processInputStep(args: ProcessInputStepArgs) {
