@@ -56,6 +56,7 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^9.9.0",
+    "@internal/test-utils": "workspace:*",
     "@mastra/core": "*",
     "@testing-library/react": "^16.3.2",
     "@types/jsdom": "^27.0.0",
