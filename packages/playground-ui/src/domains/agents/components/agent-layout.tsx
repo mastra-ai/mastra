@@ -1,7 +1,9 @@
-import { Panel, useDefaultLayout, Group, PanelImperativeHandle, usePanelRef } from 'react-resizable-panels';
+import { useEffect } from 'react';
+import { Panel, useDefaultLayout, Group, usePanelRef } from 'react-resizable-panels';
 import { getMainContentContentClassName } from '@/ds/components/MainContent';
 import { PanelSeparator } from '@/lib/resize/separator';
 import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
+import { useBrowserSession } from '../context/browser-session-context';
 
 export interface AgentLayoutProps {
   agentId: string;
@@ -18,6 +20,24 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserSlo
   });
 
   const browserPanelRef = usePanelRef();
+  const { isActive, panelRef: sessionPanelRef } = useBrowserSession();
+
+  // Expose the local panel ref to the session context so other components can access it
+  useEffect(() => {
+    sessionPanelRef.current = browserPanelRef.current;
+  });
+
+  // Auto-expand/collapse browser panel based on session activity
+  useEffect(() => {
+    if (!browserSlot) return;
+    if (!browserPanelRef.current) return;
+
+    if (isActive) {
+      browserPanelRef.current.expand();
+    } else {
+      browserPanelRef.current.collapse();
+    }
+  }, [isActive, browserSlot, browserPanelRef]);
 
   const computedClassName = getMainContentContentClassName({
     isCentered: false,

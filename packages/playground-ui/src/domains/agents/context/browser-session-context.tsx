@@ -1,10 +1,12 @@
-import { createContext, useContext, useCallback, useState, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useCallback, useState, useMemo, useRef, type ReactNode, type RefObject } from 'react';
+import type { PanelImperativeHandle } from 'react-resizable-panels';
 import type { StreamStatus } from '../hooks/use-browser-stream';
 
 interface BrowserSessionContextValue {
   isActive: boolean;
   status: StreamStatus;
   currentUrl: string | null;
+  panelRef: RefObject<PanelImperativeHandle | null>;
   show: () => void;
   hide: () => void;
   setStatus: (status: StreamStatus) => void;
@@ -17,6 +19,7 @@ export function BrowserSessionProvider({ children }: { children: ReactNode }) {
   const [isActive, setIsActive] = useState(false);
   const [status, setStatusState] = useState<StreamStatus>('idle');
   const [currentUrl, setCurrentUrlState] = useState<string | null>(null);
+  const panelRef = useRef<PanelImperativeHandle | null>(null);
 
   const show = useCallback(() => {
     setIsActive(true);
@@ -35,8 +38,8 @@ export function BrowserSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ isActive, status, currentUrl, show, hide, setStatus, setCurrentUrl }),
-    [isActive, status, currentUrl, show, hide, setStatus, setCurrentUrl],
+    () => ({ isActive, status, currentUrl, panelRef, show, hide, setStatus, setCurrentUrl }),
+    [isActive, status, currentUrl, panelRef, show, hide, setStatus, setCurrentUrl],
   );
 
   return <BrowserSessionContext.Provider value={value}>{children}</BrowserSessionContext.Provider>;
