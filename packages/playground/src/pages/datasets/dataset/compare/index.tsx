@@ -89,11 +89,7 @@ function DatasetCompare() {
             icon={<GitCompare />}
           />
 
-          <ComparisonView
-            datasetId={datasetId}
-            runIdA={runIdA}
-            runIdB={runIdB}
-          />
+          <ComparisonView datasetId={datasetId} runIdA={runIdA} runIdB={runIdB} />
         </div>
       </MainContentContent>
     </MainContentLayout>

@@ -30,6 +30,7 @@ metrics:
 ## What Was Built
 
 ### ActionsMenu Component
+
 - Popover-based menu triggered by MoreVertical (three-dot) icon
 - Three action buttons: Export, Create Dataset, Delete
 - Delete styled red (`text-red-500 hover:text-red-400`) for destructive emphasis
@@ -37,6 +38,7 @@ metrics:
 - Auto-closes popover after action invoked
 
 ### deleteItems Bulk Mutation
+
 - Sequential deletion via for-loop (no bulk API endpoint exists)
 - Accepts `{ datasetId, itemIds: string[] }`
 - Invalidates `dataset-items` and `dataset` queries on success
@@ -44,11 +46,11 @@ metrics:
 
 ## Commits
 
-| Hash | Type | Description |
-|------|------|-------------|
-| 7453d06d1c | feat | ActionsMenu component with popover pattern |
-| dbcb098075 | feat | deleteItems bulk mutation |
-| fb3438d7dc | chore | Export ActionsMenu from index |
+| Hash       | Type  | Description                                |
+| ---------- | ----- | ------------------------------------------ |
+| 7453d06d1c | feat  | ActionsMenu component with popover pattern |
+| dbcb098075 | feat  | deleteItems bulk mutation                  |
+| fb3438d7dc | chore | Export ActionsMenu from index              |
 
 ## Deviations from Plan
 
@@ -66,6 +68,7 @@ None - plan executed exactly as written.
 **Blockers:** None
 
 **Dependencies for 08-03:**
+
 - ActionsMenu component available for integration
 - deleteItems mutation ready for wiring
 

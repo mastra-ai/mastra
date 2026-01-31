@@ -38,13 +38,13 @@ key-files:
     - packages/playground/src/App.tsx
 
 key-decisions:
-  - "Column structure: Name (with description), Version (date), Created (date)"
-  - "Empty state includes docs link to /docs/evals"
-  - "Datasets under Observability section in sidebar (isOnMastraPlatform: true)"
+  - 'Column structure: Name (with description), Version (date), Created (date)'
+  - 'Empty state includes docs link to /docs/evals'
+  - 'Datasets under Observability section in sidebar (isOnMastraPlatform: true)'
 
 patterns-established:
-  - "Dataset table follows agent-table pattern with columns.tsx"
-  - "CreateDatasetDialog follows create-agent-dialog pattern"
+  - 'Dataset table follows agent-table pattern with columns.tsx'
+  - 'CreateDatasetDialog follows create-agent-dialog pattern'
 
 # Metrics
 duration: 5min
@@ -116,5 +116,6 @@ None - no external service configuration required.
 - Next plans can add dataset detail view (/datasets/:datasetId) and run views
 
 ---
-*Phase: 06-playground-integration*
-*Completed: 2026-01-26*
+
+_Phase: 06-playground-integration_
+_Completed: 2026-01-26_

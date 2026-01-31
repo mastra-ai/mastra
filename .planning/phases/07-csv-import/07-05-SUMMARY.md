@@ -16,7 +16,7 @@ affects: []
 tech-stack:
   added: []
   patterns:
-    - "useEffect for prop-to-state sync in hooks"
+    - 'useEffect for prop-to-state sync in hooks'
 
 key-files:
   created: []
@@ -24,10 +24,10 @@ key-files:
     - packages/playground-ui/src/domains/datasets/hooks/use-column-mapping.ts
 
 key-decisions:
-  - "useEffect rebuilds entire mapping on headers change (not incremental merge)"
+  - 'useEffect rebuilds entire mapping on headers change (not incremental merge)'
 
 patterns-established:
-  - "Prop-to-state sync: useState initializer + useEffect for async prop updates"
+  - 'Prop-to-state sync: useState initializer + useEffect for async prop updates'
 
 # Metrics
 duration: 1min
@@ -47,6 +47,7 @@ completed: 2026-01-27
 - **Files modified:** 1
 
 ## Accomplishments
+
 - Fixed CSV columns not appearing in Ignore zone after file parse
 - Added useEffect to sync mapping state with headers prop
 - Root cause resolved: useState initializer only ran once with empty array
@@ -58,9 +59,11 @@ Each task was committed atomically:
 1. **Task 1: Add useEffect to sync mapping with headers** - `cf9fdf71a2` (fix)
 
 ## Files Created/Modified
+
 - `packages/playground-ui/src/domains/datasets/hooks/use-column-mapping.ts` - Added useEffect to rebuild mapping when headers change
 
 ## Decisions Made
+
 - Rebuild entire mapping on headers change rather than incremental merge (simpler, avoids stale entries)
 
 ## Deviations from Plan
@@ -68,6 +71,7 @@ Each task was committed atomically:
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 None
 
 ## User Setup Required
@@ -75,9 +79,11 @@ None
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - CSV import column mapping now works correctly
 - Ready for Phase 8 (Item Selection)
 
 ---
-*Phase: 07-csv-import*
-*Completed: 2026-01-27*
+
+_Phase: 07-csv-import_
+_Completed: 2026-01-27_

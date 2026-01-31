@@ -14,6 +14,7 @@ Phase 8 adds bulk operations to the dataset items list. The existing codebase pr
 - **Toast System**: Sonner-based toast system at `src/lib/toast.tsx`
 
 This is primarily a **UI composition phase** with minimal backend changes. The main work is:
+
 1. Selection state management (React useState + custom hook)
 2. Three-dot menu with Popover
 3. Checkbox integration into `ItemsList` table
@@ -27,30 +28,30 @@ This is primarily a **UI composition phase** with minimal backend changes. The m
 
 ### Core
 
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| React | 18.x | UI framework | Already in use |
-| @radix-ui/react-checkbox | 1.3.2 | Checkbox primitives | Already installed |
-| @radix-ui/react-popover | 1.1.14 | Menu dropdown | Already installed |
-| @radix-ui/react-alert-dialog | 1.1.14 | Confirmation dialogs | Already installed |
-| @tanstack/react-query | 5.x | Server state | Already in use for datasets |
-| papaparse | 5.5.3 | CSV generation/parsing | Already installed |
-| sonner | 2.0.5 | Toast notifications | Already installed |
+| Library                      | Version | Purpose                | Why Standard                |
+| ---------------------------- | ------- | ---------------------- | --------------------------- |
+| React                        | 18.x    | UI framework           | Already in use              |
+| @radix-ui/react-checkbox     | 1.3.2   | Checkbox primitives    | Already installed           |
+| @radix-ui/react-popover      | 1.1.14  | Menu dropdown          | Already installed           |
+| @radix-ui/react-alert-dialog | 1.1.14  | Confirmation dialogs   | Already installed           |
+| @tanstack/react-query        | 5.x     | Server state           | Already in use for datasets |
+| papaparse                    | 5.5.3   | CSV generation/parsing | Already installed           |
+| sonner                       | 2.0.5   | Toast notifications    | Already installed           |
 
 ### Supporting
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| lucide-react | 0.474.0 | Icons | MoreVertical, Check, Download, Plus, Trash2 |
-| @mastra/client-js | local | API client | Dataset mutations |
+| Library           | Version | Purpose    | When to Use                                 |
+| ----------------- | ------- | ---------- | ------------------------------------------- |
+| lucide-react      | 0.474.0 | Icons      | MoreVertical, Check, Download, Plus, Trash2 |
+| @mastra/client-js | local   | API client | Dataset mutations                           |
 
 ### Alternatives Considered
 
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| Custom selection hook | react-table selection | react-table overkill for simple list |
-| Radix Popover | DropdownMenu | Popover gives more control, already used |
-| Client-side CSV | Server endpoint | No backend change needed, faster |
+| Instead of            | Could Use             | Tradeoff                                 |
+| --------------------- | --------------------- | ---------------------------------------- |
+| Custom selection hook | react-table selection | react-table overkill for simple list     |
+| Radix Popover         | DropdownMenu          | Popover gives more control, already used |
+| Client-side CSV       | Server endpoint       | No backend change needed, faster         |
 
 **Installation:** None required - all dependencies already present.
 
@@ -93,32 +94,35 @@ function useItemSelection<T extends { id: string }>(): UseItemSelectionReturn<T>
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastClickedId, setLastClickedId] = useState<string | null>(null);
 
-  const toggle = useCallback((id: string, shiftKey: boolean, allIds: string[]) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
+  const toggle = useCallback(
+    (id: string, shiftKey: boolean, allIds: string[]) => {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
 
-      if (shiftKey && lastClickedId) {
-        // Range selection
-        const startIdx = allIds.indexOf(lastClickedId);
-        const endIdx = allIds.indexOf(id);
-        const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+        if (shiftKey && lastClickedId) {
+          // Range selection
+          const startIdx = allIds.indexOf(lastClickedId);
+          const endIdx = allIds.indexOf(id);
+          const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
 
-        for (let i = from; i <= to; i++) {
-          next.add(allIds[i]);
-        }
-      } else {
-        // Single toggle
-        if (next.has(id)) {
-          next.delete(id);
+          for (let i = from; i <= to; i++) {
+            next.add(allIds[i]);
+          }
         } else {
-          next.add(id);
+          // Single toggle
+          if (next.has(id)) {
+            next.delete(id);
+          } else {
+            next.add(id);
+          }
         }
-      }
 
-      return next;
-    });
-    setLastClickedId(id);
-  }, [lastClickedId]);
+        return next;
+      });
+      setLastClickedId(id);
+    },
+    [lastClickedId],
+  );
 
   // ... rest of hook
 }
@@ -168,13 +172,11 @@ import Papa from 'papaparse';
 
 export function exportToCSV(items: DatasetItem[], filename: string): void {
   const rows = items.map(item => ({
-    input: typeof item.input === 'string'
-      ? item.input
-      : JSON.stringify(item.input),
+    input: typeof item.input === 'string' ? item.input : JSON.stringify(item.input),
     expectedOutput: item.expectedOutput
-      ? (typeof item.expectedOutput === 'string'
-          ? item.expectedOutput
-          : JSON.stringify(item.expectedOutput))
+      ? typeof item.expectedOutput === 'string'
+        ? item.expectedOutput
+        : JSON.stringify(item.expectedOutput)
       : '',
     createdAt: item.createdAt.toISOString(),
   }));
@@ -205,13 +207,13 @@ export function exportToCSV(items: DatasetItem[], filename: string): void {
 
 ## Don't Hand-Roll
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| Checkbox component | Custom checkbox | `@radix-ui/react-checkbox` (existing) | Accessibility, styling already done |
-| CSV generation | Manual string building | PapaParse `unparse()` | Handles escaping, quotes, edge cases |
-| Dropdown menu | Custom dropdown | Popover + list of Buttons | Consistent with codebase patterns |
-| Confirmation dialog | Custom modal | AlertDialog component | Already styled, accessible |
-| Toast notifications | Custom toast | sonner via `toast.tsx` | Already configured with styling |
+| Problem             | Don't Build            | Use Instead                           | Why                                  |
+| ------------------- | ---------------------- | ------------------------------------- | ------------------------------------ |
+| Checkbox component  | Custom checkbox        | `@radix-ui/react-checkbox` (existing) | Accessibility, styling already done  |
+| CSV generation      | Manual string building | PapaParse `unparse()`                 | Handles escaping, quotes, edge cases |
+| Dropdown menu       | Custom dropdown        | Popover + list of Buttons             | Consistent with codebase patterns    |
+| Confirmation dialog | Custom modal           | AlertDialog component                 | Already styled, accessible           |
+| Toast notifications | Custom toast           | sonner via `toast.tsx`                | Already configured with styling      |
 
 **Key insight:** This phase is 90% composition of existing components. The only truly new code is the selection state hook and CSV export utility.
 
@@ -382,13 +384,14 @@ const deleteItems = useMutation({
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| Redux for selection | useState + custom hook | 2022 | Simpler, less boilerplate |
-| FileSaver.js for downloads | Native Blob + URL.createObjectURL | 2020 | No extra dependency |
-| Custom checkbox styling | Radix + Tailwind | 2023 | Better accessibility |
+| Old Approach               | Current Approach                  | When Changed | Impact                    |
+| -------------------------- | --------------------------------- | ------------ | ------------------------- |
+| Redux for selection        | useState + custom hook            | 2022         | Simpler, less boilerplate |
+| FileSaver.js for downloads | Native Blob + URL.createObjectURL | 2020         | No extra dependency       |
+| Custom checkbox styling    | Radix + Tailwind                  | 2023         | Better accessibility      |
 
 **Deprecated/outdated:**
+
 - `document.execCommand('copy')`: Use Clipboard API instead (not relevant here but noted)
 
 ## Open Questions
@@ -406,21 +409,25 @@ const deleteItems = useMutation({
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - Codebase analysis: `packages/playground-ui/src/ds/components/` - Existing component library
 - Codebase analysis: `packages/playground-ui/src/domains/datasets/` - Existing dataset patterns
 - Codebase analysis: `packages/client-js/src/client.ts` - Available API methods
 - Codebase analysis: `packages/server/src/server/handlers/datasets.ts` - Server endpoints
 
 ### Secondary (MEDIUM confidence)
+
 - PapaParse documentation - CSV generation patterns (via package.json confirmation)
 - Radix UI documentation - Checkbox, Popover, AlertDialog APIs
 
 ### Tertiary (LOW confidence)
+
 - None - All findings verified against codebase
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH - All libraries already installed and in use
 - Architecture: HIGH - Patterns derived from existing codebase
 - Pitfalls: MEDIUM - Some based on general React best practices

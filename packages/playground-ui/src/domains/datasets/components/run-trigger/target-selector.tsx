@@ -14,12 +14,7 @@ export interface TargetSelectorProps {
   setTargetId: (id: string) => void;
 }
 
-export function TargetSelector({
-  targetType,
-  setTargetType,
-  targetId,
-  setTargetId,
-}: TargetSelectorProps) {
+export function TargetSelector({ targetType, setTargetType, targetId, setTargetId }: TargetSelectorProps) {
   const { data: agents, isLoading: agentsLoading } = useAgents();
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
   const { data: scorers, isLoading: scorersLoading } = useScorers();

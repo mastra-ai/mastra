@@ -30,13 +30,13 @@ key-files:
     - packages/core/src/storage/domains/operations/inmemory.ts
 
 key-decisions:
-  - "RunsStorage follows DatasetsStorage/ScoresStorage pattern"
-  - "Run tracks overall execution state, RunResult tracks per-item results"
-  - "latency stored as number (ms) with float column type"
+  - 'RunsStorage follows DatasetsStorage/ScoresStorage pattern'
+  - 'Run tracks overall execution state, RunResult tracks per-item results'
+  - 'latency stored as number (ms) with float column type'
 
 patterns-established:
-  - "Storage domain: abstract class with dangerouslyClearAll() and domain-specific methods"
-  - "Table schemas: Record<string, StorageColumn> registered in TABLE_SCHEMAS"
+  - 'Storage domain: abstract class with dangerouslyClearAll() and domain-specific methods'
+  - 'Table schemas: Record<string, StorageColumn> registered in TABLE_SCHEMAS'
 
 # Metrics
 duration: 4min
@@ -91,6 +91,7 @@ Each task was committed atomically:
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Added operations/inmemory.ts table entries**
+
 - **Found during:** Task 2 (schema registration)
 - **Issue:** TABLE_NAMES type union includes new tables, but StoreOperationsInMemory.data object missing them
 - **Fix:** Added mastra_dataset_runs and mastra_dataset_run_results Maps to data object
@@ -118,5 +119,6 @@ None - no external service configuration required.
 - Schemas registered for table creation
 
 ---
-*Phase: 02-execution-core*
-*Completed: 2026-01-24*
+
+_Phase: 02-execution-core_
+_Completed: 2026-01-24_

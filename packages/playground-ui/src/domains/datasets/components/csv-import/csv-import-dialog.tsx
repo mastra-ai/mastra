@@ -39,12 +39,7 @@ interface ImportResult {
  * Multi-step dialog for importing CSV data into a dataset.
  * Flow: upload -> preview -> mapping -> import -> complete
  */
-export function CSVImportDialog({
-  datasetId,
-  open,
-  onOpenChange,
-  onSuccess,
-}: CSVImportDialogProps) {
+export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CSVImportDialogProps) {
   // State machine for steps
   const [step, setStep] = useState<ImportStep>('upload');
 
@@ -124,44 +119,41 @@ export function CSVImportDialog({
   }, [parsedCSV, columnMapping]);
 
   // Build item from row using mapping
-  const buildItemFromRow = useCallback(
-    (row: Record<string, unknown>, mapping: ColumnMapping, headers: string[]) => {
-      // Get input value(s)
-      const inputColumns = headers.filter(h => mapping[h] === 'input');
-      const input =
-        inputColumns.length === 1
-          ? row[inputColumns[0]]
-          : inputColumns.reduce<Record<string, unknown>>((acc, col) => {
-              acc[col] = row[col];
-              return acc;
-            }, {});
+  const buildItemFromRow = useCallback((row: Record<string, unknown>, mapping: ColumnMapping, headers: string[]) => {
+    // Get input value(s)
+    const inputColumns = headers.filter(h => mapping[h] === 'input');
+    const input =
+      inputColumns.length === 1
+        ? row[inputColumns[0]]
+        : inputColumns.reduce<Record<string, unknown>>((acc, col) => {
+            acc[col] = row[col];
+            return acc;
+          }, {});
 
-      // Get expected output value(s)
-      const expectedOutputColumns = headers.filter(h => mapping[h] === 'expectedOutput');
-      let expectedOutput: unknown | undefined;
-      if (expectedOutputColumns.length === 1) {
-        expectedOutput = row[expectedOutputColumns[0]];
-      } else if (expectedOutputColumns.length > 1) {
-        expectedOutput = expectedOutputColumns.reduce<Record<string, unknown>>((acc, col) => {
-          acc[col] = row[col];
-          return acc;
-        }, {});
-      }
+    // Get expected output value(s)
+    const expectedOutputColumns = headers.filter(h => mapping[h] === 'expectedOutput');
+    let expectedOutput: unknown | undefined;
+    if (expectedOutputColumns.length === 1) {
+      expectedOutput = row[expectedOutputColumns[0]];
+    } else if (expectedOutputColumns.length > 1) {
+      expectedOutput = expectedOutputColumns.reduce<Record<string, unknown>>((acc, col) => {
+        acc[col] = row[col];
+        return acc;
+      }, {});
+    }
 
-      // Get metadata value(s)
-      const metadataColumns = headers.filter(h => mapping[h] === 'metadata');
-      let metadata: Record<string, unknown> | undefined;
-      if (metadataColumns.length > 0) {
-        metadata = metadataColumns.reduce<Record<string, unknown>>((acc, col) => {
-          acc[col] = row[col];
-          return acc;
-        }, {});
-      }
+    // Get metadata value(s)
+    const metadataColumns = headers.filter(h => mapping[h] === 'metadata');
+    let metadata: Record<string, unknown> | undefined;
+    if (metadataColumns.length > 0) {
+      metadata = metadataColumns.reduce<Record<string, unknown>>((acc, col) => {
+        acc[col] = row[col];
+        return acc;
+      }, {});
+    }
 
-      return { input, expectedOutput, metadata };
-    },
-    [],
-  );
+    return { input, expectedOutput, metadata };
+  }, []);
 
   // Handle validate and import
   const handleValidateAndImport = useCallback(async () => {
@@ -272,20 +264,12 @@ export function CSVImportDialog({
   const renderStepContent = () => {
     switch (step) {
       case 'upload':
-        return (
-          <CSVUploadStep
-            onFileSelect={handleFileSelect}
-            isParsing={isParsing}
-            error={parseError?.message}
-          />
-        );
+        return <CSVUploadStep onFileSelect={handleFileSelect} isParsing={isParsing} error={parseError?.message} />;
 
       case 'preview':
         return parsedCSV ? (
           <div className="flex flex-col gap-4">
-            <div className="text-sm text-neutral4">
-              Preview of your CSV data. Click Next to map columns.
-            </div>
+            <div className="text-sm text-neutral4">Preview of your CSV data. Click Next to map columns.</div>
             <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={5} />
           </div>
         ) : null;
@@ -299,9 +283,7 @@ export function CSVImportDialog({
               onMappingChange={handleMappingChange}
             />
 
-            {validationErrors.length > 0 && (
-              <ValidationSummary errors={validationErrors} />
-            )}
+            {validationErrors.length > 0 && <ValidationSummary errors={validationErrors} />}
 
             {/* Compact preview */}
             <div className="border-t border-border1 pt-4">
@@ -316,9 +298,7 @@ export function CSVImportDialog({
           <div className="flex flex-col items-center gap-4 py-8">
             <Spinner size="lg" />
             <div className="text-center">
-              <div className="text-lg font-medium text-neutral1">
-                Importing items...
-              </div>
+              <div className="text-lg font-medium text-neutral1">Importing items...</div>
               <div className="text-sm text-neutral4 mt-1">
                 {importProgress.current} of {importProgress.total}
               </div>
@@ -332,9 +312,7 @@ export function CSVImportDialog({
       case 'complete':
         return (
           <div className="flex flex-col items-center gap-4 py-8">
-            <div className="text-4xl">
-              {importResult && importResult.errors === 0 ? '✓' : '⚠'}
-            </div>
+            <div className="text-4xl">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
             <div className="text-center">
               <div className="text-lg font-medium text-neutral1">Import Complete</div>
               <div className="text-sm text-neutral4 mt-1">
@@ -380,11 +358,7 @@ export function CSVImportDialog({
             <Button variant="ghost" onClick={() => setStep('preview')}>
               Back
             </Button>
-            <Button
-              variant="primary"
-              onClick={handleValidateAndImport}
-              disabled={!columnMapping.isInputMapped}
-            >
+            <Button variant="primary" onClick={handleValidateAndImport} disabled={!columnMapping.isInputMapped}>
               Validate &amp; Import
             </Button>
           </>
@@ -419,13 +393,9 @@ export function CSVImportDialog({
           <DialogDescription>Import dataset items from a CSV file.</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="min-h-[200px] max-h-[50vh] overflow-y-auto">
-          {renderStepContent()}
-        </DialogBody>
+        <DialogBody className="min-h-[200px] max-h-[50vh] overflow-y-auto">{renderStepContent()}</DialogBody>
 
-        <DialogFooter className="px-6 pt-4 flex justify-end gap-2">
-          {renderFooter()}
-        </DialogFooter>
+        <DialogFooter className="px-6 pt-4 flex justify-end gap-2">{renderFooter()}</DialogFooter>
       </DialogContent>
     </Dialog>
   );

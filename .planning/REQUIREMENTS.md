@@ -105,32 +105,32 @@ Calculate statistical significance on score deltas between runs.
 
 ## Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| STORE-01 | Phase 1 | Complete |
-| STORE-02 | Phase 1 | Complete |
-| STORE-03 | Phase 1 | Complete |
-| STORE-04 | Phase 1 | Complete |
-| VERS-01 | Phase 1 | Complete |
-| EXEC-01 | Phase 2 | Complete |
-| EXEC-02 | Phase 2 | Complete |
-| EXEC-03 | Phase 2 | Complete |
-| SCORE-01 | Phase 2 | Complete |
-| TARGET-01 | Phase 3 | Complete |
-| TARGET-02 | Phase 3 | Complete |
-| TARGET-03 | Phase 4 | Complete |
-| TARGET-04 | Phase 4 | Complete |
-| COMP-01 | Phase 5 | Complete |
-| COMP-02 | Phase 5 | Complete |
-| ANAL-01 | Phase 5 | Complete |
-| ANAL-02 | Phase 5 | Complete |
-| ANAL-03 | Phase 5 | Deferred |
-| UI-01 | Phase 6 | Complete |
-| UI-02 | Phase 6 | Complete |
-| UI-03 | Phase 6 | Complete |
-| UI-04 | Phase 6 | Complete |
-| CSV-01 | Phase 7 | Complete |
-| CSV-02 | Phase 7 | Complete |
-| SEL-01 | Phase 8 | Pending |
+| Requirement | Phase   | Status   |
+| ----------- | ------- | -------- |
+| STORE-01    | Phase 1 | Complete |
+| STORE-02    | Phase 1 | Complete |
+| STORE-03    | Phase 1 | Complete |
+| STORE-04    | Phase 1 | Complete |
+| VERS-01     | Phase 1 | Complete |
+| EXEC-01     | Phase 2 | Complete |
+| EXEC-02     | Phase 2 | Complete |
+| EXEC-03     | Phase 2 | Complete |
+| SCORE-01    | Phase 2 | Complete |
+| TARGET-01   | Phase 3 | Complete |
+| TARGET-02   | Phase 3 | Complete |
+| TARGET-03   | Phase 4 | Complete |
+| TARGET-04   | Phase 4 | Complete |
+| COMP-01     | Phase 5 | Complete |
+| COMP-02     | Phase 5 | Complete |
+| ANAL-01     | Phase 5 | Complete |
+| ANAL-02     | Phase 5 | Complete |
+| ANAL-03     | Phase 5 | Deferred |
+| UI-01       | Phase 6 | Complete |
+| UI-02       | Phase 6 | Complete |
+| UI-03       | Phase 6 | Complete |
+| UI-04       | Phase 6 | Complete |
+| CSV-01      | Phase 7 | Complete |
+| CSV-02      | Phase 7 | Complete |
+| SEL-01      | Phase 8 | Pending  |
 
 **Coverage:** 24/24 v1 requirements mapped ✓

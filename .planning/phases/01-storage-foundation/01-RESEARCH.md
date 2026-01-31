@@ -17,24 +17,28 @@ The pattern is well-established: define a base class in `packages/core/src/stora
 The established libraries/tools for this domain:
 
 ### Core
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| @mastra/core | internal | Base storage abstractions | Provides StorageDomain, MastraCompositeStore |
-| @libsql/client | ^0.x | LibSQL/Turso client | Standard for SQLite-compatible storage |
-| zod | ^3.x | Schema validation | Already used for type-safe schemas |
+
+| Library        | Version  | Purpose                   | Why Standard                                 |
+| -------------- | -------- | ------------------------- | -------------------------------------------- |
+| @mastra/core   | internal | Base storage abstractions | Provides StorageDomain, MastraCompositeStore |
+| @libsql/client | ^0.x     | LibSQL/Turso client       | Standard for SQLite-compatible storage       |
+| zod            | ^3.x     | Schema validation         | Already used for type-safe schemas           |
 
 ### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| crypto | built-in | UUID generation | `crypto.randomUUID()` for IDs |
+
+| Library | Version  | Purpose         | When to Use                   |
+| ------- | -------- | --------------- | ----------------------------- |
+| crypto  | built-in | UUID generation | `crypto.randomUUID()` for IDs |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| Auto-increment version | Explicit version control | Auto simpler UX (decided) |
+
+| Instead of             | Could Use                 | Tradeoff                   |
+| ---------------------- | ------------------------- | -------------------------- |
+| Auto-increment version | Explicit version control  | Auto simpler UX (decided)  |
 | Separate version table | Version column on dataset | Column simpler, sufficient |
 
 **Installation:**
+
 ```bash
 # No new packages needed - uses existing @mastra/core infrastructure
 ```
@@ -42,6 +46,7 @@ The established libraries/tools for this domain:
 ## Architecture Patterns
 
 ### Recommended Project Structure
+
 ```
 packages/core/src/storage/
 ├── domains/
@@ -61,9 +66,11 @@ stores/libsql/src/storage/
 ```
 
 ### Pattern 1: StorageDomain Base Class
+
 **What:** Abstract base class all storage domains extend
 **When to use:** Every storage domain implementation
 **Example:**
+
 ```typescript
 // Source: packages/core/src/storage/domains/base.ts
 export abstract class StorageDomain extends MastraBase {
@@ -75,9 +82,11 @@ export abstract class StorageDomain extends MastraBase {
 ```
 
 ### Pattern 2: Domain-Specific Abstract Class
+
 **What:** Defines domain contract with abstract CRUD methods
 **When to use:** Each domain (scores, workflows, datasets)
 **Example:**
+
 ```typescript
 // Source: packages/core/src/storage/domains/scores/base.ts
 export abstract class ScoresStorage extends StorageDomain {
@@ -91,9 +100,11 @@ export abstract class ScoresStorage extends StorageDomain {
 ```
 
 ### Pattern 3: InMemoryDB Shared State
+
 **What:** Shared Maps container for in-memory implementation
 **When to use:** All in-memory domain implementations share one InMemoryDB
 **Example:**
+
 ```typescript
 // Source: packages/core/src/storage/domains/inmemory-db.ts
 export class InMemoryDB {
@@ -104,9 +115,11 @@ export class InMemoryDB {
 ```
 
 ### Pattern 4: Schema Definition in Constants
+
 **What:** Define StorageColumn schemas in constants.ts
 **When to use:** Every new table needs schema definition
 **Example:**
+
 ```typescript
 // Source: packages/core/src/storage/constants.ts
 export const TABLE_DATASETS = 'mastra_datasets';
@@ -119,9 +132,11 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
 ```
 
 ### Pattern 5: Pagination Response Structure
+
 **What:** Standard pagination info returned from list operations
 **When to use:** All list methods
 **Example:**
+
 ```typescript
 // Source: packages/core/src/storage/types.ts
 export type PaginationInfo = {
@@ -133,6 +148,7 @@ export type PaginationInfo = {
 ```
 
 ### Anti-Patterns to Avoid
+
 - **Direct Map access:** Always access via domain methods, not db.maps directly
 - **Skipping init():** Always call init() before operations; creates tables
 - **Missing dangerouslyClearAll:** Required for testing; implement in every domain
@@ -142,49 +158,55 @@ export type PaginationInfo = {
 
 Problems that look simple but have existing solutions:
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| UUID generation | Custom ID logic | `crypto.randomUUID()` | Standard, secure |
-| Pagination math | Manual offset calc | `normalizePerPage()`, `calculatePagination()` | Handles edge cases (false = all) |
-| JSON parsing | Simple JSON.parse | `safelyParseJSON()` | Handles already-parsed objects |
-| Date handling | Manual conversion | `ensureDate()`, `serializeDate()` | Consistent Date/string handling |
-| Error IDs | Manual string concat | `createStorageErrorId()` | Consistent error format |
-| SQL type mapping | Switch statements | `getSqlType()` | Consistent across backends |
+| Problem          | Don't Build          | Use Instead                                   | Why                              |
+| ---------------- | -------------------- | --------------------------------------------- | -------------------------------- |
+| UUID generation  | Custom ID logic      | `crypto.randomUUID()`                         | Standard, secure                 |
+| Pagination math  | Manual offset calc   | `normalizePerPage()`, `calculatePagination()` | Handles edge cases (false = all) |
+| JSON parsing     | Simple JSON.parse    | `safelyParseJSON()`                           | Handles already-parsed objects   |
+| Date handling    | Manual conversion    | `ensureDate()`, `serializeDate()`             | Consistent Date/string handling  |
+| Error IDs        | Manual string concat | `createStorageErrorId()`                      | Consistent error format          |
+| SQL type mapping | Switch statements    | `getSqlType()`                                | Consistent across backends       |
 
 **Key insight:** The storage layer has well-tested utilities. Use them rather than reimplementing.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Version Race Conditions
+
 **What goes wrong:** Two concurrent item updates both read version 1, both write version 2
 **Why it happens:** Read-modify-write without atomicity
 **How to avoid:** Use `UPDATE ... SET version = version + 1` atomically, or lock at dataset level
 **Warning signs:** Tests with concurrent operations produce wrong version numbers
 
 ### Pitfall 2: Missing Table Registrations
+
 **What goes wrong:** Table not created on init(), queries fail
 **Why it happens:** Forgot to add table to TABLE_NAMES, TABLE_SCHEMAS, or init() method
 **How to avoid:**
+
 1. Add TABLE_DATASETS constant
 2. Add to TABLE_NAMES type union
 3. Add DATASETS_SCHEMA
 4. Add to TABLE_SCHEMAS map
 5. Call createTable in init()
-**Warning signs:** "Table does not exist" errors
+   **Warning signs:** "Table does not exist" errors
 
 ### Pitfall 3: Inconsistent JSON Storage
+
 **What goes wrong:** Objects stored inconsistently, can't query properly
 **Why it happens:** LibSQL stores JSON as TEXT, needs stringify/parse
 **How to avoid:** Always use `jsonb` type in schema, use safelyParseJSON on read
 **Warning signs:** `[object Object]` in database or parse errors
 
 ### Pitfall 4: Breaking InMemoryDB Contract
+
 **What goes wrong:** Tests fail because in-memory doesn't match real backend
 **Why it happens:** In-memory implementation diverges from contract
 **How to avoid:** Test both backends with same test suite
 **Warning signs:** Tests pass with in-memory, fail with LibSQL
 
 ### Pitfall 5: Items Without Dataset FK
+
 **What goes wrong:** Orphaned items, can't query items by dataset
 **Why it happens:** Missing foreign key relationship
 **How to avoid:** Items must have datasetId, query items via dataset
@@ -195,6 +217,7 @@ Problems that look simple but have existing solutions:
 Verified patterns from Mastra codebase:
 
 ### Creating a New Domain Base Class
+
 ```typescript
 // Source: packages/core/src/storage/domains/scores/base.ts pattern
 import { StorageDomain } from '../base';
@@ -224,6 +247,7 @@ export abstract class DatasetsStorage extends StorageDomain {
 ```
 
 ### In-Memory Implementation Pattern
+
 ```typescript
 // Source: packages/core/src/storage/domains/scores/inmemory.ts pattern
 import type { InMemoryDB } from '../inmemory-db';
@@ -282,6 +306,7 @@ export class DatasetsInMemory extends DatasetsStorage {
 ```
 
 ### LibSQL Implementation Pattern
+
 ```typescript
 // Source: stores/libsql/src/storage/domains/scores/index.ts pattern
 import { DatasetsStorage, TABLE_DATASETS, DATASETS_SCHEMA } from '@mastra/core/storage';
@@ -332,12 +357,20 @@ export class DatasetsLibSQL extends DatasetsStorage {
       },
     });
 
-    return { id, datasetId: args.datasetId, version: newVersion, ...args, createdAt: new Date(), updatedAt: new Date() };
+    return {
+      id,
+      datasetId: args.datasetId,
+      version: newVersion,
+      ...args,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
   }
 }
 ```
 
 ### Schema Definition Pattern
+
 ```typescript
 // Source: packages/core/src/storage/constants.ts pattern
 export const TABLE_DATASETS = 'mastra_datasets';
@@ -356,7 +389,7 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
 export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   datasetId: { type: 'text', nullable: false },
-  version: { type: 'integer', nullable: false },  // Version when item was added/modified
+  version: { type: 'integer', nullable: false }, // Version when item was added/modified
   input: { type: 'jsonb', nullable: false },
   expectedOutput: { type: 'jsonb', nullable: true },
   context: { type: 'jsonb', nullable: true },
@@ -366,6 +399,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
 ```
 
 ### Registration in StorageDomains
+
 ```typescript
 // Source: packages/core/src/storage/base.ts pattern
 export type StorageDomains = {
@@ -374,18 +408,19 @@ export type StorageDomains = {
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
-  datasets?: DatasetsStorage;  // Add new domain
+  datasets?: DatasetsStorage; // Add new domain
 };
 ```
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| Direct DB access | Domain abstraction | Current | Pluggable backends |
-| MastraStorage | MastraCompositeStore | Recent | Better composition |
+| Old Approach     | Current Approach     | When Changed | Impact             |
+| ---------------- | -------------------- | ------------ | ------------------ |
+| Direct DB access | Domain abstraction   | Current      | Pluggable backends |
+| MastraStorage    | MastraCompositeStore | Recent       | Better composition |
 
 **Deprecated/outdated:**
+
 - `MastraStorage`: Use `MastraCompositeStore` instead (alias exists for backwards compat)
 
 ## Open Questions
@@ -410,6 +445,7 @@ Things that couldn't be fully resolved:
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - `packages/core/src/storage/domains/base.ts` - StorageDomain base class
 - `packages/core/src/storage/domains/scores/base.ts` - ScoresStorage pattern
 - `packages/core/src/storage/domains/scores/inmemory.ts` - In-memory implementation
@@ -421,15 +457,18 @@ Things that couldn't be fully resolved:
 - `stores/libsql/src/storage/db/index.ts` - LibSQLDB helper class
 
 ### Secondary (MEDIUM confidence)
+
 - `packages/core/src/storage/utils.ts` - Utility functions
 - `packages/core/src/storage/types.ts` - Type definitions
 
 ### Tertiary (LOW confidence)
+
 - None - all findings from direct codebase analysis
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH - direct codebase analysis
 - Architecture: HIGH - multiple consistent examples in codebase
 - Pitfalls: HIGH - derived from code patterns and common issues

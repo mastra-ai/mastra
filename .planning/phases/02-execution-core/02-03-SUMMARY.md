@@ -33,13 +33,13 @@ key-files:
     - packages/core/src/storage/base.ts
 
 key-decisions:
-  - "Scorers run inline after each item execution (not batched)"
+  - 'Scorers run inline after each item execution (not batched)'
   - "Error isolation: one scorer failing doesn't affect others"
-  - "Target resolution tries getById first, then getByName fallback"
-  - "Workflow non-success statuses (tripwire, suspended, paused) treated as errors"
+  - 'Target resolution tries getById first, then getByName fallback'
+  - 'Workflow non-success statuses (tripwire, suspended, paused) treated as errors'
 
 patterns-established:
-  - "Dataset execution: load items -> resolve target -> p-map execute -> inline score -> persist"
+  - 'Dataset execution: load items -> resolve target -> p-map execute -> inline score -> persist'
   - "Score persistence via validateAndSaveScore with source='TEST'"
 
 # Metrics
@@ -102,6 +102,7 @@ Each task was committed atomically:
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Added runs to StorageDomains type**
+
 - **Found during:** Task 4
 - **Issue:** `getStore('runs')` failed because `runs` not in StorageDomains
 - **Fix:** Added `runs?: RunsStorage` to StorageDomains in storage/base.ts
@@ -109,6 +110,7 @@ Each task was committed atomically:
 - **Committed in:** 76b631c (Task 4 commit)
 
 **2. [Rule 1 - Bug] Fixed workflow result type handling**
+
 - **Found during:** Task 2
 - **Issue:** Workflow result can be tripwire/suspended/paused, not just success/failed
 - **Fix:** Added explicit handling for all workflow result statuses
@@ -116,6 +118,7 @@ Each task was committed atomically:
 - **Committed in:** b1a52f8 (Task 2 commit)
 
 **3. [Rule 1 - Bug] Fixed scorer result type extraction**
+
 - **Found during:** Task 3
 - **Issue:** Scorer.run() return type uses complex generics, direct property access fails
 - **Fix:** Cast through `any` and validate with typeof checks
@@ -143,5 +146,6 @@ None - no external service configuration required.
 - Scoring infrastructure integrated with validateAndSaveScore
 
 ---
-*Phase: 02-execution-core*
-*Completed: 2026-01-24*
+
+_Phase: 02-execution-core_
+_Completed: 2026-01-24_

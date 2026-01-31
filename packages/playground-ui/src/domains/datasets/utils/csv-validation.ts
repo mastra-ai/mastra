@@ -4,10 +4,7 @@
  */
 
 /** Column mapping configuration */
-export type ColumnMapping = Record<
-  string,
-  'input' | 'expectedOutput' | 'metadata' | 'ignore'
->;
+export type ColumnMapping = Record<string, 'input' | 'expectedOutput' | 'metadata' | 'ignore'>;
 
 /** Validation error for a specific row/column */
 export interface ValidationError {
@@ -28,10 +25,7 @@ export interface ValidationResult {
  * @param mapping - Column mapping configuration
  * @returns Validation result with errors
  */
-export function validateMappedData(
-  data: Record<string, unknown>[],
-  mapping: ColumnMapping,
-): ValidationResult {
+export function validateMappedData(data: Record<string, unknown>[], mapping: ColumnMapping): ValidationResult {
   const errors: ValidationError[] = [];
 
   // Find input columns

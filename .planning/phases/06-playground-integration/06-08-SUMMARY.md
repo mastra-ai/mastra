@@ -7,17 +7,17 @@ tags: [async, background-execution, polling, hono]
 # Dependency graph
 requires:
   - phase: 06-05
-    provides: "Run trigger endpoint (sync)"
+    provides: 'Run trigger endpoint (sync)'
 provides:
-  - "Async run trigger returning immediately with pending status"
-  - "Background execution updating status via runsStore"
-  - "UI polling sees pending -> running -> completed transitions"
+  - 'Async run trigger returning immediately with pending status'
+  - 'Background execution updating status via runsStore'
+  - 'UI polling sees pending -> running -> completed transitions'
 affects: []
 
 # Tech tracking
 tech-stack:
   added: []
-  patterns: ["fire-and-forget async spawn with error handling wrapper"]
+  patterns: ['fire-and-forget async spawn with error handling wrapper']
 
 key-files:
   created: []
@@ -27,12 +27,12 @@ key-files:
     - packages/server/src/server/schemas/datasets.ts
 
 key-decisions:
-  - "Pre-create run record before spawn to guarantee runId availability"
-  - "Pass runId to runDataset to skip duplicate creation"
-  - "Error wrapper logs and updates run to failed on background error"
+  - 'Pre-create run record before spawn to guarantee runId availability'
+  - 'Pass runId to runDataset to skip duplicate creation'
+  - 'Error wrapper logs and updates run to failed on background error'
 
 patterns-established:
-  - "Async trigger pattern: create record, spawn execution, return immediately"
+  - 'Async trigger pattern: create record, spawn execution, return immediately'
 
 # Metrics
 duration: 3min
@@ -94,5 +94,6 @@ None - no external service configuration required.
 - Run status transitions are visible in UI via existing useDatasetRun hook
 
 ---
-*Phase: 06-playground-integration*
-*Completed: 2026-01-26*
+
+_Phase: 06-playground-integration_
+_Completed: 2026-01-26_

@@ -54,7 +54,8 @@ export const useDatasetMutations = () => {
   });
 
   const deleteItem = useMutation({
-    mutationFn: ({ datasetId, itemId }: { datasetId: string; itemId: string }) => client.deleteDatasetItem(datasetId, itemId),
+    mutationFn: ({ datasetId, itemId }: { datasetId: string; itemId: string }) =>
+      client.deleteDatasetItem(datasetId, itemId),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
       queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });

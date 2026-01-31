@@ -34,13 +34,13 @@ key-files:
   modified: []
 
 key-decisions:
-  - "Multi-column input/output: When multiple columns mapped to same field, combine into object"
-  - "Sequential import: One addItem call per row with progress tracking"
-  - "Validation before import: Block if no input column mapped or values missing"
+  - 'Multi-column input/output: When multiple columns mapped to same field, combine into object'
+  - 'Sequential import: One addItem call per row with progress tracking'
+  - 'Validation before import: Block if no input column mapped or values missing'
 
 patterns-established:
-  - "State machine pattern: ImportStep type drives dialog content and footer"
-  - "Cancellable import: shouldCancel flag checked in import loop"
+  - 'State machine pattern: ImportStep type drives dialog content and footer'
+  - 'Cancellable import: shouldCancel flag checked in import loop'
 
 # Metrics
 duration: 3min
@@ -105,5 +105,6 @@ None - no external service configuration required.
 - Barrel export enables clean import: `import { CSVImportDialog } from './csv-import'`
 
 ---
-*Phase: 07-csv-import*
-*Completed: 2026-01-27*
+
+_Phase: 07-csv-import_
+_Completed: 2026-01-27_

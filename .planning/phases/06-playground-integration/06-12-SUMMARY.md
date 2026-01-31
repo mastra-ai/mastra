@@ -45,36 +45,41 @@ Scores embedded in results and trace link navigates to observability page.
 
 ## Tasks Completed
 
-| Task | Name | Commit | Key Changes |
-|------|------|--------|-------------|
-| 1 | Add scores to RunResult type | 329544e | ScorerResult interface, scores field |
-| 2 | Store scores with result | 9a7605f | Include scores in addResult call |
-| 3 | Update storage implementations | d6a0eb5 | Schema column, JSON serialization |
-| 4 | Server response schema | 6870646 | scorerResultSchema, scores array |
-| 5 | UI uses result.scores | 79dae4a | Remove separate scores query |
-| 6 | Fix trace link | 54f6324 | /observability?traceId=xxx |
+| Task | Name                           | Commit  | Key Changes                          |
+| ---- | ------------------------------ | ------- | ------------------------------------ |
+| 1    | Add scores to RunResult type   | 329544e | ScorerResult interface, scores field |
+| 2    | Store scores with result       | 9a7605f | Include scores in addResult call     |
+| 3    | Update storage implementations | d6a0eb5 | Schema column, JSON serialization    |
+| 4    | Server response schema         | 6870646 | scorerResultSchema, scores array     |
+| 5    | UI uses result.scores          | 79dae4a | Remove separate scores query         |
+| 6    | Fix trace link                 | 54f6324 | /observability?traceId=xxx           |
 
 ## Changes Made
 
 ### Type System
+
 - Added `ScorerResult` interface to storage types
 - Added `scores: ScorerResult[]` to `RunResult`
 - Added optional `scores` to `AddRunResultInput`
 
 ### Storage Layer
+
 - Added `scores` column to DATASET_RUN_RESULTS_SCHEMA (jsonb)
 - InMemory: includes scores in result object
 - LibSQL: JSON serializes/deserializes scores
 
 ### Run Orchestration
+
 - `runDataset` now passes `itemScores` to `addResult`
 - Scores persisted with result in single operation
 
 ### API Layer
+
 - Added `scorerResultSchema` to server schemas
 - Added `scores` array to `runResultResponseSchema`
 
 ### UI Layer
+
 - Updated `RunResultData` to include `scores` field
 - Removed `scores` prop from `ResultsTableProps`
 - ResultsTable reads from `result.scores` directly

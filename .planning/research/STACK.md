@@ -10,6 +10,7 @@
 ### Storage Infrastructure
 
 **Current Domains:**
+
 - `WorkflowsStorage` — workflow runs and state
 - `MemoryStorage` — conversation threads and messages
 - `ScoresStorage` — evaluation scores from scorers
@@ -17,6 +18,7 @@
 - `ObservabilityStorage` — traces and spans
 
 **Pattern:** Each domain has:
+
 1. Base interface in `packages/core/src/storage/`
 2. Implementations in `stores/` (pg, libsql, etc.)
 3. Zod schemas for type safety
@@ -29,6 +31,7 @@
 **Location:** `packages/evals/`
 
 **Key Types:**
+
 ```typescript
 interface MastraScorer<TInput, TOutput, TGroundTruth, TResult> {
   id: string;
@@ -39,6 +42,7 @@ interface MastraScorer<TInput, TOutput, TGroundTruth, TResult> {
 ```
 
 **Existing Scorers:**
+
 - Toxicity, Bias, Hallucination, Coherence, Relevance, etc.
 - Custom scorer support via `createScorer()`
 
@@ -49,6 +53,7 @@ interface MastraScorer<TInput, TOutput, TGroundTruth, TResult> {
 **Location:** `packages/server/src/server/handlers/`
 
 **Pattern Example (scores.ts):**
+
 ```typescript
 export const LIST_SCORES_ROUTE = createRoute({
   method: 'GET',
@@ -67,6 +72,7 @@ export const LIST_SCORES_ROUTE = createRoute({
 **Location:** `packages/playground-ui/`
 
 **Key Components:**
+
 - Sidebar navigation
 - List views with pagination
 - Detail panels
@@ -98,7 +104,7 @@ export const datasetItemSchema = z.object({
   id: z.string().uuid(),
   datasetId: z.string().uuid(),
   version: z.number().int().positive(),
-  input: z.unknown(),  // Any JSON
+  input: z.unknown(), // Any JSON
   expectedOutput: z.unknown().optional(),
   metadata: z.record(z.unknown()).optional(),
   createdAt: z.date(),
@@ -111,6 +117,7 @@ export const datasetItemSchema = z.object({
 **Secondary:** LibSQL (for lighter deployments)
 
 **Tables Needed:**
+
 ```sql
 datasets (id, name, description, version, created_at, updated_at)
 dataset_items (id, dataset_id, version, input, expected_output, metadata, created_at)
@@ -151,7 +158,7 @@ export type StorageDomains = {
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
-  datasets?: DatasetsStorage;  // NEW
+  datasets?: DatasetsStorage; // NEW
 };
 ```
 
@@ -213,7 +220,7 @@ import { datasetRoutes } from './handlers/datasets';
 ```json
 {
   "dependencies": {
-    "papaparse": "^5.4.1"  // CSV parsing
+    "papaparse": "^5.4.1" // CSV parsing
   }
 }
 ```
@@ -261,5 +268,5 @@ import { datasetRoutes } from './handlers/datasets';
 
 ---
 
-*Research based on: Mastra codebase analysis (packages/core, packages/server, packages/evals, stores/)*
-*Last updated: 2026-01-23*
+_Research based on: Mastra codebase analysis (packages/core, packages/server, packages/evals, stores/)_
+_Last updated: 2026-01-23_

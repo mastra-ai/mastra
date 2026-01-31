@@ -1,6 +1,6 @@
 ---
 status: diagnosed
-trigger: "Create Item button does nothing, 500 error on runs endpoint"
+trigger: 'Create Item button does nothing, 500 error on runs endpoint'
 created: 2026-01-26T00:00:00Z
 updated: 2026-01-26T00:01:00Z
 ---
@@ -47,13 +47,15 @@ started: Current state
 ## Resolution
 
 root_cause: |
-  TWO ISSUES:
-  1. Create Item button: No AddItemDialog exists, and page doesn't pass onAddItemClick
-  2. Runs 500: MastraCompositeStore.stores composition missing 'runs' domain (line 204)
+TWO ISSUES:
+
+1. Create Item button: No AddItemDialog exists, and page doesn't pass onAddItemClick
+2. Runs 500: MastraCompositeStore.stores composition missing 'runs' domain (line 204)
 
 fix: |
-  1. Create AddItemDialog component in playground-ui
-  2. Add 'runs' to stores composition in base.ts line 204
+
+1. Create AddItemDialog component in playground-ui
+2. Add 'runs' to stores composition in base.ts line 204
 
 verification:
 files_changed: []

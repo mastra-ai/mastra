@@ -23,7 +23,7 @@ export interface EditItemDialogProps {
 export function EditItemDialog({ datasetId, open, onOpenChange, item, onSuccess }: EditItemDialogProps) {
   const [input, setInput] = useState(() => JSON.stringify(item.input, null, 2));
   const [expectedOutput, setExpectedOutput] = useState(() =>
-    item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : ''
+    item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '',
   );
   const { updateItem } = useDatasetMutations();
 
@@ -89,12 +89,7 @@ export function EditItemDialog({ datasetId, open, onOpenChange, item, onSuccess 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="edit-item-input">Input (JSON) *</Label>
-              <CodeEditor
-                value={input}
-                onChange={setInput}
-                showCopyButton={false}
-                className="min-h-[120px]"
-              />
+              <CodeEditor value={input} onChange={setInput} showCopyButton={false} className="min-h-[120px]" />
             </div>
 
             <div className="space-y-2">

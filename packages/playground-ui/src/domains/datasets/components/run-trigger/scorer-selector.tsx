@@ -9,11 +9,7 @@ export interface ScorerSelectorProps {
   disabled?: boolean;
 }
 
-export function ScorerSelector({
-  selectedScorers,
-  setSelectedScorers,
-  disabled = false,
-}: ScorerSelectorProps) {
+export function ScorerSelector({ selectedScorers, setSelectedScorers, disabled = false }: ScorerSelectorProps) {
   const { data: scorers, isLoading } = useScorers();
 
   const scorersList = Object.entries(scorers ?? {}).map(([id, scorer]) => ({
@@ -57,9 +53,7 @@ export function ScorerSelector({
   return (
     <div className="grid gap-2">
       <Label>Scorers (Optional)</Label>
-      <p className="text-ui-sm text-neutral3 mb-2">
-        Select scorers to evaluate the run results.
-      </p>
+      <p className="text-ui-sm text-neutral3 mb-2">Select scorers to evaluate the run results.</p>
       <div className="space-y-3 max-h-48 overflow-y-auto">
         {scorersList.map(scorer => (
           <label
@@ -73,9 +67,7 @@ export function ScorerSelector({
             />
             <div className="grid gap-0.5">
               <span className="text-ui-sm text-neutral5">{scorer.name}</span>
-              {scorer.description && (
-                <span className="text-ui-xs text-neutral3">{scorer.description}</span>
-              )}
+              {scorer.description && <span className="text-ui-xs text-neutral3">{scorer.description}</span>}
             </div>
           </label>
         ))}

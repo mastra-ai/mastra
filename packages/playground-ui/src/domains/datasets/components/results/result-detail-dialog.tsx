@@ -92,7 +92,10 @@ export function ResultDetailDialog({
                     {
                       label: 'Trace',
                       value: (
-                        <Link href={`/observability?traceId=${result.traceId}`} className="text-accent1 hover:underline inline-flex items-center gap-1">
+                        <Link
+                          href={`/observability?traceId=${result.traceId}`}
+                          className="text-accent1 hover:underline inline-flex items-center gap-1"
+                        >
                           <RouteIcon className="w-3 h-3" />
                           View Trace
                         </Link>
@@ -165,9 +168,7 @@ export function ResultDetailDialog({
                       {scores.map(score => (
                         <Row key={score.id}>
                           <TxtCell>{score.scorerId}</TxtCell>
-                          <TxtCell>
-                            {score.score !== null ? score.score.toFixed(2) : '-'}
-                          </TxtCell>
+                          <TxtCell>{score.score !== null ? score.score.toFixed(2) : '-'}</TxtCell>
                           <TxtCell>{score.reason || '-'}</TxtCell>
                         </Row>
                       ))}

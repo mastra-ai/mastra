@@ -38,14 +38,14 @@ key-files:
     - packages/playground/src/App.tsx
 
 key-decisions:
-  - "ScoreDelta uses unicode arrows for direction indicators"
+  - 'ScoreDelta uses unicode arrows for direction indicators'
   - "AlertDescription requires explicit 'as' prop for semantic HTML"
-  - "Routes use lazy loading for code splitting"
+  - 'Routes use lazy loading for code splitting'
 
 patterns-established:
-  - "Result navigation: getToNextEntryFn/getToPreviousEntryFn from EntryList helpers"
-  - "Run results displayed in table with row click opening SideDialog"
-  - "Comparison view shows version mismatch warning when dataset versions differ"
+  - 'Result navigation: getToNextEntryFn/getToPreviousEntryFn from EntryList helpers'
+  - 'Run results displayed in table with row click opening SideDialog'
+  - 'Comparison view shows version mismatch warning when dataset versions differ'
 
 # Metrics
 duration: 5min
@@ -115,5 +115,6 @@ None - no external service configuration required.
 - Ready for CI/CD integration phase
 
 ---
-*Phase: 06-playground-integration*
-*Completed: 2026-01-26*
+
+_Phase: 06-playground-integration_
+_Completed: 2026-01-26_

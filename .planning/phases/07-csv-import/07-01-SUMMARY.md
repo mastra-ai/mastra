@@ -35,18 +35,21 @@ PapaParse installed with JSON cell parsing and validation utilities for CSV impo
 ## What Was Built
 
 ### JSON Cell Parser (`json-cell-parser.ts`)
+
 - `parseJSONCell()`: Handles null, JSON strings, plain strings, malformed JSON
 - `parseRow()`: Applies parsing to all values, collects warnings
 - Empty strings converted to null
 - Malformed JSON kept as string with warning
 
 ### CSV Validation (`csv-validation.ts`)
+
 - `validateMappedData()`: Validates mapped CSV data before import
 - Checks at least one column mapped to 'input'
 - Validates input columns not empty (row-level errors)
 - Row numbers include header offset (first data row = 2)
 
 ### CSV Parser Hook (`use-csv-parser.ts`)
+
 - `useCSVParser()`: React hook wrapping PapaParse
 - Returns `parseFile`, `isParsing`, `error`
 - Uses web worker for files >1MB
@@ -54,10 +57,10 @@ PapaParse installed with JSON cell parsing and validation utilities for CSV impo
 
 ## Commits
 
-| Hash | Message |
-|------|---------|
-| 7e7220a1c8 | chore(07-01): install papaparse dependency |
-| a7c823ce83 | feat(07-01): create JSON cell parser utility |
+| Hash       | Message                                                    |
+| ---------- | ---------------------------------------------------------- |
+| 7e7220a1c8 | chore(07-01): install papaparse dependency                 |
+| a7c823ce83 | feat(07-01): create JSON cell parser utility               |
 | 30ffb46987 | feat(07-01): create CSV validation utility and parser hook |
 
 ## Deviations from Plan
@@ -67,6 +70,7 @@ None - plan executed exactly as written.
 ## Next Plan Readiness
 
 Ready for 07-02 (Import Dialog UI):
+
 - CSV parsing utilities available
 - Validation ready for column mapping
 - Exports added to domain index

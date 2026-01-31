@@ -11,6 +11,7 @@ Evaluation dataset systems follow a three-tier architecture: **Data Layer** (dat
 ### Langfuse Datasets
 
 **Data Model:**
+
 - Dataset: named collection with metadata
 - DatasetItem: input + optional expected output (ground truth)
 - DatasetRun: execution against a target, links to items
@@ -23,6 +24,7 @@ Evaluation dataset systems follow a three-tier architecture: **Data Layer** (dat
 ### Braintrust
 
 **Data Model:**
+
 - Dataset: versioned collection (explicit versioning)
 - Record: input/expected with metadata
 - Experiment: a run with specific config
@@ -35,6 +37,7 @@ Evaluation dataset systems follow a three-tier architecture: **Data Layer** (dat
 ### LangSmith
 
 **Data Model:**
+
 - Dataset: collection with schema
 - Example: input/output pair with metadata
 - ExperimentRun: execution record
@@ -175,6 +178,7 @@ Comparison API
 ### DatasetsStorage (New Storage Domain)
 
 **Owns:**
+
 - Dataset metadata (id, name, description, createdAt)
 - Dataset versions (auto-incremented)
 - DatasetItem records (input, expectedOutput, metadata, version)
@@ -182,18 +186,21 @@ Comparison API
 - DatasetRunResult records (itemId, output, latency, metadata)
 
 **Does NOT Own:**
+
 - Score records (use existing ScoresStorage)
 - Agent/Workflow execution (use existing primitives)
 
 ### Run Executor (Core Package)
 
 **Owns:**
+
 - Orchestrating item execution
 - Calling scorers on results
 - Managing run lifecycle (running → completed/failed)
 - Progress reporting
 
 **Does NOT Own:**
+
 - Storage operations (delegates to DatasetsStorage)
 - Actual execution (delegates to Agent/Workflow)
 - Scoring logic (delegates to Scorers)
@@ -201,22 +208,26 @@ Comparison API
 ### Target Adapter
 
 **Owns:**
+
 - Normalizing input format for different targets
 - Extracting output from target response
 - Handling streaming vs. non-streaming
 
 **Does NOT Own:**
+
 - Target implementation (uses existing)
 - Result storage
 
 ### Datasets API (Server Package)
 
 **Owns:**
+
 - HTTP routes for CRUD operations
 - Request validation (Zod schemas)
 - Auth enforcement via existing patterns
 
 **Does NOT Own:**
+
 - Business logic (delegates to executor)
 - Direct storage access (uses DatasetsStorage)
 
@@ -234,7 +245,7 @@ export type StorageDomains = {
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
-  datasets?: DatasetsStorage;  // NEW
+  datasets?: DatasetsStorage; // NEW
 };
 ```
 
@@ -244,7 +255,7 @@ export type StorageDomains = {
 // packages/core/src/mastra/index.ts
 interface Config {
   // ... existing
-  datasets?: DatasetsConfig;  // NEW
+  datasets?: DatasetsConfig; // NEW
 }
 
 class Mastra {
@@ -334,14 +345,14 @@ Dependencies: Phases 1-3
 
 ## Key Decisions for Mastra
 
-| Decision | Rationale |
-|----------|-----------|
-| **New storage domain** | Follows existing pattern, clear ownership |
+| Decision                           | Rationale                                       |
+| ---------------------------------- | ----------------------------------------------- |
+| **New storage domain**             | Follows existing pattern, clear ownership       |
 | **Auto-versioning on item change** | Simpler than explicit version management for v1 |
-| **Scorers passed per-run** | Matches Braintrust/LangSmith, more flexible |
-| **Reuse existing ScoresStorage** | Scores are scores — don't duplicate |
-| **Run executor in core** | Can be used programmatically and via server |
-| **Target adapter pattern** | Abstract agent vs workflow differences |
+| **Scorers passed per-run**         | Matches Braintrust/LangSmith, more flexible     |
+| **Reuse existing ScoresStorage**   | Scores are scores — don't duplicate             |
+| **Run executor in core**           | Can be used programmatically and via server     |
+| **Target adapter pattern**         | Abstract agent vs workflow differences          |
 
 ---
 
@@ -353,4 +364,4 @@ Dependencies: Phases 1-3
 
 ---
 
-*Generated: 2026-01-23*
+_Generated: 2026-01-23_

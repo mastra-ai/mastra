@@ -8,13 +8,7 @@
 import type { Mastra } from '../../../mastra';
 import type { ScoreRowData } from '../../../evals/types';
 import { computeScorerStats, isRegression } from './aggregate';
-import type {
-  CompareRunsConfig,
-  ComparisonResult,
-  ItemComparison,
-  ScorerComparison,
-  ScorerThreshold,
-} from './types';
+import type { CompareRunsConfig, ComparisonResult, ItemComparison, ScorerComparison, ScorerThreshold } from './types';
 
 /**
  * Default threshold when not specified: no tolerance for regression.
@@ -52,10 +46,7 @@ const DEFAULT_PASS_THRESHOLD = 0.5;
  * }
  * ```
  */
-export async function compareRuns(
-  mastra: Mastra,
-  config: CompareRunsConfig,
-): Promise<ComparisonResult> {
+export async function compareRuns(mastra: Mastra, config: CompareRunsConfig): Promise<ComparisonResult> {
   const { runIdA, runIdB, thresholds = {} } = config;
   const warnings: string[] = [];
 
@@ -76,10 +67,7 @@ export async function compareRuns(
   }
 
   // 2. Load both runs
-  const [runA, runB] = await Promise.all([
-    runsStore.getRunById({ id: runIdA }),
-    runsStore.getRunById({ id: runIdB }),
-  ]);
+  const [runA, runB] = await Promise.all([runsStore.getRunById({ id: runIdA }), runsStore.getRunById({ id: runIdB })]);
 
   if (!runA) {
     throw new Error(`Run not found: ${runIdA}`);
@@ -221,9 +209,7 @@ export async function compareRuns(
 /**
  * Group scores by scorer ID, then by item ID.
  */
-function groupScoresByScorerAndItem(
-  scores: ScoreRowData[],
-): Record<string, Record<string, ScoreRowData>> {
+function groupScoresByScorerAndItem(scores: ScoreRowData[]): Record<string, Record<string, ScoreRowData>> {
   const result: Record<string, Record<string, ScoreRowData>> = {};
 
   for (const score of scores) {

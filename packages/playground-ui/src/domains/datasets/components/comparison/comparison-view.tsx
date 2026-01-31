@@ -37,11 +37,7 @@ export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProp
   }
 
   if (!comparison) {
-    return (
-      <div className="text-neutral4 text-sm text-center py-8">
-        No comparison data
-      </div>
-    );
+    return <div className="text-neutral4 text-sm text-center py-8">No comparison data</div>;
   }
 
   const scorerIds = Object.keys(comparison.scorers);
@@ -69,9 +65,7 @@ export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProp
       {comparison.hasRegression && (
         <Alert variant="destructive">
           <AlertTitle>Regression detected</AlertTitle>
-          <AlertDescription as="p">
-            One or more scorers showed regression compared to the baseline.
-          </AlertDescription>
+          <AlertDescription as="p">One or more scorers showed regression compared to the baseline.</AlertDescription>
         </Alert>
       )}
 
@@ -152,10 +146,7 @@ export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProp
                             <span className="text-neutral4 text-xs">
                               {scoreA?.toFixed(2)} → {scoreB?.toFixed(2)}
                             </span>
-                            <ScoreDelta
-                              delta={delta}
-                              regressed={comparison.scorers[scorerId]?.regressed ?? false}
-                            />
+                            <ScoreDelta delta={delta} regressed={comparison.scorers[scorerId]?.regressed ?? false} />
                           </div>
                         ) : (
                           <span className="text-neutral4 text-sm">-</span>

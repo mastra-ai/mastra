@@ -31,12 +31,12 @@ key-files:
 
 key-decisions:
   - "Mock agents need specificationVersion: 'v2' to trigger isSupportedLanguageModel"
-  - "Use InMemoryDB shared instance between storage domains in tests"
-  - "Page-based pagination (page: 0) not offset-based"
+  - 'Use InMemoryDB shared instance between storage domains in tests'
+  - 'Page-based pagination (page: 0) not offset-based'
 
 patterns-established:
-  - "RunsInMemory tests follow DatasetsInMemory pattern with shared db"
-  - "runDataset tests mock Mastra interface minimally"
+  - 'RunsInMemory tests follow DatasetsInMemory pattern with shared db'
+  - 'runDataset tests mock Mastra interface minimally'
 
 # Metrics
 duration: 4min
@@ -76,6 +76,7 @@ Each task was committed atomically:
 ## Test Coverage
 
 ### RunsInMemory (18 tests)
+
 - createRun: pending status, custom id, datasetVersion as Date
 - updateRun: status transitions, counts, completedAt, error on non-existent
 - getRunById: fetch by id, null for non-existent
@@ -86,6 +87,7 @@ Each task was committed atomically:
 - deleteResultsByRunId: clear all results
 
 ### runDataset (12 tests)
+
 - Basic execution: all items, summary, item details
 - Status transitions: pending -> running -> completed
 - Error handling: continue-on-error, all fail -> failed status
@@ -125,5 +127,6 @@ None - no external service configuration required.
 - Ready for Phase 3: CLI Foundation
 
 ---
-*Phase: 02-execution-core*
-*Completed: 2026-01-24*
+
+_Phase: 02-execution-core_
+_Completed: 2026-01-24_

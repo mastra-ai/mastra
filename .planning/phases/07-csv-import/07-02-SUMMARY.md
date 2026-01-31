@@ -87,5 +87,6 @@ None - no external service configuration required.
 - Next: 07-03 creates preview step and wizard shell
 
 ---
-*Phase: 07-csv-import*
-*Completed: 2026-01-27*
+
+_Phase: 07-csv-import_
+_Completed: 2026-01-27_

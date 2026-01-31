@@ -36,7 +36,7 @@ export function useCSVParser() {
           skipEmptyLines: 'greedy',
           dynamicTyping: false,
           worker: useWorker,
-          complete: (results) => {
+          complete: results => {
             // Extract headers from first row fields or meta
             const headers = results.meta.fields ?? [];
 
@@ -46,7 +46,7 @@ export function useCSVParser() {
               const parsed = parseRow(row);
 
               // Prefix warnings with row number
-              parsed.warnings.forEach((w) => {
+              parsed.warnings.forEach(w => {
                 allWarnings.push(`Row ${index + 2}: ${w}`);
               });
 
@@ -60,14 +60,13 @@ export function useCSVParser() {
               warnings: allWarnings,
             });
           },
-          error: (err) => {
+          error: err => {
             reject(new Error(err.message));
           },
         });
       });
     } catch (err) {
-      const parseError =
-        err instanceof Error ? err : new Error('Failed to parse CSV');
+      const parseError = err instanceof Error ? err : new Error('Failed to parse CSV');
       setError(parseError);
       throw parseError;
     } finally {

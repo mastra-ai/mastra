@@ -14,12 +14,14 @@ Compare runs to detect score regressions and track performance metrics. Users ca
 ## Implementation Decisions
 
 ### Comparison API
+
 - Explicit pair comparison: `compareRuns(runA, runB)` — user picks both runs
 - No baseline model for v1 (can add later as thin layer if needed)
 - When dataset versions differ: warn and proceed, compare only overlapping items
 - Return both item-level diffs AND aggregate summary
 
 ### Regression Detection
+
 - Threshold-based detection (industry standard per Langfuse/Braintrust)
 - Thresholds stored per dataset, per scorer
 - Flag regression in results (consumer decides action — no exit code for v1)
@@ -27,6 +29,7 @@ Compare runs to detect score regressions and track performance metrics. Users ca
 - "Averages can hide outliers" — need per-item to identify what broke
 
 ### Aggregation Methods
+
 - Basic stats only: mean score, count (no percentiles for v1)
 - Three separate metrics per scorer:
   - Error rate: items that threw errors / total items
@@ -36,6 +39,7 @@ Compare runs to detect score regressions and track performance metrics. Users ca
 - Per-scorer stats only (no composite/weighted aggregate)
 
 ### Output Structure
+
 - Serves both API (CI/CD) and UI (Playground) equally
 - Nested by scorer for scalability:
   ```
@@ -47,6 +51,7 @@ Compare runs to detect score regressions and track performance metrics. Users ca
   - Per-scorer `regressed` boolean with `delta` for debugging
 
 ### Claude's Discretion
+
 - Exact TypeScript types for comparison result
 - How to handle edge cases (empty runs, no overlapping items)
 - Internal implementation of threshold checking
@@ -76,5 +81,5 @@ Compare runs to detect score regressions and track performance metrics. Users ca
 
 ---
 
-*Phase: 05-run-analytics*
-*Context gathered: 2026-01-24*
+_Phase: 05-run-analytics_
+_Context gathered: 2026-01-24_

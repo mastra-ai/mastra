@@ -32,12 +32,12 @@ key-files:
     - packages/playground-ui/src/domains/datasets/components/dataset-detail/dataset-detail.tsx
 
 key-decisions:
-  - "Export action clears selection immediately (no dialog needed)"
-  - "Create Dataset and Delete defer clearing to parent via clearSelectionTrigger"
+  - 'Export action clears selection immediately (no dialog needed)'
+  - 'Create Dataset and Delete defer clearing to parent via clearSelectionTrigger'
 
 patterns-established:
-  - "Selection mode pattern: selectionMode state controls UI, selection hook manages data"
-  - "Parent-controlled clearing: child signals action, parent clears after completion"
+  - 'Selection mode pattern: selectionMode state controls UI, selection hook manages data'
+  - 'Parent-controlled clearing: child signals action, parent clears after completion'
 
 # Metrics
 duration: 4min
@@ -100,5 +100,6 @@ None - no external service configuration required.
 - 08-05: Testing and 08-06: Documentation can proceed
 
 ---
-*Phase: 08-item-selection-actions*
-*Completed: 2026-01-27*
+
+_Phase: 08-item-selection-actions_
+_Completed: 2026-01-27_

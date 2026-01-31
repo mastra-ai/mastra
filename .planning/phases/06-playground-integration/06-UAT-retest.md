@@ -13,29 +13,35 @@ updated: 2026-01-26T22:50:00Z
 ## Tests
 
 ### 1. Dataset Edit/Delete
+
 expected: Dataset detail page header shows Edit and Delete buttons. Edit opens dialog with current values. Delete shows confirmation.
 result: pass
 
 ### 2. Item Edit/Delete
+
 expected: Items list has Actions column with edit/delete icon buttons per row. Edit opens dialog. Delete shows confirmation.
 result: pass
 
 ### 3. Add Item Button
+
 expected: When items exist, Add Item button is visible above the items table.
 result: pass
 
 ### 4. Async Run Trigger
+
 expected: Run trigger returns immediately (< 500ms). Status shows "pending", then transitions to "running" and "completed" via polling.
 result: issue
 reported: "Status transitions worked but had to refresh page to see latest item results. Also SQLITE_ERROR: no such column: traceId when viewing results"
 severity: major
 
 ### 5. Scores Display
+
 expected: Run results view shows scores for each item with scorer names and values.
 result: skipped
 reason: Can't test due to traceId error blocking results view
 
 ### 6. Trace Links
+
 expected: Result detail dialog shows "View Trace" link that navigates to /traces/:traceId.
 result: issue
 reported: "traceId not in API response - server schema missing the field"
@@ -63,12 +69,12 @@ skipped: 1
   test: 4
   root_cause: "triggerRun mutation invalidates dataset-runs but not dataset-run-results. When run completes via polling, results query not refetched."
   artifacts:
-    - path: "packages/playground-ui/src/domains/datasets/hooks/use-dataset-mutations.ts"
-      issue: "Line 67: only invalidates dataset-runs, missing dataset-run-results"
-  missing:
-    - "Invalidate dataset-run-results query when run completes"
-    - "Or: add refetchInterval to useDatasetRunResults while run.status !== completed"
-  debug_session: ""
+  - path: "packages/playground-ui/src/domains/datasets/hooks/use-dataset-mutations.ts"
+    issue: "Line 67: only invalidates dataset-runs, missing dataset-run-results"
+    missing:
+  - "Invalidate dataset-run-results query when run completes"
+  - "Or: add refetchInterval to useDatasetRunResults while run.status !== completed"
+    debug_session: ""
 
 - truth: "traceId column exists in LibSQL storage"
   status: user_error
@@ -87,8 +93,8 @@ skipped: 1
   test: 6
   root_cause: "Plan 06-10 added traceId to core storage but missed server API schema. runResultResponseSchema in datasets.ts doesn't include traceId."
   artifacts:
-    - path: "packages/server/src/server/schemas/datasets.ts"
-      issue: "Lines 141-155: runResultResponseSchema missing traceId field"
-  missing:
-    - "Add traceId: z.string().nullable() to runResultResponseSchema"
-  debug_session: ""
+  - path: "packages/server/src/server/schemas/datasets.ts"
+    issue: "Lines 141-155: runResultResponseSchema missing traceId field"
+    missing:
+  - "Add traceId: z.string().nullable() to runResultResponseSchema"
+    debug_session: ""

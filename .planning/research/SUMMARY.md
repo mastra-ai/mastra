@@ -20,6 +20,7 @@ Key risks center on dataset staleness (users modify prompts but forget test case
 Mastra already has everything needed—no new core dependencies required. Leverage existing storage backends (PostgreSQL via pg store, LibSQL for lighter deployments), existing Zod schemas for type safety, existing Hono server patterns, existing p-map for concurrent execution. The only new dependency is Papa Parse (CSV import) in the CLI package.
 
 **Core technologies:**
+
 - **DatasetsStorage domain**: New storage domain following workflows/memory pattern — reuses composite store infrastructure
 - **Existing Scorers (packages/evals/)**: Reuse scorer interface directly — datasets pass input/output/groundTruth from items
 - **Zod schemas**: Type-safe validation for dataset entities — already used throughout Mastra
@@ -27,6 +28,7 @@ Mastra already has everything needed—no new core dependencies required. Levera
 - **p-map**: Concurrent item execution with rate limiting — already dependency in core
 
 **Critical version requirements:**
+
 - None — all dependencies already present in Mastra stack
 - Papa Parse ^5.4.1 for CSV import (CLI only, well-tested library)
 
@@ -35,6 +37,7 @@ Mastra already has everything needed—no new core dependencies required. Levera
 Research from Langfuse, Braintrust, LangSmith reveals clear table stakes vs differentiators.
 
 **Must have (table stakes):**
+
 - Dataset CRUD with naming, description, metadata
 - Items with input/expected output/context (any JSON)
 - Bulk CSV import (adoption blocker without it)
@@ -45,6 +48,7 @@ Research from Langfuse, Braintrust, LangSmith reveals clear table stakes vs diff
 - SDK for programmatic access (CI integration)
 
 **Should have (competitive):**
+
 - Auto-versioning on item changes (simpler UX than explicit versions)
 - Baseline run pinning (reference point for regression detection)
 - Cross-version comparison with warnings (handle dataset drift)
@@ -52,6 +56,7 @@ Research from Langfuse, Braintrust, LangSmith reveals clear table stakes vs diff
 - Export results (data portability)
 
 **Defer (v2+):**
+
 - Human evaluation workflow (complex, Braintrust does well)
 - Trace integration (create items from production traces)
 - Version diff view (visualize changes between versions)
@@ -64,6 +69,7 @@ Research from Langfuse, Braintrust, LangSmith reveals clear table stakes vs diff
 Three-tier architecture: **Data Layer** (datasets, items, versions in new `DatasetsStorage` domain), **Execution Layer** (run executor orchestrating target calls and scorer application), **Presentation Layer** (comparison, analysis UI). Components have clear boundaries: `DatasetsStorage` owns dataset/item/run records but NOT scores (reuse `ScoresStorage`), run executor orchestrates but delegates to existing agents/workflows for execution and existing scorers for scoring, target adapter normalizes different target types (agent vs workflow vs custom function).
 
 **Major components:**
+
 1. **DatasetsStorage** — new storage domain for datasets/items/runs/results, follows workflow/memory pattern
 2. **Run Executor** — orchestrates item execution, scorer application, progress tracking (lives in core package)
 3. **Target Adapter** — protocol interface supporting agents, workflows, or any callable (prevents tight coupling)
@@ -92,6 +98,7 @@ From analysis of Langfuse, Braintrust, LangSmith user patterns and Mastra archit
 Based on research, suggested phase structure follows architecture tiers and dependency graph:
 
 ### Phase 1: Storage Foundation
+
 **Rationale:** Must establish data model before anything else. New storage domain = foundation for all other features. Follow proven Mastra pattern.
 **Delivers:** `DatasetsStorage` interface, Zod schemas, PostgreSQL implementation, in-memory test implementation
 **Addresses:** Dataset CRUD, items with input/expected/metadata (table stakes)
@@ -99,6 +106,7 @@ Based on research, suggested phase structure follows architecture tiers and depe
 **Research flag:** Standard storage pattern — no additional research needed
 
 ### Phase 2: API Layer
+
 **Rationale:** Depends on storage. Needed before execution or UI. Follows existing server route patterns.
 **Delivers:** Hono routes for dataset CRUD, item CRUD, route registration in server package
 **Uses:** Zod schemas from Phase 1, existing Hono patterns from scores.ts
@@ -107,6 +115,7 @@ Based on research, suggested phase structure follows architecture tiers and depe
 **Research flag:** Standard API pattern — no additional research needed
 
 ### Phase 3: Execution Engine
+
 **Rationale:** Core value delivery. Depends on storage + API. Must run before comparison makes sense.
 **Delivers:** Run executor, target adapter interface, run triggering API, progress streaming
 **Uses:** Existing scorers from packages/evals/, existing p-map for concurrency
@@ -116,6 +125,7 @@ Based on research, suggested phase structure follows architecture tiers and depe
 **Research flag:** Needs research for target adapter protocol design (multiple target types, streaming vs non-streaming)
 
 ### Phase 4: Comparison & Analysis
+
 **Rationale:** Depends on execution producing results. Comparison is table stakes feature.
 **Delivers:** Run comparison logic, comparison API routes, delta computation, cross-version handling
 **Implements:** Presentation Layer (backend)
@@ -124,6 +134,7 @@ Based on research, suggested phase structure follows architecture tiers and depe
 **Research flag:** Standard pattern — no additional research needed
 
 ### Phase 5: Playground UI
+
 **Rationale:** Depends on full API (CRUD + runs + comparison). Usability layer over working backend.
 **Delivers:** Dataset list/detail pages, run results view, comparison UI, navigation integration
 **Uses:** Existing playground patterns (sidebar, list views, detail panels)
@@ -133,6 +144,7 @@ Based on research, suggested phase structure follows architecture tiers and depe
 **Research flag:** Standard React/Tailwind patterns — no additional research needed
 
 ### Phase 6: Bulk Operations & CI
+
 **Rationale:** Depends on API + UI being solid. Adoption accelerators.
 **Delivers:** CSV import with validation, export, `mastra datasets run` CLI command
 **Uses:** Papa Parse for CSV, existing CLI patterns
@@ -155,10 +167,12 @@ Based on research, suggested phase structure follows architecture tiers and depe
 ### Research Flags
 
 Phases likely needing deeper research during planning:
+
 - **Phase 3 (Execution Engine):** Target adapter protocol design — needs research on supporting multiple target types (agents, workflows, raw functions), handling streaming vs non-streaming, extracting outputs from different response formats
 - **Phase 6 (Bulk Operations):** CSV validation patterns — needs research on Papa Parse error handling, row-level error reporting, dry-run implementation
 
 Phases with standard patterns (skip research-phase):
+
 - **Phase 1 (Storage):** Follows existing DatasetsStorage/WorkflowsStorage pattern exactly — well-documented in codebase
 - **Phase 2 (API):** Follows scores.ts route pattern exactly — well-documented in codebase
 - **Phase 4 (Comparison):** Standard aggregation/delta logic — no novel patterns
@@ -166,12 +180,12 @@ Phases with standard patterns (skip research-phase):
 
 ## Confidence Assessment
 
-| Area | Confidence | Notes |
-|------|------------|-------|
-| Stack | HIGH | All dependencies already in Mastra, no new integrations required |
-| Features | HIGH | Langfuse, Braintrust, LangSmith have converged on same table stakes — clear signal |
-| Architecture | HIGH | Maps directly to existing Mastra patterns (storage domains, scorers, server routes) |
-| Pitfalls | HIGH | Patterns observed across multiple competitor products + Mastra architecture analysis |
+| Area         | Confidence | Notes                                                                                |
+| ------------ | ---------- | ------------------------------------------------------------------------------------ |
+| Stack        | HIGH       | All dependencies already in Mastra, no new integrations required                     |
+| Features     | HIGH       | Langfuse, Braintrust, LangSmith have converged on same table stakes — clear signal   |
+| Architecture | HIGH       | Maps directly to existing Mastra patterns (storage domains, scorers, server routes)  |
+| Pitfalls     | HIGH       | Patterns observed across multiple competitor products + Mastra architecture analysis |
 
 **Overall confidence:** HIGH
 
@@ -190,18 +204,22 @@ Research based on official competitor documentation (Langfuse, Braintrust, LangS
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - Mastra codebase — packages/core/src/storage/, packages/evals/, packages/server/src/server/handlers/, stores/ (existing patterns)
 - Langfuse documentation — dataset features, versioning approach, trace integration
 - Braintrust documentation — auto-versioning, experiment comparison, scorer composition
 - LangSmith documentation — dataset schemas, evaluator patterns, example structure
 
 ### Secondary (MEDIUM confidence)
+
 - Competitor user patterns — inferred from public documentation and feature descriptions
 - Evaluation system anti-patterns — common across industry (staleness, non-determinism, comparison validity)
 
 ### Tertiary (LOW confidence)
+
 - None — all findings grounded in primary sources
 
 ---
-*Research completed: 2026-01-23*
-*Ready for roadmap: yes*
+
+_Research completed: 2026-01-23_
+_Ready for roadmap: yes_

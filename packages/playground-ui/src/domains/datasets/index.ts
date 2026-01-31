@@ -40,7 +40,12 @@ export { TargetSelector, type TargetType } from './components/run-trigger/target
 export { ScorerSelector } from './components/run-trigger/scorer-selector';
 
 // Results components
-export { ResultsTable, type ResultsTableProps, type ScoreData, type RunResultData } from './components/results/results-table';
+export {
+  ResultsTable,
+  type ResultsTableProps,
+  type ScoreData,
+  type RunResultData,
+} from './components/results/results-table';
 export { ResultDetailDialog } from './components/results/result-detail-dialog';
 
 // Comparison components

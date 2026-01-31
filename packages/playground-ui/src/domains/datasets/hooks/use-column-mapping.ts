@@ -35,8 +35,7 @@ export function useColumnMapping(headers: string[]) {
   // Rebuild mapping when headers actually change (by content, not reference)
   useEffect(() => {
     const prevHeaders = prevHeadersRef.current;
-    const headersChanged =
-      headers.length !== prevHeaders.length || headers.some((h, i) => h !== prevHeaders[i]);
+    const headersChanged = headers.length !== prevHeaders.length || headers.some((h, i) => h !== prevHeaders[i]);
 
     if (headersChanged) {
       prevHeadersRef.current = headers;

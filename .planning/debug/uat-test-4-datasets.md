@@ -1,6 +1,6 @@
 ---
 status: diagnosed
-trigger: "UAT Test 4 - Create Item button does nothing, 500 error on runs endpoint"
+trigger: 'UAT Test 4 - Create Item button does nothing, 500 error on runs endpoint'
 created: 2026-01-26T12:00:00Z
 updated: 2026-01-26T12:00:00Z
 ---
@@ -63,12 +63,12 @@ started: Initial implementation
 ## Resolution
 
 root_cause: |
-  Issue 1 (Create Item button): ItemsList component only renders "Add Item" button when items.length === 0.
-  When items exist, the table renders without any button to add more items.
+Issue 1 (Create Item button): ItemsList component only renders "Add Item" button when items.length === 0.
+When items exist, the table renders without any button to add more items.
 
-  Issue 2 (500 on runs): Either:
-  a) storage.init() not called (tables don't exist)
-  b) runsStore returning undefined (check storage config)
+Issue 2 (500 on runs): Either:
+a) storage.init() not called (tables don't exist)
+b) runsStore returning undefined (check storage config)
 
 fix: pending
 verification: pending

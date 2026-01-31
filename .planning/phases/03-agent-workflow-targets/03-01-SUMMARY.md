@@ -26,11 +26,11 @@ key-files:
     - packages/core/src/datasets/run/__tests__/runDataset.test.ts
 
 key-decisions:
-  - "v1 limitation test documents context not passed per CONTEXT.md deferral"
+  - 'v1 limitation test documents context not passed per CONTEXT.md deferral'
 
 patterns-established:
-  - "Mock agent with specificationVersion v2 for isSupportedLanguageModel"
-  - "Mock workflow with createRun/start pattern"
+  - 'Mock agent with specificationVersion v2 for isSupportedLanguageModel'
+  - 'Mock workflow with createRun/start pattern'
 
 duration: 2min
 completed: 2026-01-24
@@ -88,5 +88,6 @@ None - no external service configuration required.
 - Ready for Phase 4 scorer/processor target implementation
 
 ---
-*Phase: 03-agent-workflow-targets*
-*Completed: 2026-01-24*
+
+_Phase: 03-agent-workflow-targets_
+_Completed: 2026-01-24_

@@ -25,13 +25,13 @@ key-files:
     - packages/playground-ui/src/domains/datasets/components/dataset-detail/items-list.tsx
 
 key-decisions:
-  - "SplitButton used for New Item + Import dropdown consolidation"
-  - "ActionsMenu moved internal to ItemsToolbar (not exported separately)"
-  - "Import JSON option disabled with Coming Soon indicator"
-  - "Add to Dataset action disabled with Coming Soon indicator"
+  - 'SplitButton used for New Item + Import dropdown consolidation'
+  - 'ActionsMenu moved internal to ItemsToolbar (not exported separately)'
+  - 'Import JSON option disabled with Coming Soon indicator'
+  - 'Add to Dataset action disabled with Coming Soon indicator'
 
 patterns-established:
-  - "Toolbar extraction: separate toolbar from list for reusability and maintainability"
+  - 'Toolbar extraction: separate toolbar from list for reusability and maintainability'
 
 # Metrics
 duration: 2min
@@ -51,6 +51,7 @@ completed: 2026-01-30
 - **Files modified:** 2
 
 ## Accomplishments
+
 - Created ItemsToolbar component with SplitButton for New Item + Import actions
 - Import CSV triggers existing import flow, Import JSON disabled with Coming Soon
 - Actions menu reorganized: Export Items, Create Dataset, Add to Dataset (disabled), Delete Items
@@ -65,10 +66,12 @@ Each task was committed atomically:
 2. **Task 2: Integrate ItemsToolbar into ItemsList** - `c50c9952ad` (refactor)
 
 ## Files Created/Modified
+
 - `packages/playground-ui/src/domains/datasets/components/dataset-detail/items-toolbar.tsx` - New ItemsToolbar component with SplitButton and ActionsMenu
 - `packages/playground-ui/src/domains/datasets/components/dataset-detail/items-list.tsx` - Updated to use ItemsToolbar, removed inline toolbar code
 
 ## Decisions Made
+
 - ActionsMenu made internal to ItemsToolbar (not a separate export) - cleaner API for consumers
 - Coming Soon features disabled but visible in UI to communicate future plans
 - Toolbar props include both normal mode callbacks and selection mode state for flexibility
@@ -78,6 +81,7 @@ Each task was committed atomically:
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 - Pre-commit hooks failing due to ESLint config mismatch (v9 flat config not found) - bypassed with --no-verify as this is a project-wide config issue, not related to this plan
 
 ## User Setup Required
@@ -85,10 +89,12 @@ None - plan executed exactly as written.
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - ItemsToolbar ready for use in dataset detail view
 - Selection mode flows preserved and functional
 - Build verified successful
 
 ---
-*Phase: 10-dataset-layout-update*
-*Completed: 2026-01-30*
+
+_Phase: 10-dataset-layout-update_
+_Completed: 2026-01-30_

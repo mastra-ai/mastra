@@ -7,6 +7,7 @@
 ## Summary
 
 Researched Mastra's playground-ui patterns for implementing the dataset evaluation UI. The codebase has well-established patterns for:
+
 1. **Domain structure**: `packages/playground-ui/src/domains/{name}/` with hooks, components, and context
 2. **Data fetching**: TanStack Query with `useMastraClient()` hook for all API calls
 3. **UI components**: Design system in `packages/playground-ui/src/ds/components/` with Table, Dialog, SideDialog, EmptyState, Button, etc.
@@ -19,28 +20,32 @@ Key insight: Phase 6 requires zero new dependencies — all UI patterns exist. T
 ## Standard Stack
 
 ### Core
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| @mastra/playground-ui | internal | UI primitives, hooks, design system | All playground pages use this |
-| @mastra/client-js | internal | API client | Standard for playground data fetching |
-| @tanstack/react-query | ^5.x | Server state management | Already used by all playground hooks |
-| @tanstack/react-table | ^8.x | Table rendering | Already used by AgentsTable, WorkflowsTable |
-| react-router | ^7.x | Routing (local studio) | Standard for packages/playground |
+
+| Library               | Version  | Purpose                             | Why Standard                                |
+| --------------------- | -------- | ----------------------------------- | ------------------------------------------- |
+| @mastra/playground-ui | internal | UI primitives, hooks, design system | All playground pages use this               |
+| @mastra/client-js     | internal | API client                          | Standard for playground data fetching       |
+| @tanstack/react-query | ^5.x     | Server state management             | Already used by all playground hooks        |
+| @tanstack/react-table | ^8.x     | Table rendering                     | Already used by AgentsTable, WorkflowsTable |
+| react-router          | ^7.x     | Routing (local studio)              | Standard for packages/playground            |
 
 ### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| lucide-react | ^0.x | Icons | All icons in playground |
-| sonner | ^1.x | Toast notifications | Error/success feedback |
-| @radix-ui/react-* | various | Accessible primitives | Dialog, VisuallyHidden, etc. |
+
+| Library            | Version | Purpose               | When to Use                  |
+| ------------------ | ------- | --------------------- | ---------------------------- |
+| lucide-react       | ^0.x    | Icons                 | All icons in playground      |
+| sonner             | ^1.x    | Toast notifications   | Error/success feedback       |
+| @radix-ui/react-\* | various | Accessible primitives | Dialog, VisuallyHidden, etc. |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| SideDialog for results | Full-page modal | SideDialog matches traces pattern (decided) |
-| Checkboxes for run compare | Dropdown select | Checkboxes more visual (decided) |
+
+| Instead of                 | Could Use       | Tradeoff                                    |
+| -------------------------- | --------------- | ------------------------------------------- |
+| SideDialog for results     | Full-page modal | SideDialog matches traces pattern (decided) |
+| Checkboxes for run compare | Dropdown select | Checkboxes more visual (decided)            |
 
 **Installation:**
+
 ```bash
 # No new packages needed - all dependencies already in playground-ui
 ```
@@ -48,6 +53,7 @@ Key insight: Phase 6 requires zero new dependencies — all UI patterns exist. T
 ## Architecture Patterns
 
 ### Recommended Project Structure
+
 ```
 packages/playground-ui/src/domains/
 └── datasets/
@@ -89,9 +95,11 @@ packages/playground/src/
 ```
 
 ### Pattern 1: Domain Hook Structure
+
 **What:** TanStack Query hooks wrapping MastraClient
 **When to use:** All data fetching for datasets/runs
 **Example:**
+
 ```typescript
 // Source: packages/playground-ui/src/domains/agents/hooks/use-agents.ts pattern
 import { useMastraClient } from '@mastra/react';
@@ -116,9 +124,11 @@ export const useDataset = (datasetId: string) => {
 ```
 
 ### Pattern 2: Table with TanStack React Table
+
 **What:** Composable table with columns, search, and row click navigation
 **When to use:** DatasetsTable, ResultsTable
 **Example:**
+
 ```typescript
 // Source: packages/playground-ui/src/domains/agents/components/agent-table/agent-table.tsx
 import { useReactTable, getCoreRowModel, flexRender } from '@tanstack/react-table';
@@ -162,9 +172,11 @@ export function DatasetsTable({ datasets, isLoading, onCreateClick }) {
 ```
 
 ### Pattern 3: Create Dialog Pattern
+
 **What:** Modal dialog with form for creating entities
 **When to use:** CreateDatasetDialog
 **Example:**
+
 ```typescript
 // Source: packages/playground-ui/src/domains/agents/components/create-agent/create-agent-dialog.tsx
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
@@ -198,9 +210,11 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }) {
 ```
 
 ### Pattern 4: SideDialog for Detail Views
+
 **What:** Slide-in panel for viewing details without full navigation
 **When to use:** Result detail view, trace integration
 **Example:**
+
 ```typescript
 // Source: packages/playground-ui/src/domains/observability/components/trace-dialog.tsx
 import { SideDialog } from '@/ds/components/SideDialog';
@@ -232,9 +246,11 @@ export function ResultDetailDialog({ result, isOpen, onClose, onNext, onPrevious
 ```
 
 ### Pattern 5: Polling for In-Progress Runs
+
 **What:** refetchInterval with conditional enable
 **When to use:** Run progress updates
 **Example:**
+
 ```typescript
 // Source: packages/playground-ui/src/hooks/use-workflow-runs.ts
 export const useDatasetRun = (runId: string) => {
@@ -245,7 +261,7 @@ export const useDatasetRun = (runId: string) => {
     enabled: Boolean(runId),
     gcTime: 0,
     staleTime: 0,
-    refetchInterval: (query) => {
+    refetchInterval: query => {
       // Poll while running, stop when complete
       const status = query.state.data?.status;
       return status === 'running' || status === 'pending' ? 2000 : false;
@@ -256,9 +272,11 @@ export const useDatasetRun = (runId: string) => {
 ```
 
 ### Pattern 6: Sidebar Navigation Integration
+
 **What:** Add nav section to app-sidebar.tsx
 **When to use:** Adding Datasets entry
 **Example:**
+
 ```typescript
 // Source: packages/playground/src/components/ui/app-sidebar.tsx
 // Add to mainNavigation array, under observability section:
@@ -283,6 +301,7 @@ export const useDatasetRun = (runId: string) => {
 ```
 
 ### Anti-Patterns to Avoid
+
 - **Business logic in playground package:** All data fetching, mutations go in playground-ui
 - **Direct fetch calls:** Always use useMastraClient() + TanStack Query
 - **Custom loading states:** Use isLoading from useQuery, Skeleton components
@@ -291,76 +310,90 @@ export const useDatasetRun = (runId: string) => {
 
 ## Don't Hand-Roll
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| Data fetching | Custom fetch | useMastraClient + useQuery | Cache, deduplication, refetching |
-| Table rendering | Manual map | @tanstack/react-table | Sorting, filtering, virtualization |
-| Modals | Custom overlay | Dialog from ds/components | Accessibility, styling |
-| Detail panels | Custom sidebar | SideDialog from ds/components | Consistent with traces |
-| Progress feedback | Custom spinner | ProcessStepProgressBar or inline % | Existing patterns |
-| Icons | Custom SVGs | lucide-react | Consistent icon set |
-| Toast messages | alert() | sonner/toast | Non-blocking, styled |
+| Problem           | Don't Build    | Use Instead                        | Why                                |
+| ----------------- | -------------- | ---------------------------------- | ---------------------------------- |
+| Data fetching     | Custom fetch   | useMastraClient + useQuery         | Cache, deduplication, refetching   |
+| Table rendering   | Manual map     | @tanstack/react-table              | Sorting, filtering, virtualization |
+| Modals            | Custom overlay | Dialog from ds/components          | Accessibility, styling             |
+| Detail panels     | Custom sidebar | SideDialog from ds/components      | Consistent with traces             |
+| Progress feedback | Custom spinner | ProcessStepProgressBar or inline % | Existing patterns                  |
+| Icons             | Custom SVGs    | lucide-react                       | Consistent icon set                |
+| Toast messages    | alert()        | sonner/toast                       | Non-blocking, styled               |
 
 **Key insight:** The design system has 40+ components. Use them.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Breaking Package Boundaries
+
 **What goes wrong:** Components in packages/playground instead of playground-ui
 **Why it happens:** Seems faster to add in page file
 **How to avoid:**
+
 - Components go in playground-ui/src/domains/
 - Pages in playground are composition only
 - Check CLAUDE.md in each package
-**Warning signs:** Imports between packages don't work, storybook can't render
+  **Warning signs:** Imports between packages don't work, storybook can't render
 
 ### Pitfall 2: Missing Query Invalidation
+
 **What goes wrong:** UI doesn't update after mutation
 **Why it happens:** Forgot to invalidate related queries
 **How to avoid:**
+
 ```typescript
 const queryClient = useQueryClient();
 await createDataset.mutateAsync(params);
 queryClient.invalidateQueries({ queryKey: ['datasets'] });
 ```
+
 **Warning signs:** Refresh needed to see changes
 
 ### Pitfall 3: Stale Closure in Polling
+
 **What goes wrong:** Polling continues after navigation or status change
 **Why it happens:** refetchInterval uses stale value
 **How to avoid:** Use function form that receives query state:
+
 ```typescript
-refetchInterval: (query) => query.state.data?.status === 'running' ? 2000 : false
+refetchInterval: query => (query.state.data?.status === 'running' ? 2000 : false);
 ```
+
 **Warning signs:** Network tab shows continuous requests
 
 ### Pitfall 4: Comparison Items Don't Align
+
 **What goes wrong:** Side-by-side columns don't match by item
 **Why it happens:** Different item ordering between runs
 **How to avoid:**
+
 - Build lookup by itemId
 - Handle missing items (show placeholder)
 - Check versionMismatch flag from compareRuns
-**Warning signs:** Rows don't match visually
+  **Warning signs:** Rows don't match visually
 
 ### Pitfall 5: Missing Error Boundaries
+
 **What goes wrong:** One component error crashes whole page
 **Why it happens:** No error isolation
 **How to avoid:** Wrap each major section in error boundary
 **Warning signs:** White screen on component error
 
 ### Pitfall 6: Large Result Sets
+
 **What goes wrong:** UI freezes with 1000+ items
 **Why it happens:** Rendering all rows at once
 **How to avoid:**
+
 - Use pagination (server-side via API)
 - Consider virtualization for long lists
 - Show warning for large datasets
-**Warning signs:** UI lag when scrolling results
+  **Warning signs:** UI lag when scrolling results
 
 ## Code Examples
 
 ### Page Composition Pattern
+
 ```typescript
 // packages/playground/src/pages/datasets/index.tsx
 import { useState } from 'react';
@@ -428,6 +461,7 @@ export default Datasets;
 ```
 
 ### Run Trigger Dialog Pattern
+
 ```typescript
 // packages/playground-ui/src/domains/datasets/components/run-trigger/run-trigger-dialog.tsx
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
@@ -506,6 +540,7 @@ export function RunTriggerDialog({ datasetId, open, onOpenChange, onSuccess }) {
 ```
 
 ### Comparison View Pattern
+
 ```typescript
 // packages/playground-ui/src/domains/datasets/components/comparison/comparison-view.tsx
 import { useCompareRuns } from '../../hooks/use-compare-runs';
@@ -575,14 +610,15 @@ function ScoreDelta({ delta, regressed }) {
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| Direct DOM manipulation | React components | Always | Standard |
-| Custom fetch | TanStack Query | 2024+ | Server state management |
-| CSS classes | Tailwind + design tokens | Current | Consistent styling |
-| Full page modals | SideDialog panels | 2025+ | Better context preservation |
+| Old Approach            | Current Approach         | When Changed | Impact                      |
+| ----------------------- | ------------------------ | ------------ | --------------------------- |
+| Direct DOM manipulation | React components         | Always       | Standard                    |
+| Custom fetch            | TanStack Query           | 2024+        | Server state management     |
+| CSS classes             | Tailwind + design tokens | Current      | Consistent styling          |
+| Full page modals        | SideDialog panels        | 2025+        | Better context preservation |
 
 **Deprecated/outdated:**
+
 - N/A — building on current playground-ui patterns
 
 ## Open Questions
@@ -610,6 +646,7 @@ function ScoreDelta({ delta, regressed }) {
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - `packages/playground-ui/src/domains/agents/` - Complete domain pattern
 - `packages/playground-ui/src/domains/observability/` - SideDialog, trace patterns
 - `packages/playground-ui/src/ds/components/` - Full design system
@@ -619,15 +656,18 @@ function ScoreDelta({ delta, regressed }) {
 - `packages/playground/CLAUDE.md` - Package guidelines
 
 ### Secondary (MEDIUM confidence)
+
 - `packages/playground-ui/src/hooks/use-workflow-runs.ts` - Polling pattern
 - `client-sdks/client-js/src/client.ts` - Client API patterns
 
 ### Tertiary (LOW confidence)
+
 - None — all findings from direct codebase analysis
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH — all libraries already in use
 - Architecture: HIGH — direct pattern from existing domains
 - Pitfalls: HIGH — common React/playground issues documented

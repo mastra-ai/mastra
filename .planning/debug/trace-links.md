@@ -5,6 +5,7 @@
 **Root Cause:** traceId is available from agent/workflow execution but never captured or stored in dataset run results
 
 **Evidence:**
+
 - Agent `generate()` returns `FullOutput` with `traceId` field (packages/core/src/stream/base/output.ts:122)
 - Workflow `run.start()` returns result with `traceId` field (packages/core/src/workflows/workflow.ts:2691)
 - `ExecutionResult` interface in executor.ts only captures `output` and `error` - no traceId (packages/core/src/datasets/run/executor.ts:16-21)
@@ -13,6 +14,7 @@
 - `ResultDetailDialog` displays metadata but has no trace link (packages/playground-ui/src/domains/datasets/components/results/result-detail-dialog.tsx)
 
 **Files Involved:**
+
 - `packages/core/src/datasets/run/executor.ts:16-21`: `ExecutionResult` interface missing traceId
 - `packages/core/src/datasets/run/index.ts:122-146`: executeTarget result not capturing traceId
 - `packages/core/src/storage/constants.ts:169-183`: Schema missing traceId column
@@ -20,6 +22,7 @@
 - `packages/playground-ui/src/domains/datasets/components/results/result-detail-dialog.tsx`: Dialog not displaying trace link
 
 **Suggested Fix Direction:**
+
 1. Add `traceId` to `ExecutionResult` interface in executor.ts
 2. Capture traceId from agent/workflow results in executeAgent/executeWorkflow functions
 3. Add `traceId` column to `DATASET_RUN_RESULTS_SCHEMA`
@@ -55,6 +58,7 @@ playground-ui ResultDetailDialog
 ## Comparison: How Traces Work Elsewhere
 
 In `packages/playground-ui/src/domains/observability/components/trace-dialog.tsx`:
+
 - Receives `traceId` prop directly
 - Uses `computeTraceLink(traceId)` to generate navigation link
 - Pattern: KeyValueList with link to `/traces/{traceId}`

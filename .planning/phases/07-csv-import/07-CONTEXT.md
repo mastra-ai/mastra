@@ -14,6 +14,7 @@ Bulk item creation from CSV with validation and explicit column mapping via play
 ## Implementation Decisions
 
 ### Column Mapping UX
+
 - Braintrust-style drag-drop: columns default to input, user drags to recategorize
 - Flow: Upload → Preview table (first 5 rows) → Map columns → Validate → Confirm import
 - Only input mapping required; expectedOutput and metadata optional
@@ -22,23 +23,27 @@ Bulk item creation from CSV with validation and explicit column mapping via play
 - Empty cells become null (not empty string)
 
 ### Validation Feedback
+
 - Validation runs before commit (not during preview)
 - Error summary at top + invalid rows highlighted in table
 - Validation rules: input required + JSON type checking
 - On errors: user must fix CSV and re-upload (no "skip invalid" option)
 
 ### File Handling
+
 - No explicit file size limit (browser/server naturally constrain)
 - UTF-8 encoding only
 - Comma delimiter only (standard CSV)
 - Header row required
 
 ### CLI vs UI
+
 - This phase is UI-only (playground)
 - CLI CSV import deferred to future phase
 - SDK/programmatic import available via existing `addItem` method
 
 ### Claude's Discretion
+
 - Specific drag-drop interaction implementation
 - Preview table styling and pagination
 - Error message formatting
@@ -66,5 +71,5 @@ Bulk item creation from CSV with validation and explicit column mapping via play
 
 ---
 
-*Phase: 07-csv-import*
-*Context gathered: 2026-01-26*
+_Phase: 07-csv-import_
+_Context gathered: 2026-01-26_

@@ -5,6 +5,7 @@
 ## APIs & External Services
 
 **Large Language Model Providers:**
+
 - OpenAI - Chat/completion and embedding models
   - SDK: `@ai-sdk/openai` (multiple versions v1.3.24, v2.0.69, v3.0.1)
   - Auth: `OPENAI_API_KEY` environment variable
@@ -49,6 +50,7 @@
   - Supports custom endpoints for LLM routers and embedding models
 
 **Voice & Speech Services:**
+
 - OpenAI - Voice synthesis and speech recognition
   - SDK: `openai` (v5.11.0) in `voice/openai/`
   - Auth: `OPENAI_API_KEY`
@@ -99,6 +101,7 @@
 ## Data Storage
 
 **Databases:**
+
 - PostgreSQL 16+ (with pgvector 0.8.0+ for vector support)
   - Adapter: `stores/pg/` - Uses `pg` client (v8.16.3)
   - Connection: `process.env.DATABASE_URL`
@@ -139,6 +142,7 @@
   - Document database
 
 **Vector Stores:**
+
 - Pinecone
   - Adapter: `stores/pinecone/`
   - Client: `@pinecone-database/pinecone` (v3.0.3)
@@ -187,6 +191,7 @@
   - Cloudflare's vector database service
 
 **In-Memory Caching:**
+
 - Redis 7+
   - Docker service at localhost:6379
   - Used for caching and session storage
@@ -194,6 +199,7 @@
 ## Authentication & Identity
 
 **Auth Providers:**
+
 - Clerk - User authentication
   - Package: `auth/clerk/`
   - SDK: `@clerk/backend` (v1.34.0)
@@ -225,6 +231,7 @@
 ## Monitoring & Observability
 
 **LLM Observability:**
+
 - Langfuse - LLM observability
   - Package: `observability/langfuse/`
   - SDK: `langfuse` (v3.38.6)
@@ -245,6 +252,7 @@
   - Package: `observability/laminar/`
 
 **Telemetry & Traces:**
+
 - OpenTelemetry (OTEL) - Distributed tracing
   - Packages: `observability/otel-bridge/`, `observability/otel-exporter/`
   - SDK: `@opentelemetry/api` (v1.9.0)
@@ -267,6 +275,7 @@
 ## Message Queue & Pub/Sub
 
 **Event Distribution:**
+
 - Google Cloud Pub/Sub
   - Package: `pubsub/google-cloud-pubsub/`
   - Distributed message queuing
@@ -274,6 +283,7 @@
 ## CI/CD & Deployment
 
 **Hosting Platforms:**
+
 - Vercel
   - Deployer: `deployers/vercel/`
   - Functions deployment, edge runtime support
@@ -292,12 +302,14 @@
   - Containerized deployment
 
 **CI Pipeline:**
+
 - GitHub Actions (via `.github/workflows/`)
 - Changesets for versioning and publishing
 
 ## Server Adapters
 
 **Framework Adapters:**
+
 - Express - Traditional Node.js framework
   - Adapter: `server-adapters/express/`
   - Integration for routing and middleware
@@ -315,6 +327,7 @@
 ## Environment Configuration
 
 **Required env vars:**
+
 - LLM API Keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`
 - Database: `DATABASE_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
 - Voice/Speech: `ELEVENLABS_API_KEY`, `DEEPGRAM_API_KEY`
@@ -322,6 +335,7 @@
 - Observability: `LANGFUSE_SECRET_KEY`, `LANGFUSE_PUBLIC_KEY`, `SENTRY_DSN`
 
 **Secrets location:**
+
 - Local development: `.env` file (not committed)
 - CI: GitHub repository secrets
 - Deployment: Platform-specific secret management (Vercel, Netlify, Cloudflare, etc.)
@@ -329,17 +343,20 @@
 ## Webhook & Callback Integration
 
 **Incoming Webhooks:**
+
 - Voice callbacks from speech services
 - Auth provider callbacks (OAuth redirects)
 - LLM provider events (usage, errors)
 
 **Outgoing Webhooks:**
+
 - Workflow callbacks to user applications
 - Event notifications via configured endpoints
 
 ## Model Context Protocol (MCP)
 
 **MCP Integration:**
+
 - SDK: `@modelcontextprotocol/sdk` (v1.17.5)
 - Package: `packages/mcp/`
 - Enables external tool integration via standardized protocol
@@ -347,14 +364,16 @@
 ## Utilities & Dependencies
 
 **Content Processing:**
+
 - `js-tiktoken` - Token counting for cost estimation and context management
 - `node-html-better-parser` - HTML parsing for web content
 - RAG content processing in `packages/rag/`
 
 **Testing Utilities:**
+
 - MSW (Mock Service Worker) - HTTP request mocking for integration tests
 - Vitest environment: jsdom available for DOM testing
 
 ---
 
-*Integration audit: 2026-01-23*
+_Integration audit: 2026-01-23_

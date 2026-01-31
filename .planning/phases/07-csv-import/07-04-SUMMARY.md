@@ -29,11 +29,11 @@ key-files:
     - packages/playground-ui/src/domains/datasets/index.ts
 
 key-decisions:
-  - "Import CSV button uses outline variant to distinguish from Add Item primary action"
-  - "Button only renders when onImportClick prop provided"
+  - 'Import CSV button uses outline variant to distinguish from Add Item primary action'
+  - 'Button only renders when onImportClick prop provided'
 
 patterns-established:
-  - "Optional action props: only render UI when callback provided"
+  - 'Optional action props: only render UI when callback provided'
 
 # Metrics
 duration: 2min
@@ -95,5 +95,6 @@ None - no external service configuration required.
 - Ready for end-to-end testing or additional polish
 
 ---
-*Phase: 07-csv-import*
-*Completed: 2026-01-27*
+
+_Phase: 07-csv-import_
+_Completed: 2026-01-27_

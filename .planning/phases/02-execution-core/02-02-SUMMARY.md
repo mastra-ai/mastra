@@ -5,13 +5,13 @@ subsystem: storage
 tags: [runs, in-memory, storage-domain]
 
 dependency_graph:
-  requires: ["02-01"]
-  provides: ["RunsInMemory", "runs-domain-exports"]
-  affects: ["02-03"]
+  requires: ['02-01']
+  provides: ['RunsInMemory', 'runs-domain-exports']
+  affects: ['02-03']
 
 tech_stack:
   added: []
-  patterns: ["in-memory-storage-adapter", "domain-re-export"]
+  patterns: ['in-memory-storage-adapter', 'domain-re-export']
 
 key_files:
   created:
@@ -23,8 +23,8 @@ key_files:
 decisions: []
 
 metrics:
-  duration: "2 min"
-  completed: "2026-01-24"
+  duration: '2 min'
+  completed: '2026-01-24'
 ---
 
 # Phase 02 Plan 02: RunsInMemory Implementation Summary
@@ -42,6 +42,7 @@ In-memory storage adapter for run lifecycle tracking using shared InMemoryDB pat
 Implements all 9 abstract methods from RunsStorage:
 
 **Run Lifecycle:**
+
 - `createRun` - Creates run with status='pending', succeededCount=0, failedCount=0
 - `updateRun` - Updates status and counts
 - `getRunById` - Lookup by ID
@@ -49,6 +50,7 @@ Implements all 9 abstract methods from RunsStorage:
 - `deleteRun` - Deletes run and associated results
 
 **Results (Per-Item):**
+
 - `addResult` - Stores per-item execution result
 - `getResultById` - Lookup by ID
 - `listResults` - Paginated listing filtered by runId
@@ -72,10 +74,10 @@ Implements all 9 abstract methods from RunsStorage:
 
 ## Commits
 
-| Hash | Description |
-|------|-------------|
+| Hash       | Description                                         |
+| ---------- | --------------------------------------------------- |
 | 9c9cf1a54a | feat(02-02): implement RunsInMemory storage adapter |
-| fc7a095389 | feat(02-02): wire up RunsStorage domain exports |
+| fc7a095389 | feat(02-02): wire up RunsStorage domain exports     |
 
 ---
 

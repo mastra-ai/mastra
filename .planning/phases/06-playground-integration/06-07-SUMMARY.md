@@ -31,12 +31,12 @@ key-files:
     - packages/playground/src/pages/datasets/dataset/index.tsx
 
 key-decisions:
-  - "Item delete uses inline AlertDialog in ItemsList (matches chat-threads pattern)"
-  - "Edit dialogs use useEffect to sync form state when props change"
+  - 'Item delete uses inline AlertDialog in ItemsList (matches chat-threads pattern)'
+  - 'Edit dialogs use useEffect to sync form state when props change'
 
 patterns-established:
-  - "AlertDialog.* subcomponents for destructive action confirmation"
-  - "onEditItem/onDeleteItem callbacks passed through component hierarchy"
+  - 'AlertDialog.* subcomponents for destructive action confirmation'
+  - 'onEditItem/onDeleteItem callbacks passed through component hierarchy'
 
 # Metrics
 duration: 4min
@@ -103,5 +103,6 @@ None - no external service configuration required.
 - Ready for UAT re-verification
 
 ---
-*Phase: 06-playground-integration*
-*Completed: 2026-01-26*
+
+_Phase: 06-playground-integration_
+_Completed: 2026-01-26_

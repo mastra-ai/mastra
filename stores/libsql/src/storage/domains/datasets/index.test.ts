@@ -168,9 +168,7 @@ describe('DatasetsLibSQL', () => {
 
     it('updateItem throws for non-existent item', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      await expect(
-        storage.updateItem({ id: 'non-existent', datasetId: dataset.id, input: {} }),
-      ).rejects.toThrow();
+      await expect(storage.updateItem({ id: 'non-existent', datasetId: dataset.id, input: {} })).rejects.toThrow();
     });
 
     it('updateItem throws when item does not belong to dataset', async () => {
@@ -178,9 +176,7 @@ describe('DatasetsLibSQL', () => {
       const dataset2 = await storage.createDataset({ name: 'ds2' });
       const item = await storage.addItem({ datasetId: dataset1.id, input: {} });
 
-      await expect(
-        storage.updateItem({ id: item.id, datasetId: dataset2.id, input: {} }),
-      ).rejects.toThrow();
+      await expect(storage.updateItem({ id: item.id, datasetId: dataset2.id, input: {} })).rejects.toThrow();
     });
 
     it('deleteItem removes item', async () => {

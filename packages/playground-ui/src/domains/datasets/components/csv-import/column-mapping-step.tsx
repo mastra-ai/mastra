@@ -95,7 +95,10 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                               ${snapshot.isDragging ? 'shadow-lg ring-2 ring-accent1/30' : 'hover:bg-surface3'}
                             `}
                           >
-                            <span {...provided.dragHandleProps} className="text-neutral4 cursor-grab active:cursor-grabbing">
+                            <span
+                              {...provided.dragHandleProps}
+                              className="text-neutral4 cursor-grab active:cursor-grabbing"
+                            >
                               <Icon>
                                 <GripVertical className="h-3.5 w-3.5" />
                               </Icon>
@@ -115,9 +118,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
         })}
 
         {/* Validation message */}
-        {!inputHasColumns && (
-          <div className="text-sm text-warning">At least one column must be mapped to Input</div>
-        )}
+        {!inputHasColumns && <div className="text-sm text-warning">At least one column must be mapped to Input</div>}
       </div>
     </DragDropContext>
   );

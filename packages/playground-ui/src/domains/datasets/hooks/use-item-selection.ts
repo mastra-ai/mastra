@@ -25,7 +25,7 @@ export function useItemSelection(): ItemSelectionState {
 
   const toggle = useCallback(
     (id: string, shiftKey: boolean, allIds: string[]) => {
-      setSelectedIds((prev) => {
+      setSelectedIds(prev => {
         const next = new Set(prev);
 
         if (shiftKey && lastClickedId !== null) {

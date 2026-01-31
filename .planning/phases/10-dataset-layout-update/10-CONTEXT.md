@@ -14,12 +14,14 @@ Redesign the DatasetDetail page layout: master-detail pattern for item viewing, 
 ## Implementation Decisions
 
 ### Page Layout
+
 - CSS Grid with two rows: `auto` (header) + `1fr` (content)
 - Header and Tabs remain fixed at top
 - Tab content area scrolls independently
 - Max-width increases from 50rem to 100rem when detail panel opens
 
 ### Header Structure
+
 - Flexbox horizontal layout, `justify-between`, `items-start`
 - Left side: Dataset name (`text-xl`/`text-2xl`, `font-semibold`) + description below (`text-sm`, `text-muted-foreground`)
 - Right side: `...` menu button + "Run Experiment" button (outline variant)
@@ -29,10 +31,12 @@ Redesign the DatasetDetail page layout: master-detail pattern for item viewing, 
   - Delete Dataset
 
 ### Tabs
+
 - Two tabs: "Items" (default active) and "Runs"
 - Existing implementation unchanged
 
 ### Items Tab - List View (no item selected)
+
 - Single column, full width
 - Toolbar above list with:
   - Split button (primary): "+ New Item" main action, dropdown with:
@@ -46,6 +50,7 @@ Redesign the DatasetDetail page layout: master-detail pattern for item viewing, 
 - EntryList stays as currently implemented (4 columns: INPUT, EXPECTED OUTPUT, METADATA, CREATED AT)
 
 ### Items Tab - Master-Detail View (item selected)
+
 - Two column layout when item is clicked
 - Left column (~40-50%): Toolbar + compressed item list
 - Right column (~50-60%): Item toolbar + item details
@@ -53,6 +58,7 @@ Redesign the DatasetDetail page layout: master-detail pattern for item viewing, 
 - Smooth transition/animation when opening detail panel
 
 ### Item Detail Toolbar (right column)
+
 - Left side: Previous/Next navigation buttons (outline variant, disabled at boundaries)
 - Right side: Edit split button
   - Main action: "Edit" (switches to edit mode)
@@ -61,12 +67,14 @@ Redesign the DatasetDetail page layout: master-detail pattern for item viewing, 
     - Duplicate Item
 
 ### Item Detail Content
+
 - Item ID as heading
 - Created at / Updated at metadata
 - Sections: INPUT, EXPECTED OUTPUT, METADATA (each with label + content)
 - Content displayed read-only by default
 
 ### Split Button Component
+
 - New reusable component
 - Visual: Label section | Chevron section with divider
 - Behavior: Label click = primary action, chevron click = dropdown
@@ -74,6 +82,7 @@ Redesign the DatasetDetail page layout: master-detail pattern for item viewing, 
 - States: default, hover (individual sides), active, dropdown open
 
 ### Claude's Discretion
+
 - Exact column width ratios in master-detail
 - Transition/animation timing and easing
 - Split button hover state details (whole button vs individual sides)
@@ -105,5 +114,5 @@ Redesign the DatasetDetail page layout: master-detail pattern for item viewing, 
 
 ---
 
-*Phase: 10-dataset-layout-update*
-*Context gathered: 2026-01-30*
+_Phase: 10-dataset-layout-update_
+_Context gathered: 2026-01-30_

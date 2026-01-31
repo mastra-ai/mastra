@@ -29,11 +29,11 @@ key-files:
     - packages/playground-ui/src/domains/datasets/index.ts
 
 key-decisions:
-  - "Sequential item copying with progress - simpler than batch, shows user feedback"
-  - "Disable dialog close during creation - prevents partial state"
+  - 'Sequential item copying with progress - simpler than batch, shows user feedback'
+  - 'Disable dialog close during creation - prevents partial state'
 
 patterns-established:
-  - "Progress dialog: isCreating + progress state, conditional progress bar"
+  - 'Progress dialog: isCreating + progress state, conditional progress bar'
 
 # Metrics
 duration: 3min
@@ -93,5 +93,6 @@ None - no external service configuration required.
 - Needs ActionsMenu to add "Create Dataset from Items" option
 
 ---
-*Phase: 08-item-selection-actions*
-*Completed: 2026-01-27*
+
+_Phase: 08-item-selection-actions_
+_Completed: 2026-01-27_

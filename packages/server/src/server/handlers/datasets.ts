@@ -77,7 +77,11 @@ export const CREATE_DATASET_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
-      const { name, description, metadata } = params as { name: string; description?: string; metadata?: Record<string, unknown> };
+      const { name, description, metadata } = params as {
+        name: string;
+        description?: string;
+        metadata?: Record<string, unknown>;
+      };
 
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
       if (!datasetsStore) {
@@ -134,7 +138,11 @@ export const UPDATE_DATASET_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
-      const { name, description, metadata } = params as { name?: string; description?: string; metadata?: Record<string, unknown> };
+      const { name, description, metadata } = params as {
+        name?: string;
+        description?: string;
+        metadata?: Record<string, unknown>;
+      };
 
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
       if (!datasetsStore) {
@@ -248,7 +256,11 @@ export const ADD_ITEM_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
-      const { input, expectedOutput, context } = params as { input: unknown; expectedOutput?: unknown; context?: Record<string, unknown> };
+      const { input, expectedOutput, context } = params as {
+        input: unknown;
+        expectedOutput?: unknown;
+        context?: Record<string, unknown>;
+      };
 
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
       if (!datasetsStore) {
@@ -317,7 +329,11 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     try {
-      const { input, expectedOutput, context } = params as { input?: unknown; expectedOutput?: unknown; context?: Record<string, unknown> };
+      const { input, expectedOutput, context } = params as {
+        input?: unknown;
+        expectedOutput?: unknown;
+        context?: Record<string, unknown>;
+      };
 
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
       if (!datasetsStore) {
@@ -435,7 +451,8 @@ export const TRIGGER_RUN_ROUTE = createRoute({
   bodySchema: triggerRunBodySchema,
   responseSchema: runSummaryResponseSchema,
   summary: 'Trigger a new run',
-  description: 'Triggers a new run of the dataset against the specified target. Returns immediately with pending status; execution happens in background.',
+  description:
+    'Triggers a new run of the dataset against the specified target. Returns immediately with pending status; execution happens in background.',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
@@ -473,7 +490,9 @@ export const TRIGGER_RUN_ROUTE = createRoute({
       });
 
       if (items.length === 0) {
-        throw new HTTPException(400, { message: `No items in dataset ${datasetId} at version ${datasetVersion.toISOString()}` });
+        throw new HTTPException(400, {
+          message: `No items in dataset ${datasetId} at version ${datasetVersion.toISOString()}`,
+        });
       }
 
       // Create run record with 'pending' status BEFORE spawning execution

@@ -30,12 +30,12 @@ key-files:
     - packages/core/src/datasets/run/__tests__/runDataset.test.ts
 
 key-decisions:
-  - "Direct passthrough: item.input contains exactly what scorer expects (no field mapping)"
-  - "User structures item.input for scorer calibration: { input, output, groundTruth }"
-  - "Invalid scores (NaN, non-number) become null with console.warn"
+  - 'Direct passthrough: item.input contains exactly what scorer expects (no field mapping)'
+  - 'User structures item.input for scorer calibration: { input, output, groundTruth }'
+  - 'Invalid scores (NaN, non-number) become null with console.warn'
 
 patterns-established:
-  - "Scorer passthrough: scorer.run(item.input as any) - user controls input shape"
+  - 'Scorer passthrough: scorer.run(item.input as any) - user controls input shape'
   - "Score validation: typeof result.score === 'number' && !isNaN(result.score)"
 
 # Metrics
@@ -102,5 +102,6 @@ None - no external service configuration required.
 - Meta-scorers can evaluate scorer outputs (calibration feedback loop)
 
 ---
-*Phase: 04-scorer-targets*
-*Completed: 2026-01-24*
+
+_Phase: 04-scorer-targets_
+_Completed: 2026-01-24_

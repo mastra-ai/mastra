@@ -33,13 +33,13 @@ key-files:
     - packages/playground/src/App.tsx
 
 key-decisions:
-  - "Two-step target selection: type first, then specific target"
-  - "Scorer selection is optional, only shown for agent/workflow targets"
-  - "Run comparison via checkbox selection on run history (max 2)"
+  - 'Two-step target selection: type first, then specific target'
+  - 'Scorer selection is optional, only shown for agent/workflow targets'
+  - 'Run comparison via checkbox selection on run history (max 2)'
 
 patterns-established:
-  - "Slot-based header actions: runTriggerSlot pattern for flexible button rendering"
-  - "Controlled dialog with mutation state management"
+  - 'Slot-based header actions: runTriggerSlot pattern for flexible button rendering'
+  - 'Controlled dialog with mutation state management'
 
 # Metrics
 duration: 6min
@@ -93,6 +93,7 @@ completed: 2026-01-26
 ### Pre-existing Work
 
 **1. [Out of order] Task 1 components already existed**
+
 - **Found during:** Plan execution
 - **Issue:** dataset-detail.tsx, items-list.tsx, run-history.tsx were created in 06-06 commit
 - **Impact:** Task 1 had no changes to commit
@@ -117,5 +118,6 @@ completed: 2026-01-26
 - Run history allows selecting 2 runs for comparison navigation
 
 ---
-*Phase: 06-playground-integration*
-*Completed: 2026-01-26*
+
+_Phase: 06-playground-integration_
+_Completed: 2026-01-26_

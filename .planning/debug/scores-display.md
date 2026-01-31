@@ -5,6 +5,7 @@
 **Root Cause:** Scores are never fetched - the page passes an empty object `{}` as scores
 
 **Evidence:**
+
 - Line 83-84 in `packages/playground/src/pages/datasets/dataset/run/index.tsx`:
   ```typescript
   // Placeholder for scores - in real implementation, fetch from scores endpoint
@@ -18,11 +19,11 @@
 
 ## FILES INVOLVED
 
-| File | Issue |
-|------|-------|
-| `packages/playground/src/pages/datasets/dataset/run/index.tsx:83-84` | Hardcoded empty scores object |
-| `packages/playground-ui/src/domains/datasets/hooks/use-dataset-runs.ts` | Missing `useDatasetRunScores` hook |
-| `packages/playground-ui/src/domains/datasets/components/results/results-table.tsx:97` | Expects scores keyed by itemId |
+| File                                                                                  | Issue                              |
+| ------------------------------------------------------------------------------------- | ---------------------------------- |
+| `packages/playground/src/pages/datasets/dataset/run/index.tsx:83-84`                  | Hardcoded empty scores object      |
+| `packages/playground-ui/src/domains/datasets/hooks/use-dataset-runs.ts`               | Missing `useDatasetRunScores` hook |
+| `packages/playground-ui/src/domains/datasets/components/results/results-table.tsx:97` | Expects scores keyed by itemId     |
 
 ---
 

@@ -94,11 +94,7 @@ export function ResultsTable({ results, isLoading }: ResultsTableProps) {
   }
 
   if (results.length === 0) {
-    return (
-      <div className="text-neutral4 text-sm text-center py-8">
-        No results yet
-      </div>
-    );
+    return <div className="text-neutral4 text-sm text-center py-8">No results yet</div>;
   }
 
   return (
@@ -181,12 +177,24 @@ function ResultsTableSkeleton() {
       <Tbody>
         {Array.from({ length: 5 }).map((_, i) => (
           <Row key={i}>
-            <Cell><Skeleton className="h-4 w-24" /></Cell>
-            <Cell><Skeleton className="h-4 w-32" /></Cell>
-            <Cell><Skeleton className="h-4 w-32" /></Cell>
-            <Cell><Skeleton className="h-4 w-20" /></Cell>
-            <Cell><Skeleton className="h-4 w-8" /></Cell>
-            <Cell><Skeleton className="h-4 w-24" /></Cell>
+            <Cell>
+              <Skeleton className="h-4 w-24" />
+            </Cell>
+            <Cell>
+              <Skeleton className="h-4 w-32" />
+            </Cell>
+            <Cell>
+              <Skeleton className="h-4 w-32" />
+            </Cell>
+            <Cell>
+              <Skeleton className="h-4 w-20" />
+            </Cell>
+            <Cell>
+              <Skeleton className="h-4 w-8" />
+            </Cell>
+            <Cell>
+              <Skeleton className="h-4 w-24" />
+            </Cell>
           </Row>
         ))}
       </Tbody>
@@ -206,4 +214,3 @@ function truncate(str: string, max: number): string {
   if (str.length <= max) return str;
   return str.slice(0, max - 1) + '...';
 }
-

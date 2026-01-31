@@ -7,6 +7,7 @@
 **Overall:** Layered plugin architecture with central orchestration hub
 
 **Key Characteristics:**
+
 - Central `Mastra` class as dependency injection container and configuration hub
 - Agent-based primary AI interaction abstraction with message state management
 - Pluggable storage backends with standardized domain interfaces (workflows, memory, scores, agents)
@@ -17,6 +18,7 @@
 ## Layers
 
 **Orchestration Layer:**
+
 - Purpose: Central configuration and dependency management
 - Location: `packages/core/src/mastra/index.ts`, `packages/core/src/mastra/`
 - Contains: `Mastra` class with agent/workflow/storage registration, hook system, logging configuration
@@ -24,6 +26,7 @@
 - Used by: Application entry point; consumed by all agents and workflows
 
 **Agent Layer:**
+
 - Purpose: AI interaction abstraction with tool-loop agentic pattern
 - Location: `packages/core/src/agent/`
 - Contains: `Agent` class, `MessageList` (message state management), message saving queue, TripWire (abort/retry mechanism)
@@ -31,6 +34,7 @@
 - Used by: Direct client calls, workflows as steps, tool-loop agent network
 
 **Workflow Engine:**
+
 - Purpose: Step-based execution with type-safe composition
 - Location: `packages/core/src/workflows/`
 - Contains: `Workflow` class, `Step` creation, execution engine (default and custom), event streaming, suspend/resume
@@ -38,6 +42,7 @@
 - Used by: Application orchestration, agent step definitions, processor workflows
 
 **Tool System:**
+
 - Purpose: Unified tool interface and composition
 - Location: `packages/core/src/tools/`
 - Contains: `Tool` class, tool validation, tool execution context
@@ -45,6 +50,7 @@
 - Used by: Agents (dynamic composition), workflows, LLM calls
 
 **Message Processing Pipeline:**
+
 - Purpose: Transform messages/chunks at agent execution pipeline stages
 - Location: `packages/core/src/processors/`
 - Contains: `Processor` interface with stage-specific methods (processInput, processInputStep, processOutputStream, processOutputStep, processOutputResult), processor runner, memory processors
@@ -52,6 +58,7 @@
 - Used by: Agent execution flow at each pipeline stage
 
 **Storage Layer:**
+
 - Purpose: Unified data persistence with pluggable backends
 - Location: `packages/core/src/storage/`
 - Contains: `MastraCompositeStore` base class, domain interfaces (WorkflowsStorage, MemoryStorage, ScoresStorage, AgentsStorage, ObservabilityStorage)
@@ -59,6 +66,7 @@
 - Used by: Mastra class, agents, workflows, memory, run tracking
 
 **Memory System:**
+
 - Purpose: Conversation persistence and semantic recall
 - Location: `packages/core/src/memory/`
 - Contains: `MastraMemory` class, memory processors (MessageHistory, WorkingMemory, SemanticRecall)
@@ -66,6 +74,7 @@
 - Used by: Agents for conversation history, semantic search
 
 **Vector Store Layer:**
+
 - Purpose: Semantic search and embedding storage
 - Location: `packages/core/src/vector/`
 - Contains: `MastraVector` interface, filter system for semantic queries
@@ -73,6 +82,7 @@
 - Used by: Memory system for semantic recall, RAG operations
 
 **LLM Integration:**
+
 - Purpose: Model gateway and provider abstraction
 - Location: `packages/core/src/llm/`
 - Contains: Provider registry, model router, gateway support (Netlify, Azure OpenAI, models.dev)
@@ -80,6 +90,7 @@
 - Used by: Agents, memory, vector stores
 
 **Request Context:**
+
 - Purpose: Request-scoped state and security boundaries
 - Location: `packages/core/src/request-context/`
 - Contains: `RequestContext` generic container with set/get/has/delete operations
@@ -87,6 +98,7 @@
 - Used by: Server adapters, agents, workflows for threading/auth
 
 **Server Integration:**
+
 - Purpose: HTTP framework adapters
 - Location: `packages/core/src/server/`, `server-adapters/`
 - Contains: Base server interface, middleware support, context management
@@ -136,46 +148,54 @@
 ## Key Abstractions
 
 **Mastra Class:**
+
 - Purpose: Central hub for configuration, dependency registration, and runtime access
 - Location: `packages/core/src/mastra/index.ts`
 - Pattern: Service locator + DI container
 - Registered items: agents, workflows, tools, vectors, memory, processors, scorers, servers, gateways
 
 **Agent Class:**
+
 - Purpose: Autonomous AI system with tool execution and state management
 - Location: `packages/core/src/agent/agent.ts`
 - Pattern: Command executor with pipeline stages
 - Execution methods: `generate()` (single response), `stream()` (streaming response), `network()` (multi-agent)
 
 **Workflow Class:**
+
 - Purpose: Type-safe, composable task orchestration
 - Location: `packages/core/src/workflows/workflow.ts`
 - Pattern: Graph-based step execution with type propagation
 - Supports: Branching, looping, agent integration, error handling
 
 **Step Creation:**
+
 - Purpose: Wrap tasks (agents, tools, custom functions) as workflow steps
 - Location: `packages/core/src/workflows/step.ts`
 - Variants: Agent steps, tool steps, custom steps with I/O schemas
 
 **Processor Interface:**
+
 - Purpose: Transformation hook at specific pipeline stages
 - Location: `packages/core/src/processors/index.ts`
 - Stages: processInput, processInputStep, processOutputStream, processOutputStep, processOutputResult
 - Pattern: Chain of responsibility with abort/retry capability via TripWire
 
 **Storage Domains:**
+
 - Purpose: Separate concerns by data type with pluggable implementations
 - Types: WorkflowsStorage, MemoryStorage, ScoresStorage, AgentsStorage, ObservabilityStorage
 - Pattern: Interface-based contracts; implementations in `stores/` (pg, libsql, mongodb, chroma, etc.)
 
 **Message List:**
+
 - Purpose: Message state container with source tracking and deferred persistence
 - Location: `packages/core/src/agent/message-list/`
 - Methods: append, search by role/source, get new messages since last save
 - Integration: Saves asynchronously via SaveQueueManager
 
 **Vector Store:**
+
 - Purpose: Semantic search abstraction
 - Location: `packages/core/src/vector/`
 - Methods: Create embeddings, query with filters, delete
@@ -184,26 +204,31 @@
 ## Entry Points
 
 **Mastra Application:**
+
 - Location: Application root (user code)
 - Triggers: Application startup
 - Responsibilities: Create Mastra instance, register agents/workflows/storage, expose via server
 
 **Agent Execution:**
+
 - Location: `packages/core/src/agent/agent.ts` (methods: generate, stream, network)
 - Triggers: Client request to agent endpoint
 - Responsibilities: Initialize context, run message pipeline, save state, return result
 
 **Workflow Execution:**
+
 - Location: `packages/core/src/workflows/workflow.ts` (method: execute)
 - Triggers: Manual call or agent step execution
 - Responsibilities: Execute steps in order, handle branching, persist run state
 
 **Server Middleware:**
+
 - Location: `server-adapters/` (Express, Hono, Fastify, Koa)
 - Triggers: HTTP request
 - Responsibilities: Extract auth context, set RequestContext, inject into Mastra
 
 **LLM Call:**
+
 - Location: `packages/core/src/llm/` (generateText, streamText, etc.)
 - Triggers: Agent/workflow needs LLM response
 - Responsibilities: Resolve model, run processors, call LLM, handle streaming
@@ -213,17 +238,20 @@
 **Strategy:** Typed error domain hierarchy with categorization
 
 **Error Structure:**
+
 - Location: `packages/core/src/error/`
 - Properties: id (unique), domain (MASTRA, INTEGRATION, LLM, STORAGE, etc.), category (USER, SYSTEM, INTEGRATION), text, details
 - Error IDs: Uppercase format: `MASTRA_AGENT_GENERATION_FAILED`, `STORAGE_SAVE_ERROR`, etc.
 
 **Patterns:**
+
 - User errors (bad input): `ErrorCategory.USER` with HTTP 400
 - System errors (internal failures): `ErrorCategory.SYSTEM` with HTTP 500
 - Integration errors (external API): `ErrorCategory.INTEGRATION` with specific status
 - TripWire mechanism for processor abort/retry: `context.abort(reason, { retry: true })`
 
 **Recovery:**
+
 - Processor retry on TripWire abort with `retry: true` flag
 - Storage fallback to default domain if specific domain unavailable
 - Tool execution failures bubble to agent for retry or completion
@@ -231,24 +259,28 @@
 ## Cross-Cutting Concerns
 
 **Logging:**
+
 - Framework: Configurable logger (ConsoleLogger default, Pino, custom)
 - Pattern: Registered via Mastra config, injected via `__setLogger()` on components
 - Levels: DEBUG, INFO, WARN, ERROR configured by environment
 - Location: `packages/core/src/logger/`
 
 **Validation:**
+
 - Framework: Zod schemas for inputs/outputs at tool, step, workflow boundaries
 - Pattern: Validation errors caught at execution time with detailed messages
 - Schema compatibility: `@mastra/schema-compat` for AI SDK v4/v5 interop
 - Location: `packages/core/src/tools/validation.ts`, agent schema handling
 
 **Authentication:**
+
 - Pattern: RequestContext middleware hook for setting `MASTRA_RESOURCE_ID_KEY` and `MASTRA_THREAD_ID_KEY`
 - Security: Server-set context values take precedence over client-provided
 - Scope: Resource isolation via resourceId, thread isolation via threadId
 - Location: Server adapters integrate with Mastra RequestContext
 
 **Observability:**
+
 - Framework: Tracing and span export via `@mastra/observability` (optional)
 - Pattern: Request-scoped tracing context passed through execution
 - Entities: Agents, workflows, LLM calls tracked as spans
@@ -256,16 +288,18 @@
 - Location: `packages/core/src/observability/`
 
 **Streaming:**
+
 - Format: ChunkType union supporting text, tool calls, tool results, deltas
 - Pattern: Processors can filter/transform chunks in `processOutputStream()`
 - Serialization: WorkflowRunOutput for JSON serialization of events
 - Location: `packages/core/src/stream/`
 
 **Caching:**
+
 - Purpose: Server-side cache for tool results or LLM responses
 - Implementation: InMemoryServerCache (default), pluggable via Mastra config
 - Location: `packages/core/src/cache/`
 
 ---
 
-*Architecture analysis: 2026-01-23*
+_Architecture analysis: 2026-01-23_

@@ -94,12 +94,7 @@ export function RunHistory({ runs, isLoading, datasetId }: RunHistoryProps) {
               ? '1 run selected — select one more to compare'
               : '2 runs selected'}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!canCompare}
-          onClick={handleCompare}
-        >
+        <Button variant="outline" size="sm" disabled={!canCompare} onClick={handleCompare}>
           <GitCompare className="w-4 h-4" />
           Compare
         </Button>
@@ -132,17 +127,12 @@ export function RunHistory({ runs, isLoading, datasetId }: RunHistoryProps) {
                     />
                   </Cell>
                   <Cell>
-                    <Badge variant={statusVariantMap[status]}>
-                      {statusLabelMap[status]}
-                    </Badge>
+                    <Badge variant={statusVariantMap[status]}>{statusLabelMap[status]}</Badge>
                   </Cell>
                   <Cell className="text-ui-sm text-neutral4">
-                    <span className="text-neutral3">{run.targetType}:</span>{' '}
-                    {run.targetId}
+                    <span className="text-neutral3">{run.targetType}:</span> {run.targetId}
                   </Cell>
-                  <Cell className="text-ui-sm text-neutral3">
-                    {formatDate(run.createdAt)}
-                  </Cell>
+                  <Cell className="text-ui-sm text-neutral3">{formatDate(run.createdAt)}</Cell>
                 </Row>
               );
             })}

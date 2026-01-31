@@ -14,6 +14,7 @@ Run datasets against targets with automatic scoring and result persistence. User
 ## Implementation Decisions
 
 ### Run triggering API
+
 - Entry point: `mastra.datasets.run()` — needs access to registries + storage
 - Dataset version: Default to latest; optional `version` param to pin specific version
 - Target identification: Explicit `targetType` + `targetId` (not auto-detect)
@@ -31,6 +32,7 @@ Run datasets against targets with automatic scoring and result persistence. User
 - Deferred: Custom run metadata (commit SHA, tags) — add in later phase
 
 ### Result structure
+
 - Fields per item result:
   - `output` — raw from target (not normalized)
   - `latency` — execution time in ms
@@ -44,6 +46,7 @@ Run datasets against targets with automatic scoring and result persistence. User
 - Output format: Raw from target — no normalization
 
 ### Scoring integration
+
 - Timing: Inline after each item (score immediately after target returns)
 - Scorer param: Single `scorers` array accepting instances OR string IDs
   - `scorers: [myScorer, 'stored-accuracy-id']`
@@ -56,6 +59,7 @@ Run datasets against targets with automatic scoring and result persistence. User
 - Scoring errors: Skip scorer, log error — don't fail the item
 
 ### Status & progress
+
 - Run states: `pending` | `running` | `completed` | `failed`
 - Failure semantics: "Completed" if any items succeed
   - Partial failure still marked completed; error count in summary
@@ -65,6 +69,7 @@ Run datasets against targets with automatic scoring and result persistence. User
   - Detailed analytics (per-scorer aggregation, improvements/regressions) in Phase 5
 
 ### Claude's Discretion
+
 - Default maxConcurrency value (recommend ~5)
 - Progress update frequency during async runs
 - Exact retry behavior if network errors occur
@@ -93,5 +98,5 @@ Run datasets against targets with automatic scoring and result persistence. User
 
 ---
 
-*Phase: 02-execution-core*
-*Context gathered: 2026-01-24*
+_Phase: 02-execution-core_
+_Context gathered: 2026-01-24_

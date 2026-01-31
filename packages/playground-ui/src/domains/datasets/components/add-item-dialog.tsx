@@ -79,12 +79,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="item-input">Input (JSON) *</Label>
-              <CodeEditor
-                value={input}
-                onChange={setInput}
-                showCopyButton={false}
-                className="min-h-[120px]"
-              />
+              <CodeEditor value={input} onChange={setInput} showCopyButton={false} className="min-h-[120px]" />
             </div>
 
             <div className="space-y-2">

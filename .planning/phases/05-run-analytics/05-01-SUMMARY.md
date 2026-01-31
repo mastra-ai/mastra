@@ -20,14 +20,14 @@ key-files:
     - packages/core/src/datasets/run/index.ts
 decisions:
   - id: nested-by-scorer
-    choice: "Scorers nested: { scorers: { accuracy: {...} } }"
-    rationale: "Scalable structure per CONTEXT.md"
+    choice: 'Scorers nested: { scorers: { accuracy: {...} } }'
+    rationale: 'Scalable structure per CONTEXT.md'
   - id: three-metrics
-    choice: "errorRate, passRate, avgScore per scorer"
-    rationale: "Basic stats sufficient for v1"
+    choice: 'errorRate, passRate, avgScore per scorer'
+    rationale: 'Basic stats sufficient for v1'
   - id: default-threshold
-    choice: "Default threshold: 0, higher-is-better"
-    rationale: "Any negative delta = regression unless configured"
+    choice: 'Default threshold: 0, higher-is-better'
+    rationale: 'Any negative delta = regression unless configured'
 metrics:
   duration: 4 min
   completed: 2026-01-25
@@ -40,6 +40,7 @@ Pure computation layer for comparing runs and detecting score regressions via th
 ## What Was Built
 
 ### Types (types.ts)
+
 - `ScorerStats`: errorRate, passRate, avgScore, counts
 - `ScorerComparison`: statsA, statsB, delta, regressed flag
 - `ItemComparison`: per-item score diffs by scorer
@@ -47,11 +48,13 @@ Pure computation layer for comparing runs and detecting score regressions via th
 - `CompareRunsConfig`: runIdA, runIdB, per-scorer thresholds
 
 ### Aggregation (aggregate.ts)
+
 - `computeMean()`: arithmetic mean with empty handling
 - `computeScorerStats()`: compute all metrics from ScoreRowData[]
 - `isRegression()`: threshold + direction based detection
 
 ### Comparison (compare.ts)
+
 - `compareRuns()`: main function, loads from storage, returns ComparisonResult
 - Handles version mismatch with warning
 - Groups scores by scorer/item for efficient lookup
@@ -59,12 +62,12 @@ Pure computation layer for comparing runs and detecting score regressions via th
 
 ## Commits
 
-| Hash | Message |
-|------|---------|
-| 8f71e35152 | feat(05-01): add run analytics types |
-| 14039c8fa3 | feat(05-01): add aggregation helpers |
+| Hash       | Message                                     |
+| ---------- | ------------------------------------------- |
+| 8f71e35152 | feat(05-01): add run analytics types        |
+| 14039c8fa3 | feat(05-01): add aggregation helpers        |
 | 8e8ff7498c | feat(05-01): implement compareRuns function |
-| 206ea373c9 | feat(05-01): wire analytics exports |
+| 206ea373c9 | feat(05-01): wire analytics exports         |
 
 ## Deviations from Plan
 
@@ -89,6 +92,7 @@ grep compareRuns packages/core/src/datasets/  # Found in exports
 ## Next Phase Readiness
 
 Phase 06 (Playground Integration) can now use:
+
 - `compareRuns(mastra, { runIdA, runIdB })` for side-by-side comparison
 - `result.hasRegression` for CI quick check
 - `result.scorers[id].delta` for per-scorer drilling

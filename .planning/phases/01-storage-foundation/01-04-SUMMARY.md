@@ -30,12 +30,12 @@ key-files:
     - stores/libsql/src/storage/domains/datasets/index.ts
 
 key-decisions:
-  - "0-indexed pagination matches existing storage patterns"
-  - "Snapshot semantics filter items by item.version <= requested version"
+  - '0-indexed pagination matches existing storage patterns'
+  - 'Snapshot semantics filter items by item.version <= requested version'
 
 patterns-established:
-  - "Dataset tests verify Date instance for version fields"
-  - "JSON roundtrip tests for input/expectedOutput/context"
+  - 'Dataset tests verify Date instance for version fields'
+  - 'JSON roundtrip tests for input/expectedOutput/context'
 
 # Metrics
 duration: 7min
@@ -114,5 +114,6 @@ None - no external service configuration required.
 - Ready for experiment runner implementation (Phase 02)
 
 ---
-*Phase: 01-storage-foundation*
-*Completed: 2026-01-24*
+
+_Phase: 01-storage-foundation_
+_Completed: 2026-01-24_

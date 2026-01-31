@@ -39,9 +39,9 @@ started: Initial implementation - never had navigation
 ## Resolution
 
 root_cause: |
-  RunHistory component Row onClick handler (line 125) only calls toggleRunSelection().
-  No navigation logic exists - clicking row should navigate to run details, but
-  current design assumes row clicks are only for comparison selection.
+RunHistory component Row onClick handler (line 125) only calls toggleRunSelection().
+No navigation logic exists - clicking row should navigate to run details, but
+current design assumes row clicks are only for comparison selection.
 
 fix: (not applied - diagnosis only)
 verification: (pending)

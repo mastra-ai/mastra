@@ -27,10 +27,7 @@ export interface ExecutionResult {
  * item.input should contain exactly what the scorer expects - direct passthrough.
  * For calibration: item.input = { input, output, groundTruth } (user structures it)
  */
-async function executeScorer(
-  scorer: MastraScorer<any, any, any, any>,
-  item: DatasetItem,
-): Promise<ExecutionResult> {
+async function executeScorer(scorer: MastraScorer<any, any, any, any>, item: DatasetItem): Promise<ExecutionResult> {
   try {
     // Direct passthrough - scorer receives item.input exactly as provided
     // User structures item.input to match scorer's expected shape (e.g., { input, output, groundTruth })

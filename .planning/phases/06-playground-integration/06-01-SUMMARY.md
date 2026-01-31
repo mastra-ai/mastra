@@ -33,13 +33,13 @@ key-files:
     - packages/server/src/server/server-adapter/routes/index.ts
 
 key-decisions:
-  - "Nested routes: runs under /datasets/:datasetId/runs for clear resource hierarchy"
-  - "successResponseSchema for delete operations (matches existing pattern)"
-  - "Validate both runIdA and runIdB belong to dataset in compare (warn if cross-dataset)"
+  - 'Nested routes: runs under /datasets/:datasetId/runs for clear resource hierarchy'
+  - 'successResponseSchema for delete operations (matches existing pattern)'
+  - 'Validate both runIdA and runIdB belong to dataset in compare (warn if cross-dataset)'
 
 patterns-established:
-  - "Dataset routes follow scores.ts createRoute pattern"
-  - "All routes use requiresAuth: true for security"
+  - 'Dataset routes follow scores.ts createRoute pattern'
+  - 'All routes use requiresAuth: true for security'
 
 # Metrics
 duration: 6min
@@ -59,6 +59,7 @@ completed: 2026-01-26
 - **Files modified:** 4
 
 ## Accomplishments
+
 - Complete CRUD API for datasets and items
 - Run triggering via POST /datasets/:datasetId/runs
 - Run comparison via POST /datasets/:datasetId/compare
@@ -73,12 +74,14 @@ Each task was committed atomically:
 3. **Task 3: Create routes and register in router** - `1846adc` (feat)
 
 ## Files Created/Modified
+
 - `packages/server/src/server/schemas/datasets.ts` - Zod schemas for all API validation
 - `packages/server/src/server/handlers/datasets.ts` - Handler functions with storage access
 - `packages/server/src/server/server-adapter/routes/datasets.ts` - Route definitions
 - `packages/server/src/server/server-adapter/routes/index.ts` - Added DATASETS_ROUTES to SERVER_ROUTES
 
 ## Decisions Made
+
 - Used successResponseSchema for DELETE responses (matches vectors pattern)
 - Nested all run routes under /datasets/:datasetId for RESTful hierarchy
 - Compare endpoint validates run ownership and adds warning if cross-dataset
@@ -88,6 +91,7 @@ Each task was committed atomically:
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 None
 
 ## User Setup Required
@@ -95,9 +99,11 @@ None
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - REST API complete, ready for playground UI integration
 - OpenAPI spec auto-generated via createRoute pattern
 
 ---
-*Phase: 06-playground-integration*
-*Completed: 2026-01-26*
+
+_Phase: 06-playground-integration_
+_Completed: 2026-01-26_

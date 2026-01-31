@@ -7,7 +7,7 @@ import type { DatasetItem } from '@mastra/client-js';
  */
 export function exportItemsToCSV(items: DatasetItem[], filename: string): void {
   // Map items to CSV rows
-  const rows = items.map((item) => ({
+  const rows = items.map(item => ({
     input: formatValue(item.input),
     expectedOutput: formatValue(item.expectedOutput),
     createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : String(item.createdAt ?? ''),

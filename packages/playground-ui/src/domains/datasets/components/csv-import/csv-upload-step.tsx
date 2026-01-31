@@ -114,9 +114,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
               <Upload className="h-8 w-8" />
             </Icon>
             <div className="flex flex-col items-center gap-1">
-              <span className="text-sm font-medium text-neutral1">
-                Click to upload or drag and drop
-              </span>
+              <span className="text-sm font-medium text-neutral1">Click to upload or drag and drop</span>
               <span className="text-xs text-neutral4">CSV files only</span>
             </div>
           </>

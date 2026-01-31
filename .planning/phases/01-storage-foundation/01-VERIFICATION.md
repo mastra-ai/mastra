@@ -17,54 +17,54 @@ re_verification: false
 
 ### Observable Truths
 
-| # | Truth | Status | Evidence |
-|---|-------|--------|----------|
-| 1 | User can create dataset with name, description, metadata | ✓ VERIFIED | createDataset() implemented in both backends, accepts all fields, tests pass |
-| 2 | User can add items with input, expectedOutput, context (any JSON) | ✓ VERIFIED | addItem() accepts unknown types, JSON roundtrip tests pass, nested objects work |
-| 3 | Dataset version increments automatically when items are added/modified | ✓ VERIFIED | addItem/updateItem/deleteItem all update dataset.version with new Date(), verified in tests |
-| 4 | Items are queryable by dataset and version | ✓ VERIFIED | listItems + getItemsByVersion implemented, snapshot semantics confirmed (item.version <= query.version) |
-| 5 | Storage works with libsql and in-memory backends (pg deferred) | ✓ VERIFIED | DatasetsInMemory (35 tests pass), DatasetsLibSQL (36 tests pass), both export from packages |
+| #   | Truth                                                                  | Status     | Evidence                                                                                                |
+| --- | ---------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------- |
+| 1   | User can create dataset with name, description, metadata               | ✓ VERIFIED | createDataset() implemented in both backends, accepts all fields, tests pass                            |
+| 2   | User can add items with input, expectedOutput, context (any JSON)      | ✓ VERIFIED | addItem() accepts unknown types, JSON roundtrip tests pass, nested objects work                         |
+| 3   | Dataset version increments automatically when items are added/modified | ✓ VERIFIED | addItem/updateItem/deleteItem all update dataset.version with new Date(), verified in tests             |
+| 4   | Items are queryable by dataset and version                             | ✓ VERIFIED | listItems + getItemsByVersion implemented, snapshot semantics confirmed (item.version <= query.version) |
+| 5   | Storage works with libsql and in-memory backends (pg deferred)         | ✓ VERIFIED | DatasetsInMemory (35 tests pass), DatasetsLibSQL (36 tests pass), both export from packages             |
 
 **Score:** 5/5 truths verified
 
 ### Required Artifacts
 
-| Artifact | Expected | Status | Details |
-|----------|----------|--------|---------|
-| `packages/core/src/storage/types.ts` | Dataset/DatasetItem types, CRUD inputs/outputs | ✓ VERIFIED | 636 lines, exports Dataset, DatasetItem, CreateDatasetInput, UpdateDatasetInput, AddDatasetItemInput, UpdateDatasetItemInput, List types |
-| `packages/core/src/storage/constants.ts` | TABLE_DATASETS, DATASETS_SCHEMA | ✓ VERIFIED | 214 lines, TABLE_DATASETS/TABLE_DATASET_ITEMS constants, schemas registered in TABLE_SCHEMAS map |
-| `packages/core/src/storage/domains/datasets/base.ts` | DatasetsStorage abstract class | ✓ VERIFIED | 47 lines, 11 abstract methods (createDataset, getDatasetById, updateDataset, deleteDataset, listDatasets, addItem, updateItem, deleteItem, listItems, getItemById, getItemsByVersion) |
-| `packages/core/src/storage/domains/datasets/inmemory.ts` | DatasetsInMemory implementation | ✓ VERIFIED | 228 lines, all methods implemented, version auto-increment on item mutations, exports from core |
-| `stores/libsql/src/storage/domains/datasets/index.ts` | DatasetsLibSQL implementation | ✓ VERIFIED | 555 lines, SQL-based implementation, timestamp comparisons, exports from libsql package |
-| `packages/core/src/storage/domains/datasets/__tests__/datasets.test.ts` | Test suite for InMemory | ✓ VERIFIED | 439 lines, 35 tests pass, covers CRUD, versioning, snapshot semantics |
-| `stores/libsql/src/storage/domains/datasets/index.test.ts` | Test suite for LibSQL | ✓ VERIFIED | 467 lines, 36 tests pass, same coverage as InMemory |
+| Artifact                                                                | Expected                                       | Status     | Details                                                                                                                                                                               |
+| ----------------------------------------------------------------------- | ---------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/storage/types.ts`                                    | Dataset/DatasetItem types, CRUD inputs/outputs | ✓ VERIFIED | 636 lines, exports Dataset, DatasetItem, CreateDatasetInput, UpdateDatasetInput, AddDatasetItemInput, UpdateDatasetItemInput, List types                                              |
+| `packages/core/src/storage/constants.ts`                                | TABLE_DATASETS, DATASETS_SCHEMA                | ✓ VERIFIED | 214 lines, TABLE_DATASETS/TABLE_DATASET_ITEMS constants, schemas registered in TABLE_SCHEMAS map                                                                                      |
+| `packages/core/src/storage/domains/datasets/base.ts`                    | DatasetsStorage abstract class                 | ✓ VERIFIED | 47 lines, 11 abstract methods (createDataset, getDatasetById, updateDataset, deleteDataset, listDatasets, addItem, updateItem, deleteItem, listItems, getItemById, getItemsByVersion) |
+| `packages/core/src/storage/domains/datasets/inmemory.ts`                | DatasetsInMemory implementation                | ✓ VERIFIED | 228 lines, all methods implemented, version auto-increment on item mutations, exports from core                                                                                       |
+| `stores/libsql/src/storage/domains/datasets/index.ts`                   | DatasetsLibSQL implementation                  | ✓ VERIFIED | 555 lines, SQL-based implementation, timestamp comparisons, exports from libsql package                                                                                               |
+| `packages/core/src/storage/domains/datasets/__tests__/datasets.test.ts` | Test suite for InMemory                        | ✓ VERIFIED | 439 lines, 35 tests pass, covers CRUD, versioning, snapshot semantics                                                                                                                 |
+| `stores/libsql/src/storage/domains/datasets/index.test.ts`              | Test suite for LibSQL                          | ✓ VERIFIED | 467 lines, 36 tests pass, same coverage as InMemory                                                                                                                                   |
 
 ### Key Link Verification
 
-| From | To | Via | Status | Details |
-|------|-----|-----|--------|---------|
-| datasets/base.ts | storage/constants.ts | imports TABLE_DATASETS | ✓ WIRED | Import exists, constants used in implementations |
-| datasets/inmemory.ts | inmemory-db.ts | uses db.datasets, db.datasetItems Maps | ✓ WIRED | Maps created in InMemoryDB class, used in all CRUD ops |
-| datasets/inmemory.ts | addItem → version update | Updates dataset.version on addItem | ✓ WIRED | Lines 105-111: sets dataset.version = now, updatedAt = now |
-| datasets/inmemory.ts | updateItem → version update | Updates dataset.version on updateItem | ✓ WIRED | Lines 142-148: sets dataset.version = now, updatedAt = now |
-| datasets/inmemory.ts | deleteItem → version update | Updates dataset.version on deleteItem | ✓ WIRED | Lines 176-182: sets dataset.version = now, updatedAt = now |
-| datasets/libsql/index.ts | addItem → version update | SQL UPDATE dataset version | ✓ WIRED | Lines 289-293: UPDATE datasets SET version = ?, updatedAt = ? |
-| datasets/libsql/index.ts | updateItem → version update | SQL UPDATE dataset version | ✓ WIRED | Similar pattern in updateItem method |
-| datasets/libsql/index.ts | deleteItem → version update | SQL UPDATE dataset version | ✓ WIRED | Similar pattern in deleteItem method |
-| storage/domains/index.ts | datasets | export * from './datasets' | ✓ WIRED | Line 10, makes DatasetsStorage available |
-| storage/base.ts | MastraCompositeStore | datasets?: DatasetsStorage | ✓ WIRED | Line 11, datasets registered in composite store interface |
-| stores/libsql/index.ts | DatasetsLibSQL | Instantiated in LibSQLStore | ✓ WIRED | Line 135: new DatasetsLibSQL(domainConfig), line 143: assigned to stores.datasets |
-| packages/core → exports | DatasetsInMemory | require('./packages/core/dist/storage') | ✓ WIRED | Verified with node: typeof DatasetsInMemory === 'function' |
-| stores/libsql → exports | DatasetsLibSQL | require('./stores/libsql/dist') | ✓ WIRED | Verified with node: typeof DatasetsLibSQL === 'function' |
+| From                     | To                          | Via                                     | Status  | Details                                                                           |
+| ------------------------ | --------------------------- | --------------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| datasets/base.ts         | storage/constants.ts        | imports TABLE_DATASETS                  | ✓ WIRED | Import exists, constants used in implementations                                  |
+| datasets/inmemory.ts     | inmemory-db.ts              | uses db.datasets, db.datasetItems Maps  | ✓ WIRED | Maps created in InMemoryDB class, used in all CRUD ops                            |
+| datasets/inmemory.ts     | addItem → version update    | Updates dataset.version on addItem      | ✓ WIRED | Lines 105-111: sets dataset.version = now, updatedAt = now                        |
+| datasets/inmemory.ts     | updateItem → version update | Updates dataset.version on updateItem   | ✓ WIRED | Lines 142-148: sets dataset.version = now, updatedAt = now                        |
+| datasets/inmemory.ts     | deleteItem → version update | Updates dataset.version on deleteItem   | ✓ WIRED | Lines 176-182: sets dataset.version = now, updatedAt = now                        |
+| datasets/libsql/index.ts | addItem → version update    | SQL UPDATE dataset version              | ✓ WIRED | Lines 289-293: UPDATE datasets SET version = ?, updatedAt = ?                     |
+| datasets/libsql/index.ts | updateItem → version update | SQL UPDATE dataset version              | ✓ WIRED | Similar pattern in updateItem method                                              |
+| datasets/libsql/index.ts | deleteItem → version update | SQL UPDATE dataset version              | ✓ WIRED | Similar pattern in deleteItem method                                              |
+| storage/domains/index.ts | datasets                    | export \* from './datasets'             | ✓ WIRED | Line 10, makes DatasetsStorage available                                          |
+| storage/base.ts          | MastraCompositeStore        | datasets?: DatasetsStorage              | ✓ WIRED | Line 11, datasets registered in composite store interface                         |
+| stores/libsql/index.ts   | DatasetsLibSQL              | Instantiated in LibSQLStore             | ✓ WIRED | Line 135: new DatasetsLibSQL(domainConfig), line 143: assigned to stores.datasets |
+| packages/core → exports  | DatasetsInMemory            | require('./packages/core/dist/storage') | ✓ WIRED | Verified with node: typeof DatasetsInMemory === 'function'                        |
+| stores/libsql → exports  | DatasetsLibSQL              | require('./stores/libsql/dist')         | ✓ WIRED | Verified with node: typeof DatasetsLibSQL === 'function'                          |
 
 ### Requirements Coverage
 
-| Requirement | Status | Blocking Issue |
-|-------------|--------|----------------|
-| STORE-01: Dataset CRUD | ✓ SATISFIED | None — create, read, update, delete all implemented and tested |
-| STORE-02: Items structure | ✓ SATISFIED | None — input (unknown), expectedOutput (unknown), context (Record) work with any JSON |
-| STORE-03: Storage domain | ✓ SATISFIED | None — DatasetsStorage follows existing pattern, registered in composite store |
-| VERS-01: Auto-versioning | ✓ SATISFIED | None — version updates to new Date() on addItem/updateItem/deleteItem, verified in tests |
+| Requirement               | Status      | Blocking Issue                                                                           |
+| ------------------------- | ----------- | ---------------------------------------------------------------------------------------- |
+| STORE-01: Dataset CRUD    | ✓ SATISFIED | None — create, read, update, delete all implemented and tested                           |
+| STORE-02: Items structure | ✓ SATISFIED | None — input (unknown), expectedOutput (unknown), context (Record) work with any JSON    |
+| STORE-03: Storage domain  | ✓ SATISFIED | None — DatasetsStorage follows existing pattern, registered in composite store           |
+| VERS-01: Auto-versioning  | ✓ SATISFIED | None — version updates to new Date() on addItem/updateItem/deleteItem, verified in tests |
 
 ### Anti-Patterns Found
 
@@ -87,6 +87,7 @@ None. All success criteria are programmatically verifiable and have been verifie
 ### Truth 1: User can create dataset with name, description, metadata
 
 **Verification:**
+
 - `createDataset(input: CreateDatasetInput)` exists in base.ts (line 32)
 - InMemory implementation (inmemory.ts lines 31-45):
   - Accepts name, description, metadata from input
@@ -106,6 +107,7 @@ None. All success criteria are programmatically verifiable and have been verifie
 ### Truth 2: User can add items with input, expectedOutput, context (any JSON)
 
 **Verification:**
+
 - `addItem(args: AddDatasetItemInput)` exists in base.ts (line 39)
 - AddDatasetItemInput type uses `unknown` for input/expectedOutput (types.ts lines 599-602)
 - InMemory implementation (inmemory.ts lines 99-126):
@@ -124,6 +126,7 @@ None. All success criteria are programmatically verifiable and have been verifie
 ### Truth 3: Dataset version increments automatically when items are added/modified
 
 **Verification:**
+
 - InMemory addItem (lines 105-111):
   ```typescript
   const now = new Date();
@@ -153,6 +156,7 @@ None. All success criteria are programmatically verifiable and have been verifie
 ### Truth 4: Items are queryable by dataset and version
 
 **Verification:**
+
 - `listItems(args: ListDatasetItemsInput)` filters by datasetId (base.ts line 42)
 - `getItemsByVersion(args: { datasetId, version })` implements snapshot semantics (base.ts line 46)
 - InMemory getItemsByVersion (inmemory.ts lines 219-227):
@@ -176,6 +180,7 @@ None. All success criteria are programmatically verifiable and have been verifie
 ### Truth 5: Storage works with libsql and in-memory backends
 
 **Verification:**
+
 - DatasetsInMemory: 35 tests pass (cd packages/core && pnpm test datasets)
 - DatasetsLibSQL: 36 tests pass (cd stores/libsql && pnpm test datasets)
 - Both export correctly:

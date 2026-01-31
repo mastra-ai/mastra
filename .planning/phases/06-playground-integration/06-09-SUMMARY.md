@@ -28,11 +28,11 @@ key-files:
     - packages/playground/src/pages/datasets/dataset/run/index.tsx
 
 key-decisions:
-  - "Group scores by entityId (itemId) for ResultsTable consumption"
-  - "Default to empty object when scores not yet loaded"
+  - 'Group scores by entityId (itemId) for ResultsTable consumption'
+  - 'Default to empty object when scores not yet loaded'
 
 patterns-established:
-  - "Score hooks transform API response to component-friendly shape"
+  - 'Score hooks transform API response to component-friendly shape'
 
 # Metrics
 duration: 2min
@@ -91,5 +91,6 @@ None - no external service configuration required.
 - Scores visible in run results for each item
 
 ---
-*Phase: 06-playground-integration*
-*Completed: 2026-01-26*
+
+_Phase: 06-playground-integration_
+_Completed: 2026-01-26_

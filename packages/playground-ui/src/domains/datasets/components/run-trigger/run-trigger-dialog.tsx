@@ -22,12 +22,7 @@ export interface RunTriggerDialogProps {
   onSuccess?: (runId: string) => void;
 }
 
-export function RunTriggerDialog({
-  datasetId,
-  open,
-  onOpenChange,
-  onSuccess,
-}: RunTriggerDialogProps) {
+export function RunTriggerDialog({ datasetId, open, onOpenChange, onSuccess }: RunTriggerDialogProps) {
   const [targetType, setTargetType] = useState<TargetType | ''>('');
   const [targetId, setTargetId] = useState<string>('');
   const [selectedScorers, setSelectedScorers] = useState<string[]>([]);
@@ -78,9 +73,7 @@ export function RunTriggerDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Run Dataset</DialogTitle>
-          <DialogDescription>
-            Execute all items in this dataset against a target.
-          </DialogDescription>
+          <DialogDescription>Execute all items in this dataset against a target.</DialogDescription>
         </DialogHeader>
 
         <DialogBody className="grid gap-6">
@@ -105,11 +98,7 @@ export function RunTriggerDialog({
           <Button variant="ghost" onClick={handleClose} disabled={isRunning}>
             Cancel
           </Button>
-          <Button
-            variant="primary"
-            onClick={handleRun}
-            disabled={!canRun || isRunning}
-          >
+          <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>
             {isRunning ? (
               <>
                 <Spinner className="w-4 h-4" />

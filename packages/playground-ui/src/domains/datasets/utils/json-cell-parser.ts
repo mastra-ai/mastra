@@ -55,12 +55,7 @@ export function parseRow(row: Record<string, unknown>): ParsedRow {
 
   for (const [key, value] of Object.entries(row)) {
     // Convert value to string for parseJSONCell (PapaParse returns strings)
-    const stringValue =
-      value === null || value === undefined
-        ? null
-        : value === ''
-          ? ''
-          : String(value);
+    const stringValue = value === null || value === undefined ? null : value === '' ? '' : String(value);
 
     const result = parseJSONCell(stringValue);
     data[key] = result.parsed;

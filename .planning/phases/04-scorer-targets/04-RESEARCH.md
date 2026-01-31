@@ -9,6 +9,7 @@
 Researched the existing codebase to understand how to implement scorer-as-target execution for dataset runs. The goal is enabling users to run datasets against scorers to calibrate LLM-as-judge evaluation against human-labeled ground truth.
 
 Key discoveries:
+
 1. **Scorer.run() interface already supports the required contract:** `scorer.run({ input, output, groundTruth })` - exactly what CONTEXT.md specified
 2. **Executor already has placeholder:** `case 'scorer':` exists in executor.ts, currently throws "not yet supported"
 3. **runScorersForItem pattern provides isolation:** Error handling for scorer execution is already solved
@@ -22,23 +23,27 @@ The implementation is straightforward - add `executeScorer()` function following
 ## Standard Stack
 
 ### Core
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| @mastra/core/evals | internal | MastraScorer, createScorer | Existing scorer infrastructure |
-| @mastra/core/datasets/run | internal | executeTarget, runScorersForItem | Existing executor pattern |
+
+| Library                   | Version  | Purpose                          | Why Standard                   |
+| ------------------------- | -------- | -------------------------------- | ------------------------------ |
+| @mastra/core/evals        | internal | MastraScorer, createScorer       | Existing scorer infrastructure |
+| @mastra/core/datasets/run | internal | executeTarget, runScorersForItem | Existing executor pattern      |
 
 ### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| vitest | ^2.x | Testing | Verify scorer execution |
+
+| Library | Version | Purpose | When to Use             |
+| ------- | ------- | ------- | ----------------------- |
+| vitest  | ^2.x    | Testing | Verify scorer execution |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| Add item.output field | Nest in item.input | item.output is clearer for "thing being judged"; per CONTEXT.md recommendation |
-| Add item.output field | Nest in item.context | context is for metadata, not primary data |
+
+| Instead of            | Could Use            | Tradeoff                                                                       |
+| --------------------- | -------------------- | ------------------------------------------------------------------------------ |
+| Add item.output field | Nest in item.input   | item.output is clearer for "thing being judged"; per CONTEXT.md recommendation |
+| Add item.output field | Nest in item.context | context is for metadata, not primary data                                      |
 
 **Installation:**
+
 ```bash
 # No new packages needed - all dependencies exist
 ```
@@ -46,6 +51,7 @@ The implementation is straightforward - add `executeScorer()` function following
 ## Architecture Patterns
 
 ### Recommended Project Structure
+
 ```
 packages/core/src/
 ├── storage/types.ts      # Add output field to DatasetItem
@@ -60,9 +66,11 @@ packages/core/src/
 ```
 
 ### Pattern 1: DatasetItem Type Update (REQUIRED)
+
 **What:** Add optional `output` field for scorer target use case
 **When to use:** Before implementing executeScorer
 **Example:**
+
 ```typescript
 // Source: packages/core/src/storage/types.ts - NEEDS MODIFICATION
 /** Dataset item entity */
@@ -74,7 +82,7 @@ export interface DatasetItem {
   /** Any JSON - string for simple prompts, object for structured */
   input: unknown;
   /** Any JSON - the response/output being evaluated (for scorer targets) */
-  output?: unknown;  // NEW FIELD
+  output?: unknown; // NEW FIELD
   /** Any JSON - ground truth/human label */
   expectedOutput?: unknown;
   context?: Record<string, unknown>;
@@ -84,27 +92,24 @@ export interface DatasetItem {
 ```
 
 ### Pattern 2: Scorer Execution
+
 **What:** Execute scorer with dataset item's input/output/expectedOutput
 **When to use:** `targetType === 'scorer'`
 **Example:**
+
 ```typescript
 // Source: Codebase analysis - to be implemented
-async function executeScorer(
-  scorer: MastraScorer<any, any, any, any>,
-  item: DatasetItem,
-): Promise<ExecutionResult> {
+async function executeScorer(scorer: MastraScorer<any, any, any, any>, item: DatasetItem): Promise<ExecutionResult> {
   try {
     // CONTEXT.md decision: scorer.run({ input, output, groundTruth })
     const result = await scorer.run({
       input: item.input,
-      output: item.output,  // The thing being judged
-      groundTruth: item.expectedOutput,  // Human label
+      output: item.output, // The thing being judged
+      groundTruth: item.expectedOutput, // Human label
     });
 
     // Validate score
-    const score = typeof result.score === 'number' && !isNaN(result.score)
-      ? result.score
-      : null;
+    const score = typeof result.score === 'number' && !isNaN(result.score) ? result.score : null;
 
     if (score === null && result.score !== undefined) {
       console.warn(`Scorer ${scorer.id} returned invalid score: ${result.score}`);
@@ -129,9 +134,11 @@ async function executeScorer(
 ```
 
 ### Pattern 3: DatasetItem Schema for Scorer Calibration
+
 **What:** Dataset item provides input, output, expectedOutput fields
 **When to use:** When dataset is designed for scorer calibration
 **Example:**
+
 ```typescript
 // Example dataset item for scorer calibration (Ragas-style):
 {
@@ -156,37 +163,39 @@ async function executeScorer(
 ```
 
 ### Pattern 4: Meta-Scoring (Scoring the Scorer)
+
 **What:** Apply optional scorers[] to scorer-as-target output
 **When to use:** Evaluating scorer consistency, confidence calibration
 **Example:**
+
 ```typescript
 // CONTEXT.md decision: same mechanics as agent/workflow runs
 // After executeScorer returns, runScorersForItem applies meta-scorers
 
 // runDataset already has this pattern - no changes needed:
 const itemScores = await runScorersForItem(
-  scorers,      // Meta-scorers from config.scorers
-  item,         // Original dataset item
-  execResult.output,  // Scorer's output: { score, reason }
+  scorers, // Meta-scorers from config.scorers
+  item, // Original dataset item
+  execResult.output, // Scorer's output: { score, reason }
   storage,
   runId,
-  targetType,   // 'scorer'
+  targetType, // 'scorer'
   targetId,
 );
 ```
 
 ### Pattern 5: Score Validation
+
 **What:** Validate scorer output before storing
 **When to use:** When scorer returns invalid score type
 **Example:**
+
 ```typescript
 // CONTEXT.md decision: invalid score = null + warning, continue run
 const result = await scorer.run({ input, output, groundTruth });
 
 // Validate score is a number
-const score = typeof result.score === 'number' && !isNaN(result.score)
-  ? result.score
-  : null;
+const score = typeof result.score === 'number' && !isNaN(result.score) ? result.score : null;
 
 if (score === null && result.score !== undefined) {
   console.warn(`Scorer ${scorer.id} returned invalid score: ${result.score}`);
@@ -194,7 +203,7 @@ if (score === null && result.score !== undefined) {
 
 return {
   output: {
-    score,  // null if invalid
+    score, // null if invalid
     reason: typeof result.reason === 'string' ? result.reason : null,
   },
   error: null,
@@ -202,6 +211,7 @@ return {
 ```
 
 ### Anti-Patterns to Avoid
+
 - **Auto-comparing scores:** Don't compare scorer output to expectedOutput - store both, let analytics handle alignment analysis
 - **Changing ItemResult shape:** Keep same structure (output, latency, error) as agent/workflow
 - **Skipping error handling:** Always catch scorer errors, store message, continue run
@@ -210,49 +220,56 @@ return {
 
 ## Don't Hand-Roll
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| Error isolation | try/catch per-scorer | Existing `runScorersForItem` pattern | Handles all edge cases |
-| Score persistence | Custom storage calls | `validateAndSaveScore` | Already handles validation |
-| Scorer resolution | Registry lookup | `mastra.getScorerById()` | Already in resolveTarget |
+| Problem           | Don't Build          | Use Instead                          | Why                        |
+| ----------------- | -------------------- | ------------------------------------ | -------------------------- |
+| Error isolation   | try/catch per-scorer | Existing `runScorersForItem` pattern | Handles all edge cases     |
+| Score persistence | Custom storage calls | `validateAndSaveScore`               | Already handles validation |
+| Scorer resolution | Registry lookup      | `mastra.getScorerById()`             | Already in resolveTarget   |
 
 **Key insight:** All infrastructure exists. Implementation is wiring existing pieces together + adding DatasetItem.output field.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Confusing item.output vs ItemResult.output
+
 **What goes wrong:** Storing wrong value in ItemResult.output
 **Why it happens:** item.output is the thing being judged, ItemResult.output is scorer result
 **How to avoid:**
+
 - item.output = thing being judged (passed TO scorer as `output` param)
 - ItemResult.output = scorer result { score, reason } (returned FROM scorer)
-**Warning signs:** Score data missing from results
+  **Warning signs:** Score data missing from results
 
 ### Pitfall 2: Missing output field in DatasetItem
+
 **What goes wrong:** item.output is undefined, scorer receives nothing to judge
 **Why it happens:** Dataset created for agent/workflow (only input/expectedOutput)
 **How to avoid:** Validate item.output exists when targetType === 'scorer', or document that scorer can work without it if scorer handles undefined output
 **Warning signs:** Scorers all return 0 or error
 
 ### Pitfall 3: Comparing Scores Automatically
+
 **What goes wrong:** Building complex comparison logic for score alignment
 **Why it happens:** Natural instinct to compute alignment %
 **How to avoid:** Per CONTEXT.md - store both values, defer analysis to analytics phase
 **Warning signs:** Adding tolerance/threshold parameters
 
 ### Pitfall 4: Different Result Shape for Scorers
+
 **What goes wrong:** ItemResult has different fields for scorer vs agent
 **Why it happens:** Wanting to add scorer-specific fields
 **How to avoid:** Use same ItemResult shape, scorer result goes in ItemResult.output field
 **Warning signs:** Type errors in downstream code expecting consistent shape
 
 ### Pitfall 5: NaN or Invalid Score Types
+
 **What goes wrong:** Storing NaN or undefined as score, breaks aggregation
 **Why it happens:** Scorer returns unexpected type
 **How to avoid:** Validate score is number, convert invalid to null + warning
 **Warning signs:** NaN appearing in score results
 
 ### Pitfall 6: Forgetting DatasetItem Schema Migration
+
 **What goes wrong:** Code expects item.output but database doesn't have column
 **Why it happens:** Type updated but storage schema not updated
 **How to avoid:** Check if storage schema needs `output` column added for persistence
@@ -261,6 +278,7 @@ return {
 ## Code Examples
 
 ### Current DatasetItem Type (BEFORE)
+
 ```typescript
 // Source: packages/core/src/storage/types.ts (lines 567-579)
 export interface DatasetItem {
@@ -268,7 +286,7 @@ export interface DatasetItem {
   datasetId: string;
   version: Date;
   input: unknown;
-  expectedOutput?: unknown;  // Human label / ground truth
+  expectedOutput?: unknown; // Human label / ground truth
   context?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -277,13 +295,14 @@ export interface DatasetItem {
 ```
 
 ### Scorer.run() Interface
+
 ```typescript
 // Source: packages/core/src/evals/base.ts (lines 49-56)
 interface ScorerRun<TInput = any, TOutput = any> {
   runId?: string;
   input?: TInput;
-  output: TOutput;        // The thing being evaluated
-  groundTruth?: any;      // Human label for comparison
+  output: TOutput; // The thing being evaluated
+  groundTruth?: any; // Human label for comparison
   requestContext?: Record<string, any>;
   tracingContext?: TracingContext;
 }
@@ -301,17 +320,18 @@ ScorerRunResult<TAccumulatedResults, TInput, TRunOutput> = Promise<
 ```
 
 ### Existing runScorerSafe Pattern (for reference)
+
 ```typescript
 // Source: packages/core/src/datasets/run/scorer.ts (lines 91-124)
 async function runScorerSafe(
   scorer: MastraScorer<any, any, any, any>,
   item: DatasetItem,
-  output: unknown,  // This is the target's output being scored
+  output: unknown, // This is the target's output being scored
 ): Promise<ScorerResult> {
   try {
     const scoreResult = await scorer.run({
       input: item.input,
-      output,  // Target's output
+      output, // Target's output
       groundTruth: item.expectedOutput,
     });
 
@@ -338,6 +358,7 @@ async function runScorerSafe(
 ```
 
 ### Existing executeTarget Switch
+
 ```typescript
 // Source: packages/core/src/datasets/run/executor.ts (lines 27-51)
 export async function executeTarget(
@@ -368,6 +389,7 @@ export async function executeTarget(
 ```
 
 ### resolveTarget Already Handles Scorers
+
 ```typescript
 // Source: packages/core/src/datasets/run/index.ts (lines 253-259)
 function resolveTarget(mastra: Mastra, targetType: string, targetId: string): Target | null {
@@ -386,12 +408,13 @@ function resolveTarget(mastra: Mastra, targetType: string, targetId: string): Ta
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| Manual scorer evaluation | Integrated in dataset runs | Phase 4 | Automated calibration |
-| Compare scores programmatically | Store both, analyze later | Phase 4 | Cleaner separation |
+| Old Approach                    | Current Approach           | When Changed | Impact                |
+| ------------------------------- | -------------------------- | ------------ | --------------------- |
+| Manual scorer evaluation        | Integrated in dataset runs | Phase 4      | Automated calibration |
+| Compare scores programmatically | Store both, analyze later  | Phase 4      | Cleaner separation    |
 
 **Deprecated/outdated:**
+
 - Processor targets - dropped from roadmap entirely per CONTEXT.md
 
 ## Open Questions
@@ -414,6 +437,7 @@ function resolveTarget(mastra: Mastra, targetType: string, targetId: string): Ta
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - `packages/core/src/evals/base.ts` - MastraScorer, ScorerRun interface, scorer.run() method
 - `packages/core/src/datasets/run/executor.ts` - Existing executeTarget, executeAgent, executeWorkflow patterns
 - `packages/core/src/datasets/run/scorer.ts` - runScorerSafe, error isolation pattern
@@ -422,15 +446,18 @@ function resolveTarget(mastra: Mastra, targetType: string, targetId: string): Ta
 - `packages/core/src/storage/types.ts` - DatasetItem, TargetType definitions (lines 567-579)
 
 ### Secondary (MEDIUM confidence)
+
 - `.planning/phases/04-scorer-targets/04-CONTEXT.md` - Phase decisions
 - `.planning/phases/03-agent-workflow-targets/03-RESEARCH.md` - Pattern reference
 
 ### Tertiary (LOW confidence)
+
 - None - all findings from direct codebase analysis
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH - using existing infrastructure
 - Architecture: HIGH - follows established patterns exactly
 - Pitfalls: HIGH - derived from CONTEXT.md decisions and codebase analysis
@@ -445,10 +472,11 @@ function resolveTarget(mastra: Mastra, targetType: string, targetId: string): Ta
 Based on research, the implementation involves:
 
 1. **Add `output` field to DatasetItem type** in `packages/core/src/storage/types.ts`:
+
    ```typescript
    export interface DatasetItem {
      // ... existing fields
-     output?: unknown;  // NEW: The response being evaluated (for scorer targets)
+     output?: unknown; // NEW: The response being evaluated (for scorer targets)
      // ...
    }
    ```

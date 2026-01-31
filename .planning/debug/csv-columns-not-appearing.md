@@ -1,6 +1,6 @@
 ---
 status: diagnosed
-trigger: "Diagnose why CSV columns are not appearing in the column mapping step."
+trigger: 'Diagnose why CSV columns are not appearing in the column mapping step.'
 created: 2026-01-26T00:00:00Z
 updated: 2026-01-26T00:00:05Z
 ---

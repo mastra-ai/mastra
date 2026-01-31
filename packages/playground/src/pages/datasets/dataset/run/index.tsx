@@ -51,13 +51,14 @@ function DatasetRun() {
     );
   }
 
-  const statusVariant = run.status === 'completed'
-    ? 'success'
-    : run.status === 'failed'
-      ? 'error'
-      : run.status === 'running'
-        ? 'info'
-        : 'default';
+  const statusVariant =
+    run.status === 'completed'
+      ? 'success'
+      : run.status === 'failed'
+        ? 'error'
+        : run.status === 'running'
+          ? 'info'
+          : 'default';
 
   const runInfo = [
     {
@@ -73,7 +74,13 @@ function DatasetRun() {
     {
       key: 'created',
       label: 'Created',
-      value: new Date(run.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
+      value: new Date(run.createdAt).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
     },
     {
       key: 'progress',
@@ -127,10 +134,7 @@ function DatasetRun() {
 
           <section>
             <h3 className="text-sm font-medium text-neutral5 mb-4">Results</h3>
-            <ResultsTable
-              results={results}
-              isLoading={resultsLoading}
-            />
+            <ResultsTable results={results} isLoading={resultsLoading} />
           </section>
         </div>
       </MainContentContent>

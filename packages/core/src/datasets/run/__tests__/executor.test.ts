@@ -16,26 +16,28 @@ vi.mock('../../../agent', async importOriginal => {
 import { isSupportedLanguageModel } from '../../../agent';
 
 // Helper to create mock agent
-const createMockAgent = (response: string, shouldFail = false): Agent => ({
-  id: 'test-agent',
-  name: 'Test Agent',
-  getModel: vi.fn().mockResolvedValue({ specificationVersion: 'v2' }),
-  generate: vi.fn().mockImplementation(async () => {
-    if (shouldFail) {
-      throw new Error('Agent error');
-    }
-    return { text: response };
-  }),
-}) as unknown as Agent;
+const createMockAgent = (response: string, shouldFail = false): Agent =>
+  ({
+    id: 'test-agent',
+    name: 'Test Agent',
+    getModel: vi.fn().mockResolvedValue({ specificationVersion: 'v2' }),
+    generate: vi.fn().mockImplementation(async () => {
+      if (shouldFail) {
+        throw new Error('Agent error');
+      }
+      return { text: response };
+    }),
+  }) as unknown as Agent;
 
 // Helper to create mock workflow
-const createMockWorkflow = (result: Record<string, unknown>): Workflow => ({
-  id: 'test-workflow',
-  name: 'Test Workflow',
-  createRun: vi.fn().mockImplementation(async () => ({
-    start: vi.fn().mockResolvedValue(result),
-  })),
-}) as unknown as Workflow;
+const createMockWorkflow = (result: Record<string, unknown>): Workflow =>
+  ({
+    id: 'test-workflow',
+    name: 'Test Workflow',
+    createRun: vi.fn().mockImplementation(async () => ({
+      start: vi.fn().mockResolvedValue(result),
+    })),
+  }) as unknown as Workflow;
 
 describe('executeTarget', () => {
   beforeEach(() => {

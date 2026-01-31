@@ -20,6 +20,7 @@ Fixed two UAT gaps from retest: traceId missing from API response schema and res
 Added `traceId: z.string().nullable()` to `runResultResponseSchema` in `packages/server/src/server/schemas/datasets.ts`.
 
 Also required type alignment:
+
 - Made `RunResult.traceId` required (not optional) in core types
 - Updated inmemory storage to include traceId with null default
 - Updated libsql storage to read and write traceId
@@ -27,6 +28,7 @@ Also required type alignment:
 ### Task 2: Refactor useDatasetRunResults to object params and add polling
 
 Refactored `useDatasetRunResults` hook to:
+
 - Use object params `{ datasetId, runId, pagination?, runStatus? }` instead of positional args
 - Poll every 2 seconds when `runStatus` is `'pending'` or `'running'`
 
@@ -41,14 +43,14 @@ Updated consumer in `packages/playground/src/pages/datasets/dataset/run/index.ts
 
 ## Artifacts
 
-| File | Change |
-|------|--------|
-| packages/server/src/server/schemas/datasets.ts | traceId: z.string().nullable() in schema |
-| packages/playground-ui/src/domains/datasets/hooks/use-dataset-runs.ts | Object params + refetchInterval |
-| packages/playground/src/pages/datasets/dataset/run/index.tsx | Pass runStatus to hook |
-| packages/core/src/storage/types.ts | RunResult.traceId required |
-| packages/core/src/storage/domains/runs/inmemory.ts | Include traceId in addResult |
-| stores/libsql/src/storage/domains/runs/index.ts | Include traceId in transform and addResult |
+| File                                                                  | Change                                     |
+| --------------------------------------------------------------------- | ------------------------------------------ |
+| packages/server/src/server/schemas/datasets.ts                        | traceId: z.string().nullable() in schema   |
+| packages/playground-ui/src/domains/datasets/hooks/use-dataset-runs.ts | Object params + refetchInterval            |
+| packages/playground/src/pages/datasets/dataset/run/index.tsx          | Pass runStatus to hook                     |
+| packages/core/src/storage/types.ts                                    | RunResult.traceId required                 |
+| packages/core/src/storage/domains/runs/inmemory.ts                    | Include traceId in addResult               |
+| stores/libsql/src/storage/domains/runs/index.ts                       | Include traceId in transform and addResult |
 
 ## Deviations
 

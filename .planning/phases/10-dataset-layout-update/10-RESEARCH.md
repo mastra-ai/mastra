@@ -9,6 +9,7 @@
 This phase focuses on restructuring the Dataset Detail page layout from a dialog-based item detail view to a master-detail pattern with inline item viewing, reorganized header actions, and a new split button component. The implementation leverages existing codebase patterns and design system components.
 
 Key findings:
+
 - The codebase already has `CombinedButtons` component that can be extended for split button behavior
 - `react-resizable-panels` is already installed and used (WorkflowLayout) for panel-based layouts
 - Radix UI Popover is used for dropdown menus throughout the codebase
@@ -22,26 +23,29 @@ Key findings:
 The established libraries/tools for this domain:
 
 ### Core
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| React | 19.x | UI framework | Already in codebase |
-| Tailwind CSS | 3.4.x | Styling | Design system is Tailwind-based |
-| Radix UI Popover | 1.1.14 | Dropdown menus | Used throughout for menus |
-| tailwindcss-animate | 1.0.7 | CSS animations | Already configured |
+
+| Library             | Version | Purpose        | Why Standard                    |
+| ------------------- | ------- | -------------- | ------------------------------- |
+| React               | 19.x    | UI framework   | Already in codebase             |
+| Tailwind CSS        | 3.4.x   | Styling        | Design system is Tailwind-based |
+| Radix UI Popover    | 1.1.14  | Dropdown menus | Used throughout for menus       |
+| tailwindcss-animate | 1.0.7   | CSS animations | Already configured              |
 
 ### Supporting
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| react-resizable-panels | 4.0.15 | Resizable panel layouts | If user-resizable columns desired |
-| lucide-react | 0.474.x | Icons | All icons in codebase |
-| clsx / tailwind-merge | varies | Class composition | Via `cn()` utility |
+
+| Library                | Version | Purpose                 | When to Use                       |
+| ---------------------- | ------- | ----------------------- | --------------------------------- |
+| react-resizable-panels | 4.0.15  | Resizable panel layouts | If user-resizable columns desired |
+| lucide-react           | 0.474.x | Icons                   | All icons in codebase             |
+| clsx / tailwind-merge  | varies  | Class composition       | Via `cn()` utility                |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| CSS Grid layout | react-resizable-panels | CSS Grid simpler, panels add user resize capability |
-| Custom split button | Third-party dropdown | Keeps design system consistent |
-| CSS transitions | Framer Motion | Tailwind-animate sufficient for simple transitions |
+
+| Instead of          | Could Use              | Tradeoff                                            |
+| ------------------- | ---------------------- | --------------------------------------------------- |
+| CSS Grid layout     | react-resizable-panels | CSS Grid simpler, panels add user resize capability |
+| Custom split button | Third-party dropdown   | Keeps design system consistent                      |
+| CSS transitions     | Framer Motion          | Tailwind-animate sufficient for simple transitions  |
 
 **Installation:**
 No new packages needed - all required libraries are already in `packages/playground-ui/package.json`.
@@ -49,6 +53,7 @@ No new packages needed - all required libraries are already in `packages/playgro
 ## Architecture Patterns
 
 ### Recommended Component Structure
+
 ```
 packages/playground-ui/src/
 ├── ds/components/
@@ -66,9 +71,11 @@ packages/playground-ui/src/
 ```
 
 ### Pattern 1: Master-Detail with CSS Grid
+
 **What:** Two-column layout that conditionally renders based on selection state
 **When to use:** When displaying list + detail views side-by-side
 **Example:**
+
 ```typescript
 // Source: Existing codebase pattern in MainContentContent
 <div className={cn(
@@ -89,9 +96,11 @@ packages/playground-ui/src/
 ```
 
 ### Pattern 2: Split Button with Popover
+
 **What:** Button with main action + dropdown chevron using existing CombinedButtons
 **When to use:** Primary action with alternative options
 **Example:**
+
 ```typescript
 // Source: CombinedButtons stories pattern + Popover usage
 <Popover>
@@ -113,9 +122,11 @@ packages/playground-ui/src/
 ```
 
 ### Pattern 3: Actions Menu with Popover
+
 **What:** Three-dot menu for secondary actions (existing pattern)
 **When to use:** Header actions, toolbar overflow menus
 **Example:**
+
 ```typescript
 // Source: items-list-actions.tsx
 <Popover open={open} onOpenChange={setOpen}>
@@ -134,9 +145,11 @@ packages/playground-ui/src/
 ```
 
 ### Pattern 4: Smooth Width Transition
+
 **What:** Animate container max-width changes
 **When to use:** When detail panel opens/closes
 **Example:**
+
 ```typescript
 // Use Tailwind transition classes from primitives
 <div className={cn(
@@ -146,6 +159,7 @@ packages/playground-ui/src/
 ```
 
 ### Anti-Patterns to Avoid
+
 - **Don't use SideDialog for inline content:** SideDialog is for overlays, not inline panels
 - **Don't create new dropdown menu component:** Use existing Popover pattern
 - **Don't import animation libraries:** tailwindcss-animate provides what's needed
@@ -155,43 +169,48 @@ packages/playground-ui/src/
 
 Problems that look simple but have existing solutions:
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| Dropdown menus | Custom dropdown | `Popover` + `Button` list | Accessibility, focus management |
-| Button groups | Manual border styling | `CombinedButtons` | Handles border radius, dividers |
-| Transitions | Manual CSS animations | `transitions` primitives | Consistent timing, easing |
-| Icon rendering | Raw Lucide usage | `Icon` wrapper component | Consistent sizing |
-| Layout columns | Flex with manual widths | CSS Grid with minmax | Better responsive behavior |
+| Problem        | Don't Build             | Use Instead               | Why                             |
+| -------------- | ----------------------- | ------------------------- | ------------------------------- |
+| Dropdown menus | Custom dropdown         | `Popover` + `Button` list | Accessibility, focus management |
+| Button groups  | Manual border styling   | `CombinedButtons`         | Handles border radius, dividers |
+| Transitions    | Manual CSS animations   | `transitions` primitives  | Consistent timing, easing       |
+| Icon rendering | Raw Lucide usage        | `Icon` wrapper component  | Consistent sizing               |
+| Layout columns | Flex with manual widths | CSS Grid with minmax      | Better responsive behavior      |
 
 **Key insight:** The codebase has established patterns for menus (Popover), button combinations (CombinedButtons), and transitions (primitives). Using these ensures consistency and avoids reimplementing accessibility features.
 
 ## Common Pitfalls
 
 ### Pitfall 1: Breaking the SideDialog Detail View
+
 **What goes wrong:** Replacing dialog with inline panel without maintaining all features
 **Why it happens:** Underestimating the functionality in ItemDetailDialog (edit mode, delete confirmation, navigation)
 **How to avoid:** Extract the content/logic into a new ItemDetailPanel component, reuse in both contexts
 **Warning signs:** Edit/delete/navigation stops working after refactor
 
 ### Pitfall 2: Z-index Issues with Nested Popovers
+
 **What goes wrong:** Dropdown menus in detail panel render behind other elements
 **Why it happens:** Popover portal rendering conflicts with parent stacking context
 **How to avoid:** Ensure Popover uses portal (it does by default), test in actual layout
 **Warning signs:** Dropdowns appear clipped or behind toolbar
 
 ### Pitfall 3: Independent Scroll Containers Breaking
+
 **What goes wrong:** List and detail columns scroll together instead of independently
 **Why it happens:** Missing `overflow-hidden` on parent, or improper height constraints
 **How to avoid:** Set explicit `h-full` on both columns, `overflow-y-auto` only on content
 **Warning signs:** Scrolling one column scrolls both, or content overflows container
 
 ### Pitfall 4: Transition Flicker on Initial Render
+
 **What goes wrong:** Elements flash/jump when component first renders
 **Why it happens:** Transitions apply before initial state is set
 **How to avoid:** Use `transition-none` on initial render or apply transitions only after mount
 **Warning signs:** Quick visual jump when page loads
 
 ### Pitfall 5: Selection State Duplication
+
 **What goes wrong:** Multiple sources of truth for selected item ID
 **Why it happens:** Adding state to new panel component instead of lifting to parent
 **How to avoid:** Keep selection state in DatasetDetail (already there), pass down as props
@@ -202,6 +221,7 @@ Problems that look simple but have existing solutions:
 Verified patterns from official sources:
 
 ### Max-Width Transition (CSS Grid + Tailwind)
+
 ```typescript
 // Source: tailwind.config.ts animation tokens + transitions.ts
 const DatasetDetailContent = ({ hasSelection }: { hasSelection: boolean }) => {
@@ -218,6 +238,7 @@ const DatasetDetailContent = ({ hasSelection }: { hasSelection: boolean }) => {
 ```
 
 ### SplitButton Component Structure
+
 ```typescript
 // Source: CombinedButtons pattern + Popover usage from items-list-actions.tsx
 export interface SplitButtonProps {
@@ -265,6 +286,7 @@ export function SplitButton({
 ```
 
 ### Master-Detail Layout Structure
+
 ```typescript
 // Source: MainContentContent pattern + WorkflowLayout concepts
 export function ItemsMasterDetail({
@@ -309,6 +331,7 @@ export function ItemsMasterDetail({
 ```
 
 ### Disabled Menu Item Pattern
+
 ```typescript
 // Source: Button component disabled styling
 <Button
@@ -324,13 +347,14 @@ export function ItemsMasterDetail({
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| SideDialog for item detail | Inline panel in master-detail | Phase 10 | Better UX for item browsing |
-| Single Add Item button | Split button with import options | Phase 10 | Consolidated actions |
-| Edit/Delete in header | Three-dot menu | Phase 10 | Cleaner header |
+| Old Approach               | Current Approach                 | When Changed | Impact                      |
+| -------------------------- | -------------------------------- | ------------ | --------------------------- |
+| SideDialog for item detail | Inline panel in master-detail    | Phase 10     | Better UX for item browsing |
+| Single Add Item button     | Split button with import options | Phase 10     | Consolidated actions        |
+| Edit/Delete in header      | Three-dot menu                   | Phase 10     | Cleaner header              |
 
 **Deprecated/outdated:**
+
 - None - this is net-new layout restructuring
 
 ## Open Questions
@@ -355,6 +379,7 @@ Things that couldn't be fully resolved:
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - `packages/playground-ui/package.json` - Verified installed dependencies
 - `packages/playground-ui/src/ds/components/CombinedButtons/` - Split button pattern
 - `packages/playground-ui/src/ds/components/Popover/` - Dropdown menu pattern
@@ -362,15 +387,18 @@ Things that couldn't be fully resolved:
 - `packages/playground-ui/src/domains/datasets/components/dataset-detail/items-list-actions.tsx` - Menu pattern
 
 ### Secondary (MEDIUM confidence)
+
 - `packages/playground-ui/src/domains/workflows/components/workflow-layout.tsx` - Resizable panel pattern
 - `packages/playground-ui/src/ds/components/MainContent/` - Layout grid pattern
 
 ### Tertiary (LOW confidence)
+
 - None - all findings verified against codebase
 
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH - All libraries verified in package.json
 - Architecture: HIGH - Patterns derived from existing codebase
 - Pitfalls: MEDIUM - Based on common React patterns and codebase inspection

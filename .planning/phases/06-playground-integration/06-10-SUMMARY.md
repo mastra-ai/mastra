@@ -1,6 +1,6 @@
 ---
-phase: "06"
-plan: "10"
+phase: '06'
+plan: '10'
 subsystem: datasets
 tags: [traceId, observability, UI, debugging]
 depends_on:
@@ -38,6 +38,7 @@ metrics:
 ## Implementation Details
 
 ### executor.ts Changes
+
 - ExecutionResult interface extended with `traceId: string | null`
 - executeAgent captures traceId from result object
 - executeWorkflow captures traceId from result object (all status branches)
@@ -45,23 +46,25 @@ metrics:
 - Error cases return traceId: null
 
 ### Storage Changes
+
 - DATASET_RUN_RESULTS_SCHEMA: added `traceId: { type: 'text', nullable: true }`
 - RunResult interface: added `traceId?: string | null`
 - AddRunResultInput interface: added `traceId?: string | null`
 - runDataset: passes execResult.traceId to addResult
 
 ### UI Changes
+
 - RunResultData interface: added `traceId?: string | null`
 - ResultDetailDialog: displays trace link in KeyValueList when traceId exists
 - Uses framework Link component with `href` prop (not `to`)
 
 ## Commits
 
-| Task | Commit | Description |
-|------|--------|-------------|
-| 1 | 85fab311af | Add traceId to ExecutionResult and capture from targets |
-| 2 | b914ef7a95 | Add traceId to storage schema and persist |
-| 3 | 982f25896c | Display traceId in result detail dialog with link |
+| Task | Commit     | Description                                             |
+| ---- | ---------- | ------------------------------------------------------- |
+| 1    | 85fab311af | Add traceId to ExecutionResult and capture from targets |
+| 2    | b914ef7a95 | Add traceId to storage schema and persist               |
+| 3    | 982f25896c | Display traceId in result detail dialog with link       |
 
 ## Deviations from Plan
 

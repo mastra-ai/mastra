@@ -34,10 +34,7 @@ export function computeMean(values: number[]): number {
  * @param passThreshold - Absolute threshold for pass (score >= threshold)
  * @returns ScorerStats with all computed metrics
  */
-export function computeScorerStats(
-  scores: ScoreRowData[],
-  passThreshold: number = 0.5,
-): ScorerStats {
+export function computeScorerStats(scores: ScoreRowData[], passThreshold: number = 0.5): ScorerStats {
   const totalItems = scores.length;
 
   if (totalItems === 0) {

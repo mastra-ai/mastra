@@ -45,11 +45,7 @@ function Datasets() {
       </Header>
 
       <MainContentContent isCentered={!isLoading && datasets.length === 0}>
-        <DatasetsTable
-          datasets={datasets}
-          isLoading={isLoading}
-          onCreateClick={() => setIsCreateDialogOpen(true)}
-        />
+        <DatasetsTable datasets={datasets} isLoading={isLoading} onCreateClick={() => setIsCreateDialogOpen(true)} />
       </MainContentContent>
 
       <CreateDatasetDialog
