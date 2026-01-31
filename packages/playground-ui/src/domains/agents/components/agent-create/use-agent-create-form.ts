@@ -54,6 +54,7 @@ export function useAgentCreateForm(options: UseAgentCreateFormOptions = {}) {
       agents: initialValues?.agents ?? [],
       memory: initialValues?.memory ?? '',
       scorers: initialValues?.scorers ?? {},
+      partials: initialValues?.partials ?? {},
     },
   });
 

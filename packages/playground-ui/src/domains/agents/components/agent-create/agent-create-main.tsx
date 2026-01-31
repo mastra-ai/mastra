@@ -1,6 +1,6 @@
 'use client';
 
-import type { RefObject } from 'react';
+import { type RefObject, useEffect, useRef } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
 
 import { Input } from '@/ds/components/Input';
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 
 import { ModelPicker } from '../create-agent/model-picker';
 import type { AgentFormValues } from '../create-agent/form-validation';
+import { PartialsEditor, extractPartialNames } from './partials-editor';
 
 interface AgentCreateMainProps {
   form: UseFormReturn<AgentFormValues>;
@@ -21,7 +22,39 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
     register,
     control,
     formState: { errors },
+    watch,
+    setValue,
+    getValues,
   } = form;
+
+  // Watch instructions for partial detection
+  const instructions = watch('instructions');
+
+  // Track previous keys to avoid unnecessary updates
+  const prevKeysRef = useRef<string>('');
+
+  // Auto-sync partials when instructions change
+  useEffect(() => {
+    const detectedNames = extractPartialNames(instructions || '');
+    const currentPartials = getValues('partials') || {};
+
+    // Build new partials object
+    const newPartials: Record<string, string> = {};
+    for (const name of detectedNames) {
+      // Preserve existing content, or empty string for new partials
+      newPartials[name] = currentPartials[name] ?? '';
+    }
+
+    // Only update if keys changed (avoid infinite loops)
+    const newKeys = Object.keys(newPartials).sort().join(',');
+    if (prevKeysRef.current !== newKeys) {
+      prevKeysRef.current = newKeys;
+      setValue('partials', newPartials);
+    }
+  }, [instructions, setValue, getValues]);
+
+  // Get detected partial names for display
+  const detectedPartialNames = extractPartialNames(instructions || '');
 
   return (
     <div className="flex flex-col gap-4 h-full px-4">
@@ -93,6 +126,21 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
         />
         {errors.instructions && <span className="text-xs text-accent2">{errors.instructions.message}</span>}
       </div>
+
+      {/* Partials - only show if there are detected partials */}
+      {detectedPartialNames.length > 0 && (
+        <Controller
+          name="partials"
+          control={control}
+          render={({ field }) => (
+            <PartialsEditor
+              value={field.value || {}}
+              onChange={field.onChange}
+              detectedNames={detectedPartialNames}
+            />
+          )}
+        />
+      )}
     </div>
   );
 }

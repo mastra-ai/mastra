@@ -25,6 +25,7 @@ export const agentFormSchema = z.object({
   agents: z.array(z.string()).optional(),
   memory: z.string().optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
+  partials: z.record(z.string(), z.string()).optional(),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;

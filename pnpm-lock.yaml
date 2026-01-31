@@ -3402,6 +3402,9 @@ importers:
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
+      handlebars:
+        specifier: ^4.7.8
+        version: 4.7.8
       lucide-react:
         specifier: ^0.474.0
         version: 0.474.0(react@19.2.3)

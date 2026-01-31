@@ -9,7 +9,7 @@ export type SectionProps = {
 
 export function Section({ title, children, className }: SectionProps) {
   return (
-    <section className={cn('grid gap-4', className)}>
+    <section className={cn('grid gap-2', className)}>
       <header>{title}</header>
       {children}
     </section>

@@ -40,7 +40,7 @@ function Agents() {
               <Icon>
                 <Plus />
               </Icon>
-              Create Agent
+              Create an agent from UI
             </Button>
           )}
           <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">

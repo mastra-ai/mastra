@@ -143,7 +143,7 @@ const EmptyAgentsTable = ({ onCreateClick }: EmptyAgentsTableProps) => (
               <Icon>
                 <Plus />
               </Icon>
-              Create Agent
+              Create an agent from UI
             </Button>
           )}
           <Button
