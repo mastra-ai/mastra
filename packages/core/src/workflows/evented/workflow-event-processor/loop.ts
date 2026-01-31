@@ -188,6 +188,34 @@ export async function processWorkflowForEach(
 
   // Handle resume with forEachIndex: kick off the targeted iteration resume
   if (forEachIndex !== undefined && resumeSteps?.length > 0 && idx > 0) {
+    // Validate forEachIndex is within bounds to fail loudly instead of silently no-op
+    const outputArray = currentResult?.output;
+    const outputLength = Array.isArray(outputArray) ? outputArray.length : 0;
+    if (!Array.isArray(outputArray) || forEachIndex < 0 || forEachIndex >= outputLength) {
+      const error = new Error(
+        `Invalid forEachIndex ${forEachIndex} for forEach resume: ` +
+          `expected index in range [0, ${outputLength - 1}] but output array has length ${outputLength}`,
+      );
+      await pubsub.publish('workflows', {
+        type: 'workflow.fail',
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults,
+          prevResult: { status: 'failed', error },
+          activeSteps,
+          requestContext,
+          state: currentState,
+          outputOptions,
+        },
+      });
+      return;
+    }
+
     // Check if the target iteration is suspended
     const iterationResult = currentResult?.output?.[forEachIndex];
     if (iterationResult?.status === 'suspended' || iterationResult === null) {
