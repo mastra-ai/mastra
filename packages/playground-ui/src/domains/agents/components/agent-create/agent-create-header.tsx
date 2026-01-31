@@ -8,6 +8,7 @@ import { Combobox } from '@/ds/components/Combobox';
 import { Spinner } from '@/ds/components/Spinner';
 import { Icon } from '@/ds/icons/Icon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { CheckIcon } from '@/ds/icons/CheckIcon';
 
 export interface AgentCreateHeaderProps {
   onPublish: () => void;
@@ -40,8 +41,8 @@ export function AgentCreateHeader({ onPublish, isSubmitting = false }: AgentCrea
           placeholder="Revisions"
           value="current"
           onValueChange={() => {}}
-          variant="default"
-          size="sm"
+          variant="light"
+          size="md"
         />
         <Button variant="primary" onClick={onPublish} disabled={isSubmitting}>
           {isSubmitting ? (
@@ -50,7 +51,12 @@ export function AgentCreateHeader({ onPublish, isSubmitting = false }: AgentCrea
               Publishing...
             </>
           ) : (
-            'Publish'
+            <>
+              <Icon>
+                <CheckIcon />
+              </Icon>
+              Publish
+            </>
           )}
         </Button>
       </HeaderAction>

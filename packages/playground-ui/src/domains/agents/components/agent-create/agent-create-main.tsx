@@ -29,7 +29,7 @@ export function AgentCreateMain() {
           id="name"
           placeholder="Enter agent name"
           {...register('name')}
-          className={cn(errors.name && 'border-accent2')}
+          className={cn('bg-surface3', errors.name && 'border-accent2')}
         />
         {errors.name && <span className="text-xs text-accent2">{errors.name.message}</span>}
       </div>
@@ -43,7 +43,7 @@ export function AgentCreateMain() {
           id="description"
           placeholder="Description (optional)"
           {...register('description')}
-          className={cn(errors.description && 'border-accent2')}
+          className={cn('bg-surface3', errors.description && 'border-accent2')}
         />
         {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
       </div>

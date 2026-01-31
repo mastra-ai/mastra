@@ -39,7 +39,7 @@ export function AgentCreateSidebar() {
         )}
 
         {/* Tools */}
-        <Section title={<Section.Title icon={<ToolsIcon />}>Tools</Section.Title>}>
+        <Section title={<Section.Title icon={<ToolsIcon className="text-accent5" />}>Tools</Section.Title>}>
           <Controller
             name="tools"
             control={control}
@@ -63,7 +63,7 @@ export function AgentCreateSidebar() {
         </Section>
 
         {/* Workflows */}
-        <Section title={<Section.Title icon={<WorkflowIcon />}>Workflows</Section.Title>}>
+        <Section title={<Section.Title icon={<WorkflowIcon className="text-accent1" />}>Workflows</Section.Title>}>
           <Controller
             name="workflows"
             control={control}
@@ -87,7 +87,7 @@ export function AgentCreateSidebar() {
         </Section>
 
         {/* Sub-Agents */}
-        <Section title={<Section.Title icon={<AgentIcon />}>Sub-Agents</Section.Title>}>
+        <Section title={<Section.Title icon={<AgentIcon className="text-accent6" />}>Sub-Agents</Section.Title>}>
           <Controller
             name="agents"
             control={control}
@@ -111,7 +111,7 @@ export function AgentCreateSidebar() {
         </Section>
 
         {/* Memory */}
-        <Section title={<Section.Title icon={<MemoryIcon />}>Memory</Section.Title>}>
+        <Section title={<Section.Title icon={<MemoryIcon className="text-accent5" />}>Memory</Section.Title>}>
           <Controller
             name="memory"
             control={control}
@@ -136,7 +136,7 @@ export function AgentCreateSidebar() {
         </Section>
 
         {/* Scorers */}
-        <Section title={<Section.Title icon={<JudgeIcon />}>Scorers</Section.Title>}>
+        <Section title={<Section.Title icon={<JudgeIcon className="text-accent2" />}>Scorers</Section.Title>}>
           <Controller
             name="scorers"
             control={control}
