@@ -239,17 +239,16 @@ export class DurableAgent<
     this.#maxSteps = maxSteps;
 
     // Set up PubSub with caching for resumable streams
+    // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
     if (cache === false) {
       // Caching explicitly disabled
       this.#pubsub = pubsub ?? new EventEmitterPubSub();
       this.#cache = null;
     } else {
-      // Create or use provided cache
-      const cacheInstance: MastraServerCache = cache ?? new InMemoryServerCache();
-      this.#cache = cacheInstance;
-
-      // Wrap pubsub with caching
+      // Wrap pubsub with CachingPubSub
+      const cacheInstance = cache ?? new InMemoryServerCache();
       const innerPubsub = pubsub ?? new EventEmitterPubSub();
+      this.#cache = cacheInstance;
       this.#pubsub = new CachingPubSub(innerPubsub, cacheInstance);
     }
   }

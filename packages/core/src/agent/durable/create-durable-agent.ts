@@ -312,7 +312,8 @@ export function createDurableAgent<TOutput = undefined>(
   // Track mastra instance - can be set later when registered with Mastra
   let _mastra: Mastra | undefined = mastraOption;
 
-  // Create cache and pubsub with caching
+  // Set up cache and pubsub
+  // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
   const cache = customCache ?? new InMemoryServerCache();
   const innerPubsub = customPubsub ?? new EventEmitterPubSub();
   const pubsub = new CachingPubSub(innerPubsub, cache);

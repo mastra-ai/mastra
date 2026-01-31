@@ -281,8 +281,9 @@ export function createEventedAgent<TOutput = undefined>(options: CreateEventedAg
   // Track mastra instance - can be set later when registered with Mastra
   let _mastra: Mastra | undefined = mastraOption;
 
-  // Wrap pubsub with CachingPubSub if cache is provided (enables resumable streams)
-  const pubsub: PubSub = cache ? new CachingPubSub(innerPubsub, cache) : innerPubsub;
+  // Set up pubsub with caching for resumable streams
+  // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
+  const pubsub = cache ? new CachingPubSub(innerPubsub, cache) : innerPubsub;
 
   // Create the durable workflow for this agent
   const workflow = createDurableAgenticWorkflow({ maxSteps });
