@@ -10,6 +10,7 @@ import {
   chefAgentResponses,
   dynamicAgent,
   evalAgent,
+  dynamicToolsAgent,
   schemaValidatedAgent,
   requestContextDemoAgent,
 } from './agents/index';
@@ -59,6 +60,7 @@ const config = {
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
+    dynamicToolsAgent, // Dynamic tool search example
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
