@@ -33,7 +33,7 @@ import { handleScorerAutoVersioning, calculateChangedFields, createVersionWithRe
  */
 export const LIST_STORED_SCORERS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/scorers',
+  path: '/stored/scorers',
   responseType: 'json',
   queryParamSchema: listStoredScorersQuerySchema,
   responseSchema: listStoredScorersResponseSchema,
@@ -73,7 +73,7 @@ export const LIST_STORED_SCORERS_ROUTE = createRoute({
  */
 export const GET_STORED_SCORER_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/scorers/:scorerId',
+  path: '/stored/scorers/:scorerId',
   responseType: 'json',
   pathParamSchema: storedScorerIdPathParams,
   responseSchema: getStoredScorerResponseSchema,
@@ -112,7 +112,7 @@ export const GET_STORED_SCORER_ROUTE = createRoute({
  */
 export const CREATE_STORED_SCORER_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/scorers',
+  path: '/stored/scorers',
   responseType: 'json',
   bodySchema: createStoredScorerBodySchema,
   responseSchema: createStoredScorerResponseSchema,
@@ -163,7 +163,7 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
  */
 export const UPDATE_STORED_SCORER_ROUTE = createRoute({
   method: 'PATCH',
-  path: '/api/stored/scorers/:scorerId',
+  path: '/stored/scorers/:scorerId',
   responseType: 'json',
   pathParamSchema: storedScorerIdPathParams,
   bodySchema: updateStoredScorerBodySchema,
@@ -217,7 +217,7 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
  */
 export const DELETE_STORED_SCORER_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/stored/scorers/:scorerId',
+  path: '/stored/scorers/:scorerId',
   responseType: 'json',
   pathParamSchema: storedScorerIdPathParams,
   responseSchema: deleteStoredScorerResponseSchema,
@@ -261,7 +261,7 @@ export const DELETE_STORED_SCORER_ROUTE = createRoute({
  */
 export const LIST_SCORER_VERSIONS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/scorers/:scorerId/versions',
+  path: '/stored/scorers/:scorerId/versions',
   responseType: 'json',
   pathParamSchema: storedScorerIdPathParams,
   queryParamSchema: listScorerVersionsQuerySchema,
@@ -307,7 +307,7 @@ export const LIST_SCORER_VERSIONS_ROUTE = createRoute({
  */
 export const CREATE_SCORER_VERSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/scorers/:scorerId/versions',
+  path: '/stored/scorers/:scorerId/versions',
   responseType: 'json',
   pathParamSchema: storedScorerIdPathParams,
   bodySchema: createScorerVersionBodySchema,
@@ -368,7 +368,7 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
  */
 export const GET_SCORER_VERSION_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/scorers/:scorerId/versions/:versionId',
+  path: '/stored/scorers/:scorerId/versions/:versionId',
   responseType: 'json',
   pathParamSchema: scorerVersionIdPathParams,
   responseSchema: getScorerVersionResponseSchema,
@@ -411,7 +411,7 @@ export const GET_SCORER_VERSION_ROUTE = createRoute({
  */
 export const ACTIVATE_SCORER_VERSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/scorers/:scorerId/versions/:versionId/activate',
+  path: '/stored/scorers/:scorerId/versions/:versionId/activate',
   responseType: 'json',
   pathParamSchema: scorerVersionIdPathParams,
   responseSchema: activateScorerVersionResponseSchema,
@@ -468,7 +468,7 @@ export const ACTIVATE_SCORER_VERSION_ROUTE = createRoute({
  */
 export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/scorers/:scorerId/versions/:versionId/restore',
+  path: '/stored/scorers/:scorerId/versions/:versionId/restore',
   responseType: 'json',
   pathParamSchema: scorerVersionIdPathParams,
   responseSchema: restoreScorerVersionResponseSchema,
@@ -566,7 +566,7 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
  */
 export const DELETE_SCORER_VERSION_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/stored/scorers/:scorerId/versions/:versionId',
+  path: '/stored/scorers/:scorerId/versions/:versionId',
   responseType: 'json',
   pathParamSchema: scorerVersionIdPathParams,
   responseSchema: deleteScorerVersionResponseSchema,

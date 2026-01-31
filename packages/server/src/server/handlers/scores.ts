@@ -300,8 +300,16 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
       let entityIdToUse = entityId;
 
       if (entityType === 'AGENT') {
-        const agent = mastra.getAgentById(entityId);
-        entityIdToUse = agent.id;
+        let agent;
+        try {
+          agent = mastra.getAgentById(entityId);
+        } catch {
+          // Try stored agents if not found in code-defined agents
+          agent = await mastra.getStoredAgentById(entityId);
+        }
+        if (agent) {
+          entityIdToUse = agent.id;
+        }
       } else if (entityType === 'WORKFLOW') {
         const workflow = mastra.getWorkflowById(entityId);
         entityIdToUse = workflow.id;
