@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { BrowserViewFrame } from './browser-view-frame';
 import { BrowserViewHeader } from './browser-view-header';
 import { BrowserToolCallHistory } from './browser-tool-call-history';
+import { useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 
 interface BrowserViewPanelProps {
@@ -20,36 +21,40 @@ interface BrowserViewPanelProps {
  * and prevents screencast stop/start churn on the server.
  */
 export function BrowserViewPanel({ agentId, className }: BrowserViewPanelProps) {
-  const [status, setStatus] = useState<StreamStatus>('idle');
-  const [currentUrl, setCurrentUrl] = useState<string | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
+  const { isActive, status, currentUrl, show, hide, setStatus, setCurrentUrl } = useBrowserSession();
   const [isClosing, setIsClosing] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Handle status changes - manage visibility
-  const handleStatusChange = useCallback((newStatus: StreamStatus) => {
-    setStatus(newStatus);
-    console.log('[BrowserViewPanel] status changed:', newStatus);
+  const handleStatusChange = useCallback(
+    (newStatus: StreamStatus) => {
+      setStatus(newStatus);
+      console.log('[BrowserViewPanel] status changed:', newStatus);
 
-    // Show panel when streaming starts
-    if (newStatus === 'streaming') {
-      setIsVisible(true);
-      setIsClosing(false);
-    }
-    // browser_closed just updates status display — panel stays visible
-    // so the last frame remains as a snapshot. User dismisses via X button.
-  }, []);
+      // Show panel when streaming starts
+      if (newStatus === 'streaming') {
+        show();
+        setIsClosing(false);
+      }
+      // browser_closed just updates status display — panel stays visible
+      // so the last frame remains as a snapshot. User dismisses via X button.
+    },
+    [setStatus, show],
+  );
 
   // Handle URL changes
-  const handleUrlChange = useCallback((url: string | null) => {
-    setCurrentUrl(url);
-  }, []);
+  const handleUrlChange = useCallback(
+    (url: string | null) => {
+      setCurrentUrl(url);
+    },
+    [setCurrentUrl],
+  );
 
   // Handle close button click — hides panel immediately, then closes browser in background
   const handleClose = useCallback(async () => {
     if (isClosing) return;
     setIsClosing(true);
-    setIsVisible(false);
+    hide();
 
     try {
       const response = await fetch(`/api/agents/${agentId}/browser/close`, {
@@ -64,7 +69,7 @@ export function BrowserViewPanel({ agentId, className }: BrowserViewPanelProps) 
     } finally {
       setIsClosing(false);
     }
-  }, [agentId, isClosing]);
+  }, [agentId, isClosing, hide]);
 
   const handleToggleCollapse = useCallback(() => {
     setIsCollapsed(prev => !prev);
@@ -76,19 +81,19 @@ export function BrowserViewPanel({ agentId, className }: BrowserViewPanelProps) 
   return (
     <div
       className={
-        isVisible
+        isActive
           ? 'absolute top-4 left-0 z-10 max-w-3xl w-full px-4'
           : 'fixed -left-[9999px] -top-[9999px] w-0 h-0 overflow-hidden'
       }
-      aria-hidden={!isVisible}
+      aria-hidden={!isActive}
     >
       <div
         className={cn(
-          isVisible && 'flex flex-col bg-surface2 rounded-lg border border-border1 overflow-hidden',
+          isActive && 'flex flex-col bg-surface2 rounded-lg border border-border1 overflow-hidden',
           className,
         )}
       >
-        {isVisible && (
+        {isActive && (
           <BrowserViewHeader
             url={currentUrl}
             status={status}
@@ -97,10 +102,10 @@ export function BrowserViewPanel({ agentId, className }: BrowserViewPanelProps) 
             onToggleCollapse={handleToggleCollapse}
           />
         )}
-        <div className={isVisible && !isCollapsed ? 'p-2' : 'hidden'}>
+        <div className={isActive && !isCollapsed ? 'p-2' : 'hidden'}>
           <BrowserViewFrame agentId={agentId} onStatusChange={handleStatusChange} onUrlChange={handleUrlChange} />
         </div>
-        {isVisible && !isCollapsed && <BrowserToolCallHistory />}
+        {isActive && !isCollapsed && <BrowserToolCallHistory />}
       </div>
     </div>
   );
