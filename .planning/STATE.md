@@ -5,14 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-30)
 
 **Core value:** Agents can browse real websites and users can watch and assist them in real-time
-**Current focus:** v1.3 Browser View Layout
+**Current focus:** v1.3 Browser View Layout -- Phase 16
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements for v1.3
-Last activity: 2026-01-30 -- Milestone v1.3 started
+Phase: 16 of 18 (Context Infrastructure)
+Plan: --
+Status: Ready to plan
+Last activity: 2026-01-30 -- Roadmap created for v1.3
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -29,6 +31,12 @@ Last activity: 2026-01-30 -- Milestone v1.3 started
 - Phases: 6 (10-15)
 - Requirements: 27
 
+**v1.3 Milestone:**
+- Total plans completed: 0
+- Phases: 3 (16-18)
+- Requirements: 11
+- Estimated plans: 4
+
 **Cumulative:** 24 plans, 15 phases, 3 milestones shipped
 
 ## Accumulated Context
@@ -37,6 +45,11 @@ Last activity: 2026-01-30 -- Milestone v1.3 started
 
 All decisions documented in PROJECT.md Key Decisions table (33 entries across v1.0-v1.2).
 Full per-phase decision history archived in milestones/ directory.
+
+v1.3 context:
+- Collapsible panel with collapsedSize=0 (not conditional rendering) to preserve WebSocket
+- BrowserSessionContext hoisted to layout level for auto-expand/collapse control
+- BrowserToolCallsProvider must move from Thread to Agent page level
 
 ### Pending Todos
 
@@ -55,13 +68,7 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: v1.3 milestone initialization
+Stopped at: v1.3 roadmap created
 Resume file: None
 
-**Next action:** Define requirements and create roadmap for v1.3
-
-**Context for next session:**
-- v1.3 Browser View Layout: side-by-side split-pane replacing floating overlay
-- Team feedback: floating panel hides chat messages, needs dedicated layout space
-- Chat left, browser right, hidden when no session, collapsible
-- Phase numbering continues from 16
+**Next action:** Plan Phase 16 (Context Infrastructure)

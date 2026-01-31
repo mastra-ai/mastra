@@ -26,23 +26,23 @@ Requirements for Browser View Layout milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LAYOUT-01 | TBD | Pending |
-| LAYOUT-02 | TBD | Pending |
-| LAYOUT-03 | TBD | Pending |
-| LAYOUT-04 | TBD | Pending |
-| LAYOUT-05 | TBD | Pending |
-| STATE-01 | TBD | Pending |
-| STATE-02 | TBD | Pending |
-| STATE-03 | TBD | Pending |
-| FIX-01 | TBD | Pending |
-| FIX-02 | TBD | Pending |
-| FIX-03 | TBD | Pending |
+| LAYOUT-01 | Phase 17 | Pending |
+| LAYOUT-02 | Phase 17 | Pending |
+| LAYOUT-03 | Phase 17 | Pending |
+| LAYOUT-04 | Phase 17 | Pending |
+| LAYOUT-05 | Phase 17 | Pending |
+| STATE-01 | Phase 16 | Pending |
+| STATE-02 | Phase 16 | Pending |
+| STATE-03 | Phase 17 | Pending |
+| FIX-01 | Phase 18 | Pending |
+| FIX-02 | Phase 18 | Pending |
+| FIX-03 | Phase 18 | Pending |
 
 **Coverage:**
-- v1.3 requirements: 11 total
-- Layout: 5
-- State Management: 3
-- Interaction Fixes: 3
+- v1.3 requirements: 11 total (11 mapped, 0 orphans)
+- Phase 16: 2 requirements (STATE-01, STATE-02)
+- Phase 17: 6 requirements (LAYOUT-01 through LAYOUT-05, STATE-03)
+- Phase 18: 3 requirements (FIX-01, FIX-02, FIX-03)
 
 ---
 *Created: 2026-01-30 for v1.3 Browser View Layout milestone*
