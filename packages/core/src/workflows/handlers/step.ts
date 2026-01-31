@@ -463,11 +463,15 @@ export async function executeStep(
     } else if (durableResult.nestedWflowStepPaused) {
       execResults = { status: 'paused' };
     } else {
-      // Check if output is a nested workflow result wrapper
+      // Check if output is a nested workflow result wrapper.
+      // When a workflow step contains another workflow, the inner workflow's execute()
+      // wraps its result with NESTED_WORKFLOW_RESULT_SYMBOL (see workflow.ts).
+      // Here we unwrap it to:
+      // 1. Use the actual result as this step's output
+      // 2. Store the nested workflow's runId in metadata for debugging/tracing
       const output = durableResult.output;
       if (output && typeof output === 'object' && NESTED_WORKFLOW_RESULT_SYMBOL in output) {
         const nestedResult = output as { result: any; runId: string };
-        // Merge nestedRunId with existing metadata (preserve iterationCount, etc.)
         const existingMetadata = (stepInfo as any).metadata || {};
         execResults = {
           status: 'success',

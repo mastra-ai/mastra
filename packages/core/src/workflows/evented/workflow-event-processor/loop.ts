@@ -306,11 +306,20 @@ export async function processWorkflowForEach(
       const concurrency = step.opts.concurrency ?? 1;
       const indicesToResume = suspendedIndices.slice(0, concurrency);
 
-      // Mark only the iterations we're resuming as pending (null) before re-running them
+      // Reset suspended iterations to "pending" state before re-running them.
+      //
+      // Why PendingMarker instead of null?
+      // The storage merge logic treats null as "keep existing value" to prevent
+      // completed results from being overwritten by concurrent iterations that
+      // haven't finished yet. But when resuming, we need to force-reset the
+      // suspended result to null so the iteration can run fresh.
+      //
+      // PendingMarker ({ __mastra_pending__: true }) tells the storage layer
+      // "force this to null, don't preserve the existing suspended result."
+      // See inmemory.ts updateWorkflowResults for the merge logic.
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const updatedOutput = [...currentResult.output];
       for (const suspIdx of indicesToResume) {
-        // Use special marker to force null during atomic merge (bypasses "keep existing" logic)
         updatedOutput[suspIdx] = createPendingMarker() as any;
       }
 

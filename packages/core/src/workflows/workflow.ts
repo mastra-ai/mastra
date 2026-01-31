@@ -2090,7 +2090,11 @@ export class Workflow<
       throw res.error;
     }
 
-    // Return wrapper with runId for successful nested workflows so step handler can store it in metadata
+    // Wrap successful nested workflow results with NESTED_WORKFLOW_RESULT_SYMBOL.
+    // The step handler (handlers/step.ts) checks for this symbol to:
+    // 1. Extract the actual result for the step output
+    // 2. Store the nested workflow's runId in step metadata for debugging/tracing
+    // See constants.ts for why this uses a Symbol (safe for in-memory, never serialized).
     if (res.status === 'success') {
       return {
         [NESTED_WORKFLOW_RESULT_SYMBOL]: true,

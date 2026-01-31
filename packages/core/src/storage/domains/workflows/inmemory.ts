@@ -90,22 +90,36 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     ) {
       const existingOutput = existingResult.output as unknown[];
       const newOutput = result.output as unknown[];
-      // Merge arrays: use new value for each index, preserving existing when new is null
-      // Exception: { __pending: true } is a special marker that forces null (for bulk resume)
+      // ForEach iteration result merge logic:
+      //
+      // When forEach runs with concurrency > 1, multiple iterations execute in parallel.
+      // Each iteration writes its result to the same output array. We need to merge carefully:
+      //
+      // - null in newOutput means "iteration started but not finished" - keep existing result
+      // - non-null in newOutput means "iteration completed" - use the new result
+      // - PendingMarker ({ __mastra_pending__: true }) means "force reset to null"
+      //
+      // The PendingMarker is needed for bulk resume: when resuming suspended iterations,
+      // we must reset them to null before re-running. Without the marker, the merge logic
+      // would preserve the old suspended result (since null means "keep existing").
+      //
+      // Why a string key instead of Symbol? Symbols don't survive JSON serialization.
+      // In distributed execution where state is persisted to storage and loaded by
+      // different engine instances, a Symbol marker would be silently dropped.
       const mergedOutput = [...existingOutput];
       for (let i = 0; i < Math.max(existingOutput.length, newOutput.length); i++) {
         if (i < newOutput.length) {
           const newVal = newOutput[i];
-          // Check for pending marker - convert to null (forces reset for bulk resume)
           if (isPendingMarker(newVal)) {
+            // PendingMarker: force reset to null (for bulk resume of suspended iterations)
             mergedOutput[i] = null;
           } else if (newVal !== null) {
-            // New non-null value always wins
+            // Completed result: always use the new value
             mergedOutput[i] = newVal;
           }
-          // If newVal is null, keep existing (mergedOutput[i] already has it from spread)
+          // null: iteration in progress, keep existing result (from spread above)
         }
-        // If i >= newOutput.length, keep existing from spread
+        // Index beyond newOutput length: keep existing (from spread above)
       }
       snapshot.context[stepId] = {
         ...existingResult,
