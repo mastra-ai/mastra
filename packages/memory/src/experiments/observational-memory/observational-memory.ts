@@ -3281,7 +3281,35 @@ ${formattedMessages}
    */
   async observe(threadId: string, resourceId?: string, _prompt?: string): Promise<void> {
     const record = await this.getOrCreateRecord(threadId, resourceId);
-    // TODO: Implement manual observation
+    const lockKey = this.getLockKey(threadId, resourceId);
+
+    await this.withLock(lockKey, async () => {
+      // Re-fetch record inside lock to get latest state
+      const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
+
+      if (this.scope === 'resource' && resourceId) {
+        // Resource scope: observe all threads with unobserved messages
+        await this.doResourceScopedObservation(
+          freshRecord,
+          threadId,
+          resourceId,
+          [], // no in-flight messages — everything is already in the DB
+        );
+      } else {
+        // Thread scope: observe unobserved messages for this thread
+        const unobservedMessages = await this.loadUnobservedMessages(
+          threadId,
+          resourceId,
+          freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+        );
+
+        if (unobservedMessages.length === 0) {
+          return;
+        }
+
+        await this.doSynchronousObservation(freshRecord, threadId, unobservedMessages);
+      }
+    });
   }
 
   /**
