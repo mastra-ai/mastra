@@ -875,9 +875,7 @@ export class MastraClient extends BaseResource {
     scorerId: string,
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<StoredScorerResponse> {
-    return this.request(
-      `/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
-    );
+    return this.request(`/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -908,13 +906,10 @@ export class MastraClient extends BaseResource {
     params: UpdateStoredScorerParams,
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<StoredScorerResponse> {
-    return this.request(
-      `/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
-      {
-        method: 'PATCH',
-        body: params,
-      },
-    );
+    return this.request(`/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`, {
+      method: 'PATCH',
+      body: params,
+    });
   }
 
   /**
@@ -927,12 +922,9 @@ export class MastraClient extends BaseResource {
     scorerId: string,
     requestContext?: RequestContext | Record<string, any>,
   ): Promise<DeleteStoredScorerResponse> {
-    return this.request(
-      `/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`,
-      {
-        method: 'DELETE',
-      },
-    );
+    return this.request(`/stored/scorers/${encodeURIComponent(scorerId)}${requestContextQueryString(requestContext)}`, {
+      method: 'DELETE',
+    });
   }
 
   // ============================================================================
