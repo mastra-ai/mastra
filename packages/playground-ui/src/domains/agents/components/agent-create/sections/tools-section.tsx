@@ -5,8 +5,9 @@ import { Controller, Control } from 'react-hook-form';
 
 import { Section } from '@/domains/cms';
 import { ToolsIcon } from '@/ds/icons';
+import { Badge } from '@/ds/components/Badge';
+import { MultiCombobox } from '@/ds/components/Combobox';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import { MultiSelectPicker } from '../../create-agent/multi-select-picker';
 import type { AgentFormValues } from '../../create-agent/form-validation';
 
 interface ToolsSectionProps {
@@ -20,8 +21,8 @@ export function ToolsSection({ control, error }: ToolsSectionProps) {
   const options = useMemo(() => {
     if (!tools) return [];
     return Object.entries(tools).map(([id, tool]) => ({
-      id,
-      name: (tool as { name?: string }).name || id,
+      value: id,
+      label: (tool as { name?: string }).name || id,
       description: (tool as { description?: string }).description || '',
     }));
   }, [tools]);
@@ -31,22 +32,34 @@ export function ToolsSection({ control, error }: ToolsSectionProps) {
       <Controller
         name="tools"
         control={control}
-        render={({ field }) => (
-          <MultiSelectPicker
-            label=""
-            options={options}
-            selected={field.value || []}
-            onChange={field.onChange}
-            getOptionId={option => option.id}
-            getOptionLabel={option => option.name}
-            getOptionDescription={option => option.description}
-            placeholder="Select tools..."
-            searchPlaceholder="Search tools..."
-            emptyMessage="No tools available"
-            disabled={isLoading}
-            error={error}
-          />
-        )}
+        render={({ field }) => {
+          const selectedTools = options.filter(opt => field.value?.includes(opt.value));
+
+          return (
+            <div className="flex flex-col gap-2">
+              <MultiCombobox
+                options={options}
+                value={field.value || []}
+                onValueChange={field.onChange}
+                placeholder="Select tools..."
+                searchPlaceholder="Search tools..."
+                emptyText="No tools available"
+                disabled={isLoading}
+                error={error}
+                variant="light"
+              />
+              {selectedTools.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedTools.map(tool => (
+                    <Badge key={tool.value} icon={<ToolsIcon className="text-accent6" />}>
+                      {tool.label}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }}
       />
     </Section>
   );

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useId } from 'react';
-import { ChevronsUpDown, Search, X, Trash2 } from 'lucide-react';
+import { ChevronsUpDown, Search, Trash2 } from 'lucide-react';
 
 import { Button } from '@/ds/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
@@ -144,7 +144,6 @@ export function ScorersPicker({ selected, onChange, options, disabled = false, e
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2">
-        <Label className="text-xs text-icon5">Scorers</Label>
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <Button

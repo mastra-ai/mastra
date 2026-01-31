@@ -5,8 +5,8 @@ import { Controller, Control } from 'react-hook-form';
 
 import { Section } from '@/domains/cms';
 import { MemoryIcon } from '@/ds/icons';
+import { Combobox } from '@/ds/components/Combobox';
 import { useMemoryConfig } from '@/domains/memory/hooks';
-import { MultiSelectPicker } from '../../create-agent/multi-select-picker';
 import type { AgentFormValues } from '../../create-agent/form-validation';
 
 interface MemorySectionProps {
@@ -19,7 +19,7 @@ export function MemorySection({ control, error }: MemorySectionProps) {
 
   // Memory options - currently returns empty as memory config needs different handling
   const options = useMemo(() => {
-    return [] as { id: string; name: string; description: string }[];
+    return [] as { value: string; label: string; description: string }[];
   }, [memoryConfigsData]);
 
   return (
@@ -28,20 +28,16 @@ export function MemorySection({ control, error }: MemorySectionProps) {
         name="memory"
         control={control}
         render={({ field }) => (
-          <MultiSelectPicker<{ id: string; name: string; description: string }>
-            label=""
+          <Combobox
             options={options}
-            selected={field.value ? [field.value] : []}
-            onChange={selected => field.onChange(selected[0] || '')}
-            getOptionId={option => option.id}
-            getOptionLabel={option => option.name}
-            getOptionDescription={option => option.description}
+            value={field.value || ''}
+            onValueChange={field.onChange}
             placeholder="Select memory configuration..."
             searchPlaceholder="Search memory configs..."
-            emptyMessage="No memory configurations registered"
+            emptyText="No memory configurations registered"
             disabled={isLoading}
-            singleSelect={true}
             error={error}
+            variant="light"
           />
         )}
       />

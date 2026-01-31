@@ -5,8 +5,9 @@ import { Controller, Control } from 'react-hook-form';
 
 import { Section } from '@/domains/cms';
 import { WorkflowIcon } from '@/ds/icons';
+import { Badge } from '@/ds/components/Badge';
+import { MultiCombobox } from '@/ds/components/Combobox';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import { MultiSelectPicker } from '../../create-agent/multi-select-picker';
 import type { AgentFormValues } from '../../create-agent/form-validation';
 
 interface WorkflowsSectionProps {
@@ -20,8 +21,8 @@ export function WorkflowsSection({ control, error }: WorkflowsSectionProps) {
   const options = useMemo(() => {
     if (!workflows) return [];
     return Object.entries(workflows).map(([id, workflow]) => ({
-      id,
-      name: (workflow as { name?: string }).name || id,
+      value: id,
+      label: (workflow as { name?: string }).name || id,
       description: (workflow as { description?: string }).description || '',
     }));
   }, [workflows]);
@@ -31,22 +32,34 @@ export function WorkflowsSection({ control, error }: WorkflowsSectionProps) {
       <Controller
         name="workflows"
         control={control}
-        render={({ field }) => (
-          <MultiSelectPicker
-            label=""
-            options={options}
-            selected={field.value || []}
-            onChange={field.onChange}
-            getOptionId={option => option.id}
-            getOptionLabel={option => option.name}
-            getOptionDescription={option => option.description}
-            placeholder="Select workflows..."
-            searchPlaceholder="Search workflows..."
-            emptyMessage="No workflows available"
-            disabled={isLoading}
-            error={error}
-          />
-        )}
+        render={({ field }) => {
+          const selectedWorkflows = options.filter(opt => field.value?.includes(opt.value));
+
+          return (
+            <div className="flex flex-col gap-2">
+              <MultiCombobox
+                options={options}
+                value={field.value || []}
+                onValueChange={field.onChange}
+                placeholder="Select workflows..."
+                searchPlaceholder="Search workflows..."
+                emptyText="No workflows available"
+                disabled={isLoading}
+                error={error}
+                variant="light"
+              />
+              {selectedWorkflows.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedWorkflows.map(workflow => (
+                    <Badge key={workflow.value} icon={<WorkflowIcon className="text-accent3" />}>
+                      {workflow.label}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }}
       />
     </Section>
   );
