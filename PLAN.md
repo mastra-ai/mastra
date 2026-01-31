@@ -12,176 +12,80 @@ This branch implements durable execution patterns for Mastra agents with resumab
 
 ## Completed Work
 
-### CachingPubSub & Resumable Streams
-- [x] `CachingPubSub` decorator wrapping PubSub + MastraServerCache
-- [x] Extended `PubSub` interface with `getHistory()` and `subscribeWithReplay()`
-- [x] `createDurableAgent()` factory function
-- [x] `DurableAgent` uses CachingPubSub by default
-- [x] Stream adapter uses `subscribeWithReplay()`
+All core functionality is implemented and tested:
 
-### Redis Cache Infrastructure
-- [x] `@mastra/redis` package with generic `RedisServerCache`
-- [x] Works with any Redis client (ioredis, node-redis, @upstash/redis)
-- [x] Presets: `upstashPreset`, `nodeRedisPreset`
-- [x] `@mastra/upstash` updated to use `@mastra/redis`
+| Feature | Status | Tests |
+|---------|--------|-------|
+| CachingPubSub & Resumable Streams | ✅ Complete | 6 tests |
+| Redis Cache Infrastructure (`@mastra/redis`) | ✅ Complete | 20 unit + 11 integration |
+| Evented/Inngest Agent Caching | ✅ Complete | - |
+| Cache TTL Configuration | ✅ Complete | 10 tests |
+| Resume API | ✅ Complete | 12 tests |
+| createDurableAgent Factory | ✅ Complete | 12 tests |
+
+**Total: 71 new tests for resumable streams functionality**
 
 ---
 
 ## Remaining Work
 
-### 1. Wire Caching into Evented/Inngest Agents
+### 1. Server Workflow Handlers Migration
 
-**Priority:** High - **COMPLETED**
+**Priority:** Low | **Status:** DEFERRED
 
-`createEventedAgent` and `createInngestAgent` now support CachingPubSub for resumable streams.
+The server uses direct streaming with manual cache calls (`listPush`) instead of PubSub. Migrating to CachingPubSub would require significant refactoring.
 
-**Files:**
-- `packages/core/src/agent/durable/create-evented-agent.ts`
-- `workflows/inngest/src/durable-agent/create-inngest-agent.ts`
+**Decision:** Keep current approach. CachingPubSub works for agent streaming (PubSub-based). Server workflow streaming uses Transform streams (different pattern).
 
-**Tasks:**
-- [x] Add `cache` option to `CreateEventedAgentOptions`
-- [x] Wrap pubsub with CachingPubSub when cache provided
-- [x] Add `cache` option to `CreateInngestAgentOptions`
-- [x] Update Inngest agent to use CachingPubSub
+**Future option:** Create `CachingTransformStream` utility for direct streaming use cases.
 
 ---
 
-### 2. Server Workflow Handlers Migration
-
-**Priority:** Medium - **DEFERRED**
-
-The server currently has manual cache calls for workflow event streaming. These could use CachingPubSub instead, but this is a larger architectural change.
-
-**File:** `packages/server/src/server/handlers/workflows.ts`
-
-**Current approach:** Direct streaming with manual `listPush` calls:
-- Lines ~384, ~442, ~1037, ~1136: `serverCache.listPush(cacheKey, chunk)`
-
-**Migration considerations:**
-- Server handlers stream directly, not through pubsub
-- Would need to refactor to use pubsub for all streaming
-- Affects multiple endpoints (workflow stream, watch, execute)
-- Risk of breaking existing behavior
-
-**Recommendation:** Keep current approach for now. The CachingPubSub pattern works well for agent streaming where pubsub is already used. Server workflow streaming uses direct Transform streams which is a different pattern.
-
-**Future option:** Create a `CachingTransformStream` utility that provides similar functionality for direct streaming use cases.
-
----
-
-### 3. Integration Tests
-
-**Priority:** High - **COMPLETE**
-
-**Tests completed:**
-
-`packages/core/src/agent/durable/__tests__/resumable-streams.test.ts` (6 tests):
-- [x] Late subscriber receives full history via replay
-- [x] Receives both cached and live events
-- [x] Multiple concurrent subscribers each get full history
-- [x] Disconnect/reconnect scenario (unsubscribe, miss events, resubscribe with replay)
-- [x] Topic isolation between runs
-- [x] Cache cleanup
-
-`packages/core/src/agent/durable/__tests__/create-durable-agent.test.ts` (12 tests):
-- [x] Basic factory creation from regular Agent
-- [x] ID/name override
-- [x] Type guard (isLocalDurableAgent)
-- [x] Default InMemoryServerCache
-- [x] Custom cache support
-- [x] CachingPubSub wrapping
-- [x] Custom pubsub wrapped with CachingPubSub
-- [x] Proxy behavior for agent access
-- [x] getDurableWorkflows returns workflows
-- [x] __setMastra accepts mastra instance
-
-`packages/core/src/agent/durable/__tests__/cache-ttl.test.ts` (10 tests):
-- [x] Configurable TTL on InMemoryServerCache
-- [x] Cache item expiry after TTL
-- [x] List item expiry after TTL
-- [x] TTL refresh on list push
-- [x] Disable TTL with ttlMs: 0
-- [x] Respect maxSize option (LRU eviction)
-- [x] Empty history when cache expires
-- [x] Live events still work after cache expires
-- [x] Partial cache expiry handling
-- [x] Default TTL values
-
-`stores/redis/src/integration.test.ts` (11 tests):
-- [x] Set and get values with automatic JSON serialization
-- [x] Return null for non-existent keys
-- [x] Delete keys
-- [x] Push and retrieve list items
-- [x] Return list length
-- [x] Return range of items
-- [x] TTL expiry behavior with real Redis
-- [x] CachingPubSub: replay events to late subscriber
-- [x] CachingPubSub: receive both cached and live events
-- [x] CachingPubSub: disconnect/reconnect scenario
-- [x] CachingPubSub: topic isolation
-
-**All integration tests complete!**
-
----
-
-### 4. Resume API
-
-**Priority:** Medium - **COMPLETE**
-
-The `resume()` method is fully implemented with:
-- [x] Workflow state restoration via run registry
-- [x] Re-subscription with replay via CachingPubSub
-- [x] Tool approval resume flow with callbacks
-- [x] Context preservation (threadId, resourceId)
-
-**Tests:** `packages/core/src/agent/durable/__tests__/resume-api.test.ts` (12 tests):
-- [x] DurableAgent.resume() method available
-- [x] Accept runId and resumeData
-- [x] Preserve threadId/resourceId through prepare/resume
-- [x] LocalDurableAgent has resume method
-- [x] Return stream result from resume
-- [x] Event replay with CachingPubSub
-- [x] Event deduplication during replay
-- [x] onSuspended callback support
-- [x] onFinish callback support
-- [x] onError callback support
-- [x] Maintain run registry across prepare/resume
-- [x] Registry cleanup on cleanup()
-
----
-
-### 5. Cache TTL Configuration
-
-**Priority:** Low - **PARTIALLY COMPLETE**
-
-**Completed:**
-- [x] Configurable TTL on InMemoryServerCache (`ttlMs` option)
-- [x] Configurable TTL on RedisServerCache (`ttlSeconds` option)
-- [x] Cache size limits / eviction policies (InMemoryServerCache `maxSize` option)
-
-**Ideas (future):**
-- [ ] Make cache TTL configurable per-agent at runtime
-- [ ] Different TTLs for different event types
-- [ ] Auto-cleanup of completed run caches
-
----
-
-### 6. Observability
+### 2. Per-Agent TTL Configuration
 
 **Priority:** Low
 
-**Ideas:**
-- [ ] Emit metrics for cache hits/misses
-- [ ] Log replay events for debugging
-- [ ] Dashboard for active streams / cache usage
+Allow agents to specify custom TTL at runtime instead of using cache defaults.
+
+```typescript
+const durableAgent = createDurableAgent({
+  agent,
+  cache,
+  cacheTtl: 60 * 10, // 10 minutes for this agent
+});
+```
+
+---
+
+### 3. Auto-Cleanup of Completed Runs
+
+**Priority:** Low
+
+Automatically clear cache entries when a run completes successfully, rather than waiting for TTL expiry.
+
+```typescript
+// On finish event, clear the run's cache entry
+await cache.delete(`agent.stream.${runId}`);
+```
+
+---
+
+### 4. Observability
+
+**Priority:** Low
+
+Ideas for debugging and monitoring:
+- Emit metrics for cache hits/misses
+- Log replay events for debugging
+- Dashboard for active streams / cache usage
 
 ---
 
 ## Future Ideas
 
 ### Postgres Cache Backend
-Create `PostgresServerCache` for deployments without Redis.
+
+For deployments without Redis:
 
 ```typescript
 import { PostgresServerCache } from '@mastra/pg';
@@ -192,7 +96,8 @@ const cache = new PostgresServerCache({
 ```
 
 ### Stream Checkpointing
-Allow clients to specify a checkpoint (last event ID) when reconnecting instead of replaying full history.
+
+Resume from a specific event instead of replaying full history:
 
 ```typescript
 const { output } = await durableAgent.stream(messages, {
@@ -200,22 +105,20 @@ const { output } = await durableAgent.stream(messages, {
 });
 ```
 
-### Multi-Region Stream Replication
-For globally distributed deployments, replicate stream events across regions.
-
 ### Client SDK Integration
+
 Add resumable stream support to `@mastra/client-js`:
 
 ```typescript
 const stream = await client.agents.stream('my-agent', messages, {
   resumable: true,
-  onDisconnect: () => console.log('Disconnected, will auto-resume'),
+  onDisconnect: () => console.log('Will auto-resume'),
 });
 ```
 
 ---
 
-## Architecture Diagram
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
