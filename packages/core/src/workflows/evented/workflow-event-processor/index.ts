@@ -14,6 +14,7 @@ import type {
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
 import { createTimeTravelExecutionParams, validateStepResumeData } from '../../utils';
+import { resolveCurrentState } from '../helpers';
 import { StepExecutor } from '../step-executor';
 import { EventedWorkflow } from '../workflow';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
@@ -347,7 +348,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } = args;
 
     // Extract final state from stepResults or args
-    const finalState = stepResults?.__state ?? state ?? {};
+    const finalState = resolveCurrentState({ stepResults, state });
 
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
@@ -400,7 +401,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } = args;
 
     // Extract final state from stepResults or args
-    const finalState = stepResults?.__state ?? state ?? {};
+    const finalState = resolveCurrentState({ stepResults, state });
 
     // TODO: if there are still active paths don't end the workflow yet
     // handle nested workflow
@@ -464,7 +465,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } = args;
 
     // Extract final state from stepResults or args
-    const finalState = stepResults?.__state ?? state ?? {};
+    const finalState = resolveCurrentState({ stepResults, state });
 
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
@@ -541,7 +542,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     forEachIndex,
   }: ProcessorArgs) {
     // Get current state from stepResults.__state or from passed state
-    const currentState = stepResults?.__state ?? state ?? {};
+    const currentState = resolveCurrentState({ stepResults, state });
     let stepGraph: StepFlowEntry[] = workflow.stepGraph;
 
     if (!executionPath?.length) {
@@ -971,7 +972,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       stepResults,
       state: currentState,
-      emitter: ee,
       requestContext: rc,
       input: (prevResult as any)?.output,
       resumeData: resumeDataToUse,

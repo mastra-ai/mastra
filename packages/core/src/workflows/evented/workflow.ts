@@ -42,6 +42,8 @@ import type {
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
+import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
+import type { TripwireChunk } from './helpers';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};
@@ -305,6 +307,91 @@ function createStepFromParams(
   };
 }
 
+/**
+ * Processes an agent stream, publishing events and detecting tripwires.
+ * This helper unifies the V1 and V2 stream processing paths.
+ */
+async function processAgentStream(params: {
+  fullStream: AsyncIterable<unknown>;
+  isV2Model: boolean;
+  pubsub: { publish: (channel: string, data: any) => Promise<void> };
+  runId: string;
+  toolData: { name: string; args: unknown };
+  logger?: { debug: (msg: string, data?: unknown) => void };
+}): Promise<{ tripwireChunk: TripwireChunk | null }> {
+  const { fullStream, isV2Model, pubsub, runId, toolData, logger } = params;
+
+  // Publish stream start event
+  try {
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: { type: 'tool-call-streaming-start', ...toolData },
+    });
+  } catch (err) {
+    // Non-critical: continue even if publish fails
+    logger?.debug('Failed to publish stream start event', { runId, error: err });
+  }
+
+  let tripwireChunk: TripwireChunk | null = null;
+
+  for await (const chunk of fullStream) {
+    // Check for tripwire chunks from agent processors
+    if (isTripwireChunk(chunk)) {
+      tripwireChunk = chunk;
+      break;
+    }
+
+    // Publish text deltas
+    if (typeof chunk === 'object' && chunk !== null && 'type' in chunk && chunk.type === 'text-delta') {
+      const textDelta = getTextDeltaFromChunk(chunk as any, isV2Model);
+      if (textDelta) {
+        try {
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'tool-call-delta', ...toolData, argsTextDelta: textDelta },
+          });
+        } catch (err) {
+          // Non-critical: continue even if publish fails
+          logger?.debug('Failed to publish stream delta event', { runId, error: err });
+        }
+      }
+    }
+  }
+
+  // Publish stream finish event
+  try {
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: { type: 'tool-call-streaming-finish', ...toolData },
+    });
+  } catch (err) {
+    // Non-critical: continue even if publish fails
+    logger?.debug('Failed to publish stream finish event', { runId, error: err });
+  }
+
+  return { tripwireChunk };
+}
+
+/**
+ * Safely invokes the user's onFinish callback with error logging.
+ */
+async function safeOnFinish(
+  callback: ((result: unknown) => void | Promise<void>) | undefined,
+  result: unknown,
+  logger?: { warn: (msg: string, data?: unknown) => void },
+): Promise<void> {
+  if (!callback) return;
+  try {
+    await callback(result);
+  } catch (err) {
+    // User callback errors are logged but don't fail the step
+    logger?.warn('User onFinish callback threw an error', { error: err });
+  }
+}
+
 function createStepFromAgent<TStepId extends string, TStepOutput>(
   params: Agent<TStepId, any>,
   agentOrToolOptions?: Record<string, unknown>,
@@ -329,12 +416,14 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     execute: async ({
       inputData,
       runId,
+      mastra,
       [PUBSUB_SYMBOL]: pubsub,
       requestContext,
       tracingContext,
       abortSignal,
       abort,
     }) => {
+      const logger = mastra?.getLogger();
       const toolData = {
         name: params.name,
         args: inputData,
@@ -348,6 +437,18 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       // Track structured output result
       let structuredResult: any = null;
 
+      // Common callback to capture structured output
+      const handleFinish = (result: { text: string; object?: unknown }) => {
+        const resultWithObject = result as typeof result & { object?: unknown };
+        if ((agentOptions as any)?.structuredOutput?.schema && resultWithObject.object) {
+          structuredResult = resultWithObject.object;
+        }
+      };
+
+      // Get the appropriate stream based on model version
+      let fullStream: AsyncIterable<unknown>;
+      let textPromise: Promise<string>;
+
       if (isV2Model) {
         // V2+ model path: use .stream() which returns MastraModelOutput
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
@@ -355,160 +456,61 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           tracingContext,
           requestContext,
           onFinish: result => {
-            // Capture structured output if available
-            const resultWithObject = result as typeof result & { object?: unknown };
-            if ((agentOptions as any)?.structuredOutput?.schema && resultWithObject.object) {
-              structuredResult = resultWithObject.object;
-            }
-            void (agentOptions as any)?.onFinish?.(result);
+            handleFinish(result);
+            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
           },
           abortSignal,
         });
-
-        if (abortSignal.aborted) {
-          return abort() as TStepOutput;
-        }
-
-        // Publish stream events from fullStream
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
-        });
-
-        // Track tripwire chunk if encountered
-        let tripwireChunk: any = null;
-
-        for await (const chunk of modelOutput.fullStream) {
-          // Check for tripwire chunks from agent processors
-          // Cast to any because tripwire is a runtime addition not in the base type
-          if ((chunk as any).type === 'tripwire') {
-            tripwireChunk = chunk;
-            break;
-          }
-          if (chunk.type === 'text-delta') {
-            await pubsub.publish(`workflow.events.v2.${runId}`, {
-              type: 'watch',
-              runId,
-              data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.payload.text },
-            });
-          }
-        }
-
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
-        });
-
-        // If a tripwire was detected, throw TripWire to abort the workflow step
-        if (tripwireChunk) {
-          throw new TripWire(
-            (tripwireChunk as any).payload?.reason || 'Agent tripwire triggered',
-            {
-              retry: (tripwireChunk as any).payload?.retry,
-              metadata: (tripwireChunk as any).payload?.metadata,
-            },
-            (tripwireChunk as any).payload?.processorId,
-          );
-        }
-
-        // Return structured output if available, otherwise default text
-        if (structuredResult !== null) {
-          return structuredResult as TStepOutput;
-        }
-
-        // Get text from the modelOutput
-        const text = await modelOutput.text;
-
-        return {
-          text,
-        } as TStepOutput;
+        fullStream = modelOutput.fullStream;
+        textPromise = modelOutput.text;
       } else {
         // V1 model path: use .streamLegacy() for backwards compatibility
-        let streamPromise = {} as {
-          promise: Promise<string>;
-          resolve: (value: string) => void;
-          reject: (reason?: any) => void;
-        };
-
-        streamPromise.promise = new Promise((resolve, reject) => {
-          streamPromise.resolve = resolve;
-          streamPromise.reject = reject;
+        let resolveText: (value: string) => void;
+        textPromise = new Promise(resolve => {
+          resolveText = resolve;
         });
 
-        const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
+        const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
           tracingContext,
           requestContext,
           onFinish: result => {
-            // Capture structured output if available
-            const resultWithObject = result as typeof result & { object?: unknown };
-            if ((agentOptions as any)?.structuredOutput?.schema && resultWithObject.object) {
-              structuredResult = resultWithObject.object;
-            }
-            streamPromise.resolve(result.text);
-            void (agentOptions as any)?.onFinish?.(result);
+            handleFinish(result);
+            resolveText!(result.text);
+            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
           },
           abortSignal,
         });
-
-        if (abortSignal.aborted) {
-          return abort() as TStepOutput;
-        }
-
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
-        });
-
-        // Track tripwire chunk if encountered
-        let tripwireChunk: any = null;
-
-        for await (const chunk of fullStream) {
-          // Check for tripwire chunks from agent processors
-          // Cast to any because tripwire is a runtime addition not in the base type
-          if ((chunk as any).type === 'tripwire') {
-            tripwireChunk = chunk;
-            break;
-          }
-          if (chunk.type === 'text-delta') {
-            await pubsub.publish(`workflow.events.v2.${runId}`, {
-              type: 'watch',
-              runId,
-              data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
-            });
-          }
-        }
-
-        await pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
-        });
-
-        // If a tripwire was detected, throw TripWire to abort the workflow step
-        if (tripwireChunk) {
-          throw new TripWire(
-            (tripwireChunk as any).payload?.reason || 'Agent tripwire triggered',
-            {
-              retry: (tripwireChunk as any).payload?.retry,
-              metadata: (tripwireChunk as any).payload?.metadata,
-            },
-            (tripwireChunk as any).payload?.processorId,
-          );
-        }
-
-        // Return structured output if available, otherwise default text
-        if (structuredResult !== null) {
-          return structuredResult as TStepOutput;
-        }
-
-        return {
-          text: await streamPromise.promise,
-        } as TStepOutput;
+        fullStream = legacyResult.fullStream;
       }
+
+      if (abortSignal.aborted) {
+        return abort() as TStepOutput;
+      }
+
+      // Process the stream (unified for V1/V2)
+      const { tripwireChunk } = await processAgentStream({
+        fullStream,
+        isV2Model,
+        pubsub,
+        runId,
+        toolData,
+        logger,
+      });
+
+      // Handle tripwire if detected
+      if (tripwireChunk) {
+        throw createTripWireFromChunk(tripwireChunk);
+      }
+
+      // Return structured output if available, otherwise return text
+      if (structuredResult !== null) {
+        return structuredResult as TStepOutput;
+      }
+
+      return {
+        text: await textPromise,
+      } as TStepOutput;
     },
     component: params.component,
   };
@@ -1550,7 +1552,7 @@ export class EventedRun<
     resumeData,
     requestContext,
     perStep,
-    outputOptions: _outputOptions,
+    outputOptions,
   }: {
     resumeData?: TResume;
     step?:
@@ -1603,6 +1605,7 @@ export class EventedRun<
             step,
             requestContext,
             perStep,
+            outputOptions,
           });
 
           if (self.streamOutput) {
@@ -1643,6 +1646,10 @@ export class EventedRun<
     forEachIndex?: number;
     requestContext?: RequestContext;
     perStep?: boolean;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     if (!workflowsStore) {
@@ -1787,6 +1794,7 @@ export class EventedRun<
         requestContext,
         abortController: this.abortController,
         perStep: params.perStep,
+        outputOptions: params.outputOptions,
       })
       .then(result => {
         if (result.status !== 'suspended') {

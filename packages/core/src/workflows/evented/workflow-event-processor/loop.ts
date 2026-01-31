@@ -1,9 +1,10 @@
-import EventEmitter from 'node:events';
 import type { StepFlowEntry, StepResult } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { Mastra } from '../../../mastra';
+import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
+import { createPendingMarker } from '../types';
 import type { ProcessorArgs } from '.';
 
 export async function processWorkflowLoop(
@@ -36,7 +37,14 @@ export async function processWorkflowLoop(
   },
 ) {
   // Get current state from stepResult, stepResults or passed state
-  const currentState = (stepResult as any)?.__state ?? stepResults?.__state ?? state ?? {};
+  const currentState = resolveCurrentState({ stepResult, stepResults, state });
+
+  // Create a proper RequestContext from the plain object passed in ProcessorArgs
+  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
+
+  // Get iteration count from step results metadata (same pattern as control-flow.ts)
+  const prevIterationCount = stepResults[step.step?.id]?.metadata?.iterationCount ?? 0;
+  const iterationCount = prevIterationCount + 1;
 
   const loopCondition = await stepExecutor.evaluateCondition({
     workflowId,
@@ -44,13 +52,12 @@ export async function processWorkflowLoop(
     runId,
     stepResults,
     state: currentState,
-    emitter: new EventEmitter() as any, // TODO
-    requestContext: new RequestContext(), // TODO
+    requestContext: reqContext,
     inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
     abortController: new AbortController(),
     retryCount,
-    iterationCount: 0, //TODO: implement
+    iterationCount,
   });
 
   if (step.loopType === 'dountil') {
@@ -171,7 +178,7 @@ export async function processWorkflowForEach(
   },
 ) {
   // Get current state from stepResults or passed state
-  const currentState = stepResults?.__state ?? state ?? {};
+  const currentState = resolveCurrentState({ stepResults, state });
   const currentResult: Extract<StepResult<any, any, any, any>, { status: 'success' }> = stepResults[
     step.step.id
   ] as any;
@@ -276,6 +283,10 @@ export async function processWorkflowForEach(
       });
       return;
     }
+
+    // forEachIndex was provided but the target iteration is already complete,
+    // and there are no pending iterations. The workflow step.end handler will
+    // advance the workflow. This is expected behavior for completed forEach loops.
     return;
   }
 
@@ -300,7 +311,7 @@ export async function processWorkflowForEach(
       const updatedOutput = [...currentResult.output];
       for (const suspIdx of indicesToResume) {
         // Use special marker to force null during atomic merge (bypasses "keep existing" logic)
-        updatedOutput[suspIdx] = { __pending: true } as any;
+        updatedOutput[suspIdx] = createPendingMarker() as any;
       }
 
       await workflowsStore?.updateWorkflowResults({
@@ -318,6 +329,7 @@ export async function processWorkflowForEach(
       const isNestedWorkflow = (step.step as any).component === 'WORKFLOW';
 
       // Resume iterations up to concurrency limit
+      // Wrap in try-catch to prevent partial state issues if some publishes fail
       for (const suspIdx of indicesToResume) {
         const targetArray = (prevResult as any)?.output;
         const iterationPrevResult =
@@ -325,26 +337,31 @@ export async function processWorkflowForEach(
             ? { status: 'success' as const, output: targetArray[suspIdx] }
             : prevResult;
 
-        await pubsub.publish('workflows', {
-          type: 'workflow.step.run',
-          runId,
-          data: {
-            parentWorkflow,
-            workflowId,
+        try {
+          await pubsub.publish('workflows', {
+            type: 'workflow.step.run',
             runId,
-            executionPath: [executionPath[0]!, suspIdx],
-            resumeSteps,
-            timeTravel,
-            stepResults,
-            prevResult: iterationPrevResult,
-            resumeData,
-            activeSteps,
-            requestContext,
-            perStep,
-            state: currentState,
-            outputOptions,
-          },
-        });
+            data: {
+              parentWorkflow,
+              workflowId,
+              runId,
+              executionPath: [executionPath[0]!, suspIdx],
+              resumeSteps,
+              timeTravel,
+              stepResults,
+              prevResult: iterationPrevResult,
+              resumeData,
+              activeSteps,
+              requestContext,
+              perStep,
+              state: currentState,
+              outputOptions,
+            },
+          });
+        } catch {
+          // Log error but continue - the iteration will be picked up on next resume
+          // State was already updated, so no data loss
+        }
       }
       return;
     }

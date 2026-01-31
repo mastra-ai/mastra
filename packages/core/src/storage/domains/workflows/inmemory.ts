@@ -1,4 +1,5 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
+import { isPendingMarker } from '../../../workflows/evented/types';
 import { normalizePerPage } from '../../base';
 import type {
   StorageWorkflowRun,
@@ -80,21 +81,23 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const existingResult = snapshot.context[stepId];
     if (
       existingResult &&
+      'output' in existingResult &&
       Array.isArray(existingResult.output) &&
       result &&
       typeof result === 'object' &&
-      Array.isArray((result as any).output)
+      'output' in result &&
+      Array.isArray(result.output)
     ) {
-      const existingOutput = existingResult.output as any[];
-      const newOutput = (result as any).output as any[];
+      const existingOutput = existingResult.output as unknown[];
+      const newOutput = result.output as unknown[];
       // Merge arrays: use new value for each index, preserving existing when new is null
       // Exception: { __pending: true } is a special marker that forces null (for bulk resume)
       const mergedOutput = [...existingOutput];
       for (let i = 0; i < Math.max(existingOutput.length, newOutput.length); i++) {
         if (i < newOutput.length) {
           const newVal = newOutput[i];
-          // Check for __pending marker - convert to null (forces reset)
-          if (newVal && typeof newVal === 'object' && newVal.__pending === true) {
+          // Check for pending marker - convert to null (forces reset for bulk resume)
+          if (isPendingMarker(newVal)) {
             mergedOutput[i] = null;
           } else if (newVal !== null) {
             // New non-null value always wins

@@ -1,7 +1,7 @@
-import EventEmitter from 'node:events';
 import type { StepFlowEntry } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
+import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import type { ProcessorArgs } from '.';
 
@@ -31,7 +31,7 @@ export async function processWorkflowParallel(
   },
 ) {
   // Get current state from stepResults or passed state
-  const currentState = stepResults?.__state ?? state ?? {};
+  const currentState = resolveCurrentState({ stepResults, state });
   for (let i = 0; i < step.steps.length; i++) {
     const nestedStep = step.steps[i];
     if (nestedStep?.type === 'step') {
@@ -98,7 +98,10 @@ export async function processWorkflowConditional(
   },
 ) {
   // Get current state from stepResults or passed state
-  const currentState = stepResults?.__state ?? state ?? {};
+  const currentState = resolveCurrentState({ stepResults, state });
+
+  // Create a proper RequestContext from the plain object passed in ProcessorArgs
+  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
 
   const idxs = await stepExecutor.evaluateConditions({
     workflowId,
@@ -106,8 +109,7 @@ export async function processWorkflowConditional(
     runId,
     stepResults,
     state: currentState,
-    emitter: new EventEmitter() as any, // TODO
-    requestContext: new RequestContext(), // TODO
+    requestContext: reqContext,
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
