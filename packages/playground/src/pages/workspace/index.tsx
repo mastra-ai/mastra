@@ -93,6 +93,7 @@ export default function Workspace() {
 
   // Navigate to a different workspace (changes path, resets query params)
   const setSelectedWorkspaceId = (id: string) => {
+    setHasUndiscoveredInstall(false); // Reset warning when switching workspaces
     navigate(`/workspaces/${id}`);
   };
 
@@ -169,23 +170,25 @@ export default function Workspace() {
             if (result.success) {
               setShowAddSkillDialog(false);
 
-              try {
-                // Refetch skills and check if the installed skill appears in the list
-                const { data: refreshedData } = await refetchSkills();
-                const installedSkillFound = refreshedData?.skills.some(s => s.name === result.skillName);
+              // Refetch skills and check if the installed skill appears in the list
+              const { data: refreshedData, error } = await refetchSkills();
 
-                if (installedSkillFound) {
-                  toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
-                } else {
-                  // Skill was installed but not discovered - likely missing path config
-                  setHasUndiscoveredInstall(true);
-                  toast.warning(
-                    `Skill "${result.skillName}" installed to .agents/skills but not discovered. Add .agents/skills to your workspace skills paths.`,
-                  );
-                }
-              } catch {
-                // Refetch failed - show success but can't verify discovery
+              // If refetch failed, just show success (can't verify discovery)
+              if (error || !refreshedData) {
                 toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
+                return;
+              }
+
+              const installedSkillFound = refreshedData.skills.some(s => s.name === result.skillName);
+
+              if (installedSkillFound) {
+                toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
+              } else {
+                // Skill was installed but not discovered - likely missing path config
+                setHasUndiscoveredInstall(true);
+                toast.warning(
+                  `Skill "${result.skillName}" installed to .agents/skills but not discovered. Add .agents/skills to your workspace skills paths.`,
+                );
               }
             } else {
               toast.error('Failed to install skill');
