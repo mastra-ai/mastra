@@ -234,8 +234,8 @@ export class DurableAgent<
     super({
       id: agentId as TAgentId,
       name: agentName,
-      // Empty instructions - we delegate to the wrapped agent's getInstructions()
-      instructions: '',
+      // Delegate to wrapped agent's instructions
+      instructions: ({ requestContext }) => agent.getInstructions({ requestContext }),
       // We need to provide model to satisfy the base class, but we'll delegate to wrapped agent
       model: (agent as any).__model ?? agent.getModel(),
     });
