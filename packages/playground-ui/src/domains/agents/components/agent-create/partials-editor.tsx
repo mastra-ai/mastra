@@ -20,7 +20,7 @@ export function PartialsEditor({ value, onChange, detectedNames }: PartialsEdito
   };
 
   return (
-    <section className="flex flex-col gap-3 pb-4">
+    <section className="flex flex-col gap-3 pb-4 px-4">
       <SectionHeader
         title={
           <>

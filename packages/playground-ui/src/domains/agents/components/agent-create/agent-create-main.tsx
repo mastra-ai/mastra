@@ -8,7 +8,6 @@ import { Label } from '@/ds/components/Label';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons';
-import { Spinner } from '@/ds/components/Spinner';
 import { cn } from '@/lib/utils';
 
 import { CmsInput } from '@/domains/cms/components/cms-input';
@@ -20,11 +19,9 @@ import { TestInstructionDialog } from './test-instruction-dialog';
 interface AgentCreateMainProps {
   form: UseFormReturn<AgentFormValues>;
   formRef?: RefObject<HTMLFormElement | null>;
-  onPublish: () => void;
-  isSubmitting?: boolean;
 }
 
-export function AgentCreateMain({ form, formRef, onPublish, isSubmitting = false }: AgentCreateMainProps) {
+export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
   const {
     register,
     control,
@@ -72,9 +69,9 @@ export function AgentCreateMain({ form, formRef, onPublish, isSubmitting = false
   const detectedPartialNames = extractPartialNames(instructions || '') ?? Object.keys(partials);
 
   return (
-    <div className="flex flex-col gap-4 h-full px-4 pb-4">
-      {/* Header with Title */}
-      <div className="flex flex-col gap-2 pt-4">
+    <div className="flex flex-col gap-4 h-full pb-4 pt-4">
+      {/* Form fields */}
+      <div className="flex flex-col gap-2 px-4">
         {/* Agent Name - XL size */}
         <CmsInput
           label="Agent name"
@@ -98,7 +95,7 @@ export function AgentCreateMain({ form, formRef, onPublish, isSubmitting = false
       </div>
 
       {/* Model */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5 px-4">
         <Label className="text-xs text-icon5">
           Model <span className="text-accent2">*</span>
         </Label>
@@ -117,7 +114,7 @@ export function AgentCreateMain({ form, formRef, onPublish, isSubmitting = false
       </div>
 
       {/* Instructions - CodeEditor */}
-      <div className="flex flex-col gap-1.5 flex-1 min-h-0">
+      <div className="flex flex-col gap-1.5 flex-1 min-h-0 px-4">
         <div className="flex items-center justify-between">
           <Label htmlFor="instructions" className="text-xs text-icon5">
             Instructions <span className="text-accent2">*</span>
@@ -158,20 +155,6 @@ export function AgentCreateMain({ form, formRef, onPublish, isSubmitting = false
           />
         )}
       />
-
-      {/* Create Agent Button - at the bottom */}
-      <div className="flex justify-end">
-        <Button variant="primary" onClick={onPublish} disabled={isSubmitting}>
-          {isSubmitting ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              Creating...
-            </>
-          ) : (
-            'Create agent'
-          )}
-        </Button>
-      </div>
 
       {/* Test Instructions Dialog */}
       <TestInstructionDialog

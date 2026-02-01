@@ -8,6 +8,10 @@ import {
   AgentCreateSidebar,
   AgentLayout,
   useAgentCreateForm,
+  Header,
+  HeaderTitle,
+  Icon,
+  AgentIcon,
 } from '@mastra/playground-ui';
 
 function CmsAgentsCreatePage() {
@@ -53,9 +57,22 @@ function CmsAgentsCreatePage() {
   }, [form, createStoredAgent, navigate, paths]);
 
   return (
-    <AgentLayout agentId="agent-create" rightSlot={<AgentCreateSidebar form={form} />}>
+    <AgentLayout
+      agentId="agent-create"
+      headerSlot={
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <AgentIcon />
+            </Icon>
+            Create an agent from UI
+          </HeaderTitle>
+        </Header>
+      }
+      rightSlot={<AgentCreateSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} />}
+    >
       <form ref={formRef} className="h-full">
-        <AgentCreateMain form={form} formRef={formRef} onPublish={handlePublish} isSubmitting={isSubmitting} />
+        <AgentCreateMain form={form} formRef={formRef} />
       </form>
     </AgentLayout>
   );
