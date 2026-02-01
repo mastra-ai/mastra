@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from '../../error';
-import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import type { StepFlowEntry, StepResult } from '../types';
@@ -58,10 +57,6 @@ describe('StepExecutor', () => {
       runId: 'test-run',
       requestContext,
       stepResults: {},
-      emitter: {
-        runtime: new EventEmitterPubSub(),
-        events: new EventEmitterPubSub(),
-      },
     });
 
     // Assert: Verify return value and fn was not called
@@ -76,10 +71,6 @@ describe('StepExecutor', () => {
       runId: 'test-run',
       requestContext,
       stepResults: {},
-      emitter: {
-        runtime: new EventEmitterPubSub(),
-        events: new EventEmitterPubSub(),
-      },
     };
 
     // Test undefined fn case
@@ -137,11 +128,6 @@ describe('StepExecutor', () => {
       },
     };
 
-    const emitter = {
-      runtime: new EventEmitterPubSub(),
-      events: new EventEmitterPubSub(),
-    };
-
     // Act: Call resolveSleep with test parameters
     const result = await stepExecutor.resolveSleep({
       workflowId,
@@ -150,7 +136,6 @@ describe('StepExecutor', () => {
       input: inputData,
       resumeData,
       stepResults,
-      emitter,
       requestContext,
       retryCount,
     });
@@ -190,10 +175,6 @@ describe('StepExecutor', () => {
       step: throwingStep,
       runId: 'test-run',
       stepResults: {},
-      emitter: {
-        runtime: new EventEmitterPubSub(),
-        events: new EventEmitterPubSub(),
-      },
       requestContext,
     };
 
@@ -214,8 +195,6 @@ describe('StepExecutor', () => {
       outputSchema: z.object({}),
     });
 
-    const emitter = new EventEmitterPubSub();
-
     const result = await stepExecutor.execute({
       workflowId: 'test-workflow',
       step: failingStep,
@@ -223,7 +202,6 @@ describe('StepExecutor', () => {
       input: {},
       stepResults: {},
       state: {},
-      emitter: emitter as any,
       requestContext,
     });
 
@@ -260,8 +238,6 @@ describe('StepExecutor', () => {
       outputSchema: z.object({}),
     });
 
-    const emitter = new EventEmitterPubSub();
-
     const result = await stepExecutor.execute({
       workflowId: 'test-workflow',
       step: failingStep,
@@ -269,7 +245,6 @@ describe('StepExecutor', () => {
       input: {},
       stepResults: {},
       state: {},
-      emitter: emitter as any,
       requestContext,
     });
 
@@ -314,10 +289,6 @@ describe('StepExecutor', () => {
         runId: 'test-run',
         requestContext,
         stepResults: {},
-        emitter: {
-          runtime: new EventEmitterPubSub(),
-          events: new EventEmitterPubSub(),
-        },
         abortController: parentAbortController,
       });
 
@@ -347,10 +318,6 @@ describe('StepExecutor', () => {
         runId: 'test-run',
         requestContext,
         stepResults: {},
-        emitter: {
-          runtime: new EventEmitterPubSub(),
-          events: new EventEmitterPubSub(),
-        },
         abortController: parentAbortController,
       });
 
@@ -378,10 +345,6 @@ describe('StepExecutor', () => {
         runId: 'test-run',
         requestContext,
         stepResults: {},
-        emitter: {
-          runtime: new EventEmitterPubSub(),
-          events: new EventEmitterPubSub(),
-        },
         abortController: parentAbortController,
       });
 
@@ -413,10 +376,6 @@ describe('StepExecutor', () => {
         requestContext,
         stepResults: {},
         state: {},
-        emitter: {
-          runtime: new EventEmitterPubSub(),
-          events: new EventEmitterPubSub(),
-        },
         abortController: parentAbortController,
       });
 
@@ -443,10 +402,6 @@ describe('StepExecutor', () => {
         runId: 'test-run',
         requestContext,
         stepResults: {},
-        emitter: {
-          runtime: new EventEmitterPubSub(),
-          events: new EventEmitterPubSub(),
-        },
         // No abortController provided
       });
 

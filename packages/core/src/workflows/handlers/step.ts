@@ -8,7 +8,7 @@ import { EntityType, SpanType, wrapMastra } from '../../observability';
 import type { TracingContext, Span } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { NESTED_WORKFLOW_RESULT_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { Step, SuspendOptions } from '../step';
 import { getStepResult } from '../step';
@@ -28,6 +28,7 @@ import {
   validateStepResumeData,
   validateStepSuspendData,
   validateStepStateData,
+  validateStepRequestContext,
 } from '../utils';
 
 export interface ExecuteStepParams {
@@ -87,11 +88,20 @@ export async function executeStep(
 
   const stepCallId = randomUUID();
 
-  const { inputData, validationError } = await validateStepInput({
+  const { inputData, validationError: inputValidationError } = await validateStepInput({
     prevOutput,
     step,
     validateInputs: engine.options?.validateInputs ?? true,
   });
+
+  const { validationError: requestContextValidationError } = await validateStepRequestContext({
+    requestContext,
+    step,
+    validateInputs: engine.options?.validateInputs ?? true,
+  });
+
+  // Combine validation errors - input validation takes precedence
+  const validationError = inputValidationError || requestContextValidationError;
 
   const { resumeData: timeTravelResumeData, validationError: timeTravelResumeValidationError } =
     await validateStepResumeData({
@@ -463,7 +473,25 @@ export async function executeStep(
     } else if (durableResult.nestedWflowStepPaused) {
       execResults = { status: 'paused' };
     } else {
-      execResults = { status: 'success', output: durableResult.output, endedAt: Date.now() };
+      // Check if output is a nested workflow result wrapper.
+      // When a workflow step contains another workflow, the inner workflow's execute()
+      // wraps its result with NESTED_WORKFLOW_RESULT_SYMBOL (see workflow.ts).
+      // Here we unwrap it to:
+      // 1. Use the actual result as this step's output
+      // 2. Store the nested workflow's runId in metadata for debugging/tracing
+      const output = durableResult.output;
+      if (output && typeof output === 'object' && NESTED_WORKFLOW_RESULT_SYMBOL in output) {
+        const nestedResult = output as { result: any; runId: string };
+        const existingMetadata = (stepInfo as any).metadata || {};
+        execResults = {
+          status: 'success',
+          output: nestedResult.result,
+          endedAt: Date.now(),
+          metadata: { ...existingMetadata, nestedRunId: nestedResult.runId },
+        };
+      } else {
+        execResults = { status: 'success', output, endedAt: Date.now() };
+      }
     }
   }
 

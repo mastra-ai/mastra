@@ -4,13 +4,16 @@ export const GitHubIconLink = () => {
       href="https://github.com/mastra-ai/mastra"
       target="_blank"
       rel="noopener noreferrer"
-      className="cursor-pointer transition-colors flex items-center justify-center h-8 w-8"
+      className="flex h-8 w-8 cursor-pointer items-center justify-center transition-colors"
+      aria-label="GitHub repository"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         id="github"
         viewBox="0 0 512 512"
         className="size-5"
+        focusable={false}
+        aria-hidden="true"
       >
         <path
           fill="currentColor"
@@ -19,5 +22,5 @@ export const GitHubIconLink = () => {
         />
       </svg>
     </a>
-  );
-};
+  )
+}

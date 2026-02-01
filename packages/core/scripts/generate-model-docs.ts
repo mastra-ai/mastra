@@ -210,6 +210,8 @@ async function fetchProviderInfo(providerId: string): Promise<{ models: any[]; p
     if (!provider?.models) return { models: [] };
 
     const models = Object.entries(provider.models)
+      // The model.status is an optional enum of 'alpha' | 'beta' | 'deprecated'. Filter out deprecated models.
+      .filter(([_, model]: [string, any]) => model.status !== 'deprecated')
       .map(([modelId, model]: [string, any]) => ({
         model: `${providerId}/${modelId}`,
         imageInput: model.modalities?.input?.includes('image') || false,
@@ -272,11 +274,11 @@ ${getGeneratedComment()}
 
 ${introText}
 
-\`\`\`bash
+\`\`\`bash title=".env"
 ${provider.apiKeyEnvVar}=your-api-key
 \`\`\`
 
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
@@ -317,7 +319,7 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 
 ### Custom Headers
 
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -338,7 +340,7 @@ const agent = new Agent({
 
 ### Dynamic Model Selection
 
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
@@ -506,7 +508,7 @@ ${introText}
 
 ## Usage
 
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
@@ -580,7 +582,8 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
 
 <Tabs>
   <TabItem value="OpenAI" label="OpenAI">
-    \`\`\`typescript
+
+    \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -590,9 +593,11 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       model: "openai/gpt-5"
     })
     \`\`\`
+
   </TabItem>
   <TabItem value="Anthropic" label="Anthropic">
-    \`\`\`typescript
+
+    \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -602,9 +607,11 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       model: "anthropic/claude-4-5-sonnet"
     })
     \`\`\`
+
   </TabItem>
   <TabItem value="Google Gemini" label="Google Gemini">
-    \`\`\`typescript
+
+    \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -614,9 +621,11 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       model: "google/gemini-2.5-flash"
     })
     \`\`\`
+
   </TabItem>
   <TabItem value="xAI" label="xAI">
-    \`\`\`typescript
+
+    \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -626,9 +635,11 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       model: "xai/grok-4"
     })
     \`\`\`
+
   </TabItem>
   <TabItem value="OpenRouter" label="OpenRouter">
-    \`\`\`typescript
+
+    \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -638,9 +649,9 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
       model: "openrouter/anthropic/claude-haiku-4-5"
     })
     \`\`\`
+
   </TabItem>
 </Tabs>
-
 
 ## Model directory
 
@@ -721,12 +732,11 @@ In development, we auto-refresh your local model list every hour, ensuring your 
 
 :::
 
-
 ## Mix and match models
 
 Some models are faster but less capable, while others offer larger context windows or stronger reasoning skills. Use different models from the same provider, or mix and match across providers to fit each task.
 
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/reasoning-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 // Use a cost-effective model for document processing
@@ -745,11 +755,12 @@ const reasoningAgent = new Agent({
   model: "anthropic/claude-opus-4-1"
 })
 \`\`\`
+
 ## Dynamic model selection
 
 Since models are just strings, you can select them dynamically based on [request context](/docs/server/request-context), variables, or any other logic.
 
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/dynamic-assistant-agent.ts"
 const agent = new Agent({
   id: "dynamic-assistant",
   name: "Dynamic Assistant",
@@ -771,7 +782,7 @@ This enables powerful patterns:
 
 Different model providers expose their own configuration options. With OpenAI, you might adjust the \`reasoningEffort\`. With Anthropic, you might tune \`cacheControl\`. Mastra lets you set these specific \`providerOptions\` either at the agent level or per message.
 
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/planner-agent.ts"
 // Agent level (apply to all future messages)
 const planner = new Agent({
   id: "planner",
@@ -805,8 +816,7 @@ const highEffort = await planner.generate([
 
 If you need to specify custom headers, such as an organization ID or other provider-specific fields, use this syntax.
 
-
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/custom-agent.ts"
 const agent = new Agent({
   id: "custom-agent",
   name: "Custom Agent",
@@ -830,8 +840,7 @@ Configuration differs by provider. See the provider pages in the left navigation
 
 Relying on a single model creates a single point of failure for your application. Model fallbacks provide automatic failover between models and providers. If the primary model becomes unavailable, requests are retried against the next configured fallback until one succeeds.
 
-
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/resilient-assistant-agent.ts"
 import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
@@ -854,16 +863,56 @@ const agent = new Agent({
   ],
 });
 \`\`\`
+
 Mastra tries your primary model first. If it encounters a 500 error, rate limit, or timeout, it automatically switches to your first fallback. If that fails too, it moves to the next. Each model gets its own retry count before moving on.
 
 Your users never experience the disruption - the response comes back with the same format, just from a different model. The error context is preserved as the system moves through your fallback chain, ensuring clean error propagation while maintaining streaming compatibility.
+
+## Use local models with Mastra
+
+Mastra also supports local models like \`gpt-oss\`, \`Qwen3\`, \`DeepSeek\` and many more that you run on your own hardware. The application running your local model needs to provide an OpenAI-compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).
+
+For a custom provider the \`id\` (\`$\{providerId\}/$\{modelId\}\`) is required but it will only be used for display purposes. The \`modelId\` needs to be the actual model you want to use. An example would be: \`custom/my-qwen3-model\`.
+
+For the \`url\` it's **important** that you use the base URL of the OpenAI-compatible endpoint with Mastra's \`model\` setting and not the individual chat endpoints.
+
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "custom/my-qwen3-model",
+    url: "http://your-custom-openai-compatible-endpoint.com/v1"
+  }
+})
+\`\`\`
+
+### Example: LMStudio
+
+After starting the LMStudio server, the local server is available at \`http://localhost:1234\` and it provides endpoints like \`/v1/models\`, \`/v1/chat/completions\`, etc. The \`url\` will be \`http://localhost:1234/v1\`. For the \`id\` you can use (\`lmstudio/$\{modelId\}\`) which will be displayed in the LMStudio interface.
+
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "lmstudio/qwen/qwen3-30b-a3b-2507",
+    url: "http://localhost:1234/v1"
+  }
+})
+\`\`\`
 
 ## Use AI SDK with Mastra
 
 Mastra supports AI SDK provider modules, should you need to use them directly.
 
-
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
 import { groq } from '@ai-sdk/groq';
 import { Agent } from "@mastra/core/agent";
 
@@ -873,6 +922,7 @@ const agent = new Agent({
   model: groq('gemma2-9b-it')
 })
 \`\`\`
+
 You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).`;
 }
 
