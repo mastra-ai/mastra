@@ -404,6 +404,7 @@ export function createTool<
   TId extends string = string,
   TSchemaIn = unknown,
   TSchemaOut = unknown,
+  TSchemaOutInput = TSchemaOut,
   TSuspend = unknown,
   TResume = unknown,
   TRequestContext extends Record<string, any> | unknown = unknown,
@@ -413,7 +414,9 @@ export function createTool<
     TRequestContext
   >,
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
+  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext, TSchemaOutInput>,
 ): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext> {
-  return new Tool(opts);
+  return new Tool(
+    opts as unknown as ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
+  );
 }
