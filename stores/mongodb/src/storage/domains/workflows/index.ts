@@ -101,35 +101,149 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     await collection.deleteMany({});
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    try {
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const now = new Date();
+
+      // Load existing snapshot
+      const existingDoc = await collection.findOne({
+        workflow_name: workflowName,
+        run_id: runId,
+      });
+
+      let snapshot: WorkflowRunState;
+      if (!existingDoc) {
+        // Create new snapshot if none exists
+        snapshot = {
+          context: {},
+          activePaths: [],
+          timestamp: Date.now(),
+          suspendedPaths: {},
+          activeStepsPath: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          status: 'pending',
+          value: {},
+          waitingPaths: {},
+          runId: runId,
+          requestContext: {},
+        } as WorkflowRunState;
+      } else {
+        // Parse existing snapshot
+        const existingSnapshot = existingDoc.snapshot;
+        snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+      }
+
+      // Merge the new step result and request context
+      snapshot.context[stepId] = result;
+      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+      // Upsert the snapshot
+      await collection.updateOne(
+        { workflow_name: workflowName, run_id: runId },
+        {
+          $set: {
+            workflow_name: workflowName,
+            run_id: runId,
+            snapshot,
+            updatedAt: now,
+          },
+          $setOnInsert: {
+            createdAt: now,
+          },
+        },
+        { upsert: true },
+      );
+
+      return snapshot.context;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            stepId,
+          },
+        },
+        error,
+      );
+    }
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: UpdateWorkflowStateOptions;
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    try {
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+
+      // Load existing snapshot
+      const existingDoc = await collection.findOne({
+        workflow_name: workflowName,
+        run_id: runId,
+      });
+
+      if (!existingDoc) {
+        return undefined;
+      }
+
+      // Parse existing snapshot
+      const existingSnapshot = existingDoc.snapshot;
+      const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+
+      if (!snapshot || !snapshot?.context) {
+        throw new Error(`Snapshot not found for runId ${runId}`);
+      }
+
+      // Merge the new options with the existing snapshot
+      const updatedSnapshot = { ...snapshot, ...opts };
+
+      // Update the snapshot
+      await collection.updateOne(
+        { workflow_name: workflowName, run_id: runId },
+        {
+          $set: {
+            snapshot: updatedSnapshot,
+            updatedAt: new Date(),
+          },
+        },
+      );
+
+      return updatedSnapshot;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async persistWorkflowSnapshot({
