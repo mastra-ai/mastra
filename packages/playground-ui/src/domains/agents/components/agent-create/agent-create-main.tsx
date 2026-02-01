@@ -66,7 +66,7 @@ export function AgentCreateMain({ form }: AgentCreateMainProps) {
   const detectedPartialNames = extractPartialNames(instructions || '') ?? Object.keys(partials);
 
   return (
-    <div className="flex flex-col gap-4 h-full pb-4">
+    <div className="flex flex-col gap-6 h-full pb-4">
       <PageHeader title="Prompt Editor" icon={<SquareTerminal />} className="px-4 pt-4 pb-0" />
 
       {/* Instructions - CodeEditor */}
@@ -75,7 +75,11 @@ export function AgentCreateMain({ form }: AgentCreateMainProps) {
           <SectionHeader
             title="Instructions"
             subtitle="Write your agent's system prompt using Handlebars syntax for dynamic content."
-            icon={<FileText className="text-accent5" />}
+            icon={
+              <Icon>
+                <FileText className="text-accent5" />
+              </Icon>
+            }
           />
           <Button type="button" variant="light" size="sm" onClick={() => setTestDialogOpen(true)}>
             <Icon>

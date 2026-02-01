@@ -42,7 +42,7 @@ export function AgentCreateSidebar({
   return (
     <div className="h-full flex flex-col">
       <Tabs defaultTab="identity" className="flex-1 min-h-0 flex flex-col">
-        <TabList className="flex-shrink-0 px-4">
+        <TabList className="flex-shrink-0">
           <Tab value="identity">Identity</Tab>
           <Tab value="capabilities">Capabilities</Tab>
           <Tab value="revisions">Revisions</Tab>

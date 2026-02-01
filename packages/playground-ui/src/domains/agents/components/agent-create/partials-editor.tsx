@@ -3,7 +3,7 @@
 import { Label } from '@/ds/components/Label';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { SectionHeader } from '@/domains/cms';
-import { BranchIcon } from '@/ds/icons';
+import { BranchIcon, Icon } from '@/ds/icons';
 
 // Re-export for consumers
 export { extractPartialNames } from './template-utils';
@@ -36,7 +36,11 @@ export function PartialsEditor({ value, onChange, detectedNames }: PartialsEdito
             in your instructions.
           </>
         }
-        icon={<BranchIcon className="text-accent5" />}
+        icon={
+          <Icon>
+            <BranchIcon className="text-accent5" />
+          </Icon>
+        }
       />
 
       {detectedNames.map(name => (
