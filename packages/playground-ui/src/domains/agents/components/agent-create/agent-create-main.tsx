@@ -4,12 +4,14 @@ import { type RefObject, useEffect, useRef, useState } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
 import { Play } from 'lucide-react';
 
-import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { IconButton } from '@/ds/components/IconButton';
+import { Button } from '@/ds/components/Button';
+import { Spinner } from '@/ds/components/Spinner';
 import { cn } from '@/lib/utils';
 
+import { CmsInput } from '@/domains/cms/components/cms-input';
 import { ModelPicker } from '../create-agent/model-picker';
 import type { AgentFormValues } from '../create-agent/form-validation';
 import { PartialsEditor, extractPartialNames } from './partials-editor';
@@ -18,9 +20,11 @@ import { TestInstructionDialog } from './test-instruction-dialog';
 interface AgentCreateMainProps {
   form: UseFormReturn<AgentFormValues>;
   formRef?: RefObject<HTMLFormElement | null>;
+  onPublish: () => void;
+  isSubmitting?: boolean;
 }
 
-export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
+export function AgentCreateMain({ form, formRef, onPublish, isSubmitting = false }: AgentCreateMainProps) {
   const {
     register,
     control,
@@ -68,31 +72,26 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
   const detectedPartialNames = extractPartialNames(instructions || '') ?? Object.keys(partials);
 
   return (
-    <div className="flex flex-col gap-4 h-full px-4">
-      {/* Agent Name */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="name" className="text-xs text-icon5">
-          Name <span className="text-accent2">*</span>
-        </Label>
-        <Input
-          id="name"
-          placeholder="Enter agent name"
+    <div className="flex flex-col gap-4 h-full px-4 pb-4">
+      {/* Header with Title */}
+      <div className="flex flex-col gap-2 pt-4">
+        {/* Agent Name - XL size */}
+        <CmsInput
+          label="Agent name"
+          size="xl"
+          placeholder="Untitled Agent"
           {...register('name')}
-          className={cn('bg-surface3', errors.name && 'border-accent2')}
+          error={!!errors.name}
         />
         {errors.name && <span className="text-xs text-accent2">{errors.name.message}</span>}
-      </div>
 
-      {/* Description */}
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="description" className="text-xs text-icon5">
-          Description
-        </Label>
-        <Input
-          id="description"
-          placeholder="Description (optional)"
+        {/* Description - LG size */}
+        <CmsInput
+          label="Agent description"
+          size="lg"
+          placeholder="Add a description..."
           {...register('description')}
-          className={cn('bg-surface3', errors.description && 'border-accent2')}
+          error={!!errors.description}
         />
         {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
       </div>
@@ -163,6 +162,20 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
           )}
         />
       )}
+
+      {/* Create Agent Button - at the bottom */}
+      <div className="mt-auto pt-4">
+        <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
+          {isSubmitting ? (
+            <>
+              <Spinner className="h-4 w-4" />
+              Creating...
+            </>
+          ) : (
+            'Create agent'
+          )}
+        </Button>
+      </div>
 
       {/* Test Instructions Dialog */}
       <TestInstructionDialog

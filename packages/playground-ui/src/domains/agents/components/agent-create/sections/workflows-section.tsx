@@ -3,9 +3,8 @@
 import { useMemo } from 'react';
 import { Controller, Control } from 'react-hook-form';
 
-import { Section } from '@/domains/cms';
+import { Section, RemovableBadge } from '@/domains/cms';
 import { WorkflowIcon } from '@/ds/icons';
-import { Badge } from '@/ds/components/Badge';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import type { AgentFormValues } from '../../create-agent/form-validation';
@@ -51,9 +50,16 @@ export function WorkflowsSection({ control, error }: WorkflowsSectionProps) {
               {selectedWorkflows.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {selectedWorkflows.map(workflow => (
-                    <Badge key={workflow.value} icon={<WorkflowIcon className="text-accent3" />}>
+                    <RemovableBadge
+                      key={workflow.value}
+                      icon={<WorkflowIcon className="text-accent3" />}
+                      onRemove={() => {
+                        const newValue = field.value?.filter(v => v !== workflow.value) || [];
+                        field.onChange(newValue);
+                      }}
+                    >
                       {workflow.label}
-                    </Badge>
+                    </RemovableBadge>
                   ))}
                 </div>
               )}

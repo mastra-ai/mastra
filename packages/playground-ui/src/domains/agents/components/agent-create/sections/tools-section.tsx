@@ -3,9 +3,8 @@
 import { useMemo } from 'react';
 import { Controller, Control } from 'react-hook-form';
 
-import { Section } from '@/domains/cms';
+import { Section, RemovableBadge } from '@/domains/cms';
 import { ToolsIcon } from '@/ds/icons';
-import { Badge } from '@/ds/components/Badge';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import type { AgentFormValues } from '../../create-agent/form-validation';
@@ -51,9 +50,16 @@ export function ToolsSection({ control, error }: ToolsSectionProps) {
               {selectedTools.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {selectedTools.map(tool => (
-                    <Badge key={tool.value} icon={<ToolsIcon className="text-accent6" />}>
+                    <RemovableBadge
+                      key={tool.value}
+                      icon={<ToolsIcon className="text-accent6" />}
+                      onRemove={() => {
+                        const newValue = field.value?.filter(v => v !== tool.value) || [];
+                        field.onChange(newValue);
+                      }}
+                    >
                       {tool.label}
-                    </Badge>
+                    </RemovableBadge>
                   ))}
                 </div>
               )}

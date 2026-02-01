@@ -5,6 +5,7 @@ export const Sizes = {
   'form-sm': '1.5rem',
   'form-md': '2rem',
   'form-lg': '2.5rem',
+  'form-xl': '3.5rem',
   'header-default': '48px',
   'table-header': '28px',
   'table-row': '56px',

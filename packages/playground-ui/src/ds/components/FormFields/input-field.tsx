@@ -27,6 +27,7 @@ const inputFieldSizeClasses = {
   sm: `${formElementSizes.sm} px-2`,
   md: `${formElementSizes.md} px-3`,
   lg: `${formElementSizes.lg} px-3 py-2`,
+  xl: `${formElementSizes.xl} px-4 py-2`,
 };
 
 export function InputField({

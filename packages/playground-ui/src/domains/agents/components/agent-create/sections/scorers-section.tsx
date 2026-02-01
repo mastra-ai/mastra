@@ -4,9 +4,8 @@ import { useMemo } from 'react';
 import { Controller, Control } from 'react-hook-form';
 import { Trash2 } from 'lucide-react';
 
-import { Section } from '@/domains/cms';
+import { Section, RemovableBadge } from '@/domains/cms';
 import { JudgeIcon } from '@/ds/icons';
-import { Badge } from '@/ds/components/Badge';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Button } from '@/ds/components/Button';
 import { Label } from '@/ds/components/Label';
@@ -90,9 +89,13 @@ export function ScorersSection({ control, error }: ScorersSectionProps) {
               {selectedOptions.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {selectedOptions.map(scorer => (
-                    <Badge key={scorer.value} icon={<JudgeIcon className="text-neutral3" />}>
+                    <RemovableBadge
+                      key={scorer.value}
+                      icon={<JudgeIcon className="text-neutral3" />}
+                      onRemove={() => handleRemove(scorer.value)}
+                    >
                       {scorer.label}
-                    </Badge>
+                    </RemovableBadge>
                   ))}
                 </div>
               )}

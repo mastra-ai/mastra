@@ -19,6 +19,7 @@ const sizeClasses = {
   sm: `${formElementSizes.sm} gap-0.5`,
   md: `${formElementSizes.md} gap-1`,
   lg: `${formElementSizes.lg} gap-2`,
+  xl: `${formElementSizes.xl} gap-2`,
 };
 
 // Enhanced variant classes with transitions and subtle interactions

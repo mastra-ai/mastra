@@ -3,9 +3,8 @@
 import { useMemo } from 'react';
 import { Controller, Control } from 'react-hook-form';
 
-import { Section } from '@/domains/cms';
+import { Section, RemovableBadge } from '@/domains/cms';
 import { AgentIcon } from '@/ds/icons';
-import { Badge } from '@/ds/components/Badge';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { useAgents } from '../../../hooks/use-agents';
 import type { AgentFormValues } from '../../create-agent/form-validation';
@@ -61,9 +60,17 @@ export function AgentsSection({ control, error, currentAgentId }: AgentsSectionP
               {selectedAgents.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {selectedAgents.map(agent => (
-                    <Badge key={agent.value} icon={<AgentIcon className="text-accent1" />} variant="success">
+                    <RemovableBadge
+                      key={agent.value}
+                      icon={<AgentIcon className="text-accent1" />}
+                      variant="success"
+                      onRemove={() => {
+                        const newValue = field.value?.filter(v => v !== agent.value) || [];
+                        field.onChange(newValue);
+                      }}
+                    >
                       {agent.label}
-                    </Badge>
+                    </RemovableBadge>
                   ))}
                 </div>
               )}

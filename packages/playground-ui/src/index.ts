@@ -1,6 +1,7 @@
 import './index.css';
 
 export * from './domains/agents/index';
+export * from './domains/cms/components/cms-input';
 export * from './domains/llm/index';
 export * from './domains/processors/index';
 export * from './domains/scores/index';

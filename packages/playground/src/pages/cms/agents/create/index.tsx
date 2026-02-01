@@ -1,11 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
 
 import {
-  MainContentLayout,
   toast,
   useLinkComponent,
   useStoredAgentMutations,
-  AgentCreateHeader,
   AgentCreateMain,
   AgentCreateSidebar,
   AgentLayout,
@@ -55,14 +53,11 @@ function CmsAgentsCreatePage() {
   }, [form, createStoredAgent, navigate, paths]);
 
   return (
-    <MainContentLayout>
-      <AgentCreateHeader onPublish={handlePublish} isSubmitting={isSubmitting} />
-      <AgentLayout agentId="agent-create" rightSlot={<AgentCreateSidebar form={form} />}>
-        <form ref={formRef} className="h-full">
-          <AgentCreateMain form={form} formRef={formRef} />
-        </form>
-      </AgentLayout>
-    </MainContentLayout>
+    <AgentLayout agentId="agent-create" rightSlot={<AgentCreateSidebar form={form} />}>
+      <form ref={formRef} className="h-full">
+        <AgentCreateMain form={form} formRef={formRef} onPublish={handlePublish} isSubmitting={isSubmitting} />
+      </form>
+    </AgentLayout>
   );
 }
 

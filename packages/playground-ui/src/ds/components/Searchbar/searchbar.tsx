@@ -22,6 +22,7 @@ const searchbarSizeClasses = {
   sm: formElementSizes.sm,
   md: formElementSizes.md,
   lg: formElementSizes.lg,
+  xl: formElementSizes.xl,
 };
 
 export const Searchbar = ({ onSearch, label, placeholder, debounceMs = 300, size = 'md' }: SearchbarProps) => {
