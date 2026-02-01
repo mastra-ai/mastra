@@ -25,3 +25,17 @@ export {
   useSearchWorkspaceSkills,
   useAgentSkill,
 } from './use-workspace-skills';
+
+// Skills.sh hooks
+export {
+  useSearchSkillsSh,
+  usePopularSkillsSh,
+  useSkillPreview,
+  useInstallSkill,
+  useUpdateSkills,
+  useRemoveSkill,
+  parseSkillSource,
+  type InstallSkillParams,
+  type UpdateSkillsParams,
+  type RemoveSkillParams,
+} from './use-skills-sh';
