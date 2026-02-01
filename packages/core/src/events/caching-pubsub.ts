@@ -40,11 +40,6 @@ export interface CachingPubSubOptions {
  */
 export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
-  /**
-   * Track the next index for each topic.
-   * This enables sequential indexing of events for position tracking.
-   */
-  private readonly topicIndices: Map<string, number> = new Map();
 
   constructor(
     private readonly inner: PubSub,
@@ -53,28 +48,6 @@ export class CachingPubSub extends PubSub {
   ) {
     super();
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
-  }
-
-  /**
-   * Get the next index for a topic and increment the counter.
-   * If the topic has cached events but no in-memory index,
-   * initialize from the cache length.
-   */
-  private async getNextIndex(topic: string): Promise<number> {
-    if (!this.topicIndices.has(topic)) {
-      // Initialize from cache if we have existing events
-      const cacheKey = this.getCacheKey(topic);
-      try {
-        const length = await this.cache.listLength(cacheKey);
-        this.topicIndices.set(topic, length);
-      } catch {
-        // Key doesn't exist yet, start from 0
-        this.topicIndices.set(topic, 0);
-      }
-    }
-    const current = this.topicIndices.get(topic)!;
-    this.topicIndices.set(topic, current + 1);
-    return current;
   }
 
   /**
@@ -87,17 +60,30 @@ export class CachingPubSub extends PubSub {
   /**
    * Publish an event to a topic.
    * The event is cached with a sequential index before being published to the inner PubSub.
+   *
+   * Note: The index is derived from the current cache list length. This adds one cache
+   * call per publish but avoids memory leaks from tracking indices in-memory.
+   * Future optimization: remove index field entirely and rely on list position.
    */
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt' | 'index'>): Promise<void> {
+    const cacheKey = this.getCacheKey(topic);
+
+    // Get the current list length to use as the index for this event
+    let index = 0;
+    try {
+      index = await this.cache.listLength(cacheKey);
+    } catch {
+      // Key doesn't exist yet, start from 0
+    }
+
     const fullEvent: Event = {
       ...event,
       id: crypto.randomUUID(),
       createdAt: new Date(),
-      index: await this.getNextIndex(topic),
+      index,
     };
 
     // Cache the event (non-blocking, errors are logged but don't fail publish)
-    const cacheKey = this.getCacheKey(topic);
     this.cache.listPush(cacheKey, fullEvent).catch(err => {
       console.error(`[CachingPubSub] Failed to cache event for topic ${topic}:`, err);
     });
@@ -210,12 +196,10 @@ export class CachingPubSub extends PubSub {
   /**
    * Clear cached events for a specific topic.
    * Call this when a stream completes to free memory.
-   * Also resets the index counter for the topic.
    */
   async clearTopic(topic: string): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
     await this.cache.delete(cacheKey);
-    this.topicIndices.delete(topic);
   }
 
   /**

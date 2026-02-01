@@ -60,6 +60,8 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   output: MastraModelOutput<OUTPUT>;
   /** Cleanup function to unsubscribe from pubsub */
   cleanup: () => void;
+  /** Promise that resolves when subscription is established */
+  ready: Promise<void>;
 }
 
 /**
@@ -96,6 +98,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // Track subscription state
   let isSubscribed = false;
   let controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> | null = null;
+
+  // Promise that resolves when subscription is established
+  let resolveReady: () => void;
+  let rejectReady: (error: Error) => void;
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
 
   // Handler for pubsub events
   const handleEvent = async (event: Event) => {
@@ -190,9 +200,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       subscribePromise
         .then(() => {
           isSubscribed = true;
+          resolveReady();
         })
         .catch(error => {
           console.error(`[DurableAgentStream] Failed to subscribe to ${topic}:`, error);
+          rejectReady(error);
           ctrl.error(error);
         });
     },
@@ -227,6 +239,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   return {
     output,
     cleanup,
+    ready,
   };
 }
 

@@ -439,7 +439,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       workflowInput.stepIndex = 0;
 
       // 2. Create the durable agent stream (subscribes to pubsub)
-      const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
+      const {
+        output,
+        cleanup: streamCleanup,
+        ready,
+      } = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
         runId,
         messageId,
@@ -457,18 +461,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         onSuspended: streamOptions?.onSuspended,
       });
 
-      // 3. Trigger the workflow via Inngest (async, don't await)
+      // 3. Wait for subscription to be established, then trigger workflow
       // Pass tracing options so workflow spans are children of the agent span
       const tracingOptions = agentSpanData
         ? { traceId: agentSpanData.traceId, parentSpanId: agentSpanData.id }
         : undefined;
 
-      // Small delay to allow subscription to establish
-      setTimeout(() => {
-        void triggerWorkflow(runId, workflowInput, tracingOptions).catch(error => {
+      // Wait for subscription to be ready before triggering workflow
+      // This prevents race conditions where events are published before subscription
+      ready
+        .then(() => triggerWorkflow(runId, workflowInput, tracingOptions))
+        .catch(error => {
           void emitError(runId, error);
         });
-      }, 100);
 
       // 4. Return stream result - attach extra properties to output for compatibility
       // This allows both destructuring { output, runId, cleanup } AND direct access to fullStream
@@ -489,7 +494,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     async resume(runId, resumeData, resumeOptions): Promise<InngestAgentStreamResult<TOutput>> {
       // Re-subscribe to the stream
-      const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
+      const {
+        output,
+        cleanup: streamCleanup,
+        ready,
+      } = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
         runId,
         messageId: crypto.randomUUID(),
@@ -507,22 +516,22 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         onSuspended: resumeOptions?.onSuspended,
       });
 
-      // Send resume event to Inngest
+      // Send resume event to Inngest after subscription is ready
       const eventName = `workflow.${DurableStepIds.AGENTIC_LOOP}.resume`;
 
-      setTimeout(() => {
-        void inngest
-          .send({
+      ready
+        .then(() =>
+          inngest.send({
             name: eventName,
             data: {
               runId,
               resumeData,
             },
-          })
-          .catch(error => {
-            void emitError(runId, error);
-          });
-      }, 100);
+          }),
+        )
+        .catch(error => {
+          void emitError(runId, error);
+        });
 
       return {
         output,

@@ -409,8 +409,28 @@ export class DurableAgent<
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
     globalRunRegistry.set(runId, registryEntry);
 
+    // Track cleanup state to avoid double cleanup
+    let cleanedUp = false;
+    let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Schedule automatic registry cleanup after stream ends (30s grace period)
+    const scheduleAutoCleanup = () => {
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = setTimeout(() => {
+        if (!cleanedUp) {
+          this.#runRegistry.cleanup(runId);
+          globalRunRegistry.delete(runId);
+          cleanedUp = true;
+        }
+      }, 30_000);
+    };
+
     // 3. Create the durable agent stream (subscribes to pubsub)
-    const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
+    const {
+      output,
+      cleanup: streamCleanup,
+      ready,
+    } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
       messageId,
@@ -423,21 +443,37 @@ export class DurableAgent<
       resourceId,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: options?.onFinish,
-      onError: options?.onError,
+      onFinish: async result => {
+        await options?.onFinish?.(result);
+        scheduleAutoCleanup();
+      },
+      onError: async error => {
+        await options?.onError?.(error);
+        scheduleAutoCleanup();
+      },
       onSuspended: options?.onSuspended,
     });
 
-    // 4. Execute the workflow (async, don't await)
-    this.executeWorkflow(runId, workflowInput).catch(error => {
-      void this.emitError(runId, error);
-    });
+    // 4. Wait for subscription to be ready, then execute workflow
+    // This prevents race conditions where events are published before subscription
+    ready
+      .then(() => this.executeWorkflow(runId, workflowInput))
+      .catch(error => {
+        void this.emitError(runId, error);
+      });
 
-    // 5. Create cleanup function
+    // 5. Create cleanup function (cancels auto-cleanup timer if called)
     const cleanup = () => {
-      streamCleanup();
-      this.#runRegistry.cleanup(runId);
-      globalRunRegistry.delete(runId);
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (!cleanedUp) {
+        streamCleanup();
+        this.#runRegistry.cleanup(runId);
+        globalRunRegistry.delete(runId);
+        cleanedUp = true;
+      }
     };
 
     return {
@@ -470,7 +506,26 @@ export class DurableAgent<
 
     const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
 
-    const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
+    // Track cleanup state to avoid double cleanup
+    let cleanedUp = false;
+    let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleAutoCleanup = () => {
+      if (autoCleanupTimer || cleanedUp) return;
+      autoCleanupTimer = setTimeout(() => {
+        if (!cleanedUp) {
+          this.#runRegistry.cleanup(runId);
+          globalRunRegistry.delete(runId);
+          cleanedUp = true;
+        }
+      }, 30_000);
+    };
+
+    const {
+      output,
+      cleanup: streamCleanup,
+      ready,
+    } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
       messageId: crypto.randomUUID(),
@@ -483,21 +538,41 @@ export class DurableAgent<
       resourceId: memoryInfo?.resourceId,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: options?.onFinish,
-      onError: options?.onError,
+      onFinish: async result => {
+        await options?.onFinish?.(result);
+        scheduleAutoCleanup();
+      },
+      onError: async error => {
+        await options?.onError?.(error);
+        scheduleAutoCleanup();
+      },
       onSuspended: options?.onSuspended,
     });
 
+    // Wait for subscription to be ready, then resume workflow
     const workflow = this.getWorkflow();
-    void this.#executor.resume(workflow, this.pubsub, runId, resumeData).then(result => {
-      if (!result.success && result.error) {
-        void this.emitError(runId, result.error);
-      }
-    });
+    ready
+      .then(() => this.#executor.resume(workflow, this.pubsub, runId, resumeData))
+      .then(result => {
+        if (!result.success && result.error) {
+          void this.emitError(runId, result.error);
+        }
+      })
+      .catch(error => {
+        void this.emitError(runId, error);
+      });
 
     const cleanup = () => {
-      streamCleanup();
-      this.#runRegistry.cleanup(runId);
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (!cleanedUp) {
+        streamCleanup();
+        this.#runRegistry.cleanup(runId);
+        globalRunRegistry.delete(runId);
+        cleanedUp = true;
+      }
     };
 
     return {
