@@ -29,6 +29,9 @@
 			"ignoreMissing": [
 				"@types/react"
 			]
+		},
+		"overrides": {
+			"qs": "^6.14.1"
 		}
 	},
 	"devDependencies": {
