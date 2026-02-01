@@ -10,7 +10,7 @@ import { formElementRadius, formElementFocus } from '@/ds/primitives/form-elemen
 const cmsInputVariants = cva(
   cn(
     'flex w-full text-neutral6 bg-transparent',
-    'border border-dashed border-border1',
+    'border border-border1',
     'transition-all duration-normal ease-out-custom',
     'hover:border-border2',
     'disabled:cursor-not-allowed disabled:opacity-50',
