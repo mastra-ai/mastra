@@ -148,13 +148,13 @@ describe('createDurableAgent factory', () => {
     });
   });
 
-  describe('__setMastra', () => {
+  describe('__registerMastra', () => {
     it('should accept mastra instance', () => {
       const durableAgent = createDurableAgent({ agent });
       const mockMastra = { id: 'test-mastra' } as any;
 
       // Should not throw
-      expect(() => durableAgent.__setMastra(mockMastra)).not.toThrow();
+      expect(() => durableAgent.__registerMastra(mockMastra)).not.toThrow();
     });
   });
 });

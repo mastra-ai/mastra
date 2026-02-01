@@ -234,6 +234,8 @@ export class DurableAgent<
     super({
       id: agentId as TAgentId,
       name: agentName,
+      // Empty instructions - we delegate to the wrapped agent's getInstructions()
+      instructions: '',
       // We need to provide model to satisfy the base class, but we'll delegate to wrapped agent
       model: (agent as any).__model ?? agent.getModel(),
     });
@@ -738,11 +740,12 @@ export class DurableAgent<
   }
 
   /**
-   * Set the Mastra instance.
+   * Register the Mastra instance.
    * Called by Mastra during agent registration.
    * @internal
    */
-  override __setMastra(mastra: Mastra): void {
+  __registerMastra(mastra: Mastra): void {
+    super.__registerMastra(mastra);
     this.#mastra = mastra;
     // Also set on wrapped agent
     this.#wrappedAgent.__registerMastra(mastra);
