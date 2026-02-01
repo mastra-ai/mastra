@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Controller, Control } from 'react-hook-form';
+import { Controller, Control, useWatch } from 'react-hook-form';
 import { Trash2 } from 'lucide-react';
 
 import { Section, RemovableBadge } from '@/domains/cms';
@@ -31,6 +31,8 @@ interface ScorerConfig {
 
 export function ScorersSection({ control, error }: ScorersSectionProps) {
   const { data: scorers, isLoading } = useScorers();
+  const selectedScorers = useWatch({ control, name: 'scorers' });
+  const count = Object.keys(selectedScorers || {}).length;
 
   const options = useMemo(() => {
     if (!scorers) return [];
@@ -42,7 +44,13 @@ export function ScorersSection({ control, error }: ScorersSectionProps) {
   }, [scorers]);
 
   return (
-    <Section title={<Section.Title icon={<JudgeIcon className="text-neutral3" />}>Scorers</Section.Title>}>
+    <Section
+      title={
+        <Section.Title icon={<JudgeIcon className="text-neutral3" />}>
+          Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+        </Section.Title>
+      }
+    >
       <Controller
         name="scorers"
         control={control}

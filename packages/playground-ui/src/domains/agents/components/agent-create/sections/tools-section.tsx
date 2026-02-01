@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Controller, Control } from 'react-hook-form';
+import { Controller, Control, useWatch } from 'react-hook-form';
 
 import { Section, RemovableBadge } from '@/domains/cms';
 import { ToolsIcon } from '@/ds/icons';
@@ -16,6 +16,8 @@ interface ToolsSectionProps {
 
 export function ToolsSection({ control, error }: ToolsSectionProps) {
   const { data: tools, isLoading } = useTools();
+  const selectedTools = useWatch({ control, name: 'tools' });
+  const count = selectedTools?.length || 0;
 
   const options = useMemo(() => {
     if (!tools) return [];
@@ -27,7 +29,13 @@ export function ToolsSection({ control, error }: ToolsSectionProps) {
   }, [tools]);
 
   return (
-    <Section title={<Section.Title icon={<ToolsIcon className="text-accent6" />}>Tools</Section.Title>}>
+    <Section
+      title={
+        <Section.Title icon={<ToolsIcon className="text-accent6" />}>
+          Tools{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+        </Section.Title>
+      }
+    >
       <Controller
         name="tools"
         control={control}

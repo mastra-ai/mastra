@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Controller, Control } from 'react-hook-form';
+import { Controller, Control, useWatch } from 'react-hook-form';
 
 import { Section, RemovableBadge } from '@/domains/cms';
 import { AgentIcon } from '@/ds/icons';
@@ -17,6 +17,8 @@ interface AgentsSectionProps {
 
 export function AgentsSection({ control, error, currentAgentId }: AgentsSectionProps) {
   const { data: agents, isLoading } = useAgents();
+  const selectedAgents = useWatch({ control, name: 'agents' });
+  const count = selectedAgents?.length || 0;
 
   const options = useMemo(() => {
     if (!agents) return [];
@@ -37,7 +39,13 @@ export function AgentsSection({ control, error, currentAgentId }: AgentsSectionP
   }, [agents, currentAgentId]);
 
   return (
-    <Section title={<Section.Title icon={<AgentIcon className="text-accent1" />}>Sub-Agents</Section.Title>}>
+    <Section
+      title={
+        <Section.Title icon={<AgentIcon className="text-accent1" />}>
+          Sub-Agents{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+        </Section.Title>
+      }
+    >
       <Controller
         name="agents"
         control={control}

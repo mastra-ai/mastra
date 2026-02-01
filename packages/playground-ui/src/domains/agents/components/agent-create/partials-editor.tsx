@@ -23,7 +23,15 @@ export function PartialsEditor({ value, onChange, detectedNames }: PartialsEdito
     <section className="flex flex-col gap-3 pb-4">
       <SectionHeader
         title="Partials"
-        subtitle="Partials detected from your instructions. Define their content below."
+        subtitle={
+          <>
+            Reusable template fragments. Referenced with{' '}
+            <span className="font-mono" style={{ color: '#ffb86c' }}>
+              {'{{>name}}'}
+            </span>{' '}
+            in your instructions.
+          </>
+        }
         icon={<BranchIcon className="text-accent5" />}
       />
 

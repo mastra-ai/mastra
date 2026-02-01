@@ -6,8 +6,8 @@ import { Play } from 'lucide-react';
 
 import { Label } from '@/ds/components/Label';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { IconButton } from '@/ds/components/IconButton';
 import { Button } from '@/ds/components/Button';
+import { Icon } from '@/ds/icons';
 import { Spinner } from '@/ds/components/Spinner';
 import { cn } from '@/lib/utils';
 
@@ -89,7 +89,8 @@ export function AgentCreateMain({ form, formRef, onPublish, isSubmitting = false
         <CmsInput
           label="Agent description"
           size="lg"
-          placeholder="Add a description..."
+          placeholder="Describe what this agent does so others (and future you) understand its purpose"
+          className="text-neutral3"
           {...register('description')}
           error={!!errors.description}
         />
@@ -115,21 +116,18 @@ export function AgentCreateMain({ form, formRef, onPublish, isSubmitting = false
         />
       </div>
 
-      {/* Instructions - CodeEditor taking remaining height only when no partials */}
-      <div className={cn('flex flex-col gap-1.5', detectedPartialNames.length === 0 && 'flex-1 min-h-0')}>
+      {/* Instructions - CodeEditor */}
+      <div className="flex flex-col gap-1.5 flex-1 min-h-0">
         <div className="flex items-center justify-between">
           <Label htmlFor="instructions" className="text-xs text-icon5">
             Instructions <span className="text-accent2">*</span>
           </Label>
-          <IconButton
-            type="button"
-            variant="ghost"
-            size="sm"
-            tooltip="Test instructions"
-            onClick={() => setTestDialogOpen(true)}
-          >
-            <Play className="h-4 w-4" />
-          </IconButton>
+          <Button type="button" variant="light" size="sm" onClick={() => setTestDialogOpen(true)}>
+            <Icon>
+              <Play />
+            </Icon>
+            Test the prompt
+          </Button>
         </div>
         <Controller
           name="instructions"
@@ -148,20 +146,18 @@ export function AgentCreateMain({ form, formRef, onPublish, isSubmitting = false
         {errors.instructions && <span className="text-xs text-accent2">{errors.instructions.message}</span>}
       </div>
 
-      {/* Partials - only show if there are detected partials */}
-      {detectedPartialNames.length > 0 && (
-        <Controller
-          name="partials"
-          control={control}
-          render={({ field }) => (
-            <PartialsEditor
-              value={field.value || {}}
-              onChange={field.onChange}
-              detectedNames={detectedPartialNames}
-            />
-          )}
-        />
-      )}
+      {/* Partials */}
+      <Controller
+        name="partials"
+        control={control}
+        render={({ field }) => (
+          <PartialsEditor
+            value={field.value || {}}
+            onChange={field.onChange}
+            detectedNames={detectedPartialNames}
+          />
+        )}
+      />
 
       {/* Create Agent Button - at the bottom */}
       <div className="flex justify-end">

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Controller, Control } from 'react-hook-form';
+import { Controller, Control, useWatch } from 'react-hook-form';
 
 import { Section, RemovableBadge } from '@/domains/cms';
 import { WorkflowIcon } from '@/ds/icons';
@@ -16,6 +16,8 @@ interface WorkflowsSectionProps {
 
 export function WorkflowsSection({ control, error }: WorkflowsSectionProps) {
   const { data: workflows, isLoading } = useWorkflows();
+  const selectedWorkflows = useWatch({ control, name: 'workflows' });
+  const count = selectedWorkflows?.length || 0;
 
   const options = useMemo(() => {
     if (!workflows) return [];
@@ -27,7 +29,13 @@ export function WorkflowsSection({ control, error }: WorkflowsSectionProps) {
   }, [workflows]);
 
   return (
-    <Section title={<Section.Title icon={<WorkflowIcon className="text-accent3" />}>Workflows</Section.Title>}>
+    <Section
+      title={
+        <Section.Title icon={<WorkflowIcon className="text-accent3" />}>
+          Workflows{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+        </Section.Title>
+      }
+    >
       <Controller
         name="workflows"
         control={control}

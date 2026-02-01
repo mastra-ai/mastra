@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Controller, Control } from 'react-hook-form';
+import { Controller, Control, useWatch } from 'react-hook-form';
 
 import { Section } from '@/domains/cms';
 import { MemoryIcon } from '@/ds/icons';
@@ -16,6 +16,8 @@ interface MemorySectionProps {
 
 export function MemorySection({ control, error }: MemorySectionProps) {
   const { data: memoryConfigsData, isLoading } = useMemoryConfig();
+  const selectedMemory = useWatch({ control, name: 'memory' });
+  const count = selectedMemory ? 1 : 0;
 
   // Memory options - currently returns empty as memory config needs different handling
   const options = useMemo(() => {
@@ -23,7 +25,13 @@ export function MemorySection({ control, error }: MemorySectionProps) {
   }, [memoryConfigsData]);
 
   return (
-    <Section title={<Section.Title icon={<MemoryIcon className="text-accent1" />}>Memory</Section.Title>}>
+    <Section
+      title={
+        <Section.Title icon={<MemoryIcon className="text-accent1" />}>
+          Memory{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+        </Section.Title>
+      }
+    >
       <Controller
         name="memory"
         control={control}

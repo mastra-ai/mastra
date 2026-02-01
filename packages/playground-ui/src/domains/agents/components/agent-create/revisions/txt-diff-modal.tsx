@@ -35,14 +35,16 @@ export function TxtDiffModal({ open, onOpenChange, revisionId, previousText, cur
           <DialogDescription>Comparing revision instructions with current form</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 rounded-md overflow-auto border border-border1 bg-surface2">
-          <FileDiff
-            fileDiff={fileDiff}
-            options={{
-              theme: 'pierre-dark',
-              lineDiffType: 'word',
-            }}
-          />
+        <div className="flex-1 min-h-0 px-6 pb-6">
+          <div className="h-full rounded-md overflow-auto border border-border1 bg-surface2">
+            <FileDiff
+              fileDiff={fileDiff}
+              options={{
+                theme: 'pierre-dark',
+                lineDiffType: 'word',
+              }}
+            />
+          </div>
         </div>
       </DialogContent>
     </Dialog>
