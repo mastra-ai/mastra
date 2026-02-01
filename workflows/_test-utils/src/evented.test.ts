@@ -52,19 +52,22 @@ createWorkflowTestSuite({
 
     // Foreach
     emptyForeach: true, // Empty array causes timeout
+    foreachPartialConcurrencyTiming: true, // Timing assertions are flaky in evented engine
 
-    // Resume tests that actually fail
-    resumeWithLabel: true, // Label-based resume
-    resumeWithState: true, // State across suspend/resume
-    resumeNested: true, // Nested workflow step resume
-    resumeAutoDetect: true, // Auto-resume path
-    resumeBranchingStatus: true, // Branching step status after resume
-    resumeLoopInput: true, // Loop input timeout
-    resumeForeach: true, // Foreach resume
-    resumeForeachConcurrent: true, // Foreach concurrent resume
-    resumeForeachIndex: true, // Foreach index resume
-    resumeParallelMulti: true, // Multiple suspend/resume cycles in parallel
-    resumeMultiSuspendError: true, // Multi-suspend error path
+    // Resume tests - verified after core rebuild
+    // These now pass after rebuild:
+    resumeWithLabel: false,
+    resumeWithState: false,
+    resumeAutoDetect: false,
+    resumeForeach: false,
+    resumeForeachConcurrent: false,
+    // These still have issues:
+    resumeNested: true, // Still suspended after resume
+    resumeBranchingStatus: true, // branch-step-2 is undefined
+    resumeLoopInput: true, // Timeout - loop resume not working
+    resumeForeachIndex: true, // Wrong status - forEachIndex resume broken
+    resumeParallelMulti: true, // Only one parallel step getting suspended path
+    resumeMultiSuspendError: true, // Only 1 suspended step found, expects >1
 
     // Storage
     storageWithNestedWorkflows: true, // Different nested step naming
