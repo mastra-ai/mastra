@@ -14,7 +14,7 @@ import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-
 import { MastraClient, UIMessageWithMetadata } from '@mastra/client-js';
 import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
-import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
+import { MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useAgentPromptExperiment } from '@/domains/agents/context';
 
@@ -221,11 +221,6 @@ export function MastraRuntimeProvider({
   } = settings?.modelSettings ?? {};
   const toolCallIdToName = useRef<Record<string, string>>({});
 
-  const requestContextInstance = new RequestContext();
-  Object.entries(requestContext ?? {}).forEach(([key, value]) => {
-    requestContextInstance.set(key, value);
-  });
-
   const modelSettingsArgs = {
     frequencyPenalty,
     presencePenalty,
@@ -266,6 +261,11 @@ export function MastraRuntimeProvider({
     });
 
     const agent = clientWithAbort.getAgent(agentId);
+
+    const requestContextInstance = new RequestContext();
+    Object.entries(requestContext ?? {}).forEach(([key, value]) => {
+      requestContextInstance.set(key, value);
+    });
 
     try {
       if (isSupportedModel) {
