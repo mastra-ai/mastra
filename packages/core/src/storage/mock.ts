@@ -1,6 +1,7 @@
 import { MastraCompositeStore } from './base';
 import type { StorageDomains } from './base';
 import { InMemoryAgentsStorage } from './domains/agents/inmemory';
+import { GraphRAGInMemory } from './domains/graph-rag/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
@@ -50,6 +51,7 @@ export class InMemoryStore extends MastraCompositeStore {
       scores: new ScoresInMemory({ db: this.#db }),
       observability: new ObservabilityInMemory({ db: this.#db }),
       agents: new InMemoryAgentsStorage({ db: this.#db }),
+      graphrag: new GraphRAGInMemory({ db: this.#db }),
     };
   }
 
