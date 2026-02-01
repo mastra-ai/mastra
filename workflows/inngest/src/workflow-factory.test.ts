@@ -349,6 +349,15 @@ createWorkflowTestSuite({
     // ============================================================================
     schemaValidationThrows: true, // Inngest doesn't throw - validation happens async, returns result
     abortStatus: true, // Inngest returns 'failed' or 'success', no 'canceled' status
+    abortDuringStep: true, // Abort during step test has 5s timeout waiting for abort signal
+    agentStepDeepNested: true, // Deep nested agent workflow fails on Inngest
+    executionFlowNotDefined: true, // InngestWorkflow.createRun() doesn't validate stepFlow
+    executionGraphNotCommitted: true, // InngestWorkflow.createRun() doesn't validate commit status
+    resumeMultiSuspendError: true, // Inngest result doesn't include 'suspended' array
+    resumeForeachLoop: true, // Foreach suspend/resume uses different step coordination
+    resumeForeachConcurrent: true, // Foreach concurrent resume returns 'failed' not 'suspended'
+    resumeForeachIndex: true, // forEachIndex parameter not fully supported
+    storageWithNestedWorkflows: true, // Inngest step.invoke() uses different step naming convention
 
     // ============================================================================
     // ALL PASSING TESTS

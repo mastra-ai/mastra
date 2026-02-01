@@ -402,6 +402,41 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
       });
     });
 
+    // Alias test - same functionality, different name for compatibility
+    it('should start workflow and complete successfully', async () => {
+      const { workflow, mocks, resetMocks } = registry['basic-single-step'];
+      resetMocks?.();
+      const result = await execute(workflow, {});
+
+      expect(result.status).toBe('success');
+      expect(result.steps.step1).toMatchObject({
+        status: 'success',
+        output: { result: 'success' },
+      });
+    });
+
+    it('should execute multiple runs of a workflow', async () => {
+      const { workflow, mocks, resetMocks } = registry['basic-single-step'];
+
+      // First run
+      resetMocks?.();
+      const result1 = await execute(workflow, {});
+      expect(result1.status).toBe('success');
+      expect(mocks.executeAction).toHaveBeenCalledTimes(1);
+
+      // Second run
+      resetMocks?.();
+      const result2 = await execute(workflow, {});
+      expect(result2.status).toBe('success');
+      expect(mocks.executeAction).toHaveBeenCalledTimes(1);
+
+      // Third run
+      resetMocks?.();
+      const result3 = await execute(workflow, {});
+      expect(result3.status).toBe('success');
+      expect(mocks.executeAction).toHaveBeenCalledTimes(1);
+    });
+
     it.skipIf(skipTests.state)('should execute a single step workflow successfully with state', async () => {
       const entry = registry['basic-single-step-with-state'];
 

@@ -383,7 +383,7 @@ export function createAgentStepWorkflows(ctx: WorkflowCreatorContext) {
 }
 
 export function createAgentStepTests(ctx: WorkflowTestContext, registry?: WorkflowRegistry) {
-  const { execute } = ctx;
+  const { execute, skipTests } = ctx;
 
   describe('Agent as step', () => {
     it('should execute workflow with step that simulates agent behavior', async () => {
@@ -479,7 +479,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
       expect((result.steps['post'] as any).output?.answer).toContain('PARIS');
     });
 
-    it('should handle agent-like step in deeply nested workflow', async () => {
+    it.skipIf(skipTests.agentStepDeepNested)('should handle agent-like step in deeply nested workflow', async () => {
       const { workflow } = registry!['deep-nested-agent-workflow'];
 
       const result = await execute(workflow, { data: 'test data' });

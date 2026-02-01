@@ -84,6 +84,8 @@ export type SkippableTest =
   | 'schemaValidationThrows'
   // Abort returning 'canceled' status
   | 'abortStatus'
+  // Abort signal during step execution (requires 5s timeout, skipped by default)
+  | 'abortDuringStep'
   // Empty array in foreach
   | 'emptyForeach'
   // Concurrent foreach timing (Inngest has network overhead per step)
@@ -215,7 +217,9 @@ export type SkippableTest =
   | 'resumeForeachIndex'
   // Storage result options tests
   | 'storageFieldsFilter'
-  | 'storageWithNestedWorkflows';
+  | 'storageWithNestedWorkflows'
+  // Agent step tests
+  | 'agentStepDeepNested';
 
 /**
  * Configuration for creating a workflow test suite

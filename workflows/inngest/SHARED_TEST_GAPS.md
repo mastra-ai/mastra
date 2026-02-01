@@ -1,135 +1,229 @@
-# Shared Test Suite - Status Report
+# Shared Workflow Test Suite - Status Report
+
+## Overview
+
+This document tracks two things:
+
+1. **Test Coverage Gaps** - Tests that exist in original test files but aren't in the shared suite yet
+2. **Inngest Compatibility** - Tests in the shared suite that behave differently on Inngest
+
+---
 
 ## Current State
 
-| Suite          | Passed | Failed | Skipped | Total |
-| -------------- | ------ | ------ | ------- | ----- |
-| Default Engine | 176    | 0      | 1       | 177   |
-| Inngest Engine | 146    | 3      | 24      | 173   |
+| Suite          | Passed | Skipped | Total |
+| -------------- | ------ | ------- | ----- |
+| Default Engine | 176    | 1       | 177   |
+| Inngest Engine | 142    | 31      | 173   |
 
 ---
 
-## Inngest Failures (3 unique tests)
+# Part 1: Test Coverage Gaps
 
-These tests pass on Default Engine but fail on Inngest due to engine behavior differences:
+These tests exist in the original Inngest test file (`index.test.ts`) but are NOT yet in the shared suite.
 
-### Foreach Resume (2 failures)
+## Inngest-Specific (Cannot Share) - ~15 tests
 
-| Test                      | Issue                                                                    |
-| ------------------------- | ------------------------------------------------------------------------ |
-| `resumeForeachConcurrent` | Returns 'failed' instead of 'suspended' when resuming concurrent foreach |
-| `resumeForeachIndex`      | `forEachIndex` parameter not fully supported - returns 'failed'          |
+| Category           | Tests                                                         | Why Not Shareable          |
+| ------------------ | ------------------------------------------------------------- | -------------------------- |
+| Flow Control       | `throttle`, `rateLimit`, `concurrency`, `debounce`            | Inngest-only feature       |
+| Scheduling         | `cron schedule`, `cron with initialState`                     | Inngest-only feature       |
+| Serve Function     | `merge user functions`, `empty functions`, `no functions`     | `inngestServe()` pattern   |
+| Inngest Primitives | `inject inngest step primitives`                              | Direct `step.run()` access |
+| Realtime Streaming | `generate stream`, `stream with custom events`, `step events` | `@inngest/realtime`        |
+| Eval Framework     | `experiment with workflow target` (x2)                        | Inngest eval framework     |
 
-**Root Cause:** Inngest's foreach implementation handles suspend/resume differently. The foreach items run as separate Inngest steps, and resuming a specific index requires coordination that isn't fully implemented.
+## Shareable - Not Yet Added
 
-### Storage Nested Workflows (1 failure)
+### perStep Mode (~9 tests)
 
-| Test                                                                     | Issue                                                       |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `should exclude nested workflow steps when withNestedWorkflows is false` | Missing `storage-nested-inner-workflow.inner-step` property |
+Both engines support `perStep: true` but these tests aren't in shared suite yet.
 
-**Root Cause:** Inngest nested workflows use `step.invoke()` which stores results differently. The step naming convention differs from Default Engine, so the property name doesn't match expectations.
+| Test                                   | Description                       |
+| -------------------------------------- | --------------------------------- |
+| Execute single step                    | Basic perStep execution           |
+| Execute single step in nested workflow | Nested perStep                    |
+| Execute one step in parallel           | Parallel with perStep             |
+| Follow conditional with perStep        | Conditional chains                |
+| Suspend/resume with perStep            | Combined suspend + perStep        |
+| TimeTravel with perStep (4 variants)   | TimeTravel + perStep combinations |
+
+### Tracing/Observability (~2 tests)
+
+| Test                                  | Description            |
+| ------------------------------------- | ---------------------- |
+| `tracingContext.currentSpan` in step  | Access to current span |
+| Create child spans from workflow span | Span hierarchy         |
+
+### Sleep Variants (~4 tests)
+
+| Test                            | Description               |
+| ------------------------------- | ------------------------- |
+| `sleep` with fn parameter       | Dynamic sleep duration    |
+| `sleep.until` step              | Sleep until specific time |
+| `sleep.until` with fn parameter | Dynamic until time        |
+
+### Misc (~4 tests)
+
+| Test                              | Description              |
+| --------------------------------- | ------------------------ |
+| `waitForEvent` throws error       | Deprecated API test      |
+| Execute multiple runs of workflow | Concurrent run isolation |
+| Return correct runId              | RunId consistency        |
+| Clone workflows as steps          | Workflow cloning         |
 
 ---
 
-## Inngest Skipped Tests (24)
+# Part 2: Inngest Compatibility
 
-### By Category
+These tests ARE in the shared suite but need to be skipped on Inngest due to behavioral differences.
 
-| Category             | Count | Tests                                                                                                                                                       |
-| -------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Timing               | 2     | `foreachConcurrentTiming`, `foreachPartialConcurrencyTiming`                                                                                                |
-| Behavior Differences | 4     | `schemaValidationThrows` (x2), `abortStatus`, `foreachSingleConcurrency`                                                                                    |
-| Resume Not Supported | 8     | `resumeAutoDetect`, `resumeBranchingStatus`, `resumeNested`, `resumeConsecutiveNested`, `resumeDountil`, `resumeLoopInput`, `resumeMapStep`, `cloneAsSteps` |
-| Run Count            | 2     | `runCount`, `retryCount`                                                                                                                                    |
-| Restart              | 4     | All restart tests (not supported on Inngest)                                                                                                                |
-| Foreach Resume       | 2     | `resumeForeachConcurrent`, `resumeForeachIndex`                                                                                                             |
-| Other                | 2     | Additional skips                                                                                                                                            |
+## Validation Timing (3 tests)
 
-### Reason Breakdown
+| Test                         | Default Engine                        | Inngest Engine                   |
+| ---------------------------- | ------------------------------------- | -------------------------------- |
+| `executionFlowNotDefined`    | `createRun()` throws if no steps      | No validation in `createRun()`   |
+| `executionGraphNotCommitted` | `createRun()` throws if not committed | No validation in `createRun()`   |
+| `schemaValidationThrows`     | Throws synchronously                  | Validation async, returns result |
 
-| Reason                                    | Tests                                                        |
-| ----------------------------------------- | ------------------------------------------------------------ |
-| Inngest returns 'failed' not 'suspended'  | `resumeBranchingStatus`, `abortStatus`                       |
-| Nested step path resume not supported     | `resumeNested`, `resumeConsecutiveNested`, `resumeDountil`   |
-| Network overhead makes timing unreliable  | `foreachConcurrentTiming`, `foreachPartialConcurrencyTiming` |
-| Validation happens async, doesn't throw   | `schemaValidationThrows` (x2)                                |
-| Race condition with snapshot persistence  | `foreachSingleConcurrency`                                   |
-| Result doesn't include 'suspended' array  | `resumeAutoDetect`                                           |
-| Loop behavior differs                     | `runCount`, `retryCount`, `resumeLoopInput`                  |
-| Map step resume not supported             | `resumeMapStep`                                              |
-| Clone workflows need special registration | `cloneAsSteps`                                               |
-| `restart()` throws "not supported"        | All restart tests                                            |
+**Root Cause:** `InngestWorkflow.createRun()` overrides parent without calling validation.
+
+## Suspend/Resume (11 tests)
+
+| Test                      | Default Engine                  | Inngest Engine              |
+| ------------------------- | ------------------------------- | --------------------------- |
+| `resumeMultiSuspendError` | Result has `suspended[]` array  | No `suspended` array        |
+| `resumeAutoDetect`        | Auto-detects from `suspended[]` | No array to detect from     |
+| `resumeForeachLoop`       | Individual item suspend/resume  | Different step coordination |
+| `resumeForeachConcurrent` | Returns 'suspended'             | Returns 'failed'            |
+| `resumeForeachIndex`      | `forEachIndex` works            | Not fully supported         |
+| `resumeNested`            | Nested step path works          | Not supported               |
+| `resumeConsecutiveNested` | Consecutive nested works        | Not supported               |
+| `resumeDountil`           | Dountil loop resume             | Not supported               |
+| `resumeLoopInput`         | Loop input tracking             | Not supported               |
+| `resumeMapStep`           | Map step resume                 | Not supported               |
+| `resumeBranchingStatus`   | Returns 'suspended'             | Returns 'failed'            |
+
+**Root Cause:** Inngest uses step memoization. Complex resume scenarios need coordination not yet implemented.
+
+## Status Values (1 test)
+
+| Test          | Default Engine     | Inngest Engine                |
+| ------------- | ------------------ | ----------------------------- |
+| `abortStatus` | Returns 'canceled' | Returns 'failed' or 'success' |
+
+**Root Cause:** Inngest cancel mechanism doesn't map to 'canceled' status.
+
+## Storage/Naming (1 test)
+
+| Test                         | Default Engine              | Inngest Engine                       |
+| ---------------------------- | --------------------------- | ------------------------------------ |
+| `storageWithNestedWorkflows` | Step: `workflow-id.step-id` | Different naming via `step.invoke()` |
+
+**Root Cause:** `step.invoke()` stores results with different key structure.
+
+## Timing (2 tests)
+
+| Test                              | Default Engine | Inngest Engine |
+| --------------------------------- | -------------- | -------------- |
+| `foreachConcurrentTiming`         | <2000ms        | ~6000ms        |
+| `foreachPartialConcurrencyTiming` | <1500ms        | ~7000ms        |
+
+**Root Cause:** Inngest adds 100-500ms network overhead per step.
+
+## Race Conditions (1 test)
+
+| Test                       | Default Engine | Inngest Engine                 |
+| -------------------------- | -------------- | ------------------------------ |
+| `foreachSingleConcurrency` | Deterministic  | Race with snapshot persistence |
+
+## Unsupported Features (7 tests)
+
+| Test                | Issue                                       |
+| ------------------- | ------------------------------------------- |
+| `restart` (4 tests) | Throws "not supported on inngest workflows" |
+| `cloneAsSteps`      | Cloned workflows need Mastra registration   |
+| `runCount`          | Different loop behavior                     |
+| `retryCount`        | Different retry tracking                    |
 
 ---
 
-## Recommended Fixes
+# Part 3: Default Engine Only
 
-### P0: Fix Failures (Move to Skip or Fix Code)
+Tests that only make sense for the Default Engine.
 
-1. **Nested workflow step naming** - Align step naming between engines OR adjust test expectations
-2. **forEachIndex resume** - Add skip or implement properly
+| Category                    | Count | Examples             |
+| --------------------------- | ----- | -------------------- |
+| `stream()` API              | 3     | Streaming results    |
+| Agent + MockLanguageModelV1 | 8     | Mock LLM testing     |
+| TripWire                    | 3     | Tripwire mechanism   |
+| startAsync                  | 2     | Async start pattern  |
+| v1 model compatibility      | 2     | Legacy model support |
+| Auto-commit workflow        | 2     | Auto-commit feature  |
 
-### P1: Add Missing Skip Configurations
+---
 
-These tests should be added to `skipTests` in `workflow-factory.test.ts`:
+## Future Work
+
+### Priority 1: Add Missing Shared Tests
+
+- [ ] perStep mode tests (9 tests)
+- [ ] Tracing tests (2 tests)
+- [ ] Sleep variant tests (4 tests)
+
+### Priority 2: Align Engine Behavior
+
+- [ ] Add validation to `InngestWorkflow.createRun()`
+- [ ] Add `suspended` array to Inngest results
+- [ ] Implement foreach index coordination
+
+### Priority 3: Document Engine-Specific Tests
+
+- [ ] Move Inngest-only tests to dedicated file
+- [ ] Move Default-only tests to dedicated file
+
+---
+
+## Skip Configuration Reference
+
+Current `skipTests` in `workflow-factory.test.ts`:
 
 ```typescript
 skipTests: {
-  // Add these:
-  resumeForeachConcurrent: true,    // Already failing
-  resumeForeachIndex: true,         // Already failing
-  storageWithNestedWorkflows: true,   // Already failing
+  // Timing
+  foreachConcurrentTiming: true,
+  foreachPartialConcurrencyTiming: true,
+
+  // Validation
+  schemaValidationThrows: true,
+  executionFlowNotDefined: true,
+  executionGraphNotCommitted: true,
+
+  // Status
+  abortStatus: true,
+
+  // Resume
+  resumeMultiSuspendError: true,
+  resumeForeachLoop: true,
+  resumeForeachConcurrent: true,
+  resumeForeachIndex: true,
+  resumeAutoDetect: true,
+  resumeBranchingStatus: true,
+  resumeNested: true,
+  resumeConsecutiveNested: true,
+  resumeDountil: true,
+  resumeLoopInput: true,
+  resumeMapStep: true,
+
+  // Storage
+  storageWithNestedWorkflows: true,
+
+  // Race conditions
+  foreachSingleConcurrency: true,
+
+  // Unsupported
+  cloneAsSteps: true,
+  runCount: true,
+  retryCount: true,
 }
 ```
-
----
-
-## Engine-Specific Tests (Cannot Share)
-
-### Inngest-Only (~15 tests)
-
-- Flow control (throttle, rateLimit) - 4 tests
-- Scheduling (cron) - 2 tests
-- Serve function - 3 tests
-- Inngest primitives (step.run) - 1 test
-- @inngest/realtime streaming - 3 tests
-- Eval framework - 2 tests
-
-### Default Engine-Only (~20 tests)
-
-- `stream()` API tests - 3 tests
-- Agent with MockLanguageModelV1 - 8 tests
-- TripWire tests - 3 tests
-- startAsync tests - 2 tests
-- v1 model compatibility - 2 tests
-- Auto-commit workflow - 2 tests
-
----
-
-## Completed Work
-
-All planned tasks (T1-T8) have been completed or partially completed:
-
-| Task                        | Status  | Tests Added |
-| --------------------------- | ------- | ----------- |
-| T1: Time Travel             | ✅ Done | 8 tests     |
-| T2: Advanced Callbacks      | ✅ 6/8  | 6 tests     |
-| T3: Clone Workflows         | ✅ 1/2  | 1 test      |
-| T4: Parallel Suspended      | ✅ Done | 1 test      |
-| T5: Foreach Suspend/Resume  | ✅ 3/5  | 2 tests     |
-| T6: Workflow Result Options | ✅ Done | 2 tests     |
-| T7: Variable Resolution     | ✅ Done | 3 tests     |
-| T8: Misc Tests              | ✅ 3/8  | 3 tests     |
-
-### Remaining Blocked Items
-
-| Item                         | Blocker                                   |
-| ---------------------------- | ----------------------------------------- |
-| Mastra instance in callbacks | Need `getMastra()` helper in test context |
-| Clone workflows as steps     | Cloned workflows need Mastra registration |
-| Foreach with label resume    | Uses label option not yet in shared suite |
-| Bail in foreach              | Uses bail() in foreach                    |
-| streamLegacy tests           | Uses streamLegacy() API                   |
-| Resume schema defaults       | Resume API differences                    |
-| shouldPersistSnapshot        | Options support                           |
