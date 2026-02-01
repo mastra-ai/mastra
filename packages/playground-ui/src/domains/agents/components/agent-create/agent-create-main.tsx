@@ -1,29 +1,26 @@
 'use client';
 
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
-import { Play } from 'lucide-react';
+import { Play, SquareTerminal, FileText } from 'lucide-react';
 
-import { Label } from '@/ds/components/Label';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Button } from '@/ds/components/Button';
+import { PageHeader } from '@/ds/components/PageHeader';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
+import { SectionHeader } from '@/domains/cms';
 
-import { CmsInput } from '@/domains/cms/components/cms-input';
-import { ModelPicker } from '../create-agent/model-picker';
 import type { AgentFormValues } from '../create-agent/form-validation';
 import { PartialsEditor, extractPartialNames } from './partials-editor';
 import { TestInstructionDialog } from './test-instruction-dialog';
 
 interface AgentCreateMainProps {
   form: UseFormReturn<AgentFormValues>;
-  formRef?: RefObject<HTMLFormElement | null>;
 }
 
-export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
+export function AgentCreateMain({ form }: AgentCreateMainProps) {
   const {
-    register,
     control,
     formState: { errors },
     watch,
@@ -69,56 +66,17 @@ export function AgentCreateMain({ form, formRef }: AgentCreateMainProps) {
   const detectedPartialNames = extractPartialNames(instructions || '') ?? Object.keys(partials);
 
   return (
-    <div className="flex flex-col gap-4 h-full pb-4 pt-4">
-      {/* Form fields */}
-      <div className="flex flex-col gap-2 px-4">
-        {/* Agent Name - XL size */}
-        <CmsInput
-          label="Agent name"
-          size="xl"
-          placeholder="Untitled Agent"
-          {...register('name')}
-          error={!!errors.name}
-        />
-        {errors.name && <span className="text-xs text-accent2">{errors.name.message}</span>}
-
-        {/* Description - LG size */}
-        <CmsInput
-          label="Agent description"
-          size="lg"
-          placeholder="Describe what this agent does so others (and future you) understand its purpose"
-          className="text-neutral3"
-          {...register('description')}
-          error={!!errors.description}
-        />
-        {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
-      </div>
-
-      {/* Model */}
-      <div className="flex flex-col gap-1.5 px-4">
-        <Label className="text-xs text-icon5">
-          Model <span className="text-accent2">*</span>
-        </Label>
-        <Controller
-          name="model"
-          control={control}
-          render={({ field }) => (
-            <ModelPicker
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.model?.provider?.message || errors.model?.name?.message}
-              container={formRef}
-            />
-          )}
-        />
-      </div>
+    <div className="flex flex-col gap-4 h-full pb-4">
+      <PageHeader title="Prompt Editor" icon={<SquareTerminal />} className="px-4 pt-4 pb-0" />
 
       {/* Instructions - CodeEditor */}
-      <div className="flex flex-col gap-1.5 flex-1 min-h-0 px-4">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="instructions" className="text-xs text-icon5">
-            Instructions <span className="text-accent2">*</span>
-          </Label>
+      <div className="flex flex-col gap-3 flex-1 min-h-0 px-4">
+        <div className="flex items-start justify-between">
+          <SectionHeader
+            title="Instructions"
+            subtitle="Write your agent's system prompt using Handlebars syntax for dynamic content."
+            icon={<FileText className="text-accent5" />}
+          />
           <Button type="button" variant="light" size="sm" onClick={() => setTestDialogOpen(true)}>
             <Icon>
               <Play />

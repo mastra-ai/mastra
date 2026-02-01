@@ -15,13 +15,13 @@ export const AgentLayout = ({ children, leftSlot, rightSlot, headerSlot }: Agent
       <div
         className={cn(
           'grid flex-1 min-h-0 overflow-hidden',
-          rightSlot && !leftSlot && 'grid-cols-[2fr_1fr]',
-          leftSlot && !rightSlot && 'grid-cols-[1fr_2fr]',
-          leftSlot && rightSlot && 'grid-cols-[1fr_2fr_1fr]',
+          rightSlot && !leftSlot && 'grid-cols-[3fr_1fr]',
+          leftSlot && !rightSlot && 'grid-cols-[1fr_3fr]',
+          leftSlot && rightSlot && 'grid-cols-[1fr_3fr_1fr]',
           !leftSlot && !rightSlot && 'grid-cols-1',
         )}
       >
-        {leftSlot && <div className="overflow-y-auto bg-surface1">{leftSlot}</div>}
+        {leftSlot && <div className="overflow-y-auto bg-surface2 border-r border-border1">{leftSlot}</div>}
         <div className="overflow-y-auto bg-surface1">{children}</div>
         {rightSlot && <div className="overflow-y-auto bg-surface2 border-l border-border1">{rightSlot}</div>}
       </div>

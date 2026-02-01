@@ -69,10 +69,12 @@ function CmsAgentsCreatePage() {
           </HeaderTitle>
         </Header>
       }
-      rightSlot={<AgentCreateSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} />}
+      leftSlot={
+        <AgentCreateSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} formRef={formRef} />
+      }
     >
       <form ref={formRef} className="h-full">
-        <AgentCreateMain form={form} formRef={formRef} />
+        <AgentCreateMain form={form} />
       </form>
     </AgentLayout>
   );
