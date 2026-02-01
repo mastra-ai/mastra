@@ -4,7 +4,7 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
-} from '@mastra/core/storage';
+} from '@mastra/core/storage/constants';
 import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
 
