@@ -80,11 +80,12 @@ createWorkflowTestSuite({
       await mastra.startEventEngine();
 
       // Create the run and execute
-      const run = await workflow.createRun({ runId: options.runId });
+      const run = await workflow.createRun({ runId: options.runId, resourceId: options.resourceId });
       const result = await run.start({
         inputData,
         initialState: options.initialState,
         perStep: options.perStep,
+        requestContext: options.requestContext as any,
       });
 
       return result as WorkflowResult;

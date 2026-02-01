@@ -415,6 +415,7 @@ createWorkflowTestSuite({
       inputData,
       initialState: options.initialState,
       perStep: options.perStep,
+      requestContext: options.requestContext as any,
     });
 
     return result as WorkflowResult;
