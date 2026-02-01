@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 
 export type SectionHeaderProps = {
-  title: string;
+  title: React.ReactNode;
   subtitle?: React.ReactNode;
   icon?: React.ReactNode;
   className?: string;
