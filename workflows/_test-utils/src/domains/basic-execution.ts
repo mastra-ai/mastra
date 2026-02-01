@@ -453,9 +453,6 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
 
       // Test bail scenario
       const result = await execute(workflow, { value: 'bail' });
-      if (process.env.DEBUG_INNGEST_POLLING) {
-        console.log('[bail test] result1:', JSON.stringify(result, null, 2));
-      }
       expect(result.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'bailed' },
@@ -464,9 +461,6 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
 
       // Test non-bail scenario
       const result2 = await execute(workflow, { value: 'no-bail' });
-      if (process.env.DEBUG_INNGEST_POLLING) {
-        console.log('[bail test] result2:', JSON.stringify(result2, null, 2));
-      }
       expect(result2.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'step1: no-bail' },

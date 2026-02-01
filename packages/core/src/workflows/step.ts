@@ -100,38 +100,16 @@ export interface Step<
 
 export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {
   let result;
-  const stepId = typeof step === 'string' ? step : step?.id;
 
   if (typeof step === 'string') {
     result = stepResults[step];
   } else {
     if (!step?.id) {
-      // Log when step has no id
-      if (process.env.DEBUG_STEP_RESULTS) {
-        console.info(`[DIAG:getStepResult] Step has no id, returning null`, {
-          stepType: typeof step,
-          stepKeys: step ? Object.keys(step) : [],
-        });
-      }
       return null;
     }
 
     result = stepResults[step.id];
   }
 
-  const output = result?.status === 'success' ? result.output : null;
-
-  // Diagnostic logging for step result access
-  if (process.env.DEBUG_STEP_RESULTS) {
-    console.info(`[DIAG:getStepResult] Accessing step result`, {
-      requestedStepId: stepId,
-      availableSteps: Object.keys(stepResults),
-      stepStatuses: Object.fromEntries(Object.entries(stepResults).map(([k, v]) => [k, v?.status])),
-      foundResult: !!result,
-      resultStatus: result?.status,
-      returningOutput: output !== null,
-    });
-  }
-
-  return output;
+  return result?.status === 'success' ? result.output : null;
 };

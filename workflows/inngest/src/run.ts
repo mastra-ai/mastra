@@ -6,14 +6,6 @@ import type { TracingContext, TracingOptions } from '@mastra/core/observability'
 import type { RequestContext } from '@mastra/core/request-context';
 import { WorkflowRunOutput, ChunkFrom } from '@mastra/core/stream';
 import { createTimeTravelExecutionParams, Run, hydrateSerializedStepErrors } from '@mastra/core/workflows';
-
-// Diagnostic logging helper - enable with DEBUG_INNGEST=1
-const DIAG = (area: string, msg: string, data?: any) => {
-  if (!process.env.DEBUG_INNGEST) return;
-  const ts = new Date().toISOString().slice(11, 23);
-  const dataStr = data ? ` ${JSON.stringify(data)}` : '';
-  console.info(`[DIAG:run:${area}] ${ts} ${msg}${dataStr}`);
-};
 import type {
   ExecutionEngine,
   ExecutionGraph,
@@ -131,7 +123,6 @@ export class InngestRun<
    * Resolves as soon as either method detects completion.
    */
   async getRunOutput(eventId: string, maxWaitMs = 300000) {
-    DIAG('getRunOutput', `START`, { eventId, runId: this.runId, workflowId: this.workflowId, maxWaitMs });
     const storage = this.#mastra?.getStorage();
     const workflowsStore = await storage?.getStore('workflows');
 
@@ -153,25 +144,16 @@ export class InngestRun<
         }
       };
 
-      const handleResult = (result: any, source: string) => {
+      const handleResult = (result: any, _source: string) => {
         if (!resolved) {
-          DIAG('getRunOutput', `RESOLVED via ${source}`, {
-            runId: this.runId,
-            status: result?.output?.result?.status,
-            stepCount: Object.keys(result?.output?.result?.steps || {}).length,
-            stepStatuses: result?.output?.result?.steps
-              ? Object.fromEntries(Object.entries(result.output.result.steps).map(([k, v]) => [k, (v as any)?.status]))
-              : {},
-          });
           resolved = true;
           cleanup();
           resolve(result);
         }
       };
 
-      const handleError = (error: any, source: string) => {
+      const handleError = (error: any, _source: string) => {
         if (!resolved) {
-          DIAG('getRunOutput', `ERROR via ${source}`, { runId: this.runId, error: error?.message });
           resolved = true;
           cleanup();
           reject(error);
@@ -181,7 +163,6 @@ export class InngestRun<
       // Start realtime subscription for workflow-finish event
       const startRealtimeSubscription = async () => {
         try {
-          DIAG('realtime', `Subscribing to channel`, { channel: `workflow:${this.workflowId}:${this.runId}` });
           const streamPromise = subscribe(
             {
               channel: `workflow:${this.workflowId}:${this.runId}`,
@@ -192,27 +173,12 @@ export class InngestRun<
               if (resolved) return;
 
               const event = message.data;
-              DIAG('realtime', `Received event`, { type: event?.type, runId: this.runId });
 
               if (event?.type === 'workflow-finish') {
                 // Got the finish event - load snapshot and resolve
-                DIAG('realtime', `workflow-finish received, loading snapshot`, {
-                  workflowId: this.workflowId,
-                  runId: this.runId,
-                  eventPayloadStatus: event.payload?.status,
-                });
-                const snapshotLoadStart = Date.now();
                 const snapshot = await workflowsStore?.loadWorkflowSnapshot({
                   workflowName: this.workflowId,
                   runId: this.runId,
-                });
-                DIAG('realtime', `Snapshot loaded`, {
-                  loadTimeMs: Date.now() - snapshotLoadStart,
-                  snapshotStatus: snapshot?.status,
-                  contextKeys: Object.keys(snapshot?.context || {}),
-                  stepStatuses: snapshot?.context
-                    ? Object.fromEntries(Object.entries(snapshot.context).map(([k, v]) => [k, (v as any)?.status]))
-                    : {},
                 });
                 if (snapshot?.context) {
                   snapshot.context = hydrateSerializedStepErrors(snapshot.context);
@@ -231,14 +197,6 @@ export class InngestRun<
                   },
                 };
 
-                DIAG('realtime', `Assembled result`, {
-                  finalStatus: result.output.result.status,
-                  stepStatuses: result.output.result.steps
-                    ? Object.fromEntries(
-                        Object.entries(result.output.result.steps).map(([k, v]) => [k, (v as any)?.status]),
-                      )
-                    : {},
-                });
                 handleResult(result, 'realtime');
               }
             },
@@ -248,21 +206,17 @@ export class InngestRun<
           unsubscribe = () => {
             stream.cancel().catch(() => {});
           };
-        } catch (error) {
+        } catch {
           // Realtime subscription failed - polling will still work as fallback
-          DIAG('realtime', `Subscription failed, relying on polling`, { error: (error as Error)?.message });
         }
       };
 
       // Start polling as fallback
       const startPolling = async () => {
         const startTime = Date.now();
-        let pollCount = 0;
 
         const poll = async () => {
-          pollCount++;
           if (resolved) {
-            DIAG('polling', `Poll ${pollCount} skipped - already resolved`, { runId: this.runId });
             return;
           }
           if (Date.now() - startTime >= maxWaitMs) {
@@ -274,21 +228,12 @@ export class InngestRun<
             const runs = await this.getRuns(eventId);
             const run = runs?.find((r: { event_id: string }) => r.event_id === eventId);
 
-            DIAG('polling', `Poll ${pollCount}`, {
-              eventId,
-              runId: this.runId,
-              runsCount: runs?.length ?? 0,
-              matchedRunStatus: run?.status ?? 'none',
-            });
-
             if (run?.status === 'Completed') {
-              DIAG('polling', `Completed detected via polling`, { runId: this.runId });
               handleResult(run, 'polling');
               return;
             }
 
             if (run?.status === 'Failed') {
-              DIAG('polling', `Failed detected via polling, loading snapshot`, { runId: this.runId });
               const snapshot = await workflowsStore?.loadWorkflowSnapshot({
                 workflowName: this.workflowId,
                 runId: this.runId,
@@ -296,11 +241,6 @@ export class InngestRun<
               if (snapshot?.context) {
                 snapshot.context = hydrateSerializedStepErrors(snapshot.context);
               }
-              DIAG('polling', `Snapshot loaded for failed run`, {
-                stepStatuses: snapshot?.context
-                  ? Object.fromEntries(Object.entries(snapshot.context).map(([k, v]) => [k, (v as any)?.status]))
-                  : {},
-              });
               handleResult(
                 {
                   output: {
@@ -317,7 +257,6 @@ export class InngestRun<
             }
 
             if (run?.status === 'Cancelled') {
-              DIAG('polling', `Cancelled detected via polling`, { runId: this.runId });
               const snapshot = await workflowsStore?.loadWorkflowSnapshot({
                 workflowName: this.workflowId,
                 runId: this.runId,
@@ -346,7 +285,6 @@ export class InngestRun<
         };
 
         // Start first poll
-        DIAG('polling', `Starting polling fallback`, { runId: this.runId, eventId });
         void poll();
       };
 
@@ -513,9 +451,7 @@ export class InngestRun<
     format?: 'legacy' | 'vnext' | undefined;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    DIAG('_start', `BEGIN`, { workflowId: this.workflowId, runId: this.runId });
     const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
-    DIAG('_start', `Persisting initial snapshot`, { workflowId: this.workflowId, runId: this.runId });
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -534,14 +470,11 @@ export class InngestRun<
         timestamp: Date.now(),
       },
     });
-    DIAG('_start', `Initial snapshot persisted`, { workflowId: this.workflowId, runId: this.runId });
 
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     const eventName = `workflow.${this.workflowId}`;
-    DIAG('_start', `Sending event to Inngest`, { eventName, runId: this.runId });
-    const eventSendStart = Date.now();
 
     const eventOutput = await this.inngest.send({
       name: eventName,
@@ -559,20 +492,11 @@ export class InngestRun<
     });
 
     const eventId = eventOutput.ids[0];
-    DIAG('_start', `Event sent`, { eventId, runId: this.runId, sendDurationMs: Date.now() - eventSendStart });
     if (!eventId) {
       throw new Error('Event ID is not set');
     }
 
-    DIAG('_start', `Calling getRunOutput`, { eventId, runId: this.runId });
     const runOutput = await this.getRunOutput(eventId);
-    DIAG('_start', `getRunOutput returned`, {
-      runId: this.runId,
-      status: runOutput?.output?.result?.status,
-      stepStatuses: runOutput?.output?.result?.steps
-        ? Object.fromEntries(Object.entries(runOutput.output.result.steps).map(([k, v]) => [k, (v as any)?.status]))
-        : {},
-    });
     const result = runOutput?.output?.result;
 
     this.hydrateFailedResult(result);
@@ -580,7 +504,6 @@ export class InngestRun<
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }
-    DIAG('_start', `COMPLETE`, { runId: this.runId, finalStatus: result.status });
     return result;
   }
 

@@ -3,14 +3,6 @@ import { PubSub } from '@mastra/core/events';
 import type { Event } from '@mastra/core/events';
 import type { Inngest } from 'inngest';
 
-// Diagnostic logging helper - enable with DEBUG_INNGEST=1
-const DIAG = (area: string, msg: string, data?: any) => {
-  if (!process.env.DEBUG_INNGEST) return;
-  const ts = new Date().toISOString().slice(11, 23);
-  const dataStr = data ? ` ${JSON.stringify(data)}` : '';
-  console.info(`[DIAG:pubsub:${area}] ${ts} ${msg}${dataStr}`);
-};
-
 /**
  * Type for Inngest's publish function, available inside Inngest function context.
  */
@@ -65,35 +57,15 @@ export class InngestPubSub extends PubSub {
     }
 
     const runId = match[1];
-    const eventType = (event.data as any)?.type;
-    DIAG('publish', `Publishing event`, {
-      workflowId: this.workflowId,
-      runId,
-      eventType,
-      channel: `workflow:${this.workflowId}:${runId}`,
-    });
 
     try {
-      const publishStart = Date.now();
       await this.publishFn({
         channel: `workflow:${this.workflowId}:${runId}`,
         topic: 'watch',
         data: event.data,
       });
-      DIAG('publish', `Event published`, {
-        workflowId: this.workflowId,
-        runId,
-        eventType,
-        durationMs: Date.now() - publishStart,
-      });
     } catch (err: any) {
       // Log but don't throw - publishing failures shouldn't break workflow execution
-      DIAG('publish', `ERROR publishing event`, {
-        workflowId: this.workflowId,
-        runId,
-        eventType,
-        error: err?.message ?? err,
-      });
       console.error('InngestPubSub publish error:', err?.message ?? err);
     }
   }

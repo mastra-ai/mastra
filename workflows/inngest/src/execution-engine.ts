@@ -18,14 +18,6 @@ import type {
 import type { Inngest, BaseContext } from 'inngest';
 import { InngestWorkflow } from './workflow';
 
-// Diagnostic logging helper - enable with DEBUG_INNGEST=1
-const DIAG = (area: string, msg: string, data?: any) => {
-  if (!process.env.DEBUG_INNGEST) return;
-  const ts = new Date().toISOString().slice(11, 23);
-  const dataStr = data ? ` ${JSON.stringify(data)}` : '';
-  console.info(`[DIAG:engine:${area}] ${ts} ${msg}${dataStr}`);
-};
-
 export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
   private inngestAttempts: number;
@@ -39,7 +31,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     super({ mastra, options });
     this.inngestStep = inngestStep;
     this.inngestAttempts = inngestAttempts;
-    DIAG('constructor', 'InngestExecutionEngine created', { attempt: inngestAttempts });
   }
 
   // =============================================================================
@@ -95,27 +86,16 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       runId: string;
     },
   ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: Error; endedAt: number } }> {
-    DIAG('stepRetry', `START stepId=${stepId}`, {
-      runId: params.runId,
-      workflowId: params.workflowId,
-      maxRetries: params.retries,
-    });
     for (let i = 0; i < params.retries + 1; i++) {
       if (i > 0 && params.delay) {
-        DIAG('stepRetry', `Retry ${i}/${params.retries} for stepId=${stepId}`, { runId: params.runId });
         await new Promise(resolve => setTimeout(resolve, params.delay));
       }
       try {
         //removed retry config with RetryAfterError from wrapDurableOperation, since we're manually handling retries here
         const result = await this.wrapDurableOperation(stepId, runStep);
-        DIAG('stepRetry', `SUCCESS stepId=${stepId}`, { runId: params.runId, resultType: typeof result });
         return { ok: true, result };
       } catch (e) {
         if (i === params.retries) {
-          DIAG('stepRetry', `FAILED stepId=${stepId} after ${i + 1} attempts`, {
-            runId: params.runId,
-            error: (e as Error)?.message,
-          });
           // After step-level retries exhausted, extract failure from error cause
           const cause = (e as any)?.cause;
           if (cause?.status === 'failed') {
@@ -151,7 +131,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       }
     }
     // Should never reach here, but TypeScript needs it
-    DIAG('stepRetry', `UNREACHABLE stepId=${stepId}`, { runId: params.runId });
     return { ok: false, error: { status: 'failed', error: new Error('Unknown error'), endedAt: Date.now() } };
   }
 
@@ -182,19 +161,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * object is finally JSON.stringify'd, our error's toJSON() is called.
    */
   async wrapDurableOperation<T>(operationId: string, operationFn: () => Promise<T>): Promise<T> {
-    DIAG('wrapDurable', `ENTER operationId=${operationId}`);
-    const startTime = Date.now();
     const result = await this.inngestStep.run(operationId, async () => {
-      DIAG(
-        'wrapDurable',
-        `INSIDE step.run operationId=${operationId} (this runs on first execution, skipped on replay)`,
-      );
       try {
         const fnResult = await operationFn();
-        DIAG('wrapDurable', `OPERATION SUCCESS operationId=${operationId}`, { resultType: typeof fnResult });
         return fnResult;
       } catch (e) {
-        DIAG('wrapDurable', `OPERATION ERROR operationId=${operationId}`, { error: (e as Error)?.message });
         const errorInstance = getErrorFromUnknown(e, {
           serializeStack: false,
           fallbackMessage: 'Unknown step execution error',
@@ -208,7 +179,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         });
       }
     });
-    DIAG('wrapDurable', `EXIT operationId=${operationId} took ${Date.now() - startTime}ms`);
     return result as T;
   }
 
@@ -255,13 +225,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     requestContext: RequestContext;
     state: Record<string, any>;
   }): Promise<void> {
-    DIAG('callbacks', `Invoking lifecycle callbacks`, {
-      runId: result.runId,
-      workflowId: result.workflowId,
-      status: result.status,
-      stepCount: Object.keys(result.steps).length,
-      stepStatuses: Object.fromEntries(Object.entries(result.steps).map(([k, v]) => [k, (v as any)?.status])),
-    });
     return super.invokeLifecycleCallbacks(result);
   }
 
@@ -480,16 +443,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       stepSpan,
     } = params;
 
-    DIAG('nestedWf', `START executeWorkflowStep`, {
-      nestedWorkflowId: step.id,
-      parentWorkflowId: executionContext.workflowId,
-      parentRunId: executionContext.runId,
-      isResume: !!resume?.steps?.length,
-      isTimeTravel: !!(timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.id),
-      currentStepResultKeys: Object.keys(stepResults),
-      currentStepStatuses: Object.fromEntries(Object.entries(stepResults).map(([k, v]) => [k, v?.status])),
-    });
-
     // Build trace context to propagate to nested workflow
     const nestedTracingContext = executionContext.tracingIds?.traceId
       ? {
@@ -506,7 +459,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
     try {
       if (isResume) {
-        DIAG('nestedWf', `Invoking nested workflow (RESUME mode)`, { nestedWorkflowId: step.id });
         runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
         const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
         const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
@@ -565,12 +517,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         runId = invokeResp.runId;
         executionContext.state = invokeResp.result.state;
       } else {
-        DIAG('nestedWf', `Invoking nested workflow (NORMAL mode)`, {
-          nestedWorkflowId: step.id,
-          parentWorkflowId: executionContext.workflowId,
-          invokeOperationId: `workflow.${executionContext.workflowId}.step.${step.id}`,
-        });
-        const invokeStartTime = Date.now();
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
@@ -581,13 +527,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             tracingOptions: nestedTracingContext,
           },
         })) as any;
-        DIAG('nestedWf', `Nested workflow invoke returned`, {
-          nestedWorkflowId: step.id,
-          durationMs: Date.now() - invokeStartTime,
-          resultStatus: invokeResp?.result?.status,
-          resultRunId: invokeResp?.runId,
-          resultStepCount: Object.keys(invokeResp?.result?.steps || {}).length,
-        });
         result = invokeResp.result;
         runId = invokeResp.runId;
         executionContext.state = invokeResp.result.state;
@@ -595,27 +534,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     } catch (e) {
       // Nested workflow threw an error (likely from finalization step)
       // The error cause should contain the workflow result with runId
-      DIAG('nestedWf', `Nested workflow invoke THREW ERROR`, {
-        nestedWorkflowId: step.id,
-        errorMessage: (e as Error)?.message,
-        errorName: (e as Error)?.name,
-        hasCause: !!(e as any)?.cause,
-      });
       const errorCause = (e as any)?.cause;
 
       // Try to extract runId from error cause or generate new one
       if (errorCause && typeof errorCause === 'object') {
-        DIAG('nestedWf', `Extracting result from error cause`, {
-          nestedWorkflowId: step.id,
-          causeStatus: errorCause.status,
-          causeRunId: errorCause.runId,
-          causeStepCount: Object.keys(errorCause.steps || {}).length,
-        });
         result = errorCause as WorkflowResult<any, any, any, any>;
         // The runId might be in the result's steps metadata
         runId = errorCause.runId || randomUUID();
       } else {
-        DIAG('nestedWf', `No cause in error, constructing failed result`, { nestedWorkflowId: step.id });
         // Fallback: if we can't get the result from error, construct a basic failed result
         runId = randomUUID();
         result = {
@@ -627,20 +553,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       }
     }
 
-    DIAG('nestedWf', `Processing nested workflow result in step.run`, {
-      nestedWorkflowId: step.id,
-      resultStatus: result.status,
-      resultStepStatuses: Object.fromEntries(
-        Object.entries(result.steps || {}).map(([k, v]) => [k, (v as any)?.status]),
-      ),
-    });
     const res = await this.inngestStep.run(
       `workflow.${executionContext.workflowId}.step.${step.id}.nestedwf-results`,
       async () => {
-        DIAG('nestedWf', `INSIDE nestedwf-results step.run (first execution only)`, {
-          nestedWorkflowId: step.id,
-          resultStatus: result.status,
-        });
         if (result.status === 'failed') {
           await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
             type: 'watch',
