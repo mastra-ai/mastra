@@ -9,11 +9,15 @@
 
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { createInngestAgent } from '@mastra/inngest';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { inngest } from '../workflows/inngest';
+
+// Shared pubsub for evented agent (can also be inherited from Mastra)
+const pubsub = new EventEmitterPubSub();
 
 // Simple web search tool (simulated for demo purposes)
 const webSearchTool = createTool({
@@ -31,7 +35,8 @@ const webSearchTool = createTool({
       }),
     ),
   }),
-  execute: async ({ query }) => {
+  execute: async (inputData: { query: string }) => {
+    const { query } = inputData;
     console.log(`[web-search] Searching for: ${query}`);
     await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -80,12 +85,10 @@ export const regularResearchAgent = new Agent({
 // Use when you want reconnection support but don't need durable execution
 export const durableResearchAgent = createDurableAgent({
   agent: new Agent({
-    id: 'durable-research-agent-base',
-    name: 'Research Agent (Durable Base)',
+    id: 'durable-research-agent',
+    name: 'Research Agent (Durable)',
     ...baseAgentConfig,
   }),
-  id: 'durable-research-agent',
-  name: 'Research Agent (Durable)',
   // cache and pubsub inherited from Mastra
 });
 
@@ -94,13 +97,12 @@ export const durableResearchAgent = createDurableAgent({
 // Use for long-running operations on single-instance deployments
 export const eventedResearchAgent = createEventedAgent({
   agent: new Agent({
-    id: 'evented-research-agent-base',
-    name: 'Research Agent (Evented Base)',
+    id: 'evented-research-agent',
+    name: 'Research Agent (Evented)',
     ...baseAgentConfig,
   }),
-  id: 'evented-research-agent',
-  name: 'Research Agent (Evented)',
-  // cache and pubsub inherited from Mastra
+  pubsub,
+  // cache inherited from Mastra
 });
 
 // 3. Inngest Agent
@@ -108,12 +110,10 @@ export const eventedResearchAgent = createEventedAgent({
 // Use for production distributed systems
 export const inngestResearchAgent = createInngestAgent({
   agent: new Agent({
-    id: 'inngest-research-agent-base',
-    name: 'Research Agent (Inngest Base)',
+    id: 'inngest-research-agent',
+    name: 'Research Agent (Inngest)',
     ...baseAgentConfig,
   }),
-  id: 'inngest-research-agent',
-  name: 'Research Agent (Inngest)',
   inngest,
   // cache and pubsub inherited from Mastra
 });

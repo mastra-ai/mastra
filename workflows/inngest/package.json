@@ -36,7 +36,7 @@
   "dependencies": {
     "@inngest/realtime": "^0.4.5",
     "@opentelemetry/api": "^1.9.0",
-    "inngest": "^3.44.3"
+    "inngest": "^3.50.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.24",

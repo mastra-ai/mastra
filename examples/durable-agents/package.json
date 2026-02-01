@@ -1,22 +1,41 @@
 {
-  "name": "durable-agents-example",
-  "version": "0.1.0",
+  "name": "durable-agents",
+  "type": "module",
+  "version": "1.0.0",
   "private": true,
+  "description": "Example demonstrating durable agents with resumable streams",
+  "main": "index.js",
   "scripts": {
-    "dev": "mastra dev",
-    "build": "mastra build"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "mastra:dev": "mastra dev",
+    "start:inngest:server": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.18.2",
   "dependencies": {
-    "@mastra/core": "workspace:*",
-    "@mastra/inngest": "workspace:*",
-    "@mastra/libsql": "workspace:*",
-    "@mastra/loggers": "workspace:*",
-    "@mastra/observability": "workspace:*",
-    "@mastra/redis": "workspace:*",
-    "inngest": "^3.29.1",
-    "zod": "^3.24.1"
+    "@inngest/realtime": "^0.4.5",
+    "@mastra/core": "1.0.0-beta.20",
+    "@mastra/deployer": "1.0.0-beta.20",
+    "@mastra/inngest": "1.0.0-beta.11",
+    "@mastra/libsql": "1.0.0-beta.11",
+    "@mastra/loggers": "1.0.0-beta.4",
+    "@mastra/redis": "1.0.0-beta.4",
+    "inngest": "^3.50.0",
+    "mastra": "1.0.0-beta.13",
+    "zod": "^3.25.76"
   },
-  "devDependencies": {
-    "typescript": "^5.7.2"
+  "pnpm": {
+    "overrides": {
+      "@mastra/inngest": "link:../../workflows/inngest",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/redis": "link:../../stores/redis",
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/deployer": "link:../../packages/deployer",
+      "@mastra/server": "link:../../packages/server",
+      "mastra": "link:../../packages/cli"
+    }
   }
 }
