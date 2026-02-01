@@ -521,6 +521,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'processors/tool-search-processor',
+          label: 'ToolSearchProcessor',
+        },
+        {
+          type: 'doc',
           id: 'processors/unicode-normalizer',
           label: 'UnicodeNormalizer',
         },
