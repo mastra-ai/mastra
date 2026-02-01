@@ -376,7 +376,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     expect(!isNaN(run!.updatedAt.getTime())).toBe(true);
   });
 
-  describe.only('Workflow Snapshots', () => {
+  describe('Workflow Snapshots', () => {
     it('should persist and load workflow snapshots', async () => {
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
