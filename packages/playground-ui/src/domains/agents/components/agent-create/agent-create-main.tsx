@@ -164,8 +164,8 @@ export function AgentCreateMain({ form, formRef, onPublish, isSubmitting = false
       )}
 
       {/* Create Agent Button - at the bottom */}
-      <div className="mt-auto pt-4">
-        <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
+      <div className="flex justify-end">
+        <Button variant="primary" onClick={onPublish} disabled={isSubmitting}>
           {isSubmitting ? (
             <>
               <Spinner className="h-4 w-4" />
