@@ -17,6 +17,14 @@ import type { Inngest } from 'inngest';
 import { InngestExecutionEngine } from './execution-engine';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
+
+// Diagnostic logging helper - enable with DEBUG_INNGEST=1
+const DIAG = (area: string, msg: string, data?: any) => {
+  if (!process.env.DEBUG_INNGEST) return;
+  const ts = new Date().toISOString().slice(11, 23);
+  const dataStr = data ? ` ${JSON.stringify(data)}` : '';
+  console.info(`[DIAG:workflow:${area}] ${ts} ${msg}${dataStr}`);
+};
 import type {
   InngestEngineType,
   InngestFlowControlConfig,
@@ -220,6 +228,7 @@ export class InngestWorkflow<
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
+        DIAG('invoke', `Function invoked`, { workflowId: this.id, eventId: event.id, attempt });
         let {
           inputData,
           initialState,
@@ -233,11 +242,13 @@ export class InngestWorkflow<
           tracingOptions,
         } = event.data;
 
+        const hadRunId = !!runId;
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
             return randomUUID();
           });
         }
+        DIAG('invoke', `RunId resolved`, { workflowId: this.id, runId, wasProvided: hadRunId });
 
         // Create InngestPubSub instance with the publish function from Inngest context
         const pubsub = new InngestPubSub(this.inngest, this.id, publish);
@@ -275,6 +286,8 @@ export class InngestWorkflow<
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
 
+        DIAG('execute', `Starting engine.execute`, { workflowId: this.id, runId });
+        const executeStartTime = Date.now();
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {
           result = await engine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
@@ -316,13 +329,33 @@ export class InngestWorkflow<
             },
           });
         } catch (error) {
+          DIAG('execute', `engine.execute threw error`, {
+            workflowId: this.id,
+            runId,
+            error: (error as Error)?.message,
+          });
           // Re-throw - span will be ended in finalize if we reach it
           throw error;
         }
 
+        DIAG('execute', `engine.execute completed`, {
+          workflowId: this.id,
+          runId,
+          durationMs: Date.now() - executeStartTime,
+          status: result.status,
+          stepCount: Object.keys(result.steps).length,
+          stepStatuses: Object.fromEntries(Object.entries(result.steps).map(([k, v]) => [k, (v as any)?.status])),
+        });
+
         // Final step to invoke lifecycle callbacks and end workflow span.
         // This step is memoized by step.run.
+        DIAG('finalize', `Entering finalize step.run`, { workflowId: this.id, runId });
         await step.run(`workflow.${this.id}.finalize`, async () => {
+          DIAG('finalize', `INSIDE finalize step.run (first execution only)`, {
+            workflowId: this.id,
+            runId,
+            status: result.status,
+          });
           if (result.status !== 'paused') {
             // Invoke lifecycle callbacks (onFinish and onError)
             await engine.invokeLifecycleCallbacksInternal({
@@ -362,15 +395,99 @@ export class InngestWorkflow<
             }
           }
 
+          // Ensure final snapshot is persisted BEFORE publishing workflow-finish
+          // This fixes a race condition where getRunOutput reads the snapshot before it's fully written
+          const shouldPersistFinalSnapshot = this.options.shouldPersistSnapshot({
+            workflowStatus: result.status as any,
+            stepResults: result.steps,
+          });
+          if (shouldPersistFinalSnapshot) {
+            const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+            if (workflowsStore) {
+              // For suspended workflows, read existing snapshot to preserve suspendedPaths and resumeLabels
+              // which were set correctly by the handlers during execution
+              let existingSnapshot:
+                | { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> }
+                | undefined;
+              if (result.status === 'suspended') {
+                existingSnapshot = await workflowsStore.loadWorkflowSnapshot({
+                  workflowName: this.id,
+                  runId,
+                });
+              }
+
+              DIAG('finalize', `Persisting final snapshot before workflow-finish`, {
+                workflowId: this.id,
+                runId,
+                status: result.status,
+                stepCount: Object.keys(result.steps).length,
+              });
+              await workflowsStore.persistWorkflowSnapshot({
+                workflowName: this.id,
+                runId,
+                resourceId,
+                snapshot: {
+                  runId,
+                  status: result.status,
+                  value: result.state ?? initialState ?? {},
+                  context: result.steps as any,
+                  activePaths: [],
+                  activeStepsPath: {},
+                  serializedStepGraph: this.serializedStepGraph,
+                  suspendedPaths: existingSnapshot?.suspendedPaths ?? {},
+                  waitingPaths: {},
+                  resumeLabels: existingSnapshot?.resumeLabels ?? result.resumeLabels ?? {},
+                  result: result.status === 'success' ? (result.result as any) : undefined,
+                  error: result.status === 'failed' ? result.error : undefined,
+                  timestamp: Date.now(),
+                },
+              });
+              DIAG('finalize', `Final snapshot persisted`, { workflowId: this.id, runId });
+            }
+          }
+
+          // Publish workflow-finish event for realtime subscribers
+          DIAG('finalize', `Publishing workflow-finish event`, {
+            workflowId: this.id,
+            runId,
+            status: result.status,
+            stepStatuses: Object.fromEntries(Object.entries(result.steps).map(([k, v]) => [k, (v as any)?.status])),
+          });
+          const publishStartTime = Date.now();
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-finish',
+              payload: {
+                status: result.status,
+                result: result.status === 'success' ? result.result : undefined,
+                error: result.status === 'failed' ? result.error : undefined,
+              },
+            },
+          });
+          DIAG('finalize', `workflow-finish event published`, {
+            workflowId: this.id,
+            runId,
+            publishDurationMs: Date.now() - publishStartTime,
+          });
+
           // Throw after span ended for failed workflows
           if (result.status === 'failed') {
+            DIAG('finalize', `Throwing NonRetriableError for failed workflow`, { workflowId: this.id, runId });
             throw new NonRetriableError(`Workflow failed`, {
               cause: result,
             });
           }
 
+          DIAG('finalize', `Finalize step completing successfully`, {
+            workflowId: this.id,
+            runId,
+            status: result.status,
+          });
           return result;
         });
+        DIAG('finalize', `Finalize step.run returned`, { workflowId: this.id, runId });
 
         return { result, runId };
       },

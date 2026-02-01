@@ -1531,6 +1531,18 @@ export class Workflow<
                   : m.step,
               );
 
+          // Diagnostic logging for mapping step
+          if (process.env.DEBUG_STEP_RESULTS) {
+            console.info(`[DIAG:mapStep] Mapping key="${key}"`, {
+              stepId: Array.isArray(m.step) ? m.step.map((s: any) => s?.id) : m.step?.id,
+              path: m.path,
+              stepResultValue: stepResult,
+              stepResultType: typeof stepResult,
+              isNull: stepResult === null,
+              isUndefined: stepResult === undefined,
+            });
+          }
+
           if (m.path === '.') {
             result[key] = stepResult;
             continue;
@@ -1542,6 +1554,18 @@ export class Workflow<
             if (typeof value === 'object' && value !== null) {
               value = value[part];
             } else {
+              // Enhanced error with diagnostic info
+              if (process.env.DEBUG_STEP_RESULTS) {
+                console.info(`[DIAG:mapStep] ERROR: Invalid path`, {
+                  key,
+                  path: m.path,
+                  stepId: m?.step?.id ?? 'initData',
+                  valueAtFailure: value,
+                  valueType: typeof value,
+                  failedAtPart: part,
+                  pathParts,
+                });
+              }
               throw new Error(`Invalid path ${m.path} in step ${m?.step?.id ?? 'initData'}`);
             }
           }

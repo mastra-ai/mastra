@@ -6,6 +6,14 @@ import type { TracingContext, TracingOptions } from '@mastra/core/observability'
 import type { RequestContext } from '@mastra/core/request-context';
 import { WorkflowRunOutput, ChunkFrom } from '@mastra/core/stream';
 import { createTimeTravelExecutionParams, Run, hydrateSerializedStepErrors } from '@mastra/core/workflows';
+
+// Diagnostic logging helper - enable with DEBUG_INNGEST=1
+const DIAG = (area: string, msg: string, data?: any) => {
+  if (!process.env.DEBUG_INNGEST) return;
+  const ts = new Date().toISOString().slice(11, 23);
+  const dataStr = data ? ` ${JSON.stringify(data)}` : '';
+  console.info(`[DIAG:run:${area}] ${ts} ${msg}${dataStr}`);
+};
 import type {
   ExecutionEngine,
   ExecutionGraph,
@@ -118,68 +126,234 @@ export class InngestRun<
     throw new NonRetriableError(`Failed to get runs after ${maxRetries} attempts: ${lastError?.message}`);
   }
 
+  /**
+   * Get run output using hybrid approach: realtime subscription + polling fallback.
+   * Resolves as soon as either method detects completion.
+   */
   async getRunOutput(eventId: string, maxWaitMs = 300000) {
-    const startTime = Date.now();
+    DIAG('getRunOutput', `START`, { eventId, runId: this.runId, workflowId: this.workflowId, maxWaitMs });
     const storage = this.#mastra?.getStorage();
     const workflowsStore = await storage?.getStore('workflows');
 
-    while (Date.now() - startTime < maxWaitMs) {
-      let runs;
-      try {
-        runs = await this.getRuns(eventId);
-      } catch (error) {
-        // NonRetriableError from getRuns should propagate to prevent function-level retry
-        if (error instanceof NonRetriableError) {
-          throw error;
-        }
-        // Wrap other errors as non-retriable
-        throw new NonRetriableError(
-          `Failed to poll workflow status: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+    return new Promise<any>((resolve, reject) => {
+      let resolved = false;
+      let unsubscribe: (() => void) | null = null;
+      let pollTimeoutId: NodeJS.Timeout | null = null;
 
-      // Check completion
-      if (runs?.[0]?.status === 'Completed' && runs?.[0]?.event_id === eventId) {
-        return runs[0];
-      }
-
-      // Check failure
-      if (runs?.[0]?.status === 'Failed') {
-        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-        });
-        // Hydrate serialized errors back to Error instances
-        if (snapshot?.context) {
-          snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+      const cleanup = () => {
+        if (unsubscribe) {
+          try {
+            unsubscribe();
+          } catch {
+            // Ignore unsubscribe errors
+          }
         }
-        return {
-          output: {
-            result: {
-              steps: snapshot?.context,
-              status: 'failed',
-              // Get the original error from NonRetriableError's cause (which contains the workflow result)
-              error: getErrorFromUnknown(runs?.[0]?.output?.cause?.error, { serializeStack: false }),
+        if (pollTimeoutId) {
+          clearTimeout(pollTimeoutId);
+        }
+      };
+
+      const handleResult = (result: any, source: string) => {
+        if (!resolved) {
+          DIAG('getRunOutput', `RESOLVED via ${source}`, {
+            runId: this.runId,
+            status: result?.output?.result?.status,
+            stepCount: Object.keys(result?.output?.result?.steps || {}).length,
+            stepStatuses: result?.output?.result?.steps
+              ? Object.fromEntries(Object.entries(result.output.result.steps).map(([k, v]) => [k, (v as any)?.status]))
+              : {},
+          });
+          resolved = true;
+          cleanup();
+          resolve(result);
+        }
+      };
+
+      const handleError = (error: any, source: string) => {
+        if (!resolved) {
+          DIAG('getRunOutput', `ERROR via ${source}`, { runId: this.runId, error: error?.message });
+          resolved = true;
+          cleanup();
+          reject(error);
+        }
+      };
+
+      // Start realtime subscription for workflow-finish event
+      const startRealtimeSubscription = async () => {
+        try {
+          DIAG('realtime', `Subscribing to channel`, { channel: `workflow:${this.workflowId}:${this.runId}` });
+          const streamPromise = subscribe(
+            {
+              channel: `workflow:${this.workflowId}:${this.runId}`,
+              topics: ['watch'],
+              app: this.inngest,
             },
-          },
+            async (message: any) => {
+              if (resolved) return;
+
+              const event = message.data;
+              DIAG('realtime', `Received event`, { type: event?.type, runId: this.runId });
+
+              if (event?.type === 'workflow-finish') {
+                // Got the finish event - load snapshot and resolve
+                DIAG('realtime', `workflow-finish received, loading snapshot`, {
+                  workflowId: this.workflowId,
+                  runId: this.runId,
+                  eventPayloadStatus: event.payload?.status,
+                });
+                const snapshotLoadStart = Date.now();
+                const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+                  workflowName: this.workflowId,
+                  runId: this.runId,
+                });
+                DIAG('realtime', `Snapshot loaded`, {
+                  loadTimeMs: Date.now() - snapshotLoadStart,
+                  snapshotStatus: snapshot?.status,
+                  contextKeys: Object.keys(snapshot?.context || {}),
+                  stepStatuses: snapshot?.context
+                    ? Object.fromEntries(Object.entries(snapshot.context).map(([k, v]) => [k, (v as any)?.status]))
+                    : {},
+                });
+                if (snapshot?.context) {
+                  snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+                }
+
+                const result = {
+                  output: {
+                    result: {
+                      steps: snapshot?.context,
+                      status: event.payload.status,
+                      result: event.payload.result,
+                      error: event.payload.error
+                        ? getErrorFromUnknown(event.payload.error, { serializeStack: false })
+                        : undefined,
+                    },
+                  },
+                };
+
+                DIAG('realtime', `Assembled result`, {
+                  finalStatus: result.output.result.status,
+                  stepStatuses: result.output.result.steps
+                    ? Object.fromEntries(
+                        Object.entries(result.output.result.steps).map(([k, v]) => [k, (v as any)?.status]),
+                      )
+                    : {},
+                });
+                handleResult(result, 'realtime');
+              }
+            },
+          );
+
+          const stream = await streamPromise;
+          unsubscribe = () => {
+            stream.cancel().catch(() => {});
+          };
+        } catch (error) {
+          // Realtime subscription failed - polling will still work as fallback
+          DIAG('realtime', `Subscription failed, relying on polling`, { error: (error as Error)?.message });
+        }
+      };
+
+      // Start polling as fallback
+      const startPolling = async () => {
+        const startTime = Date.now();
+        let pollCount = 0;
+
+        const poll = async () => {
+          pollCount++;
+          if (resolved) {
+            DIAG('polling', `Poll ${pollCount} skipped - already resolved`, { runId: this.runId });
+            return;
+          }
+          if (Date.now() - startTime >= maxWaitMs) {
+            handleError(new NonRetriableError(`Workflow did not complete within ${maxWaitMs}ms`), 'polling-timeout');
+            return;
+          }
+
+          try {
+            const runs = await this.getRuns(eventId);
+            const run = runs?.find((r: { event_id: string }) => r.event_id === eventId);
+
+            DIAG('polling', `Poll ${pollCount}`, {
+              eventId,
+              runId: this.runId,
+              runsCount: runs?.length ?? 0,
+              matchedRunStatus: run?.status ?? 'none',
+            });
+
+            if (run?.status === 'Completed') {
+              DIAG('polling', `Completed detected via polling`, { runId: this.runId });
+              handleResult(run, 'polling');
+              return;
+            }
+
+            if (run?.status === 'Failed') {
+              DIAG('polling', `Failed detected via polling, loading snapshot`, { runId: this.runId });
+              const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+                workflowName: this.workflowId,
+                runId: this.runId,
+              });
+              if (snapshot?.context) {
+                snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+              }
+              DIAG('polling', `Snapshot loaded for failed run`, {
+                stepStatuses: snapshot?.context
+                  ? Object.fromEntries(Object.entries(snapshot.context).map(([k, v]) => [k, (v as any)?.status]))
+                  : {},
+              });
+              handleResult(
+                {
+                  output: {
+                    result: {
+                      steps: snapshot?.context,
+                      status: 'failed',
+                      error: getErrorFromUnknown(run?.output?.cause?.error, { serializeStack: false }),
+                    },
+                  },
+                },
+                'polling-failed',
+              );
+              return;
+            }
+
+            if (run?.status === 'Cancelled') {
+              DIAG('polling', `Cancelled detected via polling`, { runId: this.runId });
+              const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+                workflowName: this.workflowId,
+                runId: this.runId,
+              });
+              handleResult(
+                { output: { result: { steps: snapshot?.context, status: 'canceled' } } },
+                'polling-cancelled',
+              );
+              return;
+            }
+
+            // Schedule next poll with jitter
+            pollTimeoutId = setTimeout(poll, 200 + Math.random() * 200);
+          } catch (error) {
+            if (error instanceof NonRetriableError) {
+              handleError(error, 'polling-non-retriable');
+              return;
+            }
+            handleError(
+              new NonRetriableError(
+                `Failed to poll workflow status: ${error instanceof Error ? error.message : String(error)}`,
+              ),
+              'polling-error',
+            );
+          }
         };
-      }
 
-      // Check cancellation
-      if (runs?.[0]?.status === 'Cancelled') {
-        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-        });
-        return { output: { result: { steps: snapshot?.context, status: 'canceled' } } };
-      }
+        // Start first poll
+        DIAG('polling', `Starting polling fallback`, { runId: this.runId, eventId });
+        void poll();
+      };
 
-      // Backoff between polls (1-2 seconds with jitter)
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-    }
-
-    // Timeout - non-retriable to prevent duplicate executions
-    throw new NonRetriableError(`Workflow did not complete within ${maxWaitMs}ms`);
+      // Start both in parallel
+      void startRealtimeSubscription();
+      void startPolling();
+    });
   }
 
   async cancel() {
@@ -339,7 +513,9 @@ export class InngestRun<
     format?: 'legacy' | 'vnext' | undefined;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    DIAG('_start', `BEGIN`, { workflowId: this.workflowId, runId: this.runId });
     const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
+    DIAG('_start', `Persisting initial snapshot`, { workflowId: this.workflowId, runId: this.runId });
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -358,12 +534,17 @@ export class InngestRun<
         timestamp: Date.now(),
       },
     });
+    DIAG('_start', `Initial snapshot persisted`, { workflowId: this.workflowId, runId: this.runId });
 
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
+    const eventName = `workflow.${this.workflowId}`;
+    DIAG('_start', `Sending event to Inngest`, { eventName, runId: this.runId });
+    const eventSendStart = Date.now();
+
     const eventOutput = await this.inngest.send({
-      name: `workflow.${this.workflowId}`,
+      name: eventName,
       data: {
         inputData: inputDataToUse,
         initialState: initialStateToUse,
@@ -378,10 +559,20 @@ export class InngestRun<
     });
 
     const eventId = eventOutput.ids[0];
+    DIAG('_start', `Event sent`, { eventId, runId: this.runId, sendDurationMs: Date.now() - eventSendStart });
     if (!eventId) {
       throw new Error('Event ID is not set');
     }
+
+    DIAG('_start', `Calling getRunOutput`, { eventId, runId: this.runId });
     const runOutput = await this.getRunOutput(eventId);
+    DIAG('_start', `getRunOutput returned`, {
+      runId: this.runId,
+      status: runOutput?.output?.result?.status,
+      stepStatuses: runOutput?.output?.result?.steps
+        ? Object.fromEntries(Object.entries(runOutput.output.result.steps).map(([k, v]) => [k, (v as any)?.status]))
+        : {},
+    });
     const result = runOutput?.output?.result;
 
     this.hydrateFailedResult(result);
@@ -389,16 +580,18 @@ export class InngestRun<
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }
+    DIAG('_start', `COMPLETE`, { runId: this.runId, finalStatus: result.status });
     return result;
   }
 
   async resume<TResume>(params: {
     resumeData?: TResume;
-    step:
+    step?:
       | Step<string, any, any, TResume, any>
       | [...Step<string, any, any, any, any>[], Step<string, any, any, TResume, any>]
       | string
       | string[];
+    label?: string;
     requestContext?: RequestContext;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -416,29 +609,37 @@ export class InngestRun<
 
   async _resume<TResume>(params: {
     resumeData?: TResume;
-    step:
+    step?:
       | Step<string, any, any, TResume, any>
       | [...Step<string, any, any, any, any>[], Step<string, any, any, TResume, any>]
       | string
       | string[];
+    label?: string;
     requestContext?: RequestContext;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const storage = this.#mastra?.getStorage();
 
-    let steps: string[] = [];
-    if (typeof params.step === 'string') {
-      steps = params.step.split('.');
-    } else {
-      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-        typeof step === 'string' ? step : step?.id,
-      );
-    }
     const workflowsStore = await storage?.getStore('workflows');
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
+
+    // Support label-based resume: look up step from resumeLabels
+    const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;
+    const stepParam = snapshotResumeLabel?.stepId ?? params.step;
+
+    let steps: string[] = [];
+    if (stepParam) {
+      if (typeof stepParam === 'string') {
+        steps = stepParam.split('.');
+      } else {
+        steps = (Array.isArray(stepParam) ? stepParam : [stepParam]).map(step =>
+          typeof step === 'string' ? step : step?.id,
+        );
+      }
+    }
 
     const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
 
