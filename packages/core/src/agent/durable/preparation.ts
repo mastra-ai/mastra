@@ -1,7 +1,7 @@
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { MastraMemory } from '../../memory/memory';
-import type { MemoryConfig as _MemoryConfig } from '../../memory/types';
+import type { MemoryConfig, MemoryConfig as _MemoryConfig } from '../../memory/types';
 import type { RequestContext } from '../../request-context';
 import type { CoreTool } from '../../tools/types';
 import type { Agent } from '../agent';
@@ -9,9 +9,35 @@ import type { AgentExecutionOptions } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
-import type { AgentModelManagerConfig } from '../types';
+import type { AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
+
+/**
+ * Interface for the Agent methods needed during durable preparation.
+ * This provides proper typing for the public Agent methods we call.
+ */
+interface DurablePreparationAgent {
+  id: string;
+  name?: string;
+  getInstructions(opts: { requestContext: RequestContext }): string | string[] | Promise<string | string[]>;
+  getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
+  getModelList(requestContext: RequestContext): Promise<AgentModelManagerConfig[] | null>;
+  getMemory(opts: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
+  listScorers(opts: {
+    requestContext: RequestContext;
+  }): Promise<Record<string, { scorer: unknown; sampling?: unknown }> | undefined>;
+  getToolsForExecution(opts: {
+    toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
+    threadId?: string;
+    resourceId?: string;
+    runId?: string;
+    requestContext?: RequestContext;
+    memoryConfig?: MemoryConfig;
+    autoResumeSuspendedTools?: boolean;
+  }): Promise<Record<string, CoreTool>>;
+}
 
 /**
  * Result from the preparation phase
@@ -78,6 +104,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     logger,
   } = options;
 
+  // Cast agent to typed interface for proper method access
+  // All these methods are public on Agent, but TypeScript generics hide them
+  const typedAgent = agent as unknown as DurablePreparationAgent;
+
   // 1. Generate IDs
   const runId = providedRunId ?? crypto.randomUUID();
   const messageId = crypto.randomUUID();
@@ -98,7 +128,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   });
 
   // Add agent instructions
-  const instructions = (await (agent as any).getInstructions?.({ requestContext })) ?? (agent as any).instructions;
+  const instructions = await typedAgent.getInstructions({ requestContext });
   if (instructions) {
     if (typeof instructions === 'string') {
       messageList.addSystem(instructions);
@@ -117,36 +147,31 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Add user messages
   messageList.add(messages, 'input');
 
-  // 5. Convert tools
-  // Note: This calls the agent's private convertTools method
-  // In a real implementation, we'd need to expose this or use a different pattern
+  // 5. Convert tools to CoreTool format for execution
   let tools: Record<string, CoreTool> = {};
   try {
-    tools =
-      (await (agent as any).convertTools?.({
-        toolsets: execOptions?.toolsets,
-        clientTools: execOptions?.clientTools,
-        threadId,
-        resourceId,
-        runId,
-        requestContext,
-        methodType: 'stream',
-        memoryConfig: execOptions?.memory?.options,
-        autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
-      })) ?? {};
+    tools = await typedAgent.getToolsForExecution({
+      toolsets: execOptions?.toolsets,
+      clientTools: execOptions?.clientTools,
+      threadId,
+      resourceId,
+      runId,
+      requestContext,
+      memoryConfig: execOptions?.memory?.options,
+      autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
+    });
   } catch (error) {
     logger?.debug?.(`[DurableAgent] Error converting tools: ${error}`);
   }
 
   // 6. Get model (and model list if configured)
-  // Note: This gets the first model from the agent's model configuration
-  const model = (await (agent as any).getModel?.({ requestContext })) as MastraLanguageModel;
+  const model = await typedAgent.getModel({ requestContext });
   if (!model) {
     throw new Error('Agent model not available');
   }
 
   // Check if agent has a model list (for fallback support)
-  const modelList = await (agent as any).getModelList?.(requestContext);
+  const modelList = await typedAgent.getModelList(requestContext);
 
   // 6b. Get scorers configuration
   // Scorers can come from agent config or be overridden via execOptions
@@ -158,7 +183,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   } else {
     // Try to get scorers from the agent using listScorers method
     try {
-      const agentScorers = await (agent as any).listScorers?.({ requestContext });
+      const agentScorers = await typedAgent.listScorers({ requestContext });
       if (agentScorers && Object.keys(agentScorers).length > 0) {
         scorers = agentScorers;
       }
@@ -168,7 +193,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   }
 
   // 7. Get memory and create SaveQueueManager
-  const memory = (await (agent as any).getMemory?.({ requestContext })) as MastraMemory | undefined;
+  const memory = await typedAgent.getMemory({ requestContext });
   const memoryConfig = execOptions?.memory?.options;
 
   const saveQueueManager = memory

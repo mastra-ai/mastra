@@ -1,4 +1,5 @@
 import type { MastraServerCache } from '../cache/base';
+import type { IMastraLogger } from '../logger';
 import { PubSub } from './pubsub';
 import type { EventCallback } from './pubsub';
 import type { Event } from './types';
@@ -12,6 +13,11 @@ export interface CachingPubSubOptions {
    * Defaults to 'pubsub:'.
    */
   keyPrefix?: string;
+  /**
+   * Optional logger for structured logging.
+   * Falls back to console.error if not provided.
+   */
+  logger?: IMastraLogger;
 }
 
 /**
@@ -40,6 +46,7 @@ export interface CachingPubSubOptions {
  */
 export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
+  private readonly logger?: IMastraLogger;
 
   constructor(
     private readonly inner: PubSub,
@@ -48,33 +55,49 @@ export class CachingPubSub extends PubSub {
   ) {
     super();
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
+    this.logger = options.logger;
   }
 
   /**
-   * Get the cache key for a topic
+   * Log an error message using the configured logger or console.error.
+   */
+  private logError(message: string, error: unknown): void {
+    if (this.logger) {
+      this.logger.error(message, error);
+    } else {
+      console.error(message, error);
+    }
+  }
+
+  /**
+   * Get the cache key for a topic's event list
    */
   private getCacheKey(topic: string): string {
     return `${this.keyPrefix}${topic}`;
   }
 
   /**
+   * Get the cache key for a topic's index counter
+   */
+  private getCounterKey(topic: string): string {
+    return `${this.keyPrefix}${topic}:counter`;
+  }
+
+  /**
    * Publish an event to a topic.
    * The event is cached with a sequential index before being published to the inner PubSub.
    *
-   * Note: The index is derived from the current cache list length. This adds one cache
-   * call per publish but avoids memory leaks from tracking indices in-memory.
-   * Future optimization: remove index field entirely and rely on list position.
+   * Uses atomic increment for index assignment to prevent race conditions
+   * when multiple events are published concurrently.
    */
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt' | 'index'>): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
+    const counterKey = this.getCounterKey(topic);
 
-    // Get the current list length to use as the index for this event
-    let index = 0;
-    try {
-      index = await this.cache.listLength(cacheKey);
-    } catch {
-      // Key doesn't exist yet, start from 0
-    }
+    // Atomically get next index (increment returns value after incrementing, so subtract 1 for 0-based index)
+    // First event: increment returns 1, index is 0
+    // Second event: increment returns 2, index is 1
+    const index = (await this.cache.increment(counterKey)) - 1;
 
     const fullEvent: Event = {
       ...event,
@@ -85,7 +108,7 @@ export class CachingPubSub extends PubSub {
 
     // Cache the event (non-blocking, errors are logged but don't fail publish)
     this.cache.listPush(cacheKey, fullEvent).catch(err => {
-      console.error(`[CachingPubSub] Failed to cache event for topic ${topic}:`, err);
+      this.logError(`[CachingPubSub] Failed to cache event for topic ${topic}:`, err);
     });
 
     // Publish to inner PubSub with the full event (including index)
@@ -196,10 +219,12 @@ export class CachingPubSub extends PubSub {
   /**
    * Clear cached events for a specific topic.
    * Call this when a stream completes to free memory.
+   * Also clears the index counter.
    */
   async clearTopic(topic: string): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
-    await this.cache.delete(cacheKey);
+    const counterKey = this.getCounterKey(topic);
+    await Promise.all([this.cache.delete(cacheKey), this.cache.delete(counterKey)]);
   }
 
   /**

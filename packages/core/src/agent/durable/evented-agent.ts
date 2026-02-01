@@ -14,6 +14,7 @@ import type { ToolsInput } from '../types';
 
 import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';
+import type { DurableAgenticWorkflowInput } from './types';
 
 /**
  * Configuration for EventedAgent - wraps an existing Agent with fire-and-forget execution
@@ -83,7 +84,7 @@ export class EventedAgent<
    * @param workflowInput - The serialized workflow input
    * @internal
    */
-  protected override async executeWorkflow(runId: string, workflowInput: any): Promise<void> {
+  protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     try {
       const workflow = this.getWorkflow();
       const run = await workflow.createRun({

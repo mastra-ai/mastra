@@ -130,11 +130,12 @@ describe('InMemoryServerCache', () => {
 
       it('should throw error when key contains non-array value', async () => {
         await cache.set('notAnArray', 'string value');
-        await expect(cache.listLength('notAnArray')).rejects.toThrow('notAnArray is not an array');
+        await expect(cache.listLength('notAnArray')).rejects.toThrow('notAnArray exists but is not an array');
       });
 
-      it('should throw error when key does not exist', async () => {
-        await expect(cache.listLength('nonexistent')).rejects.toThrow('nonexistent is not an array');
+      it('should return 0 when key does not exist', async () => {
+        const length = await cache.listLength('nonexistent');
+        expect(length).toBe(0);
       });
     });
 
@@ -196,6 +197,42 @@ describe('InMemoryServerCache', () => {
 
         const singleItem = await cache.listFromTo('testList', 2, 2);
         expect(singleItem).toEqual(['c']); // Single item when start === end
+      });
+    });
+
+    describe('increment', () => {
+      it('should return 1 on first increment (key does not exist)', async () => {
+        const result = await cache.increment('counter');
+        expect(result).toBe(1);
+      });
+
+      it('should increment existing counter', async () => {
+        await cache.increment('counter');
+        const result = await cache.increment('counter');
+        expect(result).toBe(2);
+      });
+
+      it('should handle multiple increments', async () => {
+        for (let i = 1; i <= 5; i++) {
+          const result = await cache.increment('counter');
+          expect(result).toBe(i);
+        }
+      });
+
+      it('should throw error when key contains non-number value', async () => {
+        await cache.set('notANumber', 'string value');
+        await expect(cache.increment('notANumber')).rejects.toThrow('notANumber exists but is not a number');
+      });
+
+      it('should handle concurrent increments correctly', async () => {
+        const promises = [];
+        for (let i = 0; i < 10; i++) {
+          promises.push(cache.increment('concurrent-counter'));
+        }
+        const results = await Promise.all(promises);
+        // All results should be unique numbers 1-10
+        const sorted = [...results].sort((a, b) => a - b);
+        expect(sorted).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       });
     });
   });

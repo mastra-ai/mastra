@@ -16,7 +16,12 @@ import type { WorkflowExecutor } from './executors';
 import { prepareForDurableExecution } from './preparation';
 import { ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitErrorEvent } from './stream-adapter';
-import type { AgentFinishEventData, AgentStepFinishEventData, AgentSuspendedEventData } from './types';
+import type {
+  AgentFinishEventData,
+  AgentStepFinishEventData,
+  AgentSuspendedEventData,
+  DurableAgenticWorkflowInput,
+} from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 
 /**
@@ -133,6 +138,16 @@ export interface DurableAgentConfig<
    * Defaults to the workflow default if not specified.
    */
   maxSteps?: number;
+
+  /**
+   * Timeout in milliseconds before automatic cleanup of registry entries
+   * after a stream finishes or errors. This provides a grace period for
+   * late observers to access the stream.
+   *
+   * Defaults to 30000 (30 seconds).
+   * Set to 0 to disable auto-cleanup (manual cleanup() required).
+   */
+  cleanupTimeoutMs?: number;
 }
 
 /**
@@ -202,11 +217,14 @@ export class DurableAgent<
   /** Mastra instance (set via __setMastra when registered) */
   #mastra: Mastra | undefined;
 
+  /** Timeout for auto-cleanup after stream finishes (0 = disabled) */
+  readonly #cleanupTimeoutMs: number;
+
   /**
    * Create a new DurableAgent that wraps an existing Agent
    */
   constructor(config: DurableAgentConfig<TAgentId, TTools, TOutput>) {
-    const { agent, id: idOverride, name: nameOverride, pubsub, executor, cache, maxSteps } = config;
+    const { agent, id: idOverride, name: nameOverride, pubsub, executor, cache, maxSteps, cleanupTimeoutMs } = config;
 
     // Use provided id/name or fall back to agent.id/agent.name
     const agentId = idOverride ?? agent.id;
@@ -226,6 +244,7 @@ export class DurableAgent<
     this.#maxSteps = maxSteps;
     this.#innerPubsub = pubsub ?? new EventEmitterPubSub();
     this.#cacheConfig = cache;
+    this.#cleanupTimeoutMs = cleanupTimeoutMs ?? 30_000;
   }
 
   // ===========================================================================
@@ -294,6 +313,14 @@ export class DurableAgent<
     return this.#maxSteps;
   }
 
+  /**
+   * Get the cleanup timeout in milliseconds.
+   * Returns 0 if auto-cleanup is disabled.
+   */
+  get cleanupTimeoutMs(): number {
+    return this.#cleanupTimeoutMs;
+  }
+
   // Delegate Agent methods to wrapped agent
   override getModel(options?: any) {
     return this.#wrappedAgent.getModel(options);
@@ -347,7 +374,7 @@ export class DurableAgent<
    * @param workflowInput - The serialized workflow input
    * @internal
    */
-  protected async executeWorkflow(runId: string, workflowInput: any): Promise<void> {
+  protected async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     const workflow = this.getWorkflow();
     const result = await this.#executor.execute(workflow, workflowInput, this.pubsub, runId);
 
@@ -413,16 +440,16 @@ export class DurableAgent<
     let cleanedUp = false;
     let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
-    // Schedule automatic registry cleanup after stream ends (30s grace period)
+    // Schedule automatic registry cleanup after stream ends
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp) return;
+      if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
       autoCleanupTimer = setTimeout(() => {
         if (!cleanedUp) {
           this.#runRegistry.cleanup(runId);
           globalRunRegistry.delete(runId);
           cleanedUp = true;
         }
-      }, 30_000);
+      }, this.#cleanupTimeoutMs);
     };
 
     // 3. Create the durable agent stream (subscribes to pubsub)
@@ -511,14 +538,14 @@ export class DurableAgent<
     let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
     const scheduleAutoCleanup = () => {
-      if (autoCleanupTimer || cleanedUp) return;
+      if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
       autoCleanupTimer = setTimeout(() => {
         if (!cleanedUp) {
           this.#runRegistry.cleanup(runId);
           globalRunRegistry.delete(runId);
           cleanedUp = true;
         }
-      }, 30_000);
+      }, this.#cleanupTimeoutMs);
     };
 
     const {
@@ -601,7 +628,24 @@ export class DurableAgent<
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }> {
     const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
 
-    const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
+    // Track cleanup state to avoid double cleanup
+    let cleanedUp = false;
+    let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleAutoCleanup = () => {
+      if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
+      autoCleanupTimer = setTimeout(() => {
+        if (!cleanedUp) {
+          cleanedUp = true;
+        }
+      }, this.#cleanupTimeoutMs);
+    };
+
+    const {
+      output,
+      cleanup: streamCleanup,
+      ready,
+    } = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
       runId,
       messageId: crypto.randomUUID(),
@@ -615,17 +659,37 @@ export class DurableAgent<
       fromIndex: options?.fromIndex,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: options?.onFinish,
-      onError: options?.onError,
+      onFinish: async result => {
+        await options?.onFinish?.(result);
+        scheduleAutoCleanup();
+      },
+      onError: async error => {
+        await options?.onError?.(error);
+        scheduleAutoCleanup();
+      },
       onSuspended: options?.onSuspended,
     });
+
+    // Wait for subscription to be ready
+    await ready;
+
+    const cleanup = () => {
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (!cleanedUp) {
+        streamCleanup();
+        cleanedUp = true;
+      }
+    };
 
     return {
       output,
       runId,
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
-      cleanup: streamCleanup,
+      cleanup,
     };
   }
 

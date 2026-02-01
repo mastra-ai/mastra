@@ -84,6 +84,14 @@ export interface RedisClient {
    * Returns [cursor, keys] tuple.
    */
   scan(cursor: string | number, ...args: unknown[]): Promise<[string | number, string[]]>;
+
+  /**
+   * Atomically increment a key's integer value.
+   * Redis command: INCR
+   * Returns the new value after incrementing.
+   * If the key doesn't exist, it's set to 0 before incrementing (returns 1).
+   */
+  incr(key: string): Promise<number>;
 }
 
 /**
@@ -360,6 +368,16 @@ export class RedisServerCache extends MastraServerCache {
 
       cursor = nextCursor;
     } while (cursor !== '0' && cursor !== 0);
+  }
+
+  /**
+   * Atomically increment a counter and return the new value.
+   * Uses Redis INCR which is atomic - safe for concurrent access.
+   * Returns 1 on first call (key initialized to 0, then incremented).
+   */
+  async increment(key: string): Promise<number> {
+    const fullKey = this.getKey(key);
+    return this.client.incr(fullKey);
   }
 }
 

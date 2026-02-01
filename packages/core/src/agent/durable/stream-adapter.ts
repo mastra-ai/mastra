@@ -1,6 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
+import type { IMastraLogger } from '../../logger';
 import { MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
 import { MessageList } from '../message-list';
@@ -50,6 +51,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onError?: (error: Error) => void | Promise<void>;
   /** Callback when workflow suspends */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /** Optional logger for structured logging */
+  logger?: IMastraLogger;
 }
 
 /**
@@ -87,7 +90,17 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     onFinish,
     onError,
     onSuspended,
+    logger,
   } = options;
+
+  // Helper to log errors (uses logger if available, falls back to console)
+  const logError = (message: string, error: unknown) => {
+    if (logger) {
+      logger.error(message, error);
+    } else {
+      console.error(message, error);
+    }
+  };
 
   // Create a message list for the output
   const messageList = new MessageList({
@@ -140,9 +153,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.FINISH: {
           const data = streamEvent.data as AgentFinishEventData;
-          await onFinish?.(data);
-          // Enqueue a synthetic finish chunk so MastraModelOutput can resolve its promises
-          // The finish chunk is expected by MastraModelOutput to resolve text/usage promises
+          // Enqueue finish chunk and close stream even if callback throws
           const finishChunk = {
             type: 'finish' as const,
             payload: {
@@ -152,6 +163,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           } as ChunkType<OUTPUT>;
           controller.enqueue(finishChunk);
           controller.close();
+          // Call callback after closing stream (errors don't prevent closure)
+          try {
+            await onFinish?.(data);
+          } catch (callbackError) {
+            logError(`[DurableAgentStream] onFinish callback error:`, callbackError);
+          }
           break;
         }
 
@@ -162,8 +179,13 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          await onError?.(error);
+          // Close stream with error first, then call callback
           controller.error(error);
+          try {
+            await onError?.(error);
+          } catch (callbackError) {
+            logError(`[DurableAgentStream] onError callback error:`, callbackError);
+          }
           break;
         }
 
@@ -179,7 +201,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           break;
       }
     } catch (error) {
-      console.error(`[DurableAgentStream] Error handling event ${streamEvent.type}:`, error);
+      logError(`[DurableAgentStream] Error handling event ${streamEvent.type}:`, error);
     }
   };
 
@@ -203,7 +225,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           resolveReady();
         })
         .catch(error => {
-          console.error(`[DurableAgentStream] Failed to subscribe to ${topic}:`, error);
+          logError(`[DurableAgentStream] Failed to subscribe to ${topic}:`, error);
           rejectReady(error);
           ctrl.error(error);
         });
@@ -213,14 +235,15 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     },
   });
 
-  // Cleanup function
+  // Cleanup function - intentionally fire-and-forget for unsubscribe
+  // Multiple calls are safe - isSubscribed flag prevents duplicate unsubscribe
   const cleanup = () => {
     if (isSubscribed) {
+      isSubscribed = false; // Set before async call to prevent race
       const topic = AGENT_STREAM_TOPIC(runId);
-      pubsub.unsubscribe(topic, handleEvent).catch(error => {
-        console.error(`[DurableAgentStream] Failed to unsubscribe from ${topic}:`, error);
+      void pubsub.unsubscribe(topic, handleEvent).catch(error => {
+        logError(`[DurableAgentStream] Failed to unsubscribe from ${topic}:`, error);
       });
-      isSubscribed = false;
     }
     controller = null;
   };

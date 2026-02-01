@@ -45,11 +45,14 @@ export class InMemoryServerCache extends MastraServerCache {
   }
 
   async listLength(key: string): Promise<number> {
-    const list = this.cache.get(key) as unknown[];
-    if (!Array.isArray(list)) {
-      throw new Error(`${key} is not an array`);
+    const value = this.cache.get(key);
+    if (value === undefined) {
+      return 0; // Key doesn't exist - return 0
     }
-    return list.length;
+    if (!Array.isArray(value)) {
+      throw new Error(`${key} exists but is not an array`);
+    }
+    return value.length;
   }
 
   async listPush(key: string, value: unknown): Promise<void> {
@@ -81,5 +84,19 @@ export class InMemoryServerCache extends MastraServerCache {
 
   async clear(): Promise<void> {
     this.cache.clear();
+  }
+
+  async increment(key: string): Promise<number> {
+    const value = this.cache.get(key);
+    let counter: number;
+    if (value === undefined) {
+      counter = 1;
+    } else if (typeof value === 'number') {
+      counter = value + 1;
+    } else {
+      throw new Error(`${key} exists but is not a number`);
+    }
+    this.cache.set(key, counter);
+    return counter;
   }
 }
