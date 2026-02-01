@@ -30,7 +30,6 @@ export function SaveVersionDialog({ agentId, open, onOpenChange }: SaveVersionDi
     e.preventDefault();
     try {
       await createVersion({
-        name: name.trim() || undefined,
         changeMessage: changeMessage.trim() || undefined,
       });
       setName('');

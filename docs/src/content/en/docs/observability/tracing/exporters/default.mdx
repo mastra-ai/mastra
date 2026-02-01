@@ -158,7 +158,7 @@ Observability data grows quickly in production environments. A single agent inte
 
 ### Recommended: ClickHouse for High-Volume Production
 
-[ClickHouse](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production) is a columnar database designed for high-volume analytics workloads. It's the recommended choice for production observability because:
+[ClickHouse](/reference/storage/composite#specialized-storage-for-observability) is a columnar database designed for high-volume analytics workloads. It's the recommended choice for production observability because:
 
 - **Optimized for writes**: Handles millions of inserts per second
 - **Efficient compression**: Reduces storage costs for trace data
@@ -167,7 +167,7 @@ Observability data grows quickly in production environments. A single agent inte
 
 ### Using Composite Storage
 
-If you're using a provider without observability support (like Convex or DynamoDB) or want to optimize performance, use [composite storage](/reference/storage/composite#specialized-storage-for-observability-recommended-for-production) to route observability data to ClickHouse while keeping other data in your primary database.
+If you're using a provider without observability support (like Convex or DynamoDB) or want to optimize performance, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to ClickHouse while keeping other data in your primary database.
 
 ## Batching Behavior
 

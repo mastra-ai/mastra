@@ -1,0 +1,355 @@
+---
+title: "Reference: Workspace Class | Workspace"
+description: "Documentation for the Workspace class, the central API for filesystem access, sandbox execution, and search in Mastra."
+packages:
+  - "@mastra/core"
+---
+
+# Workspace Class
+
+The `Workspace` class combines a filesystem and sandbox to provide agents with file storage and command execution capabilities. It also supports BM25 and vector search for indexed content.
+
+## Usage Example
+
+```typescript
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  id: 'my-workspace',
+  name: 'My Workspace',
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+  }),
+  bm25: true,
+  autoIndexPaths: ['/docs'],
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for the workspace",
+      isOptional: true,
+      defaultValue: "Auto-generated",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Human-readable name",
+      isOptional: true,
+      defaultValue: "workspace-{id}",
+    },
+    {
+      name: "filesystem",
+      type: "WorkspaceFilesystem",
+      description: "Filesystem provider instance (e.g., LocalFilesystem)",
+      isOptional: true,
+    },
+    {
+      name: "sandbox",
+      type: "WorkspaceSandbox",
+      description: "Sandbox provider instance (e.g., LocalSandbox)",
+      isOptional: true,
+    },
+    {
+      name: "bm25",
+      type: "boolean | BM25Config",
+      description: "Enable BM25 keyword search. Pass true for defaults or a config object.",
+      isOptional: true,
+      defaultValue: "undefined",
+    },
+    {
+      name: "vectorStore",
+      type: "MastraVector",
+      description: "Vector store for semantic search",
+      isOptional: true,
+    },
+    {
+      name: "embedder",
+      type: "(text: string) => Promise<number[]>",
+      description: "Embedder function for generating vectors. Required when vectorStore is provided.",
+      isOptional: true,
+    },
+    {
+      name: "autoIndexPaths",
+      type: "string[]",
+      description: "Paths to auto-index on init()",
+      isOptional: true,
+    },
+    {
+      name: "skills",
+      type: "string[] | ((context: SkillsContext) => string[] | Promise<string[]>)",
+      description: "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "WorkspaceToolsConfig",
+      description: "Per-tool configuration for enabling tools and setting safety options",
+      isOptional: true,
+    },
+    {
+      name: "operationTimeout",
+      type: "number",
+      description: "Timeout for operations in milliseconds",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Tool configuration
+
+The `tools` option accepts a `WorkspaceToolsConfig` object that controls which workspace tools are enabled and their safety settings.
+
+```typescript
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
+tools: {
+  // Global defaults (apply to all tools)
+  enabled: true,
+  requireApproval: false,
+
+  // Per-tool overrides using WORKSPACE_TOOLS constants
+  [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+    requireApproval: true,
+  },
+}
+```
+
+The config object has two parts:
+- **Global defaults** (`enabled`, `requireApproval`) - Apply to all tools unless overridden
+- **Per-tool overrides** - Use `WORKSPACE_TOOLS` constants as keys to configure individual tools
+
+See [workspace overview](/docs/workspace/overview#tool-configuration) for more examples.
+
+### Per-tool options
+
+Each tool can be configured with these options:
+
+<PropertiesTable
+  content={[
+    {
+      name: "enabled",
+      type: "boolean",
+      description: "Whether the tool is available to agents",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "requireApproval",
+      type: "boolean",
+      description: "Whether the tool requires user approval before execution",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "requireReadBeforeWrite",
+      type: "boolean",
+      description: "For write tools: require reading the file first to prevent overwrites",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Workspace identifier",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Workspace name",
+    },
+    {
+      name: "status",
+      type: "WorkspaceStatus",
+      description: "'pending' | 'initializing' | 'ready' | 'error' | 'destroying' | 'destroyed'",
+    },
+    {
+      name: "filesystem",
+      type: "WorkspaceFilesystem | undefined",
+      description: "The filesystem provider",
+    },
+    {
+      name: "sandbox",
+      type: "WorkspaceSandbox | undefined",
+      description: "The sandbox provider",
+    },
+    {
+      name: "skills",
+      type: "WorkspaceSkills | undefined",
+      description: "Skills interface for accessing SKILL.md files",
+    },
+    {
+      name: "canBM25",
+      type: "boolean",
+      description: "Whether BM25 search is available",
+    },
+    {
+      name: "canVector",
+      type: "boolean",
+      description: "Whether vector search is available",
+    },
+    {
+      name: "canHybrid",
+      type: "boolean",
+      description: "Whether hybrid search is available",
+    },
+  ]}
+/>
+
+## Methods
+
+### Lifecycle
+
+#### `init()`
+
+Initialize the workspace and prepare resources.
+
+```typescript
+await workspace.init();
+```
+
+Calling `init()` is optional in most cases:
+- **Sandbox**: Auto-starts on first `executeCommand()` call. Use `init()` to avoid first-command latency.
+- **Filesystem**: Only needed if the base directory doesn't exist yet.
+- **Search**: Required only if using `autoIndexPaths` for auto-indexing.
+
+Initialization performs:
+- Starts the filesystem provider (creates base directory if needed)
+- Starts the sandbox provider (creates working directory, sets up isolation if configured)
+- Indexes files from `autoIndexPaths` for search
+
+#### `destroy()`
+
+Destroy the workspace and clean up resources.
+
+```typescript
+await workspace.destroy();
+```
+
+### Search operations
+
+#### `index(path, content, options?)`
+
+Index content for search.
+
+```typescript
+await workspace.index('/docs/guide.md', 'Guide content...');
+```
+
+#### `search(query, options?)`
+
+Search indexed content.
+
+```typescript
+const results = await workspace.search('password reset', {
+  topK: 10,
+  mode: 'hybrid',
+});
+```
+
+### Utility
+
+#### `getInfo()`
+
+Get workspace information.
+
+```typescript
+const info = await workspace.getInfo();
+// { id, name, status, createdAt, lastAccessedAt, filesystem?, sandbox? }
+```
+
+#### `getPathContext()`
+
+Get information about filesystem and sandbox paths, including instructions for agents.
+
+```typescript
+const context = workspace.getPathContext();
+// { filesystem?, sandbox?, instructions }
+```
+
+**Returns:** `PathContext`
+
+```typescript
+interface PathContext {
+  filesystem?: {
+    provider: string;
+    basePath?: string;
+  };
+  sandbox?: {
+    provider: string;
+    workingDirectory?: string;
+  };
+  instructions: string;
+}
+```
+
+The `instructions` field contains provider-generated descriptions combined from the filesystem and sandbox. These instructions are included in tool descriptions to help agents understand the execution context.
+
+#### `getToolsConfig()`
+
+Get the tools configuration.
+
+```typescript
+const config = workspace.getToolsConfig();
+```
+
+## Agent tools
+
+A workspace provides tools to agents based on what is configured.
+
+### Filesystem tools
+
+Added when a filesystem is configured:
+
+| Tool | Description |
+|------|-------------|
+| `mastra_workspace_read_file` | Read file contents. Supports optional line range for reading specific portions of large files. |
+| `mastra_workspace_write_file` | Create or overwrite a file with new content. Creates parent directories automatically. |
+| `mastra_workspace_edit_file` | Edit an existing file by finding and replacing text. Useful for targeted changes without rewriting the entire file. |
+| `mastra_workspace_list_files` | List directory contents as a tree structure. Supports recursive listing with depth limits. |
+| `mastra_workspace_delete` | Delete a file or directory. Supports recursive deletion for directories. |
+| `mastra_workspace_file_stat` | Get metadata about a file or directory including size, type, and modification time. |
+| `mastra_workspace_mkdir` | Create a directory. Creates parent directories automatically if they don't exist. |
+
+Write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode.
+
+### Sandbox tools
+
+Added when a sandbox is configured:
+
+| Tool | Description |
+|------|-------------|
+| `mastra_workspace_execute_command` | Execute a shell command with arguments. Returns stdout, stderr, and exit code. Supports timeouts and streaming output. |
+
+### Search tools
+
+Added when BM25 or vector search is configured:
+
+| Tool | Description |
+|------|-------------|
+| `mastra_workspace_search` | Search indexed content using keyword (BM25), semantic (vector), or hybrid search. Returns ranked results with scores. |
+| `mastra_workspace_index` | Index content for search. Associates content with a path for later retrieval. |
+
+The `index` tool is excluded when the filesystem is in read-only mode.
+
+## Related
+
+- [Workspace overview](/docs/workspace/overview)
+- [Search and indexing](/docs/workspace/search)
+- [Filesystem reference](/reference/workspace/filesystem)
+- [Sandbox reference](/reference/workspace/sandbox)
