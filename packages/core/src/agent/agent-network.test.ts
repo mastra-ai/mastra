@@ -6412,3 +6412,123 @@ describe('Agent - network - abort functionality', () => {
     expect(receivedAbortSignal).toBe(abortController.signal);
   });
 });
+
+/**
+ * Test for GitHub issue #12477
+ * When routing agent returns invalid (non-JSON) prompt for tool execution,
+ * the network should handle it gracefully instead of throwing "Invalid task input"
+ */
+describe('Agent - network - invalid tool input handling (issue #12477)', () => {
+  it('should handle invalid JSON prompt gracefully and feed error back to routing agent', async () => {
+    const memory = new MockMemory();
+
+    // Create a tool that expects JSON input
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'A test tool that processes input',
+      inputSchema: z.object({
+        message: z.string().describe('The message to process'),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+      execute: async ({ message }) => {
+        return { result: `Processed: ${message}` };
+      },
+    });
+
+    // Track call count to simulate: first call returns invalid JSON, second returns "none" to complete
+    let callCount = 0;
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        // First call: return invalid JSON prompt (simulates the bug scenario)
+        // Second call: return "none" to complete the network (simulates routing agent understanding the error)
+        const text =
+          callCount === 1
+            ? JSON.stringify({
+                primitiveId: 'test-tool',
+                primitiveType: 'tool',
+                prompt: '{message input}', // Invalid JSON - missing quotes
+                selectionReason: 'Using test tool',
+              })
+            : JSON.stringify({
+                primitiveId: 'none',
+                primitiveType: 'none',
+                prompt: '',
+                selectionReason: 'Task cannot be completed due to previous JSON parsing error',
+              });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text =
+          callCount === 1
+            ? JSON.stringify({
+                primitiveId: 'test-tool',
+                primitiveType: 'tool',
+                prompt: '{message input}',
+                selectionReason: 'Using test tool',
+              })
+            : JSON.stringify({
+                primitiveId: 'none',
+                primitiveType: 'none',
+                prompt: '',
+                selectionReason: 'Task cannot be completed due to previous JSON parsing error',
+              });
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'invalid-input-test-network',
+      name: 'Invalid Input Test Network',
+      instructions: 'Execute tools',
+      model: mockModel,
+      tools: { 'test-tool': testTool },
+      memory,
+    });
+
+    // Execute the network which will encounter invalid JSON for tool prompt
+    const anStream = await networkAgent.network('Process a message using the test tool', {
+      memory: {
+        thread: 'invalid-input-test-thread',
+        resource: 'invalid-input-test-resource',
+      },
+    });
+
+    // Consume the stream - should NOT throw
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Check the workflow status
+    const status = await anStream.status;
+    const result = await anStream.result;
+
+    // After the fix:
+    // - The network should NOT fail with status 'failed'
+    // - The error should be fed back to the routing agent as a result string
+    // - The routing agent gets another chance to handle the situation
+    expect(status).not.toBe('failed');
+    expect(result?.error?.message || '').not.toContain('Invalid task input');
+
+    // Verify the routing agent was called multiple times (retry happened)
+    expect(callCount).toBeGreaterThan(1);
+  });
+});

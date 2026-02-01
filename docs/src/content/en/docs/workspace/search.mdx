@@ -1,0 +1,225 @@
+---
+title: "Search and Indexing | Workspace"
+description: Index workspace content for BM25 keyword search, vector semantic search, or hybrid mode.
+packages:
+  - "@mastra/core"
+---
+
+# Search and Indexing
+
+Search lets agents find relevant content in indexed workspace files. When an agent needs to answer a question or find information, it can search the indexed content instead of reading every file.
+
+## How it works
+
+Workspace search has two phases: indexing and querying.
+
+### Indexing
+
+Content must be indexed before it can be searched. When you index a document:
+
+- The content is tokenized (split into searchable terms)
+- For BM25: term frequencies and document statistics are computed
+- For vector: the content is embedded using your embedder function and stored in the vector store
+
+Each indexed document has:
+- **id** - A unique identifier (typically the file path)
+- **content** - The text content
+- **metadata** - Optional key-value data stored with the document
+
+### Querying
+
+When you search:
+
+1. The query is processed using the same tokenization/embedding as indexing
+1. Documents are scored based on relevance to the query
+1. Results are ranked by score and returned with the matching content
+
+Workspaces support three search modes: BM25 keyword search, vector semantic search, and hybrid search that combines both.
+
+## BM25 keyword search
+
+BM25 scores documents based on term frequency and document length. It works well for exact matches and specific terminology.
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  // highlight-next-line
+  bm25: true,
+});
+```
+
+For custom BM25 parameters (`k1` is term frequency saturation, `b` is document length normalization):
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: {
+    k1: 1.5,
+    b: 0.75,
+  },
+});
+```
+
+## Vector search
+
+Vector search uses embeddings to find semantically similar content. It requires a vector store and embedder function.
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { PineconeVector } from '@mastra/pinecone';
+import { embed } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  vectorStore: new PineconeVector({
+    apiKey: process.env.PINECONE_API_KEY,
+    index: 'workspace-index',
+  }),
+  embedder: async (text: string) => {
+    const { embedding } = await embed({
+      model: openai.embedding('text-embedding-3-small'),
+      value: text,
+    });
+    return embedding;
+  },
+});
+```
+
+## Hybrid search
+
+Configure both BM25 and vector search to enable hybrid mode, which combines keyword matching with semantic understanding.
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  vectorStore: pineconeVector,
+  embedder: embedderFn,
+});
+```
+
+## Indexing content
+
+### Manual indexing
+
+Use `workspace.index()` to add content to the search index programmatically. The file paths become document IDs. You can also pass metadata for each document.
+
+```typescript
+// Basic indexing
+await workspace.index('/docs/guide.md', 'Content of the guide...');
+
+// Index with metadata for filtering or context
+await workspace.index('/docs/api.md', apiDocContent, {
+  metadata: {
+    category: 'api',
+    version: '2.0',
+  },
+});
+```
+
+Manual indexing is useful when:
+- You're indexing content that doesn't come from files (e.g., database records, API responses)
+- You want to pre-process or chunk content before indexing
+- You need to add custom metadata to documents
+
+### Auto-indexing
+
+Configure `autoIndexPaths` to automatically index files when the workspace initializes. Each path specifies a directory to index recursively.
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  autoIndexPaths: ['/docs', '/support/faq'],
+});
+
+await workspace.init();
+```
+
+When `init()` is called, all files in the specified directories are read and indexed for search. The file path becomes the document ID.
+
+:::note
+Paths must be directories, not glob patterns. Use `/docs` to index all files in the docs directory recursively. Glob patterns like `**/*.md` are not supported.
+:::
+
+## Searching
+
+Use `workspace.search()` to find relevant content. Results are ranked by relevance score.
+
+```typescript
+const results = await workspace.search('password reset');
+
+for (const result of results) {
+  console.log(`${result.id}: ${result.score}`);
+  console.log(result.content);
+}
+```
+
+### Search options
+
+You can customize the search behavior with options:
+
+```typescript
+const results = await workspace.search('authentication flow', {
+  topK: 10,
+  mode: 'hybrid',
+  minScore: 0.5,
+  vectorWeight: 0.5,
+});
+```
+
+| Option | Description |
+|--------|-------------|
+| `topK` | Maximum number of results to return. Default: 5 |
+| `mode` | Search mode: `'bm25'`, `'vector'`, or `'hybrid'`. Defaults to the best available mode based on configuration. |
+| `minScore` | Filter out results below this score threshold (0-1). |
+| `vectorWeight` | In hybrid mode, how much to weight vector scores vs BM25. 0 = all BM25, 1 = all vector, 0.5 = equal. |
+
+### Search results
+
+Each result contains:
+
+```typescript
+interface SearchResult {
+  id: string; // Document ID (typically file path)
+  content: string; // The matching content
+  score: number; // Relevance score (0-1)
+  lineRange?: { // Lines where the match was found
+    start: number;
+    end: number;
+  };
+  metadata?: Record<string, unknown>; // Metadata stored with the document
+  scoreDetails?: { // Score breakdown (hybrid mode only)
+    vector?: number;
+    bm25?: number;
+  };
+}
+```
+
+**Understanding scores:**
+
+- Scores range from 0 to 1, where 1 is a perfect match
+- BM25 scores are normalized based on the best match in the result set
+- Vector scores represent cosine similarity between query and document embeddings
+- In hybrid mode, scores are combined using the `vectorWeight` parameter
+
+### When to use each mode
+
+| Mode | Best for | Example queries |
+|------|----------|-----------------|
+| `bm25` | Exact terms, technical queries, code | "useState hook", "404 error", "config.yaml" |
+| `vector` | Conceptual queries, natural language | "how to handle user authentication", "best practices for error handling" |
+| `hybrid` | General search, unknown query types | Most agent use cases |
+
+## Agent tools
+
+When you configure search on a workspace, agents receive tools for searching and indexing content. See [workspace class reference](/reference/workspace/workspace-class#search-tools) for details.
+
+## Related
+
+- [Workspace overview](/docs/workspace/overview)
+- [RAG overview](/docs/rag/overview)
+- [Workspace class reference](/reference/workspace/workspace-class)

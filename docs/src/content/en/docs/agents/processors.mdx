@@ -416,6 +416,32 @@ The example above filters tool calls and limits tokens for the LLM, but these fi
 
 :::
 
+### ToolSearchProcessor
+
+Enables dynamic tool discovery and loading for agents with large tool libraries. Instead of providing all tools upfront, the agent searches for tools by keyword and loads them on demand, reducing context token usage.
+
+```typescript {2,9-18}
+import { Agent } from "@mastra/core/agent";
+import { ToolSearchProcessor } from "@mastra/core/processors";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: "openai/gpt-4o",
+  inputProcessors: [
+    new ToolSearchProcessor({
+      tools: {
+        createIssue: githubTools.createIssue,
+        sendEmail: emailTools.send,
+        // ... hundreds of tools
+      },
+      search: { topK: 5, minScore: 0.1 },
+    }),
+  ],
+});
+```
+
+The processor gives the agent two meta-tools: `search_tools` to find tools by keyword and `load_tool` to add a tool to the conversation. Loaded tools persist within the thread. See the [ToolSearchProcessor reference](/reference/processors/tool-search-processor) for full configuration options.
+
 ## Using workflows as processors
 
 You can use Mastra workflows as processors to create complex processing pipelines with parallel execution, conditional branching, and error handling:
@@ -494,3 +520,4 @@ The retry mechanism:
 - [Guardrails](/docs/agents/guardrails) - Security and validation processors
 - [Memory Processors](/docs/memory/memory-processors) - Memory-specific processors and automatic integration
 - [Processor Interface](/reference/processors/processor-interface) - Full API reference for processors
+- [ToolSearchProcessor Reference](/reference/processors/tool-search-processor) - API reference for dynamic tool search

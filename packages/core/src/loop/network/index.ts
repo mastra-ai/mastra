@@ -1,3 +1,4 @@
+import { parsePartialJson } from '@internal/ai-sdk-v5';
 import z from 'zod';
 import type { Mastra } from '../..';
 import type { AgentExecutionOptions } from '../../agent';
@@ -14,6 +15,7 @@ import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
+import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/output-format-handlers';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import type { IdGeneratorContext } from '../../types';
 import { createStep, createWorkflow } from '../../workflows';
@@ -28,6 +30,34 @@ import {
   generateFinalResult,
   generateStructuredFinalResult,
 } from './validation';
+
+/**
+ * Safely parses JSON from LLM output, handling common issues like:
+ * - Unescaped control characters (newlines, tabs) in strings
+ * - Truncated/incomplete JSON (missing closing braces)
+ * - Partial JSON from token limits
+ *
+ * @param text - Raw JSON text from LLM output
+ * @returns Parsed value or null if parsing fails completely
+ */
+async function safeParseLLMJson(text: string): Promise<unknown | null> {
+  if (!text?.trim()) {
+    return null;
+  }
+
+  // First fix common LLM issues with control characters in strings
+  const preprocessed = escapeUnescapedControlCharsInJsonStrings(text);
+
+  // Use parsePartialJson which can recover truncated/incomplete JSON
+  const { value, state } = await parsePartialJson(preprocessed);
+
+  // Accept successful or repaired parses
+  if (state === 'successful-parse' || state === 'repaired-parse') {
+    return value;
+  }
+
+  return null;
+}
 
 /**
  * Type for ID generator function that can optionally accept context
@@ -1072,24 +1102,27 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      let input;
-      try {
-        input = JSON.parse(inputData.prompt);
-      } catch (e: unknown) {
-        const mastraError = new MastraError(
-          {
-            id: 'WORKFLOW_EXECUTION_STEP_INVALID_TASK_INPUT',
-            domain: ErrorDomain.AGENT_NETWORK,
-            category: ErrorCategory.USER,
-            text: `Invalid task input: ${inputData.task}`,
-          },
-          e,
+      // Use safeParseLLMJson to handle malformed JSON from LLM (truncated, unescaped chars, etc.)
+      const input = await safeParseLLMJson(inputData.prompt);
+      if (input === null) {
+        const logger = mastra?.getLogger();
+        logger?.warn(
+          `Workflow execution step received invalid JSON prompt for workflow "${inputData.primitiveId}". ` +
+            `Prompt was: "${inputData.prompt}". Returning error to routing agent for retry.`,
         );
 
-        // TODO pass agent logger in here
-        // logger.trackException(mastraError);
-        // logger.error(mastraError.toString());
-        throw mastraError;
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result:
+            `Error: The prompt provided for workflow "${inputData.primitiveId}" is not valid JSON. ` +
+            `Received: "${inputData.prompt}". ` +
+            `Workflows require a valid JSON string matching their input schema. ` +
+            `Please provide the prompt as properly formatted JSON (e.g., {"key": "value"}).`,
+          isComplete: false,
+          iteration: inputData.iteration,
+        };
       }
 
       const stepId = generateId({
@@ -1420,23 +1453,26 @@ export async function createNetworkLoop({
 
       // @ts-expect-error - bad type
       const toolId = tool.id;
-      let inputDataToUse: any;
-      try {
-        inputDataToUse = JSON.parse(inputData.prompt);
-      } catch (e: unknown) {
-        const mastraError = new MastraError(
-          {
-            id: 'AGENT_NETWORK_TOOL_EXECUTION_STEP_INVALID_TASK_INPUT',
-            domain: ErrorDomain.AGENT_NETWORK,
-            category: ErrorCategory.USER,
-            text: `Invalid task input: ${inputData.task}`,
-          },
-          e,
+      // Use safeParseLLMJson to handle malformed JSON from LLM (truncated, unescaped chars, etc.)
+      const inputDataToUse = await safeParseLLMJson(inputData.prompt);
+      if (inputDataToUse === null) {
+        logger?.warn(
+          `Tool execution step received invalid JSON prompt for tool "${toolId}". ` +
+            `Prompt was: "${inputData.prompt}". Returning error to routing agent for retry.`,
         );
-        // TODO pass agent logger in here
-        // logger.trackException(mastraError);
-        // logger.error(mastraError.toString());
-        throw mastraError;
+
+        return {
+          task: inputData.task,
+          primitiveId: inputData.primitiveId,
+          primitiveType: inputData.primitiveType,
+          result:
+            `Error: The prompt provided for tool "${toolId}" is not valid JSON. ` +
+            `Received: "${inputData.prompt}". ` +
+            `Tools require a valid JSON string matching their input schema. ` +
+            `Please provide the prompt as properly formatted JSON (e.g., {"key": "value"}).`,
+          isComplete: false,
+          iteration: inputData.iteration,
+        };
       }
 
       const toolCallId = generateId({
@@ -2117,8 +2153,13 @@ export async function networkLoop<OUTPUT = undefined>({
               });
 
               const object = await result.object;
-              const resumeDataFromLLM = JSON.parse(object.resumeData);
-              if (Object.keys(resumeDataFromLLM).length > 0) {
+              // Use safeParseLLMJson to handle malformed JSON from LLM
+              const resumeDataFromLLM = await safeParseLLMJson(object.resumeData);
+              if (
+                resumeDataFromLLM !== null &&
+                typeof resumeDataFromLLM === 'object' &&
+                Object.keys(resumeDataFromLLM).length > 0
+              ) {
                 resumeDataFromTask = resumeDataFromLLM;
                 runIdFromTask = firstSuspendedTool.runId;
               }

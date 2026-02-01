@@ -13,11 +13,15 @@ import type {
 import type { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
+
 import { z } from 'zod';
+import { WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
+import type { WorkspaceToolName } from '../constants';
 
 import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
+  agentSkillPathParams,
   listAgentsResponseSchema,
   serializedAgentSchema,
   agentExecutionBodySchema,
@@ -40,6 +44,7 @@ import {
   observeAgentBodySchema,
   observeAgentResponseSchema,
 } from '../schemas/agents';
+import { getAgentSkillResponseSchema } from '../schemas/workspace';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -74,6 +79,12 @@ export interface SerializedProcessor {
   name?: string;
 }
 
+export interface SerializedSkill {
+  name: string;
+  description: string;
+  license?: string;
+}
+
 export interface SerializedTool {
   id: string;
   description?: string;
@@ -103,6 +114,10 @@ export interface SerializedAgent {
   tools: Record<string, SerializedTool>;
   agents: Record<string, SerializedAgentDefinition>;
   workflows: Record<string, SerializedWorkflow>;
+  skills: SerializedSkill[];
+  workspaceTools: string[];
+  /** ID of the agent's workspace (if configured) */
+  workspaceId?: string;
   inputProcessors: SerializedProcessor[];
   outputProcessors: SerializedProcessor[];
   provider?: string;
@@ -224,6 +239,105 @@ export function getSerializedProcessors(
   });
 }
 
+/**
+ * Extract skills from agent's workspace.
+ * Uses agent.getWorkspace() to get the workspace and then workspace.skills.list().
+ */
+export async function getSerializedSkillsFromAgent(
+  agent: Agent,
+  requestContext?: RequestContext,
+): Promise<SerializedSkill[]> {
+  try {
+    const workspace = await agent.getWorkspace({ requestContext });
+    if (!workspace?.skills) {
+      return [];
+    }
+
+    const skillsList = await workspace.skills.list();
+    return skillsList.map(skill => ({
+      name: skill.name,
+      description: skill.description,
+      license: skill.license,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get the list of available workspace tools for an agent.
+ * Returns tool names based on workspace configuration (filesystem, sandbox, search)
+ * and respects per-tool enabled settings.
+ */
+export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: RequestContext): Promise<string[]> {
+  try {
+    const workspace = await agent.getWorkspace({ requestContext });
+    if (!workspace) {
+      return [];
+    }
+
+    const tools: string[] = [];
+    const isReadOnly = workspace.filesystem?.readOnly ?? false;
+    const toolsConfig = workspace.getToolsConfig();
+
+    // Helper to check if a tool is enabled
+    const isEnabled = (toolName: WorkspaceToolName) => {
+      return resolveToolConfig(toolsConfig, toolName).enabled;
+    };
+
+    // Filesystem tools
+    if (workspace.filesystem) {
+      // Read tools
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+      }
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+      }
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
+      }
+
+      // Write tools only if not readonly
+      if (!isReadOnly) {
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+        }
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
+        }
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.DELETE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+        }
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.MKDIR)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
+        }
+      }
+    }
+
+    // Search tools (available if BM25 or vector search is enabled)
+    if (workspace.canBM25 || workspace.canVector) {
+      if (isEnabled(WORKSPACE_TOOLS.SEARCH.SEARCH)) {
+        tools.push(WORKSPACE_TOOLS.SEARCH.SEARCH);
+      }
+      if (!isReadOnly && isEnabled(WORKSPACE_TOOLS.SEARCH.INDEX)) {
+        tools.push(WORKSPACE_TOOLS.SEARCH.INDEX);
+      }
+    }
+
+    // Sandbox tools
+    if (workspace.sandbox) {
+      if (workspace.sandbox.executeCommand && isEnabled(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND)) {
+        tools.push(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+      }
+    }
+
+    return tools;
+  } catch {
+    return [];
+  }
+}
+
 interface SerializedAgentDefinition {
   id: string;
   name: string;
@@ -316,6 +430,19 @@ async function formatAgentList({
     logger.error('Error getting configured processors for agent', { agentName: agent.name, error });
   }
 
+  // Extract skills, workspace tools, and workspaceId from agent's workspace
+  const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
+  const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
+
+  // Get workspaceId if agent has a workspace
+  let workspaceId: string | undefined;
+  try {
+    const workspace = await agent.getWorkspace({ requestContext });
+    workspaceId = workspace?.id;
+  } catch {
+    // Agent doesn't have a workspace or can't access it
+  }
+
   const model = llm?.getModel();
   const models = await agent.getModelList(requestContext);
   const modelList = models?.map(md => ({
@@ -335,6 +462,9 @@ async function formatAgentList({
     agents: serializedAgentAgents,
     tools: serializedAgentTools,
     workflows: serializedAgentWorkflows,
+    skills: serializedSkills,
+    workspaceTools,
+    workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
     provider: llm?.getProvider(),
@@ -502,6 +632,19 @@ async function formatAgent({
     mastra.getLogger().error('Error getting configured processors for agent', { agentName: agent.name, error });
   }
 
+  // Extract skills, workspace tools, and workspaceId from agent's workspace
+  const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
+  const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
+
+  // Get workspaceId if agent has a workspace
+  let workspaceId: string | undefined;
+  try {
+    const workspace = await agent.getWorkspace({ requestContext: proxyRequestContext });
+    workspaceId = workspace?.id;
+  } catch {
+    // Agent doesn't have a workspace or can't access it
+  }
+
   // Serialize requestContextSchema if present
   let serializedRequestContextSchema: string | undefined;
   if (agent.requestContextSchema) {
@@ -519,6 +662,9 @@ async function formatAgent({
     tools: serializedAgentTools,
     agents: serializedAgentAgents,
     workflows: serializedAgentWorkflows,
+    skills: serializedSkills,
+    workspaceTools,
+    workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
     provider: llm?.getProvider(),
@@ -1604,4 +1750,55 @@ export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
   requiresAuth: true,
   deprecated: true,
   handler: STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE.handler,
+});
+
+// ============================================================================
+// Agent Skill Routes
+// ============================================================================
+
+export const GET_AGENT_SKILL_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agents/:agentId/skills/:skillName',
+  responseType: 'json',
+  pathParamSchema: agentSkillPathParams,
+  responseSchema: getAgentSkillResponseSchema,
+  summary: 'Get agent skill',
+  description: 'Returns details for a specific skill available to the agent via its workspace',
+  tags: ['Agents', 'Skills'],
+  handler: async ({ mastra, agentId, skillName, requestContext }) => {
+    try {
+      const agent = agentId ? mastra.getAgentById(agentId) : null;
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Agent not found' });
+      }
+
+      // Get the agent's workspace
+      const workspace = await agent.getWorkspace({ requestContext });
+      if (!workspace?.skills) {
+        throw new HTTPException(404, { message: 'Agent does not have skills configured' });
+      }
+
+      // Get the skill from the workspace
+      const skill = await workspace.skills.get(skillName);
+      if (!skill) {
+        throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
+      }
+
+      return {
+        name: skill.name,
+        description: skill.description,
+        license: skill.license,
+        compatibility: skill.compatibility,
+        metadata: skill.metadata,
+        path: skill.path,
+        instructions: skill.instructions,
+        source: skill.source,
+        references: skill.references,
+        scripts: skill.scripts,
+        assets: skill.assets,
+      };
+    } catch (error) {
+      return handleError(error, 'Error getting agent skill');
+    }
+  },
 });
