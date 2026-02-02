@@ -270,6 +270,10 @@ export class MastraCompositeStore extends MastraBase {
       initTasks.push(this.stores.datasets.init());
     }
 
+    if (this.stores?.runs) {
+      initTasks.push(this.stores.runs.init());
+    }
+
     this.hasInitialized = Promise.all(initTasks).then(() => true);
 
     await this.hasInitialized;

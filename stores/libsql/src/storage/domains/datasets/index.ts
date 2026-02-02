@@ -56,6 +56,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
       name: row.name as string,
       description: row.description as string | undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
+      inputSchema: row.inputSchema ? safelyParseJSON(row.inputSchema) : undefined,
+      outputSchema: row.outputSchema ? safelyParseJSON(row.outputSchema) : undefined,
       version: ensureDate(row.version)!, // Timestamp-based versioning
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
@@ -91,6 +93,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
           name: input.name,
           description: input.description ?? null,
           metadata: input.metadata, // jsonb serialization handled by prepareStatement
+          inputSchema: input.inputSchema ?? null,
+          outputSchema: input.outputSchema ?? null,
           version: nowIso, // Timestamp-based versioning
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -102,6 +106,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
         name: input.name,
         description: input.description,
         metadata: input.metadata,
+        inputSchema: input.inputSchema,
+        outputSchema: input.outputSchema,
         version: now, // Return as Date
         createdAt: now,
         updatedAt: now,
@@ -165,6 +171,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
         updates.push('metadata = ?');
         values.push(JSON.stringify(args.metadata));
       }
+      if (args.inputSchema !== undefined) {
+        updates.push('inputSchema = ?');
+        values.push(args.inputSchema === null ? null : JSON.stringify(args.inputSchema));
+      }
+      if (args.outputSchema !== undefined) {
+        updates.push('outputSchema = ?');
+        values.push(args.outputSchema === null ? null : JSON.stringify(args.outputSchema));
+      }
 
       values.push(args.id);
 
@@ -178,6 +192,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
         name: args.name ?? existing.name,
         description: args.description ?? existing.description,
         metadata: args.metadata ?? existing.metadata,
+        inputSchema: args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema,
+        outputSchema: args.outputSchema !== undefined ? args.outputSchema : existing.outputSchema,
         updatedAt: new Date(now),
       };
     } catch (error) {

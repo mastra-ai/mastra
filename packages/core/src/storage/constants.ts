@@ -134,6 +134,8 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   name: { type: 'text', nullable: false },
   description: { type: 'text', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
+  inputSchema: { type: 'jsonb', nullable: true }, // JSON Schema for validating item.input
+  outputSchema: { type: 'jsonb', nullable: true }, // JSON Schema for validating item.expectedOutput
   version: { type: 'timestamp', nullable: false }, // Timestamp-based versioning
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
