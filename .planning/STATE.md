@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 11 of 11 (Dataset Schema Validation)
-Plan: 4 of 7 in phase 11
+Plan: 5a of 7 in phase 11
 Status: In progress
-Last activity: 2026-02-02 — Completed 11-04-PLAN.md
+Last activity: 2026-02-02 — Completed 11-05a-PLAN.md
 
-Progress: [██████████░] ~99% (46/47 plans)
+Progress: [██████████░] ~99% (47/48 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 46
+- Total plans completed: 47
 - Average duration: 4 min
-- Total execution time: 2.62 hours
+- Total execution time: 2.65 hours
 
 **By Phase:**
 
@@ -38,11 +38,11 @@ Progress: [██████████░] ~99% (46/47 plans)
 | 08-item-selection-actions    | 4     | 13 min | 3.25 min |
 | 09-dataset-items-detail-view | 5     | 16 min | 3.2 min  |
 | 10-dataset-layout-update     | 5     | 24 min | 4.8 min  |
-| 11-dataset-schema-validation | 4     | 17 min | 4.25 min |
+| 11-dataset-schema-validation | 5     | 19 min | 3.8 min  |
 
 **Recent Trend:**
 
-- Last 5 plans: 11-01 (7 min), 11-02 (2 min), 11-03 (5 min), 11-04 (3 min)
+- Last 5 plans: 11-02 (2 min), 11-03 (5 min), 11-04 (3 min), 11-05a (2 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -133,6 +133,8 @@ Recent decisions affecting current work:
 - Schema change validates all existing items before allowing update
 - JSONSchema7 cast to Record<string, unknown> for Zod schema compatibility
 - Workflow schema returns parsed JSON (not stringified) for direct client use
+- useWorkflowSchema takes nullable workflowId (null = query disabled)
+- WorkflowSchemaImport resets selection after import for re-selection
 
 ### Pending Todos
 
@@ -153,5 +155,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: Completed 11-04-PLAN.md (CSV Import Validation)
+Stopped at: Completed 11-05a-PLAN.md (Workflow Schema Import)
 Resume file: None
