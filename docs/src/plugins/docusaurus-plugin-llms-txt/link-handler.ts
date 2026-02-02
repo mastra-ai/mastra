@@ -88,11 +88,10 @@ export function createLinkHandler(options: LinkHandlerOptions) {
       }
     }
 
-    // Convert internal links to llms.txt URLs
     let finalHref = href || ''
     if (isInternalLink(href) && !(options.excludeRoutes && isExcludedRoute(href, options.excludeRoutes))) {
       const route = normalizeRoute(href!)
-      finalHref = `${options.siteUrl}${route}/llms.txt`
+      finalHref = `${options.siteUrl}${route}`
     }
 
     return {

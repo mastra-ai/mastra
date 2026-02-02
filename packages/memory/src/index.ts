@@ -106,7 +106,7 @@ export class Memory extends MastraMemory {
       vectorSearchString?: string;
       threadId: string;
     },
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
     const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
@@ -167,8 +167,12 @@ export class Memory extends MastraMemory {
       );
     }
 
+    let usage: { tokens: number } | undefined;
+
     if (config?.semanticRecall && vectorSearchString && this.vector) {
-      const { embeddings, dimension } = await this.embedMessageContent(vectorSearchString!);
+      const result = await this.embedMessageContent(vectorSearchString!);
+      usage = result.usage;
+      const { embeddings, dimension } = result;
       const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
       await Promise.all(
@@ -231,7 +235,7 @@ export class Memory extends MastraMemory {
     // Always return mastra-db format (V2)
     const messages = list.get.all.db();
 
-    return { messages };
+    return { messages, usage };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -539,6 +543,7 @@ ${workingMemory}`;
     {
       chunks: string[];
       embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
+      usage?: { tokens: number };
       dimension: number | undefined;
     }
   >();
@@ -584,11 +589,12 @@ ${workingMemory}`;
     });
 
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
-    const { embeddings } = await promise;
+    const { embeddings, usage } = await promise;
 
     const result = {
       embeddings,
       chunks,
+      usage,
       dimension: embeddings[0]?.length,
     };
     this.embeddingCache.set(key, result);
@@ -601,7 +607,7 @@ ${workingMemory}`;
   }: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
     // Then strip working memory tags from all messages
     const updatedMessages = messages
       .map(m => {
@@ -622,6 +628,8 @@ ${workingMemory}`;
     const result = await memoryStore.saveMessages({
       messages: dbMessages,
     });
+
+    let totalTokens = 0;
 
     if (this.vector && config.semanticRecall) {
       // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
@@ -656,6 +664,9 @@ ${workingMemory}`;
 
           const result = await this.embedMessageContent(textForEmbedding);
           dimension = result.dimension;
+          if (result.usage?.tokens) {
+            totalTokens += result.usage.tokens;
+          }
 
           embeddingData.push({
             embeddings: result.embeddings,
@@ -697,7 +708,7 @@ ${workingMemory}`;
       }
     }
 
-    return result;
+    return { ...result, usage: totalTokens > 0 ? { tokens: totalTokens } : undefined };
   }
 
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {

@@ -426,3 +426,83 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
   }
   return steps;
 }
+
+/**
+ * Cleans a single step result object by removing internal properties.
+ * This is a helper for cleanStepResult that handles one level of cleaning.
+ */
+function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
+  const { __state: _state, metadata, ...rest } = result;
+
+  // Strip nestedRunId from metadata but keep other user-defined fields
+  if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+    const { nestedRunId: _nestedRunId, ...userMetadata } = metadata as Record<string, unknown>;
+    if (Object.keys(userMetadata).length > 0) {
+      return { ...rest, metadata: userMetadata };
+    }
+  }
+
+  return rest;
+}
+
+/**
+ * Cleans step result data by removing internal properties at known structural levels.
+ *
+ * Removes:
+ * - `__state` properties (internal workflow state for state propagation)
+ * - `nestedRunId` from `metadata` objects (internal tracking for nested workflow retrieval)
+ *
+ * ## Why targeted cleaning instead of recursive?
+ *
+ * Internal properties only appear at specific, known locations:
+ *
+ * 1. **`__state`** - Added by step-executor.ts to every step result. For forEach,
+ *    suspended iterations store the full result (including __state) while completed
+ *    iterations only store the output value. See workflow-event-processor/index.ts:1227-1230.
+ *
+ * 2. **`metadata.nestedRunId`** - Added when nested workflows complete, stored at the
+ *    step result level. For forEach with nested workflows, each iteration result can
+ *    have this. See workflow-event-processor/index.ts:1449-1453.
+ *
+ * By only cleaning at the step result level and forEach iteration level, we avoid
+ * accidentally stripping user data that happens to use `__state` as a property name
+ * in their actual output values.
+ *
+ * @param stepResult - A step result object, or an array of iteration results (forEach)
+ * @returns The cleaned step result with internal properties removed
+ */
+export function cleanStepResult(stepResult: unknown): unknown {
+  if (stepResult === null || stepResult === undefined) {
+    return stepResult;
+  }
+
+  if (typeof stepResult !== 'object') {
+    return stepResult;
+  }
+
+  // Handle arrays (forEach iteration results) - clean each element at the result level only
+  if (Array.isArray(stepResult)) {
+    return stepResult.map(item => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        return cleanSingleResult(item as Record<string, unknown>);
+      }
+      return item;
+    });
+  }
+
+  const result = stepResult as Record<string, unknown>;
+  const cleaned = cleanSingleResult(result);
+
+  // If output is an array (forEach results), clean each iteration result
+  // Iteration results can have __state (for suspended) or metadata.nestedRunId (for nested workflows)
+  if (Array.isArray(cleaned.output)) {
+    cleaned.output = cleaned.output.map((item: unknown) => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        return cleanSingleResult(item as Record<string, unknown>);
+      }
+      return item;
+    });
+  }
+
+  return cleaned;
+}

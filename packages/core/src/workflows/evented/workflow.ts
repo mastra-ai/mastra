@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import { isSupportedLanguageModel } from '../../agent/utils';
 import { RequestContext } from '../../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
@@ -16,7 +18,9 @@ import type { Processor } from '../../processors';
 import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
 import type { InferSchemaOutput, SchemaWithValidation } from '../../stream/base/schema';
+import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
@@ -31,12 +35,15 @@ import type {
   StepWithComponent,
   WorkflowStreamEvent,
   WorkflowEngineType,
+  WorkflowRunStatus,
   StepParams,
   ToolStep,
   DefaultEngineType,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
+import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
+import type { TripwireChunk } from './helpers';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};
@@ -285,8 +292,8 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
 // ============================================
 
 function createStepFromParams(
-  params: StepParams<any, any, any, any, any, any>,
-): Step<any, any, any, any, any, any, DefaultEngineType> {
+  params: StepParams<any, any, any, any, any, any, any>,
+): Step<any, any, any, any, any, any, DefaultEngineType, any> {
   return {
     id: params.id,
     description: params.description,
@@ -300,6 +307,91 @@ function createStepFromParams(
     retries: params.retries,
     execute: params.execute.bind(params),
   };
+}
+
+/**
+ * Processes an agent stream, publishing events and detecting tripwires.
+ * This helper unifies the V1 and V2 stream processing paths.
+ */
+async function processAgentStream(params: {
+  fullStream: AsyncIterable<unknown>;
+  isV2Model: boolean;
+  pubsub: { publish: (channel: string, data: any) => Promise<void> };
+  runId: string;
+  toolData: { name: string; args: unknown };
+  logger?: { debug: (msg: string, data?: unknown) => void };
+}): Promise<{ tripwireChunk: TripwireChunk | null }> {
+  const { fullStream, isV2Model, pubsub, runId, toolData, logger } = params;
+
+  // Publish stream start event
+  try {
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: { type: 'tool-call-streaming-start', ...toolData },
+    });
+  } catch (err) {
+    // Non-critical: continue even if publish fails
+    logger?.debug('Failed to publish stream start event', { runId, error: err });
+  }
+
+  let tripwireChunk: TripwireChunk | null = null;
+
+  for await (const chunk of fullStream) {
+    // Check for tripwire chunks from agent processors
+    if (isTripwireChunk(chunk)) {
+      tripwireChunk = chunk;
+      break;
+    }
+
+    // Publish text deltas
+    if (typeof chunk === 'object' && chunk !== null && 'type' in chunk && chunk.type === 'text-delta') {
+      const textDelta = getTextDeltaFromChunk(chunk as any, isV2Model);
+      if (textDelta) {
+        try {
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'tool-call-delta', ...toolData, argsTextDelta: textDelta },
+          });
+        } catch (err) {
+          // Non-critical: continue even if publish fails
+          logger?.debug('Failed to publish stream delta event', { runId, error: err });
+        }
+      }
+    }
+  }
+
+  // Publish stream finish event
+  try {
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: { type: 'tool-call-streaming-finish', ...toolData },
+    });
+  } catch (err) {
+    // Non-critical: continue even if publish fails
+    logger?.debug('Failed to publish stream finish event', { runId, error: err });
+  }
+
+  return { tripwireChunk };
+}
+
+/**
+ * Safely invokes the user's onFinish callback with error logging.
+ */
+async function safeOnFinish(
+  callback: ((result: unknown) => void | Promise<void>) | undefined,
+  result: unknown,
+  logger?: { warn: (msg: string, data?: unknown) => void },
+): Promise<void> {
+  if (!callback) return;
+  try {
+    await callback(result);
+  } catch (err) {
+    // User callback errors are logged but don't fail the step
+    logger?.warn('User onFinish callback threw an error', { error: err });
+  }
 }
 
 function createStepFromAgent<TStepId extends string, TStepOutput>(
@@ -326,65 +418,100 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     execute: async ({
       inputData,
       runId,
+      mastra,
       [PUBSUB_SYMBOL]: pubsub,
       requestContext,
       tracingContext,
       abortSignal,
       abort,
     }) => {
-      // TODO: support stream
-      let streamPromise = {} as {
-        promise: Promise<string>;
-        resolve: (value: string) => void;
-        reject: (reason?: any) => void;
-      };
-
-      streamPromise.promise = new Promise((resolve, reject) => {
-        streamPromise.resolve = resolve;
-        streamPromise.reject = reject;
-      });
-      // TODO: should use regular .stream()
-      const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
-        ...(agentOptions ?? {}),
-        tracingContext,
-        requestContext,
-        onFinish: result => {
-          streamPromise.resolve(result.text);
-        },
-        abortSignal,
-      });
-
-      if (abortSignal.aborted) {
-        return abort() as TStepOutput;
-      }
-
+      const logger = mastra?.getLogger();
       const toolData = {
         name: params.name,
         args: inputData,
       };
 
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
-      });
-      for await (const chunk of fullStream) {
-        if (chunk.type === 'text-delta') {
-          await pubsub.publish(`workflow.events.v2.${runId}`, {
-            type: 'watch',
-            runId,
-            data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
-          });
+      // Detect model version to choose streaming method
+      const llm = await params.getLLM({ requestContext });
+      const modelInfo = llm.getModel();
+      const isV2Model = isSupportedLanguageModel(modelInfo);
+
+      // Track structured output result
+      let structuredResult: any = null;
+
+      // Common callback to capture structured output
+      const handleFinish = (result: { text: string; object?: unknown }) => {
+        const resultWithObject = result as typeof result & { object?: unknown };
+        if ((agentOptions as any)?.structuredOutput?.schema && resultWithObject.object) {
+          structuredResult = resultWithObject.object;
         }
+      };
+
+      // Get the appropriate stream based on model version
+      let fullStream: AsyncIterable<unknown>;
+      let textPromise: Promise<string>;
+
+      if (isV2Model) {
+        // V2+ model path: use .stream() which returns MastraModelOutput
+        const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
+          ...(agentOptions ?? {}),
+          tracingContext,
+          requestContext,
+          onFinish: result => {
+            handleFinish(result);
+            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
+          },
+          abortSignal,
+        });
+        fullStream = modelOutput.fullStream;
+        textPromise = modelOutput.text;
+      } else {
+        // V1 model path: use .streamLegacy() for backwards compatibility
+        let resolveText: (value: string) => void;
+        textPromise = new Promise(resolve => {
+          resolveText = resolve;
+        });
+
+        const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
+          ...(agentOptions ?? {}),
+          tracingContext,
+          requestContext,
+          onFinish: result => {
+            handleFinish(result);
+            resolveText!(result.text);
+            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
+          },
+          abortSignal,
+        });
+        fullStream = legacyResult.fullStream;
       }
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
+
+      if (abortSignal.aborted) {
+        return abort() as TStepOutput;
+      }
+
+      // Process the stream (unified for V1/V2)
+      const { tripwireChunk } = await processAgentStream({
+        fullStream,
+        isV2Model,
+        pubsub,
         runId,
-        data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
+        toolData,
+        logger,
       });
 
+      // Handle tripwire if detected
+      if (tripwireChunk) {
+        throw createTripWireFromChunk(tripwireChunk);
+      }
+
+      // Return structured output if available, otherwise return text
+      if (structuredResult !== null) {
+        return structuredResult as TStepOutput;
+      }
+
       return {
-        text: await streamPromise.promise,
+        text: await textPromise,
       } as TStepOutput;
     },
     component: params.component,
@@ -1069,6 +1196,8 @@ export class EventedWorkflow<
         cleanup: () => this.runs.delete(runIdToUse),
         workflowSteps: this.steps,
         validateInputs: this.options?.validateInputs,
+        inputSchema: this.inputSchema,
+        stateSchema: this.stateSchema,
         workflowEngineType: this.engineType,
       });
 
@@ -1085,6 +1214,11 @@ export class EventedWorkflow<
 
     // Check if run exists in persistent storage (not just in-memory)
     const existsInStorage = existingRun && !existingRun.isFromInMemory;
+
+    // Sync status from storage to in-memory run (fixes status tracking across workflow instances)
+    if (existsInStorage && existingRun.status) {
+      run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
+    }
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -1136,6 +1270,8 @@ export class EventedRun<
     cleanup?: () => void;
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
+    inputSchema?: SchemaWithValidation<TInput>;
+    stateSchema?: SchemaWithValidation<TState>;
     workflowEngineType: WorkflowEngineType;
   }) {
     super(params);
@@ -1169,11 +1305,16 @@ export class EventedRun<
     initialState,
     requestContext,
     perStep,
+    outputOptions,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
     initialState?: TState;
     perStep?: boolean;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -1220,6 +1361,7 @@ export class EventedRun<
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       graph: this.executionGraph,
       serializedStepGraph: this.serializedStepGraph,
       input: inputDataToUse,
@@ -1229,6 +1371,7 @@ export class EventedRun<
       requestContext,
       abortController: this.abortController,
       perStep,
+      outputOptions,
     });
 
     // console.dir({ startResult: result }, { depth: null });
@@ -1314,11 +1457,186 @@ export class EventedRun<
     return { runId: this.runId };
   }
 
-  // TODO: stream
+  /**
+   * Starts the workflow execution as a stream, returning a WorkflowRunOutput
+   * with .fullStream for iteration and .result for the final result.
+   */
+  stream({
+    inputData,
+    requestContext,
+    initialState,
+    closeOnSuspend = true,
+    perStep,
+    outputOptions,
+  }: (TInput extends unknown ? { inputData?: TInput } : { inputData: TInput }) &
+    (TState extends unknown ? { initialState?: TState } : { initialState: TState }) & {
+      requestContext?: RequestContext;
+      closeOnSuspend?: boolean;
+      perStep?: boolean;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    if (this.closeStreamAction && this.streamOutput) {
+      return this.streamOutput;
+    }
+
+    this.closeStreamAction = async () => {};
+
+    const self = this;
+    const stream = new ReadableStream<WorkflowStreamEvent>({
+      async start(controller) {
+        const unwatch = self.watch((event: WorkflowStreamEvent) => {
+          const { type, payload } = event;
+          controller.enqueue({
+            type,
+            runId: self.runId,
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              stepName: (payload as any)?.id,
+              ...payload,
+            },
+          } as WorkflowStreamEvent);
+        });
+
+        self.closeStreamAction = async () => {
+          unwatch();
+          try {
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
+          } catch (err) {
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
+          }
+        };
+
+        try {
+          const executionResults = await self.start({
+            inputData: inputData as TInput,
+            requestContext,
+            initialState: initialState as TState,
+            perStep,
+            outputOptions,
+          });
+
+          if (self.streamOutput) {
+            self.streamOutput.updateResults(executionResults);
+          }
+
+          if (closeOnSuspend) {
+            self.closeStreamAction?.().catch(() => {});
+          } else if (executionResults.status !== 'suspended') {
+            self.closeStreamAction?.().catch(() => {});
+          }
+        } catch (err) {
+          self.streamOutput?.rejectResults(err as Error);
+          self.closeStreamAction?.().catch(() => {});
+        }
+      },
+    });
+
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
+
+    return this.streamOutput;
+  }
+
+  /**
+   * Resumes a suspended workflow as a stream, returning a WorkflowRunOutput
+   * with .fullStream for iteration and .result for the final result.
+   */
+  resumeStream<TResume>({
+    step,
+    resumeData,
+    requestContext,
+    perStep,
+    outputOptions,
+  }: {
+    resumeData?: TResume;
+    step?:
+      | Step<string, any, any, any, TResume, any, TEngineType>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType>[],
+          Step<string, any, any, any, TResume, any, TEngineType>,
+        ]
+      | string
+      | string[];
+    requestContext?: RequestContext;
+    perStep?: boolean;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    this.closeStreamAction = async () => {};
+
+    const self = this;
+    const stream = new ReadableStream<WorkflowStreamEvent>({
+      async start(controller) {
+        const unwatch = self.watch((event: WorkflowStreamEvent) => {
+          const { type, payload } = event;
+          controller.enqueue({
+            type,
+            runId: self.runId,
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              stepName: (payload as any)?.id,
+              ...payload,
+            },
+          } as WorkflowStreamEvent);
+        });
+
+        self.closeStreamAction = async () => {
+          unwatch();
+          try {
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
+          } catch (err) {
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
+          }
+        };
+
+        try {
+          const executionResults = await self.resume({
+            resumeData,
+            step,
+            requestContext,
+            perStep,
+            outputOptions,
+          });
+
+          if (self.streamOutput) {
+            self.streamOutput.updateResults(executionResults);
+          }
+
+          // Wait a microtask to let any pending events flush through
+          await new Promise(resolve => setTimeout(resolve, 0));
+
+          self.closeStreamAction?.().catch(() => {});
+        } catch (err) {
+          self.streamOutput?.rejectResults(err as Error);
+          self.closeStreamAction?.().catch(() => {});
+        }
+      },
+    });
+
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      stream,
+    });
+
+    return this.streamOutput;
+  }
 
   async resume<TResumeSchema>(params: {
     resumeData?: TResumeSchema;
-    step:
+    step?:
       | Step<string, any, any, TResumeSchema, any, any, TEngineType, any>
       | [
           ...Step<string, any, any, any, any, any, TEngineType, any>[],
@@ -1326,22 +1644,15 @@ export class EventedRun<
         ]
       | string
       | string[];
+    label?: string;
+    forEachIndex?: number;
     requestContext?: RequestContext;
     perStep?: boolean;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    let steps: string[] = [];
-    if (typeof params.step === 'string') {
-      steps = params.step.split('.');
-    } else {
-      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-        typeof step === 'string' ? step : step?.id,
-      );
-    }
-
-    if (steps.length === 0) {
-      throw new Error('No steps provided to resume');
-    }
-
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     if (!workflowsStore) {
       throw new Error('Cannot resume workflow: workflows store is required');
@@ -1354,12 +1665,84 @@ export class EventedRun<
       throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
     }
 
-    const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
-    if (!resumePath) {
+    // Check if workflow is suspended before proceeding
+    if (snapshot.status !== 'suspended') {
+      throw new Error('This workflow run was not suspended');
+    }
+
+    // Resolve label to step path if provided
+    const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;
+
+    // Validate label exists if provided
+    if (params.label && !snapshotResumeLabel) {
+      const availableLabels = Object.keys(snapshot?.resumeLabels ?? {});
       throw new Error(
-        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot.suspendedPaths)}`,
+        `Resume label "${params.label}" not found. ` + `Available labels: [${availableLabels.join(', ')}]`,
       );
     }
+
+    // Label takes precedence over step param
+    const stepParam = snapshotResumeLabel?.stepId ?? params.step;
+
+    // Auto-detect suspended steps if no step is provided
+    let steps: string[];
+    if (stepParam) {
+      if (typeof stepParam === 'string') {
+        steps = stepParam.split('.');
+      } else {
+        steps = (Array.isArray(stepParam) ? stepParam : [stepParam]).map(step =>
+          typeof step === 'string' ? step : step?.id,
+        );
+      }
+    } else {
+      // Use suspendedPaths to detect suspended steps
+      const suspendedStepPaths: string[][] = [];
+
+      Object.entries(snapshot?.suspendedPaths ?? {}).forEach(([stepId, _executionPath]) => {
+        // Check if this step has nested workflow suspension data
+        const stepResult = snapshot?.context?.[stepId];
+        if (stepResult && typeof stepResult === 'object' && 'status' in stepResult) {
+          const stepRes = stepResult as any;
+          if (stepRes.status === 'suspended') {
+            const nestedPath = stepRes.suspendPayload?.__workflow_meta?.path;
+            if (nestedPath && Array.isArray(nestedPath)) {
+              // For nested workflows, combine the parent step ID with the nested path
+              suspendedStepPaths.push([stepId, ...nestedPath]);
+            } else {
+              // For single-level suspension, just use the step ID
+              suspendedStepPaths.push([stepId]);
+            }
+          }
+        }
+      });
+
+      if (suspendedStepPaths.length === 0) {
+        throw new Error('No suspended steps found in this workflow run');
+      }
+
+      if (suspendedStepPaths.length === 1) {
+        // For single suspended step, use the full path
+        steps = suspendedStepPaths[0]!;
+      } else {
+        const pathStrings = suspendedStepPaths.map(path => `[${path.join(', ')}]`);
+        throw new Error(
+          `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
+            'Please specify which step to resume using the "step" parameter.',
+        );
+      }
+    }
+
+    // Validate that the step is actually suspended
+    const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+    const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
+
+    if (!isStepSuspended) {
+      throw new Error(
+        `This workflow step "${steps?.[0]}" was not suspended. Available suspended steps: [${suspendedStepIds.join(', ')}]`,
+      );
+    }
+
+    const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
 
     console.dir(
       { resume: { requestContextObj: snapshot.requestContext, requestContext: params.requestContext } },
@@ -1391,6 +1774,9 @@ export class EventedRun<
 
     this.setupAbortHandler();
 
+    // Extract state from snapshot - could be in context.__state or in value
+    const resumeState = (snapshot?.context as any)?.__state ?? snapshot?.value ?? {};
+
     const executionResultPromise = this.executionEngine
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -1398,16 +1784,19 @@ export class EventedRun<
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
         input: snapshot?.context?.input as TInput,
+        initialState: resumeState as TState,
         resume: {
           steps,
           stepResults: snapshot?.context as any,
           resumePayload: resumeDataToUse,
           resumePath,
+          forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
         },
         pubsub: this.mastra.pubsub,
         requestContext,
         abortController: this.abortController,
         perStep: params.perStep,
+        outputOptions: params.outputOptions,
       })
       .then(result => {
         if (result.status !== 'suspended') {
