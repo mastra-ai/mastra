@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 8: Item Selection & Actions** - Bulk operations via item selection ✓
 - [x] **Phase 9: Dataset Items Detail View** - EntryList with SideDialog, edit/delete flows ✓
 - [x] **Phase 10: Dataset Layout Update** - Master-detail layout with inline item viewing ✓
-- [ ] **Phase 11: Dataset Schema Validation** - Input/output schema enforcement with import validation
+- [x] **Phase 11: Dataset Schema Validation** - Input/output schema enforcement with import validation ✓
 
 ## Phase Details
 
@@ -265,15 +265,15 @@ Plans:
 
 Plans:
 
-- [ ] 11-01-PLAN.md — Core types and Ajv validation utilities
-- [ ] 11-02-PLAN.md — Storage layer schema validation (addItem/updateItem)
-- [ ] 11-03-PLAN.md — API routes for schema management and workflow schema extraction
-- [ ] 11-04-PLAN.md — CSV import validation with skip reporting
-- [ ] 11-05a-PLAN.md — Workflow schema hook and import component
-- [ ] 11-05b-PLAN.md — Schema field, settings dialog, and header integration
-- [ ] 11-06-PLAN.md — Validation error display in add/edit item and CSV import
-- [ ] 11-07-PLAN.md — End-to-end verification checkpoint
-- [ ] 11-08-PLAN.md — Schema source selector with auto-population (gap closure)
+- [x] 11-01-PLAN.md — Core types and Ajv validation utilities
+- [x] 11-02-PLAN.md — Storage layer schema validation (addItem/updateItem)
+- [x] 11-03-PLAN.md — API routes for schema management and workflow schema extraction
+- [x] 11-04-PLAN.md — CSV import validation with skip reporting
+- [x] 11-05a-PLAN.md — Workflow schema hook and import component
+- [x] 11-05b-PLAN.md — Schema field, settings dialog, and header integration
+- [x] 11-06-PLAN.md — Validation error display in add/edit item and CSV import
+- [x] 11-07-PLAN.md — End-to-end verification checkpoint
+- [x] 11-08-PLAN.md — Schema source selector with auto-population (gap closure)
 
 ## Progress
 
@@ -292,4 +292,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Item Selection & Actions   | 4/4            | ✓ Complete | 2026-01-27 |
 | 9. Dataset Items Detail View  | 5/5            | ✓ Complete | 2026-01-29 |
 | 10. Dataset Layout Update     | 5/5            | ✓ Complete | 2026-01-30 |
-| 11. Dataset Schema Validation | 0/9            | Planned    |            |
+| 11. Dataset Schema Validation | 9/9            | ✓ Complete | 2026-02-02 |
