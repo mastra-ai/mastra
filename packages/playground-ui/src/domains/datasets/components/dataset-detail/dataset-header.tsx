@@ -51,10 +51,8 @@ function HeaderActionsMenu({ onEditClick, onDeleteClick }: HeaderActionsMenuProp
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Dataset actions menu">
-          <Icon>
-            <MoreVertical className="w-4 h-4" />
-          </Icon>
+        <Button variant="secondary" size="default" aria-label="Dataset actions menu">
+          <MoreVertical />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-1">
@@ -109,7 +107,7 @@ export function DatasetHeader({
   onRunClick,
 }: DatasetHeaderProps) {
   return (
-    <header className="flex items-start justify-between px-4 py-6 gap-4">
+    <header className="flex items-start justify-between py-6 gap-4">
       {/* Left side: Name + Description */}
       <div className="flex flex-col gap-1">
         {isLoading ? (
@@ -126,14 +124,12 @@ export function DatasetHeader({
       </div>
 
       {/* Right side: Menu + Run button */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         {runTriggerSlot ? (
           runTriggerSlot
         ) : onRunClick ? (
           <Button variant="outline" size="sm" onClick={onRunClick}>
-            <Icon>
-              <Play />
-            </Icon>
+            <Play />
             Run Experiment
           </Button>
         ) : null}

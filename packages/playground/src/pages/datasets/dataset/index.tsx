@@ -13,7 +13,6 @@ import {
   useDataset,
   useDatasetMutations,
   Button,
-  Icon,
 } from '@mastra/playground-ui';
 import { Play } from 'lucide-react';
 
@@ -73,11 +72,9 @@ function Dataset() {
           onEditItem={handleEditItem}
           onDeleteItem={handleDeleteItem}
           runTriggerSlot={
-            <Button variant="primary" size="sm" onClick={() => setRunDialogOpen(true)}>
-              <Icon>
-                <Play />
-              </Icon>
-              Run
+            <Button variant="standard" size="default" onClick={() => setRunDialogOpen(true)}>
+              <Play />
+              Run Experiment
             </Button>
           }
         />

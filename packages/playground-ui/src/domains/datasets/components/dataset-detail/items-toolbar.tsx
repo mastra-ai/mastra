@@ -1,12 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { SplitButton } from '@/ds/components/SplitButton';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
-import { Plus, Upload, FileJson, MoreVertical, Download, FolderPlus, FolderOutput, Trash2 } from 'lucide-react';
-
+import {
+  Plus,
+  Upload,
+  FileJson,
+  MoreVertical,
+  Download,
+  FolderPlus,
+  FolderOutput,
+  Trash2,
+  ChevronDownIcon,
+} from 'lucide-react';
 export interface ItemsToolbarProps {
   // Normal mode actions
   onAddClick: () => void;
@@ -41,10 +49,8 @@ function ActionsMenu({ onExportClick, onCreateDatasetClick, onDeleteClick }: Act
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Actions menu">
-          <Icon>
-            <MoreVertical className="w-4 h-4" />
-          </Icon>
+        <Button variant="secondary" size="default" aria-label="Actions menu">
+          <MoreVertical />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-1 bg-surface4 ">
@@ -107,6 +113,8 @@ export function ItemsToolbar({
   onCancelSelection,
   selectionMode,
 }: ItemsToolbarProps) {
+  const [open, setOpen] = useState(false);
+
   if (isSelectionActive) {
     return (
       <div className="flex justify-between px-4 py-3 gap-2 bg-surface4 rounded-lg">
@@ -126,35 +134,36 @@ export function ItemsToolbar({
   }
 
   return (
-    <div className="flex justify-end px-4 py-3 gap-2 bg-surface4 rounded-lg">
-      <SplitButton
-        mainLabel={
-          <>
-            <Icon>
-              <Plus />
-            </Icon>
-            New Item
-          </>
-        }
-        onMainClick={onAddClick}
-        variant="primary"
-        size="sm"
-      >
-        <div className="flex flex-col">
-          <Button variant="ghost" size="sm" className="w-full justify-start gap-2" onClick={onImportClick}>
-            <Icon>
-              <Upload />
-            </Icon>
-            Import CSV
-          </Button>
-          <Button variant="ghost" size="sm" className="w-full justify-start gap-2" disabled>
-            <Icon>
-              <FileJson />
-            </Icon>
-            Import JSON (Coming Soon)
-          </Button>
-        </div>
-      </SplitButton>
+    <div className="flex justify-end px-4 py-3 gap-3 bg-surface4 rounded-lg">
+      <div className="flex items-center gap-[.1rem]">
+        <Button variant="secondary" size="default" hasRightSibling={true} onClick={onAddClick}>
+          <Plus />
+          New Item
+        </Button>
+
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Dataset actions menu">
+              <ChevronDownIcon />
+            </Button>
+          </PopoverTrigger>
+
+          <PopoverContent>
+            <Button variant="ghost" size="sm" className="w-full justify-start gap-2" onClick={onImportClick}>
+              <Icon>
+                <Upload />
+              </Icon>
+              Import CSV
+            </Button>
+            <Button variant="ghost" size="sm" className="w-full justify-start gap-2" disabled>
+              <Icon>
+                <FileJson />
+              </Icon>
+              Import JSON (Coming Soon)
+            </Button>
+          </PopoverContent>
+        </Popover>
+      </div>
 
       {hasItems && (
         <ActionsMenu

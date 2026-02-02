@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Button } from './Button';
-import { Plus, Settings, Trash } from 'lucide-react';
+import { Plus, Play, Settings, Trash } from 'lucide-react';
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',
@@ -12,11 +12,11 @@ const meta: Meta<typeof Button> = {
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['default', 'light', 'outline', 'ghost'],
+      options: ['default', 'light', 'outline', 'ghost', 'standard'],
     },
     size: {
       control: { type: 'select' },
-      options: ['md', 'lg'],
+      options: ['md', 'lg', 'large', 'default'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -26,6 +26,19 @@ const meta: Meta<typeof Button> = {
 
 export default meta;
 type Story = StoryObj<typeof Button>;
+
+export const Standard: Story = {
+  args: {
+    children: (
+      <>
+        <Play />
+        Run
+      </>
+    ),
+    variant: 'standard',
+    size: 'large',
+  },
+};
 
 export const Default: Story = {
   args: {
@@ -103,6 +116,13 @@ export const AllSizes: Story = {
     <div className="flex items-center gap-2">
       <Button size="md">Medium</Button>
       <Button size="lg">Large</Button>
+
+      <Button variant="standard" size="default">
+        Default
+      </Button>
+      <Button variant="standard" size="large">
+        Large
+      </Button>
     </div>
   ),
 };
