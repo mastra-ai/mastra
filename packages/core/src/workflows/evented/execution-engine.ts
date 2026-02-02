@@ -12,7 +12,7 @@ import type {
   TimeTravelExecutionParams,
   WorkflowRunStatus,
 } from '../types';
-import { cleanStepResultRecursively, hydrateSerializedStepErrors } from '../utils';
+import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
 
@@ -199,7 +199,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // This handles both object and array step results (e.g., forEach outputs)
     const cleanStepResults: Record<string, any> = {};
     for (const [stepId, stepResult] of Object.entries(stepResultsWithoutTopLevelState)) {
-      cleanStepResults[stepId] = cleanStepResultRecursively(stepResult);
+      cleanStepResults[stepId] = cleanStepResult(stepResult);
     }
 
     // Build the callback argument with proper typing for invokeLifecycleCallbacks

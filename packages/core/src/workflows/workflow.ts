@@ -72,7 +72,7 @@ import type {
   StepParams,
   OutputWriter,
 } from './types';
-import { cleanStepResultRecursively, createTimeTravelExecutionParams, getZodErrors } from './utils';
+import { cleanStepResult, createTimeTravelExecutionParams, getZodErrors } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -2444,7 +2444,7 @@ export class Workflow<
       // Recursively clean each step result to remove internal properties (__state, nestedRunId)
       // This handles both object and array step results (e.g., forEach outputs)
       for (const [stepId, stepResult] of Object.entries(stepsWithoutTopLevelState)) {
-        steps[stepId] = cleanStepResultRecursively(stepResult);
+        steps[stepId] = cleanStepResult(stepResult);
       }
     }
 
