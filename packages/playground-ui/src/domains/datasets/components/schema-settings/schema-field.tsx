@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Switch } from '@/ds/components/Switch';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { WorkflowSchemaImport } from './workflow-schema-import';
+import { SchemaImport } from './schema-import';
 import { cn } from '@/lib/utils';
 
 interface SchemaFieldProps {
@@ -73,7 +73,7 @@ export function SchemaField({ label, schemaType, value, onChange, error }: Schem
           </label>
         </div>
 
-        {isEnabled && <WorkflowSchemaImport schemaType={schemaType} onImport={handleImport} />}
+        {isEnabled && <SchemaImport schemaType={schemaType} onImport={handleImport} />}
       </div>
 
       {isEnabled && (
