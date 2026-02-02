@@ -54,6 +54,19 @@ Logs capture specific events and context from user code. Each log auto-correlate
 
 ---
 
+## Scores & Feedback
+
+In addition to the three signals, Mastra supports attaching quality scores and user feedback to traces:
+
+- **Evaluation Scores** — Automated scores from running evals (relevance, hallucination, factuality)
+- **User Feedback** — Human signals (thumbs up/down, star ratings, comments) from end-users or reviewers
+
+Scores and feedback flow through the observability pipeline and are distributed to exporters that support them (Langfuse, Braintrust, LangSmith, storage).
+
+→ See [Tracing - Scores](./tracing.md#scores) for details
+
+---
+
 ## Datasets & Experiments
 
 While the three signals answer *"what happened"*, datasets and experiments answer *"is it working correctly?"*

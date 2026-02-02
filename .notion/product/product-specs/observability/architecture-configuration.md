@@ -229,19 +229,9 @@ To get debug logs to a specific exporter, set root to 'debug' and let other expo
 
 ### Exporter Signal Support
 
-Each exporter declares which signals it handles:
+Each exporter declares which signals it handles. Some exporters also support scores and user feedback.
 
-| Exporter | Traces | Metrics | Logs | Destination |
-|----------|--------|---------|------|-------------|
-| **DefaultExporter** | ✓ | ✓ | ✓ | Storage (LibSQL/PG/ClickHouse) |
-| **CloudExporter** | ✓ | ✓ | ✓ | Mastra Cloud |
-| **PinoExporter** | ✗ | ✗ | ✓ | Console (pretty) / File |
-| **ConsoleExporter** | ✓ | ✗ | ✓ | Console (debug) |
-| **OtelExporter** | ✓ | ✓ | ✓ | Any OTLP endpoint |
-| **DatadogExporter** | ✓ | ✓ | ✓ | Datadog |
-| **LangfuseExporter** | ✓ | ✗ | ✗ | Langfuse |
-| **BraintrustExporter** | ✓ | ✗ | ✓ | Braintrust |
-| **SentryExporter** | ✓ | ✗ | ✓ | Sentry |
+→ See [Exporters - Signal Support Matrix](./exporters.md#signal-support-matrix) for the full list
 
 ### Multiple Exporters
 
@@ -253,50 +243,13 @@ You can use multiple exporters simultaneously. Each signal is sent to all export
 
 ### Exporter Interface
 
-```typescript
-interface ObservabilityExporter {
-  readonly name: string;
-
-  // Declare supported signals
-  readonly supportsTraces: boolean;
-  readonly supportsMetrics: boolean;
-  readonly supportsLogs: boolean;
-
-  // Signal-specific export methods (implement those you support)
-  exportSpans?(spans: Span[]): Promise<void>;
-  exportMetrics?(metrics: MetricEvent[]): Promise<void>;
-  exportLogs?(logs: LogRecord[]): Promise<void>;
-
-  flush?(): Promise<void>;
-  shutdown?(): Promise<void>;
-}
-```
+→ See [Exporters - Exporter Interface](./exporters.md#exporter-interface) for the interface definition
 
 ### Migration from Top-Level Logger
 
-The `logger` property at the Mastra config level is deprecated. Users should migrate to using a log exporter.
+The `logger` property at the Mastra config level is deprecated.
 
-```typescript
-// BEFORE (deprecated)
-const mastra = new Mastra({
-  logger: new PinoLogger({ level: 'info' }),
-  observability: new Observability({ ... }),
-});
-
-// AFTER
-const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        exporters: [
-          new DefaultExporter(),
-          new PinoExporter({ level: 'info' }),  // Replaces top-level logger
-        ],
-      },
-    },
-  }),
-});
-```
+→ See [Exporters - Migration from Top-Level Logger](./exporters.md#migration-from-top-level-logger) for migration guide
 
 ---
 

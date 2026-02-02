@@ -60,6 +60,22 @@ Each exporter declares which signals it handles:
 
 **Note:** LLM observability platforms (Langfuse, Braintrust, etc.) compute their own metrics from trace data—they don't accept metrics directly.
 
+### Score & Feedback Support
+
+Some exporters also support evaluation scores and user feedback events:
+
+| Exporter | Scores | Feedback | Notes |
+|----------|:------:|:--------:|-------|
+| **DefaultExporter** | ✓ | ✓ | Persists to storage for Studio |
+| **CloudExporter** | ✓ | ✓ | Sends to Mastra Cloud |
+| **LangfuseExporter** | ✓ | ✓ | Maps to Langfuse scores |
+| **BraintrustExporter** | ✓ | ✓ | Maps to Braintrust scores |
+| **LangSmithExporter** | ✓ | ✓ | Maps to LangSmith feedback |
+| **OtelExporter** | ✗ | ✗ | OTLP has no score concept |
+| **PinoExporter** | ✗ | ✗ | Log-only exporter |
+
+→ See [Tracing - Scores](./tracing.md#scores) for score/feedback event details
+
 ---
 
 ## Exporter Categories

@@ -296,7 +296,7 @@ Instead of converting completed spans after the fact, the MomentExporter subscri
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    Observability Event Buses                         │
+│                    Observability Event Buses                        │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  TracingBus              MetricsBus              LogsBus            │

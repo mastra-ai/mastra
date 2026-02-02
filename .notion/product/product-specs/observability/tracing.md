@@ -149,7 +149,7 @@ Tracing is built on OpenTelemetry concepts but provides a Mastra-specific abstra
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         TRACE SOURCES                                │
+│                         TRACE SOURCES                               │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  ┌──────────────────────────┐     ┌──────────────────────────────┐  │
@@ -373,7 +373,109 @@ console.log(result.traceId);
 
 Scores attach quality signals to traces or individual spans. They flow through the observability pipeline alongside other tracing events, enabling exporters to handle them appropriately.
 
-### Event Types
+### Adding Scores
+
+Scores are added directly on trace or span objects via `.addScore()`:
+
+```typescript
+interface ScoreInput {
+  scorerName: string;        // e.g., 'relevance', 'hallucination', 'factuality'
+  score: number;             // Numeric value within defined range
+  range: { min: number; max: number };  // Score range for this scorer
+  reason?: string;           // Explanation from scorer
+  metadata?: Record<string, unknown>;
+}
+```
+
+**Usage:**
+
+```typescript
+// After agent execution - add score to trace
+const result = await agent.generate("What's our refund policy?");
+
+result.trace.addScore({
+  scorerName: "relevance",
+  score: 0.85,
+  range: { min: 0, max: 1 },
+  reason: "Response was relevant and well-structured",
+});
+
+// Add score to a specific span (e.g., from automated eval)
+const modelSpan = result.trace.getSpan(modelSpanId);
+modelSpan.addScore({
+  scorerName: "factuality",
+  score: 92,
+  range: { min: 0, max: 100 },
+  reason: "92% of claims verified against sources",
+});
+
+// Retrieve trace by ID and add score (e.g., from eval pipeline)
+const trace = await mastra.getTrace(traceId);
+trace.addScore({
+  scorerName: "hallucination",
+  score: 0.12,
+  range: { min: 0, max: 1 },
+});
+```
+
+### Adding Feedback
+
+Feedback from end users or reviewers is added via `.addFeedback()`:
+
+```typescript
+interface FeedbackInput {
+  source: 'USER' | 'REVIEWER';
+  feedbackType: 'thumbs' | 'rating' | 'comment';
+  value: number | string;    // Numeric for thumbs/rating, text for comment
+  range?: { min: number; max: number };  // Required for numeric feedback
+  comment?: string;          // Optional additional context
+  userId?: string;           // Who submitted the feedback
+  metadata?: Record<string, unknown>;
+}
+```
+
+**Usage:**
+
+```typescript
+// User thumbs up/down (from client app)
+const trace = await mastra.getTrace(traceId);
+trace.addFeedback({
+  source: 'USER',
+  feedbackType: "thumbs",
+  value: 1,
+  range: { min: -1, max: 1 },
+  userId: "user_456",
+});
+
+// User star rating (1-5)
+trace.addFeedback({
+  source: 'USER',
+  feedbackType: "rating",
+  value: 4,
+  range: { min: 1, max: 5 },
+  comment: "Good but could be more concise",
+  userId: "user_456",
+});
+
+// Reviewer feedback on a specific span (from review UI)
+const span = trace.getSpan(toolSpanId);
+span.addFeedback({
+  source: 'REVIEWER',
+  feedbackType: "comment",
+  value: "This tool call was unnecessary",
+  userId: "reviewer_789",
+});
+```
+
+**Feedback types:**
+- **Thumbs up/down** — Binary quality signal (range: -1 to 1)
+- **Star ratings** — Granular quality (range: 1-5, 1-10, etc.)
+- **Comments** — Qualitative feedback (text, no range)
+- **Implicit signals** — Copy action, retry, time on page (future)
+
+### Internal Event Types
+
+When scores or feedback are added, they emit events through the tracing pipeline:
 
 ```typescript
 export enum TracingEventType {
@@ -385,115 +487,23 @@ export enum TracingEventType {
 }
 ```
 
-### SCORE_ADDED — Evaluation Scores
-
-Automated scores from running evaluations on traces or spans.
+The internal event payloads include `traceId` and `spanId` (derived from the object):
 
 ```typescript
-interface ScoreEventPayload {
+// Internal payload for SCORE_ADDED event
+interface ScoreEventPayload extends ScoreInput {
   traceId: string;
-  spanId?: string;           // Optional - trace-level OR span-level
-  scorerName: string;        // e.g., 'relevance', 'hallucination', 'factuality'
-  score: number;             // Numeric value within defined range
-  range: { min: number; max: number };  // Score range for this scorer
-  reason?: string;           // Explanation from scorer
-  metadata?: Record<string, unknown>;
+  spanId?: string;
+  timestamp: Date;
+}
+
+// Internal payload for FEEDBACK_ADDED event
+interface FeedbackEventPayload extends FeedbackInput {
+  traceId: string;
+  spanId?: string;
   timestamp: Date;
 }
 ```
-
-**Usage:**
-
-```typescript
-// Trace-level score (0-1 normalized)
-observability.emitScore({
-  traceId: "abc123",
-  scorerName: "overall_quality",
-  score: 0.85,
-  range: { min: 0, max: 1 },
-  reason: "Response was relevant and well-structured",
-});
-
-// Span-level score (percentage scale)
-observability.emitScore({
-  traceId: "abc123",
-  spanId: "def456",
-  scorerName: "factuality",
-  score: 92,
-  range: { min: 0, max: 100 },
-  reason: "92% of claims verified against sources",
-});
-```
-
-### FEEDBACK_ADDED — User Feedback
-
-Feedback from end users or human annotators.
-
-```typescript
-interface FeedbackEventPayload {
-  traceId: string;
-  spanId?: string;           // Optional - trace-level OR span-level
-  source: 'USER' | 'ANNOTATION';
-  feedbackType: 'thumbs' | 'rating' | 'comment';
-  value: number | string;    // Numeric for thumbs/rating, text for comment
-  range?: { min: number; max: number };  // Required for numeric feedback
-  comment?: string;          // Optional additional context
-  userId?: string;           // Who submitted the feedback
-  metadata?: Record<string, unknown>;
-  timestamp: Date;
-}
-```
-
-**Usage:**
-
-```typescript
-// Thumbs up/down
-mastra.submitFeedback({
-  traceId: "abc123",
-  source: 'USER',
-  feedbackType: "thumbs",
-  value: 1,
-  range: { min: -1, max: 1 },
-  userId: "user_456",
-});
-
-// Star rating (1-5)
-mastra.submitFeedback({
-  traceId: "abc123",
-  source: 'USER',
-  feedbackType: "rating",
-  value: 4,
-  range: { min: 1, max: 5 },
-  comment: "Good but could be more concise",
-  userId: "user_456",
-});
-
-// 10-point rating
-mastra.submitFeedback({
-  traceId: "abc123",
-  source: 'USER',
-  feedbackType: "rating",
-  value: 8,
-  range: { min: 1, max: 10 },
-  userId: "user_456",
-});
-
-// Annotation (text comment - no range needed)
-mastra.submitFeedback({
-  traceId: "abc123",
-  spanId: "def456",
-  source: 'ANNOTATION',
-  feedbackType: "comment",
-  value: "This response contains outdated pricing information",
-  userId: "reviewer_789",
-});
-```
-
-**Feedback types:**
-- **Thumbs up/down** — Binary quality signal (range: -1 to 1)
-- **Star ratings** — Granular quality (range: 1-5, 1-10, etc.)
-- **Comments** — Qualitative feedback (text, no range)
-- **Implicit signals** — Copy action, retry, time on page (future)
 
 ### Pipeline Flow
 
@@ -501,20 +511,18 @@ mastra.submitFeedback({
 ┌─────────────────────────────────────────────────────────────────────┐
 │                                                                     │
 │  ┌──────────────────────────┐     ┌──────────────────────────────┐  │
-│  │     Eval Scorers         │     │   User / Annotator Feedback  │  │
-│  │     (automated)          │     │   (client SDK, review UI)    │  │
+│  │     Eval Scorers         │     │   User / Reviewer Feedback   │  │
+│  │     trace.addScore()     │     │   trace.addFeedback()        │  │
+│  │     span.addScore()      │     │   span.addFeedback()         │  │
 │  └──────────┬───────────────┘     └──────────────┬───────────────┘  │
 │             │                                    │                  │
 │             ▼                                    ▼                  │
-│  ┌──────────────────────┐          ┌──────────────────────────┐    │
-│  │  ScoreEventPayload   │          │  FeedbackEventPayload    │    │
-│  │  { traceId, spanId?, │          │  { traceId, spanId?,     │    │
-│  │    scorerName, score,│          │    source, feedbackType, │    │
-│  │    reason }          │          │    value, comment }      │    │
-│  └──────────┬───────────┘          └──────────────┬───────────┘    │
+│  ┌──────────────────────┐          ┌──────────────────────────┐     │
+│  │  ScoreEventPayload   │          │  FeedbackEventPayload    │     │
+│  └──────────┬───────────┘          └──────────────┬───────────┘     │
 │             │                                     │                 │
 │             ▼                                     ▼                 │
-│        SCORE_ADDED                         FEEDBACK_ADDED          │
+│        SCORE_ADDED                         FEEDBACK_ADDED           │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
                                │
