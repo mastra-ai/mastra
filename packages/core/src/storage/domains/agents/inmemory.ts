@@ -399,10 +399,8 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       workflows: version.workflows ? [...version.workflows] : version.workflows,
       agents: version.agents ? [...version.agents] : version.agents,
       integrationTools: version.integrationTools ? [...version.integrationTools] : version.integrationTools,
-      inputProcessors: version.inputProcessors ? version.inputProcessors.map(p => ({ ...p })) : version.inputProcessors,
-      outputProcessors: version.outputProcessors
-        ? version.outputProcessors.map(p => ({ ...p }))
-        : version.outputProcessors,
+      inputProcessors: version.inputProcessors ? [...version.inputProcessors] : version.inputProcessors,
+      outputProcessors: version.outputProcessors ? [...version.outputProcessors] : version.outputProcessors,
       memory: version.memory ? { ...version.memory } : version.memory,
       scorers: version.scorers ? { ...version.scorers } : version.scorers,
       changedFields: version.changedFields ? [...version.changedFields] : version.changedFields,

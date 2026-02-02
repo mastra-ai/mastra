@@ -55,7 +55,7 @@ export const createFullSampleAgent = ({
     provider: 'openai',
     name: 'gpt-4',
     temperature: 0.7,
-    maxTokens: 2000,
+    maxCompletionTokens: 2000,
   },
   tools: ['calculator', 'webSearch'],
   defaultOptions: {
@@ -64,9 +64,9 @@ export const createFullSampleAgent = ({
   },
   workflows: ['order-workflow', 'support-workflow'],
   agents: ['helper-agent'],
-  inputProcessors: [{ type: 'sanitize', config: { stripHtml: true } }],
-  outputProcessors: [{ type: 'format', config: { style: 'markdown' } }],
-  memory: { key: 'thread-memory' },
+  inputProcessors: ['sanitize-processor'],
+  outputProcessors: ['format-processor'],
+  memory: { vector: 'default-vector' },
   scorers: {
     relevance: { sampling: { type: 'ratio', rate: 0.8 } },
   },

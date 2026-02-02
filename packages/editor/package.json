@@ -1,0 +1,26 @@
+{
+  "name": "@mastra/editor",
+  "version": "0.1.0",
+  "description": "Mastra Editor for agent management and instantiation",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.2",
+    "typescript": "^5.3.3",
+    "vitest": "catalog:",
+    "zod": "^3.25.76"
+  }
+}

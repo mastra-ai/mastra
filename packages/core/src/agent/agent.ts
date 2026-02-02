@@ -128,6 +128,7 @@ export class Agent<
 > extends MastraBase {
   public id: TAgentId;
   public name: string;
+  public source?: 'code' | 'stored';
   #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;

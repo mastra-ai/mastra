@@ -611,6 +611,7 @@ export interface StoredAgentScorerConfig {
 export interface StoredAgentResponse {
   id: string;
   status: string;
+  activeVersionId?: string;
   authorId?: string;
   name: string;
   description?: string;

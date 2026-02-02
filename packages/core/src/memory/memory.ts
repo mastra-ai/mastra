@@ -36,6 +36,7 @@ import type {
   WorkingMemoryTemplate,
   MessageDeleteInput,
   MemoryRequestContext,
+  SerializedMemoryConfig,
 } from './types';
 
 export type MemoryProcessorOpts = {
@@ -779,4 +780,31 @@ https://mastra.ai/en/docs/memory/overview`,
    * @returns Promise resolving to the cloned thread and copied messages
    */
   abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
+
+  /**
+   * Get serializable configuration for this memory instance
+   * @returns Serializable memory configuration
+   */
+  getConfig(): SerializedMemoryConfig {
+    const config: SerializedMemoryConfig = {
+      vector: this.vector?.id,
+      options: {
+        ...this.threadConfig,
+        // Omit WorkingMemory and threads
+        workingMemory: undefined,
+        threads: undefined,
+      } as Omit<MemoryConfig, 'workingMemory' | 'threads'>,
+    };
+
+    if (this.embedder && 'id' in this.embedder) {
+      config.embedder = this.embedder.id as EmbeddingModelId;
+    }
+
+    if (this.embedderOptions) {
+      const { telemetry, ...rest } = this.embedderOptions;
+      config.embedderOptions = rest;
+    }
+
+    return config;
+  }
 }

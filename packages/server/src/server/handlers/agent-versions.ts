@@ -1,4 +1,4 @@
-import type { StorageScorerConfig } from '@mastra/core/storage';
+import type { StorageAgentSnapshotType } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,
@@ -259,45 +259,23 @@ function isVersionNumberConflictError(error: unknown): boolean {
  * getLatestVersion returns the version with config fields top-level.
  */
 export interface AgentsStoreWithVersions<TAgent = any> {
-  getLatestVersion: (agentId: string) => Promise<{
-    id: string;
-    versionNumber: number;
-    name: string;
-    description?: string;
-    instructions: string;
-    model: Record<string, unknown>;
-    tools?: string[];
-    defaultOptions?: Record<string, unknown>;
-    workflows?: string[];
-    agents?: string[];
-    integrationTools?: string[];
-    inputProcessors?: Record<string, unknown>[];
-    outputProcessors?: Record<string, unknown>[];
-    memory?: Record<string, unknown>;
-    scorers?: Record<string, StorageScorerConfig>;
-    [key: string]: any;
-  } | null>;
-  createVersion: (params: {
-    id: string;
-    agentId: string;
-    versionNumber: number;
-    // Config fields are top-level (StorageAgentSnapshotType)
-    name: string;
-    description?: string;
-    instructions: string;
-    model: Record<string, unknown>;
-    tools?: string[];
-    defaultOptions?: Record<string, unknown>;
-    workflows?: string[];
-    agents?: string[];
-    integrationTools?: string[];
-    inputProcessors?: Record<string, unknown>[];
-    outputProcessors?: Record<string, unknown>[];
-    memory?: Record<string, unknown>;
-    scorers?: Record<string, StorageScorerConfig>;
-    changedFields?: string[];
-    changeMessage?: string;
-  }) => Promise<{ id: string; versionNumber: number }>;
+  getLatestVersion: (agentId: string) => Promise<
+    | (StorageAgentSnapshotType & {
+        id: string;
+        versionNumber: number;
+        [key: string]: any;
+      })
+    | null
+  >;
+  createVersion: (
+    params: StorageAgentSnapshotType & {
+      id: string;
+      agentId: string;
+      versionNumber: number;
+      changedFields?: string[];
+      changeMessage?: string;
+    },
+  ) => Promise<{ id: string; versionNumber: number }>;
   updateAgent: (params: { id: string; activeVersionId?: string; [key: string]: any }) => Promise<TAgent>;
   listVersions: (params: {
     agentId: string;

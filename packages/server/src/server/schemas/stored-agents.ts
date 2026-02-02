@@ -42,11 +42,7 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
  */
 const scorerConfigSchema = z.object({
   sampling: z
-    .object({
-      type: z.enum(['ratio', 'count']),
-      rate: z.number().optional(),
-      count: z.number().optional(),
-    })
+    .union([z.object({ type: z.literal('none') }), z.object({ type: z.literal('ratio'), rate: z.number() })])
     .optional(),
 });
 
@@ -58,7 +54,13 @@ const snapshotConfigSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
   instructions: z.string().describe('System instructions for the agent'),
-  model: z.record(z.string(), z.unknown()).describe('Model configuration (provider, name, etc.)'),
+  model: z
+    .object({
+      provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
+      name: z.string().describe('Model name (e.g., gpt-4o, claude-3-opus)'),
+    })
+    .passthrough()
+    .describe('Model configuration (provider, name, and optional params)'),
   tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
   defaultOptions: z.record(z.string(), z.unknown()).optional().describe('Default options for generate/stream calls'),
   workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
@@ -67,8 +69,8 @@ const snapshotConfigSchema = z.object({
     .array(z.string())
     .optional()
     .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
-  inputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Input processor configurations'),
-  outputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Output processor configurations'),
+  inputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
+  outputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
   memory: z.record(z.string(), z.unknown()).optional().describe('Memory configuration object'),
   scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
 });
@@ -120,7 +122,13 @@ export const storedAgentSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
   instructions: z.string().describe('System instructions for the agent'),
-  model: z.record(z.string(), z.unknown()).describe('Model configuration (provider, name, etc.)'),
+  model: z
+    .object({
+      provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
+      name: z.string().describe('Model name (e.g., gpt-4o, claude-3-opus)'),
+    })
+    .passthrough()
+    .describe('Model configuration (provider, name, and optional params)'),
   tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
   defaultOptions: z.record(z.string(), z.unknown()).optional().describe('Default options for generate/stream calls'),
   workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
@@ -129,8 +137,8 @@ export const storedAgentSchema = z.object({
     .array(z.string())
     .optional()
     .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
-  inputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Input processor configurations'),
-  outputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Output processor configurations'),
+  inputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
+  outputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
   memory: z.record(z.string(), z.unknown()).optional().describe('Memory configuration object'),
   scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
 });

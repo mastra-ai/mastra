@@ -79,7 +79,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         const minimalAgent = createSampleAgent({
           name: 'Minimal Agent',
           instructions: 'Minimal instructions',
-          model: { provider: 'openai' },
+          model: { provider: 'openai', name: 'gpt-4' },
         });
 
         const savedAgent = await agentsStorage.createAgent({ agent: minimalAgent });

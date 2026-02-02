@@ -539,3 +539,32 @@ export type WorkingMemoryTemplate = {
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];
+
+/**
+ * Serialized memory configuration that can be stored in the database
+ * This is a subset of SharedMemoryConfig with serializable types only
+ */
+export type SerializedMemoryConfig = {
+  /**
+   * Vector database identifier. The vector instance should be registered
+   * with the Mastra instance to resolve from this ID.
+   * Set to false to disable vector search entirely.
+   */
+  vector?: string | false;
+
+  /**
+   * Configuration for memory behaviors, omitting WorkingMemory and threads
+   */
+  options?: Omit<MemoryConfig, 'workingMemory' | 'threads'>;
+
+  /**
+   * Embedding model ID in the format "provider/model"
+   * (e.g., "openai/text-embedding-3-small")
+   */
+  embedder?: EmbeddingModelId;
+
+  /**
+   * Options to pass to the embedder, omitting telemetry
+   */
+  embedderOptions?: Omit<MastraEmbeddingOptions, 'telemetry'>;
+};
