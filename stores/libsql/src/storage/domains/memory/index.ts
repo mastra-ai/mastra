@@ -34,7 +34,7 @@ import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
 
 export class MemoryLibSQL extends MemoryStorage {
-  readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemory = !!TABLE_OBSERVATIONAL_MEMORY;
 
   #client: Client;
   #db: LibSQLDB;
@@ -50,28 +50,34 @@ export class MemoryLibSQL extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
-    await this.#db.createTable({
-      tableName: TABLE_OBSERVATIONAL_MEMORY,
-      schema: TABLE_SCHEMAS[TABLE_OBSERVATIONAL_MEMORY],
-    });
+    if (TABLE_OBSERVATIONAL_MEMORY) {
+      await this.#db.createTable({
+        tableName: TABLE_OBSERVATIONAL_MEMORY,
+        schema: TABLE_SCHEMAS[TABLE_OBSERVATIONAL_MEMORY],
+      });
+    }
     // Add resourceId column for backwards compatibility
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
-    // Create index on lookupKey for efficient OM queries
-    await this.#client.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON "${TABLE_OBSERVATIONAL_MEMORY}" ("lookupKey")`,
-      args: [],
-    });
+    if (TABLE_OBSERVATIONAL_MEMORY) {
+      // Create index on lookupKey for efficient OM queries
+      await this.#client.execute({
+        sql: `CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON "${TABLE_OBSERVATIONAL_MEMORY}" ("lookupKey")`,
+        args: [],
+      });
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_MESSAGES });
     await this.#db.deleteData({ tableName: TABLE_THREADS });
     await this.#db.deleteData({ tableName: TABLE_RESOURCES });
-    await this.#db.deleteData({ tableName: TABLE_OBSERVATIONAL_MEMORY });
+    if (TABLE_OBSERVATIONAL_MEMORY) {
+      await this.#db.deleteData({ tableName: TABLE_OBSERVATIONAL_MEMORY });
+    }
   }
 
   private parseRow(row: any): MastraDBMessage {

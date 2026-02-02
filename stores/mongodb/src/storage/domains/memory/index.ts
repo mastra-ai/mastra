@@ -30,7 +30,7 @@ import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { formatDateForMongoDB } from '../utils';
 
 export class MemoryStorageMongoDB extends MemoryStorage {
-  readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemory = !!TABLE_OBSERVATIONAL_MEMORY;
 
   #connector: MongoDBConnector;
   #skipDefaultIndexes?: boolean;
@@ -41,7 +41,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     TABLE_THREADS,
     TABLE_MESSAGES,
     TABLE_RESOURCES,
-    TABLE_OBSERVATIONAL_MEMORY,
+    ...(TABLE_OBSERVATIONAL_MEMORY ? [TABLE_OBSERVATIONAL_MEMORY] : []),
   ] as const;
 
   constructor(config: MongoDBDomainConfig) {
@@ -84,9 +84,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       { collection: TABLE_RESOURCES, keys: { createdAt: -1 } },
       { collection: TABLE_RESOURCES, keys: { updatedAt: -1 } },
       // Observational Memory collection indexes
-      { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { lookupKey: 1 } },
-      { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { lookupKey: 1, generationCount: -1 } },
+      ...(TABLE_OBSERVATIONAL_MEMORY
+        ? [
+            { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { id: 1 }, options: { unique: true } },
+            { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { lookupKey: 1 } },
+            { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { lookupKey: 1, generationCount: -1 } },
+          ]
+        : []),
     ];
   }
 

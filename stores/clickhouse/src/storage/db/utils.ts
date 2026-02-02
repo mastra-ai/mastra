@@ -1,4 +1,4 @@
-import type { TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
+import type { CORE_TABLE_NAMES, TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -6,13 +6,12 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_OBSERVATIONAL_MEMORY,
   safelyParseJSON,
   TABLE_SPANS,
   TABLE_AGENT_VERSIONS,
 } from '@mastra/core/storage';
 
-export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
+export const TABLE_ENGINES: Partial<Record<TABLE_NAMES, string>> & Record<CORE_TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
   [TABLE_WORKFLOW_SNAPSHOT]: `ReplacingMergeTree()`,
   [TABLE_TRACES]: `MergeTree()`,
@@ -25,7 +24,6 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_SPANS]: `ReplacingMergeTree(updatedAt)`,
   mastra_agents: `ReplacingMergeTree()`,
   [TABLE_AGENT_VERSIONS]: `MergeTree()`,
-  [TABLE_OBSERVATIONAL_MEMORY]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

@@ -63,7 +63,7 @@ function inPlaceholders(count: number, startIndex = 1): string {
 }
 
 export class MemoryPG extends MemoryStorage {
-  readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemory = !!TABLE_OBSERVATIONAL_MEMORY;
 
   #db: PgDB;
   #schema: string;
@@ -75,7 +75,7 @@ export class MemoryPG extends MemoryStorage {
     TABLE_THREADS,
     TABLE_MESSAGES,
     TABLE_RESOURCES,
-    TABLE_OBSERVATIONAL_MEMORY,
+    ...(TABLE_OBSERVATIONAL_MEMORY ? [TABLE_OBSERVATIONAL_MEMORY] : []),
   ] as const;
 
   constructor(config: PgDomainConfig) {
@@ -92,21 +92,25 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
-    await this.#db.createTable({
-      tableName: TABLE_OBSERVATIONAL_MEMORY,
-      schema: TABLE_SCHEMAS[TABLE_OBSERVATIONAL_MEMORY],
-    });
+    if (TABLE_OBSERVATIONAL_MEMORY) {
+      await this.#db.createTable({
+        tableName: TABLE_OBSERVATIONAL_MEMORY,
+        schema: TABLE_SCHEMAS[TABLE_OBSERVATIONAL_MEMORY],
+      });
+    }
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
-    // Create index on lookupKey for efficient OM queries
-    const omTableName = getTableName({
-      indexName: TABLE_OBSERVATIONAL_MEMORY,
-      schemaName: getSchemaName(this.#schema),
-    });
-    await this.#db.client.none(`CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`);
+    if (TABLE_OBSERVATIONAL_MEMORY) {
+      // Create index on lookupKey for efficient OM queries
+      const omTableName = getTableName({
+        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        schemaName: getSchemaName(this.#schema),
+      });
+      await this.#db.client.none(`CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`);
+    }
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }

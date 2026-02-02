@@ -246,19 +246,17 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryStatus(
     agentId: string,
+    requestContext?: RequestContext | Record<string, any>,
     opts?: {
       resourceId?: string;
       threadId?: string;
-      requestContext?: RequestContext | Record<string, any>;
     },
   ): Promise<GetMemoryStatusResponse> {
     const queryParams = new URLSearchParams({ agentId });
     if (opts?.resourceId) queryParams.set('resourceId', opts.resourceId);
     if (opts?.threadId) queryParams.set('threadId', opts.threadId);
     const queryString = queryParams.toString();
-    return this.request(
-      `/memory/status?${queryString}${requestContextQueryString(opts?.requestContext, '&')}`,
-    );
+    return this.request(`/memory/status?${queryString}${requestContextQueryString(requestContext, '&')}`);
   }
 
   /**

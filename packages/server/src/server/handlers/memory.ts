@@ -203,6 +203,10 @@ async function getOMConfigFromAgent(
   reflectionModel?: string;
 } | null> {
   try {
+    // Guard against older @mastra/core versions that don't have findProcessor
+    if (typeof agent.findProcessor !== 'function') {
+      return null;
+    }
     const omProcessor = await agent.findProcessor('observational-memory', requestContext);
     if (!omProcessor) {
       return null;
@@ -234,7 +238,7 @@ async function getOMConfigFromAgent(
       observationModel: undefined,
       reflectionModel: undefined,
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -270,7 +274,7 @@ async function getOMStatus(
       isObserving: record.isObserving,
       isReflecting: record.isReflecting,
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -437,7 +441,7 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       let memoryStore: MemoryStorage | undefined;
       try {
         memoryStore = await memory.storage.getStore('memory');
-      } catch (error) {
+      } catch {
         throw new HTTPException(400, { message: 'Memory storage is not initialized' });
       }
       if (!memoryStore) {

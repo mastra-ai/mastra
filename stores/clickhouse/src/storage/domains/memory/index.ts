@@ -185,38 +185,12 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Check if threadId is a valid non-empty string or array of non-empty strings
-    const hasThreadId =
-      threadId !== undefined &&
-      (typeof threadId === 'string'
-        ? threadId.trim().length > 0
-        : Array.isArray(threadId) &&
-          threadId.length > 0 &&
-          threadId.every(id => typeof id === 'string' && id.trim().length > 0));
-
-    // Validate that we have at least threadId or resourceId
-    if (!hasThreadId && !resourceId) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('CLICKHOUSE', 'LIST_MESSAGES', 'INVALID_PARAMS'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
-            resourceId: resourceId ?? '',
-          },
-        },
-        new Error('Either threadId or resourceId must be provided'),
-      );
-    }
-
-    // Normalize threadId to array only if present
-    const threadIds = hasThreadId
-      ? (Array.isArray(threadId) ? threadId : [threadId!])
-          .filter(id => id !== undefined && id !== null)
-          .map(id => (typeof id === 'string' ? id : String(id)).trim())
-          .filter(id => id.length > 0)
-      : [];
+    // Normalize threadId to array, coerce to strings, trim, and filter out empty/non-string values
+    const rawThreadIds = Array.isArray(threadId) ? threadId : [threadId];
+    const threadIds = rawThreadIds
+      .filter(id => id !== undefined && id !== null)
+      .map(id => (typeof id === 'string' ? id : String(id)).trim())
+      .filter(id => id.length > 0);
 
     if (page < 0) {
       throw new MastraError(
@@ -230,30 +204,29 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       );
     }
 
+    // Validate that we have at least one valid threadId
+    if (threadIds.length === 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: Array.isArray(threadId) ? JSON.stringify(threadId) : String(threadId) },
+        },
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
+      );
+    }
+
     const perPageForQuery = normalizePerPage(perPageInput, 40);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPageForQuery);
 
     try {
       // Step 1: Get paginated messages from the thread(s) first (without excluding included ones)
-      // Build WHERE conditions - threadId is optional if resourceId is provided
-      const conditions: string[] = [];
-      const dataParams: any = {};
-
-      if (threadIds.length > 0) {
-        if (threadIds.length === 1) {
-          conditions.push(`thread_id = {threadId0:String}`);
-        } else {
-          conditions.push(`thread_id IN (${threadIds.map((_, i) => `{threadId${i}:String}`).join(', ')})`);
-        }
-        threadIds.forEach((tid, i) => {
-          dataParams[`threadId${i}`] = tid;
-        });
-      }
-
-      if (resourceId) {
-        conditions.push(`resourceId = {resourceId:String}`);
-        dataParams.resourceId = resourceId;
-      }
+      // Build thread condition for single or multiple threads
+      const threadCondition =
+        threadIds.length === 1
+          ? `thread_id = {threadId0:String}`
+          : `thread_id IN (${threadIds.map((_, i) => `{threadId${i}:String}`).join(', ')})`;
 
       let dataQuery = `
         SELECT 
@@ -265,8 +238,17 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           thread_id AS "threadId",
           resourceId
         FROM ${TABLE_MESSAGES}
-        WHERE ${conditions.length > 0 ? conditions.join(' AND ') : '1=1'}
+        WHERE ${threadCondition}
       `;
+      const dataParams: any = {};
+      threadIds.forEach((tid, i) => {
+        dataParams[`threadId${i}`] = tid;
+      });
+
+      if (resourceId) {
+        dataQuery += ` AND resourceId = {resourceId:String}`;
+        dataParams.resourceId = resourceId;
+      }
 
       if (filter?.dateRange?.start) {
         const startDate =
@@ -316,23 +298,15 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const paginatedMessages = transformRows<MastraDBMessage>(rows.data);
       const paginatedCount = paginatedMessages.length;
 
-      // Get total count - reuse the same conditions and params from data query
-      const countConditions: string[] = [];
+      // Get total count
+      let countQuery = `SELECT count() as total FROM ${TABLE_MESSAGES} WHERE ${threadCondition}`;
       const countParams: any = {};
-
-      if (threadIds.length > 0) {
-        if (threadIds.length === 1) {
-          countConditions.push(`thread_id = {threadId0:String}`);
-        } else {
-          countConditions.push(`thread_id IN (${threadIds.map((_, i) => `{threadId${i}:String}`).join(', ')})`);
-        }
-        threadIds.forEach((tid, i) => {
-          countParams[`threadId${i}`] = tid;
-        });
-      }
+      threadIds.forEach((tid, i) => {
+        countParams[`threadId${i}`] = tid;
+      });
 
       if (resourceId) {
-        countConditions.push(`resourceId = {resourceId:String}`);
+        countQuery += ` AND resourceId = {resourceId:String}`;
         countParams.resourceId = resourceId;
       }
 
@@ -342,7 +316,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             ? filter.dateRange.start.toISOString()
             : new Date(filter.dateRange.start).toISOString();
         const startOp = filter.dateRange.startExclusive ? '>' : '>=';
-        countConditions.push(`createdAt ${startOp} parseDateTime64BestEffort({fromDate:String}, 3)`);
+        countQuery += ` AND createdAt ${startOp} parseDateTime64BestEffort({fromDate:String}, 3)`;
         countParams.fromDate = startDate;
       }
 
@@ -352,11 +326,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             ? filter.dateRange.end.toISOString()
             : new Date(filter.dateRange.end).toISOString();
         const endOp = filter.dateRange.endExclusive ? '<' : '<=';
-        countConditions.push(`createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`);
+        countQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         countParams.toDate = endDate;
       }
-
-      const countQuery = `SELECT count() as total FROM ${TABLE_MESSAGES} WHERE ${countConditions.length > 0 ? countConditions.join(' AND ') : '1=1'}`;
 
       const countResult = await this.client.query({
         query: countQuery,
