@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-01-23)
 
 **Core value:** Catch quality regressions before they reach users — when you modify a prompt or model, know immediately if scores dropped.
-**Current focus:** Phase 10 - Dataset Layout Update (COMPLETE)
+**Current focus:** Phase 11 - Dataset Schema Validation (IN PROGRESS)
 
 ## Current Position
 
-Phase: 10 of 10 (Dataset Layout Update)
-Plan: 5 of 5 in phase 10 (all complete)
-Status: Phase complete
-Last activity: 2026-01-30 — Completed 10-05-PLAN.md
+Phase: 11 of 11 (Dataset Schema Validation)
+Plan: 1 of 7 in phase 11
+Status: In progress
+Last activity: 2026-02-02 — Completed 11-01-PLAN.md
 
-Progress: [██████████] 100%
+Progress: [██████████░] ~98% (43/44 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 42
+- Total plans completed: 43
 - Average duration: 4 min
-- Total execution time: 2.33 hours
+- Total execution time: 2.45 hours
 
 **By Phase:**
 
@@ -38,10 +38,11 @@ Progress: [██████████] 100%
 | 08-item-selection-actions    | 4     | 13 min | 3.25 min |
 | 09-dataset-items-detail-view | 5     | 16 min | 3.2 min  |
 | 10-dataset-layout-update     | 5     | 24 min | 4.8 min  |
+| 11-dataset-schema-validation | 1     | 7 min  | 7 min    |
 
 **Recent Trend:**
 
-- Last 5 plans: 10-01 (5 min), 10-03 (2 min), 10-02 (9 min), 10-04 (3 min), 10-05 (5 min)
+- Last 5 plans: 10-02 (9 min), 10-04 (3 min), 10-05 (5 min), 11-01 (7 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -124,6 +125,10 @@ Recent decisions affecting current work:
 - CSS Grid with conditional columns for master-detail layout (45%/55% split)
 - Max-width transition: 50rem collapsed, 100rem expanded
 - transitions.allSlow (300ms) for smooth layout animations
+- Schema fields use JSONSchema7 | null | undefined (null = explicitly disabled)
+- Validation uses existing @mastra/schema-compat jsonSchemaToZod
+- Compilation caching keyed by prefix + field (e.g., 'dataset-123:input')
+- Batch validation stops after maxErrors (default 10)
 
 ### Pending Todos
 
@@ -135,6 +140,7 @@ None yet.
 - Phase 9 complete: Full click-to-view-details flow implemented
 - Phase 10 added: Dataset Layout Update
 - Phase 10 complete: Master-detail layout with inline item panel
+- Phase 11 added: Dataset Schema Validation (input/output schema enforcement)
 
 ### Blockers/Concerns
 
@@ -142,6 +148,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-30
-Stopped at: Completed 10-05-PLAN.md (Master-Detail Layout Integration)
+Last session: 2026-02-02
+Stopped at: Completed 11-01-PLAN.md (Schema Validation Foundation)
 Resume file: None
