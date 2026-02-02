@@ -1,7 +1,11 @@
 /**
  * CSV validation utilities for dataset import
- * Validates mapped data before import
+ * Validates mapped data before import, including schema validation
  */
+
+import { ZodSchema, ZodError, ZodIssue } from 'zod';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
 
 /** Column mapping configuration */
 export type ColumnMapping = Record<string, 'input' | 'expectedOutput' | 'metadata' | 'ignore'>;
@@ -19,8 +23,146 @@ export interface ValidationResult {
   errors: ValidationError[];
 }
 
+/** Field-level validation error from schema validation */
+export interface FieldError {
+  path: string;
+  code: string;
+  message: string;
+}
+
+/** Validation result for a single row */
+export interface RowValidationResult {
+  rowNumber: number; // 1-indexed, +1 for header
+  field: 'input' | 'expectedOutput';
+  errors: FieldError[];
+  data: unknown;
+}
+
+/** Overall CSV schema validation result */
+export interface CsvValidationResult {
+  validCount: number;
+  invalidCount: number;
+  validRows: Array<{ rowNumber: number; input: unknown; expectedOutput?: unknown }>;
+  invalidRows: RowValidationResult[];
+  totalRows: number;
+}
+
 /**
- * Validate mapped CSV data before import
+ * Convert JSON Schema to runtime Zod schema.
+ * Uses existing resolveSerializedZodOutput from lib/form/utils.
+ */
+function compileSchema(jsonSchema: Record<string, unknown>): ZodSchema {
+  const zodString = jsonSchemaToZod(jsonSchema);
+  return resolveSerializedZodOutput(zodString);
+}
+
+/**
+ * Format Zod errors into FieldError array (max 5 per row).
+ */
+function formatErrors(error: ZodError): FieldError[] {
+  return error.issues.slice(0, 5).map((issue: ZodIssue) => ({
+    // Convert Zod path array to JSON Pointer string
+    path: issue.path.length > 0 ? '/' + issue.path.join('/') : '/',
+    code: issue.code,
+    message: issue.message,
+  }));
+}
+
+/**
+ * Validate CSV rows against dataset schemas.
+ *
+ * @param rows Mapped rows from CSV (with input/expectedOutput fields)
+ * @param inputSchema JSON Schema for input field (null = skip validation)
+ * @param outputSchema JSON Schema for expectedOutput field (null = skip validation)
+ * @param maxErrors Maximum number of invalid rows to collect details for (default 10)
+ */
+export function validateCsvRows(
+  rows: Array<{ input: unknown; expectedOutput?: unknown }>,
+  inputSchema: Record<string, unknown> | null | undefined,
+  outputSchema: Record<string, unknown> | null | undefined,
+  maxErrors = 10,
+): CsvValidationResult {
+  // No schemas = all rows valid
+  if (!inputSchema && !outputSchema) {
+    return {
+      validCount: rows.length,
+      invalidCount: 0,
+      validRows: rows.map((row, i) => ({ rowNumber: i + 2, ...row })),
+      invalidRows: [],
+      totalRows: rows.length,
+    };
+  }
+
+  // Pre-compile schemas for performance
+  const inputValidator = inputSchema ? compileSchema(inputSchema) : null;
+  const outputValidator = outputSchema ? compileSchema(outputSchema) : null;
+
+  const validRows: CsvValidationResult['validRows'] = [];
+  const invalidRows: CsvValidationResult['invalidRows'] = [];
+  let invalidCount = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNumber = i + 2; // +1 for 0-index, +1 for header row
+    let isValid = true;
+    let rowInvalidDetails: RowValidationResult | null = null;
+
+    // Validate input
+    if (inputValidator) {
+      const result = inputValidator.safeParse(row.input);
+      if (!result.success) {
+        isValid = false;
+        // Only collect details up to maxErrors
+        if (invalidRows.length < maxErrors) {
+          rowInvalidDetails = {
+            rowNumber,
+            field: 'input',
+            errors: formatErrors(result.error),
+            data: row.input,
+          };
+        }
+      }
+    }
+
+    // Validate expectedOutput (only if schema enabled, value provided, and input was valid)
+    if (isValid && outputValidator && row.expectedOutput !== undefined) {
+      const result = outputValidator.safeParse(row.expectedOutput);
+      if (!result.success) {
+        isValid = false;
+        // Only collect details up to maxErrors
+        if (invalidRows.length < maxErrors) {
+          rowInvalidDetails = {
+            rowNumber,
+            field: 'expectedOutput',
+            errors: formatErrors(result.error),
+            data: row.expectedOutput,
+          };
+        }
+      }
+    }
+
+    if (isValid) {
+      validRows.push({ rowNumber, ...row });
+    } else {
+      invalidCount++;
+      if (rowInvalidDetails) {
+        invalidRows.push(rowInvalidDetails);
+      }
+    }
+  }
+
+  return {
+    validCount: validRows.length,
+    invalidCount,
+    validRows,
+    invalidRows,
+    totalRows: rows.length,
+  };
+}
+
+/**
+ * Validate mapped CSV data before import (basic validation without schemas).
+ * Checks that input columns are mapped and values are present.
  * @param data - Parsed CSV rows
  * @param mapping - Column mapping configuration
  * @returns Validation result with errors
