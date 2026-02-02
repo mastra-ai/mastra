@@ -55,14 +55,14 @@ export function ScorersSection({ control, error }: ScorersSectionProps) {
   return (
     <div className="rounded-md border border-border1 bg-surface2">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3 border-b border-border1">
+        <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3">
           <ChevronRight className="h-4 w-4 text-icon3" />
           <Section.Title icon={<JudgeIcon className="text-neutral3" />}>
             Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
           </Section.Title>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="p-3">
+          <div className="p-3 border-t border-border1">
             <Controller
               name="scorers"
               control={control}
