@@ -38,6 +38,10 @@ export const initProject = async (args: InitArgs) => {
           llmApiKey: result?.llmApiKey as string,
           components: ['agents', 'tools', 'workflows'],
           addExample: true,
+          configureMastraToolingForCodingAgents: result?.configureMastraToolingForCodingAgents as
+            | { type: 'skills'; agents: string[] }
+            | Editor
+            | undefined,
           versionTag,
         });
         return;

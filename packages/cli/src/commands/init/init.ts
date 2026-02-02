@@ -6,6 +6,7 @@ import { DepsService } from '../../services/service.deps';
 import { gitInit } from '../utils';
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
+import { installMastraSkills } from './skills-install';
 import { createComponentsDir, createMastraDir, getAPIKey, writeAPIKey, writeCodeSample, writeIndexFile } from './utils';
 import type { Component, LLMProvider } from './utils';
 
@@ -18,6 +19,7 @@ export const init = async ({
   llmApiKey,
   addExample = false,
   configureEditorWithDocsMCP,
+  configureMastraToolingForCodingAgents,
   versionTag,
   initGit = false,
 }: {
@@ -27,6 +29,7 @@ export const init = async ({
   llmApiKey?: string;
   addExample?: boolean;
   configureEditorWithDocsMCP?: Editor;
+  configureMastraToolingForCodingAgents?: { type: 'skills'; agents: string[] } | Editor;
   versionTag?: string;
   initGit?: boolean;
 }) => {
@@ -93,20 +96,57 @@ export const init = async ({
 
     const key = await getAPIKey(llmProvider || 'openai');
 
-    if (configureEditorWithDocsMCP) {
+    s.stop('Mastra initialized');
+
+    // Install skills if selected
+    if (
+      configureMastraToolingForCodingAgents &&
+      typeof configureMastraToolingForCodingAgents === 'object' &&
+      'type' in configureMastraToolingForCodingAgents &&
+      configureMastraToolingForCodingAgents.type === 'skills'
+    ) {
+      s.start('Installing Mastra agent skills');
+      const skillsResult = await installMastraSkills({
+        directory: process.cwd(),
+        agents: configureMastraToolingForCodingAgents.agents,
+      });
+      if (skillsResult.success) {
+        // Format agent names nicely
+        const agentNames = skillsResult.agents
+          .map(agent => {
+            // Convert kebab-case to Title Case
+            return agent
+              .split('-')
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+              .join(' ');
+          })
+          .join(', ');
+        s.stop(`Mastra agent skills installed (in ${agentNames})`);
+      } else {
+        s.stop('Skills installation failed');
+        console.warn(color.yellow(`\nWarning: ${skillsResult.error}`));
+      }
+    }
+
+    // Install MCP if an editor was selected
+    const mcpEditor =
+      configureMastraToolingForCodingAgents &&
+      typeof configureMastraToolingForCodingAgents === 'string' &&
+      ['cursor', 'cursor-global', 'windsurf', 'vscode', 'antigravity'].includes(configureMastraToolingForCodingAgents)
+        ? (configureMastraToolingForCodingAgents as Editor)
+        : configureEditorWithDocsMCP;
+
+    if (mcpEditor) {
       await installMastraDocsMCPServer({
-        editor: configureEditorWithDocsMCP,
+        editor: mcpEditor,
         directory: process.cwd(),
         versionTag,
       });
     }
 
-    s.stop();
-
     if (initGit) {
-      const s = p.spinner();
+      s.start('Initializing git repository');
       try {
-        s.start('Initializing git repository');
         await gitInit({ cwd: process.cwd() });
         s.stop('Git repository initialized');
       } catch {

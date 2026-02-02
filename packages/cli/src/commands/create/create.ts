@@ -28,6 +28,7 @@ export const create = async (args: {
   timeout?: number;
   directory?: string;
   mcpServer?: Editor;
+  skills?: string[];
   template?: string | boolean;
   analytics?: PosthogAnalytics;
 }) => {
@@ -54,6 +55,7 @@ export const create = async (args: {
     timeout: args?.timeout,
     llmProvider: args?.llmProvider,
     llmApiKey: args?.llmApiKey,
+    skills: args?.skills,
     needsInteractive,
   });
   const directory = args.directory || 'src/';
@@ -73,6 +75,10 @@ export const create = async (args: {
       llmApiKey: result?.llmApiKey as string | undefined,
       components: ['agents', 'tools', 'workflows', 'scorers'],
       addExample: true,
+      configureMastraToolingForCodingAgents:
+        (result?.configureMastraToolingForCodingAgents as { type: 'skills'; agents: string[] } | Editor | undefined) ||
+        (args.skills && args.skills.length > 0 ? { type: 'skills', agents: args.skills } : undefined),
+      configureEditorWithDocsMCP: undefined,
       versionTag: args.createVersionTag,
     });
     postCreate({ projectName });
@@ -96,6 +102,8 @@ export const create = async (args: {
     llmProvider,
     addExample,
     llmApiKey,
+    configureMastraToolingForCodingAgents:
+      args.skills && args.skills.length > 0 ? { type: 'skills', agents: args.skills } : undefined,
     configureEditorWithDocsMCP: args.mcpServer,
     versionTag: args.createVersionTag,
   });
