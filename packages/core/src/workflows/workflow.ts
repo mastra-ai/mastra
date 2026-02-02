@@ -2311,22 +2311,21 @@ export class Workflow<
       const stepGraph = serializedStepGraph.find(stepGraph => (stepGraph as any)?.step?.id === step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
       if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
-        // Get nestedRunId from metadata (evented runtime) or suspendPayload (default runtime fallback)
+        // Evented runtime stores nested workflow's runId in metadata.nestedRunId (set by step-executor).
+        // Default runtime uses the parent runId directly to look up nested workflow steps.
         const stepResult = steps[step] as any;
-        const nestedRunId = stepResult?.metadata?.nestedRunId ?? stepResult?.suspendPayload?.__workflow_meta?.runId;
+        const nestedRunId = stepResult?.metadata?.nestedRunId ?? runId;
 
-        if (nestedRunId) {
-          const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: step });
-          if (nestedSteps) {
-            const updatedNestedSteps = Object.entries(nestedSteps).reduce(
-              (acc, [key, value]) => {
-                acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
-                return acc;
-              },
-              {} as Record<string, StepResult<any, any, any, any>>,
-            );
-            finalSteps = { ...finalSteps, ...updatedNestedSteps };
-          }
+        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: step });
+        if (nestedSteps) {
+          const updatedNestedSteps = Object.entries(nestedSteps).reduce(
+            (acc, [key, value]) => {
+              acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
+              return acc;
+            },
+            {} as Record<string, StepResult<any, any, any, any>>,
+          );
+          finalSteps = { ...finalSteps, ...updatedNestedSteps };
         }
       }
     }
@@ -2426,10 +2425,12 @@ export class Workflow<
         const { input, ...stepsOnly } = snapshotState.context || {};
         rawSteps = stepsOnly;
       }
-      // Strip __state from steps (internal implementation detail for state propagation)
+      // Strip __state from steps (internal implementation detail for state propagation).
+      // The evented runtime adds __state to step results for cross-step state passing.
       const { __state: _removedTopLevelState, ...stepsWithoutTopLevelState } = rawSteps;
-      // Recursively clean each step result to remove internal properties (__state, nestedRunId)
-      // This handles both object and array step results (e.g., forEach outputs)
+      // Clean each step result to remove internal properties (__state, metadata.nestedRunId)
+      // that are implementation details not meant for API consumers.
+      // Handles both object and array step results (e.g., forEach outputs).
       for (const [stepId, stepResult] of Object.entries(stepsWithoutTopLevelState)) {
         steps[stepId] = cleanStepResult(stepResult);
       }
