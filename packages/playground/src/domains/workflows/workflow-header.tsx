@@ -14,7 +14,6 @@ import {
   WorkflowCombobox,
   Truncate,
 } from '@mastra/playground-ui';
-import { EyeIcon } from 'lucide-react';
 
 export function WorkflowHeader({
   workflowName,
@@ -48,12 +47,16 @@ export function WorkflowHeader({
         </Breadcrumb>
 
         <HeaderGroup>
+          <div className="text-ui-md flex items-center text-neutral2 pr-1 pl-3">Traces by </div>
           <Button as={Link} to={`/observability?entity=${workflowName}`}>
-            <Icon>
-              <EyeIcon />
-            </Icon>
-            Traces
+            Workflow
           </Button>
+
+          {runId && (
+            <Button as={Link} to={`/observability?runId=${runId}`}>
+              Run
+            </Button>
+          )}
         </HeaderGroup>
 
         <HeaderAction>
