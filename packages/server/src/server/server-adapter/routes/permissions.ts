@@ -48,35 +48,13 @@ const EXECUTE_PATTERNS = [
 ];
 
 /**
- * Known resource prefixes in the API.
- * Used by extractResource() to identify the primary resource from route paths.
- *
- * Note: This list is used for runtime permission derivation.
- * Type-safe permissions are generated from SERVER_ROUTES via `pnpm generate:permissions`.
- */
-const KNOWN_RESOURCES = [
-  'agents',
-  'workflows',
-  'memory',
-  'tools',
-  'vector',
-  'vectors',
-  'mcp',
-  'logs',
-  'observability',
-  'scores',
-  'processors',
-  'stored',
-  'stored-agents',
-  'agent-builder',
-  'workspaces',
-  'a2a',
-  'system',
-  'auth',
-];
-
-/**
  * Extracts the primary resource name from a route path.
+ *
+ * The resource is derived from the first path segment, with special handling
+ * for compound resources and well-known paths.
+ *
+ * Note: The canonical list of resources is generated in permissions.generated.ts
+ * from SERVER_ROUTES via `pnpm generate:permissions`.
  *
  * @param path - The route path (e.g., '/agents/:agentId/generate')
  * @returns The resource name (e.g., 'agents') or null if not identifiable
@@ -101,12 +79,7 @@ export function extractResource(path: string): string | null {
     return 'stored-agents';
   }
 
-  // Check if first segment is a known resource
-  if (firstSegment && KNOWN_RESOURCES.includes(firstSegment)) {
-    return firstSegment;
-  }
-
-  // Check for .well-known paths (A2A)
+  // Handle .well-known paths (A2A protocol)
   if (firstSegment === '.well-known') {
     return 'a2a';
   }
