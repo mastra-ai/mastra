@@ -32,7 +32,6 @@ import type { MastraDBMessage, Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import type { MastraScorer } from '../../evals/base';
 import { ChunkFrom } from '../../stream';
-import type { InferSchemaOutput, OutputSchema } from '../../stream/base/schema';
 import type { NetworkChunkType } from '../../stream/types';
 
 // ============================================================================
@@ -382,6 +381,8 @@ export async function runDefaultCompletionCheck(
     stepId?: string;
     runId?: string;
   },
+  abortSignal?: AbortSignal,
+  onAbort?: (event: any) => Promise<void> | void,
 ): Promise<ScorerResult> {
   const start = Date.now();
 
@@ -445,6 +446,8 @@ export async function runDefaultCompletionCheck(
       structuredOutput: {
         schema: defaultCompletionSchema,
       },
+      abortSignal,
+      onAbort,
     });
 
     let currentText = '';
@@ -534,6 +537,8 @@ export async function generateFinalResult(
     stepId?: string;
     runId?: string;
   },
+  abortSignal?: AbortSignal,
+  onAbort?: (event: any) => Promise<void> | void,
 ): Promise<string | undefined> {
   const prompt = `
     The task has been completed successfully.
@@ -558,6 +563,8 @@ export async function generateFinalResult(
   const stream = await agent.stream(prompt, {
     maxSteps: 1,
     structuredOutput: { schema: finalResultSchema },
+    abortSignal,
+    onAbort,
   });
 
   let currentText = '';
@@ -601,11 +608,11 @@ export async function generateFinalResult(
 /**
  * Result type for structured final result generation
  */
-export interface StructuredFinalResult<OUTPUT extends OutputSchema = undefined> {
+export interface StructuredFinalResult<OUTPUT = undefined> {
   /** Text result (for backward compatibility) */
   text?: string;
   /** Structured object result when user schema is provided */
-  object?: InferSchemaOutput<OUTPUT>;
+  object?: OUTPUT;
 }
 
 /**
@@ -614,7 +621,7 @@ export interface StructuredFinalResult<OUTPUT extends OutputSchema = undefined> 
  *
  * @internal Used by the network loop when structuredOutput is provided
  */
-export async function generateStructuredFinalResult<OUTPUT extends OutputSchema = undefined>(
+export async function generateStructuredFinalResult<OUTPUT extends {}>(
   agent: Agent,
   context: CompletionContext,
   structuredOutputOptions: StructuredOutputOptions<OUTPUT>,
@@ -623,6 +630,8 @@ export async function generateStructuredFinalResult<OUTPUT extends OutputSchema 
     stepId?: string;
     runId?: string;
   },
+  abortSignal?: AbortSignal,
+  onAbort?: (event: any) => Promise<void> | void,
 ): Promise<StructuredFinalResult<OUTPUT>> {
   const prompt = `
     The task has been completed successfully.
@@ -635,11 +644,11 @@ export async function generateStructuredFinalResult<OUTPUT extends OutputSchema 
     Use the conversation history and primitive results to craft the response.
   `;
 
-  // Cast structuredOutputOptions to the expected type - OUTPUT already extends OutputSchema
-  // so the conditional OUTPUT extends OutputSchema ? OUTPUT : never evaluates to OUTPUT
-  const stream = await agent.stream(prompt, {
+  const stream = await agent.stream<OUTPUT>(prompt, {
     maxSteps: 1,
-    structuredOutput: structuredOutputOptions as StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>,
+    structuredOutput: structuredOutputOptions,
+    abortSignal,
+    onAbort,
   });
 
   const { writer, stepId, runId: streamRunId } = streamContext ?? {};
@@ -659,7 +668,7 @@ export async function generateStructuredFinalResult<OUTPUT extends OutputSchema 
   }
 
   const result = await stream.getFullOutput();
-  const finalObject = result.object as InferSchemaOutput<OUTPUT> | undefined;
+  const finalObject = result.object as OUTPUT | undefined;
 
   // Emit final object-result chunk
   if (canStream && finalObject) {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fromCoreUserMessageToUIMessage } from './fromCoreUserMessageToUIMessage';
 import type { MastraUIMessage } from '../types';
-import { CoreUserMessage } from '@mastra/core/llm';
+import { type CoreUserMessage } from '@mastra/core/llm';
 
 describe('fromCoreUserMessageToUIMessage', () => {
   describe('ID generation', () => {

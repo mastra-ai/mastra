@@ -12,6 +12,7 @@ import { createProject } from './commands/actions/create-project';
 import { initProject } from './commands/actions/init-project';
 import { lintProject } from './commands/actions/lint-project';
 import { listScorers } from './commands/actions/list-scorers';
+import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
@@ -153,7 +154,18 @@ program
   .option('-h, --server-host <serverHost>', 'Host of the Mastra API server (default: localhost)')
   .option('-s, --server-port <serverPort>', 'Port of the Mastra API server (default: 4111)')
   .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')
+  .option('--server-api-prefix <serverApiPrefix>', 'API route prefix of the Mastra server (default: /api)')
   .action(studio);
+
+program
+  .command('migrate')
+  .description('Run database migrations to update storage schema')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-e, --env <env>', 'Custom env file to include')
+  .option('--debug', 'Enable debug logs', false)
+  .option('-y, --yes', 'Skip confirmation prompt (for CI/automation)')
+  .action(migrate);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');
 

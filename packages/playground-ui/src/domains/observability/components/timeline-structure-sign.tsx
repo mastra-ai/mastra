@@ -16,8 +16,8 @@ export function TimelineStructureSign({
     <div
       className={cn(
         'w-[3rem] h-[2.8rem] relative opacity-100',
-        'after:content-[""] after:absolute after:left-[-1px] after:top-0 after:bottom-0 after:w-[0px] after:border-l-[1px] after:border-icon3 after:border-dashed ',
-        'before:content-[""] before:absolute before:left-0 before:top-[50%] before:w-full before:h-[0px] before:border-b-[1px] before:border-icon3 before:border-dashed',
+        'after:content-[""] after:absolute after:left-[-1px] after:top-0 after:bottom-0 after:w-[0px] after:border-l-[1px] after:border-neutral3 after:border-dashed ',
+        'before:content-[""] before:absolute before:left-0 before:top-[50%] before:w-full before:h-[0px] before:border-b-[1px] before:border-neutral3 before:border-dashed',
         '[&_svg]:transition-all',
         '[&:hover_svg]:text-yellow-500 [&:hover_svg]:scale-[1.3] [&:hover_svg]:opacity-100',
         {

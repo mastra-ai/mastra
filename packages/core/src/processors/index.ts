@@ -5,11 +5,13 @@ import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
+import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType, OutputSchema } from '../stream';
+import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
+import type { ProcessorStepOutput } from './step-schema';
 
 /**
  * Base context shared by all processor methods
@@ -108,7 +110,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
    * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<OutputSchema>;
+  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
@@ -141,7 +143,7 @@ export type ProcessInputStepResult = {
    * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<OutputSchema>;
+  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
@@ -202,6 +204,7 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
 export interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
   readonly id: TId;
   readonly name?: string;
+  readonly description?: string;
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 
@@ -265,6 +268,53 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
    */
   processOutputStep?(args: ProcessOutputStepArgs<TTripwireMetadata>): ProcessorMessageResult;
+
+  /**
+   * Internal method called when the processor is registered with a Mastra instance.
+   * This allows processors to access Mastra services like knowledge, storage, etc.
+   * @internal
+   */
+  __registerMastra?(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void;
+}
+
+/**
+ * Base class for processors that need access to Mastra services.
+ * Extend this class to automatically get access to the Mastra instance
+ * when the processor is registered with an agent.
+ *
+ * @example
+ * ```typescript
+ * class MyProcessor extends BaseProcessor<'my-processor'> {
+ *   readonly id = 'my-processor';
+ *
+ *   async processInput(args: ProcessInputArgs) {
+ *     // Access Mastra services via this.mastra
+ *     const knowledge = this.mastra?.getKnowledge();
+ *     // ...
+ *   }
+ * }
+ * ```
+ */
+export abstract class BaseProcessor<TId extends string = string, TTripwireMetadata = unknown> implements Processor<
+  TId,
+  TTripwireMetadata
+> {
+  abstract readonly id: TId;
+  readonly name?: string;
+
+  /**
+   * The Mastra instance this processor is registered with.
+   * Available after the processor is registered via __registerMastra.
+   */
+  protected mastra?: Mastra<any, any, any, any, any, any, any, any, any, any>;
+
+  /**
+   * Called when the processor is registered with a Mastra instance.
+   * @internal
+   */
+  __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
+    this.mastra = mastra;
+  }
 }
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };
@@ -292,7 +342,7 @@ export type ProcessorTypes<TTripwireMetadata = unknown> =
  * A Workflow that can be used as a processor.
  * The workflow must accept ProcessorStepInput and return ProcessorStepOutput.
  */
-export type ProcessorWorkflow = Workflow<any, any, string, any, any, any>;
+export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any>;
 
 /**
  * Input processor config: can be a Processor or a Workflow.

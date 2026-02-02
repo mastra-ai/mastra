@@ -1,6 +1,6 @@
 import type { WritableStream } from 'node:stream/web';
 import type { TextStreamPart } from '@internal/ai-sdk-v4';
-import type z from 'zod';
+import type { z } from 'zod';
 import type { SerializedError } from '../error';
 import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
@@ -193,8 +193,7 @@ export type PathsToStringProps<T> =
       ? {
           [K in keyof T]: T[K] extends object
             ? K extends string
-              ? // @ts-ignore
-                  K | `${K}.${PathsToStringProps<T[K]>}`
+              ? K | `${K}.${PathsToStringProps<T[K]>}`
               : never
             : K extends string
               ? K
@@ -430,6 +429,7 @@ export type WorkflowInfo = {
   inputSchema: string | undefined;
   outputSchema: string | undefined;
   stateSchema: string | undefined;
+  requestContextSchema: string | undefined;
   options?: WorkflowOptions;
   stepCount?: number;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
@@ -528,7 +528,58 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
   steps?: Record<string, StepWithComponent>;
 };
 
-export type StepParams<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend> = {
+/**
+ * StepParams with schema-based inference for better type errors.
+ * Generic parameters are the SCHEMAS, and we infer value types from them.
+ * Uses z.infer for proper TypeScript contextual typing of the execute function.
+ */
+export type StepParams<
+  TStepId extends string,
+  TStateSchema extends z.ZodTypeAny | undefined,
+  TInputSchema extends z.ZodTypeAny,
+  TOutputSchema extends z.ZodTypeAny,
+  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
+  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
+> = {
+  id: TStepId;
+  description?: string;
+  inputSchema: TInputSchema;
+  outputSchema: TOutputSchema;
+  resumeSchema?: TResumeSchema;
+  suspendSchema?: TSuspendSchema;
+  stateSchema?: TStateSchema;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before step execution.
+   */
+  requestContextSchema?: TRequestContextSchema;
+  retries?: number;
+  scorers?: DynamicArgument<MastraScorers>;
+  execute: ExecuteFunction<
+    TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
+    z.infer<TInputSchema>,
+    z.infer<TOutputSchema>,
+    TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
+    TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+    DefaultEngineType,
+    TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
+  >;
+};
+
+/**
+ * Legacy StepParams type for backward compatibility.
+ * Use the schema-based StepParams for new code.
+ */
+export type StepParamsLegacy<
+  TStepId extends string,
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResume,
+  TSuspend,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = {
   id: TStepId;
   description?: string;
   inputSchema: SchemaWithValidation<TStepInput>;
@@ -536,9 +587,14 @@ export type StepParams<TStepId extends string, TState, TStepInput, TStepOutput, 
   resumeSchema?: SchemaWithValidation<TResume>;
   suspendSchema?: SchemaWithValidation<TSuspend>;
   stateSchema?: SchemaWithValidation<TState>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before step execution.
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
-  execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
+  execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType, TRequestContext>;
 };
 
 export type ToolStep<
@@ -658,13 +714,26 @@ export type WorkflowStreamResult<TState, TInput, TOutput, TSteps extends Step<st
       };
     };
 
-export type WorkflowConfig<TWorkflowId extends string, TState, TInput, TOutput, TSteps extends Step[]> = {
+export type WorkflowConfig<
+  TWorkflowId extends string,
+  TState,
+  TInput,
+  TOutput,
+  TSteps extends Step[],
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = {
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
   inputSchema: SchemaWithValidation<TInput>;
   outputSchema: SchemaWithValidation<TOutput>;
   stateSchema?: SchemaWithValidation<TState>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema when the workflow starts.
+   * If validation fails, a validation error is thrown.
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {
@@ -679,18 +748,33 @@ export type WorkflowConfig<TWorkflowId extends string, TState, TInput, TOutput, 
 /**
  * Utility type to ensure that TStepState is a subset of TState.
  * This means that all properties in TStepState must exist in TState with compatible types.
+ *
+ * Special cases:
+ * - If TState is `unknown`, any step state is allowed (workflow has no state constraint)
+ * - If TStepState is `any`, it's allowed (step doesn't use state)
+ * - If TStepState is `unknown`, it's allowed (step doesn't use state)
  */
-export type SubsetOf<TStepState, TState> = TStepState extends infer TStepShape
-  ? TState extends infer TStateShape
-    ? keyof TStepShape extends keyof TStateShape
-      ? {
-          [K in keyof TStepShape]: TStepShape[K] extends TStateShape[K] ? TStepShape[K] : never;
-        } extends TStepShape
+export type SubsetOf<TStepState, TState> =
+  // If workflow has no state (unknown), allow any step state
+  unknown extends TState
+    ? TStepState
+    : // If step state is any or unknown, allow it
+      0 extends 1 & TStepState
+      ? TStepState
+      : unknown extends TStepState
         ? TStepState
-        : never
-      : never
-    : never
-  : never;
+        : // Otherwise, check if step state is a subset of workflow state
+          TStepState extends infer TStepShape
+          ? TState extends infer TStateShape
+            ? keyof TStepShape extends keyof TStateShape
+              ? {
+                  [K in keyof TStepShape]: TStepShape[K] extends TStateShape[K] ? TStepShape[K] : never;
+                } extends TStepShape
+                ? TStepState
+                : never
+              : never
+            : never
+          : never;
 
 /**
  * Execution context passed through workflow execution
@@ -716,6 +800,14 @@ export type ExecutionContext = {
   };
   format?: 'legacy' | 'vnext' | undefined;
   state: Record<string, any>;
+  /**
+   * Trace IDs for creating child spans in durable execution.
+   * Set after workflow root span is created, used by child step spans.
+   */
+  tracingIds?: {
+    traceId: string;
+    workflowSpanId: string;
+  };
 };
 
 /**

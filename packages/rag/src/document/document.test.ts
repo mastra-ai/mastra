@@ -539,6 +539,743 @@ describe('MDocument', () => {
       expect(doc.getText().some(chunk => chunk.includes('function'))).toBe(true);
     });
 
+    it('chunkRecursive - PHP language support', async () => {
+      const phpCode = `
+              namespace App\\Controllers;
+
+              use App\\Models\\User;
+
+              class UserController {
+                public function index() {
+                  return User::all();
+                }
+
+                private function validate($data) {
+                  if (empty($data)) {
+                    return false;
+                  }
+                  return true;
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(phpCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.PHP,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class'))).toBe(true);
+      expect(doc.getText().some(chunk => chunk.includes('function'))).toBe(true);
+    });
+
+    it('chunkRecursive - GO language support', async () => {
+      const goCode = `
+              package main
+
+              import "fmt"
+
+              type User struct {
+                Name string
+                Age  int
+              }
+
+              func main() {
+                user := User{Name: "John", Age: 30}
+                fmt.Println(user)
+              }
+
+              func validate(data string) bool {
+                if data == "" {
+                  return false
+                }
+                return true
+              }
+            `;
+
+      const doc = MDocument.fromText(goCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.GO,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('func'))).toBe(true);
+    });
+
+    it('chunkRecursive - JAVA language support', async () => {
+      const javaCode = `
+              package com.example;
+
+              import java.util.List;
+
+              public class User {
+                private String name;
+                private int age;
+
+                public String getName() {
+                  return name;
+                }
+
+                public void setName(String name) {
+                  this.name = name;
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(javaCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.JAVA,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('public'))).toBe(true);
+    });
+
+    it('chunkRecursive - KOTLIN language support', async () => {
+      const kotlinCode = `
+              package com.example
+
+              import kotlin.collections.List
+
+              data class User(val name: String, val age: Int)
+
+              fun main() {
+                val user = User("John", 30)
+                println(user)
+              }
+
+              fun validate(data: String): Boolean {
+                if (data.isEmpty()) {
+                  return false
+                }
+                return true
+              }
+            `;
+
+      const doc = MDocument.fromText(kotlinCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.KOTLIN,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('fun'))).toBe(true);
+    });
+
+    it('chunkRecursive - JS language support', async () => {
+      const jsCode = `
+              class User {
+                constructor(name, age) {
+                  this.name = name;
+                  this.age = age;
+                }
+
+                getName() {
+                  return this.name;
+                }
+              }
+
+              function validate(data) {
+                if (!data) {
+                  return false;
+                }
+                return true;
+              }
+
+              const user = new User("John", 30);
+            `;
+
+      const doc = MDocument.fromText(jsCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.JS,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('function'))).toBe(true);
+    });
+
+    it('chunkRecursive - PYTHON language support', async () => {
+      const pythonCode = `
+              class User:
+                def __init__(self, name, age):
+                  self.name = name
+                  self.age = age
+
+                def get_name(self):
+                  return self.name
+
+              def validate(data):
+                if not data:
+                  return False
+                return True
+
+              async def fetch_user():
+                return User("John", 30)
+            `;
+
+      const doc = MDocument.fromText(pythonCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.PYTHON,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('def'))).toBe(true);
+    });
+
+    it('chunkRecursive - RUBY language support', async () => {
+      const rubyCode = `
+              module MyApp
+                class User
+                  def initialize(name, age)
+                    @name = name
+                    @age = age
+                  end
+
+                  def get_name
+                    @name
+                  end
+                end
+
+                def validate(data)
+                  if data.nil?
+                    return false
+                  end
+                  true
+                end
+              end
+            `;
+
+      const doc = MDocument.fromText(rubyCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.RUBY,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('def'))).toBe(true);
+    });
+
+    it('chunkRecursive - RUST language support', async () => {
+      const rustCode = `
+              mod user {
+                pub struct User {
+                  name: String,
+                  age: u32,
+                }
+
+                impl User {
+                  pub fn new(name: String, age: u32) -> Self {
+                    User { name, age }
+                  }
+
+                  pub fn get_name(&self) -> &str {
+                    &self.name
+                  }
+                }
+              }
+
+              fn validate(data: &str) -> bool {
+                if data.is_empty() {
+                  return false;
+                }
+                true
+              }
+            `;
+
+      const doc = MDocument.fromText(rustCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.RUST,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('fn') || chunk.includes('impl'))).toBe(true);
+    });
+
+    it('chunkRecursive - SWIFT language support', async () => {
+      const swiftCode = `
+              import Foundation
+
+              struct User {
+                var name: String
+                var age: Int
+
+                func getName() -> String {
+                  return name
+                }
+              }
+
+              class UserManager {
+                func validate(data: String) -> Bool {
+                  if data.isEmpty {
+                    return false
+                  }
+                  return true
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(swiftCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.SWIFT,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('struct') || chunk.includes('func'))).toBe(true);
+    });
+
+    it('chunkRecursive - HTML language support', async () => {
+      const htmlCode = `
+              <html>
+              <body>
+                <header>
+                  <h1>Title</h1>
+                </header>
+                <div class="container">
+                  <p>Paragraph 1</p>
+                  <p>Paragraph 2</p>
+                  <ul>
+                    <li>Item 1</li>
+                    <li>Item 2</li>
+                  </ul>
+                </div>
+                <footer>
+                  <p>Footer</p>
+                </footer>
+              </body>
+              </html>
+            `;
+
+      const doc = MDocument.fromText(htmlCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.HTML,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('<') && chunk.includes('>'))).toBe(true);
+    });
+
+    it('chunkRecursive - SOL language support', async () => {
+      const solCode = `
+              pragma solidity ^0.8.0;
+
+              import "./Token.sol";
+
+              contract MyContract {
+                address public owner;
+                uint256 public value;
+
+                event ValueChanged(uint256 newValue);
+
+                modifier onlyOwner() {
+                  require(msg.sender == owner);
+                  _;
+                }
+
+                function setValue(uint256 _value) public onlyOwner {
+                  value = _value;
+                  emit ValueChanged(_value);
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(solCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.SOL,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('contract') || chunk.includes('function'))).toBe(true);
+    });
+
+    it('chunkRecursive - CSHARP language support', async () => {
+      const csharpCode = `
+              namespace MyApp.Models
+              {
+                using System;
+
+                public class User
+                {
+                  private string name;
+                  private int age;
+
+                  public string GetName()
+                  {
+                    return name;
+                  }
+
+                  public void SetName(string value)
+                  {
+                    name = value;
+                  }
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(csharpCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.CSHARP,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('public'))).toBe(true);
+    });
+
+    it('chunkRecursive - SCALA language support', async () => {
+      const scalaCode = `
+              package com.example
+
+              import scala.collection.immutable.List
+
+              case class User(name: String, age: Int)
+
+              object UserManager {
+                def validate(data: String): Boolean = {
+                  if (data.isEmpty) {
+                    false
+                  } else {
+                    true
+                  }
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(scalaCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.SCALA,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('case'))).toBe(true);
+    });
+
+    it('chunkRecursive - LUA language support', async () => {
+      const luaCode = `
+              function User:new(name, age)
+                local obj = {name = name, age = age}
+                setmetatable(obj, self)
+                self.__index = self
+                return obj
+              end
+
+              local function validate(data)
+                if data == nil then
+                  return false
+                end
+                return true
+              end
+
+              for i = 1, 10 do
+                print(i)
+              end
+            `;
+
+      const doc = MDocument.fromText(luaCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.LUA,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('function'))).toBe(true);
+    });
+
+    it('chunkRecursive - PERL language support', async () => {
+      const perlCode = `
+              package User;
+
+              use strict;
+              use warnings;
+
+              sub new {
+                my $class = shift;
+                my $self = {
+                  name => shift,
+                  age => shift,
+                };
+                return bless $self, $class;
+              }
+
+              sub validate {
+                my $data = shift;
+                if (!$data) {
+                  return 0;
+                }
+                return 1;
+              }
+            `;
+
+      const doc = MDocument.fromText(perlCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.PERL,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('sub') || chunk.includes('package'))).toBe(true);
+    });
+
+    it('chunkRecursive - HASKELL language support', async () => {
+      const haskellCode = `
+              module User where
+
+              import Data.Maybe
+
+              data User = User { name :: String, age :: Int }
+
+              getName :: User -> String
+              getName user = name user
+
+              validate :: Maybe String -> Bool
+              validate Nothing = False
+              validate (Just str) = not (null str)
+
+              instance Show User where
+                show user = "User: " ++ name user
+            `;
+
+      const doc = MDocument.fromText(haskellCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.HASKELL,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('data') || chunk.includes('module'))).toBe(true);
+    });
+
+    it('chunkRecursive - ELIXIR language support', async () => {
+      const elixirCode = `
+              defmodule User do
+                defstruct [:name, :age]
+
+                def new(name, age) do
+                  %User{name: name, age: age}
+                end
+
+                def get_name(%User{name: name}) do
+                  name
+                end
+              end
+
+              defmodule Validator do
+                def validate(data) do
+                  if data == nil do
+                    false
+                  else
+                    true
+                  end
+                end
+              end
+            `;
+
+      const doc = MDocument.fromText(elixirCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.ELIXIR,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('defmodule') || chunk.includes('def'))).toBe(true);
+    });
+
+    it('chunkRecursive - POWERSHELL language support', async () => {
+      const powershellCode = `
+              function Get-User {
+                param(
+                  [string]$Name,
+                  [int]$Age
+                )
+
+                $user = @{
+                  Name = $Name
+                  Age = $Age
+                }
+
+                return $user
+              }
+
+              function Test-Data {
+                param([string]$Data)
+
+                if ([string]::IsNullOrEmpty($Data)) {
+                  return $false
+                }
+                return $true
+              }
+
+              foreach ($i in 1..10) {
+                Write-Host $i
+              }
+            `;
+
+      const doc = MDocument.fromText(powershellCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.POWERSHELL,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('function'))).toBe(true);
+    });
+
+    it('chunkRecursive - PROTO language support', async () => {
+      const protoCode = `
+              syntax = "proto3";
+
+              package example;
+
+              import "google/protobuf/timestamp.proto";
+
+              message User {
+                string name = 1;
+                int32 age = 2;
+                google.protobuf.Timestamp created_at = 3;
+              }
+
+              service UserService {
+                rpc GetUser (GetUserRequest) returns (User);
+                rpc ListUsers (ListUsersRequest) returns (stream User);
+              }
+
+              message GetUserRequest {
+                string user_id = 1;
+              }
+            `;
+
+      const doc = MDocument.fromText(protoCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.PROTO,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('message') || chunk.includes('service'))).toBe(true);
+    });
+
+    it('chunkRecursive - RST language support', async () => {
+      const rstCode = `
+              Title
+              =====
+
+              Section 1
+              ---------
+
+              This is a paragraph.
+
+              Section 2
+              ---------
+
+              Another paragraph.
+
+              .. code-block:: python
+
+                 def hello():
+                   print("Hello")
+
+              Subsection
+              **********
+
+              More content here.
+            `;
+
+      const doc = MDocument.fromText(rstCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.RST,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.length > 0)).toBe(true);
+    });
+
+    it('chunkRecursive - COBOL language support', async () => {
+      const cobolCode = `
+              IDENTIFICATION DIVISION.
+              PROGRAM-ID. SAMPLE.
+
+              ENVIRONMENT DIVISION.
+
+              DATA DIVISION.
+              WORKING-STORAGE SECTION.
+              01 WS-NAME PIC X(20).
+              01 WS-AGE PIC 99.
+
+              PROCEDURE DIVISION.
+              MAIN-PARA.
+                DISPLAY "Enter name: ".
+                ACCEPT WS-NAME.
+
+                IF WS-NAME = SPACES
+                  DISPLAY "Invalid"
+                ELSE
+                  DISPLAY "Valid".
+
+                STOP RUN.
+            `;
+
+      const doc = MDocument.fromText(cobolCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.COBOL,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('DIVISION') || chunk.includes('SECTION'))).toBe(true);
+    });
+
     it('should throw error for unsupported language', async () => {
       const doc = MDocument.fromText('tsCode', { meta: 'data' });
 

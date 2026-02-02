@@ -1,5 +1,5 @@
 import { usePlaygroundStore } from '@/store/playground-store';
-import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { z } from 'zod';
@@ -30,14 +30,22 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any) => {
+  const handleExecuteTool = async (data: any, schemaRequestContext?: Record<string, any>) => {
     if (!tool) return;
+
+    // Merge global playground request context with schema request context.
+    // Schema values take precedence and explicitly override global values,
+    // including when schema values are empty strings (user intentionally cleared them).
+    const requestContext = {
+      ...(playgroundRequestContext ?? {}),
+      ...(schemaRequestContext ?? {}),
+    };
 
     await executeTool({
       agentId: agentId!,
       toolId: tool.id,
       input: data,
-      playgroundRequestContext,
+      playgroundRequestContext: requestContext,
     });
   };
 
@@ -50,7 +58,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
   if (!tool)
     return (
       <div className="py-12 text-center px-6">
-        <Txt variant="header-md" className="text-icon3">
+        <Txt variant="header-md" className="text-neutral3">
           Tool not found
         </Txt>
       </div>
@@ -64,6 +72,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description}
       toolId={tool.id}
+      requestContextSchema={tool.requestContextSchema}
     />
   );
 };

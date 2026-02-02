@@ -10,7 +10,7 @@ import type { IMastraLogger } from '../logger';
 import { EntityType, SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType, OutputSchema } from '../stream';
+import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { ProcessorStepOutput } from './step-schema';
 import { isProcessorWorkflow } from './index';
@@ -31,8 +31,10 @@ import type {
  * Tracks state for stream processing across chunks.
  * Used by both legacy processors and workflow processors.
  */
-export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
-  private accumulatedText = '';
+export class ProcessorState<OUTPUT = undefined> {
+  private inputAccumulatedText = '';
+  private outputAccumulatedText = '';
+  private outputChunkCount = 0;
   public customState: Record<string, unknown> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
   public span?: Span<SpanType.PROCESSOR_RUN>;
@@ -61,28 +63,43 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
         processorIndex: options.processorIndex ?? 0,
       },
       input: {
-        streamParts: [],
-        state: {},
         totalChunks: 0,
       },
     });
   }
 
-  addPart(part: ChunkType<OUTPUT>): void {
+  /** Track incoming chunk (before processor transformation) */
+  addInputPart(part: ChunkType<OUTPUT>): void {
     // Extract text from text-delta chunks for accumulated text
     if (part.type === 'text-delta') {
-      this.accumulatedText += part.payload.text;
+      this.inputAccumulatedText += part.payload.text;
     }
     this.streamParts.push(part);
 
     if (this.span) {
       this.span.input = {
-        streamParts: this.streamParts,
-        state: this.customState,
         totalChunks: this.streamParts.length,
-        accumulatedText: this.accumulatedText,
+        accumulatedText: this.inputAccumulatedText,
       };
     }
+  }
+
+  /** Track outgoing chunk (after processor transformation) */
+  addOutputPart(part: ChunkType<OUTPUT> | null | undefined): void {
+    if (!part) return;
+    this.outputChunkCount++;
+    // Extract text from text-delta chunks for accumulated text
+    if (part.type === 'text-delta') {
+      this.outputAccumulatedText += part.payload.text;
+    }
+  }
+
+  /** Get final output for span */
+  getFinalOutput(): { totalChunks: number; accumulatedText: string } {
+    return {
+      totalChunks: this.outputChunkCount,
+      accumulatedText: this.outputAccumulatedText,
+    };
   }
 }
 
@@ -292,7 +309,7 @@ export class ProcessorRunner {
   /**
    * Process a stream part through all output processors with state management
    */
-  async processPart<OUTPUT extends OutputSchema>(
+  async processPart<OUTPUT>(
     part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
@@ -327,8 +344,8 @@ export class ProcessorRunner {
             processorStates.set(workflowId, state);
           }
 
-          // Add the current part to accumulated state
-          state.addPart(processedPart);
+          // Track input chunk (before processor transformation)
+          state.addInputPart(processedPart);
 
           try {
             const result = await this.executeWorkflowAsProcessor(
@@ -349,6 +366,8 @@ export class ProcessorRunner {
             if ('part' in result) {
               processedPart = result.part as ChunkType<OUTPUT> | null | undefined;
             }
+            // Track output chunk (after processor transformation or passthrough)
+            state.addOutputPart(processedPart);
           } catch (error) {
             if (error instanceof TripWire) {
               return {
@@ -379,8 +398,8 @@ export class ProcessorRunner {
               processorStates.set(processor.id, state);
             }
 
-            // Add the current part to accumulated text
-            state.addPart(processedPart);
+            // Track input chunk (before processor transformation)
+            state.addInputPart(processedPart);
 
             const result = await processor.processOutputStream({
               part: processedPart as ChunkType,
@@ -395,12 +414,9 @@ export class ProcessorRunner {
               retryCount,
             });
 
-            if (state.span && !state.span.isEvent) {
-              state.span.output = result;
-            }
-
-            // If result is null, or undefined, don't emit
+            // Track output chunk and update processedPart
             processedPart = result as ChunkType<OUTPUT> | null | undefined;
+            state.addOutputPart(processedPart);
           }
         } catch (error) {
           if (error instanceof TripWire) {
@@ -429,13 +445,8 @@ export class ProcessorRunner {
       if (isFinishChunk) {
         for (const state of processorStates.values()) {
           if (state.span) {
-            // Preserve the existing output (last processed part) and add metadata
-            const finalOutput = {
-              ...state.span.output,
-              totalChunks: state.streamParts.length,
-              finalState: state.customState,
-            };
-            state.span.end({ output: finalOutput });
+            // Set output with accumulated text and chunk count from processor's output
+            state.span.end({ output: state.getFinalOutput() });
           }
         }
       }
@@ -451,7 +462,7 @@ export class ProcessorRunner {
     }
   }
 
-  async runOutputProcessorsForStream<OUTPUT extends OutputSchema = undefined>(
+  async runOutputProcessorsForStream<OUTPUT = undefined>(
     streamResult: MastraModelOutput<OUTPUT>,
     tracingContext?: TracingContext,
   ): Promise<ReadableStream<any>> {

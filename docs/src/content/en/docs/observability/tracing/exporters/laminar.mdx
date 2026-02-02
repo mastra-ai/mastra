@@ -1,0 +1,89 @@
+---
+title: "Laminar Exporter | Tracing | Observability"
+description: "Send traces to Laminar for LLM observability, evaluation, and analysis"
+packages:
+  - "@mastra/laminar"
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Laminar Exporter
+
+[Laminar](https://laminar.sh/) is an open-source platform for engineering LLM products. The Laminar exporter sends your Mastra traces to Laminar via OTLP/HTTP (protobuf), with Laminar-native span attributes for correct rendering (paths, inputs/outputs, tags, metadata).
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/laminar@beta
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **Laminar Project**: Create/select a project in Laminar
+2. **Project API Key**: Copy from Laminar Project Settings
+3. **Environment Variables**: Set your credentials
+
+```bash title=".env"
+# Required
+LMNR_PROJECT_API_KEY=lmnr_...
+
+# Optional
+LMNR_BASE_URL=https://api.lmnr.ai
+LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
+```
+
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LaminarExporter } from "@mastra/laminar";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      laminar: {
+        serviceName: "my-service",
+        exporters: [new LaminarExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LaminarExporter } from "@mastra/laminar";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      laminar: {
+        serviceName: "my-service",
+        exporters: [
+          new LaminarExporter({
+            apiKey: process.env.LMNR_PROJECT_API_KEY!,
+            baseUrl: process.env.LMNR_BASE_URL, // Optional
+            endpoint: process.env.LAMINAR_ENDPOINT, // Optional
+            realtime: process.env.NODE_ENV === "development", // Optional
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## Related
+
+- [Tracing Overview](/docs/observability/tracing/overview)
+- [Laminar Documentation](https://docs.laminar.sh)

@@ -76,7 +76,8 @@ const includeSchema = z.preprocess(
       try {
         return JSON.parse(val);
       } catch {
-        return undefined;
+        // Return invalid string to fail validation (z.array will reject string type)
+        return val;
       }
     }
     return val;
@@ -102,7 +103,8 @@ const filterSchema = z.preprocess(
       try {
         return JSON.parse(val);
       } catch {
-        return undefined;
+        // Return invalid string to fail validation (z.object will reject string type)
+        return val;
       }
     }
     return val;
@@ -115,6 +117,7 @@ const filterSchema = z.preprocess(
           end: z.coerce.date().optional(),
         })
         .optional(),
+      roles: z.array(z.string()).optional(),
     })
     .optional(),
 );
@@ -127,7 +130,8 @@ const memoryConfigSchema = z.preprocess(val => {
     try {
       return JSON.parse(val);
     } catch {
-      return undefined;
+      // Return invalid string to fail validation (z.record will reject string type)
+      return val;
     }
   }
   return val;
@@ -162,33 +166,52 @@ const messageSchema = z.any();
 // ============================================================================
 
 /**
- * GET /api/memory/status
+ * GET /memory/status
  */
 export const getMemoryStatusQuerySchema = agentIdQuerySchema;
 
 /**
- * GET /api/memory/config
+ * GET /memory/config
  */
 export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 
 /**
- * GET /api/memory/threads
+ * GET /memory/threads
  * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - when omitted, returns all threads
+ * metadata is optional - filters threads by metadata key-value pairs (AND logic)
  */
 export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
-  resourceId: z.string(),
+  resourceId: z.string().optional(),
+  metadata: z.preprocess(
+    val => {
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
+        }
+      }
+      return val;
+    },
+    z.optional(z.record(z.string(), z.any())),
+  ),
   orderBy: storageOrderBySchema,
 });
 
 /**
- * GET /api/memory/threads/:threadId
+ * GET /memory/threads/:threadId
  * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const getThreadByIdQuerySchema = optionalAgentIdQuerySchema;
+export const getThreadByIdQuerySchema = optionalAgentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
 
 /**
- * GET /api/memory/threads/:threadId/messages
+ * GET /memory/threads/:threadId/messages
  * agentId is optional - can use storage fallback when not provided
  */
 export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
@@ -200,7 +223,7 @@ export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
 });
 
 /**
- * GET /api/memory/threads/:threadId/working-memory
+ * GET /memory/threads/:threadId/working-memory
  */
 export const getWorkingMemoryQuerySchema = z.object({
   agentId: z.string(),
@@ -208,33 +231,70 @@ export const getWorkingMemoryQuerySchema = z.object({
   memoryConfig: memoryConfigSchema,
 });
 
+/**
+ * DELETE /memory/threads/:threadId
+ * agentId is required
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
+ */
+export const deleteThreadQuerySchema = agentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
+
+/**
+ * POST /memory/messages/delete
+ * agentId is required
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
+ */
+export const deleteMessagesQuerySchema = agentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
+
 // ============================================================================
 // Legacy /network Query Parameter Schemas (backward compatibility)
 // ============================================================================
 
 /**
- * GET /api/memory/network/status
+ * GET /memory/network/status
  */
 export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
 
 /**
- * GET /api/memory/network/threads
+ * GET /memory/network/threads
  * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - when omitted, returns all threads
+ * metadata is optional - filters threads by metadata key-value pairs (AND logic)
  */
 export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
-  resourceId: z.string(),
+  resourceId: z.string().optional(),
+  metadata: z.preprocess(
+    val => {
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
+        }
+      }
+      return val;
+    },
+    z.optional(z.record(z.string(), z.any())),
+  ),
   orderBy: storageOrderBySchema,
 });
 
 /**
- * GET /api/memory/network/threads/:threadId
+ * GET /memory/network/threads/:threadId
  * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const getThreadByIdNetworkQuerySchema = optionalAgentIdQuerySchema;
+export const getThreadByIdNetworkQuerySchema = optionalAgentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
 
 /**
- * GET /api/memory/network/threads/:threadId/messages
+ * GET /memory/network/threads/:threadId/messages
  * agentId is optional - can use storage fallback when not provided
  */
 export const listMessagesNetworkQuerySchema = createPagePaginationSchema(40).extend({
@@ -246,43 +306,49 @@ export const listMessagesNetworkQuerySchema = createPagePaginationSchema(40).ext
 });
 
 /**
- * POST /api/memory/network/save-messages
+ * POST /memory/network/save-messages
  */
 export const saveMessagesNetworkQuerySchema = agentIdQuerySchema;
 
 /**
- * POST /api/memory/network/threads
+ * POST /memory/network/threads
  */
 export const createThreadNetworkQuerySchema = agentIdQuerySchema;
 
 /**
- * PATCH /api/memory/network/threads/:threadId
+ * PATCH /memory/network/threads/:threadId
  */
 export const updateThreadNetworkQuerySchema = agentIdQuerySchema;
 
 /**
- * DELETE /api/memory/network/threads/:threadId
+ * DELETE /memory/network/threads/:threadId
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const deleteThreadNetworkQuerySchema = agentIdQuerySchema;
+export const deleteThreadNetworkQuerySchema = agentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
 
 /**
- * POST /api/memory/network/messages/delete
+ * POST /memory/network/messages/delete
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema;
+export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
 
 // ============================================================================
 // Response Schemas
 // ============================================================================
 
 /**
- * Response for GET /api/memory/status
+ * Response for GET /memory/status
  */
 export const memoryStatusResponseSchema = z.object({
   result: z.boolean(),
 });
 
 /**
- * Response for GET /api/memory/config
+ * Response for GET /memory/config
  * MemoryConfig is complex with many optional fields - using passthrough
  */
 export const memoryConfigResponseSchema = z.object({
@@ -294,19 +360,19 @@ export const memoryConfigResponseSchema = z.object({
 });
 
 /**
- * Response for GET /api/memory/threads
+ * Response for GET /memory/threads
  */
 export const listThreadsResponseSchema = paginationInfoSchema.extend({
   threads: z.array(threadSchema),
 });
 
 /**
- * Response for GET /api/memory/threads/:threadId
+ * Response for GET /memory/threads/:threadId
  */
 export const getThreadByIdResponseSchema = threadSchema;
 
 /**
- * Response for GET /api/memory/threads/:threadId/messages
+ * Response for GET /memory/threads/:threadId/messages
  */
 export const listMessagesResponseSchema = z.object({
   messages: z.array(messageSchema),
@@ -314,7 +380,7 @@ export const listMessagesResponseSchema = z.object({
 });
 
 /**
- * Response for GET /api/memory/threads/:threadId/working-memory
+ * Response for GET /memory/threads/:threadId/working-memory
  */
 export const getWorkingMemoryResponseSchema = z.object({
   workingMemory: z.unknown(), // Can be string or structured object depending on template
@@ -328,14 +394,14 @@ export const getWorkingMemoryResponseSchema = z.object({
 // ============================================================================
 
 /**
- * Body schema for POST /api/memory/messages
+ * Body schema for POST /memory/messages
  */
 export const saveMessagesBodySchema = z.object({
   messages: z.array(messageSchema),
 });
 
 /**
- * Body schema for POST /api/memory/threads
+ * Body schema for POST /memory/threads
  */
 export const createThreadBodySchema = z.object({
   resourceId: z.string(),
@@ -345,7 +411,7 @@ export const createThreadBodySchema = z.object({
 });
 
 /**
- * Body schema for PUT /api/memory/threads/:threadId
+ * Body schema for PUT /memory/threads/:threadId
  */
 export const updateThreadBodySchema = z.object({
   title: z.string().optional(),
@@ -354,7 +420,7 @@ export const updateThreadBodySchema = z.object({
 });
 
 /**
- * Body schema for PUT /api/memory/threads/:threadId/working-memory
+ * Body schema for PUT /memory/threads/:threadId/working-memory
  */
 export const updateWorkingMemoryBodySchema = z.object({
   workingMemory: z.string(),
@@ -363,7 +429,7 @@ export const updateWorkingMemoryBodySchema = z.object({
 });
 
 /**
- * Body schema for POST /api/memory/messages/delete
+ * Body schema for POST /memory/messages/delete
  * Accepts: string | string[] | { id: string } | { id: string }[]
  */
 export const deleteMessagesBodySchema = z.object({
@@ -376,7 +442,7 @@ export const deleteMessagesBodySchema = z.object({
 });
 
 /**
- * Query schema for GET /api/memory/search
+ * Query schema for GET /memory/search
  */
 export const searchMemoryQuerySchema = z.object({
   agentId: z.string(),
@@ -413,7 +479,7 @@ export const searchMemoryResponseSchema = z.object({
 });
 
 /**
- * Body schema for POST /api/memory/threads/:threadId/clone
+ * Body schema for POST /memory/threads/:threadId/clone
  */
 export const cloneThreadBodySchema = z.object({
   newThreadId: z.string().optional(),
@@ -435,7 +501,7 @@ export const cloneThreadBodySchema = z.object({
 });
 
 /**
- * Response schema for POST /api/memory/threads/:threadId/clone
+ * Response schema for POST /memory/threads/:threadId/clone
  */
 export const cloneThreadResponseSchema = z.object({
   thread: threadSchema,

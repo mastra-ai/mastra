@@ -3,9 +3,6 @@ title: "Next.js | Frameworks"
 description: "Get started with Mastra and Next.js"
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
 # Integrate Mastra in your Next.js project
 
 In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to Next.js by importing and calling the agent directly from your routes.
@@ -13,13 +10,16 @@ In this guide, you'll build a tool-calling AI agent using Mastra, then connect i
 You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience.
 
 <figure>
+
 ![Screenshot of a chat-style web app displaying a completed "weatherTool" tool call, answering "What is the weather in London?" with a JSON result. A message suggests offering activity ideas, and a text input field is at the bottom.](/img/nextjs-quickstart.png)
+
 <figcaption class="text-sm text-center">What you'll build: an agent that can call a weather tool, display the JSON result, stream a weather summary in the chat UI, and persist conversation history across reloads.</figcaption>
+
 </figure>
 
 ## Before you begin
 
-- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
 - Install Node.js `v22.13.0` or later
 
 ## Create a new Next.js app (optional)
@@ -28,79 +28,25 @@ If you already have a Next.js app, skip to the next step.
 
 Run the following command to [create a new Next.js app](https://nextjs.org/docs/app/getting-started/installation):
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npx create-next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
-```
-
-</TabItem>
-</Tabs>
 
 This creates a project called `my-nextjs-agent`, but you can replace it with any name you want.
 
 ## Initialize Mastra
 
-`cd` into your Next.js project and run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
-
-When prompted, choose a provider (e.g. OpenAI) and enter your key:
-
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
+Navigate to your Next.js project:
 
 ```bash
 cd my-nextjs-agent
-npx --force mastra@beta init
 ```
 
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
+Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-```bash
-cd my-nextjs-agent
-pnpm dlx mastra@beta init
+```bash npm2yarn
+npx --force mastra@latest init
 ```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-cd my-nextjs-agent
-yarn dlx mastra@beta init
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-cd my-nextjs-agent
-bunx mastra@beta init
-```
-
-</TabItem>
-</Tabs>
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
@@ -114,69 +60,15 @@ You'll call `weather-agent.ts` from your Next.js routes in the next steps.
 
 Install AI SDK UI along with the Mastra adapter:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
-npm install @mastra/ai-sdk@beta @ai-sdk/react ai
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun add @mastra/ai-sdk@beta @ai-sdk/react ai
-```
-
-</TabItem>
-</Tabs>
 
 Next, initialize AI Elements. When prompted, choose the default options:
 
-<Tabs groupId="pm">
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npx ai-elements@latest
 ```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm dlx ai-elements@latest
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn dlx ai-elements@latest
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bunx ai-elements@latest
-```
-
-</TabItem>
-</Tabs>
 
 This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
 
@@ -374,12 +266,12 @@ Congratulations on building your Mastra agent with Next.js! 🎉
 
 From here, you can extend the project with your own tools and logic:
 
-- Learn more about [agents](/docs/v1/agents/overview)
-- Give your agent its own [tools](/docs/v1/agents/using-tools)
-- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+- Learn more about [agents](/docs/agents/overview)
+- Give your agent its own [tools](/docs/agents/using-tools)
+- Add human-like [memory](/docs/agents/agent-memory) to your agent
 
 When you're ready, read more about how Mastra integrates with AI SDK UI and Next.js, and how to deploy your agent anywhere, including Vercel:
 
-- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
-- Deploy your agent to [Vercel](/guides/v1/deployment/vercel-deployer)
-- Deploy your agent [anywhere](/docs/v1/deployment/overview)
+- Integrate Mastra with [AI SDK UI](/guides/build-your-ui/ai-sdk-ui)
+- Deploy your agent to [Vercel](/guides/deployment/vercel-deployer)
+- Deploy your agent [anywhere](/docs/deployment/overview)

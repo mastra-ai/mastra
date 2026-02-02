@@ -65,7 +65,7 @@ export const educationalImageTool = createTool({
     }),
   }),
   execute: async input => {
-    const { concept, subjectArea, style, complexity, size } = input;
+    const { concept, subjectArea, style, complexity, size = '1024x1024' } = input;
 
     console.log(`🎨 Generating educational image for concept: "${concept.substring(0, 50)}..."`);
 
@@ -103,7 +103,7 @@ export const educationalImageTool = createTool({
       const imageBuffer = Buffer.from(image.base64, 'base64');
 
       // Upload to cloud storage and get public URL
-      const publicImageUrl = await uploadImageToStorage(imageBuffer, image.mimeType);
+      const publicImageUrl = await uploadImageToStorage(imageBuffer, image.mediaType);
 
       return {
         imageUrl: publicImageUrl,

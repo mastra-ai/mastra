@@ -49,7 +49,7 @@ await store.upsert({
 });
 ```
 
-### Using MongoDB Atlas Vector search
+<h3>Using MongoDB Atlas Vector search</h3>
 
 For detailed setup instructions and best practices, see the [official MongoDB Atlas Vector Search documentation](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/?utm_campaign=devrel&utm_source=third-party-content&utm_medium=cta&utm_content=mastra-docs).
 
@@ -77,7 +77,7 @@ await store.upsert({
 });
 ```
 
-### Using PostgreSQL with pgvector
+<h3>Using PostgreSQL with pgvector</h3>
 
 PostgreSQL with the pgvector extension is a good solution for teams already using PostgreSQL who want to minimize infrastructure complexity.
 For detailed setup instructions and best practices, see the [official pgvector repository](https://github.com/pgvector/pgvector).
@@ -167,6 +167,7 @@ await store.upsert({
 import { AstraVector } from "@mastra/astra";
 
 const store = new AstraVector({
+  id: 'astra-vector',
   token: process.env.ASTRA_DB_TOKEN,
   endpoint: process.env.ASTRA_DB_ENDPOINT,
   keyspace: process.env.ASTRA_DB_KEYSPACE,
@@ -240,6 +241,7 @@ await store.upsert({
 import { CloudflareVector } from "@mastra/vectorize";
 
 const store = new CloudflareVector({
+  id: 'cloudflare-vector',
   accountId: process.env.CF_ACCOUNT_ID,
   apiToken: process.env.CF_API_TOKEN,
 });
@@ -282,7 +284,13 @@ await store.upsert({
 ```ts title="vector-store.ts"
 import { ElasticSearchVector } from "@mastra/elasticsearch";
 
-const store = new ElasticSearchVector({ url: process.env.ELASTICSEARCH_URL });
+const store = new ElasticSearchVector({
+  id: 'elasticsearch-vector',
+  url: process.env.ELASTICSEARCH_URL,
+  auth: {
+    apiKey : process.env.ELASTICSEARCH_API_KEY
+  }
+});
 
 await store.createIndex({
   indexName: "my-collection",
@@ -295,6 +303,10 @@ await store.upsert({
   metadata: chunks.map((chunk) => ({ text: chunk.text })),
 });
 ```
+<h3>Using Elasticsearch</h3>
+
+For detailed setup instructions and best practices, see the [official Elasticsearch documentation](https://www.elastic.co/docs/solutions/search/get-started).
+
 
   </TabItem>
   <TabItem value="couchbase" label="Couchbase">
@@ -303,6 +315,7 @@ await store.upsert({
 import { CouchbaseVector } from "@mastra/couchbase";
 
 const store = new CouchbaseVector({
+  id: 'couchbase-vector',
   connectionString: process.env.COUCHBASE_CONNECTION_STRING,
   username: process.env.COUCHBASE_USERNAME,
   password: process.env.COUCHBASE_PASSWORD,
@@ -342,7 +355,7 @@ await store.upsert({
 });
 ```
 
-### Using LanceDB
+<h3>Using LanceDB</h3>
 
 LanceDB is an embedded vector database built on the Lance columnar format, suitable for local development or cloud deployment.
 For detailed setup instructions and best practices, see the [official LanceDB documentation](https://lancedb.github.io/lancedb/).
@@ -354,6 +367,7 @@ For detailed setup instructions and best practices, see the [official LanceDB do
 import { S3Vectors } from "@mastra/s3vectors";
 
 const store = new S3Vectors({
+  id: 's3-vectors',
   vectorBucketName: "my-vector-bucket",
   clientConfig: {
     region: "us-east-1",
@@ -396,7 +410,7 @@ The dimension size must match the output dimension of your chosen embedding mode
 
 - OpenAI text-embedding-3-small: 1536 dimensions (or custom, e.g., 256)
 - Cohere embed-multilingual-v3: 1024 dimensions
-- Google text-embedding-004: 768 dimensions (or custom)
+- Google gemini-embedding-001: 768 dimensions (or custom)
 
 :::warning
 Index dimensions cannot be changed after creation. To use a different model, delete and recreate the index with the new dimension size.

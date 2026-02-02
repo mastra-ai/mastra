@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path, { normalize } from 'node:path';
-import resolveFrom from 'resolve-from';
 import type { Plugin } from 'rollup';
 import stripJsonComments from 'strip-json-comments';
 import type { RegisterOptions } from 'typescript-paths';
@@ -15,13 +14,17 @@ export type PluginOptions = Omit<RegisterOptions, 'loggerID'> & { localResolve?:
  * Exported for testing purposes.
  *
  * @param tsConfigPath - Path to the tsconfig.json file
- * @returns true if the tsconfig has paths configured, false otherwise
+ * @returns true if the tsconfig has paths configured or extends another config, false otherwise
  */
 export function hasPaths(tsConfigPath: string): boolean {
   try {
     const content = fs.readFileSync(tsConfigPath, 'utf8');
     const config = JSON.parse(stripJsonComments(content));
-    return !!(config.compilerOptions?.paths && Object.keys(config.compilerOptions.paths).length > 0);
+    return !!(
+      (config.compilerOptions?.paths && Object.keys(config.compilerOptions.paths).length > 0) ||
+      (typeof config.extends === 'string' && config.extends.length > 0) ||
+      (Array.isArray(config.extends) && config.extends.length > 0)
+    );
   } catch {
     return false;
   }

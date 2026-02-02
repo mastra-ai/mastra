@@ -41,7 +41,6 @@ The Mastra documentation are organized into several sections:
 
 - **docs/** - Main documentation (`src/content/en/docs/`)
 - **guides/** - Step-by-step guides (`src/content/en/guides/`)
-- **examples/** - Example implementations (`src/content/en/examples/`)
 - **reference/** - API reference documentation (`src/content/en/reference/`)
 - **models/** - Model provider documentation (`src/content/en/models/`). These docs are auto-generated and should not be edited manually.
 - **course/** - Tutorial and course content (`src/course/`)
@@ -54,11 +53,11 @@ All MDX files should include frontmatter with `title` and `description`. For doc
 
 ```yaml
 ---
-title: "Memory Overview"
-description: "Learn about Mastra's memory system"
+title: 'Memory Overview'
+description: 'Learn about Mastra's memory system'
 packages:
-  - "@mastra/memory"
-  - "@mastra/core"
+  - '@mastra/memory'
+  - '@mastra/core'
 ---
 ```
 
@@ -66,7 +65,7 @@ The `packages` field enables embedded documentation generation for npm packages,
 
 ### Edit this Page via GitHub
 
-Every page on [mastra.ai](https://mastra.ai/) has an **Edit this page** link. You can click that link to edit the source code for that page in **GitHub**.
+Every page on [mastra.ai/docs](https://mastra.ai/docs) has an **Edit this page** link. You can click that link to edit the source code for that page in **GitHub**.
 
 After you make your changes, click **Commit changes**.
 This will automatically create a [fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/about-forks) of the docs in your GitHub account with the changes.
@@ -81,15 +80,15 @@ To begin developing locally, checkout this project from your machine.
 
 ```shell
 git clone git@github.com:mastra-ai/mastra.git
-cd mastra/docs
+pnpm install
 ```
 
-You can install and run the project locally using [npm](https://www.npmjs.com/). The docs use npm as their package manager (not pnpm like the rest of the monorepo). Run the following from your terminal in the `docs` directory:
+Run the following from your terminal in the `docs` directory:
 
 ```shell
-npm install
+cd docs
 
-npm run dev
+pnpm run dev
 ```
 
 This will start a local development server at `http://localhost:3000` where you can preview your changes.
@@ -113,13 +112,13 @@ Before submitting a PR, make sure to:
 1. **Build the docs locally** to check for any build errors:
 
    ```shell
-   npm run build
+   pnpm run build
    ```
 
 2. **Preview the production build**:
 
    ```shell
-   npm run serve
+   pnpm run serve
    ```
 
 3. **Check for broken links** - The build process will warn you about broken links.

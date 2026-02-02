@@ -32,11 +32,11 @@ interface LanceIndexConfig extends IndexConfig {
 }
 
 interface LanceUpsertVectorParams extends UpsertVectorParams {
-  tableName: string;
+  tableName?: string;
 }
 
 interface LanceQueryVectorParams extends QueryVectorParams<LanceVectorFilter> {
-  tableName: string;
+  tableName?: string;
   columns?: string[];
   includeAllColumns?: boolean;
 }
@@ -100,6 +100,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
   async query({
     tableName,
+    indexName,
     queryVector,
     filter,
     includeVector = false,
@@ -107,13 +108,17 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     columns = [],
     includeAllColumns = false,
   }: LanceQueryVectorParams): Promise<QueryResult[]> {
+    // Default tableName to indexName for compatibility with the standard QueryVectorParams interface.
+    // This allows Memory and other consumers to call query without explicitly providing tableName.
+    const resolvedTableName = tableName ?? indexName;
+
     try {
       if (!this.lanceClient) {
         throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
       }
 
-      if (!tableName) {
-        throw new Error('tableName is required');
+      if (!resolvedTableName) {
+        throw new Error('tableName or indexName is required');
       }
 
       if (!queryVector) {
@@ -125,22 +130,23 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: createVectorErrorId('LANCE', 'QUERY', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
-          details: { tableName },
+          text: error instanceof Error ? error.message : 'Invalid query arguments',
+          details: { tableName: resolvedTableName },
         },
         error,
       );
     }
 
     try {
-      // Open the table
-      const table = await this.lanceClient.openTable(tableName);
-
-      // Prepare the list of columns to select
-      const selectColumns = [...columns];
-      if (!selectColumns.includes('id')) {
-        selectColumns.push('id');
+      // Check if table exists - return empty array if not
+      const tables = await this.lanceClient.tableNames();
+      if (!tables.includes(resolvedTableName)) {
+        this.logger.debug(`Table ${resolvedTableName} does not exist. Returning empty results.`);
+        return [];
       }
+
+      // Open the table
+      const table = await this.lanceClient.openTable(resolvedTableName);
 
       // Create the query builder
       let query = table.search(queryVector);
@@ -152,8 +158,13 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         query = query.where(whereClause);
       }
 
-      // Apply column selection and limit
-      if (!includeAllColumns && selectColumns.length > 0) {
+      // Apply column selection only if specific columns were requested
+      // If columns is empty and includeAllColumns is false, return all columns by default
+      if (!includeAllColumns && columns.length > 0) {
+        const selectColumns = [...columns];
+        if (!selectColumns.includes('id')) {
+          selectColumns.push('id');
+        }
         query = query.select(selectColumns);
       }
       query = query.limit(topK);
@@ -199,7 +210,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: createVectorErrorId('LANCE', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { tableName, includeVector, columnsCount: columns?.length, includeAllColumns },
+          details: { tableName: resolvedTableName, includeVector, columnsCount: columns?.length, includeAllColumns },
         },
         error,
       );
@@ -248,14 +259,18 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     return translator.translate(prefixedFilter);
   }
 
-  async upsert({ tableName, vectors, metadata = [], ids = [] }: LanceUpsertVectorParams): Promise<string[]> {
+  async upsert({ tableName, indexName, vectors, metadata = [], ids = [] }: LanceUpsertVectorParams): Promise<string[]> {
+    // Default tableName to indexName for compatibility with the standard UpsertVectorParams interface.
+    // This allows Memory and other consumers to call upsert without explicitly providing tableName.
+    const resolvedTableName = tableName ?? indexName;
+
     try {
       if (!this.lanceClient) {
         throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
       }
 
-      if (!tableName) {
-        throw new Error('tableName is required');
+      if (!resolvedTableName) {
+        throw new Error('tableName or indexName is required');
       }
 
       if (!vectors || !Array.isArray(vectors) || vectors.length === 0) {
@@ -267,8 +282,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: createVectorErrorId('LANCE', 'UPSERT', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          text: 'LanceDB client not initialized. Use LanceVectorStore.create() to create an instance',
-          details: { tableName },
+          text: error instanceof Error ? error.message : 'Invalid upsert arguments',
+          details: { tableName: resolvedTableName },
         },
         error,
       );
@@ -276,11 +291,14 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
     try {
       const tables = await this.lanceClient.tableNames();
-      if (!tables.includes(tableName)) {
-        throw new Error(`Table ${tableName} does not exist`);
-      }
+      const tableExists = tables.includes(resolvedTableName);
+      let table: Table | null = null;
 
-      const table = await this.lanceClient.openTable(tableName);
+      if (!tableExists) {
+        this.logger.debug(`Table ${resolvedTableName} does not exist. Creating it with the first upsert data.`);
+      } else {
+        table = await this.lanceClient.openTable(resolvedTableName);
+      }
 
       // Generate IDs if not provided
       const vectorIds = ids.length === vectors.length ? ids : vectors.map((_, i) => ids[i] || crypto.randomUUID());
@@ -308,7 +326,60 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         return rowData;
       });
 
-      await table.add(data, { mode: 'overwrite' });
+      if (table !== null) {
+        // Table exists - check if we need to recreate it due to schema differences
+        // This can happen when createIndex creates an empty table with minimal schema
+        // and then upsert is called with metadata fields
+        const rowCount = await table.countRows();
+        const schema = await table.schema();
+        const existingColumns = new Set(schema.fields.map(f => f.name));
+
+        // Check for schema mismatches:
+        // - extraColumns: columns in data not in schema (will be dropped)
+        // - missingSchemaColumns: columns in schema not in data (will be set to null)
+        const dataColumns = new Set(Object.keys(data[0] || {}));
+        const extraColumns = [...dataColumns].filter(col => !existingColumns.has(col));
+        const missingSchemaColumns = [...existingColumns].filter(col => !dataColumns.has(col));
+        const hasSchemaMismatch = extraColumns.length > 0 || missingSchemaColumns.length > 0;
+
+        if (rowCount === 0 && extraColumns.length > 0) {
+          // Empty table with extra columns in data - recreate it with the correct schema
+          // Note: This operation is not atomic. Concurrent upserts during table recreation
+          // may fail and should be retried by the caller.
+          this.logger.warn(
+            `Table ${resolvedTableName} is empty and data has extra columns ${extraColumns.join(', ')}. Recreating with new schema.`,
+          );
+          await this.lanceClient.dropTable(resolvedTableName);
+          await this.lanceClient.createTable(resolvedTableName, data);
+        } else if (hasSchemaMismatch) {
+          // Non-empty table or schema mismatch - normalize data to match existing schema
+          // LanceDB requires data to match table schema exactly, in the same column order
+          if (extraColumns.length > 0) {
+            this.logger.warn(
+              `Table ${resolvedTableName} has ${rowCount} rows. Columns ${extraColumns.join(', ')} will be dropped from upsert.`,
+            );
+          }
+          // Use schema field order to ensure columns are in the correct order
+          const schemaFieldNames = schema.fields.map(f => f.name);
+          const normalizedData = data.map(row => {
+            const normalized: Record<string, any> = {};
+            for (const col of schemaFieldNames) {
+              // Include column from row if present, otherwise set to null
+              normalized[col] = col in row ? row[col] : null;
+            }
+            return normalized;
+          });
+          // Use mergeInsert for true upsert behavior: update existing rows, insert new ones
+          await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(normalizedData);
+        } else {
+          // Schema matches exactly - use mergeInsert for true upsert behavior
+          await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(data);
+        }
+      } else {
+        // Table doesn't exist, create it with the data
+        this.logger.debug(`Creating table ${resolvedTableName} with initial data`);
+        await this.lanceClient.createTable(resolvedTableName, data);
+      }
 
       return vectorIds;
     } catch (error: any) {
@@ -317,7 +388,12 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: createVectorErrorId('LANCE', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { tableName, vectorCount: vectors.length, metadataCount: metadata.length, idsCount: ids.length },
+          details: {
+            tableName: resolvedTableName,
+            vectorCount: vectors.length,
+            metadataCount: metadata.length,
+            idsCount: ids.length,
+          },
         },
         error,
       );
@@ -427,7 +503,17 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
   }
 
   /**
-   * indexName is actually a column name in a table in lanceDB
+   * Creates a vector index on a table.
+   *
+   * The behavior of `indexName` depends on whether `tableName` is provided:
+   * - With `tableName`: `indexName` is the column to index (advanced use case)
+   * - Without `tableName`: `indexName` becomes the table name, and 'vector' is used as the column (Memory compatibility)
+   *
+   * @param tableName - Optional table name. If not provided, defaults to indexName.
+   * @param indexName - The index/column name, or table name if tableName is not provided.
+   * @param dimension - Vector dimension size.
+   * @param metric - Distance metric: 'cosine', 'euclidean', or 'dotproduct'.
+   * @param indexConfig - Optional index configuration.
    */
   async createIndex({
     tableName,
@@ -436,13 +522,18 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     metric = 'cosine',
     indexConfig = {},
   }: LanceCreateIndexParams): Promise<void> {
+    // Default tableName to indexName for compatibility with the standard CreateIndexParams interface.
+    // This allows Memory and other consumers to call createIndex without explicitly providing tableName.
+    const resolvedTableName = tableName ?? indexName;
+
+    // Determine the column to index:
+    // - If tableName was provided, indexName is the column name (advanced use case)
+    // - If tableName was not provided, use 'vector' as the column name (Memory compatibility)
+    const columnToIndex = tableName ? indexName : 'vector';
+
     try {
       if (!this.lanceClient) {
         throw new Error('LanceDB client not initialized. Use LanceVectorStore.create() to create an instance');
-      }
-
-      if (!tableName) {
-        throw new Error('tableName is required');
       }
 
       if (!indexName) {
@@ -458,7 +549,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: createVectorErrorId('LANCE', 'CREATE_INDEX', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { tableName: tableName || '', indexName, dimension, metric },
+          details: { tableName: resolvedTableName, indexName, dimension, metric },
         },
         err,
       );
@@ -466,13 +557,36 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
     try {
       const tables = await this.lanceClient.tableNames();
-      if (!tables.includes(tableName)) {
-        throw new Error(
-          `Table ${tableName} does not exist. Please create the table first by calling createTable() method.`,
-        );
-      }
+      let table: Table;
 
-      const table = await this.lanceClient.openTable(tableName);
+      if (!tables.includes(resolvedTableName)) {
+        // Table doesn't exist - create an empty table with the proper schema.
+        // LanceDB requires at least one row to infer schema, so we create a dummy row
+        // and immediately delete it. This leaves an empty table with the correct schema.
+        // Race condition note: There's a brief window between createTable and delete where
+        // the '__init__' row could appear in concurrent query results. In practice this window
+        // is very short (single-digit milliseconds). Callers needing strict consistency should
+        // filter out id='__init__' or ensure exclusive access during table creation.
+        this.logger.debug(
+          `Table ${resolvedTableName} does not exist. Creating empty table with dimension ${dimension}.`,
+        );
+
+        const initVector = new Array(dimension).fill(0);
+        table = await this.lanceClient.createTable(resolvedTableName, [{ id: '__init__', vector: initVector }]);
+        try {
+          await table.delete("id = '__init__'");
+        } catch (deleteError) {
+          this.logger.warn(
+            `Failed to delete initialization row from ${resolvedTableName}. Subsequent queries may include '__init__' row.`,
+            deleteError,
+          );
+        }
+        // Table is now empty; index will be created when data is upserted and row count >= 256
+        this.logger.debug(`Table ${resolvedTableName} created. Index creation deferred until data is available.`);
+        return;
+      } else {
+        table = await this.lanceClient.openTable(resolvedTableName);
+      }
 
       // Convert metric to LanceDB metric
       type LanceMetric = 'cosine' | 'l2' | 'dot';
@@ -485,8 +599,17 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         metricType = 'cosine';
       }
 
+      // Check row count - LanceDB requires at least 256 rows for IVF_HNSW_PQ index
+      const rowCount = await table.countRows();
+      if (rowCount < 256) {
+        this.logger.warn(
+          `Table ${resolvedTableName} has ${rowCount} rows, which is below the 256 row minimum for index creation. Skipping index creation.`,
+        );
+        return;
+      }
+
       if (indexConfig.type === 'ivfflat') {
-        await table.createIndex(indexName, {
+        await table.createIndex(columnToIndex, {
           config: Index.ivfPq({
             numPartitions: indexConfig.numPartitions || 128,
             numSubVectors: indexConfig.numSubVectors || 16,
@@ -496,7 +619,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       } else {
         // Default to HNSW PQ index
         this.logger.debug('Creating HNSW PQ index with config:', indexConfig);
-        await table.createIndex(indexName, {
+        await table.createIndex(columnToIndex, {
           config: Index.hnswPq({
             m: indexConfig?.hnsw?.m || 16,
             efConstruction: indexConfig?.hnsw?.efConstruction || 100,
@@ -510,7 +633,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           id: createVectorErrorId('LANCE', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { tableName: tableName || '', indexName, dimension },
+          details: { tableName: resolvedTableName, indexName, dimension },
         },
         error,
       );
@@ -870,8 +993,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
               return rowData;
             });
 
-            // Update all records
-            await table.add(updatedRecords, { mode: 'overwrite' });
+            // Use mergeInsert for true update behavior without replacing the entire table
+            await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(updatedRecords);
             return;
           }
         } catch (err) {

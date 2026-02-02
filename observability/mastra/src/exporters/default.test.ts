@@ -539,6 +539,58 @@ describe('DefaultExporter', () => {
       });
     });
 
+    describe('Flush', () => {
+      it('should flush buffered events without shutting down', async () => {
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 10, // Ensure single event doesn't trigger auto-flush
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
+        await exporter.exportTracingEvent(mockEvent);
+
+        // Wait for any async operations to settle
+        await new Promise(resolve => setImmediate(resolve));
+
+        // Should have events in buffer (not auto-flushed due to higher batch size)
+        expect((exporter as any).buffer.totalSize).toBe(1);
+
+        // Call public flush() method
+        await exporter.flush();
+
+        expect(mockLogger.debug).toHaveBeenCalledWith('Flushing buffered events', { bufferedEvents: 1 });
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalled();
+
+        // Buffer should be empty after flush
+        expect((exporter as any).buffer.totalSize).toBe(0);
+
+        // Exporter should still be usable after flush
+        const anotherEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-2', 'span-2');
+        await exporter.exportTracingEvent(anotherEvent);
+        expect((exporter as any).buffer.totalSize).toBe(1);
+
+        await exporter.shutdown();
+      });
+
+      it('should be a no-op when buffer is empty', async () => {
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        // Call flush on empty buffer
+        await exporter.flush();
+
+        // Should not have called batchCreateSpans
+        expect(mockObservabilityStore.batchCreateSpans).not.toHaveBeenCalled();
+
+        await exporter.shutdown();
+      });
+    });
+
     describe('Shutdown', () => {
       it('should flush remaining events on shutdown', async () => {
         const exporter = new DefaultExporter({
@@ -558,8 +610,6 @@ describe('DefaultExporter', () => {
         expect((exporter as any).buffer.totalSize).toBe(1);
 
         await exporter.shutdown();
-
-        expect(mockLogger.info).toHaveBeenCalledWith('Flushing remaining events on shutdown', { remainingEvents: 1 });
 
         expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalled();
       });

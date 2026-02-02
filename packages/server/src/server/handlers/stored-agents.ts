@@ -12,6 +12,7 @@ import {
 } from '../schemas/stored-agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { handleAutoVersioning } from './agent-versions';
 import { handleError } from './error';
 
 // ============================================================================
@@ -19,18 +20,19 @@ import { handleError } from './error';
 // ============================================================================
 
 /**
- * GET /api/stored/agents - List all stored agents
+ * GET /stored/agents - List all stored agents
  */
 export const LIST_STORED_AGENTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents',
+  path: '/stored/agents',
   responseType: 'json',
   queryParamSchema: listStoredAgentsQuerySchema,
   responseSchema: listStoredAgentsResponseSchema,
   summary: 'List stored agents',
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
-  handler: async ({ mastra, page, perPage, orderBy }) => {
+  requiresAuth: true,
+  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -43,10 +45,12 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      const result = await agentsStore.listAgents({
+      const result = await agentsStore.listAgentsResolved({
         page,
         perPage,
         orderBy,
+        authorId,
+        metadata,
       });
 
       return result;
@@ -57,17 +61,18 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
 });
 
 /**
- * GET /api/stored/agents/:storedAgentId - Get a stored agent by ID
+ * GET /stored/agents/:storedAgentId - Get a stored agent by ID
  */
 export const GET_STORED_AGENT_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   responseSchema: getStoredAgentResponseSchema,
   summary: 'Get stored agent by ID',
-  description: 'Returns a specific agent from storage by its unique identifier',
+  description: 'Returns a specific agent from storage by its unique identifier (resolved with active version config)',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();
@@ -81,7 +86,9 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      const agent = await agentsStore.getAgentById({ id: storedAgentId });
+      // Use getAgentByIdResolved to automatically resolve from active version
+      // Returns StorageResolvedAgentType (thin record + version config)
+      const agent = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
 
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
@@ -95,20 +102,23 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * POST /api/stored/agents - Create a new stored agent
+ * POST /stored/agents - Create a new stored agent
  */
 export const CREATE_STORED_AGENT_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/stored/agents',
+  path: '/stored/agents',
   responseType: 'json',
   bodySchema: createStoredAgentBodySchema,
   responseSchema: createStoredAgentResponseSchema,
   summary: 'Create stored agent',
   description: 'Creates a new agent in storage with the provided configuration',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     id,
+    authorId,
+    metadata,
     name,
     description,
     instructions,
@@ -117,11 +127,11 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
     defaultOptions,
     workflows,
     agents,
+    integrationTools,
     inputProcessors,
     outputProcessors,
     memory,
     scorers,
-    metadata,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -141,12 +151,16 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
 
-      // Only include tools if it's actually an array from the body (not {} from adapter)
+      // Only include tools/integrationTools if they're actually arrays from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
-      const agent = await agentsStore.createAgent({
+      // Create agent with flat StorageCreateAgentInput
+      await agentsStore.createAgent({
         agent: {
           id,
+          authorId,
+          metadata,
           name,
           description,
           instructions,
@@ -155,15 +169,20 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           defaultOptions,
           workflows,
           agents,
+          integrationTools: integrationToolsFromBody,
           inputProcessors,
           outputProcessors,
           memory,
           scorers,
-          metadata,
         },
       });
 
-      return agent;
+      // Return the resolved agent (thin record + version config)
+      const resolved = await agentsStore.getAgentByIdResolved({ id });
+      if (!resolved) {
+        throw new HTTPException(500, { message: 'Failed to resolve created agent' });
+      }
+      return resolved;
     } catch (error) {
       return handleError(error, 'Error creating stored agent');
     }
@@ -171,11 +190,11 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * PATCH /api/stored/agents/:storedAgentId - Update a stored agent
+ * PATCH /stored/agents/:storedAgentId - Update a stored agent
  */
 export const UPDATE_STORED_AGENT_ROUTE = createRoute({
   method: 'PATCH',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   bodySchema: updateStoredAgentBodySchema,
@@ -183,9 +202,14 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
   summary: 'Update stored agent',
   description: 'Updates an existing agent in storage with the provided fields',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({
     mastra,
     storedAgentId,
+    // Metadata-level fields
+    authorId,
+    metadata,
+    // Config fields (snapshot-level)
     name,
     description,
     instructions,
@@ -194,11 +218,11 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     defaultOptions,
     workflows,
     agents,
+    integrationTools,
     inputProcessors,
     outputProcessors,
     memory,
     scorers,
-    metadata,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -218,11 +242,16 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
-      // Only include tools if it's actually an array from the body (not {} from adapter)
+      // Only include tools/integrationTools if they're actually arrays from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
-      const agent = await agentsStore.updateAgent({
+      // Update the agent with both metadata-level and config-level fields
+      // The storage layer handles separating these into agent-record updates vs new-version creation
+      const updatedAgent = await agentsStore.updateAgent({
         id: storedAgentId,
+        authorId,
+        metadata,
         name,
         description,
         instructions,
@@ -231,14 +260,46 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         defaultOptions,
         workflows,
         agents,
+        integrationTools: integrationToolsFromBody,
         inputProcessors,
         outputProcessors,
         memory,
         scorers,
-        metadata,
       });
 
-      return agent;
+      // Build the snapshot config for auto-versioning comparison
+      const configFields = {
+        name,
+        description,
+        instructions,
+        model,
+        tools: toolsFromBody,
+        defaultOptions,
+        workflows,
+        agents,
+        integrationTools: integrationToolsFromBody,
+        inputProcessors,
+        outputProcessors,
+        memory,
+        scorers,
+      };
+
+      // Filter out undefined values to get only the config fields that were provided
+      const providedConfigFields = Object.fromEntries(Object.entries(configFields).filter(([_, v]) => v !== undefined));
+
+      // Handle auto-versioning with retry logic for race conditions
+      // This creates a version if there are meaningful config changes and updates activeVersionId
+      await handleAutoVersioning(agentsStore, storedAgentId, existing, updatedAgent, providedConfigFields);
+
+      // Clear the cached agent instance so the next request gets the updated config
+      mastra.clearStoredAgentCache(storedAgentId);
+
+      // Return the resolved agent (thin record + version config)
+      const resolved = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
+      if (!resolved) {
+        throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
+      }
+      return resolved;
     } catch (error) {
       return handleError(error, 'Error updating stored agent');
     }
@@ -246,17 +307,18 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
 });
 
 /**
- * DELETE /api/stored/agents/:storedAgentId - Delete a stored agent
+ * DELETE /stored/agents/:storedAgentId - Delete a stored agent
  */
 export const DELETE_STORED_AGENT_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/stored/agents/:storedAgentId',
+  path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   responseSchema: deleteStoredAgentResponseSchema,
   summary: 'Delete stored agent',
   description: 'Deletes an agent from storage by its unique identifier',
   tags: ['Stored Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();
@@ -277,6 +339,9 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       }
 
       await agentsStore.deleteAgent({ id: storedAgentId });
+
+      // Clear the cached agent instance
+      mastra.clearStoredAgentCache(storedAgentId);
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {

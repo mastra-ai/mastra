@@ -8,17 +8,17 @@ Let's update your MCP configuration in `src/mastra/agents/index.ts` to include t
 const mcp = new MCPClient({
   servers: {
     zapier: {
-      url: new URL(process.env.ZAPIER_MCP_URL || ""),
+      url: new URL(process.env.ZAPIER_MCP_URL || ''),
     },
     github: {
-      url: new URL(process.env.COMPOSIO_MCP_GITHUB || ""),
+      url: new URL(process.env.COMPOSIO_MCP_GITHUB || ''),
     },
     hackernews: {
-      command: "npx",
-      args: ["-y", "@devabdultech/hn-mcp-server"],
+      command: 'npx',
+      args: ['-y', '@devabdultech/hn-mcp-server'],
     },
   },
-});
+})
 ```
 
 This configuration tells MCP to run the Hacker News server using NPX when needed. The `-y` flag automatically confirms any prompts, making it seamless to use.

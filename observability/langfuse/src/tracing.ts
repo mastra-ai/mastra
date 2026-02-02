@@ -6,15 +6,16 @@
  * MODEL_GENERATION spans become Langfuse generations, all others become spans.
  */
 
-import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes, UsageStats } from '@mastra/core/observability';
+import type { AnyExportedSpan, ModelGenerationAttributes, SpanErrorInfo } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
-import { BaseExporter } from '@mastra/observability';
-import type { BaseExporterConfig } from '@mastra/observability';
+import { TrackingExporter } from '@mastra/observability';
+import type { TrackingExporterConfig, TraceData } from '@mastra/observability';
 import { Langfuse } from 'langfuse';
 import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient, LangfuseEventClient } from 'langfuse';
+import { formatUsageMetrics } from './metrics';
 
-export interface LangfuseExporterConfig extends BaseExporterConfig {
+export interface LangfuseExporterConfig extends TrackingExporterConfig {
   /** Langfuse API key */
   publicKey?: string;
   /** Langfuse secret key */
@@ -29,88 +30,42 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
 
 type LangfusePromptData = { name?: string; version?: number; id?: string };
 
-type SpanMetadata = {
-  parentSpanId?: string;
-  langfusePrompt?: LangfusePromptData;
-};
-
-type TraceData = {
-  trace: LangfuseTraceClient; // Langfuse trace object
-  spans: Map<string, LangfuseSpanClient | LangfuseGenerationClient>; // Maps span.id to Langfuse span/generation
-  spanMetadata: Map<string, SpanMetadata>; // Maps span.id to span metadata for prompt inheritance
-  events: Map<string, LangfuseEventClient>; // Maps span.id to Langfuse event
-  activeSpans: Set<string>; // Tracks which spans haven't ended yet
-  rootSpanId?: string; // Track the root span ID
-};
-
-type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient | LangfuseEventClient;
-
 /**
- * Token usage format compatible with Langfuse.
+ * With Langfuse, data from the root span is stored in both the Root and the
+ * first span.
  */
-export interface LangfuseUsageMetrics {
-  input?: number;
-  output?: number;
-  total?: number;
-  reasoning?: number;
-  cache_read_input_tokens?: number;
-  cache_write_input_tokens?: number;
-}
 
-/**
- * Formats UsageStats to Langfuse's expected format.
- */
-export function formatUsageMetrics(usage?: UsageStats): LangfuseUsageMetrics {
-  if (!usage) return {};
+type LangfuseRoot = LangfuseTraceClient;
+type LangfuseSpan = LangfuseSpanClient | LangfuseGenerationClient;
+type LangfuseEvent = LangfuseEventClient;
+type LangfuseMetadata = { prompt?: LangfusePromptData };
+type LangfuseTraceData = TraceData<LangfuseRoot, LangfuseSpan, LangfuseEvent, LangfuseMetadata>;
 
-  const metrics: LangfuseUsageMetrics = {};
-
-  if (usage.inputTokens !== undefined) {
-    metrics.input = usage.inputTokens;
-
-    if (usage.inputDetails?.cacheWrite !== undefined) {
-      metrics.cache_write_input_tokens = usage.inputDetails.cacheWrite;
-      metrics.input -= metrics.cache_write_input_tokens;
-    }
-  }
-
-  if (usage.inputDetails?.cacheRead !== undefined) {
-    metrics.cache_read_input_tokens = usage.inputDetails.cacheRead;
-  }
-
-  if (usage.outputTokens !== undefined) {
-    metrics.output = usage.outputTokens;
-  }
-
-  if (usage.outputDetails?.reasoning !== undefined) {
-    metrics.reasoning = usage.outputDetails.reasoning;
-  }
-
-  if (metrics.input && metrics.output) {
-    metrics.total = metrics.input + metrics.output;
-    if (metrics.cache_write_input_tokens) {
-      metrics.total += metrics.cache_write_input_tokens;
-    }
-  }
-
-  return metrics;
-}
-
-export class LangfuseExporter extends BaseExporter {
+export class LangfuseExporter extends TrackingExporter<
+  LangfuseRoot,
+  LangfuseSpan,
+  LangfuseEvent,
+  LangfuseMetadata,
+  LangfuseExporterConfig
+> {
   name = 'langfuse';
-  private client: Langfuse;
-  private realtime: boolean;
-  private traceMap = new Map<string, TraceData>();
+  #client: Langfuse | undefined;
+  #realtime: boolean;
 
   constructor(config: LangfuseExporterConfig = {}) {
-    super(config);
-
-    this.realtime = config.realtime ?? false;
-
-    // Read credentials from config or environment variables
+    // Resolve env vars BEFORE calling super (config is readonly in base class)
     const publicKey = config.publicKey ?? process.env.LANGFUSE_PUBLIC_KEY;
     const secretKey = config.secretKey ?? process.env.LANGFUSE_SECRET_KEY;
     const baseUrl = config.baseUrl ?? process.env.LANGFUSE_BASE_URL;
+
+    super({
+      ...config,
+      publicKey,
+      secretKey,
+      baseUrl,
+    });
+
+    this.#realtime = config.realtime ?? false;
 
     if (!publicKey || !secretKey) {
       const publicKeySource = config.publicKey
@@ -127,12 +82,10 @@ export class LangfuseExporter extends BaseExporter {
         `Missing required credentials (publicKey: ${publicKeySource}, secretKey: ${secretKeySource}). ` +
           `Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables or pass them in config.`,
       );
-      // Set client to null - safety is ensured by the isDisabled flag set above
-      this.client = null as any;
       return;
     }
 
-    this.client = new Langfuse({
+    this.#client = new Langfuse({
       publicKey,
       secretKey,
       baseUrl,
@@ -140,51 +93,46 @@ export class LangfuseExporter extends BaseExporter {
     });
   }
 
-  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    if (event.exportedSpan.isEvent) {
-      await this.handleEventSpan(event.exportedSpan);
-      return;
-    }
-
-    switch (event.type) {
-      case 'span_started':
-        await this.handleSpanStarted(event.exportedSpan);
-        break;
-      case 'span_updated':
-        await this.handleSpanUpdateOrEnd(event.exportedSpan, false);
-        break;
-      case 'span_ended':
-        await this.handleSpanUpdateOrEnd(event.exportedSpan, true);
-        break;
-    }
-
+  protected override async _postExportTracingEvent(): Promise<void> {
     // Flush immediately in realtime mode for instant visibility
-    if (this.realtime) {
-      await this.client.flushAsync();
+    if (this.#realtime) {
+      await this.#client?.flushAsync();
     }
   }
 
-  private async handleSpanStarted(span: AnyExportedSpan): Promise<void> {
-    if (span.isRootSpan) {
-      this.initTrace(span);
-    }
-    const method = 'handleSpanStarted';
+  protected override async _buildRoot(args: {
+    span: AnyExportedSpan;
+    traceData: LangfuseTraceData;
+  }): Promise<LangfuseTraceClient | undefined> {
+    const { span } = args;
+    // Note: If the traceId already exists in Langfuse (e.g., from a previous server instance
+    // or session), the Langfuse SDK handles this gracefully. Calling client.trace() with
+    // an existing ID is idempotent - it will update/continue the existing trace rather than
+    // failing or creating a duplicate. This is by design for distributed tracing scenarios.
+    // See: https://langfuse.com/docs/tracing-features/trace-ids
+    return this.#client?.trace(this.buildTracePayload(span));
+  }
 
-    const traceData = this.getTraceData({ span, method });
-    if (!traceData) {
+  protected override async _buildEvent(args: {
+    span: AnyExportedSpan;
+    traceData: LangfuseTraceData;
+  }): Promise<LangfuseEvent | undefined> {
+    const { span, traceData } = args;
+    const langfuseParent = traceData.getParentOrRoot({ span });
+    if (!langfuseParent) {
       return;
     }
 
-    // Store span metadata for prompt inheritance lookup (for non-root spans)
-    if (!span.isRootSpan) {
-      const langfuseData = span.metadata?.langfuse as { prompt?: LangfusePromptData } | undefined;
-      traceData.spanMetadata.set(span.id, {
-        parentSpanId: span.parentSpanId,
-        langfusePrompt: langfuseData?.prompt,
-      });
-    }
+    const payload = this.buildSpanPayload(span, true, traceData);
+    return langfuseParent.event(payload);
+  }
 
-    const langfuseParent = this.getLangfuseParent({ traceData, span, method });
+  protected override async _buildSpan(args: {
+    span: AnyExportedSpan;
+    traceData: LangfuseTraceData;
+  }): Promise<LangfuseSpan | undefined> {
+    const { span, traceData } = args;
+    const langfuseParent = traceData.getParentOrRoot({ span });
     if (!langfuseParent) {
       return;
     }
@@ -194,178 +142,51 @@ export class LangfuseExporter extends BaseExporter {
     const langfuseSpan =
       span.type === SpanType.MODEL_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
 
-    traceData.spans.set(span.id, langfuseSpan);
-    traceData.activeSpans.add(span.id); // Track as active
+    this.logger.debug(`${this.name}: built span`, {
+      traceId: span.traceId,
+      spanId: payload.id,
+      method: '_buildSpan',
+    });
+
+    return langfuseSpan;
   }
 
-  private async handleSpanUpdateOrEnd(span: AnyExportedSpan, isEnd: boolean): Promise<void> {
-    const method = isEnd ? 'handleSpanEnd' : 'handleSpanUpdate';
-
-    const traceData = this.getTraceData({ span, method });
-    if (!traceData) {
-      return;
-    }
-
-    const langfuseSpan = traceData.spans.get(span.id);
-    if (!langfuseSpan) {
-      // For event spans that only send SPAN_ENDED, we might not have the span yet
-      if (isEnd && span.isEvent) {
-        // Just make sure it's not in active spans
-        traceData.activeSpans.delete(span.id);
-        if (traceData.activeSpans.size === 0) {
-          this.traceMap.delete(span.traceId);
-        }
-        return;
-      }
-
-      this.logger.warn('Langfuse exporter: No Langfuse span found for span update/end', {
+  protected override async _updateSpan(args: { span: AnyExportedSpan; traceData: LangfuseTraceData }): Promise<void> {
+    const { span, traceData } = args;
+    const langfuseSpan = traceData.getSpan({ spanId: span.id });
+    if (langfuseSpan) {
+      this.logger.debug(`${this.name}: found span for update`, {
         traceId: span.traceId,
-        spanId: span.id,
-        spanName: span.name,
-        spanType: span.type,
-        isRootSpan: span.isRootSpan,
-        parentSpanId: span.parentSpanId,
-        method,
+        spanId: langfuseSpan.id,
+        method: '_updateSpan',
       });
-      return;
-    }
 
+      const updatePayload = this.buildSpanPayload(span, false, traceData);
+
+      // use update for both update & end, so that we can use the
+      // end time we set when ending the span.
+      langfuseSpan.update(updatePayload);
+    }
+  }
+
+  protected override async _finishSpan(args: { span: AnyExportedSpan; traceData: LangfuseTraceData }): Promise<void> {
+    const { span, traceData } = args;
+    const langfuseSpan = traceData.getSpan({ spanId: span.id });
     // use update for both update & end, so that we can use the
     // end time we set when ending the span.
-    langfuseSpan.update(this.buildSpanPayload(span, false, traceData));
+    langfuseSpan?.update(this.buildSpanPayload(span, false, traceData));
 
-    if (isEnd) {
-      // Remove from active spans
-      traceData.activeSpans.delete(span.id);
-
-      if (span.isRootSpan) {
-        traceData.trace.update({ output: span.output });
-      }
-
-      // Only clean up the trace when ALL spans have ended
-      if (traceData.activeSpans.size === 0) {
-        this.traceMap.delete(span.traceId);
-      }
-    }
-  }
-
-  private async handleEventSpan(span: AnyExportedSpan): Promise<void> {
     if (span.isRootSpan) {
-      this.logger.debug('Langfuse exporter: Creating trace', {
-        traceId: span.traceId,
-        spanId: span.id,
-        spanName: span.name,
-        method: 'handleEventSpan',
-      });
-      this.initTrace(span);
-    }
-    const method = 'handleEventSpan';
-
-    const traceData = this.getTraceData({ span, method });
-    if (!traceData) {
-      return;
-    }
-
-    const langfuseParent = this.getLangfuseParent({ traceData, span, method });
-    if (!langfuseParent) {
-      return;
-    }
-
-    const payload = this.buildSpanPayload(span, true, traceData);
-
-    const langfuseEvent = langfuseParent.event(payload);
-
-    traceData.events.set(span.id, langfuseEvent);
-
-    // Event spans are typically immediately ended, but let's track them properly
-    if (!span.endTime) {
-      traceData.activeSpans.add(span.id);
+      const langfuseRoot = traceData.getRoot();
+      langfuseRoot?.update({ output: span.output });
     }
   }
 
-  private initTrace(span: AnyExportedSpan): void {
-    // Check if trace already exists in our local traceMap
-    // This allows multiple root spans (e.g., from multiple agent.stream calls)
-    // to be grouped under the same Langfuse trace
-    if (this.traceMap.has(span.traceId)) {
-      this.logger.debug('Langfuse exporter: Reusing existing trace from local map', {
-        traceId: span.traceId,
-        spanId: span.id,
-        spanName: span.name,
-      });
-      return; // Reuse existing trace
-    }
-
-    // Note: If the traceId already exists in Langfuse (e.g., from a previous server instance
-    // or session), the Langfuse SDK handles this gracefully. Calling client.trace() with
-    // an existing ID is idempotent - it will update/continue the existing trace rather than
-    // failing or creating a duplicate. This is by design for distributed tracing scenarios.
-    // See: https://langfuse.com/docs/tracing-features/trace-ids
-    const trace = this.client.trace(this.buildTracePayload(span));
-
-    // Extract langfuse prompt data from root span
-    const langfuseData = span.metadata?.langfuse as { prompt?: LangfusePromptData } | undefined;
-    const spanMetadata = new Map<string, SpanMetadata>();
-
-    // Store root span metadata for prompt inheritance
-    spanMetadata.set(span.id, {
-      parentSpanId: undefined,
-      langfusePrompt: langfuseData?.prompt,
-    });
-
-    this.traceMap.set(span.traceId, {
-      trace,
-      spans: new Map(),
-      spanMetadata,
-      events: new Map(),
-      activeSpans: new Set(),
-      rootSpanId: span.id,
-    });
-  }
-
-  private getTraceData(options: { span: AnyExportedSpan; method: string }): TraceData | undefined {
-    const { span, method } = options;
-
-    if (this.traceMap.has(span.traceId)) {
-      return this.traceMap.get(span.traceId);
-    }
-
-    this.logger.warn('Langfuse exporter: No trace data found for span', {
-      traceId: span.traceId,
-      spanId: span.id,
-      spanName: span.name,
-      spanType: span.type,
-      isRootSpan: span.isRootSpan,
-      parentSpanId: span.parentSpanId,
-      method,
-    });
-  }
-
-  private getLangfuseParent(options: {
-    traceData: TraceData;
-    span: AnyExportedSpan;
-    method: string;
-  }): LangfuseParent | undefined {
-    const { traceData, span, method } = options;
-
-    const parentId = span.parentSpanId;
-    if (!parentId) {
-      return traceData.trace;
-    }
-    if (traceData.spans.has(parentId)) {
-      return traceData.spans.get(parentId);
-    }
-    if (traceData.events.has(parentId)) {
-      return traceData.events.get(parentId);
-    }
-    this.logger.warn('Langfuse exporter: No parent data found for span', {
-      traceId: span.traceId,
-      spanId: span.id,
-      spanName: span.name,
-      spanType: span.type,
-      isRootSpan: span.isRootSpan,
-      parentSpanId: span.parentSpanId,
-      method,
+  protected override async _abortSpan(args: { span: LangfuseSpan; reason: SpanErrorInfo }): Promise<void> {
+    const { span, reason } = args;
+    span.end({
+      level: 'ERROR',
+      statusMessage: reason.message,
     });
   }
 
@@ -393,54 +214,55 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   /**
-   * Look up the Langfuse prompt from the closest parent span that has one.
+   * Look up the Langfuse prompt from the closest span that has one.
    * This enables prompt inheritance for MODEL_GENERATION spans when the prompt
    * is set on a parent span (e.g., AGENT_RUN) rather than directly on the generation.
+   * This enables prompt linking when:
+   * - A workflow calls multiple agents, each with different prompts
+   * - Nested agents have different prompts
+   * - The prompt is set on AGENT_RUN but MODEL_GENERATION inherits it
    */
-  private findParentLangfusePrompt(traceData: TraceData, span: AnyExportedSpan): LangfusePromptData | undefined {
-    let currentSpanId = span.parentSpanId;
+  private findLangfusePrompt(traceData: LangfuseTraceData, span: AnyExportedSpan): LangfusePromptData | undefined {
+    let currentSpanId: string | undefined = span.id;
 
     while (currentSpanId) {
-      const parentMetadata = traceData.spanMetadata.get(currentSpanId);
-      if (parentMetadata?.langfusePrompt) {
-        return parentMetadata.langfusePrompt;
+      const providerMetadata = traceData.getMetadata({ spanId: currentSpanId });
+
+      if (providerMetadata?.prompt) {
+        this.logger.debug(`${this.name}: found prompt in provider metadata`, {
+          traceId: span.traceId,
+          spanId: span.id,
+          prompt: providerMetadata?.prompt,
+        });
+        return providerMetadata.prompt;
       }
-      currentSpanId = parentMetadata?.parentSpanId;
+      currentSpanId = traceData.getParentId({ spanId: currentSpanId });
     }
 
     return undefined;
   }
 
-  private buildSpanPayload(span: AnyExportedSpan, isCreate: boolean, traceData?: TraceData): Record<string, any> {
+  private buildSpanPayload(
+    span: AnyExportedSpan,
+    isCreate: boolean,
+    traceData: LangfuseTraceData,
+  ): Record<string, any> {
     const payload: Record<string, any> = {};
 
     if (isCreate) {
       payload.id = span.id;
       payload.name = span.name;
       payload.startTime = span.startTime;
-      if (span.input !== undefined) payload.input = span.input;
     }
 
+    if (span.input !== undefined) payload.input = span.input;
     if (span.output !== undefined) payload.output = span.output;
     if (span.endTime !== undefined) payload.endTime = span.endTime;
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    // For MODEL_GENERATION spans without langfuse metadata, look up the closest
-    // parent span that has langfuse prompt data. This enables prompt linking when:
-    // - A workflow calls multiple agents, each with different prompts
-    // - Nested agents have different prompts
-    // - The prompt is set on AGENT_RUN but MODEL_GENERATION inherits it
-    const resolvedTraceData = traceData ?? this.traceMap.get(span.traceId);
-    let inheritedLangfusePrompt: LangfusePromptData | undefined;
-
-    if (span.type === SpanType.MODEL_GENERATION && !span.metadata?.langfuse && resolvedTraceData) {
-      inheritedLangfusePrompt = this.findParentLangfusePrompt(resolvedTraceData, span);
-    }
-
     const metadata: Record<string, any> = {
       ...span.metadata,
-      ...(inheritedLangfusePrompt ? { langfuse: { prompt: inheritedLangfusePrompt } } : {}),
     };
 
     // Strip special fields from metadata if used in top-level keys
@@ -465,16 +287,12 @@ export class LangfuseExporter extends BaseExporter {
         attributesToOmit.push('parameters');
       }
 
-      // Handle Langfuse prompt linking
       // Users can set metadata.langfuse.prompt to link generations to Langfuse Prompt Management
       // Supported formats:
       // - { id } - link by prompt UUID alone
       // - { name, version } - link by name and version
       // - { name, version, id } - link with all fields
-      const langfuseData = metadata.langfuse as
-        | { prompt?: { name?: string; version?: number; id?: string } }
-        | undefined;
-      const promptData = langfuseData?.prompt;
+      const promptData = this.findLangfusePrompt(traceData, span);
       const hasNameAndVersion = promptData?.name !== undefined && promptData?.version !== undefined;
       const hasId = promptData?.id !== undefined;
 
@@ -524,10 +342,10 @@ export class LangfuseExporter extends BaseExporter {
     scorerName: string;
     metadata?: Record<string, any>;
   }): Promise<void> {
-    if (!this.client) return;
+    if (!this.#client) return;
 
     try {
-      await this.client.score({
+      await this.#client.score({
         id: `${traceId}-${scorerName}`,
         traceId,
         observationId: spanId,
@@ -547,11 +365,18 @@ export class LangfuseExporter extends BaseExporter {
     }
   }
 
-  async shutdown(): Promise<void> {
-    if (this.client) {
-      await this.client.shutdownAsync();
+  /**
+   * Force flush any buffered data to Langfuse without shutting down.
+   */
+  protected override async _flush(): Promise<void> {
+    if (this.#client) {
+      await this.#client.flushAsync();
     }
-    this.traceMap.clear();
-    await super.shutdown();
+  }
+
+  override async _postShutdown(): Promise<void> {
+    if (this.#client) {
+      await this.#client.shutdownAsync();
+    }
   }
 }

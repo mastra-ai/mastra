@@ -12,14 +12,19 @@ import type {
 import type { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
+
 import { z } from 'zod';
+import { WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
+import type { WorkspaceToolName } from '../constants';
 
 import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
+  agentSkillPathParams,
   listAgentsResponseSchema,
   serializedAgentSchema,
   agentExecutionBodySchema,
+  agentExecutionLegacyBodySchema,
   generateResponseSchema,
   streamResponseSchema,
   providersResponseSchema,
@@ -36,12 +41,19 @@ import {
   approveNetworkToolCallBodySchema,
   declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
+import { getAgentSkillResponseSchema } from '../schemas/workspace';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { handleError } from './error';
-import { sanitizeBody, validateBody } from './utils';
+import {
+  sanitizeBody,
+  validateBody,
+  getEffectiveResourceId,
+  getEffectiveThreadId,
+  validateThreadOwnership,
+} from './utils';
 
 /**
  * Checks if a provider has its required API key environment variable(s) configured.
@@ -84,11 +96,18 @@ export interface SerializedProcessor {
   name?: string;
 }
 
+export interface SerializedSkill {
+  name: string;
+  description: string;
+  license?: string;
+}
+
 export interface SerializedTool {
   id: string;
   description?: string;
   inputSchema?: string;
   outputSchema?: string;
+  requestContextSchema?: string;
   requireApproval?: boolean;
 }
 
@@ -97,6 +116,7 @@ interface SerializedToolInput {
   description?: string;
   inputSchema?: { jsonSchema?: unknown } | unknown;
   outputSchema?: { jsonSchema?: unknown } | unknown;
+  requestContextSchema?: { jsonSchema?: unknown } | unknown;
 }
 
 export interface SerializedWorkflow {
@@ -111,6 +131,10 @@ export interface SerializedAgent {
   tools: Record<string, SerializedTool>;
   agents: Record<string, SerializedAgentDefinition>;
   workflows: Record<string, SerializedWorkflow>;
+  skills: SerializedSkill[];
+  workspaceTools: string[];
+  /** ID of the agent's workspace (if configured) */
+  workspaceId?: string;
   inputProcessors: SerializedProcessor[];
   outputProcessors: SerializedProcessor[];
   provider?: string;
@@ -129,6 +153,9 @@ export interface SerializedAgent {
   defaultOptions?: Record<string, unknown>;
   defaultGenerateOptionsLegacy?: Record<string, unknown>;
   defaultStreamOptionsLegacy?: Record<string, unknown>;
+  /** Serialized JSON schema for request context validation */
+  requestContextSchema?: string;
+  source?: 'code' | 'stored';
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -144,6 +171,7 @@ export async function getSerializedAgentTools(
 
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;
+    let requestContextSchemaForReturn: string | undefined = undefined;
 
     // Only process schemas if not in partial mode
     if (!partial) {
@@ -177,6 +205,25 @@ export async function getSerializedAgentTools(
             );
           }
         }
+
+        if (tool.requestContextSchema) {
+          if (
+            tool.requestContextSchema &&
+            typeof tool.requestContextSchema === 'object' &&
+            'jsonSchema' in tool.requestContextSchema
+          ) {
+            requestContextSchemaForReturn = stringify(tool.requestContextSchema.jsonSchema);
+          } else if (typeof tool.requestContextSchema === 'function') {
+            const requestContextSchema = (tool.requestContextSchema as () => { jsonSchema?: unknown })();
+            if (requestContextSchema && requestContextSchema.jsonSchema) {
+              requestContextSchemaForReturn = stringify(requestContextSchema.jsonSchema);
+            }
+          } else if (tool.requestContextSchema) {
+            requestContextSchemaForReturn = stringify(
+              zodToJsonSchema(tool.requestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
+            );
+          }
+        }
       } catch (error) {
         console.error(`Error getting serialized tool`, {
           toolId: tool.id,
@@ -190,6 +237,7 @@ export async function getSerializedAgentTools(
       id: toolId,
       inputSchema: inputSchemaForReturn,
       outputSchema: outputSchemaForReturn,
+      requestContextSchema: requestContextSchemaForReturn,
     };
     return acc;
   }, {});
@@ -206,6 +254,105 @@ export function getSerializedProcessors(
       name: processor.name || processor.constructor.name,
     };
   });
+}
+
+/**
+ * Extract skills from agent's workspace.
+ * Uses agent.getWorkspace() to get the workspace and then workspace.skills.list().
+ */
+export async function getSerializedSkillsFromAgent(
+  agent: Agent,
+  requestContext?: RequestContext,
+): Promise<SerializedSkill[]> {
+  try {
+    const workspace = await agent.getWorkspace({ requestContext });
+    if (!workspace?.skills) {
+      return [];
+    }
+
+    const skillsList = await workspace.skills.list();
+    return skillsList.map(skill => ({
+      name: skill.name,
+      description: skill.description,
+      license: skill.license,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get the list of available workspace tools for an agent.
+ * Returns tool names based on workspace configuration (filesystem, sandbox, search)
+ * and respects per-tool enabled settings.
+ */
+export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: RequestContext): Promise<string[]> {
+  try {
+    const workspace = await agent.getWorkspace({ requestContext });
+    if (!workspace) {
+      return [];
+    }
+
+    const tools: string[] = [];
+    const isReadOnly = workspace.filesystem?.readOnly ?? false;
+    const toolsConfig = workspace.getToolsConfig();
+
+    // Helper to check if a tool is enabled
+    const isEnabled = (toolName: WorkspaceToolName) => {
+      return resolveToolConfig(toolsConfig, toolName).enabled;
+    };
+
+    // Filesystem tools
+    if (workspace.filesystem) {
+      // Read tools
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+      }
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+      }
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
+      }
+
+      // Write tools only if not readonly
+      if (!isReadOnly) {
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+        }
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
+        }
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.DELETE)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+        }
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.MKDIR)) {
+          tools.push(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
+        }
+      }
+    }
+
+    // Search tools (available if BM25 or vector search is enabled)
+    if (workspace.canBM25 || workspace.canVector) {
+      if (isEnabled(WORKSPACE_TOOLS.SEARCH.SEARCH)) {
+        tools.push(WORKSPACE_TOOLS.SEARCH.SEARCH);
+      }
+      if (!isReadOnly && isEnabled(WORKSPACE_TOOLS.SEARCH.INDEX)) {
+        tools.push(WORKSPACE_TOOLS.SEARCH.INDEX);
+      }
+    }
+
+    // Sandbox tools
+    if (workspace.sandbox) {
+      if (workspace.sandbox.executeCommand && isEnabled(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND)) {
+        tools.push(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+      }
+    }
+
+    return tools;
+  } catch {
+    return [];
+  }
 }
 
 interface SerializedAgentDefinition {
@@ -264,8 +411,9 @@ async function formatAgentList({
     { name: string; steps?: Record<string, { id: string; description?: string }> }
   > = {};
 
+  const logger = mastra.getLogger();
+
   if ('listWorkflows' in agent) {
-    const logger = mastra.getLogger();
     try {
       const workflows = await agent.listWorkflows({ requestContext });
       serializedAgentWorkflows = Object.entries(workflows || {}).reduce<
@@ -285,11 +433,32 @@ async function formatAgentList({
 
   const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext });
 
-  // Get and serialize processors
-  const inputProcessors = await agent.listInputProcessors(requestContext);
-  const outputProcessors = await agent.listOutputProcessors(requestContext);
-  const serializedInputProcessors = getSerializedProcessors(inputProcessors);
-  const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
+  // Get and serialize only user-configured processors (excludes memory-derived processors)
+  // This ensures the UI only shows processors explicitly configured by the user
+  let serializedInputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  let serializedOutputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  try {
+    const configuredProcessorWorkflows = await agent.getConfiguredProcessorWorkflows();
+    const inputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-input-processor'));
+    const outputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-output-processor'));
+    serializedInputProcessors = getSerializedProcessors(inputProcessorWorkflows);
+    serializedOutputProcessors = getSerializedProcessors(outputProcessorWorkflows);
+  } catch (error) {
+    logger.error('Error getting configured processors for agent', { agentName: agent.name, error });
+  }
+
+  // Extract skills, workspace tools, and workspaceId from agent's workspace
+  const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
+  const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
+
+  // Get workspaceId if agent has a workspace
+  let workspaceId: string | undefined;
+  try {
+    const workspace = await agent.getWorkspace({ requestContext });
+    workspaceId = workspace?.id;
+  } catch {
+    // Agent doesn't have a workspace or can't access it
+  }
 
   const model = llm?.getModel();
   const models = await agent.getModelList(requestContext);
@@ -310,6 +479,9 @@ async function formatAgentList({
     agents: serializedAgentAgents,
     tools: serializedAgentTools,
     workflows: serializedAgentWorkflows,
+    skills: serializedSkills,
+    workspaceTools,
+    workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
     provider: llm?.getProvider(),
@@ -319,6 +491,7 @@ async function formatAgentList({
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    source: (agent as any).source ?? 'code',
   };
 }
 
@@ -356,6 +529,16 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
     }
   }
 
+  // If still not found, try to get stored agent
+  if (!agent) {
+    logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
+    try {
+      agent = await mastra.getStoredAgentById(agentId);
+    } catch (error) {
+      logger.debug('Error getting stored agent', error);
+    }
+  }
+
   if (!agent) {
     throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
   }
@@ -375,8 +558,8 @@ async function formatAgent({
   isStudio: boolean;
 }): Promise<SerializedAgent> {
   const description = agent.getDescription();
-  const tools = await agent.listTools({ requestContext });
 
+  const tools = await agent.listTools({ requestContext });
   const serializedAgentTools = await getSerializedAgentTools(tools);
 
   let serializedAgentWorkflows: Record<
@@ -452,11 +635,42 @@ async function formatAgent({
 
   const serializedAgentAgents = await getSerializedAgentDefinition({ agent, requestContext: proxyRequestContext });
 
-  // Get and serialize processors
-  const inputProcessors = await agent.listInputProcessors(proxyRequestContext);
-  const outputProcessors = await agent.listOutputProcessors(proxyRequestContext);
-  const serializedInputProcessors = getSerializedProcessors(inputProcessors);
-  const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
+  // Get and serialize only user-configured processors (excludes memory-derived processors)
+  // This ensures the UI only shows processors explicitly configured by the user
+  let serializedInputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  let serializedOutputProcessors: ReturnType<typeof getSerializedProcessors> = [];
+  try {
+    const configuredProcessorWorkflows = await agent.getConfiguredProcessorWorkflows();
+    const inputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-input-processor'));
+    const outputProcessorWorkflows = configuredProcessorWorkflows.filter(w => w.id.endsWith('-output-processor'));
+    serializedInputProcessors = getSerializedProcessors(inputProcessorWorkflows);
+    serializedOutputProcessors = getSerializedProcessors(outputProcessorWorkflows);
+  } catch (error) {
+    mastra.getLogger().error('Error getting configured processors for agent', { agentName: agent.name, error });
+  }
+
+  // Extract skills, workspace tools, and workspaceId from agent's workspace
+  const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
+  const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
+
+  // Get workspaceId if agent has a workspace
+  let workspaceId: string | undefined;
+  try {
+    const workspace = await agent.getWorkspace({ requestContext: proxyRequestContext });
+    workspaceId = workspace?.id;
+  } catch {
+    // Agent doesn't have a workspace or can't access it
+  }
+
+  // Serialize requestContextSchema if present
+  let serializedRequestContextSchema: string | undefined;
+  if (agent.requestContextSchema) {
+    try {
+      serializedRequestContextSchema = stringify(zodToJsonSchema(agent.requestContextSchema));
+    } catch (error) {
+      mastra.getLogger().error('Error serializing requestContextSchema for agent', { agentName: agent.name, error });
+    }
+  }
 
   return {
     name: agent.name,
@@ -465,6 +679,9 @@ async function formatAgent({
     tools: serializedAgentTools,
     agents: serializedAgentAgents,
     workflows: serializedAgentWorkflows,
+    skills: serializedSkills,
+    workspaceTools,
+    workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
     provider: llm?.getProvider(),
@@ -474,6 +691,8 @@ async function formatAgent({
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    requestContextSchema: serializedRequestContextSchema,
+    source: (agent as any).source ?? 'code',
   };
 }
 
@@ -483,33 +702,67 @@ async function formatAgent({
 
 export const LIST_AGENTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents',
+  path: '/agents',
   responseType: 'json',
   queryParamSchema: z.object({
     partial: z.string().optional(),
   }),
   responseSchema: listAgentsResponseSchema,
   summary: 'List all agents',
-  description: 'Returns a list of all available agents in the system',
+  description: 'Returns a list of all available agents in the system (both code-defined and stored)',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, requestContext, partial }) => {
     try {
-      const agents = mastra.listAgents();
+      const codeAgents = mastra.listAgents();
 
       const isPartial = partial === 'true';
-      const serializedAgentsMap = await Promise.all(
-        Object.entries(agents).map(async ([id, agent]) => {
+
+      // Serialize code-defined agents
+      const serializedCodeAgentsMap = await Promise.all(
+        Object.entries(codeAgents).map(async ([id, agent]) => {
           return formatAgentList({ id, mastra, agent, requestContext, partial: isPartial });
         }),
       );
 
-      const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
+      const serializedAgents = serializedCodeAgentsMap.reduce<Record<string, (typeof serializedCodeAgentsMap)[number]>>(
         (acc, { id, ...rest }) => {
           acc[id] = { id, ...rest };
           return acc;
         },
         {},
       );
+
+      // Also fetch and include stored agents
+      try {
+        const storedAgentsResult = await mastra.listStoredAgents();
+        if (storedAgentsResult?.agents) {
+          // Process each agent individually to avoid one bad agent breaking the whole list
+          for (const agent of storedAgentsResult.agents) {
+            try {
+              const serialized = await formatAgentList({
+                id: agent.id,
+                mastra,
+                agent,
+                requestContext,
+                partial: isPartial,
+              });
+              // Don't overwrite code-defined agents with same ID
+              if (!serializedAgents[serialized.id]) {
+                serializedAgents[serialized.id] = serialized;
+              }
+            } catch (agentError) {
+              // Log but continue with other agents
+              const logger = mastra.getLogger();
+              logger.warn('Failed to serialize stored agent', { agentId: agent.id, error: agentError });
+            }
+          }
+        }
+      } catch (storageError) {
+        // Storage not configured or doesn't support agents - log and ignore
+        const logger = mastra.getLogger();
+        logger.debug('Could not fetch stored agents', { error: storageError });
+      }
 
       return serializedAgents;
     } catch (error) {
@@ -520,13 +773,14 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
 export const GET_AGENT_BY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/:agentId',
+  path: '/agents/:agentId',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   responseSchema: serializedAgentSchema,
   summary: 'Get agent by ID',
   description: 'Returns details for a specific agent including configuration, tools, and memory settings',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async ({ agentId, mastra, requestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -549,7 +803,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
   unknown
 > = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/generate',
+  path: '/agents/:agentId/generate',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
@@ -557,7 +811,8 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
   summary: 'Generate agent response',
   description: 'Executes an agent with the provided messages and returns the complete response',
   tags: ['Agents'],
-  handler: async ({ agentId, mastra, abortSignal, ...params }) => {
+  requiresAuth: true,
+  handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -565,12 +820,50 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, ...rest } = params;
+      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
 
       validateBody({ messages });
 
-      const result = await agent.generate(messages, {
+      // Merge body's requestContext values into the server's RequestContext instance
+      // Only set values that don't already exist on the server context to prevent
+      // clients from overwriting server-populated auth/tenant values
+      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
+        for (const [key, value] of Object.entries(bodyRequestContext)) {
+          if (serverRequestContext.get(key) === undefined) {
+            serverRequestContext.set(key, value);
+          }
+        }
+      }
+
+      // Authorization: apply context overrides to memory option if present
+      let authorizedMemoryOption = memoryOption;
+      if (memoryOption) {
+        const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
+
+        const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
+
+        // Validate thread ownership if accessing an existing thread
+        if (effectiveThreadId && effectiveResourceId) {
+          const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
+          if (memoryInstance) {
+            const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
+            await validateThreadOwnership(thread, effectiveResourceId);
+          }
+        }
+
+        // Build authorized memory option with effective values
+        authorizedMemoryOption = {
+          ...memoryOption,
+          resource: effectiveResourceId ?? memoryOption.resource,
+          thread: effectiveThreadId ?? memoryOption.thread,
+        };
+      }
+
+      const result = await agent.generate<unknown>(messages, {
         ...rest,
+        requestContext: serverRequestContext,
+        memory: authorizedMemoryOption,
         abortSignal,
       });
 
@@ -584,15 +877,16 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
 // Legacy routes (deprecated)
 export const GENERATE_LEGACY_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/generate-legacy',
+  path: '/agents/:agentId/generate-legacy',
   responseType: 'json' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionBodySchema,
+  bodySchema: agentExecutionLegacyBodySchema,
   responseSchema: generateResponseSchema,
   summary: '[DEPRECATED] Generate with legacy format',
-  description: 'Legacy endpoint for generating agent responses. Use /api/agents/:agentId/generate instead.',
+  description: 'Legacy endpoint for generating agent responses. Use /agents/:agentId/generate instead.',
   tags: ['Agents', 'Legacy'],
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -602,19 +896,32 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
-      const finalResourceId = resourceId ?? resourceid;
+      const clientResourceId = resourceId ?? resourceid;
+
+      // Authorization: context values take precedence over client-provided values
+      const effectiveResourceId = getEffectiveResourceId(requestContext, clientResourceId);
+      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
 
-      if ((threadId && !finalResourceId) || (!threadId && finalResourceId)) {
+      if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+      }
+
+      // Validate thread ownership if accessing an existing thread
+      if (effectiveThreadId && effectiveResourceId) {
+        const memory = await agent.getMemory({ requestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
       }
 
       const result = await agent.generateLegacy(messages, {
         ...rest,
         abortSignal,
-        resourceId: finalResourceId ?? '',
-        threadId: threadId ?? '',
+        resourceId: effectiveResourceId ?? '',
+        threadId: effectiveThreadId ?? '',
       });
 
       return result;
@@ -626,15 +933,16 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
 export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/stream-legacy',
+  path: '/agents/:agentId/stream-legacy',
   responseType: 'datastream-response' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionBodySchema,
+  bodySchema: agentExecutionLegacyBodySchema,
   responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Stream with legacy format',
-  description: 'Legacy endpoint for streaming agent responses. Use /api/agents/:agentId/stream instead.',
+  description: 'Legacy endpoint for streaming agent responses. Use /agents/:agentId/stream instead.',
   tags: ['Agents', 'Legacy'],
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -644,19 +952,32 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
-      const finalResourceId = resourceId ?? resourceid;
+      const clientResourceId = resourceId ?? resourceid;
+
+      // Authorization: context values take precedence over client-provided values
+      const effectiveResourceId = getEffectiveResourceId(requestContext, clientResourceId);
+      const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
       validateBody({ messages });
 
-      if ((threadId && !finalResourceId) || (!threadId && finalResourceId)) {
+      if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
         throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+      }
+
+      // Validate thread ownership if accessing an existing thread
+      if (effectiveThreadId && effectiveResourceId) {
+        const memory = await agent.getMemory({ requestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
       }
 
       const streamResult = await agent.streamLegacy(messages, {
         ...rest,
         abortSignal,
-        resourceId: finalResourceId ?? '',
-        threadId: threadId ?? '',
+        resourceId: effectiveResourceId ?? '',
+        threadId: effectiveThreadId ?? '',
       });
 
       const streamResponse = rest.output
@@ -685,12 +1006,13 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
 export const GET_PROVIDERS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/providers',
+  path: '/agents/providers',
   responseType: 'json',
   responseSchema: providersResponseSchema,
   summary: 'List AI providers',
   description: 'Returns a list of all configured AI model providers',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async () => {
     try {
       const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
@@ -717,7 +1039,7 @@ export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
   unknown
 > = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/generate/vnext',
+  path: '/agents/:agentId/generate/vnext',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
@@ -725,12 +1047,13 @@ export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
   summary: 'Generate a response from an agent',
   description: 'Generate a response from an agent',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: GENERATE_AGENT_ROUTE.handler,
 });
 
 export const STREAM_GENERATE_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/stream',
+  path: '/agents/:agentId/stream',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
@@ -739,7 +1062,8 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   summary: 'Stream agent response',
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -747,11 +1071,49 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, ...rest } = params;
+      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
 
-      const streamResult = await agent.stream(messages, {
+      // Merge body's requestContext values into the server's RequestContext instance
+      // Only set values that don't already exist on the server context to prevent
+      // clients from overwriting server-populated auth/tenant values
+      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
+        for (const [key, value] of Object.entries(bodyRequestContext)) {
+          if (serverRequestContext.get(key) === undefined) {
+            serverRequestContext.set(key, value);
+          }
+        }
+      }
+
+      // Authorization: apply context overrides to memory option if present
+      let authorizedMemoryOption = memoryOption;
+      if (memoryOption) {
+        const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
+
+        const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
+        const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
+
+        // Validate thread ownership if accessing an existing thread
+        if (effectiveThreadId && effectiveResourceId) {
+          const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
+          if (memoryInstance) {
+            const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
+            await validateThreadOwnership(thread, effectiveResourceId);
+          }
+        }
+
+        // Build authorized memory option with effective values
+        authorizedMemoryOption = {
+          ...memoryOption,
+          resource: effectiveResourceId ?? memoryOption.resource,
+          thread: effectiveThreadId ?? memoryOption.thread,
+        };
+      }
+
+      const streamResult = await agent.stream<unknown>(messages, {
         ...rest,
+        requestContext: serverRequestContext,
+        memory: authorizedMemoryOption,
         abortSignal,
       });
 
@@ -764,7 +1126,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
 export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/stream/vnext',
+  path: '/agents/:agentId/stream/vnext',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
@@ -772,13 +1134,14 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   summary: 'Stream a response from an agent',
   description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
   tags: ['Agents'],
+  requiresAuth: true,
   deprecated: true,
   handler: STREAM_GENERATE_ROUTE.handler,
 });
 
 export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/approve-tool-call',
+  path: '/agents/:agentId/approve-tool-call',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
@@ -787,6 +1150,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   summary: 'Approve tool call',
   description: 'Approves a pending tool call and continues agent execution',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -817,7 +1181,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
 export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/decline-tool-call',
+  path: '/agents/:agentId/decline-tool-call',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
@@ -826,6 +1190,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   summary: 'Decline tool call',
   description: 'Declines a pending tool call and continues agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -854,17 +1219,96 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   },
 });
 
+export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/approve-tool-call-generate',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: approveToolCallBodySchema,
+  responseSchema: generateResponseSchema,
+  summary: 'Approve tool call (non-streaming)',
+  description: 'Approves a pending tool call and returns the complete response',
+  tags: ['Agents', 'Tools'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const result = await agent.approveToolCallGenerate({
+        ...params,
+        abortSignal,
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'error approving tool call');
+    }
+  },
+});
+
+export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/decline-tool-call-generate',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: declineToolCallBodySchema,
+  responseSchema: generateResponseSchema,
+  summary: 'Decline tool call (non-streaming)',
+  description: 'Declines a pending tool call and returns the complete response',
+  tags: ['Agents', 'Tools'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const result = await agent.declineToolCallGenerate({
+        ...params,
+        abortSignal,
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'error declining tool call');
+    }
+  },
+});
+
 export const STREAM_NETWORK_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/network',
+  path: '/agents/:agentId/network',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
-  bodySchema: agentExecutionBodySchema.extend({ thread: z.string().optional() }),
+  bodySchema: agentExecutionBodySchema,
   responseSchema: streamResponseSchema,
   summary: 'Stream agent network',
   description: 'Executes an agent network with multiple agents and streams the response',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, messages, agentId, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -877,11 +1321,6 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       const streamResult = await agent.network(messages, {
         ...params,
-        memory: {
-          thread: params.thread ?? params.threadId ?? '',
-          resource: params.resourceId ?? '',
-          options: params.memory?.options ?? {},
-        },
       });
 
       return streamResult;
@@ -893,7 +1332,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
 export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/approve-network-tool-call',
+  path: '/agents/:agentId/approve-network-tool-call',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
@@ -902,6 +1341,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   summary: 'Approve network tool call',
   description: 'Approves a pending network tool call and continues network agent execution',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -927,7 +1367,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
 export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/decline-network-tool-call',
+  path: '/agents/:agentId/decline-network-tool-call',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
@@ -936,6 +1376,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   summary: 'Decline network tool call',
   description: 'Declines a pending network tool call and continues network agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -961,7 +1402,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
 export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/model',
+  path: '/agents/:agentId/model',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: updateAgentModelBodySchema,
@@ -969,6 +1410,7 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   summary: 'Update agent model',
   description: 'Updates the AI model used by the agent',
   tags: ['Agents', 'Models'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, modelId, provider }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -976,6 +1418,9 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
       // Use the universal Mastra router format: provider/model
       const newModel = `${provider}/${modelId}`;
 
+      // Update the model in-memory only (for temporary testing)
+      // This allows users to test different models without persisting
+      // To save permanently, users should use the Edit agent dialog
       agent.__updateModel({ model: newModel });
 
       return { message: 'Agent model updated' };
@@ -987,13 +1432,14 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
 
 export const RESET_AGENT_MODEL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/model/reset',
+  path: '/agents/:agentId/model/reset',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   responseSchema: modelManagementResponseSchema,
   summary: 'Reset agent model',
   description: 'Resets the agent model to its original configuration',
   tags: ['Agents', 'Models'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1009,7 +1455,7 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
 
 export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/models/reorder',
+  path: '/agents/:agentId/models/reorder',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: reorderAgentModelListBodySchema,
@@ -1017,6 +1463,7 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   summary: 'Reorder agent model list',
   description: 'Reorders the model list for agents with multiple model configurations',
   tags: ['Agents', 'Models'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, reorderedModelIds }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1037,7 +1484,7 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
 
 export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/models/:modelConfigId',
+  path: '/agents/:agentId/models/:modelConfigId',
   responseType: 'json',
   pathParamSchema: modelConfigIdPathParams,
   bodySchema: updateAgentModelInModelListBodySchema,
@@ -1045,6 +1492,7 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   summary: 'Update model in model list',
   description: 'Updates a specific model configuration in the agent model list',
   tags: ['Agents', 'Models'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1158,7 +1606,7 @@ type EnhanceInstructionsResponse = z.infer<typeof enhanceInstructionsResponseSch
 
 export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/instructions/enhance',
+  path: '/agents/:agentId/instructions/enhance',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
   bodySchema: enhanceInstructionsBodySchema,
@@ -1166,6 +1614,7 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   summary: 'Enhance agent instructions',
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, instructions, comment }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -1206,7 +1655,7 @@ ${comment ? `User feedback: ${comment}` : ''}`,
 
 export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/streamVNext',
+  path: '/agents/:agentId/streamVNext',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
@@ -1214,6 +1663,7 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   summary: 'Stream a response from an agent',
   description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
   tags: ['Agents'],
+  requiresAuth: true,
   deprecated: true,
   handler: async () => {
     throw new HTTPException(410, { message: 'This endpoint is deprecated. Please use /stream instead.' });
@@ -1222,7 +1672,7 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
 
 export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/stream/vnext/ui',
+  path: '/agents/:agentId/stream/vnext/ui',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
@@ -1231,6 +1681,7 @@ export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
   description:
     '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
   tags: ['Agents'],
+  requiresAuth: true,
   deprecated: true,
   handler: async () => {
     try {
@@ -1248,7 +1699,7 @@ export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
 
 export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/stream/ui',
+  path: '/agents/:agentId/stream/ui',
   responseType: 'stream',
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
@@ -1257,6 +1708,58 @@ export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
   description:
     '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
   tags: ['Agents'],
+  requiresAuth: true,
   deprecated: true,
   handler: STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE.handler,
+});
+
+// ============================================================================
+// Agent Skill Routes
+// ============================================================================
+
+export const GET_AGENT_SKILL_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agents/:agentId/skills/:skillName',
+  responseType: 'json',
+  pathParamSchema: agentSkillPathParams,
+  responseSchema: getAgentSkillResponseSchema,
+  summary: 'Get agent skill',
+  description: 'Returns details for a specific skill available to the agent via its workspace',
+  tags: ['Agents', 'Skills'],
+  handler: async ({ mastra, agentId, skillName, requestContext }) => {
+    try {
+      const agent = agentId ? mastra.getAgentById(agentId) : null;
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Agent not found' });
+      }
+
+      // Get the agent's workspace
+      const workspace = await agent.getWorkspace({ requestContext });
+      if (!workspace?.skills) {
+        throw new HTTPException(404, { message: 'Agent does not have skills configured' });
+      }
+
+      // Get the skill from the workspace
+      const skill = await workspace.skills.get(skillName);
+      if (!skill) {
+        throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
+      }
+
+      return {
+        name: skill.name,
+        description: skill.description,
+        license: skill.license,
+        compatibility: skill.compatibility,
+        metadata: skill.metadata,
+        path: skill.path,
+        instructions: skill.instructions,
+        source: skill.source,
+        references: skill.references,
+        scripts: skill.scripts,
+        assets: skill.assets,
+      };
+    } catch (error) {
+      return handleError(error, 'Error getting agent skill');
+    }
+  },
 });

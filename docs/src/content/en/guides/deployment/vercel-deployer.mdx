@@ -5,16 +5,16 @@ description: "Learn how to deploy a Mastra application to Vercel using the Mastr
 
 # VercelDeployer
 
-The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Vercel specific functionality.
+The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/) class with Vercel specific functionality.
 
 :::warning
-Vercel Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/reference/v1/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+Vercel Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/reference/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
 ## Installation
 
-```bash
-npm install @mastra/deployer-vercel@beta
+```bash npm2yarn
+npm install @mastra/deployer-vercel@latest
 ```
 
 ## Usage example
@@ -28,7 +28,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> See the [VercelDeployer](/reference/v1/deployer/vercel) API reference for all available configuration options.
+> See the [VercelDeployer](/reference/deployer/vercel) API reference for all available configuration options.
 
 ### Optional overrides
 
@@ -100,6 +100,79 @@ The `VercelDeployer` automatically generates a `config.json` configuration file 
 }
 ```
 
+## Observability
+
+To enable observability on Vercel, configure external storage (since Vercel's ephemeral filesystem doesn't support local file storage) and set up your preferred exporter(s).
+
+### Storage configuration
+
+Use a PostgreSQL provider like [Neon](https://neon.tech) or [Supabase](https://supabase.com) for persistent storage:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
+import { PostgresStore } from "@mastra/pg";
+import { Observability, DefaultExporter, CloudExporter } from "@mastra/observability";
+
+export const mastra = new Mastra({
+  logger: new PinoLogger(),
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL!,
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-mastra-app",
+        exporters: [
+          // Choose based on your observability platform:
+          new DefaultExporter(), // Your storage → Mastra Studio
+          new CloudExporter(),   // Mastra Cloud
+          // new ArizeExporter(),   // Arize
+          // new LaminarExporter(), // Laminar
+          // etc.
+        ],
+      },
+    },
+  }),
+  // ... agents, tools, workflows
+});
+```
+
+See the [Tracing documentation](/docs/observability/tracing/overview#exporters) for all available exporters.
+
+### Environment variables
+
+Add these to your Vercel project settings based on your configuration:
+
+| Variable | Description |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string (required for storage) |
+| `MASTRA_CLOUD_ACCESS_TOKEN` | Required if using CloudExporter |
+| `OPENAI_API_KEY` | Your LLM provider API key |
+
+### Flushing traces
+
+In serverless environments, call `flush()` to ensure traces are exported before the function completes:
+
+```typescript title="app/api/chat/route.ts"
+import { mastra } from "@/mastra";
+
+export async function POST(req: Request) {
+  const { message } = await req.json();
+  const agent = mastra.getAgent("myAgent");
+
+  const result = await agent.generate([{ role: "user", content: message }]);
+
+  // Flush traces before the serverless function completes
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  return Response.json(result);
+}
+```
+
+For more details on tracing configuration, see the [Tracing documentation](/docs/observability/tracing/overview).
+
 ## Next steps
 
-- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
+- [Mastra Client SDK](/reference/client-js/mastra-client)

@@ -21,7 +21,7 @@ export const authenticationMiddleware = async (req: Request, res: Response, next
   const method = req.method;
   const getHeader = (name: string) => req.headers[name.toLowerCase()] as string | undefined;
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authentication for dev playground requests
     return next();
   }
@@ -90,7 +90,7 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
   const method = req.method;
   const getHeader = (name: string) => req.headers[name.toLowerCase()] as string | undefined;
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authorization for dev playground requests
     return next();
   }
@@ -130,7 +130,7 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
         get: (key: string) => {
           if (key === 'mastra') return res.locals.mastra;
           if (key === 'requestContext') return res.locals.requestContext;
-          if (key === 'tools') return res.locals.tools;
+          if (key === 'registeredTools') return res.locals.registeredTools;
           if (key === 'taskStore') return res.locals.taskStore;
           if (key === 'customRouteAuthConfig') return res.locals.customRouteAuthConfig;
           return undefined;

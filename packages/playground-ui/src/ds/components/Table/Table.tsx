@@ -1,5 +1,5 @@
-import clsx from 'clsx';
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useEffect, useRef } from 'react';
+import { cn } from '@/lib/utils';
 
 export interface TableProps {
   className?: string;
@@ -15,7 +15,7 @@ const rowSize = {
 
 export const Table = ({ className, children, size = 'default', style }: TableProps) => {
   return (
-    <table className={clsx('w-full', rowSize[size], className)} style={style}>
+    <table className={cn('w-full', rowSize[size], className)} style={style}>
       {children}
     </table>
   );
@@ -29,7 +29,7 @@ export interface TheadProps {
 export const Thead = ({ className, children }: TheadProps) => {
   return (
     <thead>
-      <tr className={clsx('h-table-header border-b-sm border-border1 bg-surface2', className)}>{children}</tr>
+      <tr className={cn('h-table-header border-b border-border1 bg-surface2/80', className)}>{children}</tr>
     </thead>
   );
 };
@@ -42,8 +42,8 @@ export interface ThProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
 export const Th = ({ className, children, ...props }: ThProps) => {
   return (
     <th
-      className={clsx(
-        'text-icon3 text-ui-sm h-full whitespace-nowrap text-left font-normal uppercase first:pl-5 last:pr-5',
+      className={cn(
+        'text-neutral2 text-ui-xs h-full whitespace-nowrap text-left font-medium uppercase tracking-wide first:pl-3 last:pr-3',
         className,
       )}
       {...props}
@@ -53,13 +53,17 @@ export const Th = ({ className, children, ...props }: ThProps) => {
   );
 };
 
-export interface TbodyProps {
+export interface TbodyProps extends React.HTMLAttributes<HTMLTableSectionElement> {
   className?: string;
   children: React.ReactNode;
 }
 
-export const Tbody = ({ className, children }: TbodyProps) => {
-  return <tbody className={clsx('', className)}>{children}</tbody>;
+export const Tbody = ({ className, children, ...props }: TbodyProps) => {
+  return (
+    <tbody className={cn('', className)} {...props}>
+      {children}
+    </tbody>
+  );
 };
 
 export interface RowProps {
@@ -69,10 +73,32 @@ export interface RowProps {
   style?: React.CSSProperties;
   onClick?: () => void;
   tabIndex?: number;
+  /** When true, row receives focus and scrolls into view */
+  isActive?: boolean;
 }
 
 export const Row = forwardRef<HTMLTableRowElement, RowProps>(
-  ({ className, children, selected = false, style, onClick, ...props }, ref) => {
+  ({ className, children, selected = false, style, onClick, isActive = false, ...props }, ref) => {
+    const internalRef = useRef<HTMLTableRowElement>(null);
+
+    // Merge forwarded ref with internal ref
+    useEffect(() => {
+      if (!ref) return;
+      if (typeof ref === 'function') {
+        ref(internalRef.current);
+      } else {
+        ref.current = internalRef.current;
+      }
+    }, [ref]);
+
+    // Focus and scroll into view when active
+    useEffect(() => {
+      if (isActive && internalRef.current) {
+        internalRef.current.focus();
+        internalRef.current.scrollIntoView({ block: 'nearest' });
+      }
+    }, [isActive]);
+
     const handleKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
       if (event.key === 'Enter' && onClick) {
         onClick();
@@ -81,17 +107,23 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
 
     return (
       <tr
-        className={clsx(
-          'border-b-sm border-border1 hover:bg-surface3 focus:bg-surface3 -outline-offset-2',
+        className={cn(
+          'border-b border-border1',
+          // Smooth hover transition
+          'transition-colors duration-normal ease-out-custom',
+          'hover:bg-surface3',
+          // Focus state
+          'focus:bg-surface3 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent1/50',
           selected && 'bg-surface4',
           onClick && 'cursor-pointer',
           className,
         )}
         style={style}
         onClick={onClick}
-        ref={ref}
+        ref={internalRef}
         tabIndex={onClick ? 0 : undefined}
         onKeyDown={handleKeyDown}
+        data-active={isActive || undefined}
         {...props}
       >
         {children}

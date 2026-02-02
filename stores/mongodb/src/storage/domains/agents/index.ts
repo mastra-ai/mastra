@@ -3,6 +3,7 @@ import {
   AgentsStorage,
   createStorageErrorId,
   TABLE_AGENTS,
+  TABLE_AGENT_VERSIONS,
   normalizePerPage,
   calculatePagination,
 } from '@mastra/core/storage';
@@ -13,9 +14,35 @@ import type {
   StorageListAgentsInput,
   StorageListAgentsOutput,
 } from '@mastra/core/storage';
+import type {
+  AgentVersion,
+  CreateVersionInput,
+  ListVersionsInput,
+  ListVersionsOutput,
+} from '@mastra/core/storage/domains/agents';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+
+/**
+ * The set of fields from StorageAgentSnapshotType that live on version rows.
+ * Used to strip snapshot config from version documents when transforming.
+ */
+const SNAPSHOT_FIELDS = [
+  'name',
+  'description',
+  'instructions',
+  'model',
+  'tools',
+  'defaultOptions',
+  'workflows',
+  'agents',
+  'integrationTools',
+  'inputProcessors',
+  'outputProcessors',
+  'memory',
+  'scorers',
+] as const;
 
 export class MongoDBAgentsStorage extends AgentsStorage {
   #connector: MongoDBConnector;
@@ -23,7 +50,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   #indexes?: MongoDBIndexConfig[];
 
   /** Collections managed by this domain */
-  static readonly MANAGED_COLLECTIONS = [TABLE_AGENTS] as const;
+  static readonly MANAGED_COLLECTIONS = [TABLE_AGENTS, TABLE_AGENT_VERSIONS] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
@@ -48,6 +75,9 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       { collection: TABLE_AGENTS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_AGENTS, keys: { createdAt: -1 } },
       { collection: TABLE_AGENTS, keys: { updatedAt: -1 } },
+      { collection: TABLE_AGENT_VERSIONS, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_AGENT_VERSIONS, keys: { agentId: 1, versionNumber: -1 }, options: { unique: true } },
+      { collection: TABLE_AGENT_VERSIONS, keys: { agentId: 1, createdAt: -1 } },
     ];
   }
 
@@ -90,8 +120,10 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    const collection = await this.getCollection(TABLE_AGENTS);
-    await collection.deleteMany({});
+    const versionsCollection = await this.getCollection(TABLE_AGENT_VERSIONS);
+    await versionsCollection.deleteMany({});
+    const agentsCollection = await this.getCollection(TABLE_AGENTS);
+    await agentsCollection.deleteMany({});
   }
 
   async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
@@ -134,13 +166,38 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       }
 
       const now = new Date();
+
+      // Create the thin agent record with status='draft'
       const newAgent: StorageAgentType = {
-        ...agent,
+        id: agent.id,
+        status: 'draft',
+        activeVersionId: undefined,
+        authorId: agent.authorId,
+        metadata: agent.metadata,
         createdAt: now,
         updatedAt: now,
       };
 
       await collection.insertOne(this.serializeAgent(newAgent));
+
+      // Extract config fields from the flat input
+      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+
+      // Create version 1 from the config
+      const versionId = crypto.randomUUID();
+      await this.createVersion({
+        id: versionId,
+        agentId: agent.id,
+        versionNumber: 1,
+        ...snapshotConfig,
+        changedFields: Object.keys(snapshotConfig),
+        changeMessage: 'Initial version',
+      });
+
+      // Set the active version and mark as published
+      newAgent.activeVersionId = versionId;
+      newAgent.status = 'published';
+      await collection.updateOne({ id: agent.id }, { $set: { activeVersionId: versionId, status: 'published' } });
 
       return newAgent;
     } catch (error) {
@@ -178,18 +235,12 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         updatedAt: new Date(),
       };
 
-      if (updates.name !== undefined) updateDoc.name = updates.name;
-      if (updates.description !== undefined) updateDoc.description = updates.description;
-      if (updates.instructions !== undefined) updateDoc.instructions = updates.instructions;
-      if (updates.model !== undefined) updateDoc.model = updates.model;
-      if (updates.tools !== undefined) updateDoc.tools = updates.tools;
-      if (updates.defaultOptions !== undefined) updateDoc.defaultOptions = updates.defaultOptions;
-      if (updates.workflows !== undefined) updateDoc.workflows = updates.workflows;
-      if (updates.agents !== undefined) updateDoc.agents = updates.agents;
-      if (updates.inputProcessors !== undefined) updateDoc.inputProcessors = updates.inputProcessors;
-      if (updates.outputProcessors !== undefined) updateDoc.outputProcessors = updates.outputProcessors;
-      if (updates.memory !== undefined) updateDoc.memory = updates.memory;
-      if (updates.scorers !== undefined) updateDoc.scorers = updates.scorers;
+      // Only handle metadata-level fields on the thin agent record
+      if (updates.authorId !== undefined) updateDoc.authorId = updates.authorId;
+      if (updates.activeVersionId !== undefined) {
+        updateDoc.activeVersionId = updates.activeVersionId;
+        updateDoc.status = 'published';
+      }
 
       // Merge metadata if provided
       if (updates.metadata !== undefined) {
@@ -228,6 +279,10 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async deleteAgent({ id }: { id: string }): Promise<void> {
     try {
+      // Delete all versions for this agent first
+      await this.deleteVersionsByAgentId(id);
+
+      // Then delete the agent
       const collection = await this.getCollection(TABLE_AGENTS);
       // Idempotent delete - no-op if agent doesn't exist
       await collection.deleteOne({ id });
@@ -314,18 +369,301 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
+  /**
+   * Transforms a raw MongoDB document into a thin StorageAgentType record.
+   * Only returns metadata-level fields (no config/snapshot fields).
+   */
   private transformAgent(doc: any): StorageAgentType {
-    const { _id, ...agent } = doc;
+    const { _id, ...rest } = doc;
     return {
-      ...agent,
-      createdAt: agent.createdAt instanceof Date ? agent.createdAt : new Date(agent.createdAt),
-      updatedAt: agent.updatedAt instanceof Date ? agent.updatedAt : new Date(agent.updatedAt),
+      id: rest.id,
+      status: rest.status,
+      activeVersionId: rest.activeVersionId,
+      authorId: rest.authorId,
+      metadata: rest.metadata,
+      createdAt: rest.createdAt instanceof Date ? rest.createdAt : new Date(rest.createdAt),
+      updatedAt: rest.updatedAt instanceof Date ? rest.updatedAt : new Date(rest.updatedAt),
     };
   }
 
+  /**
+   * Serializes a thin StorageAgentType record for MongoDB insertion.
+   * Only persists metadata-level fields.
+   */
   private serializeAgent(agent: StorageAgentType): Record<string, any> {
     return {
-      ...agent,
+      id: agent.id,
+      status: agent.status,
+      activeVersionId: agent.activeVersionId,
+      authorId: agent.authorId,
+      metadata: agent.metadata,
+      createdAt: agent.createdAt,
+      updatedAt: agent.updatedAt,
     };
+  }
+
+  // ==========================================================================
+  // Agent Version Methods
+  // ==========================================================================
+
+  async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      const now = new Date();
+
+      // Store all config fields directly on the version document (no nested snapshot)
+      const versionDoc: Record<string, any> = {
+        id: input.id,
+        agentId: input.agentId,
+        versionNumber: input.versionNumber,
+        changedFields: input.changedFields ?? undefined,
+        changeMessage: input.changeMessage ?? undefined,
+        createdAt: now,
+      };
+
+      // Copy all snapshot config fields directly onto the document
+      for (const field of SNAPSHOT_FIELDS) {
+        if ((input as any)[field] !== undefined) {
+          versionDoc[field] = (input as any)[field];
+        }
+      }
+
+      await collection.insertOne(versionDoc);
+
+      return {
+        ...input,
+        createdAt: now,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'CREATE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: input.id, agentId: input.agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersion(id: string): Promise<AgentVersion | null> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      const result = await collection.findOne<any>({ id });
+
+      if (!result) {
+        return null;
+      }
+
+      return this.transformVersion(result);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersionByNumber(agentId: string, versionNumber: number): Promise<AgentVersion | null> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      const result = await collection.findOne<any>({ agentId, versionNumber });
+
+      if (!result) {
+        return null;
+      }
+
+      return this.transformVersion(result);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_VERSION_BY_NUMBER', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId, versionNumber },
+        },
+        error,
+      );
+    }
+  }
+
+  async getLatestVersion(agentId: string): Promise<AgentVersion | null> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      const result = await collection.find<any>({ agentId }).sort({ versionNumber: -1 }).limit(1).toArray();
+
+      if (!result || result.length === 0) {
+        return null;
+      }
+
+      return this.transformVersion(result[0]);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_LATEST_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
+    const { agentId, page = 0, perPage: perPageInput, orderBy } = input;
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_VERSIONS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 20);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      const { field, direction } = this.parseVersionOrderBy(orderBy);
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+
+      // Get total count
+      const total = await collection.countDocuments({ agentId });
+
+      if (total === 0 || perPage === 0) {
+        return {
+          versions: [],
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // MongoDB sort: 1 = ASC, -1 = DESC
+      const sortOrder = direction === 'ASC' ? 1 : -1;
+
+      let cursor = collection
+        .find({ agentId })
+        .sort({ [field]: sortOrder })
+        .skip(offset);
+
+      if (perPageInput !== false) {
+        cursor = cursor.limit(perPage);
+      }
+
+      const results = await cursor.toArray();
+      const versions = results.map((doc: any) => this.transformVersion(doc));
+
+      return {
+        versions,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput !== false && offset + perPage < total,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVersion(id: string): Promise<void> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      await collection.deleteOne({ id });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'DELETE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVersionsByAgentId(agentId: string): Promise<void> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      await collection.deleteMany({ agentId });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'DELETE_VERSIONS_BY_AGENT_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async countVersions(agentId: string): Promise<number> {
+    try {
+      const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
+      return await collection.countDocuments({ agentId });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'COUNT_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  // ==========================================================================
+  // Private Helper Methods
+  // ==========================================================================
+
+  /**
+   * Transforms a raw MongoDB version document into an AgentVersion.
+   * Config fields are returned directly (no nested snapshot object).
+   */
+  private transformVersion(doc: any): AgentVersion {
+    const { _id, ...version } = doc;
+
+    const result: any = {
+      id: version.id,
+      agentId: version.agentId,
+      versionNumber: version.versionNumber,
+      changedFields: version.changedFields,
+      changeMessage: version.changeMessage,
+      createdAt: version.createdAt instanceof Date ? version.createdAt : new Date(version.createdAt),
+    };
+
+    // Copy all snapshot config fields directly onto the result
+    for (const field of SNAPSHOT_FIELDS) {
+      if (version[field] !== undefined) {
+        result[field] = version[field];
+      }
+    }
+
+    return result as AgentVersion;
   }
 }

@@ -125,6 +125,14 @@ async export(spans: ReadOnlySpan[]): Promise<void>
 
 Batch exports spans using OpenTelemetry with OpenInference semantic conventions.
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered spans to the configured endpoint without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript
@@ -180,8 +188,7 @@ The ArizeExporter supports trace tagging for categorization and filtering. Tags 
 ### Usage
 
 ```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
+const result = await agent.generate("Hello", {
   tracingOptions: {
     tags: ["production", "experiment-v2", "user-request"],
   },
@@ -200,6 +207,6 @@ Tags are stored using the OpenInference `tag.tags` attribute:
 
 ## Related
 
-- [ArizeExporter Documentation](/docs/v1/observability/tracing/exporters/arize)
+- [ArizeExporter Documentation](/docs/observability/tracing/exporters/arize)
 - [Phoenix Documentation](https://docs.arize.com/phoenix)
 - [Arize AX Documentation](https://docs.arize.com/)

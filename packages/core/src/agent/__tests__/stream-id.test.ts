@@ -185,8 +185,7 @@ describe('Stream ID Consistency', () => {
     const resourceId = 'test-resource';
 
     const streamResult = await agent.stream('Hello!', {
-      threadId,
-      resourceId,
+      memory: { thread: threadId, resource: resourceId },
     });
 
     await streamResult.consumeStream();
@@ -267,7 +266,7 @@ describe('Stream ID Consistency', () => {
     const threadId = randomUUID();
     const resourceId = 'test-resource';
 
-    const stream = await agent.stream('Hello!', { threadId, resourceId });
+    const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: resourceId } });
 
     await stream.consumeStream();
     const res = await stream.response;

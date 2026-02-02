@@ -47,9 +47,9 @@ if (result.status === "suspended") {
       isOptional: true,
     },
     {
-      name: "runCount",
+      name: "retryCount",
       type: "number",
-      description: "Optional run count for nested workflow execution",
+      description: "Optional retry count for nested workflow execution",
       isOptional: true,
     },
     {
@@ -192,7 +192,7 @@ if (result.status === "suspended") {
 
 ## Related
 
-- [Workflows overview](/docs/v1/workflows/overview#running-workflows)
+- [Workflows overview](/docs/workflows/overview#running-workflows)
 - [Workflow.createRun()](../workflow-methods/create-run)
-- [Suspend and resume](/docs/v1/workflows/suspend-and-resume)
-- [Human in the loop](/docs/v1/workflows/human-in-the-loop)
+- [Suspend and resume](/docs/workflows/suspend-and-resume)
+- [Human in the loop](/docs/workflows/human-in-the-loop)

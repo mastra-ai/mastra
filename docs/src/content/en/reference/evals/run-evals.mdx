@@ -162,7 +162,7 @@ For workflows, you can specify scorers at different levels using `WorkflowScorer
 import { createScorer, runEvals } from "@mastra/core/evals";
 
 const myScorer = createScorer({
-  name: "My Scorer",
+  id: "my-scorer",
   description: "Check if Agent's response contains ground truth",
   type: "agent",
 }).generateScore(({ run }) => {
@@ -220,7 +220,7 @@ const workflowResult = await runEvals({
 
 ## Related
 
-- [createScorer()](/reference/v1/evals/create-scorer) - Create custom scorers for experiments
-- [MastraScorer](/reference/v1/evals/mastra-scorer) - Learn about scorer structure and methods
-- [Custom Scorers](/docs/v1/evals/custom-scorers) - Guide to building evaluation logic
-- [Scorers Overview](/docs/v1/evals/overview) - Understanding scorer concepts
+- [createScorer()](/reference/evals/create-scorer) - Create custom scorers for experiments
+- [MastraScorer](/reference/evals/mastra-scorer) - Learn about scorer structure and methods
+- [Custom Scorers](/docs/evals/custom-scorers) - Guide to building evaluation logic
+- [Scorers Overview](/docs/evals/overview) - Understanding scorer concepts

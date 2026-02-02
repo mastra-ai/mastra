@@ -66,7 +66,7 @@ export class CoreToolBuilder extends MastraBase {
       }
       if (isZodObject(schema)) {
         this.originalTool.inputSchema = schema.extend({
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional().default(''),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
           resumeData: z
             .any()
             .describe('The resumeData object created from the resumeSchema of suspended tool')
@@ -148,10 +148,11 @@ export class CoreToolBuilder extends MastraBase {
   };
 
   // For provider-defined tools, we need to include all required properties
+  // AI SDK v5 uses type: 'provider-defined', AI SDK v6 uses type: 'provider'
   private buildProviderTool(tool: ToolToConvert): (CoreTool & { id: `${string}.${string}` }) | undefined {
     if (
       'type' in tool &&
-      tool.type === 'provider-defined' &&
+      (tool.type === 'provider-defined' || tool.type === 'provider') &&
       'id' in tool &&
       typeof tool.id === 'string' &&
       tool.id.includes('.')
@@ -266,6 +267,7 @@ export class CoreToolBuilder extends MastraBase {
         name: `tool: '${options.name}'`,
         input: args,
         entityType: EntityType.TOOL,
+        entityId: options.name,
         entityName: options.name,
         attributes: {
           toolDescription: options.description,
@@ -401,7 +403,7 @@ export class CoreToolBuilder extends MastraBase {
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);
-              toolSpan?.end({ output: resumeValidation.error });
+              toolSpan?.end({ output: resumeValidation.error, attributes: { success: false } });
               return resumeValidation.error as any;
             }
           }
@@ -414,7 +416,7 @@ export class CoreToolBuilder extends MastraBase {
           const suspendValidation = validateToolSuspendData(suspendSchema, suspendData, options.name);
           if (suspendValidation.error) {
             logger?.warn(suspendValidation.error.message);
-            toolSpan?.end({ output: suspendValidation.error });
+            toolSpan?.end({ output: suspendValidation.error, attributes: { success: false } });
             return suspendValidation.error as any;
           }
         }
@@ -422,7 +424,7 @@ export class CoreToolBuilder extends MastraBase {
         // Skip validation if suspend was called without a result
         const shouldSkipValidation = typeof result === 'undefined' && !!suspendData;
         if (shouldSkipValidation) {
-          toolSpan?.end({ output: result });
+          toolSpan?.end({ output: result, attributes: { success: true } });
           return result;
         }
 
@@ -434,17 +436,17 @@ export class CoreToolBuilder extends MastraBase {
           const outputValidation = validateToolOutput(outputSchema, result, options.name, false);
           if (outputValidation.error) {
             logger?.warn(outputValidation.error.message);
-            toolSpan?.end({ output: outputValidation.error });
+            toolSpan?.end({ output: outputValidation.error, attributes: { success: false } });
             return outputValidation.error;
           }
           result = outputValidation.data;
         }
 
         // Return result (validated for Vercel tools, already validated for Mastra tools)
-        toolSpan?.end({ output: result });
+        toolSpan?.end({ output: result, attributes: { success: true } });
         return result;
       } catch (error) {
-        toolSpan?.error({ error: error as Error });
+        toolSpan?.error({ error: error as Error, attributes: { success: false } });
         throw error;
       }
     };
@@ -643,6 +645,7 @@ export class CoreToolBuilder extends MastraBase {
       parameters: processedSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
+      mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
     } as unknown as CoreTool;
   }
 }

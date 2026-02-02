@@ -8,7 +8,6 @@ import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types
 import type { TracingContext, TracingOptions } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { OutputSchema } from '../stream/base/schema';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions, AgentMethodType } from './types';
@@ -45,7 +44,7 @@ export interface NetworkRoutingConfig {
 /**
  * Full configuration options for agent.network() execution.
  */
-export type NetworkOptions<OUTPUT extends OutputSchema = undefined> = {
+export type NetworkOptions<OUTPUT = undefined> = {
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
 
@@ -56,7 +55,7 @@ export type NetworkOptions<OUTPUT extends OutputSchema = undefined> = {
   runId?: string;
 
   /** Request Context containing dynamic configuration and state */
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<any>;
 
   /** Maximum number of iterations to run */
   maxSteps?: number;
@@ -133,15 +132,23 @@ export type NetworkOptions<OUTPUT extends OutputSchema = undefined> = {
    * const result = await stream.object;
    * ```
    */
-  structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+  structuredOutput?: StructuredOutputOptions<OUTPUT extends {} ? OUTPUT : never>;
+
+  /** Callback fired when streaming is aborted */
+  onAbort?: LoopConfig<OUTPUT>['onAbort'];
+
+  /**
+   * Signal to abort the streaming operation
+   */
+  abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
 };
 
 /**
  * @deprecated Use NetworkOptions instead
  */
-export type MultiPrimitiveExecutionOptions<OUTPUT extends OutputSchema = undefined> = NetworkOptions<OUTPUT>;
+export type MultiPrimitiveExecutionOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
 
-export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
+export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 
@@ -161,12 +168,7 @@ export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
   savePerStep?: boolean;
 
   /** Request Context containing dynamic configuration and state */
-  requestContext?: RequestContext;
-
-  /** @deprecated Use memory.resource instead. Identifier for the resource/user */
-  resourceId?: string;
-  /** @deprecated Use memory.thread instead. Thread identifier for conversation continuity */
-  threadId?: string;
+  requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
 
   /** Maximum number of steps to run */
   maxSteps?: number;
@@ -178,22 +180,22 @@ export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
   providerOptions?: ProviderOptions;
 
   /** Callback fired after each execution step. */
-  onStepFinish?: LoopConfig['onStepFinish'];
+  onStepFinish?: LoopConfig<OUTPUT>['onStepFinish'];
   /** Callback fired when execution completes. */
-  onFinish?: LoopConfig['onFinish'];
+  onFinish?: LoopConfig<OUTPUT>['onFinish'];
 
   /** Callback fired for each streaming chunk received */
   onChunk?: LoopConfig<OUTPUT>['onChunk'];
   /** Callback fired when an error occurs during streaming */
-  onError?: LoopConfig['onError'];
+  onError?: LoopConfig<OUTPUT>['onError'];
   /** Callback fired when streaming is aborted */
-  onAbort?: LoopConfig['onAbort'];
+  onAbort?: LoopConfig<OUTPUT>['onAbort'];
   /** Tools that are active for this execution */
   activeTools?: LoopOptions['activeTools'];
   /**
    * Signal to abort the streaming operation
    */
-  abortSignal?: LoopConfig['abortSignal'];
+  abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
 
   /** Input processors to use for this execution (overrides agent's default) */
   inputProcessors?: InputProcessorOrWorkflow[];
@@ -237,14 +239,14 @@ export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
   /** Maximum number of tool calls to execute concurrently (default: 1 when approval may be required, otherwise 10) */
   toolCallConcurrency?: number;
 
-  /** Structured output generation with enhanced developer experience  */
-  structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
-
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
 };
 
-export type InnerAgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<OUTPUT> & {
+export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
+  (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+
+export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   outputWriter?: OutputWriter;
   messages: MessageListInput;
   methodType: AgentMethodType;
@@ -256,4 +258,4 @@ export type InnerAgentExecutionOptions<OUTPUT extends OutputSchema = undefined> 
     snapshot: any;
   };
   toolCallId?: string;
-};
+} & (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });

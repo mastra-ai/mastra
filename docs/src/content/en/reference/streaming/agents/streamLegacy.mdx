@@ -9,7 +9,7 @@ packages:
 
 :::warning
 
-**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.stream()`](./stream) method instead. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for details on upgrading.
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.stream()`](./stream) method instead. See the [migration guide](/guides/migrations/vnext-to-standard-apis) for details on upgrading.
 
 :::
 
@@ -552,7 +552,7 @@ await agent.streamLegacy("message for agent", {
 
 :::info
 
-The new `.stream()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved callback system. See the [migration guide](/guides/v1/migrations/vnext-to-standard-apis) for detailed migration instructions.
+The new `.stream()` method offers enhanced capabilities including AI SDK v5+ compatibility, better structured output handling, and improved callback system. See the [migration guide](/guides/migrations/vnext-to-standard-apis) for detailed migration instructions.
 
 :::
 
@@ -582,7 +582,7 @@ const result = await agent.stream("message", {
 
 ## Related
 
-- [Migration Guide](/guides/v1/migrations/vnext-to-standard-apis)
+- [Migration Guide](/guides/migrations/vnext-to-standard-apis)
 - [New .stream() method](./stream)
-- [Generating responses](/docs/v1/agents/overview#generating-responses)
-- [Streaming responses](/docs/v1/agents/overview#generating-responses)
+- [Generating responses](/docs/agents/overview#generating-responses)
+- [Streaming responses](/docs/agents/overview#generating-responses)

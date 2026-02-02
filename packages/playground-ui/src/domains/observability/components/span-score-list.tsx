@@ -1,10 +1,5 @@
-import {
-  EntryList,
-  EntryListSkeleton,
-  getShortId,
-  getToNextEntryFn,
-  getToPreviousEntryFn,
-} from '@/components/ui/elements';
+import { EntryList, EntryListSkeleton, getToNextEntryFn, getToPreviousEntryFn } from '@/ds/components/EntryList';
+import { getShortId } from '@/ds/components/Text';
 import { ScoreDialog } from '@/domains/scores';
 import { useLinkComponent } from '@/lib/framework';
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';

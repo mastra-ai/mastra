@@ -123,7 +123,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       try {
         // Load existing snapshot within transaction
         const existingSnapshotResult = await tx.execute({
-          sql: `SELECT snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+          sql: `SELECT json(snapshot) as snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
           args: [workflowName, runId],
         });
 
@@ -154,10 +154,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         snapshot.context[stepId] = result;
         snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
-        // Update the snapshot within the same transaction
+        // Upsert the snapshot within the same transaction
+        const now = new Date().toISOString();
         await tx.execute({
-          sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = ? WHERE workflow_name = ? AND run_id = ?`,
-          args: [JSON.stringify(snapshot), workflowName, runId],
+          sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, snapshot, createdAt, updatedAt)
+                VALUES (?, ?, jsonb(?), ?, ?)
+                ON CONFLICT(workflow_name, run_id)
+                DO UPDATE SET snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
+          args: [workflowName, runId, JSON.stringify(snapshot), now, now],
         });
 
         await tx.commit();
@@ -186,7 +190,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       try {
         // Load existing snapshot within transaction
         const existingSnapshotResult = await tx.execute({
-          sql: `SELECT snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+          sql: `SELECT json(snapshot) as snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
           args: [workflowName, runId],
         });
 
@@ -209,7 +213,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
         // Update the snapshot within the same transaction
         await tx.execute({
-          sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = ? WHERE workflow_name = ? AND run_id = ?`,
+          sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = jsonb(?) WHERE workflow_name = ? AND run_id = ?`,
           args: [JSON.stringify(updatedSnapshot), workflowName, runId],
         });
 
@@ -296,7 +300,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
     try {
       const result = await this.#client.execute({
-        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC LIMIT 1`,
+        sql: `SELECT workflow_name, run_id, resourceId, json(snapshot) as snapshot, createdAt, updatedAt FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC LIMIT 1`,
         args,
       });
 
@@ -398,7 +402,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page! * normalizedPerPage : 0;
       const result = await this.#client.execute({
-        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
+        sql: `SELECT workflow_name, run_id, resourceId, json(snapshot) as snapshot, createdAt, updatedAt FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
         args: usePagination ? [...args, normalizedPerPage, offset] : args,
       });
 

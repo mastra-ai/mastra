@@ -47,12 +47,12 @@ import { LibSQLStore } from "@mastra/libsql";
 
 const conversationMemory = new Memory({
   id: "conversation-memory",
-  storage: new LibSQLStore({ url: ":memory:" }),
+  storage: new LibSQLStore({ id: 'conversation-store', url: ":memory:" }),
 });
 
 const analyticsMemory = new Memory({
   id: "analytics-memory",
-  storage: new LibSQLStore({ url: ":memory:" }),
+  storage: new LibSQLStore({ id: 'analytics-store', url: ":memory:" }),
 });
 
 const mastra = new Mastra({
@@ -69,6 +69,6 @@ console.log(Object.keys(allMemory)); // ["conversationMemory", "analyticsMemory"
 
 ## Related
 
-- [Mastra.getMemory()](/reference/v1/core/getMemory)
-- [Memory overview](/docs/v1/memory/overview)
-- [Agent Memory](/docs/v1/agents/agent-memory)
+- [Mastra.getMemory()](/reference/core/getMemory)
+- [Memory overview](/docs/memory/overview)
+- [Agent Memory](/docs/agents/agent-memory)

@@ -45,6 +45,7 @@ export class MessageHistory implements Processor {
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRequestContext(args.requestContext);
     const threadId = memoryContext?.thread?.id;
+    const resourceId = memoryContext?.resourceId;
 
     if (!threadId) {
       return messageList;
@@ -53,6 +54,7 @@ export class MessageHistory implements Processor {
     // 1. Fetch historical messages from storage (as DB format)
     const result = await this.storage.listMessages({
       threadId,
+      resourceId,
       page: 0,
       perPage: this.lastMessages,
       orderBy: { field: 'createdAt', direction: 'DESC' },

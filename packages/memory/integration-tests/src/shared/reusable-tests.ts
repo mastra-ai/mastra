@@ -100,8 +100,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
     let page = 0;
     const perPage = 100;
     while (true) {
-      const { threads, hasMore } = await memory.listThreadsByResourceId({
-        resourceId,
+      const { threads, hasMore } = await memory.listThreads({
+        filter: { resourceId },
         page,
         perPage,
       });
@@ -855,8 +855,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       );
 
       // Get first page
-      const result = await memory.listThreadsByResourceId({
-        resourceId,
+      const result = await memory.listThreads({
+        filter: { resourceId },
         page: 0,
         perPage: 10,
       });
@@ -874,8 +874,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
     it('should handle edge cases (empty results, last page)', async () => {
       // Empty result set
-      const emptyResult = await memory.listThreadsByResourceId({
-        resourceId: 'non-existent-resource',
+      const emptyResult = await memory.listThreads({
+        filter: { resourceId: 'non-existent-resource' },
         page: 0,
         perPage: 10,
       });
@@ -893,8 +893,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         ),
       );
 
-      const lastPageResult = await memory.listThreadsByResourceId({
-        resourceId,
+      const lastPageResult = await memory.listThreads({
+        filter: { resourceId },
         page: 0,
         perPage: 10,
       });
@@ -915,8 +915,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       );
 
       // Test second page
-      const page2Result = await memory.listThreadsByResourceId({
-        resourceId,
+      const page2Result = await memory.listThreads({
+        filter: { resourceId },
         page: 1,
         perPage: 7,
       });
@@ -926,8 +926,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       expect(page2Result.hasMore).toBe(true);
 
       // Test third page (final page)
-      const page3Result = await memory.listThreadsByResourceId({
-        resourceId,
+      const page3Result = await memory.listThreads({
+        filter: { resourceId },
         page: 2,
         perPage: 7,
       });
@@ -943,8 +943,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       });
 
       await expect(
-        memory.listThreadsByResourceId({
-          resourceId,
+        memory.listThreads({
+          filter: { resourceId },
           page: -1,
           perPage: 10,
         }),
@@ -957,22 +957,22 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       });
 
       // Test perPage = 0 (should return zero results)
-      const zeroResult = await memory.listThreadsByResourceId({
-        resourceId,
+      const zeroResult = await memory.listThreads({
+        filter: { resourceId },
         page: 0,
         perPage: 0,
       });
       expect(zeroResult.threads).toHaveLength(0);
       expect(zeroResult.perPage).toBe(0);
 
-      // Test negative perPage (should fall back to default)
-      const negativeResult = await memory.listThreadsByResourceId({
-        resourceId,
-        page: 0,
-        perPage: -5,
-      });
-      expect(negativeResult.threads.length).toBeGreaterThan(0);
-      expect(negativeResult.perPage).toBe(100); // Default for listThreadsByResourceId
+      // Test negative perPage (should throw an error - invalid input)
+      await expect(
+        memory.listThreads({
+          filter: { resourceId },
+          page: 0,
+          perPage: -5,
+        }),
+      ).rejects.toThrow('perPage must be >= 0');
     });
   });
 

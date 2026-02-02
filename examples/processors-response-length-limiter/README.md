@@ -181,7 +181,7 @@ export const agent = new Agent({
 const result = await agent.generate('Explain machine learning in detail.');
 
 if (result.tripwire) {
-  console.log('Response blocked:', result.tripwireReason);
+  console.log('Response blocked:', result.tripwire.reason);
   console.log('Partial response received:', result.text);
 } else {
   console.log(result.text);
@@ -230,7 +230,7 @@ for await (const part of stream.fullStream) {
     process.stdout.write(part.payload.text);
   } else if (part.type === 'tripwire') {
     wasBlocked = true;
-    blockReason = part.payload.tripwireReason;
+    blockReason = part.payload.tripwire.reason;
     console.log('\n\nStream blocked:', blockReason);
     break;
   }

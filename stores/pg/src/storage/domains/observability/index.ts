@@ -5,12 +5,14 @@ import {
   ObservabilityStorage,
   TABLE_SCHEMAS,
   TABLE_SPANS,
+  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TracingStorageStrategy,
   ListTracesArgs,
+  ListTracesResponse,
   UpdateSpanArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
@@ -22,7 +24,6 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
-  ListTracesResponse,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig } from '../../db';
@@ -155,6 +156,35 @@ export class ObservabilityPG extends ObservabilityStorage {
         this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }
+  }
+
+  /**
+   * Manually run the spans migration to deduplicate and add the unique constraint.
+   * This is intended to be called from the CLI when duplicates are detected.
+   *
+   * @returns Migration result with status and details
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    return this.#db.migrateSpans();
+  }
+
+  /**
+   * Check migration status for the spans table.
+   * Returns information about whether migration is needed.
+   */
+  async checkSpansMigrationStatus(): Promise<{
+    needsMigration: boolean;
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    constraintExists: boolean;
+    tableName: string;
+  }> {
+    return this.#db.checkSpansMigrationStatus();
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -598,11 +628,13 @@ export class ObservabilityPG extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < count,
         },
-        spans: spans.map(span =>
-          transformFromSqlRow<SpanRecord>({
-            tableName: TABLE_SPANS,
-            sqlRow: span,
-          }),
+        spans: toTraceSpans(
+          spans.map(span =>
+            transformFromSqlRow<SpanRecord>({
+              tableName: TABLE_SPANS,
+              sqlRow: span,
+            }),
+          ),
         ),
       };
     } catch (error) {

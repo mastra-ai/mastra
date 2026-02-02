@@ -213,11 +213,10 @@ whereDocument: { "$contains": "API documentation" }
       }
     });
 
-    await vectorTool.execute({
-      context: { queryText: 'search query' },
-      mastra,
-      requestContext
-    });
+    await vectorTool.execute(
+      { queryText: 'search query' },
+      { mastra, requestContext }
+    );
     ```
 
   </TabItem>
@@ -350,6 +349,6 @@ const vectorTool = createVectorQueryTool({
 
 ## Related
 
-- [createVectorQueryTool()](/reference/v1/tools/vector-query-tool)
-- [Hybrid Vector Search](/docs/v1/rag/retrieval#metadata-filtering)
-- [Metadata Filters](/reference/v1/rag/metadata-filters)
+- [createVectorQueryTool()](/reference/tools/vector-query-tool)
+- [Hybrid Vector Search](/docs/rag/retrieval#metadata-filtering)
+- [Metadata Filters](/reference/rag/metadata-filters)

@@ -1,4 +1,6 @@
-import { SideDialog, TextAndIcon, KeyValueList, type SideDialogRootProps, getShortId } from '@/components/ui/elements';
+import { SideDialog, type SideDialogRootProps } from '@/ds/components/SideDialog';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import { KeyValueList } from '@/ds/components/KeyValueList';
 import {
   HashIcon,
   GaugeIcon,

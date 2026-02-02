@@ -41,13 +41,19 @@ describe('Tools Handlers', () => {
   describe('listToolsHandler', () => {
     it('should return empty object when no tools are provided', async () => {
       const mastra = new Mastra({ logger: false });
-      const result = await LIST_TOOLS_ROUTE.handler({ ...createTestServerContext({ mastra }), tools: undefined });
+      const result = await LIST_TOOLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: undefined,
+      });
       expect(result).toEqual({});
     });
 
     it('should return serialized tools when tools are provided', async () => {
       const mastra = new Mastra({ logger: false });
-      const result = await LIST_TOOLS_ROUTE.handler({ ...createTestServerContext({ mastra }), tools: mockTools });
+      const result = await LIST_TOOLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: mockTools,
+      });
       expect(result).toHaveProperty(mockTool.id);
       // expect(result).toHaveProperty(mockVercelTool.id);
       expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
@@ -61,7 +67,7 @@ describe('Tools Handlers', () => {
       await expect(
         GET_TOOL_BY_ID_ROUTE.handler({
           ...createTestServerContext({ mastra }),
-          tools: mockTools,
+          registeredTools: mockTools,
           toolId: 'non-existent',
         }),
       ).rejects.toThrow(HTTPException);
@@ -71,7 +77,7 @@ describe('Tools Handlers', () => {
       const mastra = new Mastra({ logger: false });
       const result = await GET_TOOL_BY_ID_ROUTE.handler({
         ...createTestServerContext({ mastra }),
-        tools: mockTools,
+        registeredTools: mockTools,
         toolId: mockTool.id,
       });
       expect(result).toHaveProperty('id', mockTool.id);
@@ -84,7 +90,7 @@ describe('Tools Handlers', () => {
       await expect(
         EXECUTE_TOOL_ROUTE.handler({
           ...createTestServerContext({ mastra: new Mastra({ logger: false }) }),
-          tools: mockTools,
+          registeredTools: mockTools,
           toolId: undefined as any,
           data: {},
         }),
@@ -95,7 +101,7 @@ describe('Tools Handlers', () => {
       await expect(
         EXECUTE_TOOL_ROUTE.handler({
           ...createTestServerContext({ mastra: new Mastra({ logger: false }) }),
-          tools: mockTools,
+          registeredTools: mockTools,
           toolId: 'non-existent',
           data: {},
         }),
@@ -104,12 +110,12 @@ describe('Tools Handlers', () => {
 
     it('should throw error when tool is not executable', async () => {
       const nonExecutableTool = { ...mockTool, execute: undefined };
-      const tools = { [nonExecutableTool.id]: nonExecutableTool };
+      const registeredTools = { [nonExecutableTool.id]: nonExecutableTool };
 
       await expect(
         EXECUTE_TOOL_ROUTE.handler({
           ...createTestServerContext({ mastra: new Mastra() }),
-          tools,
+          registeredTools,
           toolId: nonExecutableTool.id,
           data: {},
         }),
@@ -120,7 +126,7 @@ describe('Tools Handlers', () => {
       await expect(
         EXECUTE_TOOL_ROUTE.handler({
           ...createTestServerContext({ mastra: new Mastra() }),
-          tools: mockTools,
+          registeredTools: mockTools,
           toolId: mockTool.id,
           data: null as any,
         }),
@@ -135,7 +141,7 @@ describe('Tools Handlers', () => {
 
       const result = await EXECUTE_TOOL_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
-        tools: mockTools,
+        registeredTools: mockTools,
         toolId: mockTool.id,
         runId: 'test-run',
         data: context,
@@ -162,7 +168,7 @@ describe('Tools Handlers', () => {
 
       const result = await EXECUTE_TOOL_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
-        tools: mockTools,
+        registeredTools: mockTools,
         toolId: `tool`,
         data: { test: 'data' },
       });

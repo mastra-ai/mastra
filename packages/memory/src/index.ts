@@ -14,8 +14,8 @@ import type {
 } from '@mastra/core/memory';
 import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 import type {
-  StorageListThreadsByResourceIdOutput,
-  StorageListThreadsByResourceIdInput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageListMessagesInput,
   MemoryStorage,
   StorageCloneThreadInput,
@@ -106,7 +106,7 @@ export class Memory extends MastraMemory {
       vectorSearchString?: string;
       threadId: string;
     },
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
     const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
@@ -167,8 +167,12 @@ export class Memory extends MastraMemory {
       );
     }
 
+    let usage: { tokens: number } | undefined;
+
     if (config?.semanticRecall && vectorSearchString && this.vector) {
-      const { embeddings, dimension } = await this.embedMessageContent(vectorSearchString!);
+      const result = await this.embedMessageContent(vectorSearchString!);
+      usage = result.usage;
+      const { embeddings, dimension } = result;
       const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
       await Promise.all(
@@ -231,7 +235,7 @@ export class Memory extends MastraMemory {
     // Always return mastra-db format (V2)
     const messages = list.get.all.db();
 
-    return { messages };
+    return { messages, usage };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -239,11 +243,9 @@ export class Memory extends MastraMemory {
     return memoryStore.getThreadById({ threadId });
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const memoryStore = await this.getMemoryStore();
-    return memoryStore.listThreadsByResourceId(args);
+    return memoryStore.listThreads(args);
   }
 
   private async handleWorkingMemoryFromMetadata({
@@ -541,6 +543,7 @@ ${workingMemory}`;
     {
       chunks: string[];
       embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
+      usage?: { tokens: number };
       dimension: number | undefined;
     }
   >();
@@ -580,17 +583,18 @@ ${workingMemory}`;
     const promise = embedFn({
       values: chunks,
       maxRetries: 3,
-      // @ts-ignore
+      // @ts-expect-error - embedder type mismatch
       model: this.embedder,
       ...(this.embedderOptions || {}),
     });
 
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
-    const { embeddings } = await promise;
+    const { embeddings, usage } = await promise;
 
     const result = {
       embeddings,
       chunks,
+      usage,
       dimension: embeddings[0]?.length,
     };
     this.embeddingCache.set(key, result);
@@ -603,7 +607,7 @@ ${workingMemory}`;
   }: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
     // Then strip working memory tags from all messages
     const updatedMessages = messages
       .map(m => {
@@ -624,6 +628,8 @@ ${workingMemory}`;
     const result = await memoryStore.saveMessages({
       messages: dbMessages,
     });
+
+    let totalTokens = 0;
 
     if (this.vector && config.semanticRecall) {
       // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
@@ -658,6 +664,9 @@ ${workingMemory}`;
 
           const result = await this.embedMessageContent(textForEmbedding);
           dimension = result.dimension;
+          if (result.usage?.tokens) {
+            totalTokens += result.usage.tokens;
+          }
 
           embeddingData.push({
             embeddings: result.embeddings,
@@ -699,7 +708,7 @@ ${workingMemory}`;
       }
     }
 
-    return result;
+    return { ...result, usage: totalTokens > 0 ? { tokens: totalTokens } : undefined };
   }
 
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
@@ -854,6 +863,14 @@ ${workingMemory}`;
       return null;
     }
 
+    // In readOnly mode, provide context without tool instructions
+    if (config?.readOnly) {
+      return this.getReadOnlyWorkingMemoryInstruction({
+        template: workingMemoryTemplate,
+        data: workingMemoryData,
+      });
+    }
+
     return this.isVNextWorkingMemoryConfig(memoryConfig)
       ? this.__experimental_getWorkingMemoryToolInstructionVNext({
           template: workingMemoryTemplate,
@@ -967,10 +984,33 @@ ${
 `
 }
 - This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
-- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the ${template.format === 'json' ? 'JSON' : 'Markdown'} content. The system will store it for you. The user will not see it. 
+- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the ${template.format === 'json' ? 'JSON' : 'Markdown'} content. The system will store it for you. The user will not see it.
 - IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information if that information is not already stored.
 - IMPORTANT: Preserve the ${template.format === 'json' ? 'JSON' : 'Markdown'} formatting structure above while updating the content.
 `;
+  }
+
+  /**
+   * Generate read-only working memory instructions.
+   * This provides the working memory context without any tool update instructions.
+   * Used when memory is in readOnly mode.
+   */
+  protected getReadOnlyWorkingMemoryInstruction({ data }: { template: WorkingMemoryTemplate; data: string | null }) {
+    return `WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY):
+The following is your working memory - persistent information about the user and conversation collected over previous interactions. This data is provided for context to help you maintain continuity.
+
+<working_memory_data>
+${data || 'No working memory data available.'}
+</working_memory_data>
+
+Guidelines:
+1. Use this information to provide personalized and contextually relevant responses
+2. Act naturally - don't mention this system to users. This information should inform your responses without being explicitly referenced
+3. This memory is read-only in the current session - you cannot update it
+
+Notes:
+- This system is here so that you can maintain the conversation when your context window is very short
+- The user will not see the working memory data directly`;
   }
 
   private isVNextWorkingMemoryConfig(config?: MemoryConfig): boolean {
@@ -986,7 +1026,8 @@ ${
 
   public listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
-    if (mergedConfig.workingMemory?.enabled) {
+    // Don't provide update tools in readOnly mode
+    if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
       return {
         updateWorkingMemory: this.isVNextWorkingMemoryConfig(mergedConfig)
           ? // use the new experimental tool
@@ -998,20 +1039,160 @@ ${
   }
 
   /**
-   * Updates the metadata of a list of messages
-   * @param messages - The list of messages to update
+   * Updates a list of messages and syncs the vector database for semantic recall.
+   * When message content is updated, the corresponding vector embeddings are also updated
+   * to ensure semantic recall stays in sync with the message content.
+   *
+   * @param messages - The list of messages to update (must include id, can include partial content)
+   * @param memoryConfig - Optional memory configuration to determine if semantic recall is enabled
    * @returns The list of updated messages
    */
   public async updateMessages({
     messages,
+    memoryConfig,
   }: {
-    messages: Partial<MastraDBMessage> & { id: string }[];
+    messages: (Partial<MastraDBMessage> & { id: string })[];
+    memoryConfig?: MemoryConfig;
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) return [];
 
-    // TODO: Possibly handle updating the vector db here when a message is updated.
-
     const memoryStore = await this.getMemoryStore();
+    const config = this.getMergedThreadConfig(memoryConfig);
+
+    // Update vector database if semantic recall is enabled and any messages have content updates
+    if (this.vector && config.semanticRecall) {
+      const messagesWithContent = messages.filter(m => m.content !== undefined);
+
+      if (messagesWithContent.length > 0) {
+        // Get existing messages to obtain threadId and resourceId for vector metadata
+        const existingMessagesResult = await memoryStore.listMessagesById({
+          messageIds: messagesWithContent.map(m => m.id),
+        });
+        const existingMessagesMap = new Map(existingMessagesResult.messages.map(m => [m.id, m]));
+
+        // Collect embeddings for messages with new text content
+        const embeddingData: Array<{
+          embeddings: number[][];
+          metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+        }> = [];
+        let dimension: number | undefined;
+
+        // Track which messages will have new embeddings vs cleared content
+        const messageIdsWithNewEmbeddings = new Set<string>();
+        const messageIdsWithClearedContent = new Set<string>();
+
+        // Prepare new embeddings and track which messages need vector operations
+        await Promise.all(
+          messagesWithContent.map(async message => {
+            const existingMessage = existingMessagesMap.get(message.id);
+            if (!existingMessage) return;
+
+            // Extract text from the new content
+            let textForEmbedding: string | null = null;
+            const content = message.content;
+
+            if (content) {
+              if (
+                'content' in content &&
+                content.content &&
+                typeof content.content === 'string' &&
+                content.content.trim() !== ''
+              ) {
+                textForEmbedding = content.content;
+              } else if (
+                'parts' in content &&
+                content.parts &&
+                Array.isArray(content.parts) &&
+                content.parts.length > 0
+              ) {
+                // Extract text from all text parts, concatenate
+                const joined = (content.parts as any[])
+                  .filter(part => part?.type === 'text')
+                  .map(part => (part as TextPart).text)
+                  .join(' ')
+                  .trim();
+                if (joined) textForEmbedding = joined;
+              }
+            }
+
+            // If there's new text content, embed it
+            if (textForEmbedding) {
+              const result = await this.embedMessageContent(textForEmbedding);
+              dimension = result.dimension;
+
+              embeddingData.push({
+                embeddings: result.embeddings,
+                metadata: result.chunks.map(() => ({
+                  message_id: message.id,
+                  thread_id: existingMessage.threadId,
+                  resource_id: existingMessage.resourceId,
+                })),
+              });
+              messageIdsWithNewEmbeddings.add(message.id);
+            } else {
+              // Content is empty or has no text - mark for vector deletion only
+              messageIdsWithClearedContent.add(message.id);
+            }
+          }),
+        );
+
+        // Delete old vectors from all existing memory indexes for messages that need it:
+        // - Messages with cleared content: vectors must be removed (no new embeddings will replace them)
+        // - Messages with new embeddings: old vectors must be removed before upserting (may be in different indexes if embedding model changed)
+        const messageIdsNeedingDeletion = new Set([...messageIdsWithClearedContent, ...messageIdsWithNewEmbeddings]);
+
+        if (messageIdsNeedingDeletion.size > 0) {
+          try {
+            const indexes = await this.vector.listIndexes();
+            const memoryIndexes = indexes.filter(name => name.startsWith('memory_messages'));
+
+            for (const indexName of memoryIndexes) {
+              for (const messageId of messageIdsNeedingDeletion) {
+                try {
+                  await this.vector.deleteVectors({
+                    indexName,
+                    filter: { message_id: messageId },
+                  });
+                } catch {
+                  // Ignore errors if vectors don't exist for this message
+                  this.logger.debug(
+                    `No existing vectors found for message ${messageId} in ${indexName}, skipping delete`,
+                  );
+                }
+              }
+            }
+          } catch {
+            // Ignore errors if no indexes exist yet
+            this.logger.debug(`No memory indexes found to delete from`);
+          }
+        }
+
+        // Upsert new embeddings if any
+        if (embeddingData.length > 0 && dimension !== undefined) {
+          const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+          // Flatten all embeddings and metadata into single arrays
+          const allVectors: number[][] = [];
+          const allMetadata: Array<{
+            message_id: string;
+            thread_id: string | undefined;
+            resource_id: string | undefined;
+          }> = [];
+
+          for (const data of embeddingData) {
+            allVectors.push(...data.embeddings);
+            allMetadata.push(...data.metadata);
+          }
+
+          await this.vector.upsert({
+            indexName,
+            vectors: allVectors,
+            metadata: allMetadata,
+          });
+        }
+      }
+    }
+
     return memoryStore.updateMessages({ messages });
   }
 
@@ -1297,8 +1478,8 @@ ${
     }
 
     // List all threads for the resource and filter for clones
-    const { threads } = await this.listThreadsByResourceId({
-      resourceId: targetResourceId,
+    const { threads } = await this.listThreads({
+      filter: { resourceId: targetResourceId },
       perPage: false, // Get all threads
     });
 

@@ -24,7 +24,6 @@ import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { PaginationInfo, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
-import type { OutputSchema } from '@mastra/core/stream';
 
 import type { QueryResult } from '@mastra/core/vector';
 import type {
@@ -41,6 +40,8 @@ import type { ZodSchema } from 'zod';
 export interface ClientOptions {
   /** Base URL for API requests */
   baseUrl: string;
+  /** API route prefix. Defaults to '/api'. Set this to match your server's apiPrefix configuration. */
+  apiPrefix?: string;
   /** Number of retry attempts for failed requests */
   retries?: number;
   /** Initial backoff time in milliseconds between retries */
@@ -89,6 +90,10 @@ export interface GetAgentResponse {
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
   agents: Record<string, { id: string; name: string }>;
+  skills?: SkillMetadata[];
+  workspaceTools?: string[];
+  /** ID of the agent's workspace (if configured) */
+  workspaceId?: string;
   provider: string;
   modelId: string;
   modelVersion: string;
@@ -104,9 +109,15 @@ export interface GetAgentResponse {
         };
       }>
     | undefined;
+  inputProcessors?: Array<{ id: string; name: string }>;
+  outputProcessors?: Array<{ id: string; name: string }>;
   defaultOptions: WithoutMethods<AgentExecutionOptions>;
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
+  /** Serialized JSON schema for request context validation */
+  requestContextSchema?: string;
+  source?: 'code' | 'stored';
+  activeVersionId?: string;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -129,15 +140,19 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
-export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
-  messages: MessageListInput;
+export type StreamParamsBase<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
-  structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
 >;
+export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
+export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
+  messages: MessageListInput;
+} & (OUTPUT extends undefined
+    ? { structuredOutput?: never }
+    : { structuredOutput: SerializableStructuredOutputOptions<OUTPUT> });
 
 export type UpdateModelParams = {
   modelId: string;
@@ -163,6 +178,7 @@ export interface GetToolResponse {
   description: string;
   inputSchema: string;
   outputSchema: string;
+  requestContextSchema?: string;
 }
 
 export interface ListWorkflowRunsParams {
@@ -212,6 +228,8 @@ export interface GetWorkflowResponse {
   inputSchema: string;
   outputSchema: string;
   stateSchema: string;
+  /** Serialized JSON schema for request context validation */
+  requestContextSchema?: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
 }
@@ -274,7 +292,14 @@ export interface CreateMemoryThreadParams {
 export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface ListMemoryThreadsParams {
-  resourceId: string;
+  /**
+   * Optional resourceId to filter threads. When not provided, returns all threads.
+   */
+  resourceId?: string;
+  /**
+   * Optional metadata filter. Threads must match all specified key-value pairs (AND logic).
+   */
+  metadata?: Record<string, unknown>;
   /**
    * Optional agentId. When not provided and storage is configured on the server,
    * threads will be retrieved using storage directly.
@@ -585,17 +610,20 @@ export interface StoredAgentScorerConfig {
  */
 export interface StoredAgentResponse {
   id: string;
+  status: string;
+  authorId?: string;
   name: string;
   description?: string;
   instructions: string;
   model: Record<string, unknown>;
   tools?: string[];
+  integrationTools?: string[];
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: Record<string, unknown>;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -626,10 +654,13 @@ export interface ListStoredAgentsResponse {
 }
 
 /**
- * Parameters for creating a stored agent
+ * Parameters for creating a stored agent.
+ * Flat union of agent-record fields and config fields.
  */
 export interface CreateStoredAgentParams {
   id: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
   name: string;
   description?: string;
   instructions: string;
@@ -638,17 +669,19 @@ export interface CreateStoredAgentParams {
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
+  integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: Record<string, unknown>;
   scorers?: Record<string, StoredAgentScorerConfig>;
-  metadata?: Record<string, unknown>;
 }
 
 /**
  * Parameters for updating a stored agent
  */
 export interface UpdateStoredAgentParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
   instructions?: string;
@@ -657,11 +690,11 @@ export interface UpdateStoredAgentParams {
   defaultOptions?: Record<string, unknown>;
   workflows?: string[];
   agents?: string[];
+  integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: Record<string, unknown>;
   scorers?: Record<string, StoredAgentScorerConfig>;
-  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -670,6 +703,87 @@ export interface UpdateStoredAgentParams {
 export interface DeleteStoredAgentResponse {
   success: boolean;
   message: string;
+}
+
+// ============================================================================
+// Agent Version Types
+// ============================================================================
+
+export interface AgentVersionResponse {
+  id: string;
+  agentId: string;
+  versionNumber: number;
+  name: string;
+  description?: string;
+  instructions: string;
+  model: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  integrationTools?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: Record<string, unknown>;
+  scorers?: Record<string, StoredAgentScorerConfig>;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+export interface ListAgentVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface ListAgentVersionsResponse {
+  versions: AgentVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+export interface CreateAgentVersionParams {
+  changeMessage?: string;
+}
+
+export interface CreateAgentVersionResponse {
+  version: AgentVersionResponse;
+}
+
+export interface ActivateAgentVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+export interface RestoreAgentVersionResponse {
+  success: boolean;
+  message: string;
+  version: AgentVersionResponse;
+}
+
+export interface DeleteAgentVersionResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface VersionDiff {
+  field: string;
+  previousValue: any;
+  currentValue: any;
+  changeType?: 'added' | 'removed' | 'modified';
+}
+
+export type AgentVersionDiff = VersionDiff;
+
+export interface CompareVersionsResponse {
+  fromVersion: AgentVersionResponse;
+  toVersion: AgentVersionResponse;
+  diffs: VersionDiff[];
 }
 
 export interface ListAgentsModelProvidersResponse {
@@ -696,4 +810,391 @@ export interface MastraPackage {
 
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
+}
+
+// ============================================================================
+// Workspace Types
+// ============================================================================
+
+/**
+ * Workspace capabilities
+ */
+export interface WorkspaceCapabilities {
+  hasFilesystem: boolean;
+  hasSandbox: boolean;
+  canBM25: boolean;
+  canVector: boolean;
+  canHybrid: boolean;
+  hasSkills: boolean;
+}
+
+/**
+ * Workspace safety configuration
+ */
+export interface WorkspaceSafety {
+  readOnly: boolean;
+}
+
+/**
+ * Response for getting workspace info
+ */
+export interface WorkspaceInfoResponse {
+  isWorkspaceConfigured: boolean;
+  id?: string;
+  name?: string;
+  status?: string;
+  capabilities?: WorkspaceCapabilities;
+  safety?: WorkspaceSafety;
+}
+
+/**
+ * Workspace item in list response
+ */
+export interface WorkspaceItem {
+  id: string;
+  name: string;
+  status: string;
+  source: 'mastra' | 'agent';
+  agentId?: string;
+  agentName?: string;
+  capabilities: WorkspaceCapabilities;
+  safety: WorkspaceSafety;
+}
+
+/**
+ * Response for listing all workspaces
+ */
+export interface ListWorkspacesResponse {
+  workspaces: WorkspaceItem[];
+}
+
+/**
+ * File entry in directory listing
+ */
+export interface WorkspaceFileEntry {
+  name: string;
+  type: 'file' | 'directory';
+  size?: number;
+}
+
+/**
+ * Response for reading a file
+ */
+export interface WorkspaceFsReadResponse {
+  path: string;
+  content: string;
+  type: 'file' | 'directory';
+  size?: number;
+  mimeType?: string;
+}
+
+/**
+ * Response for writing a file
+ */
+export interface WorkspaceFsWriteResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for listing files
+ */
+export interface WorkspaceFsListResponse {
+  path: string;
+  entries: WorkspaceFileEntry[];
+}
+
+/**
+ * Response for deleting a file
+ */
+export interface WorkspaceFsDeleteResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for creating a directory
+ */
+export interface WorkspaceFsMkdirResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for getting file stats
+ */
+export interface WorkspaceFsStatResponse {
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  createdAt?: string;
+  modifiedAt?: string;
+  mimeType?: string;
+}
+
+/**
+ * Workspace search result
+ */
+export interface WorkspaceSearchResult {
+  /** Document identifier (typically the indexed file path) */
+  id: string;
+  content: string;
+  score: number;
+  lineRange?: {
+    start: number;
+    end: number;
+  };
+  scoreDetails?: {
+    vector?: number;
+    bm25?: number;
+  };
+}
+
+/**
+ * Parameters for searching workspace content
+ */
+export interface WorkspaceSearchParams {
+  query: string;
+  topK?: number;
+  mode?: 'bm25' | 'vector' | 'hybrid';
+  minScore?: number;
+}
+
+/**
+ * Response for searching workspace
+ */
+export interface WorkspaceSearchResponse {
+  results: WorkspaceSearchResult[];
+  query: string;
+  mode: 'bm25' | 'vector' | 'hybrid';
+}
+
+/**
+ * Parameters for indexing content
+ */
+export interface WorkspaceIndexParams {
+  path: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for indexing content
+ */
+export interface WorkspaceIndexResponse {
+  success: boolean;
+  path: string;
+}
+
+// ============================================================================
+// Skills Types
+// ============================================================================
+
+/**
+ * Skill source type indicating where the skill comes from
+ */
+export type SkillSource =
+  | { type: 'external'; packagePath: string }
+  | { type: 'local'; projectPath: string }
+  | { type: 'managed'; mastraPath: string };
+
+/**
+ * Skill metadata (without instructions content)
+ */
+export interface SkillMetadata {
+  name: string;
+  description: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Full skill data including instructions and file paths
+ */
+export interface Skill extends SkillMetadata {
+  path: string;
+  instructions: string;
+  source: SkillSource;
+  references: string[];
+  scripts: string[];
+  assets: string[];
+}
+
+/**
+ * Response for listing skills
+ */
+export interface ListSkillsResponse {
+  skills: SkillMetadata[];
+  isSkillsConfigured: boolean;
+}
+
+/**
+ * Skill search result
+ */
+export interface SkillSearchResult {
+  skillName: string;
+  source: string;
+  content: string;
+  score: number;
+  lineRange?: {
+    start: number;
+    end: number;
+  };
+  scoreDetails?: {
+    vector?: number;
+    bm25?: number;
+  };
+}
+
+/**
+ * Parameters for searching skills
+ */
+export interface SearchSkillsParams {
+  query: string;
+  topK?: number;
+  minScore?: number;
+  skillNames?: string[];
+  includeReferences?: boolean;
+}
+
+/**
+ * Response for searching skills
+ */
+export interface SearchSkillsResponse {
+  results: SkillSearchResult[];
+  query: string;
+}
+
+/**
+ * Response for listing skill references
+ */
+export interface ListSkillReferencesResponse {
+  skillName: string;
+  references: string[];
+}
+
+/**
+ * Response for getting skill reference content
+ */
+export interface GetSkillReferenceResponse {
+  skillName: string;
+  referencePath: string;
+  content: string;
+}
+
+// ============================================================================
+// Processor Types
+// ============================================================================
+
+/**
+ * Processor phase types
+ */
+export type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
+
+/**
+ * Processor configuration showing how it's attached to an agent
+ */
+export interface ProcessorConfiguration {
+  agentId: string;
+  agentName: string;
+  type: 'input' | 'output';
+}
+
+/**
+ * Processor in list response
+ */
+export interface GetProcessorResponse {
+  id: string;
+  name?: string;
+  description?: string;
+  phases: ProcessorPhase[];
+  agentIds: string[];
+  isWorkflow: boolean;
+}
+
+/**
+ * Detailed processor response
+ */
+export interface GetProcessorDetailResponse {
+  id: string;
+  name?: string;
+  description?: string;
+  phases: ProcessorPhase[];
+  configurations: ProcessorConfiguration[];
+  isWorkflow: boolean;
+}
+
+/**
+ * Parameters for executing a processor
+ */
+export interface ExecuteProcessorParams {
+  phase: ProcessorPhase;
+  messages: MastraDBMessage[];
+  agentId?: string;
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+/**
+ * Tripwire result from processor execution
+ */
+export interface ProcessorTripwireResult {
+  triggered: boolean;
+  reason?: string;
+  metadata?: unknown;
+}
+
+/**
+ * Response from processor execution
+ */
+export interface ExecuteProcessorResponse {
+  success: boolean;
+  phase: string;
+  messages?: MastraDBMessage[];
+  messageList?: {
+    messages: MastraDBMessage[];
+  };
+  tripwire?: ProcessorTripwireResult;
+  error?: string;
+}
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+/**
+ * HTTP error thrown by the Mastra client.
+ * Extends Error with additional properties for better error handling.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await client.getWorkspace('my-workspace').listFiles('/invalid-path');
+ * } catch (error) {
+ *   if (error instanceof MastraClientError) {
+ *     if (error.status === 404) {
+ *       console.log('Not found:', error.body);
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export class MastraClientError extends Error {
+  /** HTTP status code */
+  readonly status: number;
+
+  /** HTTP status text (e.g., "Not Found", "Internal Server Error") */
+  readonly statusText: string;
+
+  /** Parsed response body if available */
+  readonly body?: unknown;
+
+  constructor(status: number, statusText: string, message: string, body?: unknown) {
+    // Keep the same message format for backwards compatibility
+    super(message);
+    this.name = 'MastraClientError';
+    this.status = status;
+    this.statusText = statusText;
+    this.body = body;
+  }
 }

@@ -19,7 +19,7 @@ This project enables AI agents to interact with web pages through the Mastra fra
 
 ### Prerequisites
 
-- Node.js (v20+)
+- Node.js 22.13.0 or later
 - pnpm
 - Browserbase account
 - OpenAI API access
