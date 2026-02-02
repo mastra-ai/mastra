@@ -31,7 +31,7 @@ import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
 import { isZodType } from '../utils';
-import { NESTED_WORKFLOW_RESULT_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type {
@@ -2202,20 +2202,7 @@ export class Workflow<
       throw res.error;
     }
 
-    // Wrap successful nested workflow results with NESTED_WORKFLOW_RESULT_SYMBOL.
-    // The step handler (handlers/step.ts) checks for this symbol to:
-    // 1. Extract the actual result for the step output
-    // 2. Store the nested workflow's runId in step metadata for debugging/tracing
-    // See constants.ts for why this uses a Symbol (safe for in-memory, never serialized).
-    if (res.status === 'success') {
-      return {
-        [NESTED_WORKFLOW_RESULT_SYMBOL]: true,
-        result: res.result,
-        runId: run.runId,
-      } as any;
-    }
-
-    return undefined;
+    return res.status === 'success' ? res.result : undefined;
   }
 
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput) {
