@@ -1,3 +1,4 @@
+import { getSchemaValidator } from '../../../datasets/validation';
 import { calculatePagination, normalizePerPage } from '../../base';
 import type {
   Dataset,
@@ -102,6 +103,18 @@ export class DatasetsInMemory extends DatasetsStorage {
       throw new Error(`Dataset not found: ${args.datasetId}`);
     }
 
+    // Validate against schemas if enabled
+    const validator = getSchemaValidator();
+    const cacheKey = `dataset:${args.datasetId}`;
+
+    if (dataset.inputSchema) {
+      validator.validate(args.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
+    }
+
+    if (dataset.outputSchema && args.expectedOutput !== undefined) {
+      validator.validate(args.expectedOutput, dataset.outputSchema, 'expectedOutput', `${cacheKey}:output`);
+    }
+
     // New version timestamp
     const now = new Date();
     this.db.datasets.set(args.datasetId, {
@@ -137,6 +150,18 @@ export class DatasetsInMemory extends DatasetsStorage {
     const dataset = this.db.datasets.get(args.datasetId);
     if (!dataset) {
       throw new Error(`Dataset not found: ${args.datasetId}`);
+    }
+
+    // Validate new values against schemas if enabled
+    const validator = getSchemaValidator();
+    const cacheKey = `dataset:${args.datasetId}`;
+
+    if (args.input !== undefined && dataset.inputSchema) {
+      validator.validate(args.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
+    }
+
+    if (args.expectedOutput !== undefined && dataset.outputSchema) {
+      validator.validate(args.expectedOutput, dataset.outputSchema, 'expectedOutput', `${cacheKey}:output`);
     }
 
     // New version timestamp
