@@ -1,7 +1,7 @@
 import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
-import type { IRBACProvider } from '../ee/interfaces/rbac';
+import type { IRBACProvider } from '../auth/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
@@ -169,7 +169,7 @@ export type ServerConfig = {
    *
    * @example Using StaticRBACProvider with role definitions
    * ```typescript
-   * import { StaticRBACProvider, DEFAULT_ROLES } from '@mastra/core/ee';
+   * import { StaticRBACProvider, DEFAULT_ROLES } from '@mastra/core/auth';
    *
    * const mastra = new Mastra({
    *   server: {

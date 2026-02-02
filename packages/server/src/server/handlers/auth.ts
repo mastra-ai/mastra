@@ -8,7 +8,7 @@
  * - Logout users
  */
 
-import { buildCapabilities } from '@mastra/core/ee';
+import { buildCapabilities } from '@mastra/core/auth';
 import type {
   IUserProvider,
   ISessionProvider,
@@ -17,7 +17,7 @@ import type {
   IRBACProvider,
   EEUser,
   SSOCallbackResult,
-} from '@mastra/core/ee';
+} from '@mastra/core/auth';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
 import { HTTPException } from '../http-exception';

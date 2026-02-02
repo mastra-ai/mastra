@@ -1,4 +1,4 @@
-import type { IRBACProvider, EEUser } from '@mastra/core/ee';
+import type { IRBACProvider, EEUser } from '@mastra/core/auth';
 import {
   canAccessPublicly,
   checkRules,

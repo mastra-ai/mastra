@@ -12,7 +12,7 @@ import type {
   ISessionProvider,
   ICredentialsProvider,
 } from './interfaces';
-import { isEELicenseValid } from './license';
+import { isLicenseValid } from './license';
 
 /**
  * Public capabilities response (no authentication required).
@@ -172,7 +172,7 @@ export async function buildCapabilities(
 
   // Determine if EE features are available
   // SimpleAuth and MastraCloudAuth are exempt from license requirement
-  const hasLicense = isEELicenseValid();
+  const hasLicense = isLicenseValid();
   const isCloud = isMastraCloudAuth(auth);
   const isSimple = isSimpleAuth(auth);
   const isLicensedOrCloud = hasLicense || isCloud || isSimple;
