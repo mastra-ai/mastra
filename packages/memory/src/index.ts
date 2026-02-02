@@ -5,6 +5,7 @@ import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
+import { coreFeatures } from '@mastra/core/features';
 import type {
   MemoryConfig,
   SharedMemoryConfig,
@@ -12,7 +13,19 @@ import type {
   WorkingMemoryTemplate,
   MessageDeleteInput,
 } from '@mastra/core/memory';
-import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags, normalizeObservationalMemoryConfig } from '@mastra/core/memory';
+import {
+  MastraMemory,
+  extractWorkingMemoryContent,
+  removeWorkingMemoryTags,
+  normalizeObservationalMemoryConfig,
+} from '@mastra/core/memory';
+import type {
+  InputProcessor,
+  InputProcessorOrWorkflow,
+  OutputProcessor,
+  OutputProcessorOrWorkflow,
+} from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -35,9 +48,6 @@ import {
   __experimental_updateWorkingMemoryToolVNext,
   deepMergeWorkingMemory,
 } from './tools/working-memory';
-import type { InputProcessor, InputProcessorOrWorkflow, OutputProcessor, OutputProcessorOrWorkflow } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
-import { coreFeatures } from '@mastra/core/features';
 
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };

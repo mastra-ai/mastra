@@ -787,7 +787,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
-    const { id, observations, tokenCount, lastObservedAt, patterns } = input;
+    const { id, observations, tokenCount, lastObservedAt } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
@@ -798,18 +798,6 @@ export class InMemoryMemory extends MemoryStorage {
     record.totalTokensObserved += tokenCount;
     // Reset pending tokens since we've now observed them
     record.pendingMessageTokens = 0;
-
-    // Merge patterns if provided
-    if (patterns && Object.keys(patterns).length > 0) {
-      const existingPatterns = record.patterns ?? {};
-      for (const [patternName, items] of Object.entries(patterns)) {
-        const existingItems = existingPatterns[patternName] ?? [];
-        // Deduplicate by exact match
-        const newItems = items.filter(item => !existingItems.includes(item));
-        existingPatterns[patternName] = [...existingItems, ...newItems];
-      }
-      record.patterns = existingPatterns;
-    }
 
     // Update timestamps (top-level, not in metadata)
     // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
@@ -876,7 +864,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
-    const { currentRecord, reflection, tokenCount, patterns } = input;
+    const { currentRecord, reflection, tokenCount } = input;
     const key = this.getObservationalMemoryKey(currentRecord.threadId, currentRecord.resourceId);
     const now = new Date();
 
@@ -892,11 +880,6 @@ export class InMemoryMemory extends MemoryStorage {
       originType: 'reflection',
       generationCount: currentRecord.generationCount + 1,
       activeObservations: reflection,
-      // After reflection, reset observedMessageIds since old messages are now "baked into" the reflection.
-      // The previous DB record retains its observedMessageIds as historical record.
-      // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
-      // Patterns from reflection - new OM record gets the patterns the Reflector extracted
-      patterns: patterns,
       config: currentRecord.config,
       totalTokensObserved: currentRecord.totalTokensObserved,
       observationTokenCount: tokenCount,

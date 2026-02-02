@@ -1215,7 +1215,7 @@ export class MemoryLibSQL extends MemoryStorage {
       generationCount: Number(row.generationCount || 0),
       activeObservations: row.activeObservations || '',
       bufferedObservations: row.activeObservationsPendingUpdate || undefined,
-      patterns: row.patterns ? JSON.parse(row.patterns) : undefined,
+
       totalTokensObserved: Number(row.totalTokensObserved || 0),
       observationTokenCount: Number(row.observationTokenCount || 0),
       pendingMessageTokens: Number(row.pendingMessageTokens || 0),
@@ -1304,11 +1304,11 @@ export class MemoryLibSQL extends MemoryStorage {
       await this.#client.execute({
         sql: `INSERT INTO "${TABLE_OBSERVATIONAL_MEMORY}" (
           id, "lookupKey", scope, "resourceId", "threadId",
-          "activeObservations", "activeObservationsPendingUpdate", patterns,
+          "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
           "isObserving", "isReflecting", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           id,
           lookupKey,
@@ -1316,7 +1316,6 @@ export class MemoryLibSQL extends MemoryStorage {
           input.resourceId,
           input.threadId || null,
           '',
-          null,
           null,
           'initial',
           JSON.stringify(input.config),
@@ -1350,13 +1349,11 @@ export class MemoryLibSQL extends MemoryStorage {
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
     try {
       const now = new Date();
-      const patternsJson = input.patterns ? JSON.stringify(input.patterns) : null;
 
       const result = await this.#client.execute({
         sql: `UPDATE "${TABLE_OBSERVATIONAL_MEMORY}" SET
           "activeObservations" = ?,
           "lastObservedAt" = ?,
-          patterns = COALESCE(?, patterns),
           "pendingMessageTokens" = 0,
           "observationTokenCount" = ?,
           "totalTokensObserved" = "totalTokensObserved" + ?,
@@ -1365,7 +1362,6 @@ export class MemoryLibSQL extends MemoryStorage {
         args: [
           input.observations,
           input.lastObservedAt.toISOString(),
-          patternsJson,
           input.tokenCount,
           input.tokenCount,
           now.toISOString(),
@@ -1415,7 +1411,6 @@ export class MemoryLibSQL extends MemoryStorage {
         originType: 'reflection',
         generationCount: input.currentRecord.generationCount + 1,
         activeObservations: input.reflection,
-        patterns: input.patterns,
         totalTokensObserved: input.currentRecord.totalTokensObserved + input.tokenCount,
         observationTokenCount: input.tokenCount,
         pendingMessageTokens: 0,
@@ -1428,11 +1423,11 @@ export class MemoryLibSQL extends MemoryStorage {
       await this.#client.execute({
         sql: `INSERT INTO "${TABLE_OBSERVATIONAL_MEMORY}" (
           id, "lookupKey", scope, "resourceId", "threadId",
-          "activeObservations", "activeObservationsPendingUpdate", patterns,
+          "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
           "isObserving", "isReflecting", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           id,
           lookupKey,
@@ -1441,7 +1436,6 @@ export class MemoryLibSQL extends MemoryStorage {
           record.threadId || null,
           input.reflection,
           null,
-          input.patterns ? JSON.stringify(input.patterns) : null,
           'reflection',
           JSON.stringify(record.config),
           input.currentRecord.generationCount + 1,

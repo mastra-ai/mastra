@@ -1399,7 +1399,6 @@ export class MemoryPG extends MemoryStorage {
       generationCount: Number(row.generationCount || 0),
       activeObservations: row.activeObservations || '',
       bufferedObservations: row.activeObservationsPendingUpdate || undefined,
-      patterns: row.patterns ? (typeof row.patterns === 'string' ? JSON.parse(row.patterns) : row.patterns) : undefined,
       totalTokensObserved: Number(row.totalTokensObserved || 0),
       observationTokenCount: Number(row.observationTokenCount || 0),
       pendingMessageTokens: Number(row.pendingMessageTokens || 0),
@@ -1499,11 +1498,11 @@ export class MemoryPG extends MemoryStorage {
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id, "lookupKey", scope, "resourceId", "threadId",
-          "activeObservations", "activeObservationsPendingUpdate", patterns,
+          "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
           "isObserving", "isReflecting", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
         [
           id,
           lookupKey,
@@ -1511,7 +1510,6 @@ export class MemoryPG extends MemoryStorage {
           input.resourceId,
           input.threadId || null,
           '',
-          null,
           null,
           'initial',
           JSON.stringify(input.config),
@@ -1549,7 +1547,6 @@ export class MemoryPG extends MemoryStorage {
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
     try {
       const now = new Date();
-      const patternsJson = input.patterns ? JSON.stringify(input.patterns) : null;
       const tableName = getTableName({
         indexName: TABLE_OBSERVATIONAL_MEMORY,
         schemaName: getSchemaName(this.#schema),
@@ -1562,18 +1559,16 @@ export class MemoryPG extends MemoryStorage {
           "activeObservations" = $1,
           "lastObservedAt" = $2,
           "lastObservedAtZ" = $3,
-          patterns = COALESCE($4, patterns),
           "pendingMessageTokens" = 0,
-          "observationTokenCount" = $5,
-          "totalTokensObserved" = "totalTokensObserved" + $6,
-          "updatedAt" = $7,
-          "updatedAtZ" = $8
-        WHERE id = $9`,
+          "observationTokenCount" = $4,
+          "totalTokensObserved" = "totalTokensObserved" + $5,
+          "updatedAt" = $6,
+          "updatedAtZ" = $7
+        WHERE id = $8`,
         [
           input.observations,
           lastObservedAtStr,
           lastObservedAtStr,
-          patternsJson,
           input.tokenCount,
           input.tokenCount,
           nowStr,
@@ -1624,7 +1619,6 @@ export class MemoryPG extends MemoryStorage {
         originType: 'reflection',
         generationCount: input.currentRecord.generationCount + 1,
         activeObservations: input.reflection,
-        patterns: input.patterns,
         totalTokensObserved: input.currentRecord.totalTokensObserved + input.tokenCount,
         observationTokenCount: input.tokenCount,
         pendingMessageTokens: 0,
@@ -1643,11 +1637,11 @@ export class MemoryPG extends MemoryStorage {
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
           id, "lookupKey", scope, "resourceId", "threadId",
-          "activeObservations", "activeObservationsPendingUpdate", patterns,
+          "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
           "isObserving", "isReflecting", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
         [
           id,
           lookupKey,
@@ -1656,7 +1650,6 @@ export class MemoryPG extends MemoryStorage {
           record.threadId || null,
           input.reflection,
           null,
-          input.patterns ? JSON.stringify(input.patterns) : null,
           'reflection',
           JSON.stringify(record.config),
           input.currentRecord.generationCount + 1,

@@ -1,7 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 
-
-
 /**
  * Legacy extraction instructions from Jan 7, 2026.
  * Used for A/B testing prompt size impact on accuracy.
@@ -326,29 +324,6 @@ export const OBSERVER_EXTRACTION_INSTRUCTIONS = USE_CONDENSED_PROMPT
     : CURRENT_OBSERVER_EXTRACTION_INSTRUCTIONS;
 
 /**
- * Shared pattern instructions for Observer and Reflector agents.
- * This is exported so both agents use consistent pattern formatting.
- */
-export const PATTERN_INSTRUCTIONS = `When you notice recurring themes, group them by pattern name.
-Each pattern is a named section containing items with dates.
-Common patterns are events, plans, locations, and any other patterns you recognize.
-
-IMPORTANT: 
-- Use the ORIGINAL date when each item was mentioned or occurred, NOT the current processing date.
-- Be TERSE. Pattern items are for quick counting/reference, not full descriptions.
-- Caveman-style: "visited downtown art gallery" not "User visited the art gallery downtown"
-- Drop articles (the, a, an) and unnecessary words
-- Don't start each line with "User " - patterns are implicitly about the user
-- Patterns are ALWAYS about the user, never about assistant limitations or behaviors
-- BAD: <assistant_limitations> - never create patterns about the assistant
-- GOOD: <trips>, <purchases>, <hobbies>, <events> - patterns about user's life
-
-<pattern_name>
-* terse item description (original date)
-* another item (original date)
-</pattern_name>`;
-
-/**
  * The output format instructions for the Observer.
  * This is exported so the Reflector can use the same format.
  */
@@ -441,21 +416,6 @@ Hint for the agent's immediate next message. Examples:
 </suggested-response>`;
 
 /**
- * Patterns section for Observer output format
- */
-export const OBSERVER_PATTERNS_SECTION = `
-<patterns>
-${PATTERN_INSTRUCTIONS}
-</patterns>
-
-Only include patterns when there are 2+ related items to group.`;
-
-/**
- * Full output format including patterns (for backwards compatibility)
- */
-export const OBSERVER_OUTPUT_FORMAT = OBSERVER_OUTPUT_FORMAT_BASE + OBSERVER_PATTERNS_SECTION;
-
-/**
  * Condensed guidelines - no GOOD/BAD examples, no arbitrary limits
  */
 const CONDENSED_OBSERVER_GUIDELINES = `- Be specific: "User prefers short answers without lengthy explanations" not "User stated a preference"
@@ -489,17 +449,12 @@ export const OBSERVER_GUIDELINES = USE_CONDENSED_PROMPT
 
 /**
  * Build the complete observer system prompt.
- * @param recognizePatterns - Whether to include pattern recognition instructions (default: true)
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
  */
-export function buildObserverSystemPrompt(recognizePatterns: boolean = true, multiThread: boolean = false): string {
+export function buildObserverSystemPrompt(multiThread: boolean = false): string {
   // Use condensed output format when condensed prompt is enabled
-  // Otherwise, conditionally include patterns section based on config
-  const outputFormat = USE_CONDENSED_PROMPT
-    ? CONDENSED_OBSERVER_OUTPUT_FORMAT
-    : recognizePatterns
-      ? OBSERVER_OUTPUT_FORMAT
-      : OBSERVER_OUTPUT_FORMAT_BASE;
+  // Otherwise, use the base output format
+  const outputFormat = USE_CONDENSED_PROMPT ? CONDENSED_OBSERVER_OUTPUT_FORMAT : OBSERVER_OUTPUT_FORMAT_BASE;
 
   if (multiThread) {
     return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -609,9 +564,6 @@ export interface ObserverResult {
   /** Suggested continuation message for the Actor */
   suggestedContinuation?: string;
 
-  /** Extracted patterns - recurring themes grouped for easier counting/recall */
-  patterns?: ObserverPatterns;
-
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
 }
@@ -620,10 +572,7 @@ export interface ObserverResult {
  * Format messages for the Observer's input.
  * Includes timestamps for temporal context.
  */
-export function formatMessagesForObserver(
-  messages: MastraDBMessage[],
-  options?: { maxPartLength?: number },
-): string {
+export function formatMessagesForObserver(messages: MastraDBMessage[], options?: { maxPartLength?: number }): string {
   const maxLen = options?.maxPartLength;
 
   return messages
@@ -797,34 +746,6 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
       observations = observations.replace(/<suggested-response>[\s\S]*?<\/suggested-response>/i, '');
     }
 
-    // Extract patterns if present
-    let patterns: ObserverPatterns | undefined;
-    const patternsMatch = threadContent.match(/<patterns>([\s\S]*?)<\/patterns>/i);
-    if (patternsMatch?.[1]) {
-      patterns = {};
-      const patternsContent = patternsMatch[1];
-      const patternTagRegex = /<([a-z][a-z0-9_-]*)>([\s\S]*?)<\/\1>/gi;
-      let patternMatch;
-      while ((patternMatch = patternTagRegex.exec(patternsContent)) !== null) {
-        const patternName = patternMatch[1];
-        const patternItemsRaw = patternMatch[2];
-        if (!patternName || !patternItemsRaw) continue;
-        const items = patternItemsRaw
-          .split('\n')
-          .map(line => line.trim())
-          .filter(line => line.startsWith('-') || line.startsWith('*'))
-          .map(line => line.replace(/^[-*]\s*/, '').trim())
-          .filter(Boolean);
-        if (items.length > 0) {
-          patterns[patternName] = items;
-        }
-      }
-      observations = observations.replace(/<patterns>[\s\S]*?<\/patterns>/i, '');
-      if (Object.keys(patterns).length === 0) {
-        patterns = undefined;
-      }
-    }
-
     // Clean up observations
     observations = observations.trim();
 
@@ -832,7 +753,6 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
       observations,
       currentTask,
       suggestedContinuation,
-      patterns,
       rawOutput: threadContent,
     });
   }
@@ -883,25 +803,12 @@ export function parseObserverOutput(output: string): ObserverResult {
   // Those are stored separately in thread metadata and injected dynamically
   const observations = parsed.observations || '';
 
-
-
-  // Only include patterns if there are any
-  const hasPatterns = Object.keys(parsed.patterns).length > 0;
-
   return {
     observations,
     currentTask: parsed.currentTask || undefined,
     suggestedContinuation: parsed.suggestedResponse || undefined,
-    patterns: hasPatterns ? parsed.patterns : undefined,
     rawOutput: output,
   };
-}
-
-/**
- * A pattern is a named group of related items (e.g., "trips": ["Hawaii (May 10)", "Tokyo (June 5)"])
- */
-export interface ObserverPatterns {
-  [patternName: string]: string[];
 }
 
 /**
@@ -911,7 +818,6 @@ interface ParsedMemorySection {
   observations: string;
   currentTask: string;
   suggestedResponse: string;
-  patterns: ObserverPatterns;
 }
 
 /**
@@ -923,7 +829,6 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
     observations: '',
     currentTask: '',
     suggestedResponse: '',
-    patterns: {},
   };
 
   // Extract <observations> content (supports multiple blocks)
@@ -954,32 +859,6 @@ export function parseMemorySectionXml(content: string): ParsedMemorySection {
   const suggestedResponseMatch = content.match(/^[ \t]*<suggested-response>([\s\S]*?)^[ \t]*<\/suggested-response>/im);
   if (suggestedResponseMatch?.[1]) {
     result.suggestedResponse = suggestedResponseMatch[1].trim();
-  }
-
-  // Extract <patterns> content and parse individual pattern groups
-  // Format: <patterns><pattern_name>- item A\n- item B</pattern_name></patterns>
-  const patternsMatch = content.match(/^[ \t]*<patterns>([\s\S]*?)^[ \t]*<\/patterns>/im);
-  if (patternsMatch?.[1]) {
-    const patternsContent = patternsMatch[1];
-    // Find all named pattern tags (any XML tag that's not 'patterns')
-    // E.g., <trips>, <purchases>, <health-events>
-    const patternTagRegex = /<([a-z][a-z0-9_-]*)>([\s\S]*?)<\/\1>/gi;
-    let patternMatch;
-    while ((patternMatch = patternTagRegex.exec(patternsContent)) !== null) {
-      const patternName = patternMatch[1];
-      const patternItemsRaw = patternMatch[2];
-      if (!patternName || !patternItemsRaw) continue;
-      // Extract list items (lines starting with - or *)
-      const items = patternItemsRaw
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line.startsWith('-') || line.startsWith('*'))
-        .map(line => line.replace(/^[-*]\s*/, '').trim())
-        .filter(Boolean);
-      if (items.length > 0) {
-        result.patterns[patternName] = items;
-      }
-    }
   }
 
   return result;

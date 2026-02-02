@@ -141,7 +141,6 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   threadId: { type: 'text', nullable: true },
   activeObservations: { type: 'text', nullable: false }, // JSON array of observations
   activeObservationsPendingUpdate: { type: 'text', nullable: true }, // JSON array, used during updates
-  patterns: { type: 'text', nullable: true }, // JSON array (currently unused, reserved for future)
   originType: { type: 'text', nullable: false }, // 'initialization', 'observation', or 'reflection'
   config: { type: 'text', nullable: false }, // JSON object
   generationCount: { type: 'integer', nullable: false },

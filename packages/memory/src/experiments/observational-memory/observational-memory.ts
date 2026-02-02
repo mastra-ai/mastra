@@ -502,12 +502,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private observedMessageIds = new Set<string>();
 
-  /** Whether to extract patterns in Observer */
-  private observerRecognizePatterns: boolean;
-
-  /** Whether to consolidate patterns in Reflector */
-  private reflectorRecognizePatterns: boolean;
-
   /** Internal MessageHistory for message persistence */
   private messageHistory: MessageHistory;
 
@@ -581,9 +575,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
-    // Pattern recognition is disabled - kept for potential future use
-    this.observerRecognizePatterns = false;
-    this.reflectorRecognizePatterns = false;
 
     // Resolve model: top-level model takes precedence, then sub-config, then default
     const observationModel =
@@ -804,8 +795,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getObserverAgent(): Agent {
     if (!this.observerAgent) {
-      // Build system prompt with pattern recognition configuration
-      const systemPrompt = buildObserverSystemPrompt(this.observerRecognizePatterns);
+      const systemPrompt = buildObserverSystemPrompt();
 
       this.observerAgent = new Agent({
         id: 'observational-memory-observer',
@@ -822,8 +812,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getReflectorAgent(): Agent {
     if (!this.reflectorAgent) {
-      // Build system prompt with pattern recognition configuration
-      const systemPrompt = buildReflectorSystemPrompt(this.reflectorRecognizePatterns);
+      const systemPrompt = buildReflectorSystemPrompt();
 
       this.reflectorAgent = new Agent({
         id: 'observational-memory-reflector',
@@ -1193,33 +1182,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private async callObserver(
     existingObservations: string | undefined,
     messagesToObserve: MastraDBMessage[],
-    existingPatterns?: Record<string, string[]>,
     abortSignal?: AbortSignal,
   ): Promise<{
     observations: string;
     currentTask?: string;
     suggestedContinuation?: string;
-    patterns?: Record<string, string[]>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const agent = this.getObserverAgent();
 
-    // Format existing patterns into the observations if present
-    let observationsWithPatterns = existingObservations;
-    if (existingPatterns && Object.keys(existingPatterns).length > 0) {
-      let patternsContent = '\n\n<patterns>';
-      for (const [patternName, items] of Object.entries(existingPatterns)) {
-        patternsContent += `\n<${patternName}>`;
-        for (const item of items) {
-          patternsContent += `\n* ${item}`;
-        }
-        patternsContent += `\n</${patternName}>`;
-      }
-      patternsContent += '\n</patterns>';
-      observationsWithPatterns = (observationsWithPatterns || '') + patternsContent;
-    }
-
-    const prompt = buildObserverPrompt(observationsWithPatterns, messagesToObserve);
+    const prompt = buildObserverPrompt(existingObservations, messagesToObserve);
 
     const result = await this.withAbortCheck(
       () =>
@@ -1243,8 +1215,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       observations: parsed.observations,
       currentTask: parsed.currentTask,
       suggestedContinuation: parsed.suggestedContinuation,
-      // Only include patterns if observer patterns are enabled
-      patterns: this.observerRecognizePatterns ? parsed.patterns : undefined,
       usage: usage
         ? {
             inputTokens: usage.inputTokens,
@@ -1265,7 +1235,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     messagesByThread: Map<string, MastraDBMessage[]>,
     threadOrder: string[],
-    existingPatterns?: Record<string, string[]>,
     abortSignal?: AbortSignal,
   ): Promise<{
     results: Map<
@@ -1274,7 +1243,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: string;
         currentTask?: string;
         suggestedContinuation?: string;
-        patterns?: Record<string, string[]>;
       }
     >;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -1284,25 +1252,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       id: 'multi-thread-observer',
       name: 'multi-thread-observer',
       model: this.observationConfig.model,
-      instructions: buildObserverSystemPrompt(this.observerRecognizePatterns, true),
+      instructions: buildObserverSystemPrompt(true),
     });
 
-    // Format existing patterns into the observations if present
-    let observationsWithPatterns = existingObservations;
-    if (existingPatterns && Object.keys(existingPatterns).length > 0) {
-      let patternsContent = '\n\n<patterns>';
-      for (const [patternName, items] of Object.entries(existingPatterns)) {
-        patternsContent += `\n<${patternName}>`;
-        for (const item of items) {
-          patternsContent += `\n* ${item}`;
-        }
-        patternsContent += `\n</${patternName}>`;
-      }
-      patternsContent += '\n</patterns>';
-      observationsWithPatterns = (observationsWithPatterns || '') + patternsContent;
-    }
-
-    const prompt = buildMultiThreadObserverPrompt(observationsWithPatterns, messagesByThread, threadOrder);
+    const prompt = buildMultiThreadObserverPrompt(existingObservations, messagesByThread, threadOrder);
 
     // Flatten all messages for context dump
     const allMessages: MastraDBMessage[] = [];
@@ -1337,7 +1290,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: string;
         currentTask?: string;
         suggestedContinuation?: string;
-        patterns?: Record<string, string[]>;
       }
     >();
 
@@ -1346,7 +1298,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observations: threadResult.observations,
         currentTask: threadResult.currentTask,
         suggestedContinuation: threadResult.suggestedContinuation,
-        patterns: this.observerRecognizePatterns ? threadResult.patterns : undefined,
       });
     }
 
@@ -1380,7 +1331,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private async callReflector(
     observations: string,
     manualPrompt?: string,
-    patterns?: Record<string, string[]>,
     streamContext?: {
       writer?: ProcessorStreamWriter;
       cycleId: string;
@@ -1393,27 +1343,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
-    patterns?: Record<string, string[]>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const agent = this.getReflectorAgent();
 
-    // Format patterns into the observations if present
-    let observationsWithPatterns = observations;
-    if (patterns && Object.keys(patterns).length > 0) {
-      let patternsContent = '\n\n<patterns>';
-      for (const [patternName, items] of Object.entries(patterns)) {
-        patternsContent += `\n<${patternName}>`;
-        for (const item of items) {
-          patternsContent += `\n* ${item}`;
-        }
-        patternsContent += `\n</${patternName}>`;
-      }
-      patternsContent += '\n</patterns>';
-      observationsWithPatterns += patternsContent;
-    }
-
-    const originalTokens = this.tokenCounter.countObservations(observationsWithPatterns);
+    const originalTokens = this.tokenCounter.countObservations(observations);
 
     // Get the target threshold - use provided value or fall back to config
     const targetThreshold = observationTokensThreshold ?? this.getMaxThreshold(this.reflectionConfig.observationTokens);
@@ -1422,7 +1356,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // First attempt
-    let prompt = buildReflectorPrompt(observationsWithPatterns, manualPrompt, false);
+    let prompt = buildReflectorPrompt(observations, manualPrompt, false);
     let result = await this.withAbortCheck(
       () =>
         agent.generate(prompt, {
@@ -1480,7 +1414,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
 
       // Retry with compression prompt
-      prompt = buildReflectorPrompt(observationsWithPatterns, manualPrompt, true);
+      prompt = buildReflectorPrompt(observations, manualPrompt, true);
       result = await this.withAbortCheck(
         () =>
           agent.generate(prompt, {
@@ -1509,7 +1443,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return {
       observations: parsed.observations,
       suggestedContinuation: parsed.suggestedContinuation,
-      patterns: parsed.patterns,
       usage: totalUsage.totalTokens > 0 ? totalUsage : undefined,
     };
   }
@@ -1532,7 +1465,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     currentTask?: string,
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
-    patterns?: Record<string, string[]>,
     currentDate?: Date,
   ): string {
     // Optimize observations to save tokens
@@ -1555,20 +1487,6 @@ IMPORTANT: When responding, reference specific details from these observations. 
 KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently...", "what is my current..."), always prefer the MOST RECENT information. Observations include dates - if you see conflicting information, the newer observation supersedes the older one. Look for phrases like "will start", "is switching", "changed to", "moved to" as indicators that previous information has been updated.
 
 PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.`;
-
-    // Dynamically inject patterns from thread metadata
-    if (patterns && Object.keys(patterns).length > 0) {
-      let patternsContent = '\n\n<patterns>';
-      for (const [patternName, items] of Object.entries(patterns)) {
-        patternsContent += `\n<${patternName}>`;
-        for (const item of items) {
-          patternsContent += `\n* ${item}`;
-        }
-        patternsContent += `\n</${patternName}>`;
-      }
-      patternsContent += '\n</patterns>';
-      content += patternsContent;
-    }
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
@@ -1959,7 +1877,6 @@ ${suggestedResponse}
     const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
     const currentTask = threadOMMetadata?.currentTask;
     const suggestedResponse = threadOMMetadata?.suggestedResponse;
-    const patterns = record.patterns;
     const currentDate = (requestContext?.get('currentDate') as Date | undefined) ?? new Date();
 
     if (record.activeObservations) {
@@ -1968,7 +1885,6 @@ ${suggestedResponse}
         currentTask,
         suggestedResponse,
         unobservedContextBlocks,
-        patterns,
         currentDate,
       );
 
@@ -2284,53 +2200,6 @@ ${formattedMessages}
   }
 
   /**
-   * Merge new patterns with existing patterns.
-   * Deduplicates items within each pattern by content.
-   */
-  private mergePatterns(
-    existing: Record<string, string[]>,
-    newPatterns: Record<string, string[]>,
-  ): Record<string, string[]> {
-    const merged: Record<string, string[]> = { ...existing };
-
-    for (const [patternName, items] of Object.entries(newPatterns)) {
-      if (!merged[patternName]) {
-        merged[patternName] = [];
-      }
-      // Add new items that don't already exist (deduplicate by exact match)
-      for (const item of items) {
-        if (!merged[patternName].includes(item)) {
-          merged[patternName].push(item);
-        }
-      }
-    }
-
-    return merged;
-  }
-
-  /**
-   * Format patterns into a string for token counting.
-   * This mirrors the format used in formatObservationsForContext and callReflector.
-   */
-  private formatPatternsForTokenCount(patterns: Record<string, string[]>): string {
-    if (!patterns || Object.keys(patterns).length === 0) {
-      return '';
-    }
-
-    let patternsContent = '<patterns>';
-    for (const [patternName, items] of Object.entries(patterns)) {
-      patternsContent += `\n<${patternName}>`;
-      for (const item of items) {
-        patternsContent += `\n* ${item}`;
-      }
-      patternsContent += `\n</${patternName}>`;
-    }
-    patternsContent += '\n</patterns>';
-
-    return patternsContent;
-  }
-
-  /**
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
@@ -2483,7 +2352,6 @@ ${formattedMessages}
       const result = await this.callObserver(
         freshRecord?.activeObservations ?? record.activeObservations,
         unobservedMessages,
-        freshRecord?.patterns ?? record.patterns,
         abortSignal,
       );
 
@@ -2501,16 +2369,7 @@ ${formattedMessages}
           : result.observations;
       }
 
-      // Calculate total tokens including patterns
-      // Merge existing patterns with new patterns to get the full picture
-      const existingPatterns = freshRecord?.patterns ?? record.patterns ?? {};
-      const mergedPatterns = result.patterns ? this.mergePatterns(existingPatterns, result.patterns) : existingPatterns;
-
       let totalTokenCount = this.tokenCounter.countObservations(newObservations);
-      if (Object.keys(mergedPatterns).length > 0) {
-        const patternsString = this.formatPatternsForTokenCount(mergedPatterns);
-        totalTokenCount += this.tokenCounter.countObservations(patternsString);
-      }
 
       // Calculate tokens generated in THIS cycle only (for UI marker)
       const cycleObservationTokens = this.tokenCounter.countObservations(result.observations);
@@ -2519,16 +2378,14 @@ ${formattedMessages}
       // This ensures historical data (like LongMemEval fixtures) works correctly
       const lastObservedAt = this.getMaxMessageTimestamp(unobservedMessages);
 
-      // Pass patterns to storage - they'll be merged with existing patterns on the OM record
       await this.storage.updateActiveObservations({
         id: record.id,
         observations: newObservations,
         tokenCount: totalTokenCount,
         lastObservedAt,
-        patterns: result.patterns,
       });
 
-      // Save thread-specific metadata (currentTask, suggestedResponse only - patterns are on OM record)
+      // Save thread-specific metadata (currentTask, suggestedResponse only)
       if (result.suggestedContinuation || result.currentTask) {
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
@@ -2588,7 +2445,7 @@ ${formattedMessages}
         usage: result.usage,
       });
 
-      // Check for reflection (pass threadId so patterns can be cleared)
+      // Check for reflection
       await this.maybeReflect(
         { ...record, activeObservations: newObservations },
         totalTokenCount,
@@ -2801,7 +2658,6 @@ ${formattedMessages}
       }
 
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
-      const existingPatterns = freshRecord?.patterns ?? record.patterns;
 
       // ═════════════════════════════════════════���══════════════════
       // BATCHED MULTI-THREAD OBSERVATION: Single Observer call for all threads
@@ -2906,7 +2762,6 @@ ${formattedMessages}
           existingObservations,
           batch.threadMap,
           batch.threadIds,
-          existingPatterns,
           abortSignal,
         );
         return batchResult;
@@ -2921,7 +2776,6 @@ ${formattedMessages}
           observations: string;
           currentTask?: string;
           suggestedContinuation?: string;
-          patterns?: Record<string, string[]>;
         }
       >();
       let totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -2945,7 +2799,6 @@ ${formattedMessages}
           observations: string;
           currentTask?: string;
           suggestedContinuation?: string;
-          patterns?: Record<string, string[]>;
         };
       } | null> = [];
 
@@ -2968,10 +2821,7 @@ ${formattedMessages}
       }
 
       // Combine results: wrap each thread's observations and append to existing
-      // Also collect all patterns from all threads to store on the OM record
-      // Start with existing patterns from the record
       let currentObservations = existingObservations;
-      let allPatterns: Record<string, string[]> = { ...(existingPatterns ?? {}) };
       let cycleObservationTokens = 0; // Track total new observation tokens generated in this cycle
 
       for (const obsResult of observationResults) {
@@ -2986,15 +2836,9 @@ ${formattedMessages}
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
         currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
 
-        // Collect patterns from this thread's observation (will be merged into OM record)
-        if (result.patterns) {
-          allPatterns = this.mergePatterns(allPatterns, result.patterns);
-        }
-
         // Update thread-specific metadata:
         // - lastObservedAt: ALWAYS update to track per-thread observation progress
         // - currentTask, suggestedResponse: only if present in result
-        // - patterns go on OM record, not thread metadata
         const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
@@ -3029,13 +2873,8 @@ ${formattedMessages}
         });
       }
 
-      // After ALL threads observed, update the record with final observations and merged patterns
-      // Calculate total tokens including patterns
+      // After ALL threads observed, update the record with final observations
       let totalTokenCount = this.tokenCounter.countObservations(currentObservations);
-      if (Object.keys(allPatterns).length > 0) {
-        const patternsString = this.formatPatternsForTokenCount(allPatterns);
-        totalTokenCount += this.tokenCounter.countObservations(patternsString);
-      }
 
       // Compute global lastObservedAt as a "high water mark" across all threads
       // Note: Per-thread cursors (stored in ThreadOMMetadata.lastObservedAt) are the authoritative source
@@ -3052,7 +2891,6 @@ ${formattedMessages}
         observations: currentObservations,
         tokenCount: totalTokenCount,
         lastObservedAt,
-        patterns: Object.keys(allPatterns).length > 0 ? allPatterns : undefined,
       });
 
       // ════════════════════════════════════════════════════════════════════════
@@ -3089,7 +2927,7 @@ ${formattedMessages}
         }
       }
 
-      // Check for reflection AFTER all threads are observed (pass currentThreadId so patterns can be cleared)
+      // Check for reflection AFTER all threads are observed
       await this.maybeReflect(
         { ...record, activeObservations: currentObservations },
         totalTokenCount,
@@ -3203,12 +3041,9 @@ ${formattedMessages}
       : undefined;
 
     try {
-      // Only pass patterns to Reflector if reflector patterns are enabled
-      const patternsToReflect = this.reflectorRecognizePatterns ? record.patterns : undefined;
       const reflectResult = await this.callReflector(
         record.activeObservations,
         undefined,
-        patternsToReflect,
         streamContext,
         reflectThreshold,
         abortSignal,
@@ -3219,7 +3054,6 @@ ${formattedMessages}
         currentRecord: record,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
-        patterns: reflectResult.patterns,
       });
 
       // Stream END marker for reflection (use streamContext values which may have been updated during retry)
@@ -3248,9 +3082,6 @@ ${formattedMessages}
         observations: reflectResult.observations,
         usage: reflectResult.usage,
       });
-
-      // Note: Patterns from the Reflector are preserved in the new OM record.
-      // The Reflector consolidates patterns from observations into its output.
     } catch (error) {
       // Stream FAILED marker for reflection (use streamContext values which may have been updated during retry)
       if (writer && streamContext) {
@@ -3280,7 +3111,6 @@ ${formattedMessages}
    * Manually trigger observation.
    */
   async observe(threadId: string, resourceId?: string, _prompt?: string): Promise<void> {
-    const record = await this.getOrCreateRecord(threadId, resourceId);
     const lockKey = this.getLockKey(threadId, resourceId);
 
     await this.withLock(lockKey, async () => {
@@ -3333,23 +3163,14 @@ ${formattedMessages}
     await this.storage.setReflectingFlag(record.id, true);
 
     try {
-      // Manual reflect also passes patterns if enabled
-      const patternsToReflect = this.reflectorRecognizePatterns ? record.patterns : undefined;
       const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
-      const reflectResult = await this.callReflector(
-        record.activeObservations,
-        prompt,
-        patternsToReflect,
-        undefined,
-        reflectThreshold,
-      );
+      const reflectResult = await this.callReflector(record.activeObservations, prompt, undefined, reflectThreshold);
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
         currentRecord: record,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
-        patterns: reflectResult.patterns,
       });
 
       // Note: Thread metadata (currentTask, suggestedResponse) is preserved on each thread

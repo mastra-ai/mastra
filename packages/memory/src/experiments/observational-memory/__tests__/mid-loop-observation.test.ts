@@ -11,11 +11,11 @@
  * Observation happens when the threshold is exceeded on step N > 0.
  */
 
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
-import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { RequestContext } from '@mastra/core/di';
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
@@ -115,7 +115,7 @@ describe('Mid-Loop Observation', () => {
     om = new ObservationalMemory({
       storage,
       scope: 'thread', // Use thread scope for simpler testing
-      
+
       observation: {
         model: createMockObserverModel(),
         messageTokens: 500, // Low threshold for testing

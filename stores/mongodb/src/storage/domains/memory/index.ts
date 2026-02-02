@@ -994,7 +994,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       generationCount: Number(doc.generationCount || 0),
       activeObservations: doc.activeObservations || '',
       bufferedObservations: doc.activeObservationsPendingUpdate || undefined,
-      patterns: doc.patterns || undefined,
       totalTokensObserved: Number(doc.totalTokensObserved || 0),
       observationTokenCount: Number(doc.observationTokenCount || 0),
       pendingMessageTokens: Number(doc.pendingMessageTokens || 0),
@@ -1082,7 +1081,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         threadId: input.threadId || null,
         activeObservations: '',
         activeObservationsPendingUpdate: null,
-        patterns: null,
         originType: 'initial',
         config: input.config,
         generationCount: 0,
@@ -1123,11 +1121,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         observationTokenCount: input.tokenCount,
         updatedAt: now,
       };
-
-      // Only update patterns if provided
-      if (input.patterns) {
-        updateDoc.patterns = input.patterns;
-      }
 
       const result = await collection.updateOne(
         { id: input.id },
@@ -1179,7 +1172,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         originType: 'reflection',
         generationCount: input.currentRecord.generationCount + 1,
         activeObservations: input.reflection,
-        patterns: input.patterns,
         totalTokensObserved: input.currentRecord.totalTokensObserved + input.tokenCount,
         observationTokenCount: input.tokenCount,
         pendingMessageTokens: 0,
@@ -1198,7 +1190,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         threadId: record.threadId || null,
         activeObservations: input.reflection,
         activeObservationsPendingUpdate: null,
-        patterns: input.patterns || null,
         originType: 'reflection',
         config: record.config,
         generationCount: input.currentRecord.generationCount + 1,

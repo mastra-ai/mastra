@@ -501,10 +501,6 @@ export interface ObservationalMemoryRecord {
   // Note: Message tracking via IDs has been removed in favor of cursor-based
   // tracking via lastObservedAt. This is more efficient for long conversations.
 
-  // Patterns (resource-level insights extracted by Observer)
-  /** Patterns identified across conversations, keyed by pattern name */
-  patterns?: Record<string, string[]>;
-
   // Token tracking
   /** Running total of all tokens observed */
   totalTokensObserved: number;
@@ -548,8 +544,6 @@ export interface UpdateActiveObservationsInput {
   tokenCount: number;
   /** Timestamp when these observations were created (for cursor-based message loading) */
   lastObservedAt: Date;
-  /** Patterns to merge with existing patterns on the record */
-  patterns?: Record<string, string[]>;
 }
 
 /**
@@ -569,7 +563,6 @@ export interface CreateReflectionGenerationInput {
   currentRecord: ObservationalMemoryRecord;
   reflection: string;
   tokenCount: number;
-  patterns?: Record<string, string[]>;
 }
 
 // ============================================
@@ -582,6 +575,7 @@ export interface UpdateWorkflowStateOptions {
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
+  resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
 }
 
 /**
