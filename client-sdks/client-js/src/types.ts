@@ -1217,3 +1217,44 @@ export interface GetMemoryConfigResponseExtended {
     };
   };
 }
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+/**
+ * HTTP error thrown by the Mastra client.
+ * Extends Error with additional properties for better error handling.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await client.getWorkspace('my-workspace').listFiles('/invalid-path');
+ * } catch (error) {
+ *   if (error instanceof MastraClientError) {
+ *     if (error.status === 404) {
+ *       console.log('Not found:', error.body);
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export class MastraClientError extends Error {
+  /** HTTP status code */
+  readonly status: number;
+
+  /** HTTP status text (e.g., "Not Found", "Internal Server Error") */
+  readonly statusText: string;
+
+  /** Parsed response body if available */
+  readonly body?: unknown;
+
+  constructor(status: number, statusText: string, message: string, body?: unknown) {
+    // Keep the same message format for backwards compatibility
+    super(message);
+    this.name = 'MastraClientError';
+    this.status = status;
+    this.statusText = statusText;
+    this.body = body;
+  }
+}

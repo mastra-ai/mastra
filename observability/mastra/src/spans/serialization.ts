@@ -50,8 +50,8 @@ export interface DeepCleanOptions {
 
 export const DEFAULT_DEEP_CLEAN_OPTIONS: DeepCleanOptions = Object.freeze({
   keysToStrip: DEFAULT_KEYS_TO_STRIP,
-  maxDepth: 6,
-  maxStringLength: 1024,
+  maxDepth: 8,
+  maxStringLength: 128 * 1024, // 128KB - sufficient for large LLM prompts/responses
   maxArrayLength: 50,
   maxObjectKeys: 50,
 });

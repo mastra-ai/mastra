@@ -61,7 +61,7 @@ Each section contains detailed docs that provide comprehensive information about
 
 These are the most popular starting points:
 
-- [Getting Started](https://mastra.ai/docs/getting-started/start/llms.txt): Create a new project with the \`create mastra\` CLI or use one of the framework quickstart guides
-- [Agent Overview](https://mastra.ai/docs/agents/overview/llms.txt): Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met.
-- [Workflows Overview](https://mastra.ai/docs/workflows/overview/llms.txt): Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent.
-- [Memory Overview](https://mastra.ai/docs/memory/overview/llms.txt): Memory gives your agent coherence across interactions and allows it to improve over time by retaining relevant information from past conversations.`
+- [Getting Started](https://mastra.ai/docs/getting-started/start): Create a new project with the \`create mastra\` CLI or use one of the framework quickstart guides
+- [Agent Overview](https://mastra.ai/docs/agents/overview): Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met.
+- [Workflows Overview](https://mastra.ai/docs/workflows/overview): Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent.
+- [Memory Overview](https://mastra.ai/docs/memory/overview): Memory gives your agent coherence across interactions and allows it to improve over time by retaining relevant information from past conversations.`
