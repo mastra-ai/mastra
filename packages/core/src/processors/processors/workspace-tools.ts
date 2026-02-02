@@ -55,30 +55,26 @@ export class WorkspaceToolsProcessor implements Processor<'workspace-tools-proce
   readonly name = 'Workspace Tools Processor';
 
   private readonly _workspace: Workspace;
-  private _guidelinesInjected = false;
 
   constructor(opts: WorkspaceToolsProcessorOptions) {
     this._workspace = opts.workspace;
   }
 
   /**
-   * Process input step - inject workspace tool guidelines on first step only.
+   * Process input step - inject workspace tool guidelines.
+   * Injected on every step since system message changes from processors are reverted between steps.
    */
-  async processInputStep({ messageList, tools, stepNumber }: ProcessInputStepArgs) {
-    // Only inject guidelines on first step
-    if (stepNumber === 0 && !this._guidelinesInjected) {
-      // Check if workspace has any enabled tools
-      const enabledTools = this._workspace.getEnabledTools();
+  async processInputStep({ messageList, tools }: ProcessInputStepArgs) {
+    // Check if workspace has any enabled tools
+    const enabledTools = this._workspace.getEnabledTools();
 
-      if (enabledTools.length > 0) {
-        const instructions = this._workspace.getAgentInstructions();
-        if (instructions) {
-          messageList.addSystem({
-            role: 'system',
-            content: instructions,
-          });
-          this._guidelinesInjected = true;
-        }
+    if (enabledTools.length > 0) {
+      const instructions = this._workspace.getAgentInstructions();
+      if (instructions) {
+        messageList.addSystem({
+          role: 'system',
+          content: instructions,
+        });
       }
     }
 
