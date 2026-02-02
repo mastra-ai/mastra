@@ -314,6 +314,169 @@ for (const [key, value] of ctx.entries()) {
 }
 ```
 
+## Schema validation
+
+Use `requestContextSchema` to define a Zod schema that validates request context values at runtime. This catches missing or invalid context values early, provides clear error messages, and gives you type inference within your component.
+
+### Agent schema validation
+
+When you define `requestContextSchema` on an agent, the context is validated at the start of `generate()` or `stream()`. If validation fails, the agent throws a `MastraError` before any LLM calls are made.
+
+```typescript title="src/mastra/agents/validated-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { z } from "zod";
+
+export const validatedAgent = new Agent({
+  id: "validated-agent",
+  name: "Validated Agent",
+  requestContextSchema: z.object({
+    userId: z.string(),
+    apiKey: z.string(),
+  }),
+  instructions: ({ requestContext }) => {
+    // Access all values as a typed object
+    const { userId, apiKey } = requestContext.all;
+    // { userId: string; apiKey: string }
+
+    // Or retrieve individual values with .get()
+    const id = requestContext.get("userId");
+    // string
+
+    return `You are helping user ${userId}`;
+  },
+  model: "openai/gpt-4o",
+});
+```
+
+When validation fails, the error includes the agent ID and details about which fields failed:
+
+```
+Request context validation failed for agent 'validated-agent':
+- apiKey: Required
+```
+
+### Tool schema validation
+
+When you define `requestContextSchema` on a tool, the context is validated before `execute()` runs. Unlike agents, tools return a validation error object instead of throwing:
+
+```typescript title="src/mastra/tools/validated-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const validatedTool = createTool({
+  id: "validated-tool",
+  description: "A tool that requires authenticated context",
+  inputSchema: z.object({
+    query: z.string(),
+  }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
+  execute: async (inputData, { requestContext }) => {
+    // Access all values as a typed object
+    const { userId } = requestContext.all;
+    // { userId: string }
+
+    // Or retrieve individual values with .get()
+    const id = requestContext.get("userId");
+    // string
+
+    return { result: `Processed for ${userId}` };
+  },
+});
+```
+
+When validation fails, the tool returns an error object instead of throwing:
+
+```json
+{
+  "error": true,
+  "message": "Request context validation failed for validated-tool. Please fix the following errors and try again:\n- userId: Required\n\nProvided context: {}"
+}
+```
+
+### Workflow schema validation
+
+When you define `requestContextSchema` on a workflow, the context is validated at the start of `run.start()`. If validation fails, the workflow throws an error before any steps execute.
+
+```typescript title="src/mastra/workflows/validated-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+  execute: async ({ inputData, requestContext }) => {
+    // Access all values as a typed object
+    const { tenantId } = requestContext.all;
+    // { tenantId: string }
+
+    // Or retrieve individual values with .get()
+    const id = requestContext.get("tenantId");
+    // string
+
+    return { result: `Processed for tenant ${tenantId}` };
+  },
+});
+
+export const validatedWorkflow = createWorkflow({
+  id: "validated-workflow",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+  requestContextSchema: z.object({
+    tenantId: z.string(),
+  }),
+})
+  .then(step1)
+  .commit();
+```
+
+When validation fails, the workflow throws an error:
+
+```
+Request context validation failed for workflow 'validated-workflow':
+- tenantId: Required
+```
+
+Steps can also define their own `requestContextSchema` for step-level validation. Step validation runs before the step's `execute()` function.
+
+### Validation behavior
+
+| Component | Property | Validation timing | On failure |
+|-----------|----------|-------------------|------------|
+| Agent | `requestContextSchema` | Start of `generate()` / `stream()` | Throws `MastraError` |
+| Tool | `requestContextSchema` | Before `execute()` | Returns error object |
+| Workflow | `requestContextSchema` | Start of `run.start()` | Throws `Error` |
+| Step | `requestContextSchema` | Before step `execute()` | Step fails with error |
+
+### Best practices
+
+**Match your middleware**: Define the same required fields in your schema that your middleware sets. This ensures the contract between middleware and components is explicit and validated.
+
+```typescript
+// Middleware sets these fields
+requestContext.set("userId", user.id);
+requestContext.set("tenantId", tenant.id);
+
+// Schema validates they exist
+requestContextSchema: z.object({
+  userId: z.string(),
+  tenantId: z.string(),
+})
+```
+
+**Use optional fields for conditional context**: Use `.optional()` for values that may not always be present.
+
+```typescript
+requestContextSchema: z.object({
+  userId: z.string(),               // Always required
+  experimentVariant: z.string().optional(), // May not be set
+})
+```
+
+**Handle tool validation errors**: Since tools return error objects instead of throwing, check for errors in your agent or workflow logic when tool execution is critical.
+
 ## Related
 
 - [Agent Request Context](/docs/agents/overview#using-requestcontext)
