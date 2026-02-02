@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 11 of 11 (Dataset Schema Validation)
-Plan: 5b of 7 in phase 11
+Plan: 6 of 7 in phase 11
 Status: In progress
-Last activity: 2026-02-02 — Completed 11-05b-PLAN.md
+Last activity: 2026-02-02 — Completed 11-06-PLAN.md
 
-Progress: [██████████░] ~99% (48/49 plans)
+Progress: [██████████░] ~99% (49/50 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 48
+- Total plans completed: 49
 - Average duration: 4 min
-- Total execution time: 2.7 hours
+- Total execution time: 2.8 hours
 
 **By Phase:**
 
@@ -38,11 +38,11 @@ Progress: [██████████░] ~99% (48/49 plans)
 | 08-item-selection-actions    | 4     | 13 min | 3.25 min |
 | 09-dataset-items-detail-view | 5     | 16 min | 3.2 min  |
 | 10-dataset-layout-update     | 5     | 24 min | 4.8 min  |
-| 11-dataset-schema-validation | 6     | 22 min | 3.67 min |
+| 11-dataset-schema-validation | 7     | 26 min | 3.71 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 11-03 (5 min), 11-04 (3 min), 11-05a (2 min), 11-05b (3 min)
+- Last 5 plans: 11-04 (3 min), 11-05a (2 min), 11-05b (3 min), 11-06 (4 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -138,6 +138,9 @@ Recent decisions affecting current work:
 - SchemaField uses toggle pattern: checked = enabled, unchecked = null schema
 - Validation errors from API displayed in dialog general error area
 - DatasetHeader requires datasetId prop for schema dialog
+- parseValidationError helper extracts { field, errors } from API error message
+- ValidationErrors component displays field-level errors inline under affected field
+- Validation errors clear on field change for better UX
 
 ### Pending Todos
 
@@ -158,5 +161,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: Completed 11-05b-PLAN.md (Schema Settings Dialog)
+Stopped at: Completed 11-06-PLAN.md (Validation Error Display)
 Resume file: None
