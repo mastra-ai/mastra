@@ -5,6 +5,8 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { SectionHeader } from '@/domains/cms';
 import { BranchIcon, Icon } from '@/ds/icons';
 
+import { TemplateEmptyState } from './template-empty-state';
+
 // Re-export for consumers
 export { extractPartialNames } from './template-utils';
 
@@ -43,23 +45,27 @@ export function PartialsEditor({ value, onChange, detectedNames }: PartialsEdito
         }
       />
 
-      {detectedNames.map(name => (
-        <div key={name} className="rounded-md border border-border1 bg-surface2">
-          <div className="px-3 py-2 bg-surface3 border-b border-border1 rounded-t-md">
-            <Label className="text-ui-sm font-mono font-medium" style={{ color: '#ffb86c' }}>
-              {'{{>'} {name} {'}}'}
-            </Label>
+      {detectedNames.length === 0 ? (
+        <TemplateEmptyState message="No partials registered yet" />
+      ) : (
+        detectedNames.map(name => (
+          <div key={name} className="rounded-md border border-border1 bg-surface2">
+            <div className="px-3 py-2 bg-surface3 border-b border-border1 rounded-t-md">
+              <Label className="text-ui-sm font-mono font-medium" style={{ color: '#ffb86c' }}>
+                {'{{>'} {name} {'}}'}
+              </Label>
+            </div>
+            <CodeEditor
+              value={value[name] || ''}
+              onChange={val => handlePartialChange(name, val || '')}
+              language="markdown"
+              showCopyButton={false}
+              placeholder={`Enter content for {{> ${name}}}...`}
+              className="min-h-[80px] border-0 rounded-none bg-transparent"
+            />
           </div>
-          <CodeEditor
-            value={value[name] || ''}
-            onChange={val => handlePartialChange(name, val || '')}
-            language="markdown"
-            showCopyButton={false}
-            placeholder={`Enter content for {{> ${name}}}...`}
-            className="min-h-[80px] border-0 rounded-none bg-transparent"
-          />
-        </div>
-      ))}
+        ))
+      )}
     </section>
   );
 }
