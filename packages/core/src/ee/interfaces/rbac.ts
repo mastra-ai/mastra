@@ -9,8 +9,11 @@
  * - Use Auth0 for auth + custom RBAC provider
  */
 
+import type { PermissionPattern } from './permissions.generated';
+
 /**
  * Definition of a role with its permissions.
+ * Uses type-safe permission patterns derived from SERVER_ROUTES.
  */
 export interface RoleDefinition {
   /** Unique role identifier */
@@ -19,14 +22,15 @@ export interface RoleDefinition {
   name: string;
   /** Role description */
   description?: string;
-  /** Permissions granted by this role */
-  permissions: string[];
+  /** Permissions granted by this role (type-safe) */
+  permissions: PermissionPattern[];
   /** Role IDs this role inherits from */
   inherits?: string[];
 }
 
 /**
  * Role mapping configuration for translating provider roles to Mastra permissions.
+ * Uses type-safe permission patterns derived from SERVER_ROUTES.
  *
  * Use this when your identity provider (WorkOS, Okta, Azure AD, etc.) has its own
  * roles that need to be translated to Mastra's permission model.
@@ -45,8 +49,8 @@ export interface RoleDefinition {
  * ```
  */
 export type RoleMapping = {
-  /** Map role name to array of permissions */
-  [role: string]: string[];
+  /** Map role name to array of permission patterns */
+  [role: string]: PermissionPattern[];
 };
 
 /**

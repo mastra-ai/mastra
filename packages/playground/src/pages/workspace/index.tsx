@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   MainContentLayout,
   Header,
@@ -8,6 +8,7 @@ import {
   Button,
   DocsIcon,
   PageHeader,
+  Spinner,
   useWorkspaceInfo,
   useWorkspaces,
   useWorkspaceFiles,
@@ -24,6 +25,14 @@ import {
   WorkspaceNotConfigured,
   useWorkspaceFile,
   isWorkspaceNotSupportedError,
+  is403ForbiddenError,
+  PermissionDenied,
+  // Skills.sh
+  AddSkillDialog,
+  useInstallSkill,
+  useUpdateSkills,
+  useRemoveSkill,
+  toast,
   type WorkspaceItem,
 } from '@mastra/playground-ui';
 
@@ -38,6 +47,9 @@ export default function Workspace() {
   const navigate = useNavigate();
   const [showSearch, setShowSearch] = useState(false);
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
+  const [showAddSkillDialog, setShowAddSkillDialog] = useState(false);
+  const [removingSkillName, setRemovingSkillName] = useState<string | null>(null);
+  const [updatingSkillName, setUpdatingSkillName] = useState<string | null>(null);
 
   // Get state from URL query params (path, file, tab are still query params)
   const pathFromUrl = searchParams.get('path') || '/';
@@ -45,7 +57,7 @@ export default function Workspace() {
   const tabFromUrl = searchParams.get('tab') as TabType | null;
 
   // List of all workspaces (global + agent workspaces) - used for workspace selector dropdown
-  const { data: workspacesData, error: workspacesError } = useWorkspaces();
+  const { data: workspacesData, error: workspacesError, isLoading: isLoadingWorkspaces } = useWorkspaces();
   const workspaces = workspacesData?.workspaces ?? [];
 
   // Use workspaceId from path directly if available, otherwise fall back to first workspace from list
@@ -57,6 +69,9 @@ export default function Workspace() {
     isLoading: isLoadingInfo,
     error: workspaceInfoError,
   } = useWorkspaceInfo(effectiveWorkspaceId);
+
+  // Check if 403 forbidden (permission denied)
+  const isPermissionDenied = is403ForbiddenError(workspacesError) || is403ForbiddenError(workspaceInfoError);
 
   // Check if workspaces are not supported (501 error from server)
   const isWorkspaceNotSupported =
@@ -105,6 +120,7 @@ export default function Workspace() {
   const {
     data: filesData,
     isLoading: isLoadingFiles,
+    error: filesError,
     refetch: refetchFiles,
   } = useWorkspaceFiles(currentPath, {
     enabled: workspaceInfo?.isWorkspaceConfigured && workspaceInfo?.capabilities?.hasFilesystem,
@@ -121,8 +137,17 @@ export default function Workspace() {
   });
 
   // Skills - pass workspaceId to get skills from the selected workspace
-  const { data: skillsData, isLoading: isLoadingSkills } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
+  const {
+    data: skillsData,
+    isLoading: isLoadingSkills,
+    refetch: refetchSkills,
+  } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
   const searchSkills = useSearchWorkspaceSkills();
+
+  // Skills.sh hooks
+  const installSkill = useInstallSkill();
+  const updateSkills = useUpdateSkills();
+  const removeSkill = useRemoveSkill();
 
   const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
   const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? false;
@@ -131,6 +156,95 @@ export default function Workspace() {
   const canVector = workspaceInfo?.capabilities?.canVector ?? false;
   // Check if the selected workspace is read-only
   const isReadOnly = selectedWorkspace?.safety?.readOnly ?? false;
+
+  // Can manage skills (install/remove/check/update) if we have filesystem and not read-only
+  // None of these operations require sandbox - all are done via GitHub API + filesystem
+  const canManageSkills = hasFilesystem && !isReadOnly;
+
+  // Skills.sh handlers
+  const handleInstallSkill = useCallback(
+    (params: { repository: string; skillName: string }) => {
+      if (!effectiveWorkspaceId) return;
+
+      installSkill.mutate(
+        { ...params, workspaceId: effectiveWorkspaceId },
+        {
+          onSuccess: result => {
+            if (result.success) {
+              toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
+              setShowAddSkillDialog(false);
+              refetchSkills();
+            } else {
+              toast.error('Failed to install skill');
+            }
+          },
+          onError: error => {
+            toast.error(`Failed to install skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          },
+        },
+      );
+    },
+    [effectiveWorkspaceId, installSkill, refetchSkills],
+  );
+
+  const handleUpdateSkill = useCallback(
+    (skillName: string) => {
+      if (!effectiveWorkspaceId) return;
+
+      setUpdatingSkillName(skillName);
+      updateSkills.mutate(
+        { workspaceId: effectiveWorkspaceId, skillName },
+        {
+          onSuccess: result => {
+            setUpdatingSkillName(null);
+            if (result.updated.length > 0) {
+              const updated = result.updated[0];
+              if (updated.success) {
+                toast.success(`Skill "${skillName}" updated successfully (${updated.filesWritten} files)`);
+                refetchSkills();
+              } else {
+                toast.error(`Failed to update skill: ${updated.error ?? 'Unknown error'}`);
+              }
+            } else {
+              toast.error(`Failed to update skill: No update result returned`);
+            }
+          },
+          onError: error => {
+            setUpdatingSkillName(null);
+            toast.error(`Failed to update skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          },
+        },
+      );
+    },
+    [effectiveWorkspaceId, updateSkills, refetchSkills],
+  );
+
+  const handleRemoveSkill = useCallback(
+    (skillName: string) => {
+      if (!effectiveWorkspaceId) return;
+
+      setRemovingSkillName(skillName);
+      removeSkill.mutate(
+        { workspaceId: effectiveWorkspaceId, skillName },
+        {
+          onSuccess: result => {
+            setRemovingSkillName(null);
+            if (result.success) {
+              toast.success(`Skill "${result.skillName}" removed successfully`);
+              refetchSkills();
+            } else {
+              toast.error(`Failed to remove skill "${result.skillName}"`);
+            }
+          },
+          onError: error => {
+            setRemovingSkillName(null);
+            toast.error(`Failed to remove skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          },
+        },
+      );
+    },
+    [effectiveWorkspaceId, removeSkill, refetchSkills],
+  );
 
   // Compute active tab based on URL and workspace capabilities
   // If URL specifies a tab, use it only if the workspace supports it
@@ -148,6 +262,35 @@ export default function Workspace() {
   const skills = skillsData?.skills ?? [];
   const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
   const files = filesData?.entries ?? [];
+
+  // If permission denied (403 error)
+  if (isPermissionDenied) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <Folder className="h-4 w-4" />
+            </Icon>
+            Workspace
+          </HeaderTitle>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              Documentation
+            </Button>
+          </HeaderAction>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="workspaces" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   // If workspace v1 is not supported by the server's @mastra/core version
   if (isWorkspaceNotSupported) {
@@ -200,8 +343,38 @@ export default function Workspace() {
     );
   }
 
+  // Show loading while fetching workspace list
+  if (isLoadingWorkspaces) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <Folder className="h-4 w-4" />
+            </Icon>
+            Workspace
+          </HeaderTitle>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              Documentation
+            </Button>
+          </HeaderAction>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <Spinner />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   // If workspace is not configured, show the not configured message
-  if (!isLoadingInfo && !isWorkspaceConfigured) {
+  // Also wait for workspaces list to load to avoid showing this before 403 is detected
+  if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
       <MainContentLayout>
         <Header>
@@ -436,6 +609,7 @@ export default function Workspace() {
                     entries={files}
                     currentPath={currentPath}
                     isLoading={isLoadingFiles}
+                    error={filesError}
                     onNavigate={setCurrentPath}
                     onFileSelect={setSelectedFile}
                     onRefresh={() => refetchFiles()}
@@ -470,6 +644,11 @@ export default function Workspace() {
                 isLoading={isLoadingSkills}
                 isSkillsConfigured={isSkillsConfigured}
                 basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
+                onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
+                onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
+                onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
+                updatingSkillName={updatingSkillName ?? undefined}
+                removingSkillName={removingSkillName ?? undefined}
               />
             )}
 
@@ -482,6 +661,18 @@ export default function Workspace() {
           </div>
         </div>
       </div>
+
+      {/* Add Skill Dialog */}
+      {effectiveWorkspaceId && canManageSkills && (
+        <AddSkillDialog
+          open={showAddSkillDialog}
+          onOpenChange={setShowAddSkillDialog}
+          workspaceId={effectiveWorkspaceId}
+          onInstall={handleInstallSkill}
+          isInstalling={installSkill.isPending}
+          installedSkillNames={skills.map(s => s.name)}
+        />
+      )}
     </MainContentLayout>
   );
 }

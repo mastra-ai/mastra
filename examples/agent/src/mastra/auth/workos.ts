@@ -8,7 +8,9 @@ import type { AuthResult } from './types';
 export async function initWorkOS(): Promise<AuthResult> {
   const { MastraAuthWorkos, MastraRBACWorkos } = await import('@mastra/auth-workos');
 
-  const mastraAuth = new MastraAuthWorkos();
+  const mastraAuth = new MastraAuthWorkos({
+    redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',
+  });
 
   const rbacProvider = new MastraRBACWorkos({
     roleMapping: {

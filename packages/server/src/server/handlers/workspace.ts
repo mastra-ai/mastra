@@ -9,6 +9,7 @@
 
 import { coreFeatures } from '@mastra/core/features';
 import type { Workspace, WorkspaceSkills } from '@mastra/core/workspace';
+
 import { HTTPException } from '../http-exception';
 import {
   // Workspace info
@@ -42,6 +43,19 @@ import {
   skillReferenceResponseSchema,
   listReferencesResponseSchema,
   searchSkillsResponseSchema,
+  // skills.sh proxy schemas
+  skillsShSearchQuerySchema,
+  skillsShPopularQuerySchema,
+  skillsShSearchResponseSchema,
+  skillsShListResponseSchema,
+  skillsShPreviewQuerySchema,
+  skillsShInstallBodySchema,
+  skillsShInstallResponseSchema,
+  skillsShPreviewResponseSchema,
+  skillsShRemoveBodySchema,
+  skillsShRemoveResponseSchema,
+  skillsShUpdateBodySchema,
+  skillsShUpdateResponseSchema,
 } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -49,6 +63,37 @@ import { handleError } from './error';
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+/**
+ * Check if an error is a workspace filesystem not-found error.
+ * Handles Node.js ENOENT and workspace FileNotFoundError/DirectoryNotFoundError.
+ */
+function isFilesystemNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  // Check for Node.js native ENOENT
+  if ('code' in error && error.code === 'ENOENT') return true;
+
+  // Check for workspace FileNotFoundError / DirectoryNotFoundError
+  if ('name' in error) {
+    const name = error.name;
+    if (name === 'FileNotFoundError' || name === 'DirectoryNotFoundError') return true;
+  }
+
+  return false;
+}
+
+/**
+ * Workspace-specific error handler.
+ * Converts filesystem not-found errors to 404, then falls back to generic handler.
+ */
+function handleWorkspaceError(error: unknown, defaultMessage: string): never {
+  if (isFilesystemNotFoundError(error)) {
+    const message = error instanceof Error ? error.message : 'Not found';
+    throw new HTTPException(404, { message });
+  }
+  return handleError(error, defaultMessage);
+}
 
 /**
  * Throws if workspace v1 is not supported by the current version of @mastra/core.
@@ -201,7 +246,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
 
       return { workspaces };
     } catch (error) {
-      return handleError(error, 'Error listing workspaces');
+      return handleWorkspaceError(error, 'Error listing workspaces');
     }
   },
 });
@@ -247,7 +292,7 @@ export const GET_WORKSPACE_ROUTE = createRoute({
         },
       };
     } catch (error) {
-      return handleError(error, 'Error getting workspace info');
+      return handleWorkspaceError(error, 'Error getting workspace info');
     }
   },
 });
@@ -297,7 +342,7 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
         type: 'file' as const,
       };
     } catch (error) {
-      return handleError(error, 'Error reading file');
+      return handleWorkspaceError(error, 'Error reading file');
     }
   },
 });
@@ -344,7 +389,7 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
         path: decodedPath,
       };
     } catch (error) {
-      return handleError(error, 'Error writing file');
+      return handleWorkspaceError(error, 'Error writing file');
     }
   },
 });
@@ -394,7 +439,7 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
         })),
       };
     } catch (error) {
-      return handleError(error, 'Error listing directory');
+      return handleWorkspaceError(error, 'Error listing directory');
     }
   },
 });
@@ -448,7 +493,7 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
         path: decodedPath,
       };
     } catch (error) {
-      return handleError(error, 'Error deleting path');
+      return handleWorkspaceError(error, 'Error deleting path');
     }
   },
 });
@@ -489,7 +534,7 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
         path: decodedPath,
       };
     } catch (error) {
-      return handleError(error, 'Error creating directory');
+      return handleWorkspaceError(error, 'Error creating directory');
     }
   },
 });
@@ -535,7 +580,7 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
         mimeType: stat.mimeType,
       };
     } catch (error) {
-      return handleError(error, 'Error getting file info');
+      return handleWorkspaceError(error, 'Error getting file info');
     }
   },
 });
@@ -611,7 +656,7 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
         mode: searchMode,
       };
     } catch (error) {
-      return handleError(error, 'Error searching workspace');
+      return handleWorkspaceError(error, 'Error searching workspace');
     }
   },
 });
@@ -651,7 +696,7 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
         path,
       };
     } catch (error) {
-      return handleError(error, 'Error indexing content');
+      return handleWorkspaceError(error, 'Error indexing content');
     }
   },
 });
@@ -683,18 +728,34 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
 
       const skillsList = await skills.list();
 
+      // Get full skill details to include path in response
+      // Handle individual skill fetch failures gracefully to avoid failing the entire list
+      const skillsWithPath = await Promise.all(
+        skillsList.map(async skillMeta => {
+          let path = '';
+          try {
+            const fullSkill = await skills.get(skillMeta.name);
+            path = fullSkill?.path ?? '';
+          } catch {
+            // Fall back to empty path if skill details can't be loaded
+          }
+          return {
+            name: skillMeta.name,
+            description: skillMeta.description,
+            license: skillMeta.license,
+            compatibility: skillMeta.compatibility,
+            metadata: skillMeta.metadata,
+            path,
+          };
+        }),
+      );
+
       return {
-        skills: skillsList.map(skill => ({
-          name: skill.name,
-          description: skill.description,
-          license: skill.license,
-          compatibility: skill.compatibility,
-          metadata: skill.metadata,
-        })),
+        skills: skillsWithPath,
         isSkillsConfigured: true,
       };
     } catch (error) {
-      return handleError(error, 'Error listing skills');
+      return handleWorkspaceError(error, 'Error listing skills');
     }
   },
 });
@@ -743,7 +804,7 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
         assets: skill.assets,
       };
     } catch (error) {
-      return handleError(error, 'Error getting skill');
+      return handleWorkspaceError(error, 'Error getting skill');
     }
   },
 });
@@ -785,7 +846,7 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
         references,
       };
     } catch (error) {
-      return handleError(error, 'Error listing skill references');
+      return handleWorkspaceError(error, 'Error listing skill references');
     }
   },
 });
@@ -829,7 +890,7 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
         content,
       };
     } catch (error) {
-      return handleError(error, 'Error getting skill reference');
+      return handleWorkspaceError(error, 'Error getting skill reference');
     }
   },
 });
@@ -885,10 +946,561 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
         query,
       };
     } catch (error) {
+      return handleWorkspaceError(error, 'Error searching skills');
+    }
+  },
+});
+
+// =============================================================================
+// skills.sh Proxy Routes
+// =============================================================================
+
+const SKILLS_SH_API_URL = 'https://skills-api-production.up.railway.app';
+
+export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workspaces/:workspaceId/skills-sh/search',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  queryParamSchema: skillsShSearchQuerySchema,
+  responseSchema: skillsShSearchResponseSchema,
+  summary: 'Search skills on skills.sh',
+  description: 'Proxies search requests to skills.sh API to avoid CORS issues',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ q, limit }) => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const url = `${SKILLS_SH_API_URL}/api/skills?query=${encodeURIComponent(q)}&pageSize=${limit}`;
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new HTTPException(502, {
+          message: `Skills API error: ${response.status} ${response.statusText}`,
+        });
+      }
+
+      const data = (await response.json()) as {
+        skills: Array<{
+          skillId: string;
+          name: string;
+          installs: number;
+          source: string;
+          owner: string;
+          repo: string;
+          githubUrl: string;
+          displayName: string;
+        }>;
+        total: number;
+        page: number;
+        pageSize: number;
+        totalPages: number;
+      };
+      return {
+        query: q,
+        searchType: 'query',
+        skills: data.skills.map(s => ({ id: s.skillId, name: s.name, installs: s.installs, topSource: s.source })),
+        count: data.total,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
       return handleError(error, 'Error searching skills');
     }
   },
 });
+
+export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workspaces/:workspaceId/skills-sh/popular',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  queryParamSchema: skillsShPopularQuerySchema,
+  responseSchema: skillsShListResponseSchema,
+  summary: 'Get popular skills from skills.sh',
+  description: 'Proxies popular skills requests to skills.sh API to avoid CORS issues',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ limit, offset }) => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const page = offset > 0 ? Math.floor(offset / limit) + 1 : 1;
+      const url = `${SKILLS_SH_API_URL}/api/skills/top?pageSize=${limit}&page=${page}`;
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new HTTPException(502, {
+          message: `Skills API error: ${response.status} ${response.statusText}`,
+        });
+      }
+
+      const data = (await response.json()) as {
+        skills: Array<{
+          skillId: string;
+          name: string;
+          installs: number;
+          source: string;
+          owner: string;
+          repo: string;
+          githubUrl: string;
+          displayName: string;
+        }>;
+        total: number;
+      };
+      return {
+        skills: data.skills.map(s => ({ id: s.skillId, name: s.name, installs: s.installs, topSource: s.source })),
+        count: data.total,
+        limit,
+        offset,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error fetching popular skills');
+    }
+  },
+});
+
+// =============================================================================
+// Skills API helpers
+// =============================================================================
+
+/**
+ * Validate skill name to prevent path traversal attacks.
+ * Only allows alphanumeric characters, hyphens, and underscores.
+ */
+const SKILL_NAME_REGEX = /^[a-z0-9][a-z0-9-_]*$/i;
+
+function assertSafeSkillName(name: string): string {
+  if (!SKILL_NAME_REGEX.test(name)) {
+    throw new HTTPException(400, {
+      message: `Invalid skill name "${name}". Names must start with alphanumeric and contain only letters, numbers, hyphens, and underscores.`,
+    });
+  }
+  return name;
+}
+
+/**
+ * Validate that a file path is safe (no traversal, no absolute paths).
+ * Prevents malicious API responses from writing files outside the skill directory.
+ */
+function assertSafeFilePath(filePath: string): string {
+  // Reject absolute paths
+  if (filePath.startsWith('/') || /^[a-zA-Z]:/.test(filePath)) {
+    throw new HTTPException(400, {
+      message: `Invalid file path "${filePath}". Absolute paths are not allowed.`,
+    });
+  }
+  // Reject path traversal attempts
+  const segments = filePath.split('/');
+  for (const segment of segments) {
+    if (segment === '..' || segment === '.') {
+      throw new HTTPException(400, {
+        message: `Invalid file path "${filePath}". Path traversal is not allowed.`,
+      });
+    }
+  }
+  return filePath;
+}
+
+interface SkillFileEntry {
+  path: string;
+  content: string;
+  encoding: 'utf-8' | 'base64';
+}
+
+interface SkillFilesResponse {
+  skillId: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  files: SkillFileEntry[];
+}
+
+/**
+ * Fetch skill files from the Skills API.
+ * Returns all files for a skill with their content.
+ */
+async function fetchSkillFiles(owner: string, repo: string, skillName: string): Promise<SkillFilesResponse | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s for file downloads
+
+  const url = `${SKILLS_SH_API_URL}/api/skills/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(skillName)}/files`;
+  const response = await fetch(url, { signal: controller.signal });
+  clearTimeout(timeoutId);
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null;
+    }
+    throw new Error(`Skills API error: ${response.status} ${response.statusText}`);
+  }
+
+  return (await response.json()) as SkillFilesResponse;
+}
+
+// =============================================================================
+// skills.sh Preview Route
+// =============================================================================
+
+export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workspaces/:workspaceId/skills-sh/preview',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  queryParamSchema: skillsShPreviewQuerySchema,
+  responseSchema: skillsShPreviewResponseSchema,
+  summary: 'Preview skill content',
+  description: 'Fetches the skill content from the Skills API.',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ owner, repo, path: skillName }) => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const url = `${SKILLS_SH_API_URL}/api/skills/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(skillName)}/content`;
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new HTTPException(404, {
+          message: `Could not find skill "${skillName}" for ${owner}/${repo}`,
+        });
+      }
+
+      const data = (await response.json()) as { instructions: string; raw: string };
+      const content = data.instructions || data.raw || '';
+
+      if (!content) {
+        throw new HTTPException(404, {
+          message: `No content available for skill "${skillName}"`,
+        });
+      }
+
+      return { content };
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error fetching skill preview');
+    }
+  },
+});
+
+// =============================================================================
+// skills.sh Install Route
+// =============================================================================
+
+export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workspaces/:workspaceId/skills-sh/install',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  bodySchema: skillsShInstallBodySchema,
+  responseSchema: skillsShInstallResponseSchema,
+  summary: 'Install skill from Skills API',
+  description: 'Installs a skill by fetching files from the Skills API and writing to workspace filesystem.',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ mastra, workspaceId, owner, repo, skillName }) => {
+    try {
+      requireWorkspaceV1Support();
+
+      const workspace = await getWorkspaceById(mastra, workspaceId);
+      if (!workspace) {
+        throw new HTTPException(404, { message: 'Workspace not found' });
+      }
+
+      if (!workspace.filesystem) {
+        throw new HTTPException(400, { message: 'Workspace filesystem not available' });
+      }
+
+      if (workspace.filesystem.readOnly) {
+        throw new HTTPException(403, { message: 'Workspace is read-only' });
+      }
+
+      // Fetch skill files from the Skills API
+      const result = await fetchSkillFiles(owner, repo, skillName);
+      if (!result || result.files.length === 0) {
+        throw new HTTPException(404, {
+          message: `Could not find skill "${skillName}" in ${owner}/${repo}.`,
+        });
+      }
+
+      // Validate skill name to prevent path traversal
+      const safeSkillId = assertSafeSkillName(result.skillId);
+      const installPath = `.agents/skills/${safeSkillId}`;
+
+      // Ensure the skills directory exists
+      try {
+        await workspace.filesystem.mkdir(installPath, { recursive: true });
+      } catch {
+        // Directory might already exist
+      }
+
+      // Write all files to the workspace
+      let filesWritten = 0;
+      for (const file of result.files) {
+        // Validate file path to prevent path traversal from API response
+        const safePath = assertSafeFilePath(file.path);
+        const filePath = `${installPath}/${safePath}`;
+
+        // Create subdirectory if needed
+        if (safePath.includes('/')) {
+          const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+          try {
+            await workspace.filesystem.mkdir(dirPath, { recursive: true });
+          } catch {
+            // Directory might already exist
+          }
+        }
+
+        const content = file.encoding === 'base64' ? Buffer.from(file.content, 'base64') : file.content;
+        await workspace.filesystem.writeFile(filePath, content);
+        filesWritten++;
+      }
+
+      // Write metadata file for update support
+      const metadata = {
+        skillName: result.skillId,
+        owner: result.owner,
+        repo: result.repo,
+        branch: result.branch,
+        installedAt: new Date().toISOString(),
+      };
+      await workspace.filesystem.writeFile(`${installPath}/.meta.json`, JSON.stringify(metadata, null, 2));
+      filesWritten++;
+
+      return {
+        success: true,
+        skillName: result.skillId,
+        installedPath: installPath,
+        filesWritten,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error installing skill');
+    }
+  },
+});
+
+/**
+ * Interface for skill metadata stored in .meta.json
+ */
+interface SkillMetaFile {
+  skillName: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  installedAt: string;
+}
+
+export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workspaces/:workspaceId/skills-sh/remove',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  bodySchema: skillsShRemoveBodySchema,
+  responseSchema: skillsShRemoveResponseSchema,
+  summary: 'Remove an installed skill',
+  description: 'Removes an installed skill by deleting its directory. Does not require sandbox.',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ mastra, workspaceId, skillName }) => {
+    try {
+      requireWorkspaceV1Support();
+
+      const workspace = await getWorkspaceById(mastra, workspaceId);
+      if (!workspace) {
+        throw new HTTPException(404, { message: 'Workspace not found' });
+      }
+
+      if (!workspace.filesystem) {
+        throw new HTTPException(400, { message: 'Workspace filesystem not available' });
+      }
+
+      if (workspace.filesystem.readOnly) {
+        throw new HTTPException(403, { message: 'Workspace is read-only' });
+      }
+
+      // Validate skill name to prevent path traversal
+      const safeSkillName = assertSafeSkillName(skillName);
+      const skillPath = `.agents/skills/${safeSkillName}`;
+
+      // Check if skill exists
+      try {
+        await workspace.filesystem.stat(skillPath);
+      } catch {
+        throw new HTTPException(404, { message: `Skill "${skillName}" not found at ${skillPath}` });
+      }
+
+      // Delete the skill directory
+      await workspace.filesystem.rmdir(skillPath, { recursive: true });
+
+      return {
+        success: true,
+        skillName,
+        removedPath: skillPath,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error removing skill');
+    }
+  },
+});
+
+export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/workspaces/:workspaceId/skills-sh/update',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  bodySchema: skillsShUpdateBodySchema,
+  responseSchema: skillsShUpdateResponseSchema,
+  summary: 'Update installed skills',
+  description:
+    'Updates installed skills by re-fetching from GitHub. Specify skillName to update one, or omit to update all.',
+  tags: ['Workspace', 'Skills'],
+  handler: async ({ mastra, workspaceId, skillName }) => {
+    try {
+      requireWorkspaceV1Support();
+
+      const workspace = await getWorkspaceById(mastra, workspaceId);
+      if (!workspace) {
+        throw new HTTPException(404, { message: 'Workspace not found' });
+      }
+
+      if (!workspace.filesystem) {
+        throw new HTTPException(400, { message: 'Workspace filesystem not available' });
+      }
+
+      if (workspace.filesystem.readOnly) {
+        throw new HTTPException(403, { message: 'Workspace is read-only' });
+      }
+
+      const skillsPath = '.agents/skills';
+      const results: Array<{
+        skillName: string;
+        success: boolean;
+        filesWritten?: number;
+        error?: string;
+      }> = [];
+
+      // Get list of skills to update
+      let skillsToUpdate: string[];
+      if (skillName) {
+        // Validate skill name to prevent path traversal
+        skillsToUpdate = [assertSafeSkillName(skillName)];
+      } else {
+        try {
+          const entries = await workspace?.filesystem?.readdir(skillsPath);
+          skillsToUpdate = entries?.filter(e => e.type === 'directory').map(e => e.name) ?? [];
+        } catch {
+          // Skills directory doesn't exist or isn't readable - no skills to update
+          // This is expected when no skills have been installed yet
+          return { updated: [] };
+        }
+      }
+
+      for (const skill of skillsToUpdate) {
+        // Validate each skill name for safety
+        try {
+          assertSafeSkillName(skill);
+        } catch {
+          results.push({
+            skillName: skill,
+            success: false,
+            error: 'Invalid skill name',
+          });
+          continue;
+        }
+        const metaPath = `${skillsPath}/${skill}/.meta.json`;
+        try {
+          const metaContent = await workspace?.filesystem?.readFile(metaPath, { encoding: 'utf-8' });
+          const meta: SkillMetaFile = JSON.parse(metaContent as string);
+
+          // Re-fetch skill files from the Skills API
+          const fetchResult = await fetchSkillFiles(meta.owner, meta.repo, meta.skillName);
+
+          if (!fetchResult || fetchResult.files.length === 0) {
+            results.push({
+              skillName: skill,
+              success: false,
+              error: 'No files found in skill directory',
+            });
+            continue;
+          }
+
+          const installPath = `${skillsPath}/${skill}`;
+          let filesWritten = 0;
+
+          for (const file of fetchResult.files) {
+            // Validate file path to prevent path traversal from API response
+            const safePath = assertSafeFilePath(file.path);
+            const filePath = `${installPath}/${safePath}`;
+
+            if (safePath.includes('/')) {
+              const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
+              try {
+                await workspace.filesystem.mkdir(dirPath, { recursive: true });
+              } catch {
+                // Directory might already exist
+              }
+            }
+
+            const content = file.encoding === 'base64' ? Buffer.from(file.content, 'base64') : file.content;
+            await workspace.filesystem.writeFile(filePath, content);
+            filesWritten++;
+          }
+
+          // Update metadata with new install time and branch
+          const updatedMeta: SkillMetaFile = {
+            ...meta,
+            branch: fetchResult.branch,
+            installedAt: new Date().toISOString(),
+          };
+          await workspace.filesystem.writeFile(metaPath, JSON.stringify(updatedMeta, null, 2));
+          filesWritten++;
+
+          results.push({
+            skillName: skill,
+            success: true,
+            filesWritten,
+          });
+        } catch (error) {
+          results.push({
+            skillName: skill,
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      return { updated: results };
+    } catch (error) {
+      if (error instanceof HTTPException) {
+        throw error;
+      }
+      return handleError(error, 'Error updating skills');
+    }
+  },
+});
+
+export const WORKSPACE_SKILLS_SH_ROUTES = [
+  WORKSPACE_SKILLS_SH_SEARCH_ROUTE,
+  WORKSPACE_SKILLS_SH_POPULAR_ROUTE,
+  WORKSPACE_SKILLS_SH_PREVIEW_ROUTE,
+  WORKSPACE_SKILLS_SH_INSTALL_ROUTE,
+  WORKSPACE_SKILLS_SH_REMOVE_ROUTE,
+  WORKSPACE_SKILLS_SH_UPDATE_ROUTE,
+];
 
 // =============================================================================
 // Route Collections

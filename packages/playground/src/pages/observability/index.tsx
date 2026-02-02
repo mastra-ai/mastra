@@ -20,6 +20,8 @@ import {
   useAgents,
   useWorkflows,
   useScorers,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { EntityType } from '@mastra/core/observability';
 import { useEffect, useState } from 'react';
@@ -143,6 +145,35 @@ export default function Observability() {
   };
 
   const error = isTracesError ? parseError(TracesError) : undefined;
+
+  // 403 check - permission denied for traces
+  if (TracesError && is403ForbiddenError(TracesError)) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <EyeIcon />
+            </Icon>
+            Observability
+          </HeaderTitle>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/observability/tracing/overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              Observability documentation
+            </Button>
+          </HeaderAction>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="traces" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
 

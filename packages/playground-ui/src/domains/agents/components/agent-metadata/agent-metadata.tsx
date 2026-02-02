@@ -322,7 +322,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
         const isActivated = isSkillActivated(skill.name);
         const badge = (
           <Badge
-            icon={<SkillIcon className={isActivated ? 'text-green-400' : 'text-accent2'} />}
+            icon={<SkillIcon className={`h-3 w-3 ${isActivated ? 'text-green-400' : 'text-accent2'}`} />}
             variant={isActivated ? 'success' : 'default'}
           >
             {skill.name}
