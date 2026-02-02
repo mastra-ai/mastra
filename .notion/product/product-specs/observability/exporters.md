@@ -374,6 +374,19 @@ const bridge = new OtelBridge();
 
 ---
 
+## Bridges vs Exporters
+
+Bridges provide bidirectional integration with external systems, unlike exporters which only send data out.
+
+| Feature | Bridges | Exporters |
+|---------|---------|-----------|
+| Creates native spans in external systems | Yes | No |
+| Inherits context from external systems | Yes | No |
+| Sends data to backends | Via external SDK | Directly |
+| Use case | Existing distributed tracing | Standalone Mastra tracing |
+
+---
+
 ## Multiple Exporters
 
 You can use multiple exporters simultaneously. Each signal is sent to all exporters that support it. This allows mixing:

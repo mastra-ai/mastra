@@ -19,6 +19,48 @@ Mastra logging exists alongside tracing and metrics, but avoids:
 
 ---
 
+## Logging Architecture
+
+Logs flow through a unified pipeline with automatic trace correlation:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         LOG SOURCES                                  │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────────────────┐     ┌──────────────────────────────┐  │
+│  │  Context-Aware Logger    │     │   Direct Logger API          │  │
+│  │  observability.info()    │     │   mastra.logger.info()       │  │
+│  │  observability.error()   │     │   mastra.logger.error()      │  │
+│  └──────────┬───────────────┘     └──────────────┬───────────────┘  │
+│             │                                    │                  │
+│             │ auto-correlates                    │ no trace         │
+│             │ traceId, spanId,                   │ correlation      │
+│             │ entity, runId, etc.                │                  │
+│             ▼                                    ▼                  │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │                 LogRecord (unified format)                   │   │
+│  │    { level, message, data, traceId, spanId, timestamp }      │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │  Signal Processors  │  (SensitiveDataFilter, etc.)
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    Exporters (that support logs)
+```
+
+### Why Two APIs?
+
+- **Context-aware** (inside tools/workflows) — Auto-captures all correlation fields, enabling log → trace navigation
+- **Direct** (outside trace context) — For startup logs, background jobs, or when no trace is active
+
+---
+
 ## Log Structure
 
 Logs in Mastra are structured events with full correlation fields:
@@ -143,133 +185,29 @@ mastra.logger.info("Application started", { version: "1.0.0" });
 mastra.logger.warn("Config missing, using defaults");
 ```
 
-### Unified Exporter Model
-
-Logs flow through the observability exporter system. Different exporters handle logs differently:
-
-```typescript
-const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        logLevel: 'info',  // Root level - ceiling for all log exporters
-        exporters: [
-          new DefaultExporter(),   // T ✓  M ✓  L ✓  → Storage (queryable)
-          new PinoExporter({       // T ✗  M ✗  L ✓  → Console (pretty)
-            level: 'debug',        // Adjusted to 'info' ⚠ (can't exceed root)
-            pretty: true,
-          }),
-          new CloudExporter({      // T ✓  M ✓  L ✓  → Mastra Cloud
-            level: 'warn',         // Filters down to warn+ only
-          }),
-        ],
-      },
-    },
-  }),
-});
-```
-
-**Note:** The top-level `logger` config in Mastra is deprecated. Use `PinoExporter` or `WinstonExporter` in the observability config instead.
-
-### Log Level Filtering
-
-Log levels follow a ceiling model:
-
-- **Root `logLevel`** is the ceiling - filters before events enter the observability system
-- **Per-exporter `level`** filters down from root (can be more restrictive, not less)
-- If exporter level < root level → warn on startup, auto-adjust exporter up to root level
-
-To get debug logs to a specific exporter, set root to 'debug' and let other exporters filter down.
-
 ---
 
-## Auto-Instrumentation
+## Sensitive Data Filtering
 
-When observability is enabled, Mastra automatically:
-- Correlates logs with active traces
-- Attaches traceId and spanId to log entries
-- Captures HTTP request/response logs (Sentry-style)
+Logs pass through the same signal processor pipeline as traces, allowing automatic redaction of passwords, tokens, API keys, and other sensitive data before export.
 
----
-
-## Sampling
-
-Optional sampling strategies to control log volume:
-- Sample by log level (e.g., always capture errors)
-- Sample by ratio
-- Custom sampling logic
+→ See [Architecture & Configuration - Signal Processors](./architecture-configuration.md#signal-processors) for configuration
 
 ---
 
 ## Storage
 
-Logs are stored via the observability storage domain.
+Logs are stored via the observability storage domain alongside traces and metrics.
 
-### ClickHouse Schema
-
-```sql
-CREATE TABLE logs (
-  id String,
-  project_id String,
-  build_id Nullable(String),
-  trace_id Nullable(String),
-  span_id Nullable(String),
-  entity_type Nullable(Enum8('agent'=1, 'workflow'=2, 'tool'=3, 'processor'=4)),
-  entity_name Nullable(String),
-  run_id Nullable(String),
-  session_id Nullable(String),
-  timestamp DateTime64(3),
-  level Enum8('debug'=1, 'info'=2, 'warn'=3, 'error'=4, 'fatal'=5),
-  message String,
-  data Nullable(String),
-  error_stack Nullable(String),
-  created_at DateTime64(3) DEFAULT now64(3)
-)
-ENGINE = MergeTree()
-PARTITION BY toYYYYMM(timestamp)
-ORDER BY (project_id, timestamp, id)
-TTL timestamp + INTERVAL 10 DAY;
-```
+→ See [Architecture & Configuration](./architecture-configuration.md) for storage backends and retention policies
 
 ---
 
-## File-Based Logging (MastraAdmin)
+## Inline Logs in Trace UI (Future)
 
-For MastraAdmin deployments, logs flow through a file-based ingestion pipeline:
+Logs will be displayed as events within their related spans in the tracing UI. Since logs are auto-correlated with `traceId` and `spanId`, navigating between logs and traces preserves full context.
 
-1. **FileLogger** - Injected at build time, writes structured logs to JSONL files
-2. **File Storage** - Logs written to `{buildDir}/observability/logs/*.jsonl`
-3. **IngestionWorker** - Polls files, parses JSONL, bulk inserts to ClickHouse
-
-This approach:
-- Works even if admin server restarts
-- Provides consistent pattern with span ingestion
-- Avoids tight coupling between runner and deployed server
-
----
-
-## Retention
-
-**Default retention:** 10 days
-
-**Enforcement:** Manual via CLI (no background job infrastructure yet)
-
-```bash
-mastra logs cleanup --older-than 10d
-```
-
-**Future CLI expansion:**
-
-```bash
-mastra logs --search 'error'
-mastra logs --trace-id abc123
-mastra logs --level error --since 1h
-```
-
-**Considerations:**
-- Configure retention policies per environment
-- Consider log level-based retention (keep errors longer)
-- Use sampling for high-volume debug logs
+→ See [Tracing - Inline Logs in Trace UI](./tracing.md#inline-logs-in-trace-ui-future) for details
 
 ---
 

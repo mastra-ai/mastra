@@ -149,226 +149,55 @@ Tracing is built on OpenTelemetry concepts but provides a Mastra-specific abstra
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    Mastra Tracing Architecture                      │
+│                         TRACE SOURCES                                │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  ┌──────────────────┐    ┌──────────────────┐                      │
-│  │  Agent.generate  │    │  Workflow.start  │                      │
-│  │  Agent.stream    │    │  Workflow.stream │                      │
-│  └────────┬─────────┘    └────────┬─────────┘                      │
-│           │                       │                                 │
-│           └───────────┬───────────┘                                │
-│                       ▼                                             │
-│           ┌───────────────────────┐                                │
-│           │   TracingContext      │                                │
-│           │   - currentSpan       │                                │
-│           │   - createChildSpan() │                                │
-│           └───────────┬───────────┘                                │
-│                       │                                             │
-│                       ▼                                             │
-│           ┌───────────────────────┐                                │
-│           │   Span Processors     │  (transform/filter/enrich)     │
-│           │   - SensitiveDataFilter                                │
-│           │   - Custom processors │                                │
-│           └───────────┬───────────┘                                │
-│                       │                                             │
-│                       ▼                                             │
-│     ┌─────────────────────────────────────────────────┐            │
-│     │              Exporters (parallel)                │            │
-│     │  ┌─────────┐ ┌─────────┐ ┌─────────┐           │            │
-│     │  │ Default │ │ Cloud   │ │External │           │            │
-│     │  │(Storage)│ │(Mastra) │ │(Langfuse│           │            │
-│     │  │         │ │         │ │ Arize,  │           │            │
-│     │  │         │ │         │ │ etc.)   │           │            │
-│     │  └─────────┘ └─────────┘ └─────────┘           │            │
-│     └─────────────────────────────────────────────────┘            │
+│  ┌──────────────────────────┐     ┌──────────────────────────────┐  │
+│  │    Agent.generate()      │     │    Workflow.start()          │  │
+│  │    Agent.stream()        │     │    Workflow.stream()         │  │
+│  └──────────────┬───────────┘     └──────────────┬───────────────┘  │
+│                 │                                │                  │
+│                 │  auto-creates spans            │                  │
+│                 │  with context                  │                  │
+│                 └────────────┬───────────────────┘                  │
+│                              ▼                                      │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │                    TracingContext                            │   │
+│  │         { currentSpan, createChildSpan(), traceId }          │   │
+│  └──────────────────────────────────────────────────────────────┘   │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │  Signal Processors  │  (SensitiveDataFilter, etc.)
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    Exporters (that support traces)
 ```
 
----
-
-## Configuration
-
-Tracing is configured through the `Observability` class with named configurations:
-
-```typescript
-import { Mastra } from "@mastra/core";
-import {
-  Observability,
-  DefaultExporter,
-  CloudExporter,
-  SensitiveDataFilter,
-} from "@mastra/observability";
-
-export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: "my-service",
-        sampling: { type: "always" },
-        exporters: [
-          new DefaultExporter(),   // Persists to storage for Studio
-          new CloudExporter(),     // Sends to Mastra Cloud
-        ],
-        spanOutputProcessors: [
-          new SensitiveDataFilter(),
-        ],
-        serializationOptions: {
-          maxStringLength: 1024,
-          maxDepth: 6,
-          maxArrayLength: 50,
-          maxObjectKeys: 50,
-        },
-        requestContextKeys: ["userId", "environment"],
-      },
-    },
-    configSelector: (context, availableConfigs) => {
-      // Dynamic config selection based on context
-      return "default";
-    },
-  }),
-});
-```
-
-### Configuration Options
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `serviceName` | string | Identifies your service in traces |
-| `sampling` | object | Sampling strategy configuration |
-| `exporters` | Exporter[] | Where to send trace data |
-| `spanOutputProcessors` | Processor[] | Transform spans before export |
-| `serializationOptions` | object | Control payload truncation |
-| `requestContextKeys` | string[] | Auto-extract metadata from RequestContext |
-
----
-
-## Sampling Strategies
-
-Control which traces are collected:
-
-| Strategy | Config | Description |
-|----------|--------|-------------|
-| Always | `{ type: "always" }` | Capture 100% of traces (default) |
-| Never | `{ type: "never" }` | Disable tracing entirely |
-| Ratio | `{ type: "ratio", probability: 0.1 }` | Sample percentage (0-1) |
-| Custom | `{ type: "custom", sampler: fn }` | Custom logic based on context |
-
-### Custom Sampler Example
-
-```typescript
-sampling: {
-  type: 'custom',
-  sampler: (options) => {
-    // Sample premium users at higher rate
-    if (options?.metadata?.userTier === 'premium') {
-      return Math.random() < 0.5; // 50%
-    }
-    return Math.random() < 0.01; // 1% default
-  }
-}
-```
-
----
-
-## Exporters
-
-Exporters determine where trace data is sent. Multiple exporters can be used simultaneously.
-
-### Internal Exporters
-
-| Exporter | Package | Description |
-|----------|---------|-------------|
-| DefaultExporter | @mastra/observability | Persists to storage for Studio |
-| CloudExporter | @mastra/observability | Sends to Mastra Cloud |
-
-### External Exporters
-
-| Exporter | Package | Description |
-|----------|---------|-------------|
-| ArizeExporter | @mastra/arize | Arize Phoenix/AX (OpenInference) |
-| BraintrustExporter | @mastra/braintrust | Braintrust eval platform |
-| DatadogExporter | @mastra/datadog | Datadog APM via OTLP |
-| LaminarExporter | @mastra/laminar | Laminar via OTLP/HTTP |
-| LangfuseExporter | @mastra/langfuse | Langfuse LLM platform |
-| LangSmithExporter | @mastra/langsmith | LangSmith observability |
-| PostHogExporter | @mastra/posthog | PostHog AI analytics |
-| SentryExporter | @mastra/sentry | Sentry via OTel |
-| OtelExporter | @mastra/observability | Any OTel-compatible backend |
-
-### Per-Exporter Formatters
-
-Each exporter can have a custom span formatter for platform-specific formatting:
-
-```typescript
-new BraintrustExporter({
-  customSpanFormatter: (span) => ({
-    ...span,
-    input: extractPlainText(span.input),
-  }),
-})
-```
-
-Formatters support async operations and can be chained:
-
-```typescript
-import { chainFormatters } from "@mastra/observability";
-
-new LangfuseExporter({
-  customSpanFormatter: chainFormatters([
-    plainTextFormatter,      // sync
-    userEnrichmentFormatter, // async
-  ]),
-})
-```
-
----
-
-## Bridges
-
-Bridges provide bidirectional integration with external tracing systems, unlike exporters which only send data out.
-
-| Bridge | Description |
-|--------|-------------|
-| OtelBridge | Integrates with existing OpenTelemetry infrastructure |
-
-### Bridges vs Exporters
-
-| Feature | Bridges | Exporters |
-|---------|---------|-----------|
-| Creates native spans in external systems | Yes | No |
-| Inherits context from external systems | Yes | No |
-| Sends data to backends | Via external SDK | Directly |
-| Use case | Existing distributed tracing | Standalone Mastra tracing |
+→ See [Architecture & Configuration](./architecture-configuration.md) for configuration, sampling, and exporter setup
 
 ---
 
 ## Span Processors
 
-Span processors transform, filter, or enrich spans before export. They run once and affect all exporters.
+Span processors transform, filter, or enrich spans before export. They run once and affect all exporters. Span processing is part of the unified Signal Processor system that works across traces, logs, and metrics.
+
+→ See [Architecture & Configuration - Signal Processors](./architecture-configuration.md#signal-processors) for the unified processor model
 
 ### Built-in Processors
 
 - **SensitiveDataFilter** - Redacts passwords, tokens, API keys
 
-### Custom Processor Interface
+### Custom Span Processor Example
 
 ```typescript
-interface SpanOutputProcessor {
-  name: string;
-  process(span: AnySpan): AnySpan;
-  shutdown(): Promise<void>;
-}
-```
-
-### Example Custom Processor
-
-```typescript
-class LowercaseInputProcessor implements SpanOutputProcessor {
+class LowercaseInputProcessor implements SignalProcessor {
   name = "lowercase-processor";
 
-  process(span: AnySpan): AnySpan {
+  processSpan(span: AnySpan): AnySpan {
     span.input = `${span.input}`.toLowerCase();
     return span;
   }
@@ -496,30 +325,6 @@ Control how span data is truncated before export:
 
 ---
 
-## Multi-Config Setup
-
-Use `configSelector` for dynamic configuration selection:
-
-```typescript
-new Observability({
-  configs: {
-    development: { /* full tracing */ },
-    production: { /* sampled tracing */ },
-    debug: { /* detailed tracing */ },
-  },
-  configSelector: (context, availableConfigs) => {
-    if (context.requestContext?.get("supportMode")) {
-      return "debug";
-    }
-    return process.env.NODE_ENV || "development";
-  },
-})
-```
-
-**Note:** Only one config is used per execution, but a single config can have multiple exporters.
-
----
-
 ## External Trace Context
 
 Integrate Mastra traces into existing distributed traces:
@@ -564,102 +369,235 @@ console.log(result.traceId);
 
 ---
 
-## Serverless Flush
+## Scores
 
-In serverless environments, call `flush()` to ensure spans are exported before termination:
+Scores attach quality signals to traces or individual spans. They flow through the observability pipeline alongside other tracing events, enabling exporters to handle them appropriately.
+
+### Event Types
 
 ```typescript
-export async function POST(req: Request) {
-  const result = await agent.generate(await req.text());
-
-  // Ensure spans are exported
-  const observability = mastra.getObservability();
-  await observability.flush();
-
-  return Response.json(result);
+export enum TracingEventType {
+  SPAN_STARTED = 'span_started',
+  SPAN_UPDATED = 'span_updated',
+  SPAN_ENDED = 'span_ended',
+  SCORE_ADDED = 'score_added',
+  FEEDBACK_ADDED = 'feedback_added',
 }
 ```
 
-### flush() vs shutdown()
+### SCORE_ADDED — Evaluation Scores
 
-| Method | Behavior | Use Case |
-|--------|----------|----------|
-| `flush()` | Exports buffered spans, keeps exporter active | Serverless, periodic flushing |
-| `shutdown()` | Exports buffered spans, releases resources | Application termination |
-
----
-
-## Cross-Signal Correlation
-
-Traces provide the foundation for correlating all observability signals:
-
-| Signal | Correlation |
-|--------|-------------|
-| **Logs** | traceId, spanId automatically attached |
-| **Metrics** | Auto-labeled with entity type/name from span context |
-
-See [Architecture & Configuration](./architecture-configuration.md) for details.
-
----
-
-## User Feedback on Traces (Future)
-
-**Status:** Planned
-
-Allow users to attach feedback scores to traces or spans, enabling quality tracking from real user interactions.
-
-### Concept
+Automated scores from running evaluations on traces or spans.
 
 ```typescript
-// Client-side SDK
-mastra.submitFeedback({
+interface ScoreEventPayload {
+  traceId: string;
+  spanId?: string;           // Optional - trace-level OR span-level
+  scorerName: string;        // e.g., 'relevance', 'hallucination', 'factuality'
+  score: number;             // Numeric value within defined range
+  range: { min: number; max: number };  // Score range for this scorer
+  reason?: string;           // Explanation from scorer
+  metadata?: Record<string, unknown>;
+  timestamp: Date;
+}
+```
+
+**Usage:**
+
+```typescript
+// Trace-level score (0-1 normalized)
+observability.emitScore({
   traceId: "abc123",
-  spanId: "def456",         // Optional: target specific span
-  type: "thumbs",           // thumbs | rating | text
-  value: 1,                 // 1 (up) or -1 (down) for thumbs; 1-5 for rating
-  comment: "Great response", // Optional text
+  scorerName: "overall_quality",
+  score: 0.85,
+  range: { min: 0, max: 1 },
+  reason: "Response was relevant and well-structured",
+});
+
+// Span-level score (percentage scale)
+observability.emitScore({
+  traceId: "abc123",
+  spanId: "def456",
+  scorerName: "factuality",
+  score: 92,
+  range: { min: 0, max: 100 },
+  reason: "92% of claims verified against sources",
 });
 ```
 
-### Score Source
+### FEEDBACK_ADDED — User Feedback
 
-Feedback scores are stored with a `source` field to distinguish from automated scoring:
+Feedback from end users or human annotators.
 
-| Source | Description |
-|--------|-------------|
-| `SCORER` | Automated LLM-as-judge or code-based scorer |
-| `USER` | End-user feedback (thumbs, ratings) |
-| `ANNOTATION` | Human reviewer via annotation queue |
+```typescript
+interface FeedbackEventPayload {
+  traceId: string;
+  spanId?: string;           // Optional - trace-level OR span-level
+  source: 'USER' | 'ANNOTATION';
+  feedbackType: 'thumbs' | 'rating' | 'comment';
+  value: number | string;    // Numeric for thumbs/rating, text for comment
+  range?: { min: number; max: number };  // Required for numeric feedback
+  comment?: string;          // Optional additional context
+  userId?: string;           // Who submitted the feedback
+  metadata?: Record<string, unknown>;
+  timestamp: Date;
+}
+```
 
-### Use Cases
+**Usage:**
 
-- **Thumbs up/down** on agent responses
-- **Star ratings** (1-5) for quality
-- **Text comments** for detailed feedback
-- **Implicit signals** (copy action, retry, time on page)
+```typescript
+// Thumbs up/down
+mastra.submitFeedback({
+  traceId: "abc123",
+  source: 'USER',
+  feedbackType: "thumbs",
+  value: 1,
+  range: { min: -1, max: 1 },
+  userId: "user_456",
+});
+
+// Star rating (1-5)
+mastra.submitFeedback({
+  traceId: "abc123",
+  source: 'USER',
+  feedbackType: "rating",
+  value: 4,
+  range: { min: 1, max: 5 },
+  comment: "Good but could be more concise",
+  userId: "user_456",
+});
+
+// 10-point rating
+mastra.submitFeedback({
+  traceId: "abc123",
+  source: 'USER',
+  feedbackType: "rating",
+  value: 8,
+  range: { min: 1, max: 10 },
+  userId: "user_456",
+});
+
+// Annotation (text comment - no range needed)
+mastra.submitFeedback({
+  traceId: "abc123",
+  spanId: "def456",
+  source: 'ANNOTATION',
+  feedbackType: "comment",
+  value: "This response contains outdated pricing information",
+  userId: "reviewer_789",
+});
+```
+
+**Feedback types:**
+- **Thumbs up/down** — Binary quality signal (range: -1 to 1)
+- **Star ratings** — Granular quality (range: 1-5, 1-10, etc.)
+- **Comments** — Qualitative feedback (text, no range)
+- **Implicit signals** — Copy action, retry, time on page (future)
+
+### Pipeline Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│  ┌──────────────────────────┐     ┌──────────────────────────────┐  │
+│  │     Eval Scorers         │     │   User / Annotator Feedback  │  │
+│  │     (automated)          │     │   (client SDK, review UI)    │  │
+│  └──────────┬───────────────┘     └──────────────┬───────────────┘  │
+│             │                                    │                  │
+│             ▼                                    ▼                  │
+│  ┌──────────────────────┐          ┌──────────────────────────┐    │
+│  │  ScoreEventPayload   │          │  FeedbackEventPayload    │    │
+│  │  { traceId, spanId?, │          │  { traceId, spanId?,     │    │
+│  │    scorerName, score,│          │    source, feedbackType, │    │
+│  │    reason }          │          │    value, comment }      │    │
+│  └──────────┬───────────┘          └──────────────┬───────────┘    │
+│             │                                     │                 │
+│             ▼                                     ▼                 │
+│        SCORE_ADDED                         FEEDBACK_ADDED          │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+                         TracingBus
+                               │
+                               ▼
+                    Exporters (that support scores/feedback)
+```
+
+### Exporter Handling
+
+Exporters receive both event types and handle them separately:
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void> {
+  switch (event.type) {
+    case TracingEventType.SCORE_ADDED:
+      await this.handleScore(event.score);
+      break;
+    case TracingEventType.FEEDBACK_ADDED:
+      await this.handleFeedback(event.feedback);
+      break;
+    // ... other event types
+  }
+}
+```
+
+**Exporter support:**
+
+| Exporter | Scores | Feedback | Notes |
+|----------|:------:|:--------:|-------|
+| DefaultExporter | ✓ | ✓ | Persists to storage for Studio |
+| CloudExporter | ✓ | ✓ | Sends to Mastra Cloud |
+| LangfuseExporter | ✓ | ✓ | Maps to Langfuse scores |
+| BraintrustExporter | ✓ | ✓ | Maps to Braintrust scores |
+| LangSmithExporter | ✓ | ✓ | Maps to LangSmith feedback |
+| OtelExporter | ✗ | ✗ | OTLP has no score concept |
+| PinoExporter | ✗ | ✗ | Log-only exporter |
 
 ### Analytics
 
-User feedback enables:
+Scores enable:
 - Correlation between automated scores and user satisfaction
 - Identification of traces needing review
-- Quality trends over time by agent/workflow
+- Quality trends over time by agent/workflow/model
+- A/B testing of prompts or models
+- Regression detection across deployments
 
-→ See [Plan Analysis](./plan-analysis.md) for competitive comparison with Langfuse feedback collection
+→ See [Plan Analysis](./plan-analysis.md) for competitive comparison with Langfuse score handling
 
 ---
 
-## Storage
+## Inline Logs in Trace UI (Future)
 
-Traces are persisted via `DefaultExporter` to the configured storage backend. Supported backends:
+**Status:** Planned
 
-| Backend | Package | Notes |
-|---------|---------|-------|
-| DuckDB | npm-only | Recommended local dev |
-| LibSQL | @mastra/libsql | Legacy / simple demos |
-| PostgreSQL | @mastra/pg | Mid-size production |
+Display logs as events within their related spans in the tracing UI. Since logs are auto-correlated with `traceId` and `spanId`, they can be rendered inline as timestamped events within the span timeline.
 
-**Note:** External exporters handle their own storage. ClickHouse and other backends are accessed via external platforms (Langfuse, Arize, etc.).
+### Benefits
+
+- **Context preservation** — See logs alongside the span that produced them
+- **Seamless navigation** — Moving from logs to traces (or vice versa) maintains full context
+- **Debugging workflow** — No need to copy trace IDs and search separately
+
+### Concept
+
+```
+┌─ AGENT_RUN (support-agent) ────────────────────────────────┐
+│  ├─ MODEL_GENERATION (gpt-4) ──────────────────────────────┤
+│  │    📝 LOG [info] "Processing user query..."             │
+│  │    📝 LOG [debug] "Token count: 1,523"                  │
+│  │                                                         │
+│  ├─ TOOL_CALL (search) ────────────────────────────────────┤
+│  │    📝 LOG [info] "Searching for: pricing plans"         │
+│  │    📝 LOG [warn] "Rate limit approaching"               │
+│  │                                                         │
+│  └─ MODEL_GENERATION (gpt-4) ──────────────────────────────┤
+│       📝 LOG [info] "Generating response..."               │
+└────────────────────────────────────────────────────────────┘
+```
+
+→ See [Logging](./logging.md) for log correlation details
 
 ---
 

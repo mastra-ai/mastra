@@ -95,34 +95,45 @@ mastra.metrics.counter('background_jobs_total').add(1, { job_type: 'cleanup' });
 
 ### Event Bus Architecture
 
-Each signal has its own event bus, similar to the existing tracing bus:
+Each signal has its own event bus. TracingBus events cross-push to MetricsBus for automatic metric extraction.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         Observability                               │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │
-│  │ TracingBus   │  │ MetricsBus   │  │ LogsBus      │               │
-│  │              │  │              │  │              │               │
-│  │ span.start ──┼──│→ metric.emit │  │ log.emit     │               │
-│  │ span.end   ──┼──│→             │  │              │               │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘               │
-│         │                 │                 │                       │
-│         └─────────────────┼─────────────────┘                       │
-│                           ▼                                         │
-│                    ┌─────────────┐                                  │
-│                    │  Exporters  │                                  │
-│                    │ (T/M/L)     │                                  │
-│                    └─────────────┘                                  │
+│  ┌────────────────────┐  ┌──────────────┐  ┌──────────────┐         │
+│  │ TracingBus         │  │ MetricsBus   │  │ LogsBus      │         │
+│  │                    │  │              │  │              │         │
+│  │ span.start ────────┼─→│ metric.emit  │  │ log.emit     │         │
+│  │ span.end ──────────┼─→│              │  │              │         │
+│  │ score.added ───────┼─→│              │  │              │         │
+│  │ feedback.added ────┼─→│              │  │              │         │
+│  │                    │  │              │  │              │         │
+│  └──────────┬─────────┘  └──────┬───────┘  └──────┬───────┘         │
+│             │                   │                 │                 │
+│             └───────────────────┼─────────────────┘                 │
+│                                 ▼                                   │
+│                          ┌─────────────┐                            │
+│                          │  Exporters  │                            │
+│                          │ (T/M/L)     │                            │
+│                          └─────────────┘                            │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key points:**
 - TracingBus emits to MetricsBus on span lifecycle (for built-in metric extraction)
+- Score and feedback events also cross-push to MetricsBus (for score distribution metrics)
 - Each exporter receives only the signals it supports
 - Buses are decoupled for independent scaling and failure isolation
+
+**Auto-extracted metrics from scores/feedback:**
+
+| Event | Metrics Emitted |
+|-------|-----------------|
+| `score.added` | `mastra_scores_total`, `mastra_score_value` (histogram) |
+| `feedback.added` | `mastra_feedback_total`, `mastra_feedback_value` (histogram for numeric) |
 
 ---
 
@@ -289,6 +300,83 @@ const mastra = new Mastra({
 
 ---
 
+## Sampling Strategies
+
+Control which traces and logs are collected:
+
+| Strategy | Config | Description |
+|----------|--------|-------------|
+| Always | `{ type: "always" }` | Capture 100% (default) |
+| Never | `{ type: "never" }` | Disable entirely |
+| Ratio | `{ type: "ratio", probability: 0.1 }` | Sample percentage (0-1) |
+| Custom | `{ type: "custom", sampler: fn }` | Custom logic based on context |
+
+### Custom Sampler Example
+
+```typescript
+sampling: {
+  type: 'custom',
+  sampler: (options) => {
+    // Sample premium users at higher rate
+    if (options?.metadata?.userTier === 'premium') {
+      return Math.random() < 0.5; // 50%
+    }
+    return Math.random() < 0.01; // 1% default
+  }
+}
+```
+
+---
+
+## Multi-Config Setup
+
+Use `configSelector` for dynamic configuration selection:
+
+```typescript
+new Observability({
+  configs: {
+    development: { /* full tracing */ },
+    production: { /* sampled tracing */ },
+    debug: { /* detailed tracing */ },
+  },
+  configSelector: (context, availableConfigs) => {
+    if (context.requestContext?.get("supportMode")) {
+      return "debug";
+    }
+    return process.env.NODE_ENV || "development";
+  },
+})
+```
+
+**Note:** Only one config is used per execution, but a single config can have multiple exporters.
+
+---
+
+## Serverless Environments
+
+In serverless environments, call `flush()` to ensure telemetry is exported before termination:
+
+```typescript
+export async function POST(req: Request) {
+  const result = await agent.generate(await req.text());
+
+  // Ensure telemetry is exported
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  return Response.json(result);
+}
+```
+
+### flush() vs shutdown()
+
+| Method | Behavior | Use Case |
+|--------|----------|----------|
+| `flush()` | Exports buffered data, keeps exporters active | Serverless, periodic flushing |
+| `shutdown()` | Exports buffered data, releases resources | Application termination |
+
+---
+
 ## Data Model Principles
 
 ### Attributes/Labels Are First-Class
@@ -336,6 +424,53 @@ observability: new Observability({
 - Value length cap (128 chars)
 
 **Note:** Step labels in workflow mapping operations may need special handling - IDs/names can be generated and change on each run, causing cardinality explosion. This is flagged for deeper investigation during workflow implementation.
+
+---
+
+## Signal Processors
+
+Signal processors transform, filter, or enrich telemetry data before export. Rather than having separate processor systems for each signal type, Mastra uses a unified approach.
+
+### Processor Interface
+
+```typescript
+interface SignalProcessor {
+  name: string;
+
+  // Implement the signals you want to process
+  processSpan?(span: Span): Span | null;      // null = drop
+  processLog?(log: LogRecord): LogRecord | null;
+  processMetric?(metric: MetricEvent): MetricEvent | null;
+
+  shutdown(): Promise<void>;
+}
+```
+
+### Built-in Processors
+
+| Processor | Spans | Logs | Metrics | Description |
+|-----------|:-----:|:----:|:-------:|-------------|
+| **SensitiveDataFilter** | ✓ | ✓ | ✗ | Redacts passwords, tokens, API keys |
+
+### Configuration
+
+```typescript
+new Observability({
+  configs: {
+    default: {
+      exporters: [...],
+      processors: [
+        new SensitiveDataFilter(),
+        new CustomProcessor(),
+      ],
+    },
+  },
+})
+```
+
+Processors run once before data is sent to exporters, affecting all exporters uniformly.
+
+→ See [Tracing - Span Processors](./tracing.md#span-processors) for custom processor examples
 
 ---
 

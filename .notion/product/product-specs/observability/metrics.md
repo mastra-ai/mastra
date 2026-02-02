@@ -177,6 +177,32 @@ These metrics are automatically extracted from span lifecycle events when observ
 | `mastra_processor_duration_ms` | Histogram | processor, env | Span end |
 | `mastra_processor_errors_total` | Counter | processor, error_type, env | Error |
 
+### Score & Feedback Metrics
+
+| Metric | Type | Labels | Extracted On |
+|--------|------|--------|--------------|
+| `mastra_scores_total` | Counter | scorer, agent, workflow, env | Score added |
+| `mastra_score_value` | Histogram | scorer, agent, workflow, env | Score added |
+| `mastra_feedback_total` | Counter | feedback_type, source, agent, workflow, env | Feedback added |
+| `mastra_feedback_value` | Histogram | feedback_type, source, agent, workflow, env | Feedback added (numeric only) |
+
+**Range-based bucketing:**
+
+Scores and feedback include a `range` field that defines the expected min/max. Histogram buckets are generated dynamically based on this range:
+
+| Range | Generated Buckets |
+|-------|-------------------|
+| 0-1 (normalized) | `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]` |
+| 0-100 (percentage) | `[10, 20, 30, 40, 50, 60, 70, 80, 90, 100]` |
+| 1-5 (star rating) | `[1, 2, 3, 4, 5]` |
+| -1 to 1 (thumbs) | `[-1, 0, 1]` |
+| 1-10 (10-point) | `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]` |
+
+**Notes:**
+- Buckets are derived from the `range` field in score/feedback events
+- Scores/feedback with the same `scorer`/`feedbackType` should use consistent ranges
+- Text-only feedback increments `mastra_feedback_total` but not the histogram
+
 ---
 
 ## Naming Conventions
