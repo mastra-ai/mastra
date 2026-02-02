@@ -3,7 +3,7 @@ import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
-import type { EmbeddingModelId } from '../llm/model';
+import type { EmbeddingModelId, ModelRouterModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
 import type {
   InputProcessor,
@@ -786,15 +786,44 @@ https://mastra.ai/en/docs/memory/overview`,
    * @returns Serializable memory configuration
    */
   getConfig(): SerializedMemoryConfig {
+    const { generateTitle, workingMemory, threads, ...restConfig } = this.threadConfig;
+
     const config: SerializedMemoryConfig = {
       vector: this.vector?.id,
       options: {
-        ...this.threadConfig,
-        // Omit WorkingMemory and threads
-        workingMemory: undefined,
-        threads: undefined,
-      } as Omit<MemoryConfig, 'workingMemory' | 'threads'>,
+        ...restConfig,
+      },
     };
+
+    // Serialize generateTitle configuration
+    if (generateTitle !== undefined && config.options) {
+      if (typeof generateTitle === 'boolean') {
+        config.options.generateTitle = generateTitle;
+      } else if (typeof generateTitle === 'object' && generateTitle.model) {
+        const model = generateTitle.model;
+        // Extract ModelRouterModelId from various model configurations
+        let modelId: string | undefined;
+
+        if (typeof model === 'string') {
+          modelId = model;
+        } else if (typeof model === 'function') {
+          // Cannot serialize dynamic functions - skip
+          modelId = undefined;
+        } else if (model && typeof model === 'object') {
+          // Handle config objects with id field
+          if ('id' in model && typeof model.id === 'string') {
+            modelId = model.id;
+          }
+        }
+
+        if (modelId && config.options) {
+          config.options.generateTitle = {
+            model: modelId as ModelRouterModelId,
+            instructions: typeof generateTitle.instructions === 'string' ? generateTitle.instructions : undefined,
+          };
+        }
+      }
+    }
 
     if (this.embedder && 'id' in this.embedder) {
       config.embedder = this.embedder.id as EmbeddingModelId;

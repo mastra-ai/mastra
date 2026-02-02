@@ -4,6 +4,7 @@ import type { ZodObject } from 'zod';
 
 export type { MastraDBMessage } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
+import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage';
@@ -555,7 +556,26 @@ export type SerializedMemoryConfig = {
   /**
    * Configuration for memory behaviors, omitting WorkingMemory and threads
    */
-  options?: Omit<MemoryConfig, 'workingMemory' | 'threads'>;
+  options?: {
+    /** Treat memory as read-only (no new messages stored) */
+    readOnly?: boolean;
+
+    /** Number of recent messages to include, or false to disable */
+    lastMessages?: number | false;
+
+    /** Semantic recall configuration */
+    semanticRecall?: boolean | SemanticRecall;
+
+    /** Title generation configuration (serialized form) */
+    generateTitle?:
+      | boolean
+      | {
+          /** Model ID in format provider/model-name */
+          model: ModelRouterModelId;
+          /** Custom instructions for title generation */
+          instructions?: string;
+        };
+  };
 
   /**
    * Embedding model ID in the format "provider/model"

@@ -288,6 +288,8 @@ export class MastraEditor implements IMastraEditor {
     const agents = this.resolveStoredAgents(storedAgent.agents);
     const memory = this.resolveStoredMemory(storedAgent.memory);
     const scorers = this.resolveStoredScorers(storedAgent.scorers);
+    const inputProcessors = this.resolveStoredInputProcessors(storedAgent.inputProcessors);
+    const outputProcessors = this.resolveStoredOutputProcessors(storedAgent.outputProcessors);
 
     // Extract model configuration
     const modelConfig = storedAgent.model;
@@ -315,8 +317,8 @@ export class MastraEditor implements IMastraEditor {
       workflows,
       agents,
       scorers,
-      inputProcessors: this.resolveStoredInputProcessors(storedAgent.inputProcessors),
-      outputProcessors: this.resolveStoredOutputProcessors(storedAgent.outputProcessors),
+      inputProcessors,
+      outputProcessors,
       defaultOptions: {
         maxSteps: defaultOptions?.maxSteps,
         modelSettings: {

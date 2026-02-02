@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
@@ -270,19 +271,42 @@ export interface StorageModelConfig {
 
 /**
  * Default options stored in agent snapshots.
+ * Based on AgentExecutionOptionsBase but omitting non-serializable properties.
+ *
+ * Non-serializable properties that are omitted:
+ * - Callbacks (onStepFinish, onFinish, onChunk, onError, onAbort, prepareStep)
+ * - Runtime objects (requestContext, abortSignal, tracingContext)
+ * - Functions and processor instances (inputProcessors, outputProcessors, clientTools, scorers)
+ * - Tools/toolsets (contain functions, stored separately as references)
+ * - Complex types (context, memory, instructions, system, stopWhen)
  */
-export interface StorageDefaultOptions {
-  /** Maximum number of messages to include */
-  maxMessages?: number;
-  /** Maximum number of steps */
-  maxSteps?: number;
-  /** Input schema (JSON schema) */
-  inputSchema?: unknown;
-  /** Output schema (JSON schema) */
-  outputSchema?: unknown;
-  /** Additional options */
-  [key: string]: unknown;
-}
+export type StorageDefaultOptions = Omit<
+  AgentExecutionOptionsBase<any>,
+  // Callback functions
+  | 'onStepFinish'
+  | 'onFinish'
+  | 'onChunk'
+  | 'onError'
+  | 'onAbort'
+  | 'prepareStep'
+  // Runtime objects
+  | 'abortSignal'
+  | 'requestContext'
+  | 'tracingContext'
+  // Functions and processor instances
+  | 'inputProcessors'
+  | 'outputProcessors'
+  | 'clientTools'
+  | 'scorers'
+  | 'toolsets'
+  // Complex types
+  | 'context' // ModelMessage includes complex content types (images, files)
+  | 'memory' // AgentMemoryOption might contain runtime memory instances
+  | 'instructions' // SystemMessage can be arrays or complex message objects
+  | 'system' // SystemMessage can be arrays or complex message objects
+  | 'stopWhen' // StopCondition is a complex union type from AI SDK
+  | 'providerOptions' // ProviderOptions includes provider-specific types from external packages
+>;
 
 /**
  * Agent version snapshot type containing ALL agent configuration fields.

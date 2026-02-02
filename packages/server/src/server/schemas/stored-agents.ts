@@ -1,5 +1,7 @@
 import z from 'zod';
 import { paginationInfoSchema, createPagePaginationSchema } from './common';
+import { defaultOptionsSchema } from './default-options';
+import { serializedMemoryConfigSchema } from './memory-config';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -62,7 +64,7 @@ const snapshotConfigSchema = z.object({
     .passthrough()
     .describe('Model configuration (provider, name, and optional params)'),
   tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
-  defaultOptions: z.record(z.string(), z.unknown()).optional().describe('Default options for generate/stream calls'),
+  defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),
   workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
   agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
   integrationTools: z
@@ -71,7 +73,7 @@ const snapshotConfigSchema = z.object({
     .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
   inputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
   outputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
-  memory: z.record(z.string(), z.unknown()).optional().describe('Memory configuration object'),
+  memory: serializedMemoryConfigSchema.optional().describe('Memory configuration object (SerializedMemoryConfig)'),
   scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
 });
 
@@ -130,7 +132,7 @@ export const storedAgentSchema = z.object({
     .passthrough()
     .describe('Model configuration (provider, name, and optional params)'),
   tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
-  defaultOptions: z.record(z.string(), z.unknown()).optional().describe('Default options for generate/stream calls'),
+  defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),
   workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
   agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
   integrationTools: z
@@ -139,7 +141,7 @@ export const storedAgentSchema = z.object({
     .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
   inputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
   outputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
-  memory: z.record(z.string(), z.unknown()).optional().describe('Memory configuration object'),
+  memory: serializedMemoryConfigSchema.optional().describe('Memory configuration object (SerializedMemoryConfig)'),
   scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
 });
 
