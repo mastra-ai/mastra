@@ -23,6 +23,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   admin: ['*'],
   member: ['agents:read', 'workflows:*', 'tools:read', 'tools:execute'],
   viewer: ['agents:read', 'workflows:read'],
+  readonly: ['*:read'], // Action wildcard: read access to all resources
   _default: [],
 };
 
@@ -448,6 +449,83 @@ describe('RBAC Permission Enforcement', () => {
       for (const response of results) {
         expect(response.status).toBe(200);
       }
+    });
+  });
+
+  describe('Action Wildcard (*:action) Support', () => {
+    it('should allow readonly role (*:read) to access agents:read route', async () => {
+      const { app, adapter } = await setupAuthAdapter(context);
+      const testRoute = createProtectedRoute('agents:read');
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/api/test/agents-read', {
+          method: 'GET',
+          headers: { Authorization: 'Bearer readonly' },
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it('should allow readonly role (*:read) to access workflows:read route', async () => {
+      const { app, adapter } = await setupAuthAdapter(context);
+      const testRoute = createProtectedRoute('workflows:read');
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/api/test/workflows-read', {
+          method: 'GET',
+          headers: { Authorization: 'Bearer readonly' },
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it('should allow readonly role (*:read) to access tools:read route', async () => {
+      const { app, adapter } = await setupAuthAdapter(context);
+      const testRoute = createProtectedRoute('tools:read');
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/api/test/tools-read', {
+          method: 'GET',
+          headers: { Authorization: 'Bearer readonly' },
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it('should deny readonly role (*:read) access to agents:execute route', async () => {
+      const { app, adapter } = await setupAuthAdapter(context);
+      const testRoute = createProtectedRoute('agents:execute');
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/api/test/agents-execute', {
+          method: 'GET',
+          headers: { Authorization: 'Bearer readonly' },
+        }),
+      );
+
+      expect(response.status).toBe(403);
+    });
+
+    it('should deny readonly role (*:read) access to workflows:write route', async () => {
+      const { app, adapter } = await setupAuthAdapter(context);
+      const testRoute = createProtectedRoute('workflows:write');
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/api/test/workflows-write', {
+          method: 'GET',
+          headers: { Authorization: 'Bearer readonly' },
+        }),
+      );
+
+      expect(response.status).toBe(403);
     });
   });
 });

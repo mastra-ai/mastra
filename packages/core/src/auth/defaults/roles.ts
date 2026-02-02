@@ -224,6 +224,7 @@ export function resolvePermissions(roleIds: string[], roles: RoleDefinition[] = 
  * Examples:
  * - `*` matches everything
  * - `agents:*` matches `agents:read`, `agents:read:my-agent`
+ * - `*:read` matches `agents:read`, `workflows:read` (action across all resources)
  * - `agents:read` matches `agents:read`, `agents:read:my-agent`
  * - `agents:read:my-agent` matches only `agents:read:my-agent`
  * - `agents:*:my-agent` matches `agents:read:my-agent`, `agents:write:my-agent`
@@ -249,7 +250,21 @@ export function matchesPermission(userPermission: string, requiredPermission: st
   const [grantedResource, grantedAction, grantedId] = grantedParts;
   const [requiredResource, requiredAction, requiredId] = requiredParts;
 
-  // Resource must match
+  // Resource wildcard with specific action: "*:read" matches any resource with that action
+  if (grantedResource === '*') {
+    // Action must match for resource wildcards
+    if (grantedAction !== requiredAction) {
+      return false;
+    }
+    // If no granted ID, matches all instances
+    if (grantedId === undefined) {
+      return true;
+    }
+    // *:read:my-id would match agents:read:my-id (unusual but consistent)
+    return grantedId === requiredId;
+  }
+
+  // Resource must match (for non-wildcard resources)
   if (grantedResource !== requiredResource) {
     return false;
   }
