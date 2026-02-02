@@ -15,7 +15,6 @@ import { cn } from '@/lib/utils';
 import { useAgents } from '../../hooks/use-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import { useMemoryConfig } from '@/domains/memory/hooks';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 import { ModelPicker } from './model-picker';
@@ -89,7 +88,6 @@ export function AgentEditForm({
   const { data: tools, isLoading: toolsLoading } = useTools();
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
   const { data: agents, isLoading: agentsLoading } = useAgents();
-  const { data: memoryConfigsData, isLoading: memoryConfigsLoading } = useMemoryConfig();
   const { data: scorers, isLoading: scorersLoading } = useScorers();
 
   // Form setup
@@ -108,7 +106,6 @@ export function AgentEditForm({
       tools: initialValues?.tools ?? [],
       workflows: initialValues?.workflows ?? [],
       agents: initialValues?.agents ?? [],
-      memory: initialValues?.memory ?? '',
       scorers: initialValues?.scorers ?? {},
     },
   });
@@ -154,14 +151,6 @@ export function AgentEditForm({
     }));
   }, [availableAgents]);
 
-  // Transform memory configs data
-  // Note: MemoryConfig doesn't have an id, so we use memory IDs from a different source
-  // For now, return empty array as memory selection needs to be handled differently
-  const memoryOptions = React.useMemo(() => {
-    // TODO: Implement proper memory config listing
-    return [];
-  }, [memoryConfigsData]);
-
   // Transform scorers data
   const scorerOptions = React.useMemo(() => {
     if (!scorers) return [];
@@ -176,7 +165,7 @@ export function AgentEditForm({
     await onSubmit(values);
   };
 
-  const isLoading = toolsLoading || workflowsLoading || agentsLoading || memoryConfigsLoading || scorersLoading;
+  const isLoading = toolsLoading || workflowsLoading || agentsLoading || scorersLoading;
 
   return (
     <form ref={formRef} onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4 px-6">
@@ -335,29 +324,6 @@ export function AgentEditForm({
                   emptyMessage="No agents available"
                   disabled={agentsLoading}
                   error={errors.agents?.message}
-                />
-              )}
-            />
-
-            {/* Memory - Single Select */}
-            <Controller
-              name="memory"
-              control={control}
-              render={({ field }) => (
-                <MultiSelectPicker<{ id: string; name: string; description: string }>
-                  label="Memory"
-                  options={memoryOptions}
-                  selected={field.value ? [field.value] : []}
-                  onChange={selected => field.onChange(selected[0] || '')}
-                  getOptionId={option => option.id}
-                  getOptionLabel={option => option.name}
-                  getOptionDescription={option => option.description}
-                  placeholder="Select memory configuration..."
-                  searchPlaceholder="Search memory configs..."
-                  emptyMessage="No memory configurations registered"
-                  disabled={memoryConfigsLoading}
-                  singleSelect={true}
-                  error={errors.memory?.message}
                 />
               )}
             />

@@ -22,8 +22,7 @@ import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useAgents } from '../../hooks/use-agents';
 import { usePregenerateAgentConfig } from '../../hooks/use-pregenerate-agent-config';
 import type { AgentFormValues } from '../agent-edit/form-validation';
-import { ToolsSection, WorkflowsSection, AgentsSection, MemorySection, ScorersSection } from './sections';
-import { RevisionsTabContent } from './revisions';
+import { ToolsSection, WorkflowsSection, AgentsSection, ScorersSection } from './sections';
 
 interface AgentEditSidebarProps {
   form: UseFormReturn<AgentFormValues>;
@@ -166,7 +165,6 @@ export function AgentEditSidebar({
         <TabList className="flex-shrink-0">
           <Tab value="identity">Identity</Tab>
           <Tab value="capabilities">Capabilities</Tab>
-          <Tab value="revisions">Revisions</Tab>
         </TabList>
 
         <TabContent value="identity" className="flex-1 min-h-0">
@@ -261,14 +259,9 @@ export function AgentEditSidebar({
               <ToolsSection control={control} error={errors.tools?.message} />
               <WorkflowsSection control={control} error={errors.workflows?.message} />
               <AgentsSection control={control} error={errors.agents?.message} currentAgentId={currentAgentId} />
-              <MemorySection control={control} error={errors.memory?.message} />
               <ScorersSection control={control} />
             </div>
           </ScrollArea>
-        </TabContent>
-
-        <TabContent value="revisions" className="flex-1 min-h-0">
-          <RevisionsTabContent agentId={currentAgentId} currentInstructions={form.watch('instructions')} />
         </TabContent>
       </Tabs>
 

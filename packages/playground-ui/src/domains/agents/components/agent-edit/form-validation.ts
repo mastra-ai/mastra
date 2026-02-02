@@ -23,9 +23,7 @@ export const agentFormSchema = z.object({
   tools: z.array(z.string()).optional(),
   workflows: z.array(z.string()).optional(),
   agents: z.array(z.string()).optional(),
-  memory: z.string().optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
-  partials: z.record(z.string(), z.string()).optional(),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;
@@ -41,7 +39,6 @@ export function validateReferences(
   availableTools: string[],
   availableWorkflows: string[],
   availableAgents: string[],
-  availableMemory: string[],
 ): ValidationResult {
   const errors: Record<string, string> = {};
   const warnings: Record<string, string> = {};
@@ -62,11 +59,6 @@ export function validateReferences(
   const invalidAgents = values.agents?.filter(a => !availableAgents.includes(a)) || [];
   if (invalidAgents.length > 0) {
     errors.agents = `Unknown agents: ${invalidAgents.join(', ')}`;
-  }
-
-  // Check memory exists
-  if (values.memory && !availableMemory.includes(values.memory)) {
-    errors.memory = `Unknown memory config: ${values.memory}`;
   }
 
   return {

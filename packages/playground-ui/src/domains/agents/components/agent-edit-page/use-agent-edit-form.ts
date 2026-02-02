@@ -4,6 +4,7 @@ import { useForm, Resolver } from 'react-hook-form';
 
 import type { AgentFormValues } from '../agent-edit/form-validation';
 
+// Simple validation resolver without zod to avoid version conflicts
 const agentFormResolver: Resolver<AgentFormValues> = async values => {
   const errors: Record<string, { type: string; message: string }> = {};
 
@@ -52,9 +53,7 @@ export function useAgentEditForm(options: UseAgentEditFormOptions = {}) {
       tools: initialValues?.tools ?? [],
       workflows: initialValues?.workflows ?? [],
       agents: initialValues?.agents ?? [],
-      memory: initialValues?.memory ?? '',
       scorers: initialValues?.scorers ?? {},
-      partials: initialValues?.partials ?? {},
     },
   });
 

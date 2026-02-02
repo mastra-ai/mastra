@@ -1,7 +1,7 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, MatchDecorator } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import CodeMirror from '@uiw/react-codemirror';
@@ -14,38 +14,6 @@ import { CopyButton } from '@/ds/components/CopyButton';
 import { variableHighlight } from './variable-highlight-extension';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
-
-// Handlebars template highlighting for markdown
-const handlebarsDecoration = Decoration.mark({ class: 'cm-handlebars' });
-
-const handlebarsMatcher = new MatchDecorator({
-  regexp: /\{\{[^}]*\}\}/g,
-  decoration: () => handlebarsDecoration,
-});
-
-const handlebarsHighlighter = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-
-    constructor(view: EditorView) {
-      this.decorations = handlebarsMatcher.createDeco(view);
-    }
-
-    update(update: ViewUpdate) {
-      this.decorations = handlebarsMatcher.updateDeco(update, this.decorations);
-    }
-  },
-  {
-    decorations: v => v.decorations,
-  },
-);
-
-const handlebarsTheme = EditorView.baseTheme({
-  '.cm-handlebars': {
-    color: '#ffb86c', // Dracula orange for template expressions
-    fontWeight: '500',
-  },
-});
 
 export const useCodemirrorTheme = (): Extension => {
   return useMemo(() => {
@@ -90,17 +58,6 @@ export const useCodemirrorTheme = (): Extension => {
 
     return [baseTheme, customLineNumberTheme];
   }, []);
-};
-
-const getLanguageExtension = (language: CodeEditorLanguage): Extension[] => {
-  switch (language) {
-    case 'markdown':
-      // Include Handlebars highlighting for markdown to support template syntax
-      return [markdown({ base: markdownLanguage }), handlebarsHighlighter, handlebarsTheme];
-    case 'json':
-    default:
-      return [jsonLanguage];
-  }
 };
 
 export type CodeEditorProps = {
