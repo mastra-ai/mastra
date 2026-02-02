@@ -1,5 +1,53 @@
-@import './fonts.css';
-@import 'tailwindcss';
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/InterVF.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 400 900;
+}
+
+@font-face {
+  font-family: 'Inter Fallback';
+  src: local('Arial'), local('ArialMT');
+  ascent-override: 90.4365%;
+  descent-override: 22.518%;
+  line-gap-override: 0%;
+  size-adjust: 107.1194%;
+}
+
+/*
+@font-face {
+  font-family: 'Greed';
+  src: url('/fonts/GreedVF.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 400 900;
+}
+
+@font-face {
+  font-family: 'Greed Fallback';
+  src: local('Arial'), local('ArialMT');
+  ascent-override: 96.0022%;
+  descent-override: 20.3123%;
+  size-adjust: 93.5395%;
+  line-gap-override: 0%;
+}
+*/
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMonoVF.woff2') format('woff2');
+  font-display: swap;
+  font-weight: 400 800;
+}
+
+@font-face {
+  font-family: 'Geist Mono Fallback';
+  src: local('Courier New'), local('CourierNewPSMT');
+  ascent-override: 100.5164%;
+  descent-override: 29.5048%;
+  size-adjust: 99.9837%;
+}
+
+@import 'tailwindcss' source('./src/');
 @import 'tw-animate-css';
 
 @custom-variant dark (&:is([data-theme="dark"] *));

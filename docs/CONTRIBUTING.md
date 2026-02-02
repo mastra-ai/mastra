@@ -80,15 +80,15 @@ To begin developing locally, checkout this project from your machine.
 
 ```shell
 git clone git@github.com:mastra-ai/mastra.git
-cd mastra/docs
+pnpm install
 ```
 
-You can install and run the project locally using [npm](https://www.npmjs.com/). The docs use npm as their package manager (not pnpm like the rest of the monorepo). Run the following from your terminal in the `docs` directory:
+Run the following from your terminal in the `docs` directory:
 
 ```shell
-npm install
+cd docs
 
-npm run dev
+pnpm run dev
 ```
 
 This will start a local development server at `http://localhost:3000` where you can preview your changes.
@@ -112,13 +112,13 @@ Before submitting a PR, make sure to:
 1. **Build the docs locally** to check for any build errors:
 
    ```shell
-   npm run build
+   pnpm run build
    ```
 
 2. **Preview the production build**:
 
    ```shell
-   npm run serve
+   pnpm run serve
    ```
 
 3. **Check for broken links** - The build process will warn you about broken links.

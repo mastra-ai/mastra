@@ -308,6 +308,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/nova',
+          label: 'Nova',
+        },
+        {
+          type: 'doc',
           id: 'providers/novita-ai',
           label: 'NovitaAI',
         },
