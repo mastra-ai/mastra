@@ -1,3 +1,4 @@
+import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 import type { SerializedError } from '../error';
 import type { MastraDBMessage, StorageThreadType } from '../memory/types';
@@ -559,6 +560,20 @@ export interface Dataset {
   metadata?: Record<string, unknown>;
   /** Timestamp-based versioning (Langfuse pattern) */
   version: Date;
+  /**
+   * Optional JSON Schema for validating item.input
+   * - undefined: not configured (no validation)
+   * - null: explicitly disabled
+   * - JSONSchema7: validation enabled
+   */
+  inputSchema?: JSONSchema7 | null;
+  /**
+   * Optional JSON Schema for validating item.expectedOutput
+   * - undefined: not configured (no validation)
+   * - null: explicitly disabled
+   * - JSONSchema7: validation enabled
+   */
+  outputSchema?: JSONSchema7 | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -583,6 +598,10 @@ export interface CreateDatasetInput {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
+  /** Optional JSON Schema for validating item.input (null = explicitly disabled) */
+  inputSchema?: JSONSchema7 | null;
+  /** Optional JSON Schema for validating item.expectedOutput (null = explicitly disabled) */
+  outputSchema?: JSONSchema7 | null;
 }
 
 /** Input for updating a dataset */
@@ -591,6 +610,10 @@ export interface UpdateDatasetInput {
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
+  /** Optional JSON Schema for validating item.input (null = explicitly disabled) */
+  inputSchema?: JSONSchema7 | null;
+  /** Optional JSON Schema for validating item.expectedOutput (null = explicitly disabled) */
+  outputSchema?: JSONSchema7 | null;
 }
 
 /** Input for adding an item to a dataset */
