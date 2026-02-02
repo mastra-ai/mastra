@@ -59,7 +59,7 @@
     "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0",
     "use-stick-to-bottom": "^1.1.1",
-    "zod": "^4.1.12"
+    "valibot": "^1.2.0"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.9.2",
