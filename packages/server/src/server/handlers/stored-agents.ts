@@ -354,6 +354,12 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
 
 /**
  * POST /stored/agents/pregenerate - Generate agent configuration using AI
+ *
+ * This endpoint makes two LLM calls:
+ * 1. First call: Select appropriate capabilities (tools, workflows, agents, scorers) based on agent purpose
+ * 2. Second call: Generate detailed instructions knowing which capabilities were selected
+ *
+ * This two-step approach ensures instructions can reference and explain the selected tools.
  */
 export const PREGENERATE_AGENT_CONFIG_ROUTE = createRoute({
   method: 'POST',
@@ -383,29 +389,21 @@ export const PREGENERATE_AGENT_CONFIG_ROUTE = createRoute({
       // Build the model string in the format "provider/modelName"
       const modelString = `${model.provider}/${model.name}`;
 
-      // Define the output schema for structured generation
-      // All fields are required for JSON Schema compatibility - use nullable() for optional semantics
-      const outputSchema = z.object({
-        instructions: z
-          .string()
-          .describe('Comprehensive system instructions for the agent based on its name and description'),
-        tools: z
-          .array(z.string())
-          .nullable()
-          .describe('Array of tool IDs that would be useful for this agent, or null if none'),
-        workflows: z
-          .array(z.string())
-          .nullable()
-          .describe('Array of workflow IDs that would be useful for this agent, or null if none'),
-        agents: z
-          .array(z.string())
-          .nullable()
-          .describe('Array of sub-agent IDs that would be useful for this agent, or null if none'),
-        memory: z.string().nullable().describe('Memory configuration suggestion, or null if not needed'),
-        scorers: z.array(z.string()).nullable().describe('Array of scorer IDs for quality evaluation, or null if none'),
-      });
+      // Helper to create and configure an ephemeral agent
+      const createEphemeralAgent = (id: string, agentName: string, instructions: string) => {
+        const agent = new Agent({
+          id,
+          name: agentName,
+          instructions,
+          model: modelString,
+        });
+        if (mastra) {
+          agent.__registerMastra(mastra);
+        }
+        return agent;
+      };
 
-      // Build context about available resources for the prompt
+      // Build context about available resources
       const resourceContext: string[] = [];
 
       if (availableTools && availableTools.length > 0) {
@@ -432,52 +430,144 @@ export const PREGENERATE_AGENT_CONFIG_ROUTE = createRoute({
         );
       }
 
-      const systemPrompt = `You are an expert AI agent configuration assistant. Your task is to generate a comprehensive configuration for a new AI agent based on its name and description.
+      // ========================================================================
+      // STEP 1: Select appropriate capabilities
+      // ========================================================================
+      const capabilitiesSchema = z.object({
+        tools: z
+          .array(z.string())
+          .nullable()
+          .describe('Array of tool IDs that would be useful for this agent, or null if none'),
+        workflows: z
+          .array(z.string())
+          .nullable()
+          .describe('Array of workflow IDs that would be useful for this agent, or null if none'),
+        agents: z
+          .array(z.string())
+          .nullable()
+          .describe('Array of sub-agent IDs that would be useful for this agent, or null if none'),
+        memory: z.string().nullable().describe('Memory configuration suggestion, or null if not needed'),
+        scorers: z.array(z.string()).nullable().describe('Array of scorer IDs for quality evaluation, or null if none'),
+      });
+
+      const capabilitiesSystemPrompt = `You are an expert AI agent configuration assistant. Your task is to select the most appropriate capabilities for a new AI agent based on its name and description.
 
 Guidelines:
-1. Generate detailed, clear system instructions that define the agent's persona, capabilities, and behavior
-2. Only select tools/workflows/agents from the available lists - do not invent new ones
-3. Only select capabilities that are relevant to the agent's purpose
-4. For scorers, only suggest them if quality evaluation is relevant
-5. Be conservative - only suggest capabilities that clearly align with the agent's purpose
+1. Only select tools/workflows/agents/scorers from the available lists - do not invent new ones
+2. Only select capabilities that are clearly relevant to the agent's purpose
+3. Be conservative - quality over quantity
+4. For memory, suggest it if the agent needs to maintain conversation context
+5. For scorers, only suggest them if quality evaluation is relevant
+
+${resourceContext.length > 0 ? '\n' + resourceContext.join('\n\n') : '\nNo additional resources are available.'}`;
+
+      const capabilitiesUserPrompt = `Select appropriate capabilities for an AI agent with:
+- Name: ${name}
+- Description: ${description}
+
+Choose only the capabilities that directly support this agent's purpose.`;
+
+      const capabilitiesAgent = createEphemeralAgent(
+        'pregenerate-capabilities-agent',
+        'Capabilities Selector',
+        capabilitiesSystemPrompt,
+      );
+
+      const capabilitiesResult = await capabilitiesAgent.generate(capabilitiesUserPrompt, {
+        structuredOutput: {
+          schema: capabilitiesSchema,
+        },
+      });
+
+      const selectedCapabilities = capabilitiesResult.object;
+
+      // ========================================================================
+      // STEP 2: Generate instructions with knowledge of selected capabilities
+      // ========================================================================
+
+      // Build context about the selected capabilities for instructions generation
+      const selectedContext: string[] = [];
+
+      if (selectedCapabilities.tools && selectedCapabilities.tools.length > 0) {
+        const selectedToolDetails = availableTools
+          ?.filter(t => selectedCapabilities.tools!.includes(t.id))
+          .map(t => `- **${t.name}** (${t.id}): ${t.description || 'No description'}`)
+          .join('\n');
+        if (selectedToolDetails) {
+          selectedContext.push(`Selected Tools:\n${selectedToolDetails}`);
+        }
+      }
+
+      if (selectedCapabilities.workflows && selectedCapabilities.workflows.length > 0) {
+        const selectedWorkflowDetails = availableWorkflows
+          ?.filter(w => selectedCapabilities.workflows!.includes(w.id))
+          .map(w => `- **${w.name}** (${w.id}): ${w.description || 'No description'}`)
+          .join('\n');
+        if (selectedWorkflowDetails) {
+          selectedContext.push(`Selected Workflows:\n${selectedWorkflowDetails}`);
+        }
+      }
+
+      if (selectedCapabilities.agents && selectedCapabilities.agents.length > 0) {
+        const selectedAgentDetails = availableAgents
+          ?.filter(a => selectedCapabilities.agents!.includes(a.id))
+          .map(a => `- **${a.name}** (${a.id}): ${a.description || 'No description'}`)
+          .join('\n');
+        if (selectedAgentDetails) {
+          selectedContext.push(`Selected Sub-Agents:\n${selectedAgentDetails}`);
+        }
+      }
+
+      const instructionsSchema = z.object({
+        instructions: z.string().describe('Comprehensive system instructions for the agent'),
+      });
+
+      const instructionsSystemPrompt = `You are an expert AI agent configuration assistant. Your task is to write comprehensive system instructions for an AI agent.
+
+The agent has access to the following capabilities:
+${selectedContext.length > 0 ? selectedContext.join('\n\n') : 'No tools, workflows, or sub-agents selected.'}
+${selectedCapabilities.memory ? `\nMemory: ${selectedCapabilities.memory}` : ''}
 
 IMPORTANT - Instructions Format:
 - Write the instructions in well-formatted Markdown
 - Use headings (## Section) to organize different aspects
 - Use bullet points for lists of behaviors or rules
 - Include blank lines between sections for readability
-- Structure the instructions clearly with sections like: Role, Capabilities, Guidelines, Tone, etc.
+- Structure clearly with sections like: Role, Capabilities, Guidelines, Tone, etc.
+- IMPORTANT: Reference the specific tools/workflows available and explain when/how to use each one
+- If tools are available, include a section explaining each tool's purpose and when to use it`;
 
-${resourceContext.length > 0 ? '\n' + resourceContext.join('\n\n') : '\nNo additional resources are available.'}`;
-
-      const userPrompt = `Generate a configuration for an AI agent with:
+      const instructionsUserPrompt = `Write comprehensive system instructions for an AI agent with:
 - Name: ${name}
 - Description: ${description}
 
-Provide comprehensive system instructions and select appropriate capabilities from the available resources.`;
+The instructions should:
+1. Define the agent's role and persona
+2. Explain its capabilities and how to use the available tools/workflows
+3. Provide guidelines for behavior and responses
+4. Set the appropriate tone and communication style`;
 
-      // Create an ephemeral agent for this generation
-      const ephemeralAgent = new Agent({
-        id: 'pregenerate-config-agent',
-        name: 'Configuration Generator',
-        instructions: systemPrompt,
-        model: modelString,
-      });
+      const instructionsAgent = createEphemeralAgent(
+        'pregenerate-instructions-agent',
+        'Instructions Generator',
+        instructionsSystemPrompt,
+      );
 
-      // Inject mastra if available for model resolution
-      if (mastra) {
-        ephemeralAgent.__registerMastra(mastra);
-      }
-
-      // Generate the configuration using structured output
-      const result = await ephemeralAgent.generate(userPrompt, {
+      const instructionsResult = await instructionsAgent.generate(instructionsUserPrompt, {
         structuredOutput: {
-          schema: outputSchema,
+          schema: instructionsSchema,
         },
       });
 
-      // Return the generated configuration
-      return result.object;
+      // Combine results from both steps
+      return {
+        instructions: instructionsResult.object.instructions,
+        tools: selectedCapabilities.tools,
+        workflows: selectedCapabilities.workflows,
+        agents: selectedCapabilities.agents,
+        memory: selectedCapabilities.memory,
+        scorers: selectedCapabilities.scorers,
+      };
     } catch (error) {
       return handleError(error, 'Error pregenerating agent configuration');
     }
