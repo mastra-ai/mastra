@@ -166,8 +166,8 @@ export function validatePermissions(permissions: string[]): permissions is Permi
 }
 `;
 
-// Write to @mastra/core
-const outputPath = path.join(__dirname, '../../core/src/ee/interfaces/permissions.generated.ts');
+// Write to @mastra/core/auth
+const outputPath = path.join(__dirname, '../../core/src/auth/interfaces/permissions.generated.ts');
 fs.writeFileSync(outputPath, output);
 
 console.info(`✓ Generated ${outputPath}`);
