@@ -62,6 +62,7 @@ export function AgentEditMain({ form }: AgentEditMainProps) {
               language="markdown"
               showCopyButton={false}
               placeholder="Enter agent instructions..."
+              wordWrap
               className={cn('flex-1 min-h-[200px]', errors.instructions && 'border border-accent2')}
             />
           )}

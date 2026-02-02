@@ -61,6 +61,8 @@ import type {
   GetObservationalMemoryResponse,
   GetMemoryStatusResponse,
   ListWorkspacesResponse,
+  PregenerateAgentConfigParams,
+  PregenerateAgentConfigResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -821,6 +823,18 @@ export class MastraClient extends BaseResource {
    */
   public createStoredAgent(params: CreateStoredAgentParams): Promise<StoredAgentResponse> {
     return this.request('/stored/agents', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Pregenerates agent configuration using AI based on name, description, and available resources
+   * @param params - Agent identity info and available resources for configuration suggestion
+   * @returns Promise containing suggested configuration (instructions, tools, workflows, etc.)
+   */
+  public pregenerateAgentConfig(params: PregenerateAgentConfigParams): Promise<PregenerateAgentConfigResponse> {
+    return this.request('/stored/agents/pregenerate', {
       method: 'POST',
       body: params,
     });

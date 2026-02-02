@@ -112,6 +112,8 @@ export type CodeEditorProps = {
   highlightVariables?: boolean;
   language?: CodeEditorLanguage;
   placeholder?: string;
+  /** Enable word wrapping instead of horizontal scrolling */
+  wordWrap?: boolean;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
 export const CodeEditor = ({
@@ -123,6 +125,7 @@ export const CodeEditor = ({
   language = 'json',
   highlightVariables = false,
   placeholder,
+  wordWrap = false,
   ...props
 }: CodeEditorProps) => {
   const theme = useCodemirrorTheme();
@@ -146,7 +149,10 @@ export const CodeEditor = ({
   }, [language, highlightVariables]);
 
   return (
-    <div className={cn('rounded-md bg-surface3 p-1 font-mono relative border border-border1', className)} {...props}>
+    <div
+      className={cn('rounded-md bg-surface3 p-1 font-mono relative border border-border1 overflow-hidden', className)}
+      {...props}
+    >
       {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
       <CodeMirror
         value={formattedCode}
@@ -155,6 +161,8 @@ export const CodeEditor = ({
         onChange={onChange}
         aria-label="Code editor"
         placeholder={placeholder}
+        height="100%"
+        style={{ height: '100%' }}
       />
     </div>
   );
