@@ -5,9 +5,11 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover
 import { Button } from '@/ds/components/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Icon } from '@/ds/icons/Icon';
-import { MoreVertical, Pencil, Copy, Trash2, Play } from 'lucide-react';
+import { MoreVertical, Pencil, Copy, Trash2, Play, Settings } from 'lucide-react';
+import { SchemaSettingsDialog } from '../schema-settings';
 
 export interface DatasetHeaderProps {
+  datasetId: string;
   name?: string;
   description?: string;
   version?: Date | string;
@@ -16,6 +18,8 @@ export interface DatasetHeaderProps {
   onDeleteClick?: () => void;
   runTriggerSlot?: React.ReactNode;
   onRunClick?: () => void;
+  inputSchema?: Record<string, unknown> | null;
+  outputSchema?: Record<string, unknown> | null;
 }
 
 /**
@@ -34,13 +38,14 @@ function formatVersion(version: Date | string | undefined): string {
 interface HeaderActionsMenuProps {
   onEditClick?: () => void;
   onDeleteClick?: () => void;
+  onSchemaSettingsClick?: () => void;
 }
 
 /**
  * Three-dot actions menu for dataset header.
- * Options: Edit Dataset, Duplicate Dataset (disabled), Delete Dataset
+ * Options: Edit Dataset, Schema Settings, Duplicate Dataset (disabled), Delete Dataset
  */
-function HeaderActionsMenu({ onEditClick, onDeleteClick }: HeaderActionsMenuProps) {
+function HeaderActionsMenu({ onEditClick, onDeleteClick, onSchemaSettingsClick }: HeaderActionsMenuProps) {
   const [open, setOpen] = useState(false);
 
   const handleAction = (callback?: () => void) => {
@@ -68,6 +73,17 @@ function HeaderActionsMenu({ onEditClick, onDeleteClick }: HeaderActionsMenuProp
             </Icon>
             Edit Dataset
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2"
+            onClick={() => handleAction(onSchemaSettingsClick)}
+          >
+            <Icon>
+              <Settings className="w-4 h-4" />
+            </Icon>
+            Schema Settings
+          </Button>
           <Button variant="ghost" size="sm" className="w-full justify-start gap-2" disabled>
             <Icon>
               <Copy className="w-4 h-4" />
@@ -94,9 +110,10 @@ function HeaderActionsMenu({ onEditClick, onDeleteClick }: HeaderActionsMenuProp
 
 /**
  * Dataset header with name, description, actions menu, and run button.
- * Consolidates Edit/Delete into three-dot menu.
+ * Consolidates Edit/Delete/Schema Settings into three-dot menu.
  */
 export function DatasetHeader({
+  datasetId,
   name,
   description,
   version,
@@ -105,7 +122,11 @@ export function DatasetHeader({
   onDeleteClick,
   runTriggerSlot,
   onRunClick,
+  inputSchema,
+  outputSchema,
 }: DatasetHeaderProps) {
+  const [schemaDialogOpen, setSchemaDialogOpen] = useState(false);
+
   return (
     <header className="flex items-start justify-between py-6 gap-4">
       {/* Left side: Name + Description */}
@@ -133,8 +154,20 @@ export function DatasetHeader({
             Run Experiment
           </Button>
         ) : null}
-        <HeaderActionsMenu onEditClick={onEditClick} onDeleteClick={onDeleteClick} />
+        <HeaderActionsMenu
+          onEditClick={onEditClick}
+          onDeleteClick={onDeleteClick}
+          onSchemaSettingsClick={() => setSchemaDialogOpen(true)}
+        />
       </div>
+
+      <SchemaSettingsDialog
+        open={schemaDialogOpen}
+        onOpenChange={setSchemaDialogOpen}
+        datasetId={datasetId}
+        initialInputSchema={inputSchema}
+        initialOutputSchema={outputSchema}
+      />
     </header>
   );
 }
