@@ -54,14 +54,14 @@ export function AgentsSection({ control, error, currentAgentId }: AgentsSectionP
   return (
     <div className="rounded-md border border-border1 bg-surface2">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="flex items-center gap-1 w-full p-3">
+        <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3 border-b border-border1">
           <ChevronRight className="h-4 w-4 text-icon3" />
           <Section.Title icon={<AgentIcon className="text-accent1" />}>
             Sub-Agents{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
           </Section.Title>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="mx-3 mb-3 pl-3 border-l border-border1">
+          <div className="p-3">
             <Controller
               name="agents"
               control={control}
