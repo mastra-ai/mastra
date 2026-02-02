@@ -333,6 +333,19 @@ export interface WorkflowRunState {
   timestamp: number;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
+  /**
+   * Tracing context for span continuity during suspend/resume.
+   * Persisted when workflow suspends to enable linking resumed spans
+   * as children of the original suspended span.
+   */
+  tracingContext?: {
+    /** The trace ID for this workflow run */
+    traceId?: string;
+    /** The span ID of the workflow run span (for linking on resume) */
+    spanId?: string;
+    /** The parent span ID (if this is a nested workflow) */
+    parentSpanId?: string;
+  };
 }
 
 /**

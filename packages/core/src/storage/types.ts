@@ -413,6 +413,16 @@ export interface UpdateWorkflowStateOptions {
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
+  /**
+   * Tracing context for span continuity during suspend/resume.
+   * Persisted when workflow suspends to enable linking resumed spans
+   * as children of the original suspended span.
+   */
+  tracingContext?: {
+    traceId?: string;
+    spanId?: string;
+    parentSpanId?: string;
+  };
 }
 
 /**
