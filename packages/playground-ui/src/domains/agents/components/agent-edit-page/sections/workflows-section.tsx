@@ -41,82 +41,81 @@ export function WorkflowsSection({ control, error }: WorkflowsSectionProps) {
   };
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <Section
-        title={
-          <CollapsibleTrigger className="flex items-center gap-1 w-full">
-            <ChevronRight className="h-4 w-4 text-icon3" />
-            <Section.Title icon={<WorkflowIcon className="text-accent3" />}>
-              Workflows{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
-            </Section.Title>
-          </CollapsibleTrigger>
-        }
-      >
+    <div className="rounded-md border border-border1 bg-surface2">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CollapsibleTrigger className="flex items-center gap-1 w-full p-3">
+          <ChevronRight className="h-4 w-4 text-icon3" />
+          <Section.Title icon={<WorkflowIcon className="text-accent3" />}>
+            Workflows{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+          </Section.Title>
+        </CollapsibleTrigger>
         <CollapsibleContent>
-          <Controller
-            name="workflows"
-            control={control}
-            render={({ field }) => {
-              const selectedIds = Object.keys(field.value || {});
-              const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
+          <div className="mx-3 mb-3 pl-3 border-l border-border1">
+            <Controller
+              name="workflows"
+              control={control}
+              render={({ field }) => {
+                const selectedIds = Object.keys(field.value || {});
+                const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
 
-              const handleValueChange = (newIds: string[]) => {
-                const newValue: Record<string, EntityConfig> = {};
-                for (const id of newIds) {
-                  newValue[id] = field.value?.[id] || {
-                    description: getOriginalDescription(id),
-                  };
-                }
-                field.onChange(newValue);
-              };
+                const handleValueChange = (newIds: string[]) => {
+                  const newValue: Record<string, EntityConfig> = {};
+                  for (const id of newIds) {
+                    newValue[id] = field.value?.[id] || {
+                      description: getOriginalDescription(id),
+                    };
+                  }
+                  field.onChange(newValue);
+                };
 
-              const handleDescriptionChange = (workflowId: string, description: string) => {
-                field.onChange({
-                  ...field.value,
-                  [workflowId]: { ...field.value?.[workflowId], description },
-                });
-              };
+                const handleDescriptionChange = (workflowId: string, description: string) => {
+                  field.onChange({
+                    ...field.value,
+                    [workflowId]: { ...field.value?.[workflowId], description },
+                  });
+                };
 
-              const handleRemove = (workflowId: string) => {
-                const newValue = { ...field.value };
-                delete newValue[workflowId];
-                field.onChange(newValue);
-              };
+                const handleRemove = (workflowId: string) => {
+                  const newValue = { ...field.value };
+                  delete newValue[workflowId];
+                  field.onChange(newValue);
+                };
 
-              return (
-                <div className="flex flex-col gap-2">
-                  <MultiCombobox
-                    options={options}
-                    value={selectedIds}
-                    onValueChange={handleValueChange}
-                    placeholder="Select workflows..."
-                    searchPlaceholder="Search workflows..."
-                    emptyText="No workflows available"
-                    disabled={isLoading}
-                    error={error}
-                    variant="light"
-                  />
-                  {selectedOptions.length > 0 && (
-                    <div className="flex flex-col gap-2 mt-1">
-                      {selectedOptions.map(workflow => (
-                        <EntityAccordionItem
-                          key={workflow.value}
-                          id={workflow.value}
-                          name={workflow.label}
-                          icon={<WorkflowIcon className="text-accent3" />}
-                          description={field.value?.[workflow.value]?.description || ''}
-                          onDescriptionChange={desc => handleDescriptionChange(workflow.value, desc)}
-                          onRemove={() => handleRemove(workflow.value)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            }}
-          />
+                return (
+                  <div className="flex flex-col gap-2">
+                    <MultiCombobox
+                      options={options}
+                      value={selectedIds}
+                      onValueChange={handleValueChange}
+                      placeholder="Select workflows..."
+                      searchPlaceholder="Search workflows..."
+                      emptyText="No workflows available"
+                      disabled={isLoading}
+                      error={error}
+                      variant="light"
+                    />
+                    {selectedOptions.length > 0 && (
+                      <div className="flex flex-col gap-3 mt-2">
+                        {selectedOptions.map(workflow => (
+                          <EntityAccordionItem
+                            key={workflow.value}
+                            id={workflow.value}
+                            name={workflow.label}
+                            icon={<WorkflowIcon className="text-accent3" />}
+                            description={field.value?.[workflow.value]?.description || ''}
+                            onDescriptionChange={desc => handleDescriptionChange(workflow.value, desc)}
+                            onRemove={() => handleRemove(workflow.value)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }}
+            />
+          </div>
         </CollapsibleContent>
-      </Section>
-    </Collapsible>
+      </Collapsible>
+    </div>
   );
 }

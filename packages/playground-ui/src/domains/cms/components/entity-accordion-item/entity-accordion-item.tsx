@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react';
 
 import { IconButton } from '@/ds/components/IconButton';
 import { Textarea } from '@/ds/components/Textarea';
+import { Icon } from '@/ds/icons';
 
 export interface EntityAccordionItemProps {
   id: string;
@@ -23,10 +24,10 @@ export function EntityAccordionItem({
   onRemove,
 }: EntityAccordionItemProps) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="[&>svg]:w-[1em] [&>svg]:h-[1em]">{icon}</span>
+          <Icon size="sm">{icon}</Icon>
           <span className="text-xs font-medium text-icon6">{name}</span>
         </div>
         <IconButton
@@ -44,7 +45,7 @@ export function EntityAccordionItem({
         value={description}
         onChange={e => onDescriptionChange(e.target.value)}
         placeholder="Custom description for this entity..."
-        className="min-h-[60px] text-sm bg-surface3"
+        className="min-h-[40px] text-xs bg-surface3 border-dashed px-2 py-1"
         size="sm"
       />
     </div>

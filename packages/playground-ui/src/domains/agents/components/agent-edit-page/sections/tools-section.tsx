@@ -41,82 +41,81 @@ export function ToolsSection({ control, error }: ToolsSectionProps) {
   };
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <Section
-        title={
-          <CollapsibleTrigger className="flex items-center gap-1 w-full">
-            <ChevronRight className="h-4 w-4 text-icon3" />
-            <Section.Title icon={<ToolsIcon className="text-accent6" />}>
-              Tools{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
-            </Section.Title>
-          </CollapsibleTrigger>
-        }
-      >
+    <div className="rounded-md border border-border1 bg-surface2">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CollapsibleTrigger className="flex items-center gap-1 w-full p-3">
+          <ChevronRight className="h-4 w-4 text-icon3" />
+          <Section.Title icon={<ToolsIcon className="text-accent6" />}>
+            Tools{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+          </Section.Title>
+        </CollapsibleTrigger>
         <CollapsibleContent>
-          <Controller
-            name="tools"
-            control={control}
-            render={({ field }) => {
-              const selectedIds = Object.keys(field.value || {});
-              const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
+          <div className="mx-3 mb-3 pl-3 border-l border-border1">
+            <Controller
+              name="tools"
+              control={control}
+              render={({ field }) => {
+                const selectedIds = Object.keys(field.value || {});
+                const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
 
-              const handleValueChange = (newIds: string[]) => {
-                const newValue: Record<string, EntityConfig> = {};
-                for (const id of newIds) {
-                  newValue[id] = field.value?.[id] || {
-                    description: getOriginalDescription(id),
-                  };
-                }
-                field.onChange(newValue);
-              };
+                const handleValueChange = (newIds: string[]) => {
+                  const newValue: Record<string, EntityConfig> = {};
+                  for (const id of newIds) {
+                    newValue[id] = field.value?.[id] || {
+                      description: getOriginalDescription(id),
+                    };
+                  }
+                  field.onChange(newValue);
+                };
 
-              const handleDescriptionChange = (toolId: string, description: string) => {
-                field.onChange({
-                  ...field.value,
-                  [toolId]: { ...field.value?.[toolId], description },
-                });
-              };
+                const handleDescriptionChange = (toolId: string, description: string) => {
+                  field.onChange({
+                    ...field.value,
+                    [toolId]: { ...field.value?.[toolId], description },
+                  });
+                };
 
-              const handleRemove = (toolId: string) => {
-                const newValue = { ...field.value };
-                delete newValue[toolId];
-                field.onChange(newValue);
-              };
+                const handleRemove = (toolId: string) => {
+                  const newValue = { ...field.value };
+                  delete newValue[toolId];
+                  field.onChange(newValue);
+                };
 
-              return (
-                <div className="flex flex-col gap-2">
-                  <MultiCombobox
-                    options={options}
-                    value={selectedIds}
-                    onValueChange={handleValueChange}
-                    placeholder="Select tools..."
-                    searchPlaceholder="Search tools..."
-                    emptyText="No tools available"
-                    disabled={isLoading}
-                    error={error}
-                    variant="light"
-                  />
-                  {selectedOptions.length > 0 && (
-                    <div className="flex flex-col gap-2 mt-1">
-                      {selectedOptions.map(tool => (
-                        <EntityAccordionItem
-                          key={tool.value}
-                          id={tool.value}
-                          name={tool.label}
-                          icon={<ToolsIcon className="text-accent6" />}
-                          description={field.value?.[tool.value]?.description || ''}
-                          onDescriptionChange={desc => handleDescriptionChange(tool.value, desc)}
-                          onRemove={() => handleRemove(tool.value)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            }}
-          />
+                return (
+                  <div className="flex flex-col gap-2">
+                    <MultiCombobox
+                      options={options}
+                      value={selectedIds}
+                      onValueChange={handleValueChange}
+                      placeholder="Select tools..."
+                      searchPlaceholder="Search tools..."
+                      emptyText="No tools available"
+                      disabled={isLoading}
+                      error={error}
+                      variant="light"
+                    />
+                    {selectedOptions.length > 0 && (
+                      <div className="flex flex-col gap-3 mt-2">
+                        {selectedOptions.map(tool => (
+                          <EntityAccordionItem
+                            key={tool.value}
+                            id={tool.value}
+                            name={tool.label}
+                            icon={<ToolsIcon className="text-accent6" />}
+                            description={field.value?.[tool.value]?.description || ''}
+                            onDescriptionChange={desc => handleDescriptionChange(tool.value, desc)}
+                            onRemove={() => handleRemove(tool.value)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }}
+            />
+          </div>
         </CollapsibleContent>
-      </Section>
-    </Collapsible>
+      </Collapsible>
+    </div>
   );
 }
