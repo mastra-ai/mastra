@@ -42,11 +42,11 @@ export function WorkflowSchemaImport({ schemaType, onImport }: WorkflowSchemaImp
         </SelectTrigger>
         <SelectContent>
           {workflowsLoading ? (
-            <SelectItem value="" disabled>
+            <SelectItem value="__loading__" disabled>
               Loading...
             </SelectItem>
           ) : workflowOptions.length === 0 ? (
-            <SelectItem value="" disabled>
+            <SelectItem value="__empty__" disabled>
               No workflows available
             </SelectItem>
           ) : (
