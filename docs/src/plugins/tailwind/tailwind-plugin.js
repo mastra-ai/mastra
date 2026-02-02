@@ -3,7 +3,7 @@ module.exports = function tailwindPlugin(context, options) {
     name: 'tailwind-plugin',
     configurePostCss(postcssOptions) {
       const tailwind = require('@tailwindcss/postcss')
-      postcssOptions.plugins = [tailwind, ...(postcssOptions.plugins ?? [])]
+      postcssOptions.plugins = [tailwind, ...(postcssOptions.plugins ? postcssOptions.plugins : [])]
       return postcssOptions
     },
     },
