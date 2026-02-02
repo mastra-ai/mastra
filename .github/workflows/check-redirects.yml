@@ -95,19 +95,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          run_install: false
-
-      - name: Setup Node.js 22.x
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22.13.0
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Run validate-redirects
         run: node .github/scripts/validate-redirects.js
