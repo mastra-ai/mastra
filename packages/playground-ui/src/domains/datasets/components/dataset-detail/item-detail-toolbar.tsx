@@ -25,7 +25,7 @@ export function ItemDetailToolbar({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 rounded-lg bg-surface4">
+    <div className="flex items-center justify-between">
       {/* Left side: Navigation */}
       <div className="flex items-center gap-[2px]">
         <Button

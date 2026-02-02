@@ -48,7 +48,7 @@ export function ItemsMasterDetail({
   return (
     <div
       className={cn(
-        'grid h-full overflow-hidden gap-5 ItemsMasterDetail',
+        'grid h-full overflow-hidden gap-10',
         transitions.allSlow, // 300ms transition
         selectedItemId ? 'grid-cols-[1fr_auto]' : 'grid-cols-1',
       )}

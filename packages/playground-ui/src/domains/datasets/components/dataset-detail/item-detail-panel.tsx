@@ -148,7 +148,7 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
 
   return (
     <>
-      <div className="grid grid-rows-[auto_1fr] h-full gap-4">
+      <div className="grid grid-rows-[auto_1fr] h-full gap-8">
         <ItemDetailToolbar
           onPrevious={toPreviousItem()}
           onNext={toNextItem()}
@@ -158,7 +158,7 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
           isEditing={isEditing}
         />
 
-        <div className="flex-1 overflow-y-auto p-4 border-2 border-border1 rounded-lg">
+        <div className="flex-1 overflow-y-auto rounded-lg">
           {isEditing ? (
             <EditModeContent
               inputValue={inputValue}

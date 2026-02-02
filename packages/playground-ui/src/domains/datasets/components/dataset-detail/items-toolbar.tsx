@@ -117,7 +117,7 @@ export function ItemsToolbar({
 
   if (isSelectionActive) {
     return (
-      <div className="flex justify-between px-4 py-3 gap-2 bg-surface4 rounded-lg">
+      <div className="flex justify-between">
         <span className="text-sm text-neutral3 flex items-center">{selectedCount} selected</span>
         <div>
           <Button variant="primary" size="sm" disabled={selectedCount === 0} onClick={onExecuteAction}>
@@ -134,7 +134,7 @@ export function ItemsToolbar({
   }
 
   return (
-    <div className="flex justify-end px-4 py-3 gap-3 bg-surface4 rounded-lg">
+    <div className="flex justify-end gap-3">
       <div className="flex items-center gap-[.1rem]">
         <Button variant="secondary" size="default" hasRightSibling={true} onClick={onAddClick}>
           <Plus />

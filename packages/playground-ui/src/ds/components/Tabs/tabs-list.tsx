@@ -20,10 +20,10 @@ export const TabList = ({ children, variant = 'default', className }: TabListPro
             '[&>button]:py-2 [&>button]:px-6 [&>button]:font-normal [&>button]:text-neutral3 [&>button]:flex-1 [&>button]:border-b [&>button]:border-border1':
               variant === 'default',
             [`[&>button]:${transitions.colors} [&>button]:hover:text-neutral4`]: variant === 'default',
-            '[&>button[data-state=active]]:text-neutral5 [&>button[data-state=active]]:border-accent1':
+            '[&>button[data-state=active]]:text-neutral5 [&>button[data-state=active]]:border-white/50':
               variant === 'default',
             // variant: buttons
-            'border border-border1 flex justify-stretch rounded-md overflow-hidden text-ui-md min-h-[2.5rem]':
+            'border border-border1 flex justify-stretch rounded-md overflow-hidden text-ui-lg min-h-[2.5rem]':
               variant === 'buttons',
             [`[&>button]:flex-1 [&>button]:py-2 [&>button]:px-4 [&>button]:text-neutral3 [&>button]:${transitions.all}`]:
               variant === 'buttons',

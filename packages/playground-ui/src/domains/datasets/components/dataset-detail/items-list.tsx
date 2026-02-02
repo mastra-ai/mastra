@@ -127,7 +127,7 @@ export function ItemsList({
   };
 
   return (
-    <div className="grid grid-rows-[auto_1fr] gap-4 h-full">
+    <div className="grid grid-rows-[auto_1fr] gap-8 h-full">
       <ItemsToolbar
         onAddClick={onAddClick}
         onImportClick={onImportClick ?? (() => {})}
