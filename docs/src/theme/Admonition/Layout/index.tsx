@@ -56,7 +56,11 @@ function AdmonitionIconType({ title, type }: Pick<Props, 'title' | 'type'>) {
   return (
     <div className="flex items-center gap-1.5">
       <span className="size-3 shrink-0">{TypeToEmoji[type]}</span>
-      {title ? <span className="font-mono text-sm font-bold tracking-tight capitalize">{title}</span> : null}
+      {title ? (
+        <span className="font-mono text-sm font-bold tracking-tight capitalize" data-testid="admonition-title">
+          {title}
+        </span>
+      ) : null}
     </div>
   )
 }
