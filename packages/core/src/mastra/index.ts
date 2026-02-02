@@ -819,7 +819,11 @@ export class Mastra<
    * mastra.addAgent(newAgent, 'customKey'); // Uses custom key
    * ```
    */
-  public addAgent<A extends Agent | ToolLoopAgentLike>(agent: A, key?: string): void {
+  public addAgent<A extends Agent | ToolLoopAgentLike>(
+    agent: A,
+    key?: string,
+    options?: { source?: 'code' | 'stored' },
+  ): void {
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
@@ -848,6 +852,12 @@ export class Mastra<
       tts: this.#tts,
       vectors: this.#vectors,
     });
+
+    // Set the source if provided
+    if (options?.source) {
+      mastraAgent.source = options.source;
+    }
+
     agents[agentKey] = mastraAgent;
 
     // Register configured processor workflows from the agent

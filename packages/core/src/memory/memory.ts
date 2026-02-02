@@ -825,8 +825,8 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    if (this.embedder && 'id' in this.embedder) {
-      config.embedder = this.embedder.id as EmbeddingModelId;
+    if (this.embedder) {
+      config.embedder = this.embedder as unknown as EmbeddingModelId;
     }
 
     if (this.embedderOptions) {

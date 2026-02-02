@@ -113,7 +113,9 @@ export class MastraEditor implements IMastraEditor {
         return null;
       }
 
-      const resolvedAgent: StorageResolvedAgentType = { ...agentRecord, ...snapshotConfig };
+      // When retrieving a specific version, we should not use the activeVersionId from the agent record
+      const { activeVersionId: _activeVersionId, ...agentRecordWithoutActiveVersion } = agentRecord;
+      const resolvedAgent: StorageResolvedAgentType = { ...agentRecordWithoutActiveVersion, ...snapshotConfig };
       if (options?.returnRaw) {
         return resolvedAgent;
       }
@@ -143,7 +145,9 @@ export class MastraEditor implements IMastraEditor {
         return null;
       }
 
-      const resolvedAgent: StorageResolvedAgentType = { ...agentRecord, ...snapshotConfig };
+      // When retrieving a specific version, we should not use the activeVersionId from the agent record
+      const { activeVersionId: _activeVersionId, ...agentRecordWithoutActiveVersion } = agentRecord;
+      const resolvedAgent: StorageResolvedAgentType = { ...agentRecordWithoutActiveVersion, ...snapshotConfig };
       if (options?.returnRaw) {
         return resolvedAgent;
       }
@@ -287,6 +291,7 @@ export class MastraEditor implements IMastraEditor {
     const workflows = this.resolveStoredWorkflows(storedAgent.workflows);
     const agents = this.resolveStoredAgents(storedAgent.agents);
     const memory = this.resolveStoredMemory(storedAgent.memory);
+    console.log(`[createAgentFromStoredConfig] Resolved memory: ${memory ? 'Memory instance created' : 'No memory'} for agent \"${storedAgent.id}\"`, { memory });
     const scorers = this.resolveStoredScorers(storedAgent.scorers);
     const inputProcessors = this.resolveStoredInputProcessors(storedAgent.inputProcessors);
     const outputProcessors = this.resolveStoredOutputProcessors(storedAgent.outputProcessors);
@@ -317,6 +322,7 @@ export class MastraEditor implements IMastraEditor {
       workflows,
       agents,
       scorers,
+      mastra: this.mastra,
       inputProcessors,
       outputProcessors,
       defaultOptions: {
@@ -331,21 +337,9 @@ export class MastraEditor implements IMastraEditor {
       },
     });
 
-    // Register the agent with Mastra
-    agent.__setLogger(this.mastra.getLogger());
-    agent.__registerMastra(this.mastra);
-    agent.__registerPrimitives({
-      logger: this.mastra.getLogger(),
-      storage: this.mastra.getStorage(),
-      agents: this.mastra.listAgents(),
-      tts: this.mastra.getTTS(),
-      vectors: this.mastra.listVectors(),
-    });
+    this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
 
-    // Mark the agent as coming from storage (used by UI to show edit button)
-    agent.source = 'stored';
-
-    this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);
+    this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent \"${storedAgent.id}\"`);
 
     return agent;
   }
@@ -445,7 +439,9 @@ export class MastraEditor implements IMastraEditor {
    * Uses @mastra/memory Memory class to instantiate from serialized config.
    */
   private resolveStoredMemory(memoryConfig?: SerializedMemoryConfig): MastraMemory | undefined {
+    this.logger?.debug(`[resolveStoredMemory] Called with config:`, { memoryConfig });
     if (!memoryConfig) {
+      this.logger?.debug(`[resolveStoredMemory] No memory config provided`);
       return undefined;
     }
 

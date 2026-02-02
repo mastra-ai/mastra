@@ -181,6 +181,7 @@ export class Agent<
 
     this.name = config.name;
     this.id = config.id ?? config.name;
+    this.source = 'code';
 
     this.#instructions = config.instructions;
     this.#description = config.description;
