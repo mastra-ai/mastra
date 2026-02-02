@@ -244,10 +244,21 @@ export class EnsureFinalResponseProcessor implements Processor {
     this.maxSteps = maxSteps;
   }
 
-  async processInputStep({ stepNumber }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
-    // On the last step, prevent tool calls to guarantee a text response
+  async processInputStep({ stepNumber, systemMessages }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // On the last step, prevent tool calls and instruct the LLM to summarize
     if (stepNumber === this.maxSteps - 1) {
-      return { tools: {}, toolChoice: "none" };
+      return {
+        tools: {},
+        toolChoice: "none",
+        systemMessages: [
+          ...systemMessages,
+          {
+            role: "system",
+            content:
+              "You have reached the maximum number of steps. Summarize your progress so far and provide a best-effort response. If the task is incomplete, clearly indicate what remains to be done.",
+          },
+        ],
+      };
     }
     return {};
   }
@@ -274,7 +285,7 @@ const agent = new Agent({
 const result = await agent.generate("Your prompt", { maxSteps: MAX_STEPS });
 ```
 
-This ensures that on the final allowed step (step 4 when `maxSteps` is 5, since steps are 0-indexed), the LLM generates text instead of attempting another tool call.
+This ensures that on the final allowed step (step 4 when `maxSteps` is 5, since steps are 0-indexed), the LLM generates a summary instead of attempting another tool call, and clearly indicates if the task is incomplete.
 
 #### Using prepareStep callback
 
