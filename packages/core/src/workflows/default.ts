@@ -327,6 +327,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       type: SpanType;
       input?: unknown;
       attributes?: Record<string, unknown>;
+      tracingPolicy?: TracingPolicy;
     };
     executionContext: ExecutionContext;
   }): Promise<Span<SpanType> | undefined> {
@@ -489,10 +490,30 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | unknown,
   ): Promise<TOutput> {
+    // Strip nestedRunId from metadata (internal tracking for nested workflow retrieval)
+    const cleanStepResults: Record<string, StepResult<any, any, any, any>> = {};
+    for (const [stepId, stepResult] of Object.entries(stepResults)) {
+      if (stepResult && typeof stepResult === 'object' && !Array.isArray(stepResult) && 'metadata' in stepResult) {
+        const { metadata, ...rest } = stepResult as any;
+        if (metadata) {
+          const { nestedRunId: _nestedRunId, ...userMetadata } = metadata;
+          if (Object.keys(userMetadata).length > 0) {
+            cleanStepResults[stepId] = { ...rest, metadata: userMetadata };
+          } else {
+            cleanStepResults[stepId] = rest;
+          }
+        } else {
+          cleanStepResults[stepId] = stepResult;
+        }
+      } else {
+        cleanStepResults[stepId] = stepResult;
+      }
+    }
+
     const base: FormattedWorkflowResult = {
       status: lastOutput.status,
-      steps: stepResults,
-      input: stepResults.input,
+      steps: cleanStepResults,
+      input: cleanStepResults.input,
     };
 
     if (lastOutput.status === 'success') {

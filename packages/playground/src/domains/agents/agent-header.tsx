@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from 'react-router';
+import { Link } from 'react-router';
 
 import {
   Header,
@@ -6,25 +6,15 @@ import {
   Crumb,
   HeaderGroup,
   Button,
-  DividerIcon,
   HeaderAction,
   Icon,
   DocsIcon,
   AgentIcon,
   AgentCombobox,
 } from '@mastra/playground-ui';
+import { EyeIcon } from 'lucide-react';
 
-export function AgentHeader({
-  agentId,
-  threadId,
-}: {
-  agentName: string;
-  agentId: string;
-  threadId?: string;
-}) {
-  const [searchParams] = useSearchParams();
-  const isNewThread = searchParams.get('new') === 'true';
-
+export function AgentHeader({ agentId }: { agentId: string }) {
   return (
     <Header>
       <Breadcrumb>
@@ -40,24 +30,12 @@ export function AgentHeader({
       </Breadcrumb>
 
       <HeaderGroup>
-        <Button as={Link} to={`/agents/${agentId}/chat`}>
-          Chat
+        <Button as={Link} to={`/observability?entity=${agentId}`}>
+          <Icon>
+            <EyeIcon />
+          </Icon>
+          Traces
         </Button>
-
-        <DividerIcon />
-
-        <div className="flex items-center gap-1">
-          <div className="text-ui-md flex items-center text-neutral2 pr-1 pl-3">Traces by </div>
-          <Button as={Link} to={`/observability?entity=${agentId}`}>
-            Agent
-          </Button>
-
-          {threadId && !isNewThread && (
-            <Button as={Link} to={`/observability?threadId=${threadId}`}>
-              Thread
-            </Button>
-          )}
-        </div>
       </HeaderGroup>
 
       <HeaderAction>

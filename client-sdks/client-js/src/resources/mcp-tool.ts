@@ -23,7 +23,9 @@ export class MCPTool extends BaseResource {
    * @returns Promise containing the tool's information (name, description, schema).
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<McpToolInfo> {
-    return this.request(`/api/mcp/${this.serverId}/tools/${this.toolId}${requestContextQueryString(requestContext)}`);
+    return this.request(
+      `/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}${requestContextQueryString(requestContext)}`,
+    );
   }
 
   /**
@@ -34,15 +36,13 @@ export class MCPTool extends BaseResource {
   execute(params: { data?: any; requestContext?: RequestContext }): Promise<any> {
     const body: any = {};
     if (params.data !== undefined) body.data = params.data;
-    // If none of data, args the body might be empty or just contain requestContext.
-    // The handler will look for these, so an empty args object might be appropriate if that's the intent.
-    // else body.data = {}; // Or let it be empty if no specific input fields are used
+    // If data is not provided, the body might be empty or contain only requestContext.
 
     if (params.requestContext !== undefined) {
       body.requestContext = params.requestContext;
     }
 
-    return this.request(`/api/mcp/${this.serverId}/tools/${this.toolId}/execute`, {
+    return this.request(`/mcp/${encodeURIComponent(this.serverId)}/tools/${encodeURIComponent(this.toolId)}/execute`, {
       method: 'POST',
       body: Object.keys(body).length > 0 ? body : undefined,
     });

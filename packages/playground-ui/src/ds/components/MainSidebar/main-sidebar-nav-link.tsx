@@ -73,7 +73,7 @@ export function MainSidebarNavLink({
                   {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
                 </Link>
               </TooltipTrigger>
-              <TooltipContent side="right" align="center" className="bg-border1 text-neutral6 ml-4">
+              <TooltipContent side="right" align="center" className="ml-4">
                 {link.tooltipMsg ? (
                   <>
                     {isCollapsed && `${link.name} | `} {link.tooltipMsg}

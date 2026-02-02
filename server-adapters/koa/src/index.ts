@@ -146,6 +146,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Koa's ctx.query is ParsedUrlQuery which is Record<string, string | string[]>
     const queryParams = normalizeQueryParams((ctx.query || {}) as Record<string, unknown>);
     let body: unknown;
+    let bodyParseError: { message: string } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
       const contentType = ctx.headers['content-type'] || '';
@@ -160,13 +161,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
           }
+          bodyParseError = {
+            message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+          };
         }
       } else {
         body = ctx.request.body;
       }
     }
 
-    return { urlParams, queryParams, body };
+    return { urlParams, queryParams, body, bodyParseError };
   }
 
   /**
@@ -229,7 +233,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     });
   }
 
-  async sendResponse(route: ServerRoute, ctx: Context, result: unknown): Promise<void> {
+  async sendResponse(route: ServerRoute, ctx: Context, result: unknown, prefix?: string): Promise<void> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
     if (route.responseType === 'json') {
       ctx.body = result;
     } else if (route.responseType === 'stream') {
@@ -265,7 +271,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // Tell Koa we're handling the response ourselves
       ctx.respond = false;
 
-      const { server, httpPath } = result as MCPHttpTransportResult;
+      const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
 
       try {
         // Attach parsed body to raw request so MCP server's readJsonBody can use it
@@ -274,11 +280,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           rawReq.body = ctx.request.body;
         }
 
+        // Merge class-level mcpOptions with route-specific options (route takes precedence)
+        const options = { ...this.mcpOptions, ...routeMcpOptions };
+
         await server.startHTTP({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          httpPath: `${this.prefix ?? ''}${httpPath}`,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req: rawReq,
           res: ctx.res,
+          options: Object.keys(options).length > 0 ? options : undefined,
         });
         // Response handled by startHTTP
       } catch {
@@ -309,8 +319,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         await server.startSSE({
           url: new URL(ctx.url, `http://${ctx.headers.host}`),
-          ssePath: `${this.prefix ?? ''}${ssePath}`,
-          messagePath: `${this.prefix ?? ''}${messagePath}`,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           req: rawReq,
           res: ctx.res,
         });
@@ -326,7 +336,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     }
   }
 
-  async registerRoute(app: Koa, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(app: Koa, route: ServerRoute, { prefix: prefixParam }: { prefix?: string } = {}): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     const fullPath = `${prefix}${route.path}`;
 
     // Convert Express-style :param to Koa-style :param (they're the same)
@@ -372,6 +385,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       }
 
       const params = await this.getParams(route, ctx);
+
+      // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
+      if (params.bodyParseError) {
+        ctx.status = 400;
+        ctx.body = {
+          error: 'Invalid request body',
+          issues: [{ field: 'body', message: params.bodyParseError.message }],
+        };
+        return;
+      }
 
       if (params.queryParams) {
         try {
@@ -422,12 +445,12 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         tools: ctx.state.tools,
         taskStore: ctx.state.taskStore,
         abortSignal: ctx.state.abortSignal,
-        routePrefix: this.prefix,
+        routePrefix: prefix,
       };
 
       try {
         const result = await route.handler(handlerParams);
-        await this.sendResponse(route, ctx, result);
+        await this.sendResponse(route, ctx, result, prefix);
       } catch (error) {
         console.error('Error calling handler', error);
         // Check if it's an HTTPException or MastraError with a status code

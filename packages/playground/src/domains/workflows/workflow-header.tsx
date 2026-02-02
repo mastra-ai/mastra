@@ -11,13 +11,10 @@ import {
   ApiIcon,
   WorkflowIcon,
   DocsIcon,
-  DividerIcon,
   WorkflowCombobox,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  Badge,
+  Truncate,
 } from '@mastra/playground-ui';
+import { EyeIcon } from 'lucide-react';
 
 export function WorkflowHeader({
   workflowName,
@@ -38,36 +35,25 @@ export function WorkflowHeader({
             </Icon>
             Workflows
           </Crumb>
-          <Crumb as="span" to="" isCurrent>
+          <Crumb as="span" to="" isCurrent={!runId}>
             <WorkflowCombobox value={workflowId} variant="ghost" />
           </Crumb>
+          {runId && (
+            <Crumb as={Link} to={`/workflows/${workflowId}/graph/${runId}`} isCurrent>
+              <Truncate untilChar="-" copy>
+                {runId}
+              </Truncate>
+            </Crumb>
+          )}
         </Breadcrumb>
 
         <HeaderGroup>
-          {runId && (
-            <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="default">#{runId.slice(0, 8)}</Badge>
-                </TooltipTrigger>
-                <TooltipContent>{`Workflow Run ID: ${runId}`}</TooltipContent>
-              </Tooltip>
-              <DividerIcon />
-            </>
-          )}
-
-          <div className="flex items-center gap-1">
-            <div className="text-ui-md flex items-center text-neutral2 pr-1 pl-3">Traces by </div>
-            <Button as={Link} to={`/observability?entity=${workflowName}`}>
-              Workflow
-            </Button>
-
-            {runId && (
-              <Button as={Link} to={`/observability?runId=${runId}`}>
-                Run
-              </Button>
-            )}
-          </div>
+          <Button as={Link} to={`/observability?entity=${workflowName}`}>
+            <Icon>
+              <EyeIcon />
+            </Icon>
+            Traces
+          </Button>
         </HeaderGroup>
 
         <HeaderAction>

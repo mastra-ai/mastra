@@ -3,8 +3,8 @@
  * It is in a separate file to avoid including local-pkg in runtime code.
  */
 
-import { getPackageInfo } from 'local-pkg';
 import { pathToFileURL } from 'node:url';
+import { getPackageInfo } from 'local-pkg';
 
 /**
  * Get package root path
@@ -26,7 +26,7 @@ export async function getPackageRootPath(packageName: string, parentPath?: strin
 
     const pkg = await getPackageInfo(packageName, options);
     rootPath = pkg?.rootPath ?? null;
-  } catch (e) {
+  } catch {
     rootPath = null;
   }
 

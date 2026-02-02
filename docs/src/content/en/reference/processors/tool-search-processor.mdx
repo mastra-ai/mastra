@@ -1,0 +1,173 @@
+---
+title: "Reference: ToolSearchProcessor | Processors"
+description: "Documentation for the ToolSearchProcessor in Mastra, which enables dynamic tool discovery and loading for agents with large tool libraries."
+packages:
+  - "@mastra/core"
+---
+
+# ToolSearchProcessor
+
+The `ToolSearchProcessor` is an **input processor** that enables dynamic tool discovery and loading. Instead of providing all tools to the agent upfront, it gives the agent two meta-tools (`search_tools` and `load_tool`) that let it find and load tools on demand. This reduces context token usage when working with large tool libraries.
+
+## Usage example
+
+```typescript
+import { ToolSearchProcessor } from "@mastra/core/processors";
+
+const toolSearch = new ToolSearchProcessor({
+  tools: {
+    createIssue: githubTools.createIssue,
+    sendEmail: emailTools.send,
+    getWeather: weatherTools.forecast,
+    // ... many more tools
+  },
+  search: {
+    topK: 5,
+    minScore: 0.1,
+  },
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "ToolSearchProcessorOptions",
+      description: "Configuration options for the tool search processor",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "All tools that can be searched and loaded dynamically. These tools are not immediately available to the agent — they must be discovered via search and loaded on demand.",
+      isOptional: false,
+    },
+    {
+      name: "search",
+      type: "{ topK?: number; minScore?: number }",
+      description: "Configuration for the search behavior.",
+      isOptional: true,
+    },
+    {
+      name: "search.topK",
+      type: "number",
+      description: "Maximum number of tools to return in search results.",
+      isOptional: true,
+      default: "5",
+    },
+    {
+      name: "search.minScore",
+      type: "number",
+      description: "Minimum relevance score (0-1) for including a tool in search results.",
+      isOptional: true,
+      default: "0",
+    },
+    {
+      name: "ttl",
+      type: "number",
+      description: "Time-to-live for thread state in milliseconds. After this duration of inactivity, thread state will be cleaned up. Set to 0 to disable cleanup.",
+      isOptional: true,
+      default: "3600000",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'tool-search'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Processor display name set to 'Tool Search Processor'",
+      isOptional: false,
+    },
+    {
+      name: "processInputStep",
+      type: "(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>",
+      description: "Processes each step to inject search/load meta-tools and any previously loaded tools into the agent's tool set.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript title="src/mastra/agents/dynamic-tools-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { ToolSearchProcessor } from "@mastra/core/processors";
+
+// Tools from various integrations
+import { githubTools } from "./tools/github";
+import { slackTools } from "./tools/slack";
+import { dbTools } from "./tools/database";
+
+const toolSearch = new ToolSearchProcessor({
+  tools: {
+    ...githubTools,  // createIssue, listPRs, mergePR, ...
+    ...slackTools,   // sendMessage, createChannel, ...
+    ...dbTools,      // query, insert, update, ...
+  },
+  search: {
+    topK: 5,
+    minScore: 0.1,
+  },
+});
+
+const agent = new Agent({
+  name: "dynamic-tools-agent",
+  instructions: "You are a helpful assistant with access to many tools. Use search_tools to find relevant tools, then load_tool to make them available.",
+  model: "openai/gpt-4o",
+  inputProcessors: [toolSearch],
+});
+```
+
+The agent workflow is:
+1. Agent receives a user message
+2. Agent calls `search_tools` with keywords (e.g., "github issue")
+3. Agent reviews results and calls `load_tool` with the tool name
+4. The loaded tool becomes available on the next turn
+5. Agent uses the loaded tool normally
+
+## Combining with other processors
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import {
+  ToolSearchProcessor,
+  TokenLimiter,
+} from "@mastra/core/processors";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: "openai/gpt-4o",
+  inputProcessors: [
+    new ToolSearchProcessor({
+      tools: allTools,
+      search: { topK: 5 },
+    }),
+    // Place TokenLimiter last to ensure context fits
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+## Related
+
+- [Processors](/docs/agents/processors)
+- [Using Tools](/docs/agents/using-tools)

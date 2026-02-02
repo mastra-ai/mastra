@@ -106,6 +106,40 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Workspace',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'workspace/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/filesystem',
+          label: 'Filesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/sandbox',
+          label: 'Sandbox',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/skills',
+          label: 'Skills',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/search',
+          label: 'Search and Indexing',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Workflows',
       items: [
         {
@@ -322,6 +356,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/simple-auth',
+              label: 'Simple Auth',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/jwt',
               label: 'JSON Web Token',
             },
@@ -349,6 +388,16 @@ const sidebars = {
               type: 'doc',
               id: 'server/auth/auth0',
               label: 'Auth0',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/composite-auth',
+              label: 'Composite Auth',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/custom-auth-provider',
+              label: 'Custom Auth Provider',
             },
           ],
         },

@@ -1,0 +1,63 @@
+{
+  "__structure__": [
+    "workflow_run: \"workflow run: 'metadata-workflow'\"",
+    "└── workflow_step: \"workflow step: 'custom-metadata'\""
+  ],
+  "spans": [
+    {
+      "span": {
+        "id": "<span-1>",
+        "traceId": "<trace-1>",
+        "name": "workflow run: 'metadata-workflow'",
+        "type": "workflow_run",
+        "completed": true,
+        "isEvent": false,
+        "isRootSpan": true,
+        "entityType": "workflow_run",
+        "entityId": "metadata-workflow",
+        "attributes": {
+          "status": "success"
+        },
+        "metadata": {
+          "runId": "<runId-1>"
+        },
+        "input": {
+          "value": "tacos"
+        },
+        "output": {
+          "output": "Processed: tacos"
+        }
+      },
+      "children": [
+        {
+          "span": {
+            "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "workflow step: 'custom-metadata'",
+            "type": "workflow_step",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "workflow_step",
+            "entityId": "custom-metadata",
+            "attributes": {
+              "status": "success"
+            },
+            "metadata": {
+              "customValue": "tacos",
+              "stepType": "metadata-test",
+              "executionTime": "<date>"
+            },
+            "input": {
+              "value": "tacos"
+            },
+            "output": {
+              "output": "Processed: tacos"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
