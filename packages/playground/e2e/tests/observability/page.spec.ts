@@ -27,7 +27,8 @@ test('has entity filter dropdown', async ({ page }) => {
   await page.goto('/observability');
 
   // The entity filter should be present with default "All" selection
-  const entityFilter = page.locator('button:has-text("All")');
+  const entityFilter = page.locator('button:text-matches("^All")');
+
   await expect(entityFilter).toBeVisible();
 });
 
