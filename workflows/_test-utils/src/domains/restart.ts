@@ -193,6 +193,59 @@ export function createRestartWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should restart workflow with parallel steps
+  {
+    mockRegistry.register('restart-parallel:step1', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        return { result: inputData.value * 2 };
+      }),
+    );
+    mockRegistry.register('restart-parallel:step2', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        return { result: inputData.value + 10 };
+      }),
+    );
+
+    const step1 = createStep({
+      id: 'step1',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ result: z.number() }),
+      execute: async ctx => mockRegistry.get('restart-parallel:step1')(ctx),
+    });
+
+    const step2 = createStep({
+      id: 'step2',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ result: z.number() }),
+      execute: async ctx => mockRegistry.get('restart-parallel:step2')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'restart-parallel',
+      steps: [step1, step2],
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({
+        step1: z.object({ result: z.number() }),
+        step2: z.object({ result: z.number() }),
+      }),
+    });
+
+    workflow.parallel([step1, step2]).commit();
+
+    workflows['restart-parallel'] = {
+      workflow,
+      mocks: {
+        get step1() {
+          return mockRegistry.get('restart-parallel:step1');
+        },
+        get step2() {
+          return mockRegistry.get('restart-parallel:step2');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   return workflows;
 }
 
@@ -376,6 +429,63 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
       expect(result.status).toBe('success');
       expect(result.steps.failingStep.output).toEqual({ result: 'HELLO' });
       expect(mocks.failingStep).toHaveBeenCalledTimes(1);
+    });
+
+    it.skipIf(skipTests.restartParallel)('should restart workflow with parallel steps', async () => {
+      const { workflow, mocks, resetMocks } = registry!['restart-parallel'];
+      resetMocks?.();
+
+      // Get storage to simulate interrupted workflow
+      const mastra = (workflow as any).mastra;
+      const storage = mastra?.getStorage();
+      const workflowsStore = await storage?.getStore('workflows');
+
+      if (!workflowsStore) {
+        return;
+      }
+
+      const runId = `restart-parallel-${Date.now()}`;
+
+      // Simulate a workflow that was interrupted during parallel execution
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: workflow.id,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [0, 0], // Both parallel paths active
+          activeStepsPath: { step1: [0], step2: [0] },
+          value: {},
+          context: {
+            input: { value: 5 },
+            step1: {
+              payload: { value: 5 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+            step2: {
+              payload: { value: 5 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          },
+          serializedStepGraph: (workflow as any).serializedStepGraph,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      const run = await workflow.createRun({ runId });
+      const result = await run.restart();
+
+      expect(result.status).toBe('success');
+      // step1: 5 * 2 = 10, step2: 5 + 10 = 15
+      expect(result.steps.step1.output).toEqual({ result: 10 });
+      expect(result.steps.step2.output).toEqual({ result: 15 });
+      expect(mocks.step1).toHaveBeenCalledTimes(1);
+      expect(mocks.step2).toHaveBeenCalledTimes(1);
     });
   });
 }

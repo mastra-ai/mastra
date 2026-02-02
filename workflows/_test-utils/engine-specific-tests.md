@@ -1,0 +1,330 @@
+# Engine-Specific Tests - All Test Cases
+
+## workflow.test.ts (Default Engine)
+
+- should generate a stream
+- should handle basic suspend and resume flow using resumeLabel
+- should continue streaming current run on subsequent stream calls
+- should be able to use an agent as a step
+- should pass agentOptions when wrapping agent with createStep
+- should handle sleep waiting flow
+- should handle sleep waiting flow with fn parameter
+- should preserve input property from snapshot context after resume
+- should generate a stream
+- should generate a stream for a single step when perStep is true
+- should generate a stream for a single step workflow successfully with state
+- should handle basic suspend and resume flow that does not close on suspend
+- should handle custom event emission using writer
+- should be able to use an agent as a step
+- should be able to use an agent with v1 model as a step
+- should pass agentOptions when wrapping agent with createStep
+- should handle sleep waiting flow
+- should handle sleep waiting flow with fn parameter
+- should preserve input property from snapshot context after resume
+- should automatically commit uncommitted workflow when registering in mastra instance
+- should execute a single step nested workflow successfully with state
+- should execute a single step nested workflow successfully with state being set by the nested workflow
+- should execute a single step in a nested workflow when perStep is true
+- should execute only one step when there are multiple steps in parallel and perStep is true
+- should properly update snapshot when executing multiple steps in parallel
+- should update state after each concurrent batch in foreach step
+- should bail foreach execution when called in a concurrent batch
+- should properly update state when executing multiple steps in parallel
+- should have runId in the step execute function - bug #4260
+- should provide access to step results and trigger data via getStepResult helper
+- should resolve trigger data from getInitData with workflow schema
+- should resolve trigger data and DI requestContext values via .map()
+- should resolve variables from previous steps
+- should resolve inputs from previous steps that are arrays via .map()
+- should follow conditional chains and run only one step when perStep is true
+- should execute a a sleep step
+- should execute a a sleep until step
+- should execute a sleep until step with fn parameter
+- should throw error if waitForEvent is used
+- should only update workflow status to success after all steps have run successfully
+- should return workflow run execution result with nested workflow steps information
+- should be able to abort workflow execution in between steps
+- should be able to abort workflow execution immediately
+- should be able to abort workflow execution during a step
+- should be able to cancel a suspended workflow
+- should persist error message without stack trace in snapshot
+- should persist MastraError message without stack trace in snapshot
+- should handle step execution errors within branches
+- should preserve custom error properties when step throws error with extra fields
+- should handle errors from agent.stream() with full error details
+- should preserve error details in streaming workflow
+- should load serialized error from storage via getWorkflowRunById
+- should suspend and resume when running a single item concurrency (default) for loop
+- should run a all item concurrency for loop
+- should suspend and resume when running all items concurrency for loop
+- should suspend and resume provided index when running all items concurrency for loop
+- should suspend and resume provided label when running all items concurrency for loop
+- should run a partial item concurrency for loop
+- should suspend and resume when running a partial item concurrency for loop
+- should suspend and resume provided index when running a partial item concurrency for loop
+- should preserve ZodError as cause when input validation fails
+- should throw error if inputData is invalid in workflow with .map()
+- should properly validate input schema when .map is used after .foreach. bug #11313
+- should throw error when you try to resume a workflow step with invalid resume data
+- should use default value from resumeSchema when resuming a workflow
+- should throw error if inputData is invalid in nested workflows
+- should throw error if inputData is invalid in workflow with .map()
+- should throw error when you try to resume a workflow step with invalid resume data
+- should use default value from resumeSchema when resuming a workflow
+- should throw error if inputData is invalid in nested workflows
+- should return correct status from storage when creating run with existing runId from different workflow instance
+- should update run status from storage snapshot when run exists in memory map
+- should handle basic suspend and resume flow with async await syntax
+- should handle basic suspend and resume single step flow with async await syntax and perStep:true
+- should handle basic suspend and resume flow with async await syntax with state
+- should work with requestContext - bug #4442
+- should work with custom requestContext - bug #4442
+- should handle basic suspend and resume in a dountil workflow
+- should handle writer.custom during resume operations
+- should handle basic suspend and resume in nested dountil workflow - bug #5650
+- should throw error when you try to resume a workflow that is not suspended
+- should throw error when you try to resume a workflow step that is not suspended
+- should support both explicit step resume and auto-resume (backwards compatibility)
+- should have access to the correct input value when resuming in a loop. bug #6669
+- should have access to the correct inputValue when resuming a step preceded by a .map step
+- should preserve state across suspend and resume cycles
+- should throw error if trying to restart a workflow execution that was not previously active
+- should restart a workflow execution that was previously active
+- should restart a workflow execution that was previously active and has nested workflows
+- should successfully suspend and resume a restarted workflow execution
+- should restart workflow execution for a do-while workflow
+- should restart workflow execution for workflow with parallel steps
+- should throw error if trying to timetravel a workflow execution that is still running
+- should throw error if validateInputs is true and trying to timetravel a workflow execution with invalid inputData
+- should throw error if trying to timetravel to a non-existent step
+- should timeTravel a workflow execution and run only one step when perStep is true
+- should timeTravel a workflow execution that was previously ran
+- should timeTravel a workflow execution that was previously ran and run only one step when perStep is true
+- should timeTravel a workflow execution that has nested workflows
+- should successfully suspend and resume a timeTravelled workflow execution
+- should timetravel a suspended workflow execution
+- should timeTravel workflow execution for a do-until workflow
+- should timeTravel workflow execution for workflow with parallel steps
+- should timeTravel workflow execution for workflow with parallel steps and run just the timeTravelled step when perStep is true
+- should timeTravel to step in conditional chains
+- should timeTravel to step in conditional chains and run just one step when perStep is true
+- should auto-resume simple suspended step without specifying step parameter
+- should throw error when multiple steps are suspended and no step specified
+- should return empty result when mastra is not initialized
+- should use shouldPersistSnapshot option
+- should preserve resourceId when resuming a suspended workflow
+- should be able to use an agent as a step
+- should be able to use an agent in parallel
+- should be able to use an agent as a step via mastra instance
+- should be able to use an agent as a step in nested workflow via mastra instance
+- should be able to nest workflows
+- should be able clone workflows as steps
+- should be able to nest workflows with conditions
+- should execute if-branch
+- should execute else-branch
+- should execute nested else and if-branch
+- should be able to suspend nested workflow step
+- should be able to resume suspended nested workflow step with only nested workflow step provided
+- should handle consecutive nested workflows with suspend/resume
+- should preserve request context in nested workflows after suspend/resume
+- should be able to spec out workflow result via variables
+- should be able to suspend nested workflow step in a nested workflow step
+- should not execute incorrect branches after resuming from suspended nested workflow
+- should maintain correct step status after resuming in branching workflows - #6419
+- should propagate abort signal to nested workflow when using run.cancel()
+- should propagate abort signal to nested workflow when using run.abortController.abort() directly
+- should propagate abort signal to agent step in nested workflow when parent is cancelled
+- should inject requestContext dependencies into steps during run
+- should inject requestContext dependencies into steps during resume
+- should have access to requestContext from before suspension during workflow resume
+- should not show removed requestContext values in subsequent steps
+- should support consecutive parallel calls with proper type inference
+- multiple steps should have different run counts
+- runCount should exist and equal zero for the first run
+- should remain suspended when only one of multiple parallel suspended steps is resumed - #6418
+- should complete parallel workflow when steps do not suspend
+- should handle multiple suspend/resume cycles in parallel workflow
+- should provide full TypeScript support for tracingContext
+- should provide access to suspendData in workflow step on resume
+- should bubble up tripwire from agent input processor to workflow result
+- should return tripwire status when streaming agent in workflow
+- should handle tripwire from output stream processor in agent within workflow
+- should pass structured output from agent step to next step with correct types
+- should call onFinish callback when workflow completes successfully
+- should call onFinish callback when workflow fails
+- should call both onFinish and onError when workflow fails and both are defined
+- should provide mastra instance in onFinish callback
+- should provide mastra instance in onError callback
+- should provide resourceId in onError callback when provided
+- should provide state in onError callback
+
+## evented-workflow.test.ts (Evented Engine)
+
+- should generate a stream
+- should be able to use an agent as a step
+- should handle sleep waiting flow
+- should generate a stream
+- should generate a stream for a single step when perStep is true
+- should be able to use an agent as a step
+- should handle sleep waiting flow
+- should execute a single step in a workflow when perStep is true
+- should execute a single step in a nested workflow when perStep is true
+- should throw error when restart is called on evented workflow
+- should execute only one step when there are multiple steps in parallel and perStep is true
+- should have runId in the step execute function - bug #4260
+- should provide access to step results and trigger data via getStepResult helper
+- should resolve trigger data from getInitData with workflow schema
+- should resolve trigger data and DI requestContext values via .map()
+- should resolve variables from previous steps
+- should resolve inputs from previous steps that are arrays via .map()
+- should follow conditional chains and run only one step when perStep is true
+- should preserve custom error properties and cause chains in evented workflows
+- should execute a a sleep step
+- should execute a a sleep until step
+- should throw error if waitForEvent is used
+- should be able to cancel a suspended workflow
+- should update status to canceled immediately when cancel() resolves
+- should handle step execution errors within branches
+- should preserve custom error properties like statusCode
+- should preserve error cause chain from agent API errors
+- should run a all item concurrency for loop
+- should run a partial item concurrency for loop
+- should handle basic suspend and resume flow with async await syntax
+- should handle basic suspend and resume single step flow with async await syntax and perStep:true
+- should work with requestContext - bug #4442
+- should work with custom requestContext - bug #4442
+- should handle basic suspend and resume in a dountil workflow
+- should have access to the correct inputValue when resuming a step preceded by a .map step
+- should throw error if trying to timetravel a workflow execution that is still running
+- should throw error if validateInputs is true and trying to timetravel a workflow execution with invalid inputData
+- should throw error if trying to timetravel to a non-existent step
+- should timeTravel a workflow execution and run only one step when perStep is true
+- should timeTravel a workflow execution that was previously ran
+- should timeTravel a workflow execution that was previously ran and run only one step when perStep is true
+- should timeTravel a workflow execution that has nested workflows
+- should successfully suspend and resume a timeTravelled workflow execution
+- should timetravel a suspended workflow execution
+- should timeTravel workflow execution for a do-until workflow
+- should timeTravel workflow execution for workflow with parallel steps
+- should timeTravel workflow execution for workflow with parallel steps and run just the timeTravelled step when perStep is true
+- should timeTravel to step in conditional chains
+- should timeTravel to step in conditional chains and run just one step when perStep is true
+- should return empty result when mastra is not initialized
+- should get workflow run by id from storage
+- should be able to use an agent as a step
+- should be able to use an agent in parallel
+- should be able to use an agent as a step via mastra instance
+- should be able to use an agent as a step in nested workflow via mastra instance
+- should be able to nest workflows
+- should be able to nest workflows sequentially
+- should be able clone workflows as steps
+- should be able to nest workflows with conditions
+- should execute if-branch
+- should execute else-branch
+- should execute nested else and if-branch
+- should be able to suspend nested workflow step
+- should be able to spec out workflow result via variables
+- should be able to suspend nested workflow step in a nested workflow step
+- should propagate abort signal to nested workflow when using run.cancel()
+- should propagate abort signal to nested workflow when using run.abortController.abort() directly
+- should propagate abort signal to agent step in nested workflow when parent is cancelled
+- should inject requestContext dependencies into steps during run
+- should inject requestContext dependencies into steps during resume
+- should support consecutive parallel calls with proper type inference
+- retryCount property should increment the run count when a step is executed multiple times
+- multiple steps should have different run counts
+- retryCount should exist and equal zero for the first run
+- should pass resourceId to createRun and persist it in storage
+- should call onFinish callback when workflow completes successfully
+- should call onFinish callback when workflow fails
+- should call both onFinish and onError when workflow fails and both are defined
+
+## inngest/index.test.ts (Inngest Engine)
+
+- should execute a single step in a workflow when perStep is true
+- should throw error when restart is called on inngest workflow
+- should execute a single step nested workflow successfully with state
+- should execute a single step in a nested workflow when perStep is true
+- should execute a single step nested workflow successfully with state being set by the nested workflow
+- should execute only one step when there are multiple steps in parallel and perStep is true
+- should execute steps sequentially
+- should execute a a sleep until step
+- should execute a sleep until step with fn parameter
+- should throw error if waitForEvent is used
+- should persist a workflow run with resourceId
+- should be able to abort workflow execution in between steps
+- should be able to abort workflow execution during a step
+- should provide access to step results and trigger data via getStepResult helper
+- should resolve variables from previous steps
+- should follow conditional chains and run only one step when perStep is true
+- should preserve custom error properties through Inngest serialization
+- should preserve error cause chains through Inngest serialization
+- should handle step execution errors within branches
+- should run foreach with nested workflow
+- should handle basic suspend and resume flow with async await syntax
+- should handle basic suspend and resume single step flow with async await syntax and perStep:true
+- should handle basic suspend and resume flow with async await syntax with state
+- should handle consecutive nested workflows with suspend/resume
+- should maintain correct step status after resuming in branching workflows - #6419
+- should have access to the correct inputValue when resuming a step preceded by a .map step
+- should throw error if trying to timetravel a workflow execution that is still running
+- should throw error if validateInputs is true and trying to timetravel a workflow execution with invalid inputData
+- should throw error if trying to timetravel to a non-existent step
+- should timeTravel a workflow execution and run only one step when perStep is true
+- should timeTravel a workflow execution that was previously ran
+- should timeTravel a workflow execution that was previously ran and run only one step when perStep is true
+- should timeTravel a workflow execution that has nested workflows
+- should successfully suspend and resume a timeTravelled workflow execution
+- should timetravel a suspended workflow execution
+- should timeTravel workflow execution for a do-until workflow
+- should timeTravel workflow execution for workflow with parallel steps
+- should timeTravel workflow execution for workflow with parallel steps and run just the timeTravelled step when perStep is true
+- should timeTravel to step in conditional chains
+- should timeTravel to step in conditional chains and run just one step when perStep is true
+- should be able to use an agent as a step
+- should be able to use an agent in parallel
+- should be able to nest workflows
+- should be able to nest workflows with conditions
+- should execute if-branch
+- should execute else-branch
+- should execute nested else and if-branch
+- should be able to suspend nested workflow step
+- should be able to spec out workflow result via variables
+- should be able to suspend nested workflow step in a nested workflow step
+- should be able clone workflows as steps
+- should inject requestContext dependencies into steps during run
+- should have access to requestContext from before suspension during workflow resume
+- should not show removed requestContext values in subsequent steps
+- should inject inngest step primitives into steps during run
+- should generate a stream
+- should handle basic sleep waiting flow
+- should handle basic sleep waiting flow with fn parameter
+- should be able to use an agent as a step
+- should run experiment with workflow target
+- should generate a stream
+- should emit step-result and step-finish events when step fails
+- should generate a stream with custom events
+- should handle basic sleep waiting flow
+- should be able to use an agent as a step
+- should run experiment with workflow target
+- should accept workflow configuration with flow control properties
+- should handle workflow configuration with partial flow control properties
+- should handle workflow configuration without flow control properties (backward compatibility)
+- should support all flow control configuration types
+- should execute workflow via cron schedule
+- should execute workflow via cron schedule with initialState
+- should merge user-supplied functions with workflow functions
+- :
+- should work with empty user functions array
+- should work when no functions parameter is provided
+- should use shouldPersistSnapshot option
+- should get workflow run by id from storage
+- should pass structured output from agent step to next step with correct types
+- should call onFinish callback when workflow completes successfully
+- should call onFinish and onError callbacks when workflow fails
+- should not call onError when workflow succeeds
+- should swallow callback errors and not fail the workflow
+- should provide all expected properties in onFinish callback
+- should provide all expected properties in onError callback
+- should provide tracingContext.currentSpan to step execution
+- should create workflow step child spans from the workflow span

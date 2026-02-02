@@ -6,9 +6,16 @@
  */
 
 import { createWorkflowTestSuite } from '@internal/workflow-test-utils';
-import type { WorkflowResult, ResumeWorkflowOptions, TimeTravelWorkflowOptions } from '@internal/workflow-test-utils';
+import type {
+  WorkflowResult,
+  ResumeWorkflowOptions,
+  TimeTravelWorkflowOptions,
+  StreamWorkflowResult,
+  StreamEvent,
+} from '@internal/workflow-test-utils';
 import { vi } from 'vitest';
 
+import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
@@ -25,7 +32,7 @@ createWorkflowTestSuite({
   name: 'Workflow (Default Engine)',
 
   getWorkflowFactory: () => {
-    return { createWorkflow, createStep, createTool };
+    return { createWorkflow, createStep, createTool, Agent };
   },
 
   // Register workflows with Mastra for storage/resume support
@@ -85,12 +92,20 @@ createWorkflowTestSuite({
       resourceId: options.resourceId,
     });
 
-    const result = await run.start({
+    // Use streaming API to ensure it works correctly - just await the result
+    const streamResult = run.stream({
       inputData,
       initialState: options.initialState,
       perStep: options.perStep,
       requestContext: options.requestContext as any,
     });
+
+    // Consume the stream to ensure it completes
+    for await (const _event of streamResult.fullStream) {
+      // Discard events - we only care about the result
+    }
+
+    const result = await streamResult.result;
 
     return result as WorkflowResult;
   },
@@ -120,5 +135,68 @@ createWorkflowTestSuite({
     });
 
     return result as WorkflowResult;
+  },
+
+  streamWorkflow: async (workflow, inputData, options = {}, api = 'stream'): Promise<StreamWorkflowResult> => {
+    const wf = workflow as Workflow<any, any, any, any, any, any, any>;
+
+    const run = await wf.createRun({
+      runId: options.runId,
+      resourceId: options.resourceId,
+    });
+
+    const events: StreamEvent[] = [];
+
+    if (api === 'streamLegacy') {
+      const { stream, getWorkflowState } = run.streamLegacy({
+        inputData,
+        initialState: options.initialState,
+        perStep: options.perStep,
+        requestContext: options.requestContext as any,
+      });
+
+      for await (const event of stream) {
+        events.push(JSON.parse(JSON.stringify(event)));
+      }
+
+      const result = await getWorkflowState();
+      return { events, result: result as WorkflowResult };
+    } else {
+      const streamResult = run.stream({
+        inputData,
+        initialState: options.initialState,
+        perStep: options.perStep,
+        requestContext: options.requestContext as any,
+        closeOnSuspend: options.closeOnSuspend,
+      });
+
+      for await (const event of streamResult.fullStream) {
+        events.push(JSON.parse(JSON.stringify(event)));
+      }
+
+      const result = await streamResult.result;
+      return { events, result: result as WorkflowResult };
+    }
+  },
+
+  streamResumeWorkflow: async (workflow, options: ResumeWorkflowOptions): Promise<StreamWorkflowResult> => {
+    const wf = workflow as Workflow<any, any, any, any, any, any, any>;
+
+    const run = await wf.createRun({ runId: options.runId });
+
+    const events: StreamEvent[] = [];
+    const streamResult = run.resumeStream({
+      step: options.step as any,
+      label: options.label,
+      resumeData: options.resumeData,
+      forEachIndex: options.forEachIndex,
+    });
+
+    for await (const event of streamResult.fullStream) {
+      events.push(JSON.parse(JSON.stringify(event)));
+    }
+
+    const result = await streamResult.result;
+    return { events, result: result as WorkflowResult };
   },
 });

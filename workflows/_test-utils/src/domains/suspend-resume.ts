@@ -1360,6 +1360,359 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should remain suspended when only one of multiple parallel suspended steps is resumed - #6418
+  {
+    const parallelStep1Action = vi.fn().mockImplementation(async ({ inputData, suspend, resumeData }) => {
+      if (!resumeData) {
+        await suspend({});
+        return { result: 0 };
+      }
+      return { result: inputData.value * (resumeData as any).multiplier };
+    });
+
+    const parallelStep2Action = vi.fn().mockImplementation(async ({ inputData, suspend, resumeData }) => {
+      if (!resumeData) {
+        await suspend({});
+        return { result: 0 };
+      }
+      return { result: inputData.value / (resumeData as any).divisor };
+    });
+
+    const parallelStep1 = createStep({
+      id: 'parallel-step-1',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ result: z.number() }),
+      resumeSchema: z.object({ multiplier: z.number() }),
+      execute: parallelStep1Action,
+    });
+
+    const parallelStep2 = createStep({
+      id: 'parallel-step-2',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ result: z.number() }),
+      resumeSchema: z.object({ divisor: z.number() }),
+      execute: parallelStep2Action,
+    });
+
+    const workflow = createWorkflow({
+      id: 'parallel-suspension-bug-6418-workflow',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({
+        'parallel-step-1': z.object({ result: z.number() }),
+        'parallel-step-2': z.object({ result: z.number() }),
+      }),
+    })
+      .parallel([parallelStep1, parallelStep2])
+      .commit();
+
+    workflows['parallel-suspension-bug-6418-workflow'] = {
+      workflow,
+      mocks: { parallelStep1Action, parallelStep2Action },
+      resetMocks: () => {
+        parallelStep1Action.mockClear();
+        parallelStep2Action.mockClear();
+      },
+    };
+  }
+
+  // Test: should work with requestContext - bug #4442
+  {
+    const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+    const promptAgentAction = vi.fn().mockImplementation(async ({ suspend, requestContext, resumeData }) => {
+      if (!resumeData) {
+        requestContext.set('responses', [...(requestContext.get('responses') ?? []), 'first message']);
+        return await suspend({ testPayload: 'hello' });
+      }
+      requestContext.set('responses', [...(requestContext.get('responses') ?? []), 'promptAgentAction']);
+      return undefined;
+    });
+    const requestContextAction = vi.fn().mockImplementation(async ({ requestContext }) => {
+      return requestContext.get('responses');
+    });
+
+    const getUserInput = createStep({
+      id: 'getUserInput',
+      execute: getUserInputAction,
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ userInput: z.string() }),
+    });
+    const promptAgent = createStep({
+      id: 'promptAgent',
+      execute: promptAgentAction,
+      inputSchema: z.object({ userInput: z.string() }),
+      outputSchema: z.object({ modelOutput: z.string() }),
+      suspendSchema: z.object({ testPayload: z.string() }),
+      resumeSchema: z.object({ userInput: z.string() }),
+    });
+    const requestContextStep = createStep({
+      id: 'requestContextAction',
+      execute: requestContextAction,
+      inputSchema: z.object({ modelOutput: z.string() }),
+      outputSchema: z.array(z.string()),
+    });
+
+    const workflow = createWorkflow({
+      id: 'requestcontext-bug-4442-workflow',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({}),
+      options: { validateInputs: false },
+    });
+
+    workflow.then(getUserInput).then(promptAgent).then(requestContextStep).commit();
+
+    workflows['requestcontext-bug-4442-workflow'] = {
+      workflow,
+      mocks: { getUserInputAction, promptAgentAction, requestContextAction },
+      resetMocks: () => {
+        getUserInputAction.mockClear();
+        promptAgentAction.mockClear();
+        requestContextAction.mockClear();
+      },
+    };
+  }
+
+  // Test: should maintain correct step status after resuming in branching workflows - #6419
+  {
+    const branchStep1Action = vi.fn().mockImplementation(async ({ inputData, suspend, resumeData }) => {
+      if (!resumeData) {
+        await suspend({});
+        return { result: 0 };
+      }
+      return { result: inputData.value * (resumeData as any).multiplier };
+    });
+
+    const branchStep2Action = vi.fn().mockImplementation(async ({ inputData, suspend, resumeData }) => {
+      if (!resumeData) {
+        await suspend({});
+        return { result: 0 };
+      }
+      return { result: inputData.value * (resumeData as any).multiplier };
+    });
+
+    const branchStep1 = createStep({
+      id: 'branch-step-1',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ result: z.number() }),
+      resumeSchema: z.object({ multiplier: z.number() }),
+      execute: branchStep1Action,
+    });
+
+    const branchStep2 = createStep({
+      id: 'branch-step-2',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ result: z.number() }),
+      resumeSchema: z.object({ multiplier: z.number() }),
+      execute: branchStep2Action,
+    });
+
+    const workflow = createWorkflow({
+      id: 'branching-state-bug-6419-workflow',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({
+        'branch-step-1': z.object({ result: z.number() }),
+        'branch-step-2': z.object({ result: z.number() }),
+      }),
+    });
+
+    workflow
+      .branch([
+        [async () => true, branchStep1], // First branch will execute and suspend
+        [async () => true, branchStep2], // Second branch will execute and suspend
+      ])
+      .commit();
+
+    workflows['branching-state-bug-6419-workflow'] = {
+      workflow,
+      mocks: { branchStep1Action, branchStep2Action },
+      resetMocks: () => {
+        branchStep1Action.mockClear();
+        branchStep2Action.mockClear();
+      },
+    };
+  }
+
+  // Test: should have access to the correct input value when resuming in a loop - bug #6669
+  {
+    const step1Action = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+      let { condition, value } = inputData;
+      const { shouldContinue } = (resumeData as any) ?? {};
+
+      if (!shouldContinue) {
+        await suspend({
+          message: `Continue with value ${value}?`,
+        });
+        return { value, condition };
+      }
+
+      // Small delay to simulate work
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      value = value + 1;
+      condition = value >= 10;
+
+      return {
+        value,
+        condition,
+      };
+    });
+
+    const step2Action = vi.fn().mockImplementation(async ({ inputData }) => {
+      const { condition, value } = inputData;
+      return { value, condition };
+    });
+
+    const step1 = createStep({
+      id: 'step-1',
+      inputSchema: z.object({
+        value: z.number(),
+        condition: z.boolean().default(false),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+        condition: z.boolean(),
+      }),
+      resumeSchema: z.object({
+        shouldContinue: z.boolean(),
+      }),
+      suspendSchema: z.object({
+        message: z.string(),
+      }),
+      execute: step1Action,
+    });
+
+    const step2 = createStep({
+      id: 'step-2',
+      inputSchema: z.object({
+        value: z.number(),
+        condition: z.boolean(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+        condition: z.boolean(),
+      }),
+      execute: step2Action,
+    });
+
+    const workflow = createWorkflow({
+      id: 'loop-input-bug-6669-workflow',
+      inputSchema: z.object({
+        value: z.number(),
+        condition: z.boolean().default(false),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+        condition: z.boolean(),
+      }),
+    });
+
+    workflow
+      .dountil(step1, async ({ inputData: { condition } }) => condition)
+      .then(step2)
+      .commit();
+
+    workflows['loop-input-bug-6669-workflow'] = {
+      workflow,
+      mocks: { step1Action, step2Action },
+      resetMocks: () => {
+        step1Action.mockClear();
+        step2Action.mockClear();
+      },
+    };
+  }
+
+  // Test: should handle basic suspend and resume in nested dountil workflow - bug #5650
+  {
+    let incrementLoopValue = 2;
+
+    const resumeStepAction = vi.fn().mockImplementation(async ({ inputData, requestContext, getInitData }) => {
+      const shouldNotExist = requestContext?.get('__mastraWorflowInputData');
+      expect(shouldNotExist).toBeUndefined();
+      const initData = getInitData();
+
+      expect(initData.value).toBe(incrementLoopValue);
+      incrementLoopValue = inputData.value; // we expect the input of the nested workflow to be updated with the output of this step
+      return { value: inputData.value };
+    });
+
+    const incrementStepAction = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend, requestContext }) => {
+      const shouldNotExist = requestContext?.get('__mastraWorflowInputData');
+      expect(shouldNotExist).toBeUndefined();
+      if (!(resumeData as any)?.amountToIncrementBy) {
+        return suspend({ optionsToIncrementBy: [1, 2, 3] });
+      }
+
+      const result = inputData.value + (resumeData as any).amountToIncrementBy;
+      return { value: result };
+    });
+
+    const resumeStep = createStep({
+      id: 'resume',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      execute: resumeStepAction,
+    });
+
+    const incrementStep = createStep({
+      id: 'increment',
+      inputSchema: z.object({
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      resumeSchema: z.object({
+        amountToIncrementBy: z.number(),
+      }),
+      suspendSchema: z.object({
+        optionsToIncrementBy: z.array(z.number()),
+      }),
+      execute: incrementStepAction,
+    });
+
+    const nestedWorkflow = createWorkflow({
+      id: 'simple-resume-workflow-5650',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      steps: [incrementStep, resumeStep],
+    })
+      .then(incrementStep)
+      .then(resumeStep)
+      .commit();
+
+    const finalStep = createStep({
+      id: 'final',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      execute: async ({ inputData }) => ({ value: inputData.value }),
+    });
+
+    const dowhileWorkflow = createWorkflow({
+      id: 'nested-dountil-bug-5650-workflow',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+    })
+      .dountil(
+        nestedWorkflow,
+        async ({ inputData }) => {
+          return inputData.value >= 10;
+        },
+      )
+      .then(finalStep)
+      .commit();
+
+    workflows['nested-dountil-bug-5650-workflow'] = {
+      workflow: dowhileWorkflow,
+      nestedWorkflowId: 'simple-resume-workflow-5650',
+      mocks: { resumeStepAction, incrementStepAction },
+      resetMocks: () => {
+        resumeStepAction.mockClear();
+        incrementStepAction.mockClear();
+        incrementLoopValue = 2;
+      },
+      getIterationCount: () => incrementLoopValue,
+    };
+  }
+
   return workflows;
 }
 
@@ -2219,6 +2572,206 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         if (resume2.status === 'success') {
           expect(resume2.result).toEqual({ suspect: 'second-suspect' });
         }
+      },
+    );
+
+    // Bug regression test #6418 - parallel suspended steps should remain suspended until all are resumed
+    it.skipIf(ctx.skipTests.resumeParallelMulti || !ctx.resume)(
+      'should remain suspended when only one of multiple parallel suspended steps is resumed - #6418',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['parallel-suspension-bug-6418-workflow'];
+        resetMocks?.();
+
+        const runId = `parallel-6418-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start workflow - both parallel steps should suspend
+        const startResult = await execute(workflow, { value: 100 }, { runId });
+        expect(startResult.status).toBe('suspended');
+        if (startResult.status === 'suspended') {
+          expect(startResult.suspended).toHaveLength(2);
+        }
+
+        // Resume ONLY the first parallel step
+        const resumeResult1 = await ctx.resume!(workflow, {
+          runId,
+          step: 'parallel-step-1',
+          resumeData: { multiplier: 2 },
+        });
+        expect(resumeResult1.status).toBe('suspended');
+        if (resumeResult1.status === 'suspended') {
+          expect(resumeResult1.suspended).toHaveLength(1);
+          expect(resumeResult1.suspended[0]).toContain('parallel-step-2');
+        }
+
+        // Only after resuming the second step should the workflow complete
+        const resumeResult2 = await ctx.resume!(workflow, {
+          runId,
+          step: 'parallel-step-2',
+          resumeData: { divisor: 5 },
+        });
+        expect(resumeResult2.status).toBe('success');
+        if (resumeResult2.status === 'success') {
+          expect(resumeResult2.result).toEqual({
+            'parallel-step-1': { result: 200 },
+            'parallel-step-2': { result: 20 },
+          });
+        }
+      },
+    );
+
+    // Bug regression test #4442 - requestContext should work during suspend/resume
+    it.skipIf(ctx.skipTests.resumeWithState || !ctx.resume)(
+      'should work with requestContext - bug #4442',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['requestcontext-bug-4442-workflow'];
+        resetMocks?.();
+
+        const runId = `requestcontext-4442-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start workflow - should suspend at promptAgent step
+        const initialResult = await execute(workflow, { input: 'test' }, { runId });
+        expect(initialResult.steps.promptAgent.status).toBe('suspended');
+        expect(mocks.promptAgentAction).toHaveBeenCalledTimes(1);
+
+        // Resume with user input
+        const resumeResult = await ctx.resume!(workflow, {
+          runId,
+          step: 'promptAgent',
+          resumeData: { userInput: 'test input for resumption' },
+        });
+
+        expect(mocks.promptAgentAction).toHaveBeenCalledTimes(2);
+        expect(resumeResult.steps.requestContextAction.status).toBe('success');
+        // @ts-expect-error - testing dynamic workflow result
+        expect(resumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
+      },
+    );
+
+    // Bug regression test #6419 - branching workflow step status after resume
+    it.skipIf(ctx.skipTests.resumeBranchingStatus || !ctx.resume)(
+      'should maintain correct step status after resuming in branching workflows - #6419',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['branching-state-bug-6419-workflow'];
+        resetMocks?.();
+
+        const runId = `branching-6419-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start workflow - both steps should suspend
+        const initialResult = await execute(workflow, { value: 10 }, { runId });
+
+        expect(initialResult.status).toBe('suspended');
+        expect(initialResult.steps['branch-step-1'].status).toBe('suspended');
+        expect(initialResult.steps['branch-step-2'].status).toBe('suspended');
+        if (initialResult.status === 'suspended') {
+          expect(initialResult.suspended).toHaveLength(2);
+          expect(initialResult.suspended[0]).toContain('branch-step-1');
+          expect(initialResult.suspended[1]).toContain('branch-step-2');
+        }
+
+        // Resume only branch-step-1
+        const resumedResult1 = await ctx.resume!(workflow, {
+          runId,
+          step: 'branch-step-1',
+          resumeData: { multiplier: 2 },
+        });
+
+        // Workflow should still be suspended (branch-step-2 not resumed yet)
+        expect(resumedResult1.status).toBe('suspended');
+        expect(resumedResult1.steps['branch-step-1'].status).toBe('success');
+        expect(resumedResult1.steps['branch-step-2'].status).toBe('suspended');
+        if (resumedResult1.status === 'suspended') {
+          expect(resumedResult1.suspended).toHaveLength(1);
+          expect(resumedResult1.suspended[0]).toContain('branch-step-2');
+        }
+
+        // Resume branch-step-2 to complete the workflow
+        const finalResult = await ctx.resume!(workflow, {
+          runId,
+          step: 'branch-step-2',
+          resumeData: { multiplier: 3 },
+        });
+
+        expect(finalResult.status).toBe('success');
+        expect(finalResult.steps['branch-step-1'].status).toBe('success');
+        expect(finalResult.steps['branch-step-2'].status).toBe('success');
+        if (finalResult.status === 'success') {
+          expect(finalResult.result).toEqual({
+            'branch-step-1': { result: 20 }, // 10 * 2
+            'branch-step-2': { result: 30 }, // 10 * 3
+          });
+        }
+      },
+    );
+
+    // Bug regression test #6669 - correct input value when resuming in a loop
+    it.skipIf(ctx.skipTests.resumeLoopInput || !ctx.resume)(
+      'should have access to the correct input value when resuming in a loop - bug #6669',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['loop-input-bug-6669-workflow'];
+        resetMocks?.();
+
+        const runId = `loop-input-6669-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start workflow - should suspend at first iteration
+        const initialResult = await execute(workflow, { value: 0, condition: false }, { runId });
+
+        expect(initialResult.status).toBe('suspended');
+
+        // Resume first time - value becomes 1
+        const firstResume = await ctx.resume!(workflow, {
+          runId,
+          resumeData: { shouldContinue: true },
+        });
+
+        expect(firstResume.steps['step-1'].payload.value).toBe(1);
+
+        // Resume second time - value becomes 2
+        const secondResume = await ctx.resume!(workflow, {
+          runId,
+          resumeData: { shouldContinue: true },
+        });
+        expect(secondResume.steps['step-1'].payload.value).toBe(2);
+
+        // Resume third time - value becomes 3
+        const thirdResume = await ctx.resume!(workflow, {
+          runId,
+          resumeData: { shouldContinue: true },
+        });
+
+        expect(thirdResume.steps['step-1'].payload.value).toBe(3);
+        expect(thirdResume.status).toBe('suspended');
+      },
+    );
+
+    // Bug regression test #5650 - nested dountil suspend/resume
+    it.skipIf(ctx.skipTests.resumeDountil || !ctx.resume)(
+      'should handle basic suspend and resume in nested dountil workflow - bug #5650',
+      async () => {
+        const { workflow, nestedWorkflowId, mocks, resetMocks } = registry!['nested-dountil-bug-5650-workflow'];
+        resetMocks?.();
+
+        const runId = `nested-dountil-5650-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start workflow - nested workflow should suspend at increment step
+        const initialResult = await execute(workflow, { value: 2 }, { runId });
+
+        expect(initialResult.steps[nestedWorkflowId!]).toMatchObject({
+          status: 'suspended',
+        });
+
+        // Resume with increment of 2, value becomes 4
+        // Since 4 < 10, the loop continues and the nested workflow suspends again
+        const resumeResult = await ctx.resume!(workflow, {
+          runId,
+          resumeData: { amountToIncrementBy: 2 },
+          step: [nestedWorkflowId!, 'increment'],
+        });
+
+        // After resume with increment of 2, value becomes 4
+        // Since 4 < 10, the loop continues and the nested workflow suspends again
+        expect(resumeResult.steps[nestedWorkflowId!]).toMatchObject({
+          status: 'suspended',
+        });
       },
     );
   });

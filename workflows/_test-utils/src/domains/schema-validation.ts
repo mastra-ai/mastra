@@ -203,6 +203,69 @@ export function createSchemaValidationWorkflows(ctx: WorkflowCreatorContext) {
     workflows['schema-subset-input'] = { workflow, mocks: {} };
   }
 
+  // Test: should properly validate input schema when .map is used after .foreach - bug #11313
+  {
+    const mapAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      return { value: inputData.value + 11 };
+    });
+
+    const mapStep = createStep({
+      id: 'map',
+      description: 'Maps (+11) on the current value',
+      inputSchema: z.object({
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      execute: mapAction,
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      description: 'Final step that prints the result',
+      inputSchema: z.object({
+        inputValue: z.number(),
+      }),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+      execute: async ({ inputData }) => {
+        return { finalValue: inputData.inputValue };
+      },
+    });
+
+    const workflow = createWorkflow({
+      steps: [mapStep, finalStep],
+      id: 'schema-map-after-foreach-bug-11313',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+    });
+
+    workflow
+      .foreach(mapStep)
+      .map(
+        async ({ inputData }) => {
+          return {
+            inputValue: inputData.reduce((acc: number, curr: { value: number }) => acc + curr.value, 0),
+          };
+        },
+        { id: 'map-step' },
+      )
+      .then(finalStep)
+      .commit();
+
+    workflows['schema-map-after-foreach-bug-11313'] = {
+      workflow,
+      mocks: { mapAction },
+      resetMocks: () => {
+        mapAction.mockClear();
+      },
+    };
+  }
+
   return workflows;
 }
 
@@ -282,6 +345,30 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
       expect(result.steps.step2).toMatchObject({
         status: 'success',
         output: { result: 'test1-processed' },
+      });
+    });
+
+    // Bug regression test #11313 - .map after .foreach should properly validate schema
+    it('should properly validate input schema when .map is used after .foreach - bug #11313', async () => {
+      const { workflow, mocks, resetMocks } = registry!['schema-map-after-foreach-bug-11313'];
+      resetMocks?.();
+
+      const result = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }]);
+
+      expect(mocks.mapAction).toHaveBeenCalledTimes(3);
+      expect(result.steps).toMatchObject({
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 }, { value: 344 }],
+        },
+        'map-step': {
+          status: 'success',
+          output: { inputValue: 12 + 33 + 344 }, // 389
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 389 },
+        },
       });
     });
   });

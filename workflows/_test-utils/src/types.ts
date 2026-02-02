@@ -6,6 +6,25 @@ import type { Workflow } from '@mastra/core/workflows';
 import type { MastraStorage } from '@mastra/core/storage';
 
 /**
+ * Stream event from workflow streaming APIs
+ */
+export interface StreamEvent {
+  type: string;
+  payload?: Record<string, unknown>;
+  from?: string;
+  runId?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Result of streaming a workflow - includes events and final result
+ */
+export interface StreamWorkflowResult {
+  events: StreamEvent[];
+  result: WorkflowResult;
+}
+
+/**
  * Result of workflow execution - matches the core WorkflowResult type
  */
 export interface WorkflowResult {
@@ -29,6 +48,11 @@ export interface StepResult {
  * Function type for creating a step
  */
 export type CreateStepFn = typeof import('@mastra/core/workflows').createStep;
+
+/**
+ * Agent class type for creating agent steps
+ */
+export type AgentClass = typeof import('@mastra/core/agent').Agent;
 
 /**
  * Function type for creating a workflow
@@ -147,6 +171,7 @@ export type SkippableTest =
   | 'restartCompleted'
   | 'restartMultistep'
   | 'restartFailed'
+  | 'restartParallel'
   // perStep execution mode tests
   | 'perStepBasic'
   | 'perStepParallel'
@@ -219,7 +244,17 @@ export type SkippableTest =
   | 'storageFieldsFilter'
   | 'storageWithNestedWorkflows'
   // Agent step tests
-  | 'agentStepDeepNested';
+  | 'agentStepDeepNested'
+  // Streaming suspend/resume tests
+  | 'streamingSuspendResume'
+  // Streaming error property preservation
+  | 'streamingErrorPreservation'
+  // Streaming detailed event structure (exact event count/structure assertions)
+  | 'streamingDetailedEvents'
+  // Streaming suspend/resume with streamLegacy API
+  | 'streamingSuspendResumeLegacy'
+  // Agent options passthrough test
+  | 'agentOptions';
 
 /**
  * Configuration for creating a workflow test suite
@@ -239,6 +274,7 @@ export interface WorkflowTestConfig {
     createWorkflow: CreateWorkflowFn;
     createStep: CreateStepFn;
     createTool?: CreateToolFn;
+    Agent?: AgentClass;
   };
 
   /**
@@ -278,6 +314,34 @@ export interface WorkflowTestConfig {
     workflow: Workflow<any, any, any, any, any, any, any>,
     options: TimeTravelWorkflowOptions,
   ) => Promise<WorkflowResult>;
+
+  /**
+   * Stream a workflow and return both events and result.
+   * This is optional - only implement if the engine supports streaming.
+   *
+   * @param workflow - The workflow to stream
+   * @param inputData - Input data for the workflow
+   * @param options - Optional execution options
+   * @param api - Which streaming API to use ('stream' or 'streamLegacy')
+   */
+  streamWorkflow?: <T>(
+    workflow: Workflow<any, any, any, any, any, any, any>,
+    inputData: T,
+    options?: ExecuteWorkflowOptions,
+    api?: 'stream' | 'streamLegacy',
+  ) => Promise<StreamWorkflowResult>;
+
+  /**
+   * Resume a workflow via streaming and return both events and result.
+   * This is optional - only implement if the engine supports streaming resume.
+   *
+   * @param workflow - The workflow to resume
+   * @param options - Resume options (runId, step/label, resumeData)
+   */
+  streamResumeWorkflow?: (
+    workflow: Workflow<any, any, any, any, any, any, any>,
+    options: ResumeWorkflowOptions,
+  ) => Promise<StreamWorkflowResult>;
 
   /**
    * Called with all workflows after they're created, before tests run.
@@ -340,6 +404,8 @@ export interface ExecuteWorkflowOptions {
   requestContext?: Record<string, unknown>;
   initialState?: Record<string, unknown>;
   perStep?: boolean;
+  /** Close stream when workflow suspends (for streaming tests) */
+  closeOnSuspend?: boolean;
 }
 
 /**
@@ -427,6 +493,11 @@ export interface WorkflowCreatorContext {
    * Clone a workflow with a new ID (optional - for clone tests)
    */
   cloneWorkflow?: CloneWorkflowFn;
+
+  /**
+   * Agent class for creating agent steps (optional - for agent tests)
+   */
+  Agent?: AgentClass;
 }
 
 /**
@@ -460,6 +531,26 @@ export interface WorkflowTestContext extends WorkflowCreatorContext {
     workflow: Workflow<any, any, any, any, any, any, any>,
     options: TimeTravelWorkflowOptions,
   ) => Promise<WorkflowResult>;
+
+  /**
+   * Stream a workflow and return both events and result.
+   * Returns undefined if the engine doesn't support streaming.
+   */
+  stream?: <T>(
+    workflow: Workflow<any, any, any, any, any, any, any>,
+    inputData: T,
+    options?: ExecuteWorkflowOptions,
+    api?: 'stream' | 'streamLegacy',
+  ) => Promise<StreamWorkflowResult>;
+
+  /**
+   * Resume a workflow via streaming and return both events and result.
+   * Returns undefined if the engine doesn't support streaming resume.
+   */
+  streamResume?: (
+    workflow: Workflow<any, any, any, any, any, any, any>,
+    options: ResumeWorkflowOptions,
+  ) => Promise<StreamWorkflowResult>;
 
   /**
    * Get the storage instance for spying on storage operations.

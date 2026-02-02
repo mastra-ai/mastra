@@ -4,11 +4,12 @@
 
 import { createWorkflowTestSuite } from './factory';
 import { createWorkflow, createStep } from '@mastra/core/workflows/evented';
+import { Agent } from '@mastra/core/agent';
 import type { Workflow } from '@mastra/core/workflows';
 import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import { EventEmitterPubSub } from '@mastra/core/events';
-import type { WorkflowResult, ResumeWorkflowOptions, TimeTravelWorkflowOptions } from './types';
+import type { WorkflowResult, ResumeWorkflowOptions, TimeTravelWorkflowOptions, StreamWorkflowResult, StreamEvent } from './types';
 import { vi } from 'vitest';
 
 // Shared storage instance
@@ -20,6 +21,7 @@ createWorkflowTestSuite({
   getWorkflowFactory: () => ({
     createWorkflow,
     createStep,
+    Agent,
   }),
 
   // Skip restart domain - restart() is not supported on evented workflows
@@ -65,6 +67,7 @@ createWorkflowTestSuite({
     resumeNested: true, // Still suspended after resume
     resumeBranchingStatus: true, // branch-step-2 is undefined
     resumeLoopInput: true, // Timeout - loop resume not working
+    resumeDountil: true, // Nested dountil suspend/resume behaves differently - #5650
     resumeForeachIndex: true, // Wrong status - forEachIndex resume broken
     resumeParallelMulti: true, // Only one parallel step getting suspended path
     resumeMultiSuspendError: true, // Only 1 suspended step found, expects >1
@@ -81,6 +84,9 @@ createWorkflowTestSuite({
 
     // Time travel conditional - different result structure
     timeTravelConditional: true,
+
+    // Streaming suspend/resume with legacy API - different event behavior
+    streamingSuspendResumeLegacy: true,
   },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
@@ -96,14 +102,21 @@ createWorkflowTestSuite({
       // Start the event engine
       await mastra.startEventEngine();
 
-      // Create the run and execute
+      // Create the run and execute using streaming API
       const run = await workflow.createRun({ runId: options.runId, resourceId: options.resourceId });
-      const result = await run.start({
+      const streamResult = run.stream({
         inputData,
         initialState: options.initialState,
         perStep: options.perStep,
         requestContext: options.requestContext as any,
       });
+
+      // Consume the stream to ensure it completes
+      for await (const _event of streamResult.fullStream) {
+        // Discard events - we only care about the result
+      }
+
+      const result = await streamResult.result;
 
       return result as WorkflowResult;
     } finally {
@@ -166,6 +179,88 @@ createWorkflowTestSuite({
       return result as WorkflowResult;
     } finally {
       // Always stop the event engine
+      await mastra.stopEventEngine();
+    }
+  },
+
+  streamWorkflow: async (workflow, inputData, options = {}, api = 'stream'): Promise<StreamWorkflowResult> => {
+    const mastra = new Mastra({
+      workflows: { [workflow.id]: workflow },
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+
+    try {
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun({
+        runId: options.runId,
+        resourceId: options.resourceId,
+      });
+
+      const events: StreamEvent[] = [];
+
+      if (api === 'streamLegacy') {
+        const { stream, getWorkflowState } = run.streamLegacy({
+          inputData,
+          initialState: options.initialState,
+          perStep: options.perStep,
+          requestContext: options.requestContext as any,
+        });
+
+        for await (const event of stream) {
+          events.push(JSON.parse(JSON.stringify(event)));
+        }
+
+        const result = await getWorkflowState();
+        return { events, result: result as WorkflowResult };
+      } else {
+        const streamResult = run.stream({
+          inputData,
+          initialState: options.initialState,
+          perStep: options.perStep,
+          requestContext: options.requestContext as any,
+          closeOnSuspend: options.closeOnSuspend,
+        });
+
+        for await (const event of streamResult.fullStream) {
+          events.push(JSON.parse(JSON.stringify(event)));
+        }
+
+        const result = await streamResult.result;
+        return { events, result: result as WorkflowResult };
+      }
+    } finally {
+      await mastra.stopEventEngine();
+    }
+  },
+
+  streamResumeWorkflow: async (workflow, options: ResumeWorkflowOptions): Promise<StreamWorkflowResult> => {
+    const mastra = new Mastra({
+      workflows: { [workflow.id]: workflow },
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+
+    try {
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun({ runId: options.runId });
+
+      const events: StreamEvent[] = [];
+      const streamResult = run.resumeStream({
+        resumeData: options.resumeData,
+        step: options.step,
+        label: options.label,
+      } as any);
+
+      for await (const event of streamResult.fullStream) {
+        events.push(JSON.parse(JSON.stringify(event)));
+      }
+
+      const result = await streamResult.result;
+      return { events, result: result as WorkflowResult };
+    } finally {
       await mastra.stopEventEngine();
     }
   },
