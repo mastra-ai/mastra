@@ -44,17 +44,19 @@ export const AgentMetadataModelSwitcher = ({
 
   const currentModelProvider = cleanProviderId(selectedProvider);
 
+  // Resolve the full provider ID (handles gateway prefix, e.g., 'custom' -> 'acme/custom')
+  const resolvedProvider = findProviderById(providers, currentModelProvider);
+  const fullProviderId = resolvedProvider?.id || currentModelProvider;
+
   // Auto-save when model changes
   const handleModelSelect = async (modelId: string) => {
     setSelectedModel(modelId);
 
-    const providerToUse = currentModelProvider || selectedProvider;
-
-    if (modelId && providerToUse) {
+    if (modelId && fullProviderId) {
       setLoading(true);
       try {
         const result = await updateModel({
-          provider: providerToUse as UpdateModelParams['provider'],
+          provider: fullProviderId as UpdateModelParams['provider'],
           modelId,
         });
         console.log('Model updated:', result);
@@ -98,10 +100,12 @@ export const AgentMetadataModelSwitcher = ({
         setSelectedProvider(cleanProviderId(originalProvider));
         setSelectedModel(originalModel);
 
-        // Update back to original configuration
-        if (originalProvider && originalModel) {
+        // Update back to original configuration - resolve full provider ID
+        const resolvedOriginalProvider = findProviderById(providers, originalProvider);
+        const fullOriginalProviderId = resolvedOriginalProvider?.id || originalProvider;
+        if (fullOriginalProviderId && originalModel) {
           updateModel({
-            provider: originalProvider as UpdateModelParams['provider'],
+            provider: fullOriginalProviderId as UpdateModelParams['provider'],
             modelId: originalModel,
           }).catch(error => {
             console.error('Failed to reset model:', error);
