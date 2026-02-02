@@ -13406,6 +13406,96 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
+  describe.sequential('Long Running Steps', () => {
+    it('should handle long-running steps with eventual consistency', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const childWorkflowStep = createStep({
+        id: 'child-workflow-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const childWorkflow = createWorkflow({
+        id: 'child-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(childWorkflowStep)
+        .commit();
+
+      // Create a step that takes 30 seconds to complete
+      const longRunningStep = createStep({
+        id: 'long-running-step',
+        execute: async () => {
+          // Simulate a long-running operation (30 seconds)
+          await new Promise(resolve => setTimeout(resolve, 30000));
+          return { result: 'completed after 30 seconds' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'long-running-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [childWorkflow, longRunningStep],
+      });
+      workflow.then(childWorkflow).then(longRunningStep).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'long-running-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      srv.close();
+
+      // Verify the workflow completed successfully with the correct output
+      expect(result.status).toBe('success');
+      expect(result.steps['long-running-step']).toEqual({
+        status: 'success',
+        output: { result: 'completed after 30 seconds' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    }, 120000); // 2 minute timeout for the test
+  });
+
   describe.sequential('Flow Control Configuration', () => {
     it('should accept workflow configuration with flow control properties', async ctx => {
       const inngest = new Inngest({

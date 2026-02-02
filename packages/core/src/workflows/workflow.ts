@@ -31,7 +31,7 @@ import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
 import { isZodType } from '../utils';
-import { NESTED_WORKFLOW_RESULT_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type {
@@ -72,7 +72,7 @@ import type {
   StepParams,
   OutputWriter,
 } from './types';
-import { createTimeTravelExecutionParams, getZodErrors } from './utils';
+import { cleanStepResult, createTimeTravelExecutionParams, getZodErrors } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -2202,20 +2202,7 @@ export class Workflow<
       throw res.error;
     }
 
-    // Wrap successful nested workflow results with NESTED_WORKFLOW_RESULT_SYMBOL.
-    // The step handler (handlers/step.ts) checks for this symbol to:
-    // 1. Extract the actual result for the step output
-    // 2. Store the nested workflow's runId in step metadata for debugging/tracing
-    // See constants.ts for why this uses a Symbol (safe for in-memory, never serialized).
-    if (res.status === 'success') {
-      return {
-        [NESTED_WORKFLOW_RESULT_SYMBOL]: true,
-        result: res.result,
-        runId: run.runId,
-      } as any;
-    }
-
-    return undefined;
+    return res.status === 'success' ? res.result : undefined;
   }
 
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput) {
@@ -2324,22 +2311,21 @@ export class Workflow<
       const stepGraph = serializedStepGraph.find(stepGraph => (stepGraph as any)?.step?.id === step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
       if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
-        // Get nestedRunId from metadata (evented runtime) or suspendPayload (default runtime fallback)
+        // Evented runtime stores nested workflow's runId in metadata.nestedRunId (set by step-executor).
+        // Default runtime uses the parent runId directly to look up nested workflow steps.
         const stepResult = steps[step] as any;
-        const nestedRunId = stepResult?.metadata?.nestedRunId ?? stepResult?.suspendPayload?.__workflow_meta?.runId;
+        const nestedRunId = stepResult?.metadata?.nestedRunId ?? runId;
 
-        if (nestedRunId) {
-          const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: step });
-          if (nestedSteps) {
-            const updatedNestedSteps = Object.entries(nestedSteps).reduce(
-              (acc, [key, value]) => {
-                acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
-                return acc;
-              },
-              {} as Record<string, StepResult<any, any, any, any>>,
-            );
-            finalSteps = { ...finalSteps, ...updatedNestedSteps };
-          }
+        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: step });
+        if (nestedSteps) {
+          const updatedNestedSteps = Object.entries(nestedSteps).reduce(
+            (acc, [key, value]) => {
+              acc[`${step}.${key}`] = value as StepResult<any, any, any, any>;
+              return acc;
+            },
+            {} as Record<string, StepResult<any, any, any, any>>,
+          );
+          finalSteps = { ...finalSteps, ...updatedNestedSteps };
         }
       }
     }
@@ -2439,12 +2425,14 @@ export class Workflow<
         const { input, ...stepsOnly } = snapshotState.context || {};
         rawSteps = stepsOnly;
       }
-      // Strip __state from steps (internal implementation detail for state propagation)
+      // Strip __state from steps (internal implementation detail for state propagation).
+      // The evented runtime adds __state to step results for cross-step state passing.
       const { __state: _removedTopLevelState, ...stepsWithoutTopLevelState } = rawSteps;
-      // Recursively clean each step result to remove internal properties (__state, nestedRunId)
-      // This handles both object and array step results (e.g., forEach outputs)
+      // Clean each step result to remove internal properties (__state, metadata.nestedRunId)
+      // that are implementation details not meant for API consumers.
+      // Handles both object and array step results (e.g., forEach outputs).
       for (const [stepId, stepResult] of Object.entries(stepsWithoutTopLevelState)) {
-        steps[stepId] = cleanStepResultRecursively(stepResult);
+        steps[stepId] = cleanStepResult(stepResult);
       }
     }
 
@@ -2483,76 +2471,6 @@ export class Workflow<
 
     return result;
   }
-}
-
-/**
- * Recursively cleans step result data by removing internal properties.
- *
- * This function traverses objects and arrays to:
- * - Remove `__state` properties (internal workflow state, not meant for user output)
- * - Strip `nestedRunId` from `metadata` objects (internal tracking for nested workflows)
- *   while preserving other user-defined metadata fields
- *
- * This is necessary because forEach and other array-producing steps can have
- * nested objects that contain these internal properties, and a shallow cleanup
- * would leak them to the user.
- *
- * Note: Error objects and other special objects (Date, RegExp, etc.) are preserved as-is
- * since they have non-enumerable properties that would be lost if we reconstructed them.
- */
-function cleanStepResultRecursively(value: unknown): unknown {
-  // Handle null/undefined
-  if (value === null || value === undefined) {
-    return value;
-  }
-
-  // Handle arrays - recursively clean each element
-  if (Array.isArray(value)) {
-    return value.map(cleanStepResultRecursively);
-  }
-
-  // Handle objects
-  if (typeof value === 'object') {
-    // Preserve Error objects as-is - they have non-enumerable properties (message, stack)
-    // that would be lost if we iterated over Object.entries()
-    if (value instanceof Error) {
-      return value;
-    }
-
-    // Preserve other special built-in objects that shouldn't be reconstructed
-    if (value instanceof Date || value instanceof RegExp || value instanceof Map || value instanceof Set) {
-      return value;
-    }
-
-    const obj = value as Record<string, unknown>;
-    const cleaned: Record<string, unknown> = {};
-
-    for (const [key, val] of Object.entries(obj)) {
-      // Skip __state property entirely
-      if (key === '__state') {
-        continue;
-      }
-
-      // Special handling for metadata - strip nestedRunId but keep other fields
-      if (key === 'metadata' && val && typeof val === 'object' && !Array.isArray(val)) {
-        const { nestedRunId: _nestedRunId, ...userMetadata } = val as Record<string, unknown>;
-        if (Object.keys(userMetadata).length > 0) {
-          // Recursively clean the remaining metadata in case it has nested structures
-          cleaned.metadata = cleanStepResultRecursively(userMetadata);
-        }
-        // If metadata is now empty, don't include it
-        continue;
-      }
-
-      // Recursively clean nested values
-      cleaned[key] = cleanStepResultRecursively(val);
-    }
-
-    return cleaned;
-  }
-
-  // Primitives (string, number, boolean, etc.) - return as-is
-  return value;
 }
 
 /**

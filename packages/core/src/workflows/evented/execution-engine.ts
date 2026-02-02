@@ -12,79 +12,9 @@ import type {
   TimeTravelExecutionParams,
   WorkflowRunStatus,
 } from '../types';
-import { hydrateSerializedStepErrors } from '../utils';
+import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
-
-/**
- * Recursively cleans step result data by removing internal properties.
- *
- * This function traverses objects and arrays to:
- * - Remove `__state` properties (internal workflow state, not meant for user output)
- * - Strip `nestedRunId` from `metadata` objects (internal tracking for nested workflows)
- *   while preserving other user-defined metadata fields
- *
- * This is necessary because forEach and other array-producing steps can have
- * nested objects that contain these internal properties, and a shallow cleanup
- * would leak them to the user.
- *
- * Note: Error objects and other special objects (Date, RegExp, etc.) are preserved as-is
- * since they have non-enumerable properties that would be lost if we reconstructed them.
- */
-function cleanStepResultRecursively(value: unknown): unknown {
-  // Handle null/undefined
-  if (value === null || value === undefined) {
-    return value;
-  }
-
-  // Handle arrays - recursively clean each element
-  if (Array.isArray(value)) {
-    return value.map(cleanStepResultRecursively);
-  }
-
-  // Handle objects
-  if (typeof value === 'object') {
-    // Preserve Error objects as-is - they have non-enumerable properties (message, stack)
-    // that would be lost if we iterated over Object.entries()
-    if (value instanceof Error) {
-      return value;
-    }
-
-    // Preserve other special built-in objects that shouldn't be reconstructed
-    if (value instanceof Date || value instanceof RegExp || value instanceof Map || value instanceof Set) {
-      return value;
-    }
-
-    const obj = value as Record<string, unknown>;
-    const cleaned: Record<string, unknown> = {};
-
-    for (const [key, val] of Object.entries(obj)) {
-      // Skip __state property entirely
-      if (key === '__state') {
-        continue;
-      }
-
-      // Special handling for metadata - strip nestedRunId but keep other fields
-      if (key === 'metadata' && val && typeof val === 'object' && !Array.isArray(val)) {
-        const { nestedRunId: _nestedRunId, ...userMetadata } = val as Record<string, unknown>;
-        if (Object.keys(userMetadata).length > 0) {
-          // Recursively clean the remaining metadata in case it has nested structures
-          cleaned.metadata = cleanStepResultRecursively(userMetadata);
-        }
-        // If metadata is now empty, don't include it
-        continue;
-      }
-
-      // Recursively clean nested values
-      cleaned[key] = cleanStepResultRecursively(val);
-    }
-
-    return cleaned;
-  }
-
-  // Primitives (string, number, boolean, etc.) - return as-is
-  return value;
-}
 
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
@@ -269,7 +199,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // This handles both object and array step results (e.g., forEach outputs)
     const cleanStepResults: Record<string, any> = {};
     for (const [stepId, stepResult] of Object.entries(stepResultsWithoutTopLevelState)) {
-      cleanStepResults[stepId] = cleanStepResultRecursively(stepResult);
+      cleanStepResults[stepId] = cleanStepResult(stepResult);
     }
 
     // Build the callback argument with proper typing for invokeLifecycleCallbacks
