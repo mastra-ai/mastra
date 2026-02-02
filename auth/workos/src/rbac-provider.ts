@@ -57,13 +57,11 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   private workos: WorkOS;
   private options: MastraRBACWorkosOptions;
   /**
-   * Caches storing promises for both roles and permissions.
-   * Storing promises handles both caching and concurrent request deduplication:
-   * - Cache hit: returns resolved promise immediately
-   * - Cache miss: creates promise, caches it, all concurrent requests share it
+   * Single cache for roles (the expensive WorkOS API call).
+   * Permissions are derived from roles on-the-fly (cheap, synchronous).
+   * Storing promises handles concurrent request deduplication.
    */
   private rolesCache: LRUCache<string, Promise<string[]>>;
-  private permissionCache: LRUCache<string, Promise<string[]>>;
 
   /**
    * Expose roleMapping for middleware access.
@@ -93,13 +91,11 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
     this.workos = new WorkOS(apiKey, { clientId });
     this.options = options;
 
-    // Initialize LRU caches with configurable size and TTL
-    const cacheOptions = {
+    // Initialize LRU cache with configurable size and TTL
+    this.rolesCache = new LRUCache<string, Promise<string[]>>({
       max: options.cache?.maxSize ?? DEFAULT_CACHE_MAX_SIZE,
       ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
-    };
-    this.rolesCache = new LRUCache<string, Promise<string[]>>(cacheOptions);
-    this.permissionCache = new LRUCache<string, Promise<string[]>>(cacheOptions);
+    });
 
     console.info(
       `[WorkOS RBAC] Initialized with roleMapping keys: ${Object.keys(this.options.roleMapping).join(', ')}`,
@@ -112,6 +108,8 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
    * Fetches organization memberships from WorkOS and extracts role slugs.
    * If an organizationId is configured, only returns roles from that organization.
    * Otherwise, returns roles from all organizations the user belongs to.
+   *
+   * Results are cached and concurrent requests are deduplicated.
    *
    * @param user - WorkOS user to get roles for
    * @returns Array of role slugs
@@ -129,12 +127,12 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
     // Check cache - returns existing promise (resolved or in-flight)
     const cached = this.rolesCache.get(cacheKey);
     if (cached) {
-      console.info(`[WorkOS RBAC] Roles cache hit for user ${cacheKey}`);
+      console.info(`[WorkOS RBAC] Cache hit for user ${cacheKey}`);
       return cached;
     }
 
     // Create and cache the role fetch promise
-    console.info(`[WorkOS RBAC] Roles cache miss for user ${cacheKey}, fetching from WorkOS`);
+    console.info(`[WorkOS RBAC] Cache miss for user ${cacheKey}, fetching from WorkOS`);
     const rolesPromise = this.fetchRolesFromWorkOS(user);
     this.rolesCache.set(cacheKey, rolesPromise);
 
@@ -146,7 +144,6 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
    */
   private async fetchRolesFromWorkOS(user: WorkOSUser): Promise<string[]> {
     try {
-      console.info(`[WorkOS RBAC] Fetching memberships from WorkOS API for user ${user.workosId}`);
       const memberships = await this.workos.userManagement.listOrganizationMemberships({
         userId: user.workosId,
       });
@@ -183,8 +180,8 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
    * Get all permissions for a user by mapping their WorkOS roles.
    *
    * Uses the configured roleMapping to translate WorkOS role slugs
-   * into Mastra permission strings. Results are cached by user ID
-   * for performance, and concurrent requests are deduplicated.
+   * into Mastra permission strings. Roles are cached; permissions
+   * are derived on-the-fly (cheap, synchronous operation).
    *
    * If the user has no roles (no organization memberships), the
    * _default permissions from the role mapping are applied.
@@ -193,40 +190,13 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
    * @returns Array of permission strings
    */
   async getPermissions(user: WorkOSUser): Promise<string[]> {
-    const cacheKey = user.id;
-
-    // Check cache - returns existing promise (resolved or in-flight)
-    const cached = this.permissionCache.get(cacheKey);
-    if (cached) {
-      console.info(`[WorkOS RBAC] Cache hit for user ${cacheKey}`);
-      return cached;
-    }
-
-    // Create and cache the permission resolution promise
-    // All concurrent requests will share this same promise
-    console.info(`[WorkOS RBAC] Cache miss for user ${cacheKey}, fetching permissions`);
-    const permissionPromise = this.resolveUserPermissions(user);
-    this.permissionCache.set(cacheKey, permissionPromise);
-
-    return permissionPromise;
-  }
-
-  /**
-   * Resolve permissions for a user by fetching roles and mapping them.
-   */
-  private async resolveUserPermissions(user: WorkOSUser): Promise<string[]> {
     const roles = await this.getRoles(user);
 
-    let permissions: string[];
     if (roles.length === 0) {
-      // No roles - apply _default permissions
-      permissions = this.options.roleMapping['_default'] ?? [];
-    } else {
-      permissions = resolvePermissionsFromMapping(roles, this.options.roleMapping);
+      return this.options.roleMapping['_default'] ?? [];
     }
 
-    console.info(`[WorkOS RBAC] Resolved permissions for user ${user.id}: ${JSON.stringify(permissions)}`);
-    return permissions;
+    return resolvePermissionsFromMapping(roles, this.options.roleMapping);
   }
 
   /**
@@ -269,18 +239,17 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   }
 
   /**
-   * Clear all caches.
+   * Clear the roles cache.
    *
    * Call this when system-wide role changes occur.
    * For individual user changes, prefer clearUserCache() instead.
    */
   clearCache(): void {
     this.rolesCache.clear();
-    this.permissionCache.clear();
   }
 
   /**
-   * Clear cached data for a specific user.
+   * Clear cached roles for a specific user.
    *
    * Call this when a user's roles change to ensure fresh permission resolution
    * on their next request. This is more efficient than clearing the entire cache.
@@ -289,7 +258,6 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
    */
   clearUserCache(userId: string): void {
     this.rolesCache.delete(userId);
-    this.permissionCache.delete(userId);
   }
 
   /**
@@ -299,8 +267,8 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
    */
   getCacheStats(): { size: number; maxSize: number } {
     return {
-      size: this.permissionCache.size,
-      maxSize: this.permissionCache.max,
+      size: this.rolesCache.size,
+      maxSize: this.rolesCache.max,
     };
   }
 
