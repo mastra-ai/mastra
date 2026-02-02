@@ -56,7 +56,7 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
       <button
         type="button"
         onClick={() => setIsExpanded(prev => !prev)}
-        className="flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-surface3 transition-colors"
+        className="flex items-center gap-2 w-full px-3 py-0.5 text-left hover:bg-surface3 transition-colors"
       >
         <ChevronRight className={cn('h-3 w-3 text-neutral3 transition-transform shrink-0', isExpanded && 'rotate-90')} />
 

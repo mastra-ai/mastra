@@ -14,7 +14,7 @@ interface BrowserToolCallHistoryProps {
  */
 export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProps) {
   const { toolCalls } = useBrowserToolCalls();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to latest entry when new tool calls arrive
@@ -27,11 +27,11 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
   if (toolCalls.length === 0) return null;
 
   return (
-    <div className={cn('border-t border-border1', className)}>
+    <div className={cn('border-t border-border1 flex flex-col overflow-hidden', className)}>
       <button
         type="button"
         onClick={() => setIsExpanded(prev => !prev)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-surface3 transition-colors"
+        className="flex items-center gap-2 w-full px-3 py-1 text-left hover:bg-surface3 transition-colors shrink-0"
       >
         <ChevronUp
           className={cn('h-3.5 w-3.5 text-neutral3 transition-transform', isExpanded ? 'rotate-180' : 'rotate-90')}
@@ -42,7 +42,7 @@ export function BrowserToolCallHistory({ className }: BrowserToolCallHistoryProp
       </button>
 
       {isExpanded && (
-        <div ref={listRef} className="max-h-60 overflow-y-auto bg-surface1">
+        <div ref={listRef} className="flex-1 overflow-y-auto bg-surface1">
           {toolCalls.map(entry => (
             <BrowserToolCallItem key={entry.toolCallId} entry={entry} />
           ))}

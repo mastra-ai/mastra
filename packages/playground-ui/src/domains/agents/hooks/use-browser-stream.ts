@@ -152,7 +152,7 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
               setStatus('error');
             }
 
-            if (parsed.url !== undefined) {
+            if (parsed.url) {
               setCurrentUrl(parsed.url);
             }
 

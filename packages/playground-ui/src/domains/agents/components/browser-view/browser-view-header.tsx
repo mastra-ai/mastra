@@ -1,4 +1,4 @@
-import { X, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/ds/components/StatusBadge';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
@@ -10,6 +10,7 @@ interface BrowserViewHeaderProps {
   className?: string;
   onClose?: () => void;
   onToggleCollapse?: () => void;
+  onTuck?: () => void;
 }
 
 /**
@@ -52,6 +53,7 @@ export function BrowserViewHeader({
   className,
   onClose,
   onToggleCollapse,
+  onTuck,
 }: BrowserViewHeaderProps) {
   const { variant, pulse, label } = getStatusBadgeConfig(status);
 
@@ -76,12 +78,23 @@ export function BrowserViewHeader({
           {label}
         </StatusBadge>
 
+        {/* Tuck away to pill */}
+        {onTuck && (
+          <button
+            onClick={onTuck}
+            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
+            title="Minimize to pill"
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+        )}
+
         {/* Collapse/expand toggle */}
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
             className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
-            title={isCollapsed ? 'Expand browser view' : 'Collapse browser view'}
+            title={isCollapsed ? 'Expand browser view' : 'Minimize browser view'}
           >
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
           </button>

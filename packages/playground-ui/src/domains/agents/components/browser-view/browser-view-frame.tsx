@@ -14,13 +14,14 @@ interface BrowserViewFrameProps {
   className?: string;
   onStatusChange?: (status: StreamStatus) => void;
   onUrlChange?: (url: string | null) => void;
+  onFirstFrame?: () => void;
 }
 
 /**
  * Browser view frame component that displays screencast stream.
  * Uses useRef pattern for img.src updates to bypass React virtual DOM.
  */
-export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChange }: BrowserViewFrameProps) {
+export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChange, onFirstFrame }: BrowserViewFrameProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [hasFrame, setHasFrame] = useState(false);
@@ -83,6 +84,13 @@ export function BrowserViewFrame({ agentId, className, onStatusChange, onUrlChan
   useEffect(() => {
     onUrlChange?.(currentUrl);
   }, [currentUrl, onUrlChange]);
+
+  // Notify parent when first frame arrives (reliable signal that browser is active)
+  useEffect(() => {
+    if (hasFrame) {
+      onFirstFrame?.();
+    }
+  }, [hasFrame, onFirstFrame]);
 
   // Auto-connect when component mounts
   useEffect(() => {
