@@ -79,7 +79,9 @@ export default function Observability() {
     if (!entityName || entityName === 'all') {
       return { value: 'all', label: 'All', type: 'all' as const };
     }
-    return entityOptions.find(option => option.value === entityName) || { value: 'all', label: 'All', type: 'all' as const };
+    return (
+      entityOptions.find(option => option.value === entityName) || { value: 'all', label: 'All', type: 'all' as const }
+    );
   }, [searchParams, entityOptions]);
 
   const {
@@ -259,7 +261,7 @@ export default function Observability() {
         </Header>
 
         <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] px-12 mx-auto grid content-start gap-8 h-full')}>
+          <div className={cn('max-w-[100rem] w-full px-12 mx-auto grid content-start gap-8 h-full')}>
             <PageHeader
               title="Observability"
               description="Explore observability traces for your entities"
