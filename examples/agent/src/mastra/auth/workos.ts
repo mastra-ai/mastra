@@ -14,10 +14,14 @@ export async function initWorkOS(): Promise<AuthResult> {
 
   const rbacProvider = new MastraRBACWorkos({
     roleMapping: {
+      // Full access
       admin: ['*'],
-      member: ['agents:read', 'agents:execute', 'workflows:read', 'workflows:execute', 'logs:read'],
-      viewer: ['agents:read', 'workflows:read', 'logs:read'],
-      _default: ['agents:read'],
+      // Read and execute across all resources
+      member: ['*:read', '*:execute'],
+      // Read-only access to all resources
+      viewer: ['*:read'],
+      // Minimal default - no access
+      _default: [],
     },
   });
 
