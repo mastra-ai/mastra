@@ -26,8 +26,9 @@ export const useAllModels = (providers: Provider[]): ModelInfo[] => {
 /**
  * Check if a provider ID matches, handling gateway prefix fallback.
  * e.g., 'custom' matches 'acme/custom'
+ * @internal Exported for testing
  */
-const providerMatches = (modelProvider: string, targetProvider: string): boolean => {
+export const providerMatches = (modelProvider: string, targetProvider: string): boolean => {
   const cleanTarget = cleanProviderId(targetProvider);
   const cleanModel = cleanProviderId(modelProvider);
 
