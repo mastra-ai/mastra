@@ -372,14 +372,14 @@ export const validatedTool = createTool({
   requestContextSchema: z.object({
     userId: z.string(),
   }),
-  execute: async (inputData, { requestContext }) => {
+  execute: async (inputData, context) => {
     // Access all values as a typed object
-    const { userId } = requestContext.all;
+    const { userId } = context.requestContext?.all ?? {};
     // { userId: string }
 
     // Or retrieve individual values with .get()
-    const id = requestContext.get("userId");
-    // string
+    const id = context.requestContext?.get("userId");
+    // string | undefined
 
     return { result: `Processed for ${userId}` };
   },
@@ -403,10 +403,17 @@ When you define `requestContextSchema` on a workflow, the context is validated a
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
+// Define schema once and share between workflow and steps
+const workflowContextSchema = z.object({
+  tenantId: z.string(),
+});
+
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({ message: z.string() }),
   outputSchema: z.object({ result: z.string() }),
+  // Add schema to step for type inference
+  requestContextSchema: workflowContextSchema,
   execute: async ({ inputData, requestContext }) => {
     // Access all values as a typed object
     const { tenantId } = requestContext.all;
@@ -424,9 +431,7 @@ export const validatedWorkflow = createWorkflow({
   id: "validated-workflow",
   inputSchema: z.object({ message: z.string() }),
   outputSchema: z.object({ result: z.string() }),
-  requestContextSchema: z.object({
-    tenantId: z.string(),
-  }),
+  requestContextSchema: workflowContextSchema,
 })
   .then(step1)
   .commit();
