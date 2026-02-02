@@ -5,4 +5,9 @@ export type Event = {
   data: any;
   runId: string;
   createdAt: Date;
+  /**
+   * Sequential index for position tracking.
+   * Enables efficient resume from a specific position.
+   */
+  index?: number;
 };

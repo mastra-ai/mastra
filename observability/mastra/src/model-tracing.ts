@@ -36,6 +36,10 @@ export class ModelSpanTracker {
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
   #completionStartTime?: Date;
+  /** When true, step-finish chunks don't auto-close the step span (for durable execution) */
+  #deferStepClose: boolean = false;
+  /** Stored step-finish payload when defer mode is enabled */
+  #pendingStepFinishPayload?: StepFinishPayload<any, any>;
 
   constructor(modelSpan?: Span<SpanType.MODEL_GENERATION>) {
     this.#modelSpan = modelSpan;
@@ -88,6 +92,46 @@ export class ModelSpanTracker {
    */
   updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void {
     this.#modelSpan?.update(options);
+  }
+
+  /**
+   * Enable or disable deferred step closing for durable execution.
+   * When enabled, step-finish chunks won't automatically close the step span.
+   * Use exportCurrentStep() to get the span data, then close it manually later.
+   */
+  setDeferStepClose(defer: boolean): void {
+    this.#deferStepClose = defer;
+  }
+
+  /**
+   * Export the current step span for later rebuilding (durable execution).
+   * Returns undefined if no step span is active.
+   */
+  exportCurrentStep(): ReturnType<Span<SpanType.MODEL_STEP>['exportSpan']> | undefined {
+    return this.#currentStepSpan?.exportSpan();
+  }
+
+  /**
+   * Get the pending step finish payload (captured when defer mode is enabled).
+   * This contains usage, finishReason, etc. for closing the step later.
+   */
+  getPendingStepFinishPayload(): StepFinishPayload<any, any> | undefined {
+    return this.#pendingStepFinishPayload;
+  }
+
+  /**
+   * Set the starting step index for durable execution.
+   * Used when resuming across agentic loop iterations to maintain step continuity.
+   */
+  setStepIndex(index: number): void {
+    this.#stepIndex = index;
+  }
+
+  /**
+   * Get the current step index.
+   */
+  getStepIndex(): number {
+    return this.#stepIndex;
   }
 
   /**
@@ -472,7 +516,13 @@ export class ModelSpanTracker {
               break;
 
             case 'step-finish':
-              this.#endStepSpan(chunk.payload);
+              if (this.#deferStepClose) {
+                // Durable mode: save payload for later, don't close the step
+                this.#pendingStepFinishPayload = chunk.payload;
+              } else {
+                // Normal mode: close the step immediately
+                this.#endStepSpan(chunk.payload);
+              }
               break;
 
             // Infrastructure chunks - skip creating spans for these
