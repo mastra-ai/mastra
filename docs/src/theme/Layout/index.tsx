@@ -33,7 +33,7 @@ export default function Layout(props: Props): ReactNode {
   useKeyboardNavigation();
 
   const location = useLocation();
-  const { siteConfig } = useDocusaurusContext();
+  const { siteConfig, i18n } = useDocusaurusContext();
   const cleanPath = location.pathname
     .replace(/^\/ja(\/|$)/, "/")
     .replace(/^\/([a-z]+)\/v0(\/|$)/, "/$1$2");
@@ -47,6 +47,10 @@ export default function Layout(props: Props): ReactNode {
         {/* If the current path is in the v0Urls list, do not set a canonical URL */}
         {!v0Urls.includes(location.pathname) && (
           <link rel="canonical" href={canonicalUrl} />
+        )}
+        {/* We don't want to index the ja locale */}
+        {i18n.currentLocale === "ja" && (
+          <meta name="robots" content="noindex" />
         )}
       </Head>
 
