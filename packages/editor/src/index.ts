@@ -2,6 +2,8 @@ import { Memory } from '@mastra/memory';
 import {
   Agent,
   Mastra,
+  IMastraEditor,
+  MastraEditorConfig,
 } from '@mastra/core';
 
 import type {
@@ -23,11 +25,9 @@ import type {
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 
-export interface MastraEditorConfig {
-  logger?: Logger;
-}
+export type { MastraEditorConfig };
 
-export class MastraEditor {
+export class MastraEditor implements IMastraEditor {
   private logger?: Logger;
   private mastra?: Mastra;
 
@@ -65,15 +65,15 @@ export class MastraEditor {
    */
   public async getStoredAgentById(
     id: string,
-    options?: { raw?: false; versionId?: string; versionNumber?: number },
+    options?: { returnRaw?: false; versionId?: string; versionNumber?: number },
   ): Promise<Agent | null>;
   public async getStoredAgentById(
     id: string,
-    options: { raw: true; versionId?: string; versionNumber?: number },
+    options: { returnRaw: true; versionId?: string; versionNumber?: number },
   ): Promise<StorageResolvedAgentType | null>;
   public async getStoredAgentById(
     id: string,
-    options?: { raw?: boolean; versionId?: string; versionNumber?: number },
+    options?: { returnRaw?: boolean; versionId?: string; versionNumber?: number },
   ): Promise<Agent | StorageResolvedAgentType | null> {
     if (!this.mastra) {
       throw new Error('MastraEditor is not registered with a Mastra instance');
@@ -114,7 +114,7 @@ export class MastraEditor {
       }
 
       const resolvedAgent: StorageResolvedAgentType = { ...agentRecord, ...snapshotConfig };
-      if (options?.raw) {
+      if (options?.returnRaw) {
         return resolvedAgent;
       }
       return this.createAgentFromStoredConfig(resolvedAgent);
@@ -144,7 +144,7 @@ export class MastraEditor {
       }
 
       const resolvedAgent: StorageResolvedAgentType = { ...agentRecord, ...snapshotConfig };
-      if (options?.raw) {
+      if (options?.returnRaw) {
         return resolvedAgent;
       }
       return this.createAgentFromStoredConfig(resolvedAgent);
@@ -152,7 +152,7 @@ export class MastraEditor {
 
     // Default behavior: get the current agent config with version resolution
     // Check cache first for non-raw requests (allows in-memory model changes to persist)
-    if (!options?.raw) {
+    if (!options?.returnRaw) {
       const agentCache = this.mastra.getStoredAgentCache();
       if (agentCache) {
         const cached = agentCache.get(id);
@@ -170,7 +170,7 @@ export class MastraEditor {
       return null;
     }
 
-    if (options?.raw) {
+    if (options?.returnRaw) {
       return storedAgent;
     }
 
@@ -188,35 +188,32 @@ export class MastraEditor {
   /**
    * List all stored agents with page-based pagination.
    */
-  public async listStoredAgents(args?: {
+  public async listStoredAgents(options?: {
+    returnRaw?: false;
     page?: number;
-    perPage?: number | false;
-    orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
-    raw?: false;
+    pageSize?: number;
   }): Promise<{
     agents: Agent[];
     total: number;
     page: number;
-    perPage: number | false;
+    perPage: number;
     hasMore: boolean;
   }>;
-  public async listStoredAgents(args: {
+  public async listStoredAgents(options: {
+    returnRaw: true;
     page?: number;
-    perPage?: number | false;
-    orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
-    raw: true;
+    pageSize?: number;
   }): Promise<{
     agents: StorageResolvedAgentType[];
     total: number;
     page: number;
-    perPage: number | false;
+    perPage: number;
     hasMore: boolean;
   }>;
-  public async listStoredAgents(args?: {
+  public async listStoredAgents(options?: {
+    returnRaw?: boolean;
     page?: number;
-    perPage?: number | false;
-    orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
-    raw?: boolean;
+    pageSize?: number;
   }): Promise<{
     agents: Agent[] | StorageResolvedAgentType[];
     total: number;
@@ -232,12 +229,12 @@ export class MastraEditor {
 
     // Use listAgentsResolved to get version-resolved configs
     const result = await agentsStore.listAgentsResolved({
-      page: args?.page,
-      perPage: args?.perPage,
-      orderBy: args?.orderBy,
+      page: options?.page,
+      perPage: options?.pageSize,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
     });
 
-    if (args?.raw) {
+    if (options?.returnRaw) {
       return result;
     }
 
@@ -295,10 +292,10 @@ export class MastraEditor {
     // Extract model configuration
     const modelConfig = storedAgent.model;
 
-    // Build model string in "provider/modelName" format
-    if (!modelConfig.provider || !modelConfig.name) {
+    // Skip agents without model configuration (no active version)
+    if (!modelConfig || !modelConfig.provider || !modelConfig.name) {
       throw new Error(
-        `Stored agent "${storedAgent.id}" has invalid model configuration. Both provider and name are required.`,
+        `Stored agent "${storedAgent.id}" has no active version or invalid model configuration. Both provider and name are required.`,
       );
     }
     const model = `${modelConfig.provider}/${modelConfig.name}`;

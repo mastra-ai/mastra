@@ -89,7 +89,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.getStoredAgentById('stored-agent-1', { raw: true });
+      const result = await editor.getStoredAgentById('stored-agent-1', { returnRaw: true });
 
       expect(result).not.toBeInstanceOf(Agent);
       expect(result?.id).toBe('stored-agent-1');
@@ -153,7 +153,7 @@ describe('Stored Agents via MastraEditor', () => {
           id: 'invalid-model-agent',
           name: 'Invalid Model Agent',
           instructions: 'Test',
-          model: { invalid: 'config' }, // Missing provider and name
+          model: { invalid: 'config' } as any, // Missing provider and name
         },
       });
 
@@ -217,7 +217,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.getStoredAgentById('stored-agent-1', { raw: true, versionId });
+      const result = await editor.getStoredAgentById('stored-agent-1', { returnRaw: true, versionId });
 
       expect(result).not.toBeInstanceOf(Agent);
       expect(result?.id).toBe('stored-agent-1');
@@ -272,7 +272,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.listStoredAgents({ raw: true });
+      const result = await editor.listStoredAgents({ returnRaw: true });
 
       expect(result.agents).toHaveLength(2);
       expect(result.agents[0]).not.toBeInstanceOf(Agent);
@@ -298,7 +298,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.listStoredAgents({ page: 0, perPage: 10 });
+      const result = await editor.listStoredAgents({ page: 0, pageSize: 10 });
 
       expect(result.agents).toHaveLength(10);
       expect(result.total).toBe(25);
@@ -442,14 +442,14 @@ describe('Stored Agents via MastraEditor', () => {
       }
     });
 
-    it('should have correct return type for getStoredAgentById with raw: true', async () => {
+    it('should have correct return type for getStoredAgentById with returnRaw: true', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
       await agentsStore?.createAgent({ agent: sampleStoredAgent });
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.getStoredAgentById('stored-agent-1', { raw: true });
+      const result = await editor.getStoredAgentById('stored-agent-1', { returnRaw: true });
 
       // TypeScript should infer: StorageResolvedAgentType | null
       if (result) {
@@ -474,14 +474,14 @@ describe('Stored Agents via MastraEditor', () => {
       }
     });
 
-    it('should have correct return type for listStoredAgents with raw: true', async () => {
+    it('should have correct return type for listStoredAgents with returnRaw: true', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
       await agentsStore?.createAgent({ agent: sampleStoredAgent });
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.listStoredAgents({ raw: true });
+      const result = await editor.listStoredAgents({ returnRaw: true });
 
       // TypeScript should infer: { agents: StorageResolvedAgentType[], ... }
       for (const agent of result.agents) {

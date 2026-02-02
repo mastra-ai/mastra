@@ -18,6 +18,10 @@
     "@mastra/memory": "workspace:*"
   },
   "devDependencies": {
+    "@internal/ai-sdk-v4": "workspace:*",
+    "@internal/ai-sdk-v5": "workspace:*",
+    "@internal/ai-v6": "workspace:*",
+    "@mastra/libsql": "workspace:*",
     "tsup": "^8.0.2",
     "typescript": "^5.3.3",
     "vitest": "catalog:",

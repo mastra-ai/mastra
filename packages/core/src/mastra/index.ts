@@ -4,6 +4,7 @@ import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
 import type { MastraDeployer } from '../deployer';
+import type { IMastraEditor } from '../editor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
@@ -243,7 +244,7 @@ export interface Config<
    * Editor instance for handling agent instantiation and configuration.
    * The editor handles complex instantiation logic including memory resolution.
    */
-  editor?: any; // Using any temporarily to avoid circular dependency
+  editor?: IMastraEditor;
 }
 
 /**
@@ -333,7 +334,7 @@ export class Mastra<
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
   // Editor instance for handling agent instantiation and configuration
-  #editor?: any;
+  #editor?: IMastraEditor;
 
   get pubsub() {
     return this.#pubsub;

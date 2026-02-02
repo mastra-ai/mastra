@@ -86,8 +86,8 @@ export const agentVersionSchema = z.object({
     .array(z.string())
     .optional()
     .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
-  inputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Input processor configurations'),
-  outputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Output processor configurations'),
+  inputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
+  outputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
   memory: z.record(z.string(), z.unknown()).optional().describe('Memory configuration object'),
   scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
   // Version metadata fields

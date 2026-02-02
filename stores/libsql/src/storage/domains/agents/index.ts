@@ -205,6 +205,19 @@ export class AgentsLibSQL extends AgentsStorage {
 
   private parseJson(value: any, fieldName?: string): any {
     if (!value) return undefined;
+
+    // Handle ArrayBuffer case (binary JSONB data from LibSQL)
+    if (value instanceof ArrayBuffer || (value && value.constructor && value.constructor.name === 'ArrayBuffer')) {
+      try {
+        const decoder = new TextDecoder();
+        const jsonString = decoder.decode(value);
+        return JSON.parse(jsonString);
+      } catch (error) {
+        console.error(`Failed to parse ArrayBuffer for ${fieldName}:`, error);
+        return undefined;
+      }
+    }
+
     if (typeof value !== 'string') return value;
 
     try {
@@ -564,84 +577,54 @@ export class AgentsLibSQL extends AgentsStorage {
         };
       }
 
-      // Get paginated results with a JOIN to get active version or latest version
+      // Get paginated agents using selectMany (which handles JSONB columns correctly)
       const limitValue = perPageInput === false ? total : perPage;
-
-      // LibSQL query with JOIN and COALESCE
-      const query = `
-        WITH latest_versions AS (
-          SELECT v.*
-          FROM ${TABLE_AGENT_VERSIONS} v
-          INNER JOIN (
-            SELECT agentId, MAX(versionNumber) as max_version
-            FROM ${TABLE_AGENT_VERSIONS}
-            GROUP BY agentId
-          ) lv ON v.agentId = lv.agentId AND v.versionNumber = lv.max_version
-        )
-        SELECT 
-          a.*,
-          COALESCE(av.id, lv.id) as version_id,
-          COALESCE(av.versionNumber, lv.versionNumber) as version_number,
-          COALESCE(av.name, lv.name) as version_name,
-          COALESCE(av.description, lv.description) as version_description,
-          COALESCE(av.instructions, lv.instructions) as version_instructions,
-          COALESCE(av.model, lv.model) as version_model,
-          COALESCE(av.tools, lv.tools) as version_tools,
-          COALESCE(av.defaultOptions, lv.defaultOptions) as version_defaultOptions,
-          COALESCE(av.workflows, lv.workflows) as version_workflows,
-          COALESCE(av.agents, lv.agents) as version_agents,
-          COALESCE(av.integrationTools, lv.integrationTools) as version_integrationTools,
-          COALESCE(av.inputProcessors, lv.inputProcessors) as version_inputProcessors,
-          COALESCE(av.outputProcessors, lv.outputProcessors) as version_outputProcessors,
-          COALESCE(av.memory, lv.memory) as version_memory,
-          COALESCE(av.scorers, lv.scorers) as version_scorers
-        FROM ${TABLE_AGENTS} a
-        LEFT JOIN ${TABLE_AGENT_VERSIONS} av ON a.activeVersionId = av.id
-        LEFT JOIN latest_versions lv ON a.id = lv.agentId
-        ORDER BY a."${field}" ${direction}
-        LIMIT ? OFFSET ?
-      `;
-
-      const result = await this.#client.execute({
-        sql: query,
-        args: [limitValue, offset],
+      const agents = await this.#db.selectMany<StorageAgentType>({
+        tableName: TABLE_AGENTS,
+        orderBy: `"${field}" ${direction}`,
+        limit: limitValue,
+        offset,
       });
 
-      const resolvedAgents = result.rows.map((row: any) => {
-        // Parse the agent record
-        const agent = this.parseRow({
-          id: row.id,
-          status: row.status,
-          activeVersionId: row.activeVersionId,
-          authorId: row.authorId,
-          metadata: row.metadata,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-        });
+      // For each agent, resolve the version configuration
+      const resolvedAgents = await Promise.all(
+        agents.map(async agent => {
+          let version: AgentVersion | null = null;
 
-        // If we have version data, merge it with agent
-        if (row.version_id) {
+          // Get the active version if set
+          if (agent.activeVersionId) {
+            version = await this.getVersion(agent.activeVersionId);
+          }
+
+          // If no active version, get the latest version
+          if (!version) {
+            version = await this.getLatestVersion(agent.id);
+          }
+
+          // If no version found, return thin agent
+          if (!version) {
+            return agent as StorageResolvedAgentType;
+          }
+
+          // Return fully resolved agent with version data
           return {
             ...agent,
-            name: row.version_name,
-            description: row.version_description,
-            instructions: row.version_instructions,
-            model: this.parseJson(row.version_model, 'model'),
-            tools: this.parseJson(row.version_tools, 'tools'),
-            defaultOptions: this.parseJson(row.version_defaultOptions, 'defaultOptions'),
-            workflows: this.parseJson(row.version_workflows, 'workflows'),
-            agents: this.parseJson(row.version_agents, 'agents'),
-            integrationTools: this.parseJson(row.version_integrationTools, 'integrationTools'),
-            inputProcessors: this.parseJson(row.version_inputProcessors, 'inputProcessors'),
-            outputProcessors: this.parseJson(row.version_outputProcessors, 'outputProcessors'),
-            memory: this.parseJson(row.version_memory, 'memory'),
-            scorers: this.parseJson(row.version_scorers, 'scorers'),
+            name: version.name,
+            description: version.description,
+            instructions: version.instructions,
+            model: version.model,
+            tools: version.tools,
+            defaultOptions: version.defaultOptions,
+            workflows: version.workflows,
+            agents: version.agents,
+            integrationTools: version.integrationTools,
+            inputProcessors: version.inputProcessors,
+            outputProcessors: version.outputProcessors,
+            memory: version.memory,
+            scorers: version.scorers,
           } as StorageResolvedAgentType;
-        }
-
-        // No versions exist - return thin record cast as resolved
-        return agent as StorageResolvedAgentType;
-      });
+        }),
+      );
 
       return {
         agents: resolvedAgents,
