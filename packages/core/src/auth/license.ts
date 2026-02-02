@@ -63,7 +63,7 @@ export function validateLicense(licenseKey?: string): LicenseInfo {
  *
  * @returns True if EE features should be enabled
  */
-export function isEELicenseValid(): boolean {
+export function isLicenseValid(): boolean {
   const now = Date.now();
 
   // Return cached result if still valid
@@ -83,13 +83,18 @@ export function isEELicenseValid(): boolean {
 }
 
 /**
+ * @deprecated Use `isLicenseValid()` instead. This alias is provided for backward compatibility.
+ */
+export const isEELicenseValid = isLicenseValid;
+
+/**
  * Check if a specific EE feature is enabled.
  *
  * @param feature - Feature name to check
  * @returns True if the feature is enabled
  */
 export function isFeatureEnabled(feature: string): boolean {
-  if (!isEELicenseValid()) {
+  if (!isLicenseValid()) {
     return false;
   }
 

@@ -1,5 +1,5 @@
 /**
- * @mastra/core/ee
+ * @mastra/core/auth
  *
  * Enterprise authentication capabilities for Mastra.
  *
@@ -13,10 +13,7 @@ export * from './interfaces';
 export * from './capabilities';
 
 // License
-export { validateLicense, isEELicenseValid, isFeatureEnabled, type LicenseInfo } from './license';
-
-// Wrapper
-export { withEE, type WithEEOptions, type EEAuthProvider } from './with-ee';
+export { validateLicense, isLicenseValid, isEELicenseValid, isFeatureEnabled, type LicenseInfo } from './license';
 
 // Default implementations
 export * from './defaults';

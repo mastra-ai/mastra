@@ -17,7 +17,7 @@ import {
   type IRBACProvider,
   type SSOCallbackResult,
   type SSOLoginConfig,
-} from '@mastra/core/ee';
+} from '@mastra/core/auth';
 import { MastraCloudClient, CloudApiError, type CloudUser, type CloudSession } from './client';
 
 export { MastraCloudClient, CloudApiError, type CloudUser, type CloudSession, type JWTClaims } from './client';

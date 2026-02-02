@@ -1,5 +1,5 @@
 import type { HonoRequest } from 'hono';
-import type { EEUser, IUserProvider, ICredentialsProvider, CredentialsResult } from '../ee';
+import type { EEUser, IUserProvider, ICredentialsProvider, CredentialsResult } from '../auth';
 import type { MastraAuthProviderOptions } from './auth';
 import { MastraAuthProvider } from './auth';
 

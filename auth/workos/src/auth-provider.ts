@@ -14,7 +14,7 @@ import type {
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
-} from '@mastra/core/ee';
+} from '@mastra/core/auth';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 import { MastraAuthProvider } from '@mastra/core/server';
 import { AuthService, sessionEncryption } from '@workos/authkit-session';
