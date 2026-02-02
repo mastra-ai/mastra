@@ -261,7 +261,7 @@ Plans:
 7. If validation fails when enabling/modifying schema, up to 10 failing items are shown with errors
 8. Users cannot enable or modify a schema if existing items would fail validation
 
-**Plans**: 8 plans
+**Plans**: 9 plans
 
 Plans:
 
@@ -273,6 +273,7 @@ Plans:
 - [ ] 11-05b-PLAN.md — Schema field, settings dialog, and header integration
 - [ ] 11-06-PLAN.md — Validation error display in add/edit item and CSV import
 - [ ] 11-07-PLAN.md — End-to-end verification checkpoint
+- [ ] 11-08-PLAN.md — Schema source selector with auto-population (gap closure)
 
 ## Progress
 
@@ -291,4 +292,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Item Selection & Actions   | 4/4            | ✓ Complete | 2026-01-27 |
 | 9. Dataset Items Detail View  | 5/5            | ✓ Complete | 2026-01-29 |
 | 10. Dataset Layout Update     | 5/5            | ✓ Complete | 2026-01-30 |
-| 11. Dataset Schema Validation | 0/8            | Planned    |            |
+| 11. Dataset Schema Validation | 0/9            | Planned    |            |
