@@ -230,7 +230,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'deployer/cloudflare', label: 'Cloudflare' },
-        { type: 'doc', id: 'deployer/deployer', label: 'Deployer' },
+        { type: 'doc', id: 'deployer/index', label: 'Deployer' },
         { type: 'doc', id: 'deployer/netlify', label: 'Netlify' },
         { type: 'doc', id: 'deployer/vercel', label: 'Vercel' },
       ],
