@@ -4,7 +4,7 @@
  * These tests cover features specific to DurableAgent that are not available
  * in InngestDurableAgent:
  * - runRegistry access (getModel, getTools, has, cleanup)
- * - Lazy initialization (agent accessor)
+ * - Wrapped agent access
  * - Concurrent operations with registry
  * - MessageList serialization/deserialization
  *
@@ -13,9 +13,9 @@
 
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { DurableAgent } from '@mastra/core/agent/durable';
+import { Agent, MessageList } from '@mastra/core/agent';
+import { createDurableAgent } from '@mastra/core/agent/durable';
 import { createTool } from '@mastra/core/tools';
-import { MessageList } from '@mastra/core/agent';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel } from '../mock-models';
 
@@ -25,13 +25,13 @@ export function createAdvancedDurableOnlyTests({ getPubSub }: DurableAgentTestCo
       const mockModel = createTextStreamModel('Hello');
       const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const innerAgent = new Agent({
         id: 'model-registry-agent',
         name: 'Model Registry Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
+      const agent = createDurableAgent({ agent: innerAgent, pubsub });
 
       const result = await agent.prepare('Test');
 
@@ -45,13 +45,13 @@ export function createAdvancedDurableOnlyTests({ getPubSub }: DurableAgentTestCo
       const mockModel = createTextStreamModel('Hello');
       const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const innerAgent = new Agent({
         id: 'concurrent-agent',
         name: 'Concurrent Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
+      const agent = createDurableAgent({ agent: innerAgent, pubsub });
 
       const preparePromises = Array.from({ length: 10 }, (_, i) => agent.prepare(`Message ${i}`));
 
@@ -76,14 +76,14 @@ export function createAdvancedDurableOnlyTests({ getPubSub }: DurableAgentTestCo
         execute: async ({ x }) => x * 2,
       });
 
-      const agent = new DurableAgent({
+      const innerAgent = new Agent({
         id: 'isolation-agent',
         name: 'Isolation Agent',
         instructions: 'Test',
         model: mockModel,
         tools: { tool1 },
-        pubsub,
       });
+      const agent = createDurableAgent({ agent: innerAgent, pubsub });
 
       const result1 = await agent.prepare('First');
       const result2 = await agent.prepare('Second');
@@ -101,82 +101,41 @@ export function createAdvancedDurableOnlyTests({ getPubSub }: DurableAgentTestCo
     });
   });
 
-  describe('lazy initialization', () => {
-    it('should not initialize Agent until first async method call', () => {
+  describe('wrapped agent access', () => {
+    it('should provide access to wrapped agent', () => {
       const mockModel = createTextStreamModel('Hello');
       const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
-        id: 'lazy-init-agent',
-        name: 'Lazy Init Agent',
+      const innerAgent = new Agent({
+        id: 'wrapped-agent-test',
+        name: 'Wrapped Agent Test',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
+      const agent = createDurableAgent({ agent: innerAgent, pubsub });
 
-      expect(agent.id).toBe('lazy-init-agent');
-      expect(agent.name).toBe('Lazy Init Agent');
+      expect(agent.id).toBe('wrapped-agent-test');
+      expect(agent.name).toBe('Wrapped Agent Test');
       expect(agent.runRegistry).toBeDefined();
-
-      expect(() => agent.agent).toThrow('DurableAgent not initialized');
+      expect(agent.agent).toBe(innerAgent);
     });
 
-    it('should initialize Agent after prepare call', async () => {
+    it('should handle multiple concurrent prepare calls', async () => {
       const mockModel = createTextStreamModel('Hello');
       const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
-        id: 'init-after-prepare-agent',
-        name: 'Init After Prepare Agent',
+      const innerAgent = new Agent({
+        id: 'concurrent-prepare-agent',
+        name: 'Concurrent Prepare Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
-
-      expect(() => agent.agent).toThrow();
-
-      await agent.prepare('Test');
-      expect(agent.agent).toBeDefined();
-      expect(agent.agent.id).toBe('init-after-prepare-agent');
-    });
-
-    it('should initialize Agent after stream call', async () => {
-      const mockModel = createTextStreamModel('Hello');
-      const pubsub = getPubSub();
-
-      const agent = new DurableAgent({
-        id: 'init-after-stream-agent',
-        name: 'Init After Stream Agent',
-        instructions: 'Test',
-        model: mockModel,
-        pubsub,
-      });
-
-      expect(() => agent.agent).toThrow();
-
-      const { cleanup } = await agent.stream('Test');
-      expect(agent.agent).toBeDefined();
-      cleanup();
-    });
-
-    it('should only initialize once even with multiple concurrent calls', async () => {
-      const mockModel = createTextStreamModel('Hello');
-      const pubsub = getPubSub();
-
-      const agent = new DurableAgent({
-        id: 'single-init-agent',
-        name: 'Single Init Agent',
-        instructions: 'Test',
-        model: mockModel,
-        pubsub,
-      });
+      const agent = createDurableAgent({ agent: innerAgent, pubsub });
 
       const results = await Promise.all([agent.prepare('Test 1'), agent.prepare('Test 2'), agent.prepare('Test 3')]);
 
       expect(results.length).toBe(3);
       expect(new Set(results.map(r => r.runId)).size).toBe(3);
-
-      expect(agent.agent).toBeDefined();
     });
   });
 
@@ -185,13 +144,13 @@ export function createAdvancedDurableOnlyTests({ getPubSub }: DurableAgentTestCo
       const mockModel = createTextStreamModel('Hello');
       const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const innerAgent = new Agent({
         id: 'messagelist-agent',
         name: 'MessageList Agent',
         instructions: 'Test instructions',
         model: mockModel,
-        pubsub,
       });
+      const agent = createDurableAgent({ agent: innerAgent, pubsub });
 
       const result = await agent.prepare([
         { role: 'user', content: 'First message' },

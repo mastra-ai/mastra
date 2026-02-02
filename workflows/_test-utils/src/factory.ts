@@ -4,7 +4,8 @@
 
 import { describe, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { PubSub } from '@mastra/core/events';
-import { DurableAgent } from '@mastra/core/agent/durable';
+import { Agent } from '@mastra/core/agent';
+import { createDurableAgent } from '@mastra/core/agent/durable';
 import type {
   DurableAgentTestConfig,
   DurableAgentTestContext,
@@ -47,11 +48,14 @@ const DEFAULT_EVENT_PROPAGATION_DELAY = 100;
  */
 function defaultCreateAgent(config: CreateAgentConfig, context: DurableAgentTestContext): DurableAgentLike {
   const pubsub = context.getPubSub();
-  return new DurableAgent({
-    ...config,
+  const agent = new Agent({
+    id: config.id,
     name: config.name || config.id,
-    pubsub,
+    instructions: config.instructions,
+    model: config.model,
+    tools: config.tools,
   });
+  return createDurableAgent({ agent, pubsub });
 }
 
 /**

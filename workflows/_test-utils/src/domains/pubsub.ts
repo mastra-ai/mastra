@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { DurableAgent, AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '@mastra/core/agent/durable';
+import { Agent } from '@mastra/core/agent';
+import { createDurableAgent, AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '@mastra/core/agent/durable';
 import type { AgentStreamEvent } from '@mastra/core/agent/durable';
 import type { DurableAgentTestContext } from '../types';
 import { createTextStreamModel } from '../mock-models';
@@ -77,13 +78,13 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       const receivedEvents: AgentStreamEvent[] = [];
       const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const innerAgent = new Agent({
         id: 'pubsub-test-agent',
         name: 'Pubsub Test Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
+      const agent = createDurableAgent({ agent: innerAgent, pubsub });
 
       // Prepare to get the runId first
       const preparation = await agent.prepare('Test message');
@@ -113,13 +114,13 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       const eventsRun2: AgentStreamEvent[] = [];
       const pubsub = getPubSub();
 
-      const agent = new DurableAgent({
+      const innerAgent = new Agent({
         id: 'isolation-test-agent',
         name: 'Isolation Test Agent',
         instructions: 'Test',
         model: mockModel,
-        pubsub,
       });
+      const agent = createDurableAgent({ agent: innerAgent, pubsub });
 
       const prep1 = await agent.prepare('Message 1');
       const prep2 = await agent.prepare('Message 2');
