@@ -56,7 +56,13 @@ const DEFAULT_CACHE_MAX_SIZE = 1000;
 export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   private workos: WorkOS;
   private options: MastraRBACWorkosOptions;
-  private permissionCache: LRUCache<string, string[]>;
+  /**
+   * Single cache storing permission promises.
+   * Storing promises handles both caching and concurrent request deduplication:
+   * - Cache hit: returns resolved promise immediately
+   * - Cache miss: creates promise, caches it, all concurrent requests share it
+   */
+  private permissionCache: LRUCache<string, Promise<string[]>>;
 
   /**
    * Expose roleMapping for middleware access.
@@ -87,7 +93,7 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
     this.options = options;
 
     // Initialize LRU cache with configurable size and TTL
-    this.permissionCache = new LRUCache<string, string[]>({
+    this.permissionCache = new LRUCache<string, Promise<string[]>>({
       max: options.cache?.maxSize ?? DEFAULT_CACHE_MAX_SIZE,
       ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
     });
@@ -108,22 +114,16 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
    * @returns Array of role slugs
    */
   async getRoles(user: WorkOSUser): Promise<string[]> {
-    console.info(`[WorkOS RBAC] getRoles called for user ${user.id}, workosId=${user.workosId}`);
-
     // If memberships are already present on the user object, use them
     if (user.memberships && user.memberships.length > 0) {
-      const roles = this.extractRolesFromMemberships(user);
-      console.info(`[WorkOS RBAC] Using cached memberships, roles: ${JSON.stringify(roles)}`);
-      return roles;
+      return this.extractRolesFromMemberships(user);
     }
 
     // Fetch memberships from WorkOS
     try {
-      console.info(`[WorkOS RBAC] Fetching memberships from WorkOS for user ${user.workosId}`);
       const memberships = await this.workos.userManagement.listOrganizationMemberships({
         userId: user.workosId,
       });
-      console.info(`[WorkOS RBAC] Found ${memberships.data.length} memberships`);
 
       // Filter by organization if specified
       const relevantMemberships = this.options.organizationId
@@ -131,9 +131,7 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
         : memberships.data;
 
       // Extract role slugs
-      const roles = relevantMemberships.map(m => m.role.slug);
-      console.info(`[WorkOS RBAC] Extracted roles: ${JSON.stringify(roles)}`);
-      return roles;
+      return relevantMemberships.map(m => m.role.slug);
     } catch (error) {
       console.error(`[WorkOS RBAC] Error fetching memberships:`, error);
       // Return empty roles on error - _default permissions will be applied
@@ -158,7 +156,7 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
    *
    * Uses the configured roleMapping to translate WorkOS role slugs
    * into Mastra permission strings. Results are cached by user ID
-   * for performance.
+   * for performance, and concurrent requests are deduplicated.
    *
    * If the user has no roles (no organization memberships), the
    * _default permissions from the role mapping are applied.
@@ -167,32 +165,34 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
    * @returns Array of permission strings
    */
   async getPermissions(user: WorkOSUser): Promise<string[]> {
-    console.info(`[WorkOS RBAC] getPermissions called for user ${user.id}`);
+    const cacheKey = user.id;
 
-    // Check cache first (LRU cache handles TTL automatically)
-    const cached = this.permissionCache.get(user.id);
+    // Check cache - returns existing promise (resolved or in-flight)
+    const cached = this.permissionCache.get(cacheKey);
     if (cached) {
-      console.info(`[WorkOS RBAC] Returning cached permissions: ${JSON.stringify(cached)}`);
       return cached;
     }
 
-    // Get roles and resolve permissions
+    // Create and cache the permission resolution promise
+    // All concurrent requests will share this same promise
+    const permissionPromise = this.resolveUserPermissions(user);
+    this.permissionCache.set(cacheKey, permissionPromise);
+
+    return permissionPromise;
+  }
+
+  /**
+   * Resolve permissions for a user by fetching roles and mapping them.
+   */
+  private async resolveUserPermissions(user: WorkOSUser): Promise<string[]> {
     const roles = await this.getRoles(user);
 
-    let permissions: string[];
     if (roles.length === 0) {
       // No roles - apply _default permissions
-      permissions = this.options.roleMapping['_default'] ?? [];
-      console.info(`[WorkOS RBAC] No roles, using _default permissions: ${JSON.stringify(permissions)}`);
-    } else {
-      permissions = resolvePermissionsFromMapping(roles, this.options.roleMapping);
-      console.info(`[WorkOS RBAC] Resolved permissions from roles: ${JSON.stringify(permissions)}`);
+      return this.options.roleMapping['_default'] ?? [];
     }
 
-    // Cache the result (LRU cache handles TTL and eviction)
-    this.permissionCache.set(user.id, permissions);
-
-    return permissions;
+    return resolvePermissionsFromMapping(roles, this.options.roleMapping);
   }
 
   /**
