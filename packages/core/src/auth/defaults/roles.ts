@@ -15,6 +15,11 @@ export type { RoleMapping };
  * - **admin**: Manage agents, workflows, and users
  * - **member**: Execute agents and workflows, read-only settings
  * - **viewer**: Read-only access
+ *
+ * Permission patterns:
+ * - `*` - Full access to everything
+ * - `resource:*` - All actions on a specific resource
+ * - `*:action` - An action across all resources (e.g., `*:read` for read-only)
  */
 export const DEFAULT_ROLES: RoleDefinition[] = [
   {
@@ -28,39 +33,24 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     name: 'Admin',
     description: 'Manage agents, workflows, and team members',
     permissions: [
-      'studio:*',
-      'agents:*',
-      'workflows:*',
-      'memory:*',
-      'tools:*',
-      'logs:read',
-      'users:read',
+      '*:read',
+      '*:write',
+      '*:execute',
       'users:invite',
-      'settings:read',
-      'settings:write',
+      // Note: admins cannot delete resources or users
     ],
   },
   {
     id: 'member',
     name: 'Member',
     description: 'Execute agents and workflows',
-    permissions: [
-      'studio:read',
-      'studio:execute',
-      'agents:read',
-      'agents:execute',
-      'workflows:read',
-      'workflows:execute',
-      'memory:read',
-      'tools:read',
-      'logs:read',
-    ],
+    permissions: ['*:read', '*:execute'],
   },
   {
     id: 'viewer',
     name: 'Viewer',
-    description: 'Read-only access to agents and workflows',
-    permissions: ['studio:read', 'agents:read', 'workflows:read', 'logs:read'],
+    description: 'Read-only access',
+    permissions: ['*:read'],
   },
 ];
 
