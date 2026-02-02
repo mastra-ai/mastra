@@ -204,6 +204,9 @@ describe('InMemoryStore - Message Fetching', () => {
     await expect(store.listMessages({ threadId: '   ' })).rejects.toThrow(
       'Either threadId or resourceId must be provided',
     );
+
+    // Empty object should throw (runtime guard for untyped callers)
+    await expect(store.listMessages({} as any)).rejects.toThrow('Either threadId or resourceId must be provided');
   });
 });
 
@@ -382,6 +385,7 @@ describe('InMemoryStore - listMessagesById', () => {
 
   beforeEach(async () => {
     store = new InMemoryStore();
+    messageCounter = 0;
 
     // Create test threads with different dates
     threads = [

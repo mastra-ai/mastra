@@ -1619,7 +1619,7 @@ export class MemoryPG extends MemoryStorage {
         originType: 'reflection',
         generationCount: input.currentRecord.generationCount + 1,
         activeObservations: input.reflection,
-        totalTokensObserved: input.currentRecord.totalTokensObserved + input.tokenCount,
+        totalTokensObserved: input.currentRecord.totalTokensObserved,
         observationTokenCount: input.tokenCount,
         pendingMessageTokens: 0,
         isReflecting: false,
@@ -1657,7 +1657,7 @@ export class MemoryPG extends MemoryStorage {
           lastObservedAtStr, // lastObservedAtZ
           nowStr, // lastReflectionAt
           nowStr, // lastReflectionAtZ
-          0,
+          record.pendingMessageTokens,
           record.totalTokensObserved,
           record.observationTokenCount,
           false,

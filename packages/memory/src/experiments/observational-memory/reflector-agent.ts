@@ -1,13 +1,11 @@
 import { OBSERVER_EXTRACTION_INSTRUCTIONS, OBSERVER_OUTPUT_FORMAT_BASE, OBSERVER_GUIDELINES } from './observer-agent';
+import type { ReflectorResult as BaseReflectorResult } from './types';
 
 /**
- * Result from parsing Reflector output
+ * Result from parsing Reflector output, extending the base type with
+ * token count used for compression validation.
  */
-export interface ReflectorResult {
-  /** The refined observations */
-  observations: string;
-  /** Optional suggested continuation for the Actor */
-  suggestedContinuation?: string;
+export interface ReflectorResult extends BaseReflectorResult {
   /** Token count of output (for compression validation) */
   tokenCount?: number;
 }

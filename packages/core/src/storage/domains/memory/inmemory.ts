@@ -883,7 +883,7 @@ export class InMemoryMemory extends MemoryStorage {
       config: currentRecord.config,
       totalTokensObserved: currentRecord.totalTokensObserved,
       observationTokenCount: tokenCount,
-      pendingMessageTokens: currentRecord.pendingMessageTokens ?? 0,
+      pendingMessageTokens: 0,
       isReflecting: false,
       isObserving: false,
       // Extensible metadata (optional)

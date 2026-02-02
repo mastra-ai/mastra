@@ -667,8 +667,27 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // If no threadIds but resourceId is provided, get all threads for the resource
       if (effectiveThreadIds.length === 0 && hasResourceId) {
-        const resourceThreads = await this.listThreads({ filter: { resourceId: resourceId! } });
-        effectiveThreadIds = resourceThreads.threads.map(t => t.id);
+        const MAX_THREADS = 10_000;
+        const PAGE_SIZE = 100;
+        const allThreadIds: string[] = [];
+        let currentPage = 0;
+        let hasMore = true;
+        while (hasMore && allThreadIds.length < MAX_THREADS) {
+          const result = await this.listThreads({
+            filter: { resourceId: resourceId! },
+            page: currentPage,
+            perPage: PAGE_SIZE,
+          });
+          allThreadIds.push(...result.threads.map(t => t.id));
+          hasMore = result.hasMore;
+          currentPage++;
+        }
+        if (hasMore) {
+          this.logger?.warn?.(
+            `Resource ${resourceId} has more than ${MAX_THREADS} threads. Only the first ${MAX_THREADS} will be queried for messages.`,
+          );
+        }
+        effectiveThreadIds = allThreadIds;
       }
 
       // Get all message IDs from all thread sorted sets

@@ -1,5 +1,6 @@
 import type { CORE_TABLE_NAMES, TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
 import {
+  TABLE_AGENTS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_SCORERS,
@@ -22,7 +23,7 @@ export const TABLE_ENGINES: Partial<Record<TABLE_NAMES, string>> & Record<CORE_T
   // keeping the row with the highest updatedAt value. Combined with ORDER BY (traceId, spanId),
   // this provides eventual uniqueness for the (traceId, spanId) composite key.
   [TABLE_SPANS]: `ReplacingMergeTree(updatedAt)`,
-  mastra_agents: `ReplacingMergeTree()`,
+  [TABLE_AGENTS]: `ReplacingMergeTree()`,
   [TABLE_AGENT_VERSIONS]: `MergeTree()`,
 };
 

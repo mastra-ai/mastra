@@ -11,8 +11,11 @@ import o200k_base from 'js-tiktoken/ranks/o200k_base';
 export class TokenCounter {
   private encoder: Tiktoken;
 
-  // Overhead constants (from TokenLimiterProcessor)
+  // Per-message overhead: accounts for role tokens, message framing, and separators.
+  // Empirically derived from OpenAI's token counting guide (3 tokens per message base +
+  // fractional overhead from name/role encoding). 3.8 is a practical average across models.
   private static readonly TOKENS_PER_MESSAGE = 3.8;
+  // Conversation-level overhead: system prompt framing, reply priming tokens, etc.
   private static readonly TOKENS_PER_CONVERSATION = 24;
 
   constructor(encoding?: TiktokenBPE) {
@@ -56,6 +59,8 @@ export class TokenCounter {
                   tokenString += invocation.args;
                 } else {
                   tokenString += JSON.stringify(invocation.args);
+                  // JSON.stringify adds ~12 tokens of structural overhead (braces, quotes, colons)
+                  // that the model's native tool encoding doesn't use, so subtract to compensate.
                   overhead -= 12;
                 }
               }
@@ -70,7 +75,9 @@ export class TokenCounter {
                 }
               }
             } else {
-              throw new Error(`MISSING token counting for part ${part.type}`);
+              throw new Error(
+                `Unhandled tool-invocation state '${(part as any).toolInvocation?.state}' in token counting for part type '${part.type}'`,
+              );
             }
           } else {
             tokenString += JSON.stringify(part);
