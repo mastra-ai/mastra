@@ -44,4 +44,4 @@ export { ToolCallFilter } from './tool-call-filter';
 
 export { SkillsProcessor, type SkillsProcessorOptions } from './skills';
 
-export { WorkspaceToolsProcessor, type WorkspaceToolsProcessorOptions } from './workspace-tools';
+export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOptions } from './workspace-instructions';

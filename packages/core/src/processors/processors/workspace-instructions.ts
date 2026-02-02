@@ -1,11 +1,12 @@
 /**
- * WorkspaceToolsProcessor - Injects workspace tool usage guidelines into agent system messages.
+ * WorkspaceInstructionsProcessor - Injects workspace instructions into agent system messages.
  *
  * This processor uses `workspace.getAgentInstructions()` to inject comprehensive
  * workspace guidelines into the agent's system prompt, including:
  * - General tool behavior guidelines
  * - Workspace context (filesystem/sandbox provider info)
- * - Tool-specific guidelines based on enabled tools
+ * - Cross-tool workflow guidance
+ * - Safety guidelines for destructive operations
  *
  * @example
  * ```typescript
@@ -20,7 +21,7 @@
  * // Or explicit processor control:
  * const agent = new Agent({
  *   workspace,
- *   inputProcessors: [new WorkspaceToolsProcessor({ workspace })],
+ *   inputProcessors: [new WorkspaceInstructionsProcessor({ workspace })],
  * });
  * ```
  */
@@ -33,35 +34,35 @@ import type { ProcessInputStepArgs, Processor } from '../index';
 // =============================================================================
 
 /**
- * Configuration options for WorkspaceToolsProcessor
+ * Configuration options for WorkspaceInstructionsProcessor
  */
-export interface WorkspaceToolsProcessorOptions {
+export interface WorkspaceInstructionsProcessorOptions {
   /**
-   * Workspace instance to generate guidelines for.
+   * Workspace instance to generate instructions for.
    */
   workspace: Workspace;
 }
 
 // =============================================================================
-// WorkspaceToolsProcessor
+// WorkspaceInstructionsProcessor
 // =============================================================================
 
 /**
- * Processor that injects workspace tool usage guidelines into agent system messages.
- * Guidelines are dynamically built by the workspace based on enabled tools.
+ * Processor that injects workspace instructions into agent system messages.
+ * Instructions are dynamically built by the workspace based on configuration.
  */
-export class WorkspaceToolsProcessor implements Processor<'workspace-tools-processor'> {
-  readonly id = 'workspace-tools-processor' as const;
-  readonly name = 'Workspace Tools Processor';
+export class WorkspaceInstructionsProcessor implements Processor<'workspace-instructions-processor'> {
+  readonly id = 'workspace-instructions-processor' as const;
+  readonly name = 'Workspace Instructions Processor';
 
   private readonly _workspace: Workspace;
 
-  constructor(opts: WorkspaceToolsProcessorOptions) {
+  constructor(opts: WorkspaceInstructionsProcessorOptions) {
     this._workspace = opts.workspace;
   }
 
   /**
-   * Process input step - inject workspace tool guidelines.
+   * Process input step - inject workspace instructions.
    * Injected on every step since system message changes from processors are reverted between steps.
    */
   async processInputStep({ messageList, tools }: ProcessInputStepArgs) {

@@ -37,7 +37,7 @@ import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observa
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
-import { WorkspaceToolsProcessor } from '../processors/processors/workspace-tools';
+import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraAgentNetworkStream } from '../stream';
@@ -345,16 +345,16 @@ export class Agent<
       return [];
     }
 
-    // Check for existing WorkspaceToolsProcessor in configured processors to avoid duplicates
-    const hasWorkspaceToolsProcessor = configuredProcessors.some(
-      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'workspace-tools-processor',
+    // Check for existing WorkspaceInstructionsProcessor in configured processors to avoid duplicates
+    const hasWorkspaceInstructionsProcessor = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'workspace-instructions-processor',
     );
-    if (hasWorkspaceToolsProcessor) {
+    if (hasWorkspaceInstructionsProcessor) {
       return [];
     }
 
-    // Create new WorkspaceToolsProcessor using workspace
-    return [new WorkspaceToolsProcessor({ workspace })];
+    // Create new WorkspaceInstructionsProcessor using workspace
+    return [new WorkspaceInstructionsProcessor({ workspace })];
   }
 
   /**
