@@ -1569,11 +1569,11 @@ Ensure the prompt is:
 - Ethically sound
 
 4. OUTPUT FORMAT
-Return a structured response with:
-- Enhanced system prompt
-- Analysis of key components
-- Identified goals and constraints
-- Core domain concepts
+Return your response as JSON with the following fields:
+- new_prompt: The enhanced system prompt
+- analysis: Analysis of key components
+- goals: Identified goals and constraints
+- concepts: Core domain concepts
 
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
 
