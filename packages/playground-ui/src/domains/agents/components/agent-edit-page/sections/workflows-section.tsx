@@ -7,7 +7,7 @@ import { Section, RemovableBadge } from '@/domains/cms';
 import { WorkflowIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import type { AgentFormValues } from '../../create-agent/form-validation';
+import type { AgentFormValues } from '../../agent-edit/form-validation';
 
 interface WorkflowsSectionProps {
   control: Control<AgentFormValues>;

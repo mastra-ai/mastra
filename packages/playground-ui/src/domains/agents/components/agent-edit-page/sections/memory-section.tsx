@@ -7,7 +7,7 @@ import { Section } from '@/domains/cms';
 import { MemoryIcon } from '@/ds/icons';
 import { Combobox } from '@/ds/components/Combobox';
 import { useMemoryConfig } from '@/domains/memory/hooks';
-import type { AgentFormValues } from '../../create-agent/form-validation';
+import type { AgentFormValues } from '../../agent-edit/form-validation';
 
 interface MemorySectionProps {
   control: Control<AgentFormValues>;

@@ -7,7 +7,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useAgent } from '../hooks/use-agent';
 import { useExperimentalFeatures } from '@/lib/experimental-features';
-import { EditAgentDialog } from './create-agent/edit-agent-dialog';
+import { EditAgentDialog } from './agent-edit/edit-agent-dialog';
 
 export interface AgentEntityHeaderProps {
   agentId: string;

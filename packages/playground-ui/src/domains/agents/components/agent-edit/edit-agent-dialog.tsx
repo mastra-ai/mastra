@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { toast } from '@/lib/toast';
 
-import { AgentForm } from './agent-form';
+import { AgentEditForm } from './agent-edit-form';
 import type { AgentFormValues } from './form-validation';
 import { useStoredAgent, useStoredAgentMutations } from '../../hooks/use-stored-agents';
 import { Spinner } from '@/ds/components/Spinner';
@@ -124,7 +124,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
             <Spinner className="h-8 w-8" />
           </div>
         ) : initialValues ? (
-          <AgentForm
+          <AgentEditForm
             mode="edit"
             agentId={agentId}
             initialValues={initialValues}

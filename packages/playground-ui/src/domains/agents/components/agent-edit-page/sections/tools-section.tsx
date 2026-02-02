@@ -7,7 +7,7 @@ import { Section, RemovableBadge } from '@/domains/cms';
 import { ToolsIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import type { AgentFormValues } from '../../create-agent/form-validation';
+import type { AgentFormValues } from '../../agent-edit/form-validation';
 
 interface ToolsSectionProps {
   control: Control<AgentFormValues>;

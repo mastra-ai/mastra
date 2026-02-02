@@ -56,7 +56,7 @@ const agentFormResolver: Resolver<AgentFormValues> = async values => {
   };
 };
 
-export interface AgentFormProps {
+export interface AgentEditFormProps {
   mode: 'create' | 'edit';
   agentId?: string;
   initialValues?: Partial<AgentFormValues>;
@@ -69,7 +69,7 @@ export interface AgentFormProps {
   container?: React.RefObject<HTMLElement | null>;
 }
 
-export function AgentForm({
+export function AgentEditForm({
   mode,
   agentId,
   initialValues,
@@ -80,7 +80,7 @@ export function AgentForm({
   isDeleting = false,
   excludeAgentId,
   container,
-}: AgentFormProps) {
+}: AgentEditFormProps) {
   const formRef = React.useRef<HTMLFormElement>(null);
   const portalContainer = container ?? formRef;
   const [showAdvanced, setShowAdvanced] = React.useState(false);

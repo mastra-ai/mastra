@@ -14,11 +14,11 @@ import { Label } from '@/ds/components/Label';
 import { SectionHeader } from '@/domains/cms';
 
 import { LLMProviders, LLMModels } from '@/domains/llm';
-import type { AgentFormValues } from '../create-agent/form-validation';
+import type { AgentFormValues } from '../agent-edit/form-validation';
 import { ToolsSection, WorkflowsSection, AgentsSection, MemorySection, ScorersSection } from './sections';
 import { RevisionsTabContent } from './revisions';
 
-interface AgentCreateSidebarProps {
+interface AgentEditSidebarProps {
   form: UseFormReturn<AgentFormValues>;
   currentAgentId?: string;
   onPublish: () => void;
@@ -26,13 +26,13 @@ interface AgentCreateSidebarProps {
   formRef?: RefObject<HTMLFormElement | null>;
 }
 
-export function AgentCreateSidebar({
+export function AgentEditSidebar({
   form,
   currentAgentId,
   onPublish,
   isSubmitting = false,
   formRef,
-}: AgentCreateSidebarProps) {
+}: AgentEditSidebarProps) {
   const {
     register,
     control,

@@ -2,7 +2,7 @@
 
 import { useForm, Resolver } from 'react-hook-form';
 
-import type { AgentFormValues } from '../create-agent/form-validation';
+import type { AgentFormValues } from '../agent-edit/form-validation';
 
 const agentFormResolver: Resolver<AgentFormValues> = async values => {
   const errors: Record<string, { type: string; message: string }> = {};
@@ -35,11 +35,11 @@ const agentFormResolver: Resolver<AgentFormValues> = async values => {
   };
 };
 
-export interface UseAgentCreateFormOptions {
+export interface UseAgentEditFormOptions {
   initialValues?: Partial<AgentFormValues>;
 }
 
-export function useAgentCreateForm(options: UseAgentCreateFormOptions = {}) {
+export function useAgentEditForm(options: UseAgentEditFormOptions = {}) {
   const { initialValues } = options;
 
   const form = useForm<AgentFormValues>({

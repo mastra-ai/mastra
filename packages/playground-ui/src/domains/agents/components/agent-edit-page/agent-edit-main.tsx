@@ -11,15 +11,15 @@ import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 import { SectionHeader } from '@/domains/cms';
 
-import type { AgentFormValues } from '../create-agent/form-validation';
+import type { AgentFormValues } from '../agent-edit/form-validation';
 import { PartialsEditor, extractPartialNames } from './partials-editor';
 import { TestInstructionDialog } from './test-instruction-dialog';
 
-interface AgentCreateMainProps {
+interface AgentEditMainProps {
   form: UseFormReturn<AgentFormValues>;
 }
 
-export function AgentCreateMain({ form }: AgentCreateMainProps) {
+export function AgentEditMain({ form }: AgentEditMainProps) {
   const {
     control,
     formState: { errors },

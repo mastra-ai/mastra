@@ -12,7 +12,7 @@ import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import type { AgentFormValues } from '../../create-agent/form-validation';
+import type { AgentFormValues } from '../../agent-edit/form-validation';
 
 interface ScorersSectionProps {
   control: Control<AgentFormValues>;

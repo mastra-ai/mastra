@@ -4,10 +4,10 @@ import {
   toast,
   useLinkComponent,
   useStoredAgentMutations,
-  AgentCreateMain,
-  AgentCreateSidebar,
+  AgentEditMain,
+  AgentEditSidebar,
   AgentLayout,
-  useAgentCreateForm,
+  useAgentEditForm,
   Header,
   HeaderTitle,
   Icon,
@@ -19,7 +19,7 @@ function CmsAgentsCreatePage() {
   const { createStoredAgent } = useStoredAgentMutations();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
-  const { form } = useAgentCreateForm();
+  const { form } = useAgentEditForm();
 
   const handlePublish = useCallback(async () => {
     const isValid = await form.trigger();
@@ -70,11 +70,11 @@ function CmsAgentsCreatePage() {
         </Header>
       }
       leftSlot={
-        <AgentCreateSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} formRef={formRef} />
+        <AgentEditSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} formRef={formRef} />
       }
     >
       <form ref={formRef} className="h-full">
-        <AgentCreateMain form={form} />
+        <AgentEditMain form={form} />
       </form>
     </AgentLayout>
   );
