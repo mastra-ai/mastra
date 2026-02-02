@@ -105,26 +105,31 @@ export const init = async ({
       'type' in configureMastraToolingForCodingAgents &&
       configureMastraToolingForCodingAgents.type === 'skills'
     ) {
-      s.start('Installing Mastra agent skills');
-      const skillsResult = await installMastraSkills({
-        directory: process.cwd(),
-        agents: configureMastraToolingForCodingAgents.agents,
-      });
-      if (skillsResult.success) {
-        // Format agent names nicely
-        const agentNames = skillsResult.agents
-          .map(agent => {
-            // Convert kebab-case to Title Case
-            return agent
-              .split('-')
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-              .join(' ');
-          })
-          .join(', ');
-        s.stop(`Mastra agent skills installed (in ${agentNames})`);
-      } else {
+      try {
+        s.start('Installing Mastra agent skills');
+        const skillsResult = await installMastraSkills({
+          directory: process.cwd(),
+          agents: configureMastraToolingForCodingAgents.agents,
+        });
+        if (skillsResult.success) {
+          // Format agent names nicely
+          const agentNames = skillsResult.agents
+            .map(agent => {
+              // Convert kebab-case to Title Case
+              return agent
+                .split('-')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ');
+            })
+            .join(', ');
+          s.stop(`Mastra agent skills installed (in ${agentNames})`);
+        } else {
+          s.stop('Skills installation failed');
+          console.warn(color.yellow(`\nWarning: ${skillsResult.error}`));
+        }
+      } catch (error) {
         s.stop('Skills installation failed');
-        console.warn(color.yellow(`\nWarning: ${skillsResult.error}`));
+        console.warn(color.yellow(`\nWarning: ${error instanceof Error ? error.message : 'Unknown error'}`));
       }
     }
 
