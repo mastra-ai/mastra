@@ -116,11 +116,14 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   async getRoles(user: WorkOSUser): Promise<string[]> {
     // If memberships are already present on the user object, use them
     if (user.memberships && user.memberships.length > 0) {
-      return this.extractRolesFromMemberships(user);
+      const roles = this.extractRolesFromMemberships(user);
+      console.info(`[WorkOS RBAC] Using user memberships, roles: ${JSON.stringify(roles)}`);
+      return roles;
     }
 
     // Fetch memberships from WorkOS
     try {
+      console.info(`[WorkOS RBAC] Fetching memberships from WorkOS API for user ${user.workosId}`);
       const memberships = await this.workos.userManagement.listOrganizationMemberships({
         userId: user.workosId,
       });
@@ -131,7 +134,9 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
         : memberships.data;
 
       // Extract role slugs
-      return relevantMemberships.map(m => m.role.slug);
+      const roles = relevantMemberships.map(m => m.role.slug);
+      console.info(`[WorkOS RBAC] Fetched ${memberships.data.length} memberships, roles: ${JSON.stringify(roles)}`);
+      return roles;
     } catch (error) {
       console.error(`[WorkOS RBAC] Error fetching memberships:`, error);
       // Return empty roles on error - _default permissions will be applied
@@ -170,11 +175,13 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
     // Check cache - returns existing promise (resolved or in-flight)
     const cached = this.permissionCache.get(cacheKey);
     if (cached) {
+      console.info(`[WorkOS RBAC] Cache hit for user ${cacheKey}`);
       return cached;
     }
 
     // Create and cache the permission resolution promise
     // All concurrent requests will share this same promise
+    console.info(`[WorkOS RBAC] Cache miss for user ${cacheKey}, fetching permissions`);
     const permissionPromise = this.resolveUserPermissions(user);
     this.permissionCache.set(cacheKey, permissionPromise);
 
@@ -187,12 +194,16 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   private async resolveUserPermissions(user: WorkOSUser): Promise<string[]> {
     const roles = await this.getRoles(user);
 
+    let permissions: string[];
     if (roles.length === 0) {
       // No roles - apply _default permissions
-      return this.options.roleMapping['_default'] ?? [];
+      permissions = this.options.roleMapping['_default'] ?? [];
+    } else {
+      permissions = resolvePermissionsFromMapping(roles, this.options.roleMapping);
     }
 
-    return resolvePermissionsFromMapping(roles, this.options.roleMapping);
+    console.info(`[WorkOS RBAC] Resolved permissions for user ${user.id}: ${JSON.stringify(permissions)}`);
+    return permissions;
   }
 
   /**
