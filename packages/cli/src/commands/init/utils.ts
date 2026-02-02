@@ -669,6 +669,7 @@ interface InteractivePromptArgs {
     llmProvider?: boolean;
     llmApiKey?: boolean;
     gitInit?: boolean;
+    configureMastraToolingForCodingAgents?: boolean;
   };
 }
 
@@ -717,82 +718,181 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         }
         return undefined;
       },
-      configureEditorWithDocsMCP: async () => {
-        const editor = await p.select({
-          message: `Make your IDE into a Mastra expert? (Installs Mastra's MCP server)`,
+      configureMastraToolingForCodingAgents: async () => {
+        if (skip?.configureMastraToolingForCodingAgents) return undefined;
+
+        const choice = await p.select({
+          message: `Configure Mastra tooling for coding agents?`,
           options: [
-            { value: 'skip', label: 'Skip for now', hint: 'default' },
-            {
-              value: 'cursor',
-              label: 'Cursor (project only)',
-            },
-            {
-              value: 'cursor-global',
-              label: 'Cursor (global, all projects)',
-            },
-            {
-              value: 'windsurf',
-              label: 'Windsurf',
-            },
-            {
-              value: 'vscode',
-              label: 'VSCode',
-            },
-            {
-              value: 'antigravity',
-              label: 'Antigravity',
-            },
-          ] satisfies { value: Editor | 'skip'; label: string; hint?: string }[],
+            { value: 'skills', label: 'Skills - Mastra agent skills', hint: 'recommended' },
+            { value: 'mcp', label: 'MCP Docs - IDE integration' },
+          ],
+          initialValue: 'skills',
         });
 
-        if (editor === `skip`) return undefined;
+        if (choice === 'skills') {
+          // Popular agents
+          const POPULAR_AGENTS: { value: string; label: string }[] = [
+            { value: 'claude-code', label: 'Claude Code' },
+            { value: 'cursor', label: 'Cursor' },
+            { value: 'windsurf', label: 'Windsurf' },
+            { value: 'github-copilot', label: 'GitHub Copilot' },
+            { value: 'cline', label: 'Cline' },
+            { value: 'continue', label: 'Continue' },
+            { value: 'gemini-cli', label: 'Gemini CLI' },
+            { value: 'opencode', label: 'OpenCode' },
+            { value: 'replit', label: 'Replit' },
+            { value: 'roo', label: 'Roo Code' },
+          ];
 
-        if (editor === `cursor`) {
-          p.log.message(
-            `\nNote: you will need to go into Cursor Settings -> MCP Settings and manually enable the installed Mastra MCP server.\n`,
-          );
-        }
+          // All agents (alphabetically)
+          const ALL_AGENTS: { value: string; label: string }[] = [
+            ...POPULAR_AGENTS,
+            { value: 'adal', label: 'AdaL' },
+            { value: 'amp', label: 'Amp' },
+            { value: 'antigravity', label: 'Antigravity' },
+            { value: 'augment', label: 'Augment' },
+            { value: 'codebuddy', label: 'CodeBuddy' },
+            { value: 'codex', label: 'Codex' },
+            { value: 'command-code', label: 'Command Code' },
+            { value: 'crush', label: 'Crush' },
+            { value: 'droid', label: 'Droid' },
+            { value: 'goose', label: 'Goose' },
+            { value: 'iflow-cli', label: 'iFlow CLI' },
+            { value: 'junie', label: 'Junie' },
+            { value: 'kilo', label: 'Kilo Code' },
+            { value: 'kimi-cli', label: 'Kimi Code CLI' },
+            { value: 'kiro-cli', label: 'Kiro CLI' },
+            { value: 'kode', label: 'Kode' },
+            { value: 'mcpjam', label: 'MCPJam' },
+            { value: 'mistral-vibe', label: 'Mistral Vibe' },
+            { value: 'mux', label: 'Mux' },
+            { value: 'neovate', label: 'Neovate' },
+            { value: 'openclaude', label: 'OpenClaude IDE' },
+            { value: 'openclaw', label: 'OpenClaw' },
+            { value: 'openhands', label: 'OpenHands' },
+            { value: 'pi', label: 'Pi' },
+            { value: 'pochi', label: 'Pochi' },
+            { value: 'qoder', label: 'Qoder' },
+            { value: 'qwen-code', label: 'Qwen Code' },
+            { value: 'trae', label: 'Trae' },
+            { value: 'trae-cn', label: 'Trae CN' },
+            { value: 'zencoder', label: 'Zencoder' },
+          ];
 
-        if (editor === `cursor-global`) {
-          const confirm = await p.select({
-            message: `Global install will add/update ${cursorGlobalMCPConfigPath} and make the Mastra docs MCP server available in all your Cursor projects. Continue?`,
-            options: [
-              { value: 'yes', label: 'Yes, I understand' },
-              { value: 'skip', label: 'No, skip for now' },
-            ],
+          // Show popular agents first with "Show all" option
+          const initialSelection = await p.multiselect({
+            message: 'Select agent(s) to install skills for:',
+            options: [...POPULAR_AGENTS, { value: '__show_all__', label: '+ Show all agents (30 more)' }],
+            required: true,
           });
-          if (confirm !== `yes`) {
+
+          if (p.isCancel(initialSelection)) {
             return undefined;
           }
-        }
 
-        if (editor === `windsurf`) {
-          const confirm = await p.select({
-            message: `Windsurf only supports a global MCP config (at ${windsurfGlobalMCPConfigPath}) is it ok to add/update that global config?\nThis means the Mastra docs MCP server will be available in all your Windsurf projects.`,
-            options: [
-              { value: 'yes', label: 'Yes, I understand' },
-              { value: 'skip', label: 'No, skip for now' },
-            ],
-          });
-          if (confirm !== `yes`) {
-            return undefined;
+          let selectedAgents = initialSelection as string[];
+
+          // If user selected "Show all", show full list
+          if (selectedAgents.includes('__show_all__')) {
+            // Remove the __show_all__ marker and use those as pre-selected
+            const preSelected = selectedAgents.filter(a => a !== '__show_all__');
+
+            const fullSelection = await p.multiselect({
+              message: 'Select agent(s) to install skills for:',
+              options: ALL_AGENTS,
+              initialValues: preSelected,
+              required: true,
+            });
+
+            if (p.isCancel(fullSelection)) {
+              return undefined;
+            }
+
+            selectedAgents = fullSelection as string[];
           }
+
+          return { type: 'skills' as const, agents: selectedAgents };
         }
 
-        if (editor === `antigravity`) {
-          const confirm = await p.select({
-            message: `Antigravity only supports a global MCP config (at ${antigravityGlobalMCPConfigPath}). Is it ok to add/update that global config?\nThis will make the Mastra docs MCP server available in all Antigravity projects.`,
+        // If MCP selected, show editor sub-selection
+        if (choice === 'mcp') {
+          const editor = await p.select({
+            message: `Which editor?`,
             options: [
-              { value: 'yes', label: 'Yes, I understand' },
-              { value: 'skip', label: 'No, skip for now' },
-            ],
+              {
+                value: 'cursor',
+                label: 'Cursor (project only)',
+              },
+              {
+                value: 'cursor-global',
+                label: 'Cursor (global, all projects)',
+              },
+              {
+                value: 'windsurf',
+                label: 'Windsurf',
+              },
+              {
+                value: 'vscode',
+                label: 'VSCode',
+              },
+              {
+                value: 'antigravity',
+                label: 'Antigravity',
+              },
+            ] satisfies { value: Editor; label: string }[],
           });
 
-          if (confirm !== `yes`) {
-            return undefined;
+          // Handle MCP editor selections with confirmations
+          if (editor === `cursor`) {
+            p.log.message(
+              `\nNote: you will need to go into Cursor Settings -> MCP Settings and manually enable the installed Mastra MCP server.\n`,
+            );
           }
+
+          if (editor === `cursor-global`) {
+            const confirm = await p.select({
+              message: `Global install will add/update ${cursorGlobalMCPConfigPath} and make the Mastra docs MCP server available in all your Cursor projects. Continue?`,
+              options: [
+                { value: 'yes', label: 'Yes, I understand' },
+                { value: 'no', label: 'No, cancel' },
+              ],
+            });
+            if (confirm !== `yes`) {
+              return undefined;
+            }
+          }
+
+          if (editor === `windsurf`) {
+            const confirm = await p.select({
+              message: `Windsurf only supports a global MCP config (at ${windsurfGlobalMCPConfigPath}) is it ok to add/update that global config?\nThis means the Mastra docs MCP server will be available in all your Windsurf projects.`,
+              options: [
+                { value: 'yes', label: 'Yes, I understand' },
+                { value: 'no', label: 'No, cancel' },
+              ],
+            });
+            if (confirm !== `yes`) {
+              return undefined;
+            }
+          }
+
+          if (editor === `antigravity`) {
+            const confirm = await p.select({
+              message: `Antigravity only supports a global MCP config (at ${antigravityGlobalMCPConfigPath}). Is it ok to add/update that global config?\nThis will make the Mastra docs MCP server available in all Antigravity projects.`,
+              options: [
+                { value: 'yes', label: 'Yes, I understand' },
+                { value: 'no', label: 'No, cancel' },
+              ],
+            });
+
+            if (confirm !== `yes`) {
+              return undefined;
+            }
+          }
+          return editor;
         }
-        return editor;
+
+        return undefined;
       },
       initGit: async () => {
         if (skip?.gitInit) return false;
