@@ -71,13 +71,13 @@ export default function Observability() {
       label: wf.name,
       type: EntityType.WORKFLOW_RUN,
     }));
-    return [{ value: 'all', label: 'All', type: 'all' as const }, ...agentOpts, ...workflowOpts];
+    return [{ value: 'all', label: 'All Entities', type: 'all' as const }, ...agentOpts, ...workflowOpts];
   }, [agents, workflows]);
 
   const selectedEntityOption = useMemo<EntityOptions>(() => {
     const entityName = searchParams.get('entity');
     if (!entityName || entityName === 'all') {
-      return { value: 'all', label: 'All', type: 'all' as const };
+      return { value: 'all', label: 'All Entities', type: 'all' as const };
     }
     return (
       entityOptions.find(option => option.value === entityName) || { value: 'all', label: 'All', type: 'all' as const }
