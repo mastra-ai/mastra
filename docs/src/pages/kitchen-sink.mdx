@@ -9,6 +9,9 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
+import YouTube from "@site/src/components/YouTube-player";
+import { ReferenceCards } from "@site/src/components/ReferenceCards";
 
 # Kitchen Sink
 
@@ -136,6 +139,100 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 :::
+
+## Card Grid
+
+<CardGrid>
+  <CardGridItem
+    title="Gateways"
+    href="/models/gateways"
+  >
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 text-sm">
+          <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+          <span>OpenRouter</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <NetlifyLogo className="w-4 h-4" />
+          <span>Netlify</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <img src="https://models.dev/logos/vercel.svg" alt="Vercel" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+          <span>Vercel</span>
+        </div>
+      </div>
+      <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 1 more</div>
+    </div>
+  </CardGridItem>
+  <CardGridItem
+    title="Providers"
+    href="/models/providers"
+  >
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 text-sm">
+          <img src="https://models.dev/logos/openai.svg" alt="OpenAI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+          <span>OpenAI</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <img src="https://models.dev/logos/anthropic.svg" alt="Anthropic" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+          <span>Anthropic</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <img src="https://models.dev/logos/google.svg" alt="Google" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+          <span>Google</span>
+        </div>
+      </div>
+      <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 68 more</div>
+    </div>
+  </CardGridItem>
+</CardGrid>
+
+## YouTube
+
+<YouTube id="1qnmnRICX50" />
+
+## Reference Cards
+
+<ReferenceCards />
+
+## Properties Table
+
+<PropertiesTable
+  content={[
+    {
+      name: "domain",
+      type: "string",
+      description:
+        "Your Auth0 domain (e.g., your-tenant.auth0.com). This is used to verify JWT tokens issued by your Auth0 tenant.",
+      isOptional: true,
+      defaultValue: "process.env.AUTH0_DOMAIN",
+    },
+    {
+      name: "audience",
+      type: "string",
+      description:
+        "Your Auth0 API identifier/audience. This ensures tokens are intended for your specific API.",
+      isOptional: true,
+      defaultValue: "process.env.AUTH0_AUDIENCE",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Custom name for the auth provider instance.",
+      isOptional: true,
+      defaultValue: '"auth0"',
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: Auth0User) => Promise<boolean> | boolean",
+      description:
+        "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users with valid tokens.",
+      isOptional: true,
+    },
+  ]}
+/>
 
 ## Markdown Kitchen Sink
 
