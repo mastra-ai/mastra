@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-01-23)
 ## Current Position
 
 Phase: 11 of 11 (Dataset Schema Validation)
-Plan: 6 of 7 in phase 11
+Plan: 8 of 9 in phase 11
 Status: In progress
-Last activity: 2026-02-02 — Completed 11-06-PLAN.md
+Last activity: 2026-02-02 — Completed 11-08-PLAN.md
 
-Progress: [██████████░] ~99% (49/50 plans)
+Progress: [██████████░] ~99%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 49
+- Total plans completed: 51
 - Average duration: 4 min
-- Total execution time: 2.8 hours
+- Total execution time: ~2.9 hours
 
 **By Phase:**
 
@@ -38,11 +38,11 @@ Progress: [██████████░] ~99% (49/50 plans)
 | 08-item-selection-actions    | 4     | 13 min | 3.25 min |
 | 09-dataset-items-detail-view | 5     | 16 min | 3.2 min  |
 | 10-dataset-layout-update     | 5     | 24 min | 4.8 min  |
-| 11-dataset-schema-validation | 7     | 26 min | 3.71 min |
+| 11-dataset-schema-validation | 9     | 34 min | 3.78 min |
 
 **Recent Trend:**
 
-- Last 5 plans: 11-04 (3 min), 11-05a (2 min), 11-05b (3 min), 11-06 (4 min)
+- Last 5 plans: 11-05b (3 min), 11-06 (4 min), 11-07 (4 min), 11-08 (4 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -141,6 +141,11 @@ Recent decisions affecting current work:
 - parseValidationError helper extracts { field, errors } from API error message
 - ValidationErrors component displays field-level errors inline under affected field
 - Validation errors clear on field change for better UX
+- SchemaConfigSection is collapsible, default collapsed for simple use case
+- Source selector with Custom/Agent/Workflow/Scorer options for schema import
+- Auto-populate uses hasAutoPopulatedRef to prevent repeated population on re-enable
+- Edit dialog auto-opens schema section if dataset has existing schemas
+- Removed separate Schema Settings dialog - consolidated into Edit Dataset
 
 ### Pending Todos
 
@@ -161,5 +166,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: Completed 11-06-PLAN.md (Validation Error Display)
+Stopped at: Completed 11-08-PLAN.md (Schema Dialog Integration)
 Resume file: None
