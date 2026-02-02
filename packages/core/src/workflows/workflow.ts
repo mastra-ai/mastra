@@ -72,7 +72,7 @@ import type {
   StepParams,
   OutputWriter,
 } from './types';
-import { createTimeTravelExecutionParams, getZodErrors } from './utils';
+import { cleanStepResult, createTimeTravelExecutionParams, getZodErrors } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -2317,7 +2317,12 @@ export class Workflow<
       const stepGraph = serializedStepGraph.find(stepGraph => (stepGraph as any)?.step?.id === step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
       if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
-        const nestedSteps = await this.getWorkflowRunSteps({ runId, workflowId: step });
+        // Evented runtime stores nested workflow's runId in metadata.nestedRunId (set by step-executor).
+        // Default runtime uses the parent runId directly to look up nested workflow steps.
+        const stepResult = steps[step] as any;
+        const nestedRunId = stepResult?.metadata?.nestedRunId ?? runId;
+
+        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: step });
         if (nestedSteps) {
           const updatedNestedSteps = Object.entries(nestedSteps).reduce(
             (acc, [key, value]) => {
@@ -2419,11 +2424,21 @@ export class Workflow<
     // Get steps if needed
     let steps: Record<string, any> = {};
     if (includeAllFields || fieldsSet.has('steps')) {
+      let rawSteps: Record<string, any>;
       if (withNestedWorkflows) {
-        steps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+        rawSteps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
       } else {
         const { input, ...stepsOnly } = snapshotState.context || {};
-        steps = stepsOnly;
+        rawSteps = stepsOnly;
+      }
+      // Strip __state from steps (internal implementation detail for state propagation).
+      // The evented runtime adds __state to step results for cross-step state passing.
+      const { __state: _removedTopLevelState, ...stepsWithoutTopLevelState } = rawSteps;
+      // Clean each step result to remove internal properties (__state, metadata.nestedRunId)
+      // that are implementation details not meant for API consumers.
+      // Handles both object and array step results (e.g., forEach outputs).
+      for (const [stepId, stepResult] of Object.entries(stepsWithoutTopLevelState)) {
+        steps[stepId] = cleanStepResult(stepResult);
       }
     }
 
