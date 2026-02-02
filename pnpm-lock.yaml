@@ -837,18 +837,12 @@ importers:
 
   explorations/longmemeval:
     dependencies:
-      '@ai-sdk/google':
-        specifier: latest
-        version: 3.0.18(zod@3.25.76)
       '@ai-sdk/openai':
-        specifier: latest
-        version: 3.0.23(zod@3.25.76)
+        specifier: ^1.3.23
+        version: 1.3.24(zod@3.25.76)
       '@ai-sdk/provider':
-        specifier: latest
-        version: 3.0.6
-      '@ai-sdk/provider-utils':
-        specifier: latest
-        version: 4.0.11(zod@3.25.76)
+        specifier: ^1.1.3
+        version: 1.1.3
       '@huggingface/hub':
         specifier: ^0.15.1
         version: 0.15.2
@@ -871,8 +865,8 @@ importers:
         specifier: ^1.7.6
         version: 1.7.6
       ai:
-        specifier: latest
-        version: 6.0.62(zod@3.25.76)
+        specifier: ^4.3.17
+        version: 4.3.19(react@19.2.3)(zod@3.25.76)
       async-mutex:
         specifier: ^0.5.0
         version: 0.5.0
@@ -882,9 +876,6 @@ importers:
       commander:
         specifier: ^12.1.0
         version: 12.1.0
-      dotenv:
-        specifier: ^16.4.5
-        version: 16.6.1
       fastq:
         specifier: ^1.19.1
         version: 1.19.1
@@ -897,13 +888,13 @@ importers:
       ora:
         specifier: ^8.1.1
         version: 8.2.0
-      xxhash-wasm:
-        specifier: ^1.1.0
-        version: 1.1.0
       zod:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
+      '@ai-sdk/google':
+        specifier: ^1.2.19
+        version: 1.2.22(zod@3.25.76)
       '@types/node':
         specifier: 22.19.7
         version: 22.19.7
@@ -5588,12 +5579,6 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4
 
-  '@ai-sdk/google@3.0.18':
-    resolution: {integrity: sha512-g36Arlv38wjnqAhNlxMkfTvmWpMbD+FTFoXLppZ8dZhMQbr/UI5dEtFAByU1/lWeDyOmj/uTWzAuRTyJRw7OLA==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
   '@ai-sdk/groq@1.2.9':
     resolution: {integrity: sha512-7MoDaxm8yWtiRbD1LipYZG0kBl+Xe0sv/EeyxnHnGPZappXdlgtdOgTZVjjXkT3nWP30jjZi9A45zoVrBMb3Xg==}
     engines: {node: '>=18'}
@@ -5674,12 +5659,6 @@ packages:
 
   '@ai-sdk/openai@3.0.1':
     resolution: {integrity: sha512-P+qxz2diOrh8OrpqLRg+E+XIFVIKM3z2kFjABcCJGHjGbXBK88AJqmuKAi87qLTvTe/xn1fhZBjklZg9bTyigw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/openai@3.0.23':
-    resolution: {integrity: sha512-vFfFadJH+hbrgI4lhC9H/r8qPzuFJFUwZNS8oMI8KujO/woovbE1EWOOGMRGtNVL8PrhhxBfgJzvOKdux3c1gw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -19059,12 +19038,6 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.3(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/google@3.0.18(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.6
-      '@ai-sdk/provider-utils': 4.0.11(zod@3.25.76)
-      zod: 3.25.76
-
   '@ai-sdk/groq@1.2.9(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -19147,12 +19120,6 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 3.0.0
       '@ai-sdk/provider-utils': 4.0.1(zod@3.25.76)
-      zod: 3.25.76
-
-  '@ai-sdk/openai@3.0.23(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.6
-      '@ai-sdk/provider-utils': 4.0.11(zod@3.25.76)
       zod: 3.25.76
 
   '@ai-sdk/perplexity@2.0.5(zod@3.25.76)':
