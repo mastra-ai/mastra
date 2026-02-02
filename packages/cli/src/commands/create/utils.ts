@@ -160,6 +160,7 @@ export const createMastraProject = async ({
   llmProvider,
   llmApiKey,
   skills,
+  mcpServer,
   needsInteractive,
 }: {
   projectName?: string;
@@ -168,6 +169,7 @@ export const createMastraProject = async ({
   llmProvider?: LLMProvider;
   llmApiKey?: string;
   skills?: string[];
+  mcpServer?: string;
   needsInteractive?: boolean;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
@@ -199,7 +201,8 @@ export const createMastraProject = async ({
       skip: {
         llmProvider: llmProvider !== undefined,
         llmApiKey: llmApiKey !== undefined,
-        configureMastraToolingForCodingAgents: skills !== undefined && skills.length > 0,
+        skills: skills !== undefined && skills.length > 0,
+        mcpServer: mcpServer !== undefined,
       },
     });
   }
