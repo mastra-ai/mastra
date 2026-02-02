@@ -16,8 +16,13 @@ import type { BlockContent, DefinitionContent } from 'mdast'
 import type { State } from 'hast-util-to-mdast'
 
 /**
- * Find an element with a specific data-testid attribute recursively
+ * Find an element with a specific data-testid attribute within a limited depth
+ * This prevents false positives when ancestor divs contain deeply nested admonitions
+ * The admonition structure has data-testid="admonition-title" at depth 2 from the container:
+ *   admonition div (0) > title row div (1) > span[data-testid] (2)
  */
+const MAX_ADMONITION_SEARCH_DEPTH = 2
+
 function findByTestId(node: ElementContent, testId: string, depth = 0): Element | null {
   if (node.type !== 'element') return null
 
@@ -27,6 +32,11 @@ function findByTestId(node: ElementContent, testId: string, depth = 0): Element 
 
   if (dataTestId === testId) {
     return node
+  }
+
+  // Limit search depth to avoid matching ancestor divs that contain admonitions
+  if (depth >= MAX_ADMONITION_SEARCH_DEPTH) {
+    return null
   }
 
   for (const child of node.children || []) {
