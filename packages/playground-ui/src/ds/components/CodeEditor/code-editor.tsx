@@ -51,7 +51,7 @@ export const CodeEditor = ({ data, value, onChange, showCopyButton = true, class
   const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
   return (
-    <div className={cn('rounded-md bg-surface4 p-1 font-mono relative', className)} {...props}>
+    <div className={cn('rounded-md bg-surface4 p-1 font-mono relative overflow-hidden', className)} {...props}>
       {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
       <CodeMirror
         value={formattedCode}
@@ -59,6 +59,8 @@ export const CodeEditor = ({ data, value, onChange, showCopyButton = true, class
         extensions={[jsonLanguage]}
         onChange={onChange}
         aria-label="Code editor"
+        height="100%"
+        style={{ height: '100%', overflow: 'auto' }}
       />
     </div>
   );
