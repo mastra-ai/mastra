@@ -17,6 +17,50 @@ import { format } from 'date-fns/format';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { ItemDetailToolbar } from './item-detail-toolbar';
 
+/** Schema validation error from API */
+interface SchemaValidationError {
+  field: 'input' | 'expectedOutput';
+  errors: Array<{ path: string; message: string }>;
+}
+
+/** Parses API error message to extract schema validation details */
+function parseValidationError(error: unknown): SchemaValidationError | null {
+  if (!(error instanceof Error)) return null;
+
+  // API error format: "HTTP error! status: 400 - {\"error\":\"...\",\"field\":\"...\",\"errors\":[...]}"
+  const match = error.message.match(/- ({.*})$/);
+  if (!match) return null;
+
+  try {
+    const parsed = JSON.parse(match[1]);
+    if (parsed.field && Array.isArray(parsed.errors)) {
+      return { field: parsed.field, errors: parsed.errors };
+    }
+  } catch {
+    // Not valid JSON
+  }
+  return null;
+}
+
+/** Displays field-level validation errors */
+function ValidationErrors({ field, errors }: { field: string; errors: Array<{ path: string; message: string }> }) {
+  if (!errors.length) return null;
+
+  return (
+    <div className="mt-2 space-y-1">
+      {errors.map((err, idx) => (
+        <p key={idx} className="text-xs text-destructive">
+          <code className="bg-destructive/10 px-1 rounded">
+            {field}
+            {err.path !== '/' ? err.path : ''}
+          </code>
+          : {err.message}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export interface ItemDetailPanelProps {
   datasetId: string;
   item: DatasetItem;
@@ -39,6 +83,9 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
   const [expectedOutputValue, setExpectedOutputValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
 
+  // Validation error state
+  const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
+
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -50,6 +97,7 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
+      setValidationErrors(null); // Reset validation errors on item change
     }
   }, [item?.id]);
 
@@ -114,8 +162,15 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
 
       toast.success('Item updated successfully');
       setIsEditing(false);
+      setValidationErrors(null);
     } catch (error) {
-      toast.error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Check for schema validation error from API
+      const schemaError = parseValidationError(error);
+      if (schemaError) {
+        setValidationErrors(schemaError);
+      } else {
+        toast.error(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     }
   };
 
@@ -125,6 +180,22 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
     setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
     setIsEditing(false);
+    setValidationErrors(null);
+  };
+
+  // Clear validation errors on field change
+  const handleInputValueChange = (value: string) => {
+    setInputValue(value);
+    if (validationErrors?.field === 'input') {
+      setValidationErrors(null);
+    }
+  };
+
+  const handleExpectedOutputValueChange = (value: string) => {
+    setExpectedOutputValue(value);
+    if (validationErrors?.field === 'expectedOutput') {
+      setValidationErrors(null);
+    }
   };
 
   const handleEdit = () => {
@@ -162,11 +233,12 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
           {isEditing ? (
             <EditModeContent
               inputValue={inputValue}
-              setInputValue={setInputValue}
+              setInputValue={handleInputValueChange}
               expectedOutputValue={expectedOutputValue}
-              setExpectedOutputValue={setExpectedOutputValue}
+              setExpectedOutputValue={handleExpectedOutputValueChange}
               metadataValue={metadataValue}
               setMetadataValue={setMetadataValue}
+              validationErrors={validationErrors}
               onSave={handleSave}
               onCancel={handleCancel}
               isSaving={updateItem.isPending}
@@ -261,6 +333,7 @@ interface EditModeContentProps {
   setExpectedOutputValue: (value: string) => void;
   metadataValue: string;
   setMetadataValue: (value: string) => void;
+  validationErrors: SchemaValidationError | null;
   onSave: () => void;
   onCancel: () => void;
   isSaving: boolean;
@@ -273,6 +346,7 @@ function EditModeContent({
   setExpectedOutputValue,
   metadataValue,
   setMetadataValue,
+  validationErrors,
   onSave,
   onCancel,
   isSaving,
@@ -289,6 +363,7 @@ function EditModeContent({
         <div className="space-y-2">
           <Label>Input (JSON) *</Label>
           <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-[120px]" />
+          {validationErrors?.field === 'input' && <ValidationErrors field="input" errors={validationErrors.errors} />}
         </div>
 
         <div className="space-y-2">
@@ -299,6 +374,9 @@ function EditModeContent({
             showCopyButton={false}
             className="min-h-[100px]"
           />
+          {validationErrors?.field === 'expectedOutput' && (
+            <ValidationErrors field="expectedOutput" errors={validationErrors.errors} />
+          )}
         </div>
 
         <div className="space-y-2">
