@@ -286,6 +286,18 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
   // Handle done - close dialog and notify
   const handleDone = useCallback(() => {
+    // Show success toast with counts
+    if (importResult) {
+      const skipped = schemaValidation?.invalidCount ?? 0;
+      if (skipped > 0) {
+        toast.success(
+          `Imported ${importResult.success} row${importResult.success !== 1 ? 's' : ''} (${skipped} skipped)`,
+        );
+      } else {
+        toast.success(`Imported ${importResult.success} row${importResult.success !== 1 ? 's' : ''}`);
+      }
+    }
+
     onOpenChange(false);
     onSuccess?.();
 
@@ -298,7 +310,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       setImportProgress({ current: 0, total: 0 });
       setImportResult(null);
     }, 150);
-  }, [onOpenChange, onSuccess]);
+  }, [onOpenChange, onSuccess, importResult, schemaValidation]);
 
   // Handle dialog close
   const handleClose = useCallback(() => {
@@ -375,7 +387,36 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
                 ? 'Rows have been validated against the dataset schema.'
                 : 'Ready to import. No schema validation required.'}
             </div>
-            <ValidationReport result={schemaValidation} />
+
+            {/* Prominent validation summary banner */}
+            {schemaValidation.invalidCount > 0 ? (
+              <div className="p-3 bg-warning/10 border border-warning/30 rounded-md">
+                <div className="flex items-center gap-2 text-warning font-medium">
+                  <span className="text-lg">⚠</span>
+                  {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {schemaValidation.validCount} of {schemaValidation.totalRows} rows will be imported
+                </p>
+              </div>
+            ) : (
+              <div className="p-3 bg-success/10 border border-success/30 rounded-md">
+                <div className="flex items-center gap-2 text-success font-medium">
+                  <span className="text-lg">✓</span>
+                  All {schemaValidation.totalRows} row{schemaValidation.totalRows !== 1 ? 's are' : ' is'} valid
+                </div>
+              </div>
+            )}
+
+            {/* No valid rows warning */}
+            {schemaValidation.validCount === 0 && (
+              <p className="text-sm text-destructive">
+                No valid rows to import. Please fix the data or adjust the schema.
+              </p>
+            )}
+
+            {/* Detailed validation report (only show table if there are invalid rows) */}
+            {schemaValidation.invalidCount > 0 && <ValidationReport result={schemaValidation} />}
           </div>
         ) : null;
 
@@ -461,7 +502,9 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
               onClick={handleImport}
               disabled={!schemaValidation || schemaValidation.validCount === 0}
             >
-              Import {schemaValidation?.validCount ?? 0} Row{schemaValidation?.validCount !== 1 ? 's' : ''}
+              {schemaValidation?.invalidCount
+                ? `Import ${schemaValidation.validCount} Valid Row${schemaValidation.validCount !== 1 ? 's' : ''}`
+                : `Import ${schemaValidation?.totalRows ?? 0} Row${schemaValidation?.totalRows !== 1 ? 's' : ''}`}
             </Button>
           </>
         );
