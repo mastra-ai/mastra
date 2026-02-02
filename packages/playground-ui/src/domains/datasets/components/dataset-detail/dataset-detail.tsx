@@ -110,7 +110,6 @@ export function DatasetDetail({
         >
           {/* Header */}
           <DatasetHeader
-            datasetId={datasetId}
             name={dataset?.name}
             description={(dataset as { description?: string } | undefined)?.description}
             version={dataset?.version}
@@ -119,8 +118,6 @@ export function DatasetDetail({
             onDeleteClick={onDeleteClick}
             runTriggerSlot={runTriggerSlot}
             onRunClick={onRunClick}
-            inputSchema={dataset?.inputSchema as Record<string, unknown> | null | undefined}
-            outputSchema={dataset?.outputSchema as Record<string, unknown> | null | undefined}
           />
 
           {/* Content with tabs */}
