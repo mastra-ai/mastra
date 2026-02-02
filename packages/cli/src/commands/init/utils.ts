@@ -722,7 +722,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         if (skip?.configureMastraToolingForCodingAgents) return undefined;
 
         const choice = await p.select({
-          message: `Configure Mastra tooling for coding agents?`,
+          message: `Choose your agent tooling:`,
           options: [
             { value: 'skills', label: 'Skills - Mastra agent skills', hint: 'recommended' },
             { value: 'mcp', label: 'MCP Docs - IDE integration' },
