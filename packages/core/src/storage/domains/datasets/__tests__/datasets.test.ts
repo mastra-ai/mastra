@@ -355,6 +355,168 @@ describe('DatasetsInMemory', () => {
     });
   });
 
+  // ------------- Schema Validation -------------
+  describe('schema validation', () => {
+    it('validates input against inputSchema on addItem', async () => {
+      const dataset = await storage.createDataset({
+        name: 'test',
+        inputSchema: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+          required: ['name'],
+        },
+      });
+
+      // Valid item succeeds
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { name: 'Alice' },
+      });
+      expect(item.input).toEqual({ name: 'Alice' });
+
+      // Invalid item throws
+      await expect(
+        storage.addItem({
+          datasetId: dataset.id,
+          input: { name: 123 }, // wrong type
+        }),
+      ).rejects.toThrow('Validation failed for input');
+    });
+
+    it('validates expectedOutput against outputSchema on addItem', async () => {
+      const dataset = await storage.createDataset({
+        name: 'test',
+        outputSchema: {
+          type: 'object',
+          properties: { score: { type: 'number' } },
+          required: ['score'],
+        },
+      });
+
+      // Valid item succeeds
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: 'prompt',
+        expectedOutput: { score: 0.9 },
+      });
+      expect(item.expectedOutput).toEqual({ score: 0.9 });
+
+      // Invalid item throws
+      await expect(
+        storage.addItem({
+          datasetId: dataset.id,
+          input: 'prompt',
+          expectedOutput: { score: 'high' }, // wrong type
+        }),
+      ).rejects.toThrow('Validation failed for expectedOutput');
+    });
+
+    it('validates input on updateItem', async () => {
+      const dataset = await storage.createDataset({
+        name: 'test',
+        inputSchema: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+          required: ['name'],
+        },
+      });
+
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { name: 'Alice' },
+      });
+
+      // Valid update succeeds
+      const updated = await storage.updateItem({
+        id: item.id,
+        datasetId: dataset.id,
+        input: { name: 'Bob' },
+      });
+      expect(updated.input).toEqual({ name: 'Bob' });
+
+      // Invalid update throws
+      await expect(
+        storage.updateItem({
+          id: item.id,
+          datasetId: dataset.id,
+          input: { name: 123 }, // wrong type
+        }),
+      ).rejects.toThrow('Validation failed for input');
+    });
+
+    it('validates existing items when schema is added', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+
+      // Add items without schema
+      await storage.addItem({ datasetId: dataset.id, input: { name: 'Alice' } });
+      await storage.addItem({ datasetId: dataset.id, input: { name: 123 } }); // would fail with schema
+
+      // Try to add schema - should fail due to invalid item
+      await expect(
+        storage.updateDataset({
+          id: dataset.id,
+          inputSchema: {
+            type: 'object',
+            properties: { name: { type: 'string' } },
+            required: ['name'],
+          },
+        }),
+      ).rejects.toThrow('Cannot update schema');
+    });
+
+    it('allows schema update when all items valid', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+
+      await storage.addItem({ datasetId: dataset.id, input: { name: 'Alice' } });
+      await storage.addItem({ datasetId: dataset.id, input: { name: 'Bob' } });
+
+      // Add schema - should succeed
+      const updated = await storage.updateDataset({
+        id: dataset.id,
+        inputSchema: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+          required: ['name'],
+        },
+      });
+      expect(updated.inputSchema).toBeDefined();
+    });
+
+    it('allows schema update on empty dataset', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+
+      // No items - schema update should succeed
+      const updated = await storage.updateDataset({
+        id: dataset.id,
+        inputSchema: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+          required: ['name'],
+        },
+      });
+      expect(updated.inputSchema).toBeDefined();
+    });
+
+    it('skips validation when expectedOutput is undefined', async () => {
+      const dataset = await storage.createDataset({
+        name: 'test',
+        outputSchema: {
+          type: 'object',
+          properties: { score: { type: 'number' } },
+          required: ['score'],
+        },
+      });
+
+      // Item without expectedOutput should succeed
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: 'prompt',
+        // no expectedOutput
+      });
+      expect(item.id).toBeDefined();
+    });
+  });
+
   // ------------- Edge Cases -------------
   describe('edge cases', () => {
     it('getDatasetById with non-existent ID returns null', async () => {

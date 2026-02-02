@@ -33,3 +33,19 @@ export interface BatchValidationResult {
     errors: FieldError[];
   }>;
 }
+
+/** Error thrown when schema update would invalidate existing items */
+export class SchemaUpdateValidationError extends Error {
+  constructor(
+    public readonly failingItems: Array<{
+      index: number;
+      data: unknown;
+      field: 'input' | 'expectedOutput';
+      errors: FieldError[];
+    }>,
+  ) {
+    const count = failingItems.length;
+    super(`Cannot update schema: ${count} existing item(s) would fail validation`);
+    this.name = 'SchemaUpdateValidationError';
+  }
+}

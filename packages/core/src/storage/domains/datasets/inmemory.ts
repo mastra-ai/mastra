@@ -1,4 +1,4 @@
-import { getSchemaValidator } from '../../../datasets/validation';
+import { getSchemaValidator, SchemaUpdateValidationError } from '../../../datasets/validation';
 import { calculatePagination, normalizePerPage } from '../../base';
 import type {
   Dataset,
@@ -37,6 +37,8 @@ export class DatasetsInMemory extends DatasetsStorage {
       name: input.name,
       description: input.description,
       metadata: input.metadata,
+      inputSchema: input.inputSchema,
+      outputSchema: input.outputSchema,
       version: now, // Timestamp-based versioning
       createdAt: now,
       updatedAt: now,
@@ -54,11 +56,47 @@ export class DatasetsInMemory extends DatasetsStorage {
     if (!existing) {
       throw new Error(`Dataset not found: ${args.id}`);
     }
+
+    // Check if schemas are being added or modified
+    const inputSchemaChanging =
+      args.inputSchema !== undefined && JSON.stringify(args.inputSchema) !== JSON.stringify(existing.inputSchema);
+    const outputSchemaChanging =
+      args.outputSchema !== undefined && JSON.stringify(args.outputSchema) !== JSON.stringify(existing.outputSchema);
+
+    // If schemas changing, validate all existing items against new schemas
+    if (inputSchemaChanging || outputSchemaChanging) {
+      const items = Array.from(this.db.datasetItems.values()).filter(item => item.datasetId === args.id);
+
+      if (items.length > 0) {
+        const validator = getSchemaValidator();
+        const newInputSchema = args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema;
+        const newOutputSchema = args.outputSchema !== undefined ? args.outputSchema : existing.outputSchema;
+
+        const result = validator.validateBatch(
+          items.map(i => ({ input: i.input, expectedOutput: i.expectedOutput })),
+          newInputSchema,
+          newOutputSchema,
+          `dataset:${args.id}:schema-update`,
+          10, // Max 10 errors to report
+        );
+
+        if (result.invalid.length > 0) {
+          throw new SchemaUpdateValidationError(result.invalid);
+        }
+
+        // Clear old cache since schema changed
+        validator.clearCache(`dataset:${args.id}:input`);
+        validator.clearCache(`dataset:${args.id}:output`);
+      }
+    }
+
     const updated: Dataset = {
       ...existing,
       name: args.name ?? existing.name,
       description: args.description ?? existing.description,
       metadata: args.metadata ?? existing.metadata,
+      inputSchema: args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema,
+      outputSchema: args.outputSchema !== undefined ? args.outputSchema : existing.outputSchema,
       updatedAt: new Date(),
     };
     this.db.datasets.set(args.id, updated);
