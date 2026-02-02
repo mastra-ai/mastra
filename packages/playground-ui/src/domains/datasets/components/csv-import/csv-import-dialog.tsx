@@ -16,10 +16,13 @@ import { toast } from '@/lib/toast';
 import { useCSVParser, ParsedCSV } from '../../hooks/use-csv-parser';
 import { useColumnMapping, ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
+import { useDataset } from '../../hooks/use-datasets';
 import { CSVUploadStep } from './csv-upload-step';
 import { CSVPreviewTable } from './csv-preview-table';
 import { ColumnMappingStep } from './column-mapping-step';
 import { ValidationSummary, ValidationError } from './validation-summary';
+import { ValidationReport } from './validation-report';
+import { validateCsvRows, CsvValidationResult } from '../../utils/csv-validation';
 
 export interface CSVImportDialogProps {
   datasetId: string;
@@ -28,7 +31,7 @@ export interface CSVImportDialogProps {
   onSuccess?: () => void;
 }
 
-type ImportStep = 'upload' | 'preview' | 'mapping' | 'importing' | 'complete';
+type ImportStep = 'upload' | 'preview' | 'mapping' | 'validation' | 'importing' | 'complete';
 
 interface ImportResult {
   success: number;
@@ -55,9 +58,13 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
   const [isImporting, setIsImporting] = useState(false);
   const [shouldCancel, setShouldCancel] = useState(false);
 
+  // Schema validation result
+  const [schemaValidation, setSchemaValidation] = useState<CsvValidationResult | null>(null);
+
   // Hooks
   const { parseFile, isParsing, error: parseError } = useCSVParser();
   const { addItem } = useDatasetMutations();
+  const { data: dataset } = useDataset(datasetId);
 
   // Column mapping - initialize with empty headers, update when CSV is parsed
   const columnMapping = useColumnMapping(parsedCSV?.headers ?? []);
@@ -155,8 +162,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
     return { input, expectedOutput, metadata };
   }, []);
 
-  // Handle validate and import
-  const handleValidateAndImport = useCallback(async () => {
+  // Handle validate mapping and proceed to schema validation
+  const handleValidateMapping = useCallback(() => {
     const errors = validateMappedData();
     setValidationErrors(errors);
 
@@ -166,26 +173,91 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
     if (!parsedCSV) return;
 
+    const { data, headers } = parsedCSV;
+    const { mapping } = columnMapping;
+
+    // Build mapped rows for schema validation
+    const mappedRows = data.map(row => buildItemFromRow(row, mapping, headers));
+
+    // Perform schema validation if dataset has schemas
+    const hasSchemas = dataset?.inputSchema || dataset?.outputSchema;
+
+    if (hasSchemas) {
+      const result = validateCsvRows(
+        mappedRows,
+        dataset?.inputSchema as Record<string, unknown> | null | undefined,
+        dataset?.outputSchema as Record<string, unknown> | null | undefined,
+        10,
+      );
+      setSchemaValidation(result);
+
+      // If no valid rows, stay on mapping step with error
+      if (result.validCount === 0) {
+        setValidationErrors([
+          {
+            row: 0,
+            column: '',
+            message: 'All rows failed schema validation. Please check your data.',
+          },
+        ]);
+        return;
+      }
+
+      // Show validation step
+      setStep('validation');
+    } else {
+      // No schemas, proceed directly to import
+      setSchemaValidation({
+        validCount: mappedRows.length,
+        invalidCount: 0,
+        validRows: mappedRows.map((row, i) => ({ rowNumber: i + 2, ...row })),
+        invalidRows: [],
+        totalRows: mappedRows.length,
+      });
+      setStep('validation');
+    }
+  }, [validateMappedData, parsedCSV, columnMapping, buildItemFromRow, dataset]);
+
+  // Handle import (only valid rows from schema validation)
+  const handleImport = useCallback(async () => {
+    if (!schemaValidation || schemaValidation.validCount === 0) return;
+
     setStep('importing');
     setIsImporting(true);
     setShouldCancel(false);
 
-    const { data, headers } = parsedCSV;
-    const { mapping } = columnMapping;
-
+    const rowsToImport = schemaValidation.validRows;
     let successCount = 0;
     let errorCount = 0;
 
-    setImportProgress({ current: 0, total: data.length });
+    setImportProgress({ current: 0, total: rowsToImport.length });
 
-    for (let i = 0; i < data.length; i++) {
+    for (let i = 0; i < rowsToImport.length; i++) {
       // Check for cancellation
       if (shouldCancel) {
         break;
       }
 
-      const row = data[i];
-      const { input, expectedOutput, metadata } = buildItemFromRow(row, mapping, headers);
+      const { input, expectedOutput } = rowsToImport[i];
+
+      // Get metadata from original row data
+      // Note: validRows contains mapped data, metadata is extracted separately
+      let metadata: Record<string, unknown> | undefined;
+      if (parsedCSV) {
+        const originalRowIndex = rowsToImport[i].rowNumber - 2; // Convert back to 0-indexed
+        const { headers } = parsedCSV;
+        const { mapping } = columnMapping;
+        const originalRow = parsedCSV.data[originalRowIndex];
+        if (originalRow) {
+          const metadataColumns = headers.filter(h => mapping[h] === 'metadata');
+          if (metadataColumns.length > 0) {
+            metadata = metadataColumns.reduce<Record<string, unknown>>((acc, col) => {
+              acc[col] = originalRow[col];
+              return acc;
+            }, {});
+          }
+        }
+      }
 
       try {
         await addItem.mutateAsync({
@@ -199,13 +271,13 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
         errorCount++;
       }
 
-      setImportProgress({ current: i + 1, total: data.length });
+      setImportProgress({ current: i + 1, total: rowsToImport.length });
     }
 
     setImportResult({ success: successCount, errors: errorCount });
     setIsImporting(false);
     setStep('complete');
-  }, [validateMappedData, parsedCSV, columnMapping, buildItemFromRow, addItem, datasetId, shouldCancel]);
+  }, [schemaValidation, addItem, datasetId, shouldCancel, parsedCSV, columnMapping]);
 
   // Handle cancel import
   const handleCancelImport = useCallback(() => {
@@ -222,6 +294,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       setStep('upload');
       setParsedCSV(null);
       setValidationErrors([]);
+      setSchemaValidation(null);
       setImportProgress({ current: 0, total: 0 });
       setImportResult(null);
     }, 150);
@@ -245,6 +318,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       setStep('upload');
       setParsedCSV(null);
       setValidationErrors([]);
+      setSchemaValidation(null);
       setImportProgress({ current: 0, total: 0 });
       setImportResult(null);
     }, 150);
@@ -290,6 +364,18 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
               <div className="text-xs text-neutral4 mb-2">Data Preview</div>
               <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={3} />
             </div>
+          </div>
+        ) : null;
+
+      case 'validation':
+        return schemaValidation ? (
+          <div className="flex flex-col gap-4">
+            <div className="text-sm text-neutral4">
+              {dataset?.inputSchema || dataset?.outputSchema
+                ? 'Rows have been validated against the dataset schema.'
+                : 'Ready to import. No schema validation required.'}
+            </div>
+            <ValidationReport result={schemaValidation} />
           </div>
         ) : null;
 
@@ -358,8 +444,24 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             <Button variant="ghost" onClick={() => setStep('preview')}>
               Back
             </Button>
-            <Button variant="primary" onClick={handleValidateAndImport} disabled={!columnMapping.isInputMapped}>
-              Validate &amp; Import
+            <Button variant="primary" onClick={handleValidateMapping} disabled={!columnMapping.isInputMapped}>
+              {dataset?.inputSchema || dataset?.outputSchema ? 'Validate' : 'Next'}
+            </Button>
+          </>
+        );
+
+      case 'validation':
+        return (
+          <>
+            <Button variant="ghost" onClick={() => setStep('mapping')}>
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleImport}
+              disabled={!schemaValidation || schemaValidation.validCount === 0}
+            >
+              Import {schemaValidation?.validCount ?? 0} Row{schemaValidation?.validCount !== 1 ? 's' : ''}
             </Button>
           </>
         );
@@ -381,6 +483,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
     upload: 'Import CSV',
     preview: 'Preview Data',
     mapping: 'Map Columns',
+    validation: 'Review Validation',
     importing: 'Importing',
     complete: 'Import Complete',
   };
