@@ -724,7 +724,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         const choice = await p.select({
           message: `Choose your agent tooling:`,
           options: [
-            { value: 'skills', label: 'Skills - Mastra agent skills', hint: 'recommended' },
+            { value: 'skills', label: 'Skills', hint: 'recommended' },
             { value: 'mcp', label: 'MCP Docs - IDE integration' },
           ],
           initialValue: 'skills',
