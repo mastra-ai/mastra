@@ -7,6 +7,7 @@ import { Input } from '@/ds/components/Input';
 import { Label } from '@/ds/components/Label';
 import { toast } from '@/lib/toast';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { SchemaConfigSection } from './schema-config-section';
 
 export interface CreateDatasetDialogProps {
   open: boolean;
@@ -17,7 +18,17 @@ export interface CreateDatasetDialogProps {
 export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDatasetDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(null);
+  const [outputSchema, setOutputSchema] = useState<Record<string, unknown> | null>(null);
   const { createDataset } = useDatasetMutations();
+
+  const handleSchemaChange = (schemas: {
+    inputSchema: Record<string, unknown> | null;
+    outputSchema: Record<string, unknown> | null;
+  }) => {
+    setInputSchema(schemas.inputSchema);
+    setOutputSchema(schemas.outputSchema);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,6 +42,8 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
       const result = await createDataset.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
+        inputSchema,
+        outputSchema,
       });
 
       toast.success('Dataset created successfully');
@@ -38,6 +51,8 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
       // Reset form
       setName('');
       setDescription('');
+      setInputSchema(null);
+      setOutputSchema(null);
       onOpenChange(false);
 
       // Navigate to new dataset
@@ -50,16 +65,18 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
   const handleCancel = () => {
     setName('');
     setDescription('');
+    setInputSchema(null);
+    setOutputSchema(null);
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create Dataset</DialogTitle>
         </DialogHeader>
-        <DialogBody>
+        <DialogBody className="max-h-[70vh] overflow-y-auto">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="dataset-name">Name *</Label>
@@ -81,6 +98,13 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
                 placeholder="Enter dataset description (optional)"
               />
             </div>
+
+            <SchemaConfigSection
+              inputSchema={inputSchema}
+              outputSchema={outputSchema}
+              onChange={handleSchemaChange}
+              disabled={createDataset.isPending}
+            />
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={handleCancel}>
