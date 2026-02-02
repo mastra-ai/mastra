@@ -369,7 +369,7 @@ export class MastraAuthWorkos
    * Get the configuration for rendering the login button.
    */
   getLoginButtonConfig(): SSOLoginConfig {
-    let text = 'Sign in with SSO';
+    let text = 'Sign in';
     if (this.ssoConfig?.provider) {
       const providerNames: Record<string, string> = {
         GoogleOAuth: 'Google',
@@ -377,7 +377,10 @@ export class MastraAuthWorkos
         GitHubOAuth: 'GitHub',
         AppleOAuth: 'Apple',
       };
-      text = `Sign in with ${providerNames[this.ssoConfig.provider] || 'SSO'}`;
+      const providerName = providerNames[this.ssoConfig.provider];
+      if (providerName) {
+        text = `Sign in with ${providerName}`;
+      }
     }
 
     return {
