@@ -7,13 +7,21 @@ import { fieldsToJSONSchema, addFieldAtPath, removeFieldAtPath, updateFieldAtPat
 
 export interface JSONSchemaFormRootProps {
   onChange?: (schema: JSONSchemaOutput) => void;
+  onFieldsChange?: (fields: SchemaField[]) => void;
   defaultValue?: SchemaField[];
   maxDepth?: number;
   className?: string;
   children: React.ReactNode;
 }
 
-export function Root({ onChange, defaultValue, maxDepth = 5, className, children }: JSONSchemaFormRootProps) {
+export function Root({
+  onChange,
+  onFieldsChange,
+  defaultValue,
+  maxDepth = 5,
+  className,
+  children,
+}: JSONSchemaFormRootProps) {
   const [fields, setFields] = React.useState<SchemaField[]>(() => defaultValue || []);
 
   const previousSchemaRef = React.useRef<string>('');
@@ -27,6 +35,10 @@ export function Root({ onChange, defaultValue, maxDepth = 5, className, children
       onChange?.(schema);
     }
   }, [fields, onChange]);
+
+  React.useEffect(() => {
+    onFieldsChange?.(fields);
+  }, [fields, onFieldsChange]);
 
   const addField = React.useCallback((parentPath: string[]) => {
     const newField = createField();

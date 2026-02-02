@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Provider } from '@mastra/client-js';
+import type { SchemaField } from '@/ds/components/JSONSchemaForm';
 import { cleanProviderId } from '../agent-metadata/utils';
 
 const scoringSamplingConfigSchema = z.object({
@@ -29,6 +30,7 @@ export const agentFormSchema = z.object({
   workflows: z.record(z.string(), entityConfigSchema).optional(),
   agents: z.record(z.string(), entityConfigSchema).optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
+  variables: z.custom<SchemaField[]>().optional(),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;

@@ -1,14 +1,15 @@
 'use client';
 
-import { useMemo, type RefObject } from 'react';
+import { useMemo, useState, type RefObject } from 'react';
 import { Controller, type UseFormReturn, useWatch } from 'react-hook-form';
 import { Check, Sparkles } from 'lucide-react';
 
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons';
+import { Icon, VariablesIcon } from '@/ds/icons';
 import { Spinner } from '@/ds/components/Spinner';
+import type { SchemaField } from '@/ds/components/JSONSchemaForm';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { Label } from '@/ds/components/Label';
@@ -23,6 +24,7 @@ import { useAgents } from '../../hooks/use-agents';
 import { usePregenerateAgentConfig } from '../../hooks/use-pregenerate-agent-config';
 import type { AgentFormValues } from '../agent-edit/form-validation';
 import { ToolsSection, WorkflowsSection, AgentsSection, ScorersSection } from './sections';
+import { VariableDialog } from './variable-dialog';
 
 interface AgentEditSidebarProps {
   form: UseFormReturn<AgentFormValues>;
@@ -52,6 +54,15 @@ export function AgentEditSidebar({
   const watchedDescription = useWatch({ control, name: 'description' });
   const watchedProvider = useWatch({ control, name: 'model.provider' });
   const watchedModel = useWatch({ control, name: 'model.name' });
+  const watchedVariables = useWatch({ control, name: 'variables' });
+
+  // Variable dialog state
+  const [isVariableDialogOpen, setIsVariableDialogOpen] = useState(false);
+
+  const handleSaveVariables = (fields: SchemaField[]) => {
+    form.setValue('variables', fields, { shouldDirty: true });
+    setIsVariableDialogOpen(false);
+  };
 
   // Fetch available resources
   const { data: tools } = useTools();
@@ -288,6 +299,12 @@ export function AgentEditSidebar({
 
       {/* Sticky footer with Pregenerate and Create/Update Agent buttons */}
       <div className="flex-shrink-0 p-4 border-t border-border1 flex flex-col gap-2">
+        <Button variant="outline" onClick={() => setIsVariableDialogOpen(true)} className="w-full" type="button">
+          <Icon>
+            <VariablesIcon />
+          </Icon>
+          Manage variables
+        </Button>
         {mode !== 'edit' && (
           <Button
             variant="outline"
@@ -327,6 +344,13 @@ export function AgentEditSidebar({
           )}
         </Button>
       </div>
+
+      <VariableDialog
+        isOpen={isVariableDialogOpen}
+        onClose={() => setIsVariableDialogOpen(false)}
+        defaultValue={watchedVariables ?? []}
+        onSave={handleSaveVariables}
+      />
     </div>
   );
 }
