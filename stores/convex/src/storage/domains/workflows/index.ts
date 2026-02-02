@@ -25,6 +25,10 @@ export class WorkflowsConvex extends WorkflowsStorage {
     this.#db = new ConvexDB(client);
   }
 
+  supportsConcurrentUpdates(): boolean {
+    return false;
+  }
+
   async init(): Promise<void> {
     // No-op for Convex; schema is managed server-side.
   }

@@ -24,6 +24,12 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     this.#db = new CloudflareKVDB(resolveCloudflareConfig(config));
   }
 
+  supportsConcurrentUpdates(): boolean {
+    // Cloudflare KV is eventually-consistent and doesn't support atomic read-modify-write
+    // operations or conditional writes needed for concurrent updates
+    return false;
+  }
+
   async init(): Promise<void> {
     // Cloudflare KV is schemaless, no table creation needed
   }

@@ -55,6 +55,10 @@ export class WorkflowsPG extends WorkflowsStorage {
     this.#indexes = indexes?.filter(idx => (WorkflowsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
   private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
     let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
     if (typeof parsedSnapshot === 'string') {
@@ -140,13 +144,14 @@ export class WorkflowsPG extends WorkflowsStorage {
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
-      // Use a transaction to ensure atomicity
+      // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {
         const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
 
-        // Load existing snapshot within transaction
+        // Load existing snapshot within transaction with FOR UPDATE to lock the row
+        // This prevents concurrent updates from reading stale data
         const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
-          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2`,
+          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [workflowName, runId],
         );
 
@@ -216,13 +221,14 @@ export class WorkflowsPG extends WorkflowsStorage {
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     try {
-      // Use a transaction to ensure atomicity
+      // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {
         const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
 
-        // Load existing snapshot within transaction
+        // Load existing snapshot within transaction with FOR UPDATE to lock the row
+        // This prevents concurrent updates from reading stale data
         const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
-          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2`,
+          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [workflowName, runId],
         );
 

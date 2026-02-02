@@ -35,6 +35,10 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     this.#db = new LanceDB({ client });
   }
 
+  supportsConcurrentUpdates(): boolean {
+    return false;
+  }
+
   private parseWorkflowRun(row: any): WorkflowRun {
     let parsedSnapshot: WorkflowRunState | string = row.snapshot;
     if (typeof parsedSnapshot === 'string') {
@@ -83,35 +87,56 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    // Load existing snapshot
-    let snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+    try {
+      // Note: LanceDB doesn't support atomic read-modify-write operations.
+      // The mergeInsert is atomic at the record level, but concurrent updates
+      // may still overwrite each other's changes in high-concurrency scenarios.
 
-    if (!snapshot) {
-      // Create new snapshot if none exists
-      snapshot = {
-        context: {},
-        activePaths: [],
-        timestamp: Date.now(),
-        suspendedPaths: {},
-        activeStepsPath: {},
-        resumeLabels: {},
-        serializedStepGraph: [],
-        status: 'pending',
-        value: {},
-        waitingPaths: {},
-        runId: runId,
-        requestContext: {},
-      } as WorkflowRunState;
+      // Load existing snapshot
+      let snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+
+      if (!snapshot) {
+        // Create new snapshot if none exists
+        snapshot = {
+          context: {},
+          activePaths: [],
+          timestamp: Date.now(),
+          suspendedPaths: {},
+          activeStepsPath: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          status: 'pending',
+          value: {},
+          waitingPaths: {},
+          runId: runId,
+          requestContext: {},
+        } as WorkflowRunState;
+      }
+
+      // Merge the new step result and request context
+      snapshot.context[stepId] = result;
+      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+      // Persist updated snapshot
+      await this.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+      return snapshot.context;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            stepId,
+          },
+        },
+        error,
+      );
     }
-
-    // Merge the new step result and request context
-    snapshot.context[stepId] = result;
-    snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
-
-    // Persist updated snapshot
-    await this.persistWorkflowSnapshot({ workflowName, runId, snapshot });
-
-    return snapshot.context;
   }
 
   async updateWorkflowState({
@@ -123,24 +148,44 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    // Load existing snapshot
-    const snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+    try {
+      // Note: LanceDB doesn't support atomic read-modify-write operations.
+      // The mergeInsert is atomic at the record level, but concurrent updates
+      // may still overwrite each other's changes in high-concurrency scenarios.
 
-    if (!snapshot) {
-      return undefined;
+      // Load existing snapshot
+      const snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+
+      if (!snapshot) {
+        return undefined;
+      }
+
+      if (!snapshot.context) {
+        throw new Error(`Snapshot not found for runId ${runId}`);
+      }
+
+      // Merge the new options with the existing snapshot
+      const updatedSnapshot = { ...snapshot, ...opts };
+
+      // Persist updated snapshot
+      await this.persistWorkflowSnapshot({ workflowName, runId, snapshot: updatedSnapshot });
+
+      return updatedSnapshot;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
     }
-
-    if (!snapshot.context) {
-      throw new Error(`Snapshot not found for runId ${runId}`);
-    }
-
-    // Merge the new options with the existing snapshot
-    const updatedSnapshot = { ...snapshot, ...opts };
-
-    // Persist updated snapshot
-    await this.persistWorkflowSnapshot({ workflowName, runId, snapshot: updatedSnapshot });
-
-    return updatedSnapshot;
   }
 
   async persistWorkflowSnapshot({

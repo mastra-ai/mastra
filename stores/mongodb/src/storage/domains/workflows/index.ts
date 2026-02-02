@@ -35,6 +35,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     );
   }
 
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
   }
@@ -118,57 +122,62 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       const now = new Date();
 
-      // Load existing snapshot
-      const existingDoc = await collection.findOne({
-        workflow_name: workflowName,
-        run_id: runId,
-      });
+      // Default snapshot structure for new entries
+      const defaultSnapshot = {
+        context: {},
+        activePaths: [],
+        timestamp: Date.now(),
+        suspendedPaths: {},
+        activeStepsPath: {},
+        resumeLabels: {},
+        serializedStepGraph: [],
+        status: 'pending',
+        value: {},
+        waitingPaths: {},
+        runId: runId,
+        requestContext: {},
+      };
 
-      let snapshot: WorkflowRunState;
-      if (!existingDoc) {
-        // Create new snapshot if none exists
-        snapshot = {
-          context: {},
-          activePaths: [],
-          timestamp: Date.now(),
-          suspendedPaths: {},
-          activeStepsPath: {},
-          resumeLabels: {},
-          serializedStepGraph: [],
-          status: 'pending',
-          value: {},
-          waitingPaths: {},
-          runId: runId,
-          requestContext: {},
-        } as WorkflowRunState;
-      } else {
-        // Parse existing snapshot
-        const existingSnapshot = existingDoc.snapshot;
-        snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
-      }
-
-      // Merge the new step result and request context
-      snapshot.context[stepId] = result;
-      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
-
-      // Upsert the snapshot
-      await collection.updateOne(
+      // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
+      // This ensures concurrent updates don't overwrite each other
+      const updatedDoc = await collection.findOneAndUpdate(
         { workflow_name: workflowName, run_id: runId },
-        {
-          $set: {
-            workflow_name: workflowName,
-            run_id: runId,
-            snapshot,
-            updatedAt: now,
+        [
+          {
+            $set: {
+              workflow_name: workflowName,
+              run_id: runId,
+              // If snapshot doesn't exist, use default; otherwise merge
+              snapshot: {
+                $mergeObjects: [
+                  // Start with default snapshot if document is new
+                  { $ifNull: ['$snapshot', defaultSnapshot] },
+                  // Merge the new context entry
+                  {
+                    context: {
+                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.context', {}] }, {}] }, { [stepId]: result }],
+                    },
+                  },
+                  // Merge the new request context
+                  {
+                    requestContext: {
+                      $mergeObjects: [{ $ifNull: [{ $ifNull: ['$snapshot.requestContext', {}] }, {}] }, requestContext],
+                    },
+                  },
+                ],
+              },
+              updatedAt: now,
+              // Only set createdAt if it doesn't exist
+              createdAt: { $ifNull: ['$createdAt', now] },
+            },
           },
-          $setOnInsert: {
-            createdAt: now,
-          },
-        },
-        { upsert: true },
+        ],
+        { upsert: true, returnDocument: 'after' },
       );
 
-      return snapshot.context;
+      const snapshot =
+        typeof updatedDoc?.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc?.snapshot;
+      return snapshot?.context || {};
     } catch (error) {
       throw new MastraError(
         {
@@ -197,39 +206,35 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     try {
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
 
-      // Load existing snapshot
-      const existingDoc = await collection.findOne({
-        workflow_name: workflowName,
-        run_id: runId,
-      });
+      // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
+      // This ensures concurrent updates don't overwrite each other
+      const updatedDoc = await collection.findOneAndUpdate(
+        {
+          workflow_name: workflowName,
+          run_id: runId,
+          // Only update if snapshot exists and has context
+          'snapshot.context': { $exists: true },
+        },
+        [
+          {
+            $set: {
+              // Merge the new options into the existing snapshot
+              snapshot: {
+                $mergeObjects: ['$snapshot', opts],
+              },
+              updatedAt: new Date(),
+            },
+          },
+        ],
+        { returnDocument: 'after' },
+      );
 
-      if (!existingDoc) {
+      if (!updatedDoc) {
         return undefined;
       }
 
-      // Parse existing snapshot
-      const existingSnapshot = existingDoc.snapshot;
-      const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
-
-      if (!snapshot || !snapshot?.context) {
-        throw new Error(`Snapshot not found for runId ${runId}`);
-      }
-
-      // Merge the new options with the existing snapshot
-      const updatedSnapshot = { ...snapshot, ...opts };
-
-      // Update the snapshot
-      await collection.updateOne(
-        { workflow_name: workflowName, run_id: runId },
-        {
-          $set: {
-            snapshot: updatedSnapshot,
-            updatedAt: new Date(),
-          },
-        },
-      );
-
-      return updatedSnapshot;
+      const snapshot = typeof updatedDoc.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc.snapshot;
+      return snapshot;
     } catch (error) {
       throw new MastraError(
         {

@@ -27,6 +27,13 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     this.#db = new D1DB(resolveD1Config(config));
   }
 
+  supportsConcurrentUpdates(): boolean {
+    // D1 doesn't support atomic read-modify-write operations needed for concurrent updates
+    // batch() executes all statements atomically but requires all statements upfront,
+    // so we can't use SELECT result to construct UPDATE in the same transaction
+    return false;
+  }
+
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
   }
@@ -60,7 +67,6 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
 
       let snapshot: WorkflowRunState;
       if (!existingDoc) {
-        // Create new snapshot if none exists
         snapshot = {
           context: {},
           activePaths: [],
@@ -76,7 +82,6 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           requestContext: {},
         } as WorkflowRunState;
       } else {
-        // Parse existing snapshot
         const existingSnapshot = existingDoc.snapshot;
         snapshot =
           typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : (existingSnapshot as WorkflowRunState);
@@ -127,6 +132,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       );
     }
   }
+
   async updateWorkflowState({
     workflowName,
     runId,
@@ -138,6 +144,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
   }): Promise<WorkflowRunState | undefined> {
     try {
       const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+      const now = new Date().toISOString();
 
       // Load existing snapshot
       const existingDoc = await this.#db.load<{ snapshot: unknown }>({
@@ -149,7 +156,6 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
         return undefined;
       }
 
-      // Parse existing snapshot
       const existingSnapshot = existingDoc.snapshot;
       const snapshot =
         typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : (existingSnapshot as WorkflowRunState);
@@ -162,7 +168,6 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       const updatedSnapshot = { ...snapshot, ...opts };
 
       // Update the snapshot
-      const now = new Date().toISOString();
       const sql = `UPDATE ${fullTableName} SET snapshot = ?, updatedAt = ? WHERE workflow_name = ? AND run_id = ?`;
       const params: SqlParam[] = [JSON.stringify(updatedSnapshot), now, workflowName, runId];
 
