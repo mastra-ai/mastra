@@ -67,6 +67,8 @@ describe('getProvidersHandler', () => {
   afterEach(() => {
     // Restore original env
     process.env = originalEnv;
+    // Clear mock registry to prevent cross-test contamination
+    delete (global as any).__MOCK_PROVIDER_REGISTRY__;
   });
 
   it('should return all providers from the registry', async () => {
@@ -212,6 +214,8 @@ describe('isProviderConnected', () => {
   afterEach(() => {
     // Restore original env
     process.env = originalEnv;
+    // Clear mock registry to prevent cross-test contamination
+    delete (global as any).__MOCK_PROVIDER_REGISTRY__;
   });
 
   describe('Standard provider lookup', () => {
