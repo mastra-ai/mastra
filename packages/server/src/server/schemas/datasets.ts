@@ -2,6 +2,16 @@ import z from 'zod';
 import { paginationInfoSchema } from './common';
 
 // ============================================================================
+// JSON Schema Types (for inputSchema/outputSchema fields)
+// ============================================================================
+
+// JSON Schema type (simplified for storage - full spec too complex)
+const jsonSchemaObject: z.ZodType<Record<string, unknown>> = z.lazy(() => z.record(z.unknown()));
+
+// JSON Schema field (object or null to disable)
+const jsonSchemaField = z.union([jsonSchemaObject, z.null()]).optional();
+
+// ============================================================================
 // Path Parameter Schemas
 // ============================================================================
 
@@ -50,12 +60,16 @@ export const createDatasetBodySchema = z.object({
   name: z.string().describe('Name of the dataset'),
   description: z.string().optional().describe('Description of the dataset'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
+  inputSchema: jsonSchemaField.describe('JSON Schema for validating item input'),
+  outputSchema: jsonSchemaField.describe('JSON Schema for validating item expectedOutput'),
 });
 
 export const updateDatasetBodySchema = z.object({
   name: z.string().optional().describe('Name of the dataset'),
   description: z.string().optional().describe('Description of the dataset'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
+  inputSchema: jsonSchemaField.describe('JSON Schema for validating item input'),
+  outputSchema: jsonSchemaField.describe('JSON Schema for validating item expectedOutput'),
 });
 
 export const addItemBodySchema = z.object({
@@ -101,8 +115,10 @@ export const compareRunsBodySchema = z.object({
 export const datasetResponseSchema = z.object({
   id: z.string(),
   name: z.string(),
-  description: z.string().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  description: z.string().optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+  inputSchema: z.record(z.unknown()).optional().nullable(),
+  outputSchema: z.record(z.unknown()).optional().nullable(),
   version: z.coerce.date(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),

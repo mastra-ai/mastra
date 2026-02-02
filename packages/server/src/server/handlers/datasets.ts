@@ -1,5 +1,5 @@
 import type { StoragePagination } from '@mastra/core/storage';
-import { runDataset, compareRuns } from '@mastra/core/datasets';
+import { runDataset, compareRuns, SchemaValidationError } from '@mastra/core/datasets';
 import { HTTPException } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
 import {
@@ -55,8 +55,9 @@ export const LIST_DATASETS_ROUTE = createRoute({
       }
 
       const result = await datasetsStore.listDatasets({ pagination });
+      // Cast JSONSchema7 to Record<string, unknown> for response schema compatibility
       return {
-        datasets: result.datasets,
+        datasets: result.datasets as any,
         pagination: result.pagination,
       };
     } catch (error) {
@@ -77,10 +78,12 @@ export const CREATE_DATASET_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
-      const { name, description, metadata } = params as {
+      const { name, description, metadata, inputSchema, outputSchema } = params as {
         name: string;
         description?: string;
         metadata?: Record<string, unknown>;
+        inputSchema?: Record<string, unknown> | null;
+        outputSchema?: Record<string, unknown> | null;
       };
 
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
@@ -88,8 +91,15 @@ export const CREATE_DATASET_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Datasets storage not configured' });
       }
 
-      const dataset = await datasetsStore.createDataset({ name, description, metadata });
-      return dataset;
+      const dataset = await datasetsStore.createDataset({
+        name,
+        description,
+        metadata,
+        inputSchema: inputSchema as any,
+        outputSchema: outputSchema as any,
+      });
+      // Cast JSONSchema7 to Record<string, unknown> for response schema compatibility
+      return dataset as any;
     } catch (error) {
       return handleError(error, 'Error creating dataset');
     }
@@ -118,7 +128,8 @@ export const GET_DATASET_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
 
-      return dataset;
+      // Cast JSONSchema7 to Record<string, unknown> for response schema compatibility
+      return dataset as any;
     } catch (error) {
       return handleError(error, 'Error getting dataset');
     }
@@ -138,10 +149,12 @@ export const UPDATE_DATASET_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
-      const { name, description, metadata } = params as {
+      const { name, description, metadata, inputSchema, outputSchema } = params as {
         name?: string;
         description?: string;
         metadata?: Record<string, unknown>;
+        inputSchema?: Record<string, unknown> | null;
+        outputSchema?: Record<string, unknown> | null;
       };
 
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
@@ -155,9 +168,23 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
 
-      const dataset = await datasetsStore.updateDataset({ id: datasetId, name, description, metadata });
-      return dataset;
+      const dataset = await datasetsStore.updateDataset({
+        id: datasetId,
+        name,
+        description,
+        metadata,
+        inputSchema: inputSchema as any,
+        outputSchema: outputSchema as any,
+      });
+      // Cast JSONSchema7 to Record<string, unknown> for response schema compatibility
+      return dataset as any;
     } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw new HTTPException(400, {
+          message: error.message,
+          cause: { field: error.field, errors: error.errors },
+        });
+      }
       return handleError(error, 'Error updating dataset');
     }
   },
@@ -276,6 +303,12 @@ export const ADD_ITEM_ROUTE = createRoute({
       const item = await datasetsStore.addItem({ datasetId, input, expectedOutput, context });
       return item;
     } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw new HTTPException(400, {
+          message: error.message,
+          cause: { field: error.field, errors: error.errors },
+        });
+      }
       return handleError(error, 'Error adding item to dataset');
     }
   },
@@ -355,6 +388,12 @@ export const UPDATE_ITEM_ROUTE = createRoute({
       const item = await datasetsStore.updateItem({ id: itemId, datasetId, input, expectedOutput, context });
       return item;
     } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw new HTTPException(400, {
+          message: error.message,
+          cause: { field: error.field, errors: error.errors },
+        });
+      }
       return handleError(error, 'Error updating dataset item');
     }
   },
