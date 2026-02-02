@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Provider } from '@mastra/client-js';
+import { cleanProviderId } from '../utils';
 
 export interface ModelInfo {
   provider: string;
@@ -23,6 +24,30 @@ export const useAllModels = (providers: Provider[]): ModelInfo[] => {
 };
 
 /**
+ * Check if a provider ID matches, handling gateway prefix fallback.
+ * e.g., 'custom' matches 'acme/custom'
+ */
+const providerMatches = (modelProvider: string, targetProvider: string): boolean => {
+  const cleanTarget = cleanProviderId(targetProvider);
+  const cleanModel = cleanProviderId(modelProvider);
+
+  // Direct match
+  if (cleanModel === cleanTarget) {
+    return true;
+  }
+
+  // Gateway prefix fallback: 'custom' should match 'acme/custom'
+  if (!cleanTarget.includes('/')) {
+    const parts = modelProvider.split('/');
+    if (parts.length === 2 && parts[1] === cleanTarget) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
  * Hook to filter models by provider and search term
  */
 export const useFilteredModels = (
@@ -35,7 +60,7 @@ export const useFilteredModels = (
     let filtered = allModels;
 
     if (currentProvider) {
-      filtered = filtered.filter(m => m.provider === currentProvider);
+      filtered = filtered.filter(m => providerMatches(m.provider, currentProvider));
     }
 
     if (isSearching && searchTerm) {

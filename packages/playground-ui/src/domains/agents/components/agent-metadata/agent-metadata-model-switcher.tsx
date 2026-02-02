@@ -5,7 +5,7 @@ import { UpdateModelParams, Provider } from '@mastra/client-js';
 import { useModelReset } from '../../context/model-reset-context';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 import { Button } from '@/ds/components/Button';
-import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId } from '@/domains/llm';
+import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -156,7 +156,7 @@ export const AgentMetadataModelSwitcher = ({
     }
   };
 
-  const currentProvider = providers.find((p: Provider) => p.id === currentModelProvider);
+  const currentProvider = findProviderById(providers, currentModelProvider);
 
   return (
     <div className="@container">
