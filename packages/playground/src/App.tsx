@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 
@@ -192,8 +191,7 @@ function App() {
     return <PlaygroundConfigGuard />;
   }
 
-  // Memoize router to prevent recreation on every render (which causes component remounts)
-  const router = useMemo(() => createBrowserRouter(routes, { basename: studioBasePath }), [studioBasePath]);
+  const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
     <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>

@@ -8,13 +8,11 @@ import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
 
-
 /**
  * Content item type for assistant message content parts.
  */
 interface ContentItem {
   type: string;
-  data?: unknown;
   metadata?: {
     mode?: string;
     completionResult?: unknown;
@@ -41,8 +39,8 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
   const showModelUsed = hasModelList && modelMetadata;
 
   return (
-    <MessagePrimitive.Root className="max-w-full" data-message-id={messageId} data-message-index={data.index}>
-      <div className="text-neutral6 text-ui-lg leading-ui-lg" style={{ paddingTop: '0.5rem' }}>
+    <MessagePrimitive.Root className="max-w-full" data-message-id={messageId}>
+      <div className="text-neutral6 text-ui-lg leading-ui-lg">
         <MessagePrimitive.Parts
           components={{
             Text: ErrorAwareText,

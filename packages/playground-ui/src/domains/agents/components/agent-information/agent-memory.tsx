@@ -1,12 +1,11 @@
 import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
-import { AgentObservationalMemory } from './agent-observational-memory';
 import { useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { ExternalLink, Copy } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
-import { useMemoryConfig, useMemorySearch, useCloneThread, useMemoryWithOMStatus } from '@/domains/memory/hooks';
+import { useMemoryConfig, useMemorySearch, useCloneThread } from '@/domains/memory/hooks';
 import { MemorySearch } from '@/lib/ai-ui/memory-search';
 import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
@@ -27,17 +26,6 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   // Check if semantic recall is enabled
   const config = data?.config;
   const isSemanticRecallEnabled = Boolean(config?.semanticRecall);
-
-  // Check if observational memory is enabled
-  const { data: omStatus } = useMemoryWithOMStatus({
-    agentId,
-    resourceId: agentId, // In playground, agentId is the resourceId
-    threadId,
-  });
-  const isOMEnabled = omStatus?.observationalMemory?.enabled ?? false;
-
-  // Debug: log OM status
-  console.log('[AgentMemory] OM Status:', { omStatus, isOMEnabled, agentId, threadId });
 
   // Get memory search hook
   const { mutateAsync: searchMemory, data: searchMemoryData } = useMemorySearch({
@@ -95,7 +83,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   }
 
   return (
-    <div className="flex flex-col h-full min-w-0 overflow-hidden">
+    <div className="flex flex-col h-full">
       {/* Clone Thread Section */}
       {threadId && (
         <div className="p-4 border-b border-border1">
@@ -109,13 +97,6 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
               {isCloning ? 'Cloning...' : 'Clone'}
             </Button>
           </div>
-        </div>
-      )}
-
-      {/* Observational Memory Section - moved above Semantic Recall */}
-      {isOMEnabled && (
-        <div className="border-b border-border1 min-w-0 overflow-hidden">
-          <AgentObservationalMemory agentId={agentId} resourceId={agentId} threadId={threadId} />
         </div>
       )}
 

@@ -30,7 +30,7 @@ export class BenchmarkStore extends MastraStorage {
   private mode: DBMode;
 
   constructor(mode: DBMode = 'read-write') {
-    super({ id: 'benchmark-store', name: 'BenchmarkStore' });
+    super({ name: 'BenchmarkStore' });
     this.hasInitialized = Promise.resolve(true);
     this.mode = mode;
   }
@@ -39,9 +39,6 @@ export class BenchmarkStore extends MastraStorage {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      deleteMessages: true,
     };
   }
 

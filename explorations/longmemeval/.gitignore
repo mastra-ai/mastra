@@ -1,6 +1,5 @@
 # Data files
 /data
-/investigations
 
 # Temporary directories
 /.temp-longmemeval
@@ -21,7 +20,3 @@ node_modules
 # Environment files
 .env
 .env.local
-omm.md
-
-# Cache files
-.prep-token-cache.json

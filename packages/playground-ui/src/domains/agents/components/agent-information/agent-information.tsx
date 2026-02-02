@@ -134,11 +134,7 @@ export const AgentInformationLayout = ({ children, agentId }: AgentInformationLa
   const { data: agent } = useAgent(agentId);
   useAgentInformationSettings({ modelId: agent?.modelId || '' });
 
-  return (
-    <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto overflow-x-hidden min-w-0 w-full">
-      {children}
-    </div>
-  );
+  return <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto">{children}</div>;
 };
 
 export interface AgentInformationTabLayoutProps {
@@ -155,7 +151,7 @@ export const AgentInformationTabLayout = ({ children, agentId }: AgentInformatio
   });
 
   return (
-    <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col min-w-0 w-full">
+    <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
       <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
         {children}
       </Tabs>

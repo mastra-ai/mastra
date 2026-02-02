@@ -26,7 +26,10 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   // Check if working memory is enabled
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
 
-  // All hooks must be called before any early returns
+  if (isLoading || isConfigLoading) {
+    return <Skeleton className="h-32 w-full" />;
+  }
+
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: workingMemoryData ?? '',
     copyMessage: 'Working memory copied!',
@@ -37,10 +40,6 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   React.useEffect(() => {
     setEditValue(workingMemoryData ?? '');
   }, [workingMemoryData]);
-
-  if (isLoading || isConfigLoading) {
-    return <Skeleton className="h-32 w-full" />;
-  }
 
   return (
     <div className="flex flex-col gap-4 p-4">

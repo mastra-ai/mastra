@@ -50,17 +50,14 @@ export const AgentChat = ({
     return null;
   }
 
-  const v5Messages = data?.messages ? (toAISdkV5Messages(data.messages) as MastraUIMessage[]) : [];
-  const v4Messages = data?.messages ? toAISdkV4Messages(data.messages) : [];
-
   return (
     <MastraRuntimeProvider
       agentId={agentId}
       agentName={agentName}
       modelVersion={modelVersion}
       threadId={threadId}
-      initialMessages={v5Messages}
-      initialLegacyMessages={v4Messages}
+      initialMessages={data?.messages ? (toAISdkV5Messages(data.messages) as MastraUIMessage[]) : []}
+      initialLegacyMessages={data?.messages ? toAISdkV4Messages(data.messages) : []}
       memory={memory}
       refreshThreadList={refreshThreadList}
       settings={settings}

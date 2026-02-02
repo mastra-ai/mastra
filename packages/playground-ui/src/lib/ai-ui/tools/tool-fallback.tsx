@@ -9,7 +9,6 @@ import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
-import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
@@ -17,11 +16,6 @@ export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
 }
 
 export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
-  // Handle OM observation markers - they don't need WorkflowRunProvider
-  if (toolName === 'mastra-memory-om-observation') {
-    return <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />;
-  }
-
   return (
     <WorkflowRunProvider workflowId={''} withoutTimeTravel>
       <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />
@@ -30,11 +24,6 @@ export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackP
 };
 
 const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
-  // Handle OM observation markers first - render as ObservationMarkerBadge
-  if (toolName === 'mastra-memory-om-observation') {
-    return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
-  }
-
   const { activateSkill } = useActivatedSkills();
 
   // Detect skill activation tool calls

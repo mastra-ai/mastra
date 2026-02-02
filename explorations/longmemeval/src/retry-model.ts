@@ -1,7 +1,6 @@
-import { wrapLanguageModel } from 'ai';
-import { LanguageModelV2 } from '@ai-sdk/provider';
+import { LanguageModel, wrapLanguageModel } from 'ai';
 
-export function makeRetryModel(model: LanguageModelV2) {
+export function makeRetryModel(model: LanguageModel) {
   const state = {
     rateLimitCount: 0,
     pause: null as null | Promise<void>,
@@ -11,8 +10,7 @@ export function makeRetryModel(model: LanguageModelV2) {
   const wrapped = wrapLanguageModel({
     model,
     middleware: {
-      wrapGenerate: async ({ doGenerate, params }) => {
-        // console.log('params', params);
+      wrapGenerate: async ({ doGenerate }) => {
         if (state.pause) await state.pause;
         const maxRetries = 10;
         let retries = 0;
