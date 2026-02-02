@@ -181,7 +181,7 @@ export async function buildCapabilities(
   let login: PublicAuthCapabilities['login'] = null;
 
   const hasSSO = implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud;
-  const hasCredentials = implementsInterface<IUserProvider>(auth, 'getCurrentUser') && isLicensedOrCloud;
+  const hasCredentials = implementsInterface<ICredentialsProvider>(auth, 'signIn') && isLicensedOrCloud;
 
   // Check if sign-up is enabled (defaults to true)
   let signUpEnabled = true;
