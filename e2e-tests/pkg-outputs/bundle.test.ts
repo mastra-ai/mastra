@@ -13,7 +13,7 @@ const globalIgnore = [
   '@mastra/dane',
   '@mastra/mcp-docs-server',
   '@mastra/mcp-registry-registry',
-  'mastra-docs'
+  'mastra-docs',
 ];
 
 describe.for(

@@ -6,7 +6,7 @@ const IGNORE_LIST = [
   '@mastra/memory-integration-tests',
   '@mastra/longmemeval',
   '@mastra/mcp-configuration',
-  'mastra-docs'
+  'mastra-docs',
 ];
 
 const ALLOW_LIST = ['mastra', 'create-mastra', '@mastra'];
