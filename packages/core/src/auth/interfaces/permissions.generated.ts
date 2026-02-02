@@ -183,10 +183,11 @@ export type Permission = (typeof PERMISSIONS)[number];
  * Permission pattern that can be used in role definitions.
  * Supports:
  * - Specific permissions: 'agents:read', 'workflows:execute'
- * - Resource wildcards: 'agents:*', 'workflows:*'
- * - Global wildcard: '*'
+ * - Resource wildcards: 'agents:*', 'workflows:*' (all actions on a resource)
+ * - Action wildcards: '*:read', '*:write' (an action across all resources)
+ * - Global wildcard: '*' (full access)
  */
-export type PermissionPattern = Permission | '*' | `${Resource}:*`;
+export type PermissionPattern = Permission | '*' | `${Resource}:*` | `*:${Action}`;
 
 /**
  * Type-safe role mapping configuration.
@@ -213,9 +214,15 @@ export type TypedRoleMapping = {
  */
 export function isValidPermissionPattern(pattern: string): pattern is PermissionPattern {
   if (pattern === '*') return true;
+  // Resource wildcard: 'agents:*'
   if (pattern.endsWith(':*')) {
     const resource = pattern.slice(0, -2);
     return (RESOURCES as readonly string[]).includes(resource);
+  }
+  // Action wildcard: '*:read'
+  if (pattern.startsWith('*:')) {
+    const action = pattern.slice(2);
+    return (ACTIONS as readonly string[]).includes(action);
   }
   return (PERMISSIONS as readonly string[]).includes(pattern);
 }
