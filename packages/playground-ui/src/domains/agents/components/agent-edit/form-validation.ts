@@ -8,7 +8,12 @@ const scoringSamplingConfigSchema = z.object({
   count: z.number().optional(),
 });
 
+const entityConfigSchema = z.object({
+  description: z.string().max(500).optional(),
+});
+
 const scorerConfigSchema = z.object({
+  description: z.string().max(500).optional(),
   sampling: scoringSamplingConfigSchema.optional(),
 });
 
@@ -20,9 +25,9 @@ export const agentFormSchema = z.object({
     provider: z.string().min(1, 'Provider is required'),
     name: z.string().min(1, 'Model is required'),
   }),
-  tools: z.array(z.string()).optional(),
-  workflows: z.array(z.string()).optional(),
-  agents: z.array(z.string()).optional(),
+  tools: z.record(z.string(), entityConfigSchema).optional(),
+  workflows: z.record(z.string(), entityConfigSchema).optional(),
+  agents: z.record(z.string(), entityConfigSchema).optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
 });
 
@@ -44,19 +49,22 @@ export function validateReferences(
   const warnings: Record<string, string> = {};
 
   // Check tools exist
-  const invalidTools = values.tools?.filter(t => !availableTools.includes(t)) || [];
+  const toolIds = Object.keys(values.tools || {});
+  const invalidTools = toolIds.filter(t => !availableTools.includes(t));
   if (invalidTools.length > 0) {
     errors.tools = `Unknown tools: ${invalidTools.join(', ')}`;
   }
 
   // Check workflows exist
-  const invalidWorkflows = values.workflows?.filter(w => !availableWorkflows.includes(w)) || [];
+  const workflowIds = Object.keys(values.workflows || {});
+  const invalidWorkflows = workflowIds.filter(w => !availableWorkflows.includes(w));
   if (invalidWorkflows.length > 0) {
     errors.workflows = `Unknown workflows: ${invalidWorkflows.join(', ')}`;
   }
 
   // Check agents exist
-  const invalidAgents = values.agents?.filter(a => !availableAgents.includes(a)) || [];
+  const agentIds = Object.keys(values.agents || {});
+  const invalidAgents = agentIds.filter(a => !availableAgents.includes(a));
   if (invalidAgents.length > 0) {
     errors.agents = `Unknown agents: ${invalidAgents.join(', ')}`;
   }

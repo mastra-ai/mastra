@@ -1,15 +1,17 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
-import { Trash2 } from 'lucide-react';
+import { Trash2, ChevronRight } from 'lucide-react';
 
-import { Section, RemovableBadge } from '@/domains/cms';
+import { Section } from '@/domains/cms';
 import { JudgeIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
-import { Button } from '@/ds/components/Button';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
+import { IconButton } from '@/ds/components/IconButton';
 import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
+import { Textarea } from '@/ds/components/Textarea';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import type { AgentFormValues } from '../../agent-edit/form-validation';
@@ -26,10 +28,12 @@ interface ScoringSamplingConfig {
 }
 
 interface ScorerConfig {
+  description?: string;
   sampling?: ScoringSamplingConfig;
 }
 
 export function ScorersSection({ control, error }: ScorersSectionProps) {
+  const [isOpen, setIsOpen] = useState(false);
   const { data: scorers, isLoading } = useScorers();
   const selectedScorers = useWatch({ control, name: 'scorers' });
   const count = Object.keys(selectedScorers || {}).length;
@@ -43,117 +47,129 @@ export function ScorersSection({ control, error }: ScorersSectionProps) {
     }));
   }, [scorers]);
 
+  const getOriginalDescription = (id: string): string => {
+    const option = options.find(opt => opt.value === id);
+    return option?.description || '';
+  };
+
   return (
-    <Section
-      title={
-        <Section.Title icon={<JudgeIcon className="text-neutral3" />}>
-          Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
-        </Section.Title>
-      }
-    >
-      <Controller
-        name="scorers"
-        control={control}
-        render={({ field }) => {
-          const selectedScorers = field.value || {};
-          const selectedIds = Object.keys(selectedScorers);
-          const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Section
+        title={
+          <CollapsibleTrigger className="flex items-center gap-1 w-full">
+            <ChevronRight className="h-4 w-4 text-icon3" />
+            <Section.Title icon={<JudgeIcon className="text-neutral3" />}>
+              Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+            </Section.Title>
+          </CollapsibleTrigger>
+        }
+      >
+        <CollapsibleContent>
+          <Controller
+            name="scorers"
+            control={control}
+            render={({ field }) => {
+              const selectedScorers = field.value || {};
+              const selectedIds = Object.keys(selectedScorers);
+              const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
 
-          const handleValueChange = (newIds: string[]) => {
-            const newScorers: Record<string, ScorerConfig> = {};
-            for (const id of newIds) {
-              // Preserve existing config or create empty one
-              newScorers[id] = selectedScorers[id] || {};
-            }
-            field.onChange(newScorers);
-          };
+              const handleValueChange = (newIds: string[]) => {
+                const newScorers: Record<string, ScorerConfig> = {};
+                for (const id of newIds) {
+                  newScorers[id] = selectedScorers[id] || {
+                    description: getOriginalDescription(id),
+                  };
+                }
+                field.onChange(newScorers);
+              };
 
-          const handleSamplingChange = (scorerId: string, samplingConfig: ScoringSamplingConfig | undefined) => {
-            field.onChange({
-              ...selectedScorers,
-              [scorerId]: { sampling: samplingConfig },
-            });
-          };
+              const handleDescriptionChange = (scorerId: string, description: string) => {
+                field.onChange({
+                  ...selectedScorers,
+                  [scorerId]: { ...selectedScorers[scorerId], description },
+                });
+              };
 
-          const handleRemove = (scorerId: string) => {
-            const newScorers = { ...selectedScorers };
-            delete newScorers[scorerId];
-            field.onChange(newScorers);
-          };
+              const handleSamplingChange = (scorerId: string, samplingConfig: ScoringSamplingConfig | undefined) => {
+                field.onChange({
+                  ...selectedScorers,
+                  [scorerId]: { ...selectedScorers[scorerId], sampling: samplingConfig },
+                });
+              };
 
-          return (
-            <div className="flex flex-col gap-2">
-              <MultiCombobox
-                options={options}
-                value={selectedIds}
-                onValueChange={handleValueChange}
-                placeholder="Select scorers..."
-                searchPlaceholder="Search scorers..."
-                emptyText="No scorers available"
-                disabled={isLoading}
-                error={error}
-                variant="light"
-              />
-              {selectedOptions.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedOptions.map(scorer => (
-                    <RemovableBadge
-                      key={scorer.value}
-                      icon={<JudgeIcon className="text-neutral3" />}
-                      onRemove={() => handleRemove(scorer.value)}
-                    >
-                      {scorer.label}
-                    </RemovableBadge>
-                  ))}
+              const handleRemove = (scorerId: string) => {
+                const newScorers = { ...selectedScorers };
+                delete newScorers[scorerId];
+                field.onChange(newScorers);
+              };
+
+              return (
+                <div className="flex flex-col gap-2">
+                  <MultiCombobox
+                    options={options}
+                    value={selectedIds}
+                    onValueChange={handleValueChange}
+                    placeholder="Select scorers..."
+                    searchPlaceholder="Search scorers..."
+                    emptyText="No scorers available"
+                    disabled={isLoading}
+                    error={error}
+                    variant="light"
+                  />
+                  {selectedOptions.length > 0 && (
+                    <div className="flex flex-col gap-2 mt-1">
+                      {selectedOptions.map(scorer => (
+                        <ScorerConfigPanel
+                          key={scorer.value}
+                          scorerId={scorer.value}
+                          scorerName={scorer.label}
+                          description={selectedScorers[scorer.value]?.description || ''}
+                          samplingConfig={selectedScorers[scorer.value]?.sampling}
+                          onDescriptionChange={desc => handleDescriptionChange(scorer.value, desc)}
+                          onSamplingChange={config => handleSamplingChange(scorer.value, config)}
+                          onRemove={() => handleRemove(scorer.value)}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-              {/* Sampling configuration for selected scorers */}
-              {selectedOptions.length > 0 && (
-                <div className="flex flex-col gap-2 mt-2 pl-3 border-l-2 border-border1">
-                  {selectedOptions.map(scorer => (
-                    <ScorerSamplingConfig
-                      key={scorer.value}
-                      scorerId={scorer.value}
-                      scorerName={scorer.label}
-                      samplingConfig={selectedScorers[scorer.value]?.sampling}
-                      onSamplingChange={config => handleSamplingChange(scorer.value, config)}
-                      onRemove={() => handleRemove(scorer.value)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        }}
-      />
-    </Section>
+              );
+            }}
+          />
+        </CollapsibleContent>
+      </Section>
+    </Collapsible>
   );
 }
 
-interface ScorerSamplingConfigProps {
+interface ScorerConfigPanelProps {
   scorerId: string;
   scorerName: string;
+  description: string;
   samplingConfig?: ScoringSamplingConfig;
+  onDescriptionChange: (description: string) => void;
   onSamplingChange: (config: ScoringSamplingConfig | undefined) => void;
   onRemove: () => void;
 }
 
-function ScorerSamplingConfig({
+function ScorerConfigPanel({
   scorerId,
   scorerName,
+  description,
   samplingConfig,
+  onDescriptionChange,
   onSamplingChange,
   onRemove,
-}: ScorerSamplingConfigProps) {
+}: ScorerConfigPanelProps) {
   const samplingType = samplingConfig?.type || 'none';
 
   const handleTypeChange = (type: string) => {
     if (type === 'none') {
       onSamplingChange(undefined);
     } else if (type === 'ratio') {
-      onSamplingChange({ type: 'ratio', rate: 0.1 }); // Default 10%
+      onSamplingChange({ type: 'ratio', rate: 0.1 });
     } else if (type === 'count') {
-      onSamplingChange({ type: 'count', count: 10 }); // Default 10 samples
+      onSamplingChange({ type: 'count', count: 10 });
     }
   };
 
@@ -170,19 +186,32 @@ function ScorerSamplingConfig({
   };
 
   return (
-    <div className="flex flex-col gap-2 p-2 bg-surface2 rounded-md border border-border1">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-icon6">{scorerName}</span>
-        <Button
-          type="button"
-          variant="ghost"
+        <div className="flex items-center gap-2">
+          <span className="[&>svg]:w-[1em] [&>svg]:h-[1em]">
+            <JudgeIcon className="text-neutral3" />
+          </span>
+          <span className="text-xs font-medium text-icon6">{scorerName}</span>
+        </div>
+        <IconButton
+          tooltip={`Remove ${scorerName}`}
           onClick={onRemove}
-          className="h-6 w-6 p-0 text-icon3 hover:text-accent2"
-          aria-label={`Remove ${scorerName}`}
+          variant="ghost"
+          size="sm"
         >
-          <Trash2 className="h-3 w-3" />
-        </Button>
+          <Trash2 />
+        </IconButton>
       </div>
+
+      <Textarea
+        id={`description-${scorerId}`}
+        value={description}
+        onChange={e => onDescriptionChange(e.target.value)}
+        placeholder="Custom description for this scorer..."
+        className="min-h-[60px] text-sm bg-surface3"
+        size="sm"
+      />
 
       <div className="flex flex-col gap-2">
         <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-icon4">

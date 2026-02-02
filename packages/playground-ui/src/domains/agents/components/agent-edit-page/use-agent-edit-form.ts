@@ -50,9 +50,9 @@ export function useAgentEditForm(options: UseAgentEditFormOptions = {}) {
       description: initialValues?.description ?? '',
       instructions: initialValues?.instructions ?? '',
       model: initialValues?.model ?? { provider: '', name: '' },
-      tools: initialValues?.tools ?? [],
-      workflows: initialValues?.workflows ?? [],
-      agents: initialValues?.agents ?? [],
+      tools: initialValues?.tools ?? {},
+      workflows: initialValues?.workflows ?? {},
+      agents: initialValues?.agents ?? {},
       scorers: initialValues?.scorers ?? {},
     },
   });

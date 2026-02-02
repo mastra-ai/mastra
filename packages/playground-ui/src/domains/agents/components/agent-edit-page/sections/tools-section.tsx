@@ -1,13 +1,19 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
+import { ChevronRight } from 'lucide-react';
 
-import { Section, RemovableBadge } from '@/domains/cms';
+import { Section, EntityAccordionItem } from '@/domains/cms';
 import { ToolsIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import type { AgentFormValues } from '../../agent-edit/form-validation';
+
+interface EntityConfig {
+  description?: string;
+}
 
 interface ToolsSectionProps {
   control: Control<AgentFormValues>;
@@ -15,9 +21,10 @@ interface ToolsSectionProps {
 }
 
 export function ToolsSection({ control, error }: ToolsSectionProps) {
+  const [isOpen, setIsOpen] = useState(false);
   const { data: tools, isLoading } = useTools();
   const selectedTools = useWatch({ control, name: 'tools' });
-  const count = selectedTools?.length || 0;
+  const count = Object.keys(selectedTools || {}).length;
 
   const options = useMemo(() => {
     if (!tools) return [];
@@ -28,53 +35,88 @@ export function ToolsSection({ control, error }: ToolsSectionProps) {
     }));
   }, [tools]);
 
-  return (
-    <Section
-      title={
-        <Section.Title icon={<ToolsIcon className="text-accent6" />}>
-          Tools{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
-        </Section.Title>
-      }
-    >
-      <Controller
-        name="tools"
-        control={control}
-        render={({ field }) => {
-          const selectedTools = options.filter(opt => field.value?.includes(opt.value));
+  const getOriginalDescription = (id: string): string => {
+    const option = options.find(opt => opt.value === id);
+    return option?.description || '';
+  };
 
-          return (
-            <div className="flex flex-col gap-2">
-              <MultiCombobox
-                options={options}
-                value={field.value || []}
-                onValueChange={field.onChange}
-                placeholder="Select tools..."
-                searchPlaceholder="Search tools..."
-                emptyText="No tools available"
-                disabled={isLoading}
-                error={error}
-                variant="light"
-              />
-              {selectedTools.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedTools.map(tool => (
-                    <RemovableBadge
-                      key={tool.value}
-                      icon={<ToolsIcon className="text-accent6" />}
-                      onRemove={() => {
-                        const newValue = field.value?.filter(v => v !== tool.value) || [];
-                        field.onChange(newValue);
-                      }}
-                    >
-                      {tool.label}
-                    </RemovableBadge>
-                  ))}
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Section
+        title={
+          <CollapsibleTrigger className="flex items-center gap-1 w-full">
+            <ChevronRight className="h-4 w-4 text-icon3" />
+            <Section.Title icon={<ToolsIcon className="text-accent6" />}>
+              Tools{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+            </Section.Title>
+          </CollapsibleTrigger>
+        }
+      >
+        <CollapsibleContent>
+          <Controller
+            name="tools"
+            control={control}
+            render={({ field }) => {
+              const selectedIds = Object.keys(field.value || {});
+              const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
+
+              const handleValueChange = (newIds: string[]) => {
+                const newValue: Record<string, EntityConfig> = {};
+                for (const id of newIds) {
+                  newValue[id] = field.value?.[id] || {
+                    description: getOriginalDescription(id),
+                  };
+                }
+                field.onChange(newValue);
+              };
+
+              const handleDescriptionChange = (toolId: string, description: string) => {
+                field.onChange({
+                  ...field.value,
+                  [toolId]: { ...field.value?.[toolId], description },
+                });
+              };
+
+              const handleRemove = (toolId: string) => {
+                const newValue = { ...field.value };
+                delete newValue[toolId];
+                field.onChange(newValue);
+              };
+
+              return (
+                <div className="flex flex-col gap-2">
+                  <MultiCombobox
+                    options={options}
+                    value={selectedIds}
+                    onValueChange={handleValueChange}
+                    placeholder="Select tools..."
+                    searchPlaceholder="Search tools..."
+                    emptyText="No tools available"
+                    disabled={isLoading}
+                    error={error}
+                    variant="light"
+                  />
+                  {selectedOptions.length > 0 && (
+                    <div className="flex flex-col gap-2 mt-1">
+                      {selectedOptions.map(tool => (
+                        <EntityAccordionItem
+                          key={tool.value}
+                          id={tool.value}
+                          name={tool.label}
+                          icon={<ToolsIcon className="text-accent6" />}
+                          description={field.value?.[tool.value]?.description || ''}
+                          onDescriptionChange={desc => handleDescriptionChange(tool.value, desc)}
+                          onRemove={() => handleRemove(tool.value)}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        }}
-      />
-    </Section>
+              );
+            }}
+          />
+        </CollapsibleContent>
+      </Section>
+    </Collapsible>
   );
 }

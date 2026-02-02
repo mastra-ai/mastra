@@ -30,6 +30,7 @@ interface AgentEditSidebarProps {
   onPublish: () => void;
   isSubmitting?: boolean;
   formRef?: RefObject<HTMLFormElement | null>;
+  mode?: 'create' | 'edit';
 }
 
 export function AgentEditSidebar({
@@ -38,6 +39,7 @@ export function AgentEditSidebar({
   onPublish,
   isSubmitting = false,
   formRef,
+  mode = 'create',
 }: AgentEditSidebarProps) {
   const {
     register,
@@ -134,21 +136,40 @@ export function AgentEditSidebar({
           if (data.instructions) {
             form.setValue('instructions', data.instructions);
           }
+          // Convert tool IDs array to the record format expected by the form
           if (data.tools && data.tools.length > 0) {
-            form.setValue('tools', data.tools);
+            const toolsRecord: Record<string, { description?: string }> = {};
+            for (const toolId of data.tools) {
+              const tool = availableTools.find(t => t.id === toolId);
+              toolsRecord[toolId] = { description: tool?.description };
+            }
+            form.setValue('tools', toolsRecord);
           }
+          // Convert workflow IDs array to the record format expected by the form
           if (data.workflows && data.workflows.length > 0) {
-            form.setValue('workflows', data.workflows);
+            const workflowsRecord: Record<string, { description?: string }> = {};
+            for (const workflowId of data.workflows) {
+              const workflow = availableWorkflows.find(w => w.id === workflowId);
+              workflowsRecord[workflowId] = { description: workflow?.description };
+            }
+            form.setValue('workflows', workflowsRecord);
           }
+          // Convert agent IDs array to the record format expected by the form
           if (data.agents && data.agents.length > 0) {
-            form.setValue('agents', data.agents);
+            const agentsRecord: Record<string, { description?: string }> = {};
+            for (const agentId of data.agents) {
+              const agent = availableAgents.find(a => a.id === agentId);
+              agentsRecord[agentId] = { description: agent?.description };
+            }
+            form.setValue('agents', agentsRecord);
           }
           // Convert scorer IDs array to the record format expected by the form
           // Users can configure sampling manually after generation
           if (data.scorers && data.scorers.length > 0) {
-            const scorersRecord: Record<string, { sampling?: { type: 'ratio' | 'count'; rate?: number; count?: number } }> = {};
+            const scorersRecord: Record<string, { description?: string; sampling?: { type: 'ratio' | 'count'; rate?: number; count?: number } }> = {};
             for (const scorerId of data.scorers) {
-              scorersRecord[scorerId] = {};
+              const scorer = availableScorers.find(s => s.id === scorerId);
+              scorersRecord[scorerId] = { description: scorer?.description };
             }
             form.setValue('scorers', scorersRecord);
           }
@@ -256,50 +277,52 @@ export function AgentEditSidebar({
                 subtitle="Extend your agent with tools, workflows, and other resources to enhance its abilities."
               />
 
-              <ToolsSection control={control} error={errors.tools?.message} />
-              <WorkflowsSection control={control} error={errors.workflows?.message} />
-              <AgentsSection control={control} error={errors.agents?.message} currentAgentId={currentAgentId} />
+              <ToolsSection control={control} error={errors.tools?.root?.message} />
+              <WorkflowsSection control={control} error={errors.workflows?.root?.message} />
+              <AgentsSection control={control} error={errors.agents?.root?.message} currentAgentId={currentAgentId} />
               <ScorersSection control={control} />
             </div>
           </ScrollArea>
         </TabContent>
       </Tabs>
 
-      {/* Sticky footer with Pregenerate and Create Agent buttons */}
+      {/* Sticky footer with Pregenerate and Create/Update Agent buttons */}
       <div className="flex-shrink-0 p-4 border-t border-border1 flex flex-col gap-2">
-        <Button
-          variant="outline"
-          onClick={handlePregenerate}
-          disabled={!canPregenerate || isPregenerating}
-          className="w-full"
-          type="button"
-        >
-          {isPregenerating ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <Icon>
-                <Sparkles />
-              </Icon>
-              Pregenerate Configuration
-            </>
-          )}
-        </Button>
+        {mode !== 'edit' && (
+          <Button
+            variant="outline"
+            onClick={handlePregenerate}
+            disabled={!canPregenerate || isPregenerating}
+            className="w-full"
+            type="button"
+          >
+            {isPregenerating ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Icon>
+                  <Sparkles />
+                </Icon>
+                Pregenerate Configuration
+              </>
+            )}
+          </Button>
+        )}
         <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
           {isSubmitting ? (
             <>
               <Spinner className="h-4 w-4" />
-              Creating...
+              {mode === 'edit' ? 'Updating...' : 'Creating...'}
             </>
           ) : (
             <>
               <Icon>
                 <Check />
               </Icon>
-              Create agent
+              {mode === 'edit' ? 'Update agent' : 'Create agent'}
             </>
           )}
         </Button>

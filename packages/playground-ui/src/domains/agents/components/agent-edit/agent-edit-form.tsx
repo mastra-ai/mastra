@@ -103,9 +103,9 @@ export function AgentEditForm({
       description: initialValues?.description ?? '',
       instructions: initialValues?.instructions ?? '',
       model: initialValues?.model ?? { provider: '', name: '' },
-      tools: initialValues?.tools ?? [],
-      workflows: initialValues?.workflows ?? [],
-      agents: initialValues?.agents ?? [],
+      tools: initialValues?.tools ?? {},
+      workflows: initialValues?.workflows ?? {},
+      agents: initialValues?.agents ?? {},
       scorers: initialValues?.scorers ?? {},
     },
   });
@@ -266,66 +266,99 @@ export function AgentEditForm({
             <Controller
               name="tools"
               control={control}
-              render={({ field }) => (
-                <MultiSelectPicker
-                  label="Tools"
-                  options={toolOptions}
-                  selected={field.value || []}
-                  onChange={field.onChange}
-                  getOptionId={option => option.id}
-                  getOptionLabel={option => option.name}
-                  getOptionDescription={option => option.description}
-                  placeholder="Select tools..."
-                  searchPlaceholder="Search tools..."
-                  emptyMessage="No tools available"
-                  disabled={toolsLoading}
-                  error={errors.tools?.message}
-                />
-              )}
+              render={({ field }) => {
+                const selectedIds = Object.keys(field.value || {});
+                const handleChange = (ids: string[]) => {
+                  const newValue: Record<string, { description?: string }> = {};
+                  for (const id of ids) {
+                    const tool = toolOptions.find(t => t.id === id);
+                    newValue[id] = field.value?.[id] || { description: tool?.description };
+                  }
+                  field.onChange(newValue);
+                };
+                return (
+                  <MultiSelectPicker
+                    label="Tools"
+                    options={toolOptions}
+                    selected={selectedIds}
+                    onChange={handleChange}
+                    getOptionId={option => option.id}
+                    getOptionLabel={option => option.name}
+                    getOptionDescription={option => option.description}
+                    placeholder="Select tools..."
+                    searchPlaceholder="Search tools..."
+                    emptyMessage="No tools available"
+                    disabled={toolsLoading}
+                    error={errors.tools?.root?.message}
+                  />
+                );
+              }}
             />
 
             {/* Workflows */}
             <Controller
               name="workflows"
               control={control}
-              render={({ field }) => (
-                <MultiSelectPicker
-                  label="Workflows"
-                  options={workflowOptions}
-                  selected={field.value || []}
-                  onChange={field.onChange}
-                  getOptionId={option => option.id}
-                  getOptionLabel={option => option.name}
-                  getOptionDescription={option => option.description}
-                  placeholder="Select workflows..."
-                  searchPlaceholder="Search workflows..."
-                  emptyMessage="No workflows available"
-                  disabled={workflowsLoading}
-                  error={errors.workflows?.message}
-                />
-              )}
+              render={({ field }) => {
+                const selectedIds = Object.keys(field.value || {});
+                const handleChange = (ids: string[]) => {
+                  const newValue: Record<string, { description?: string }> = {};
+                  for (const id of ids) {
+                    const workflow = workflowOptions.find(w => w.id === id);
+                    newValue[id] = field.value?.[id] || { description: workflow?.description };
+                  }
+                  field.onChange(newValue);
+                };
+                return (
+                  <MultiSelectPicker
+                    label="Workflows"
+                    options={workflowOptions}
+                    selected={selectedIds}
+                    onChange={handleChange}
+                    getOptionId={option => option.id}
+                    getOptionLabel={option => option.name}
+                    getOptionDescription={option => option.description}
+                    placeholder="Select workflows..."
+                    searchPlaceholder="Search workflows..."
+                    emptyMessage="No workflows available"
+                    disabled={workflowsLoading}
+                    error={errors.workflows?.root?.message}
+                  />
+                );
+              }}
             />
 
             {/* Sub-Agents */}
             <Controller
               name="agents"
               control={control}
-              render={({ field }) => (
-                <MultiSelectPicker
-                  label="Sub-Agents"
-                  options={agentOptions}
-                  selected={field.value || []}
-                  onChange={field.onChange}
-                  getOptionId={option => option.id}
-                  getOptionLabel={option => option.name}
-                  getOptionDescription={option => option.description}
-                  placeholder="Select sub-agents..."
-                  searchPlaceholder="Search agents..."
-                  emptyMessage="No agents available"
-                  disabled={agentsLoading}
-                  error={errors.agents?.message}
-                />
-              )}
+              render={({ field }) => {
+                const selectedIds = Object.keys(field.value || {});
+                const handleChange = (ids: string[]) => {
+                  const newValue: Record<string, { description?: string }> = {};
+                  for (const id of ids) {
+                    const agent = agentOptions.find(a => a.id === id);
+                    newValue[id] = field.value?.[id] || { description: agent?.description };
+                  }
+                  field.onChange(newValue);
+                };
+                return (
+                  <MultiSelectPicker
+                    label="Sub-Agents"
+                    options={agentOptions}
+                    selected={selectedIds}
+                    onChange={handleChange}
+                    getOptionId={option => option.id}
+                    getOptionLabel={option => option.name}
+                    getOptionDescription={option => option.description}
+                    placeholder="Select sub-agents..."
+                    searchPlaceholder="Search agents..."
+                    emptyMessage="No agents available"
+                    disabled={agentsLoading}
+                    error={errors.agents?.root?.message}
+                  />
+                );
+              }}
             />
 
             {/* Scorers */}
