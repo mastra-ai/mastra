@@ -10,6 +10,7 @@ import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons';
 import { Spinner } from '@/ds/components/Spinner';
 import { Input } from '@/ds/components/Input';
+import { Textarea } from '@/ds/components/Textarea';
 import { Label } from '@/ds/components/Label';
 import { SectionHeader } from '@/domains/cms';
 import { toast } from '@/lib/toast';
@@ -193,7 +194,7 @@ export function AgentEditSidebar({
                 <Label htmlFor="agent-description" className="text-xs text-icon5">
                   Description
                 </Label>
-                <Input
+                <Textarea
                   id="agent-description"
                   placeholder="Describe what this agent does"
                   className="bg-surface3"

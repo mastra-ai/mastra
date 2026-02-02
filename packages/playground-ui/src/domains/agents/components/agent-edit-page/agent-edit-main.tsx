@@ -45,11 +45,11 @@ export function AgentEditMain({ form }: AgentEditMainProps) {
               </Icon>
             }
           />
-          <Button type="button" variant="light" size="sm" onClick={() => setTestDialogOpen(true)}>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setTestDialogOpen(true)}>
             <Icon>
               <Play />
             </Icon>
-            Test the prompt
+            See compiled prompt
           </Button>
         </div>
         <Controller
