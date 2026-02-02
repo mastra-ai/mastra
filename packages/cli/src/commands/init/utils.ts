@@ -669,7 +669,8 @@ interface InteractivePromptArgs {
     llmProvider?: boolean;
     llmApiKey?: boolean;
     gitInit?: boolean;
-    configureMastraToolingForCodingAgents?: boolean;
+    skills?: boolean;
+    mcpServer?: boolean;
   };
 }
 
@@ -718,11 +719,11 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         }
         return undefined;
       },
-      configureMastraToolingForCodingAgents: async () => {
-        if (skip?.configureMastraToolingForCodingAgents) return undefined;
+      configureMastraToolingForAgents: async () => {
+        if (skip?.skills && skip?.mcpServer) return { skills: undefined, mcpServer: undefined };
 
         const choice = await p.select({
-          message: `Configure Mastra tooling for coding agents?`,
+          message: `Configure Mastra tooling for agents?`,
           options: [
             { value: 'skills', label: 'Skills - Mastra agent skills', hint: 'recommended' },
             { value: 'mcp', label: 'MCP Docs - IDE integration' },
@@ -788,7 +789,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           });
 
           if (p.isCancel(initialSelection)) {
-            return undefined;
+            return { skills: undefined, mcpServer: undefined };
           }
 
           let selectedAgents = initialSelection as string[];
@@ -806,13 +807,13 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             });
 
             if (p.isCancel(fullSelection)) {
-              return undefined;
+              return { skills: undefined, mcpServer: undefined };
             }
 
             selectedAgents = fullSelection as string[];
           }
 
-          return { type: 'skills' as const, agents: selectedAgents };
+          return { skills: selectedAgents, mcpServer: undefined };
         }
 
         // If MCP selected, show editor sub-selection
@@ -859,7 +860,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
               ],
             });
             if (confirm !== `yes`) {
-              return undefined;
+              return { skills: undefined, mcpServer: undefined };
             }
           }
 
@@ -872,7 +873,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
               ],
             });
             if (confirm !== `yes`) {
-              return undefined;
+              return { skills: undefined, mcpServer: undefined };
             }
           }
 
@@ -886,13 +887,13 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             });
 
             if (confirm !== `yes`) {
-              return undefined;
+              return { skills: undefined, mcpServer: undefined };
             }
           }
-          return editor;
+          return { skills: undefined, mcpServer: editor };
         }
 
-        return undefined;
+        return { skills: undefined, mcpServer: undefined };
       },
       initGit: async () => {
         if (skip?.gitInit) return false;
@@ -911,7 +912,13 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
     },
   );
 
-  return mastraProject;
+  // Flatten the configureMastraToolingForAgents return value
+  const { configureMastraToolingForAgents, ...rest } = mastraProject;
+  return {
+    ...rest,
+    skills: configureMastraToolingForAgents?.skills as string[] | undefined,
+    mcpServer: configureMastraToolingForAgents?.mcpServer as Editor | undefined,
+  };
 };
 
 /**

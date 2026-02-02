@@ -18,8 +18,8 @@ export const init = async ({
   llmProvider = 'openai',
   llmApiKey,
   addExample = false,
-  configureEditorWithDocsMCP,
-  configureMastraToolingForCodingAgents,
+  skills,
+  mcpServer,
   versionTag,
   initGit = false,
 }: {
@@ -28,8 +28,8 @@ export const init = async ({
   llmProvider?: LLMProvider;
   llmApiKey?: string;
   addExample?: boolean;
-  configureEditorWithDocsMCP?: Editor;
-  configureMastraToolingForCodingAgents?: { type: 'skills'; agents: string[] } | Editor;
+  skills?: string[];
+  mcpServer?: Editor;
   versionTag?: string;
   initGit?: boolean;
 }) => {
@@ -99,17 +99,12 @@ export const init = async ({
     s.stop('Mastra initialized');
 
     // Install skills if selected
-    if (
-      configureMastraToolingForCodingAgents &&
-      typeof configureMastraToolingForCodingAgents === 'object' &&
-      'type' in configureMastraToolingForCodingAgents &&
-      configureMastraToolingForCodingAgents.type === 'skills'
-    ) {
+    if (skills && skills.length > 0) {
       try {
         s.start('Installing Mastra agent skills');
         const skillsResult = await installMastraSkills({
           directory: process.cwd(),
-          agents: configureMastraToolingForCodingAgents.agents,
+          agents: skills,
         });
         if (skillsResult.success) {
           // Format agent names nicely
@@ -134,16 +129,9 @@ export const init = async ({
     }
 
     // Install MCP if an editor was selected
-    const mcpEditor =
-      configureMastraToolingForCodingAgents &&
-      typeof configureMastraToolingForCodingAgents === 'string' &&
-      ['cursor', 'cursor-global', 'windsurf', 'vscode', 'antigravity'].includes(configureMastraToolingForCodingAgents)
-        ? (configureMastraToolingForCodingAgents as Editor)
-        : configureEditorWithDocsMCP;
-
-    if (mcpEditor) {
+    if (mcpServer) {
       await installMastraDocsMCPServer({
-        editor: mcpEditor,
+        editor: mcpServer,
         directory: process.cwd(),
         versionTag,
       });
