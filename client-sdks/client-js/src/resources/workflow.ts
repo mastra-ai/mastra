@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type {
   ClientOptions,
   GetWorkflowResponse,
+  GetWorkflowSchemaResponse,
   ListWorkflowRunsResponse,
   ListWorkflowRunsParams,
   GetWorkflowRunByIdResponse,
@@ -28,6 +29,14 @@ export class Workflow extends BaseResource {
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<GetWorkflowResponse> {
     return this.request(`/api/workflows/${this.workflowId}${requestContextQueryString(requestContext)}`);
+  }
+
+  /**
+   * Retrieves the input/output JSON schemas for the workflow
+   * @returns Promise containing workflow input and output schemas
+   */
+  getSchema(): Promise<GetWorkflowSchemaResponse> {
+    return this.request(`/api/workflows/${encodeURIComponent(this.workflowId)}/schema`);
   }
 
   /**

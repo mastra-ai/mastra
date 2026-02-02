@@ -224,6 +224,14 @@ export interface GetWorkflowResponse {
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
+
+/**
+ * Response for getting workflow schema
+ */
+export interface GetWorkflowSchemaResponse {
+  inputSchema: Record<string, unknown> | null;
+  outputSchema: Record<string, unknown> | null;
+}
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
@@ -873,8 +881,10 @@ export interface ExecuteProcessorResponse {
 export interface Dataset {
   id: string;
   name: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  inputSchema?: Record<string, unknown> | null;
+  outputSchema?: Record<string, unknown> | null;
   version: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -901,6 +911,8 @@ export interface CreateDatasetParams {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  outputSchema?: Record<string, unknown> | null;
 }
 
 /**
@@ -911,6 +923,8 @@ export interface UpdateDatasetParams {
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  outputSchema?: Record<string, unknown> | null;
 }
 
 /**

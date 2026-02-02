@@ -1110,3 +1110,44 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
     }
   },
 });
+
+// ============================================================================
+// Workflow Schema Route
+// ============================================================================
+
+export const GET_WORKFLOW_SCHEMA_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workflows/:workflowId/schema',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  responseSchema: z.object({
+    inputSchema: z.record(z.unknown()).nullable(),
+    outputSchema: z.record(z.unknown()).nullable(),
+  }),
+  summary: 'Get workflow input/output schemas',
+  description: 'Returns the JSON Schema for workflow input and output',
+  tags: ['Workflows'],
+  requiresAuth: true,
+  handler: async ({ mastra, workflowId }) => {
+    try {
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+
+      const info = getWorkflowInfo(workflow);
+
+      return {
+        inputSchema: info.inputSchema ? JSON.parse(info.inputSchema) : null,
+        outputSchema: info.outputSchema ? JSON.parse(info.outputSchema) : null,
+      };
+    } catch (error) {
+      return handleError(error, 'Error getting workflow schema');
+    }
+  },
+});
