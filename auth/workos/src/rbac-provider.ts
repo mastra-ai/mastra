@@ -96,10 +96,6 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
       max: options.cache?.maxSize ?? DEFAULT_CACHE_MAX_SIZE,
       ttl: options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS,
     });
-
-    console.info(
-      `[WorkOS RBAC] Initialized with roleMapping keys: ${Object.keys(this.options.roleMapping).join(', ')}`,
-    );
   }
 
   /**
@@ -117,9 +113,7 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   async getRoles(user: WorkOSUser): Promise<string[]> {
     // If memberships are already present on the user object, use them
     if (user.memberships && user.memberships.length > 0) {
-      const roles = this.extractRolesFromMemberships(user);
-      console.info(`[WorkOS RBAC] Using user memberships, roles: ${JSON.stringify(roles)}`);
-      return roles;
+      return this.extractRolesFromMemberships(user);
     }
 
     const cacheKey = user.workosId ?? user.id;
@@ -127,12 +121,10 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
     // Check cache - returns existing promise (resolved or in-flight)
     const cached = this.rolesCache.get(cacheKey);
     if (cached) {
-      console.info(`[WorkOS RBAC] Cache hit for user ${cacheKey}`);
       return cached;
     }
 
     // Create and cache the role fetch promise
-    console.info(`[WorkOS RBAC] Cache miss for user ${cacheKey}, fetching from WorkOS`);
     const rolesPromise = this.fetchRolesFromWorkOS(user);
     this.rolesCache.set(cacheKey, rolesPromise);
 
@@ -154,11 +146,8 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
         : memberships.data;
 
       // Extract role slugs
-      const roles = relevantMemberships.map(m => m.role.slug);
-      console.info(`[WorkOS RBAC] Fetched ${memberships.data.length} memberships, roles: ${JSON.stringify(roles)}`);
-      return roles;
-    } catch (error) {
-      console.error(`[WorkOS RBAC] Error fetching memberships:`, error);
+      return relevantMemberships.map(m => m.role.slug);
+    } catch {
       // Return empty roles on error - _default permissions will be applied
       return [];
     }
