@@ -731,6 +731,10 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           initialValue: 'skills',
         });
 
+        if (p.isCancel(choice)) {
+          return { skills: undefined, mcpServer: undefined };
+        }
+
         if (choice === 'skills') {
           // Popular agents
           const POPULAR_AGENTS: { value: string; label: string }[] = [
@@ -843,6 +847,10 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
               },
             ] satisfies { value: Editor; label: string }[],
           });
+
+          if (p.isCancel(editor)) {
+            return { skills: undefined, mcpServer: undefined };
+          }
 
           // Handle MCP editor selections with confirmations
           if (editor === `cursor`) {
