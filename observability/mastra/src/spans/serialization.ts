@@ -52,8 +52,8 @@ export const DEFAULT_DEEP_CLEAN_OPTIONS: DeepCleanOptions = Object.freeze({
   keysToStrip: DEFAULT_KEYS_TO_STRIP,
   maxDepth: 8,
   maxStringLength: 128 * 1024, // 128KB - sufficient for large LLM prompts/responses
-  maxArrayLength: 100, // Supports longer conversation histories
-  maxObjectKeys: 100,
+  maxArrayLength: 50,
+  maxObjectKeys: 50,
 });
 
 /**
