@@ -24,7 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 9: Dataset Items Detail View** - EntryList with SideDialog, edit/delete flows ✓
 - [x] **Phase 10: Dataset Layout Update** - Master-detail layout with inline item viewing ✓
 - [x] **Phase 11: Dataset Schema Validation** - Input/output schema enforcement with import validation ✓
-- [ ] **Phase 12: Schema JSON Schema Notification** - Notify users of JSON Schema support when enabling schemas
+- [x] **Phase 12: Schema JSON Schema Notification** - Notify users of JSON Schema support when enabling schemas ✓
 
 ## Phase Details
 
@@ -292,24 +292,24 @@ Plans:
 
 Plans:
 
-- [ ] 12-01-PLAN.md — Add JSON Schema info Alert to SchemaConfigSection
+- [x] 12-01-PLAN.md — Add JSON Schema info Alert to SchemaConfigSection
 
 ## Progress
 
 **Execution Order:**
 Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12
 
-| Phase                               | Plans Complete | Status      | Completed  |
-| ----------------------------------- | -------------- | ----------- | ---------- |
-| 1. Storage Foundation               | 4/4            | ✓ Complete  | 2026-01-24 |
-| 2. Execution Core                   | 4/4            | ✓ Complete  | 2026-01-24 |
-| 3. Agent & Workflow Targets         | 1/1            | ✓ Complete  | 2026-01-24 |
-| 4. Scorer Targets                   | 1/1            | ✓ Complete  | 2026-01-24 |
-| 5. Run Analytics                    | 1/1            | ✓ Complete  | 2026-01-24 |
-| 6. Playground Integration           | 12/12          | ✓ Complete  | 2026-01-26 |
-| 7. CSV Import                       | 5/5            | ✓ Complete  | 2026-01-27 |
-| 8. Item Selection & Actions         | 4/4            | ✓ Complete  | 2026-01-27 |
-| 9. Dataset Items Detail View        | 5/5            | ✓ Complete  | 2026-01-29 |
-| 10. Dataset Layout Update           | 5/5            | ✓ Complete  | 2026-01-30 |
-| 11. Dataset Schema Validation       | 9/9            | ✓ Complete  | 2026-02-02 |
-| 12. Schema JSON Schema Notification | 0/1            | Not Started | -          |
+| Phase                               | Plans Complete | Status     | Completed  |
+| ----------------------------------- | -------------- | ---------- | ---------- |
+| 1. Storage Foundation               | 4/4            | ✓ Complete | 2026-01-24 |
+| 2. Execution Core                   | 4/4            | ✓ Complete | 2026-01-24 |
+| 3. Agent & Workflow Targets         | 1/1            | ✓ Complete | 2026-01-24 |
+| 4. Scorer Targets                   | 1/1            | ✓ Complete | 2026-01-24 |
+| 5. Run Analytics                    | 1/1            | ✓ Complete | 2026-01-24 |
+| 6. Playground Integration           | 12/12          | ✓ Complete | 2026-01-26 |
+| 7. CSV Import                       | 5/5            | ✓ Complete | 2026-01-27 |
+| 8. Item Selection & Actions         | 4/4            | ✓ Complete | 2026-01-27 |
+| 9. Dataset Items Detail View        | 5/5            | ✓ Complete | 2026-01-29 |
+| 10. Dataset Layout Update           | 5/5            | ✓ Complete | 2026-01-30 |
+| 11. Dataset Schema Validation       | 9/9            | ✓ Complete | 2026-02-02 |
+| 12. Schema JSON Schema Notification | 1/1            | ✓ Complete | 2026-02-02 |
