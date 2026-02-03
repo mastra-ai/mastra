@@ -29,12 +29,20 @@ const myTool = createTool({
 });
 ```
 
-**Dynamic Workspace Configuration** - Workspace can be configured dynamically via agent config functions, following the same pattern as dynamic model configuration.
+**Dynamic Workspace Configuration** - Workspace can be configured dynamically via agent config functions, following the same pattern as dynamic model configuration. Dynamically created workspaces are auto-registered with Mastra, making them available via `listWorkspaces()` and visible in server/studio.
 
 ```typescript
 const agent = new Agent({
   workspace: ({ mastra, requestContext }) => {
-    return mastra.getWorkspaceById(requestContext?.get('workspaceId'));
+    // Thread-scoped workspaces - each new workspace is auto-registered
+    const threadId = requestContext?.get('threadId');
+    return new Workspace({
+      id: `workspace-${threadId}`,
+      filesystem: new LocalFilesystem({ basePath: `/data/${threadId}` }),
+    });
   },
 });
+
+// Later, all dynamically created workspaces are accessible
+const allWorkspaces = mastra.listWorkspaces(); // includes thread-scoped ones
 ```
