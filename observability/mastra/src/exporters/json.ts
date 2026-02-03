@@ -23,8 +23,7 @@ function getSnapshotsDir(): string {
   if (!_snapshotsDir) {
     if (typeof import.meta.url !== 'string') {
       throw new Error(
-        'Snapshot functionality requires a Node.js environment. ' +
-          'import.meta.url is not available in this runtime.',
+        'Snapshot functionality requires a Node.js environment. ' + 'import.meta.url is not available in this runtime.',
       );
     }
     const __filename = fileURLToPath(import.meta.url);
