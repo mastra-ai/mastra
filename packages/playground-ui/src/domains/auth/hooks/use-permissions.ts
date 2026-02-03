@@ -31,7 +31,8 @@ import { isAuthenticated } from '../types';
  * Supports:
  * - Exact match: 'agents:read' matches 'agents:read'
  * - Wildcard action: 'agents:*' matches 'agents:read', 'agents:write', etc.
- * - Wildcard resource: 'agents:read' matches 'agents:read:specific-id'
+ * - Wildcard resource type: '*:execute' matches 'agents:execute', 'tools:execute', etc.
+ * - Resource ID scoping: 'agents:read' matches 'agents:read:specific-id'
  * - Full wildcard: '*' matches everything
  */
 function matchesPermission(userPermission: string, requiredPermission: string): boolean {
@@ -50,6 +51,24 @@ function matchesPermission(userPermission: string, requiredPermission: string): 
 
   const [grantedResource, grantedAction, grantedId] = grantedParts;
   const [requiredResource, requiredAction, requiredId] = requiredParts;
+
+  // Resource wildcard: "*:execute" matches any resource with that action
+  if (grantedResource === '*') {
+    // Action wildcard: "*:*" matches everything
+    if (grantedAction === '*') {
+      return true;
+    }
+    // Action must match
+    if (grantedAction !== requiredAction) {
+      return false;
+    }
+    // No resource ID in granted permission = access to all
+    if (grantedId === undefined) {
+      return true;
+    }
+    // Both have resource IDs - must match exactly
+    return grantedId === requiredId;
+  }
 
   // Resource must match
   if (grantedResource !== requiredResource) {
