@@ -1,5 +1,6 @@
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
+import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 
 // This is used in place of DynamicArgument so that model router IDE autocomplete works.
@@ -43,23 +44,10 @@ export type ThresholdRange = {
 };
 
 /**
- * Model settings for Observer/Reflector agents
+ * Model settings for Observer/Reflector agents.
+ * Re-exported from @mastra/core/memory for convenience.
  */
-export interface ModelSettings {
-  /**
-   * Temperature for generation.
-   * Lower values produce more consistent output.
-   * @default 0.3
-   */
-  temperature?: number;
-
-  /**
-   * Maximum output tokens.
-   * High value to prevent truncation of observations.
-   * @default 100000
-   */
-  maxOutputTokens?: number;
-}
+export type ModelSettings = ObservationalMemoryModelSettings;
 
 /**
  * Google-specific provider options
@@ -154,7 +142,7 @@ export interface ReflectionConfig {
 
   /**
    * Model settings for the Reflector agent.
-   * @default { temperature: 0.3, maxOutputTokens: 100_000 }
+   * @default { temperature: 0, maxOutputTokens: 100_000 }
    */
   modelSettings?: ModelSettings;
 

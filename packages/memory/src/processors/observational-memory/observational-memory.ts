@@ -384,7 +384,8 @@ interface ResolvedObservationConfig {
   messageTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
   shareTokenBudget: boolean;
-  modelSettings: Required<ModelSettings>;
+  /** Model settings - merged with user config and defaults */
+  modelSettings: ModelSettings;
   providerOptions: ProviderOptions;
   maxTokensPerBatch: number;
 }
@@ -395,7 +396,8 @@ interface ResolvedReflectionConfig {
   observationTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
   shareTokenBudget: boolean;
-  modelSettings: Required<ModelSettings>;
+  /** Model settings - merged with user config and defaults */
+  modelSettings: ModelSettings;
   providerOptions: ProviderOptions;
 }
 
@@ -1199,8 +1201,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       () =>
         agent.generate(prompt, {
           modelSettings: {
-            temperature: this.observationConfig.modelSettings.temperature,
-            maxOutputTokens: this.observationConfig.modelSettings.maxOutputTokens,
+            ...this.observationConfig.modelSettings,
           },
           providerOptions: this.observationConfig.providerOptions as any,
           abortSignal,
@@ -1274,8 +1275,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       () =>
         agent.generate(prompt, {
           modelSettings: {
-            temperature: this.observationConfig.modelSettings.temperature,
-            maxOutputTokens: this.observationConfig.modelSettings.maxOutputTokens,
+            ...this.observationConfig.modelSettings,
           },
           providerOptions: this.observationConfig.providerOptions as any,
           abortSignal,
@@ -1363,8 +1363,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       () =>
         agent.generate(prompt, {
           modelSettings: {
-            temperature: this.reflectionConfig.modelSettings.temperature,
-            maxOutputTokens: this.reflectionConfig.modelSettings.maxOutputTokens,
+            ...this.reflectionConfig.modelSettings,
           },
           providerOptions: this.reflectionConfig.providerOptions as any,
           abortSignal,
@@ -1421,8 +1420,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         () =>
           agent.generate(prompt, {
             modelSettings: {
-              temperature: this.reflectionConfig.modelSettings.temperature,
-              maxOutputTokens: this.reflectionConfig.modelSettings.maxOutputTokens,
+              ...this.reflectionConfig.modelSettings,
             },
             providerOptions: this.reflectionConfig.providerOptions as any,
             abortSignal,
