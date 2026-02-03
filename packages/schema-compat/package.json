@@ -20,6 +20,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./standard-schema": {
+      "import": {
+        "types": "./dist/standard-schema.d.ts",
+        "default": "./dist/standard-schema.js"
+      },
+      "require": {
+        "types": "./dist/standard-schema.d.ts",
+        "default": "./dist/standard-schema.cjs"
+      }
+    },
     "./zod-to-json": {
       "import": {
         "types": "./dist/zod-to-json.d.ts",

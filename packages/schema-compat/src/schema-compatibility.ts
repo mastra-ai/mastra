@@ -161,8 +161,8 @@ export abstract class SchemaCompatLayer {
   abstract getSchemaTarget(): Targets | undefined;
   abstract processZodType(value: ZodType): ZodType;
 
-  abstract preProcessJSONNode(schema: JSONSchema7, parentSchema?: JSONSchema7): void;
-  abstract postProcessJSONNode(schema: JSONSchema7, parentSchema?: JSONSchema7): void;
+  public preProcessJSONNode(_schema: JSONSchema7, _parentSchema?: JSONSchema7): void {}
+  public postProcessJSONNode(_schema: JSONSchema7, _parentSchema?: JSONSchema7): void {}
 
   public defaultZodObjectHandler(
     value: zV3.ZodObject<any, any, any, any, any> | zV4.ZodObject<any, any>,

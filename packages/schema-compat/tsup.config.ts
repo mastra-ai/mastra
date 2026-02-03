@@ -2,7 +2,7 @@ import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/zod-to-json.ts', 'src/json-to-zod.ts'],
+  entry: ['src/index.ts', 'src/standard-schema/index.ts', 'src/zod-to-json.ts', 'src/json-to-zod.ts'],
   format: ['esm', 'cjs'],
   clean: true,
   dts: false,

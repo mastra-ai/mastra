@@ -1,11 +1,32 @@
-// Schema compatibility base class
+// Schema compatibility base class and related types
+export {
+  SchemaCompatLayer as SchemaCompatLayerV3,
+  ALL_STRING_CHECKS,
+  ALL_NUMBER_CHECKS,
+  ALL_ARRAY_CHECKS,
+  UNSUPPORTED_ZOD_TYPES,
+  SUPPORTED_ZOD_TYPES,
+  ALL_ZOD_TYPES,
+  // Types
+  type StringCheckType,
+  type NumberCheckType,
+  type ArrayCheckType,
+  type UnsupportedZodType,
+  type SupportedZodType,
+  type AllZodType,
+  type ZodShape,
+  type ShapeKey,
+  type ShapeValue,
+  // Re-usable type predicates
+  isOptional,
+  isObj,
+  isArr,
+  isUnion,
+  isString,
+  isNumber,
+} from './schema-compatibility-v3';
+export { SchemaCompatLayer as SchemaCompatLayerV4 } from './schema-compatibility-v4';
 export { SchemaCompatLayer } from './schema-compatibility';
-
-// V3 functions and types
-export * as v3 from './schema-compatibility-v3';
-
-// V4 functions and types
-export * as v4 from './schema-compatibility-v4';
 
 // Utility functions
 export { convertZodSchemaToAISDKSchema, applyCompatLayer, convertSchemaToZod, isZodType } from './utils';
@@ -20,22 +41,3 @@ export { OpenAIReasoningSchemaCompatLayer } from './provider-compats/openai-reas
 
 export { type ModelInformation } from './types';
 export { type JSONSchema7, type Schema, jsonSchema } from './json-schema';
-
-// Re-export zodTypes for v3 compatibility
-export {
-  ALL_STRING_CHECKS,
-  ALL_NUMBER_CHECKS,
-  ALL_ARRAY_CHECKS,
-  UNSUPPORTED_ZOD_TYPES,
-  SUPPORTED_ZOD_TYPES,
-  ALL_ZOD_TYPES,
-  type StringCheckType,
-  type NumberCheckType,
-  type ArrayCheckType,
-  type UnsupportedZodType,
-  type SupportedZodType,
-  type AllZodType,
-  type ZodShape,
-  type ShapeKey,
-  type ShapeValue,
-} from './zodTypes';
