@@ -380,7 +380,7 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract saveMessages(args: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-  }): Promise<{ messages: MastraDBMessage[] }>;
+  }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
    * Retrieves messages for a specific thread with optional semantic recall
@@ -395,7 +395,7 @@ https://mastra.ai/en/docs/memory/overview`,
       threadConfig?: MemoryConfig;
       vectorSearchString?: string;
     },
-  ): Promise<{ messages: MastraDBMessage[] }>;
+  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
    * Helper method to create a new thread

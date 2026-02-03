@@ -230,7 +230,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'deployer/cloudflare', label: 'Cloudflare' },
-        { type: 'doc', id: 'deployer/deployer', label: 'Deployer' },
+        { type: 'doc', id: 'deployer/index', label: 'Deployer' },
         { type: 'doc', id: 'deployer/netlify', label: 'Netlify' },
         { type: 'doc', id: 'deployer/vercel', label: 'Vercel' },
       ],
@@ -518,6 +518,11 @@ const sidebars = {
           type: 'doc',
           id: 'processors/tool-call-filter',
           label: 'ToolCallFilter',
+        },
+        {
+          type: 'doc',
+          id: 'processors/tool-search-processor',
+          label: 'ToolSearchProcessor',
         },
         {
           type: 'doc',

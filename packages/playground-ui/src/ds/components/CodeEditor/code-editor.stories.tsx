@@ -1,15 +1,30 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CodeEditor } from './code-editor';
+import { TooltipProvider } from '../Tooltip';
 
 const meta: Meta<typeof CodeEditor> = {
   title: 'Composite/CodeEditor',
   component: CodeEditor,
+  decorators: [
+    Story => (
+      <TooltipProvider>
+        <Story />
+      </TooltipProvider>
+    ),
+  ],
   parameters: {
     layout: 'centered',
   },
   tags: ['autodocs'],
   argTypes: {
     showCopyButton: {
+      control: { type: 'boolean' },
+    },
+    language: {
+      control: { type: 'select' },
+      options: ['json', 'markdown'],
+    },
+    highlightVariables: {
       control: { type: 'boolean' },
     },
   },
@@ -104,5 +119,54 @@ export const LargeContent: Story = {
       },
     },
     className: 'w-[600px] max-h-[400px] overflow-auto',
+  },
+};
+
+export const MarkdownWithVariables: Story = {
+  args: {
+    value: `# Agent Instructions
+
+You are a helpful assistant for {{companyName}}.
+
+## Context
+- User: {{userName}}
+- Role: {{userRole}}
+
+## Guidelines
+
+1. Always greet the user by their name: {{userName}}
+2. Use the company context: {{companyContext}}
+3. Respond in the user's preferred language: {{preferredLanguage}}
+
+## Example Response
+
+Hello {{userName}}, welcome to {{companyName}}! How can I help you today?`,
+    language: 'markdown',
+    highlightVariables: true,
+    className: 'w-[600px]',
+  },
+};
+
+export const MarkdownWithoutVariables: Story = {
+  args: {
+    value: `# Simple Markdown
+
+This is a markdown editor without variable highlighting.
+
+## Features
+
+- Syntax highlighting for markdown
+- Code blocks support
+- Line wrapping enabled
+
+\`\`\`javascript
+const greeting = "Hello, World!";
+console.log(greeting);
+\`\`\`
+
+Regular text continues here.`,
+    language: 'markdown',
+    highlightVariables: false,
+    className: 'w-[600px]',
   },
 };

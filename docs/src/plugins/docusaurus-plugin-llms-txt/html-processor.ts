@@ -12,8 +12,23 @@ import type { Root as MdastRoot } from 'mdast'
 
 import { handleCodeBlock } from './code-block-handler'
 import { createLinkHandler } from './link-handler'
+import { isAdmonition, handleAdmonition } from './admonition-handler'
+import {
+  isTabsContainer,
+  handleTabsContainer,
+  isDetails,
+  handleDetails,
+  isCardGrid,
+  handleCardGrid,
+  isCardGridItems,
+  handleCardGridItems,
+  isPropertiesTable,
+  handlePropertiesTable,
+} from './component-handlers'
 import { extractMetadata, selectContent, removeUnwantedElements, type PageMetadata } from './content-extractor'
 import type { ResolvedOptions } from './options'
+import type { State } from 'hast-util-to-mdast'
+import type { BlockContent, DefinitionContent } from 'mdast'
 
 export interface ProcessedPage {
   metadata: PageMetadata
@@ -24,6 +39,76 @@ export interface ProcessedPage {
 // Reusable HTML parser - created once, used for all files
 const htmlParser = unified().use(rehypeParse, { fragment: false })
 
+/**
+ * Custom handler for div elements
+ * Checks for special div types (admonitions, tabs, card grids, properties tables) and handles them appropriately
+ */
+function handleDiv(state: State, node: Element): BlockContent | Array<BlockContent | DefinitionContent> | undefined {
+  // Check if this is an admonition
+  if (isAdmonition(node)) {
+    return handleAdmonition(state, node)
+  }
+
+  // Check if this is a tabs container
+  if (isTabsContainer(node)) {
+    return handleTabsContainer(state, node)
+  }
+
+  // Check if this is a card grid (Reference Cards with card__grid class)
+  if (isCardGrid(node)) {
+    return handleCardGrid(state, node)
+  }
+
+  // Check if this is a CardGrid items container (grid with data-slot=card)
+  if (isCardGridItems(node)) {
+    return handleCardGridItems(state, node)
+  }
+
+  // Check if this is a PropertiesTable
+  if (isPropertiesTable(node)) {
+    return handlePropertiesTable(state, node)
+  }
+
+  // For regular divs, process children and return them (default behavior)
+  const children: Array<BlockContent | DefinitionContent> = []
+  for (const child of node.children) {
+    const result = state.one(child, node)
+    if (result) {
+      if (Array.isArray(result)) {
+        children.push(...(result as Array<BlockContent | DefinitionContent>))
+      } else {
+        children.push(result as BlockContent | DefinitionContent)
+      }
+    }
+  }
+  return children
+}
+
+/**
+ * Custom handler for details elements
+ */
+function handleDetailsElement(
+  state: State,
+  node: Element,
+): BlockContent | Array<BlockContent | DefinitionContent> | undefined {
+  if (isDetails(node)) {
+    return handleDetails(state, node)
+  }
+  // Shouldn't reach here, but fallback to processing children
+  const children: Array<BlockContent | DefinitionContent> = []
+  for (const child of node.children) {
+    const result = state.one(child, node)
+    if (result) {
+      if (Array.isArray(result)) {
+        children.push(...(result as Array<BlockContent | DefinitionContent>))
+      } else {
+        children.push(result as BlockContent | DefinitionContent)
+      }
+    }
+  }
+  return children
+}
+
 // Processor factory - creates a new processor for the given options
 function createProcessor(options: ResolvedOptions) {
   const linkHandler = createLinkHandler({ siteUrl: options.siteUrl, excludeRoutes: options.excludeRoutes })
@@ -32,6 +117,8 @@ function createProcessor(options: ResolvedOptions) {
       handlers: {
         pre: handleCodeBlock,
         a: linkHandler,
+        div: handleDiv,
+        details: handleDetailsElement,
       },
     })
     .use(remarkGfm)
