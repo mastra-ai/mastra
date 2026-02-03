@@ -12,7 +12,7 @@ import { OPERATOR_LABELS, OPERATORS } from './types';
 export const RuleOperatorSelect: React.FC<RuleOperatorSelectProps> = ({ value, onChange, className }) => {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={cn('min-w-[120px] text-neutral6', className)} size="sm">
+      <SelectTrigger className={cn('min-w-[120px] text-neutral6 bg-surface4', className)} size="sm">
         <SelectValue placeholder="Select operator" />
       </SelectTrigger>
       <SelectContent>

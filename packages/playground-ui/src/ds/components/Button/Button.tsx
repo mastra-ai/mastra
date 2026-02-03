@@ -16,7 +16,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const sizeClasses = {
-  sm: `${formElementSizes.sm} gap-0.5`,
+  sm: `${formElementSizes.sm} gap-1 text-ui-sm`,
   md: `${formElementSizes.md} gap-1`,
   lg: `${formElementSizes.lg} gap-2`,
 };

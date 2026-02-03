@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import { AgentCMSBlocks } from './agent-cms-blocks';
 import { TooltipProvider } from '@/ds/components/Tooltip';
+import { complexSchema } from '@/lib/rule-engine/components/fixtures';
 
 const meta: Meta<typeof AgentCMSBlocks> = {
   title: 'Domain/Agents/AgentCMSBlocks',
@@ -25,7 +26,7 @@ const InteractiveExample = () => {
   return (
     <div className="w-[500px]">
       <TooltipProvider>
-        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." />
+        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." schema={complexSchema} />
       </TooltipProvider>
 
       <div className="mt-4 p-3 bg-surface2 rounded-lg">
@@ -46,7 +47,12 @@ const EmptyExample = () => {
   return (
     <div className="w-[500px]">
       <TooltipProvider>
-        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Add your first content block..." />
+        <AgentCMSBlocks
+          items={items}
+          onChange={setItems}
+          placeholder="Add your first content block..."
+          schema={complexSchema}
+        />
       </TooltipProvider>
     </div>
   );
@@ -62,7 +68,7 @@ const SingleBlockExample = () => {
   return (
     <div className="w-[500px]">
       <TooltipProvider>
-        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." />
+        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." schema={complexSchema} />
       </TooltipProvider>
     </div>
   );
