@@ -8,12 +8,8 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   safelyParseJSON,
   TABLE_SPANS,
-  TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
 } from '@mastra/core/storage';
-
-// Clickhouse doesn't support observational memory, but we need to satisfy the TABLE_NAMES type
-const TABLE_OBSERVATIONAL_MEMORY_LOCAL = 'mastra_observational_memory' as const;
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
@@ -26,10 +22,8 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   // keeping the row with the highest updatedAt value. Combined with ORDER BY (traceId, spanId),
   // this provides eventual uniqueness for the (traceId, spanId) composite key.
   [TABLE_SPANS]: `ReplacingMergeTree(updatedAt)`,
-  [TABLE_AGENTS]: `ReplacingMergeTree()`,
+  mastra_agents: `ReplacingMergeTree()`,
   [TABLE_AGENT_VERSIONS]: `MergeTree()`,
-  // Observational memory is not supported by Clickhouse - this is a placeholder to satisfy types
-  [TABLE_OBSERVATIONAL_MEMORY_LOCAL]: `MergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

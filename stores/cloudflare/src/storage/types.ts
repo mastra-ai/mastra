@@ -102,9 +102,6 @@ export function isWorkersConfig(config: CloudflareStoreConfig): config is Cloudf
   return 'bindings' in config;
 }
 
-// Cloudflare doesn't support observational memory, but we need to satisfy the TABLE_NAMES type
-const TABLE_OBSERVATIONAL_MEMORY_LOCAL = 'mastra_observational_memory' as const;
-
 export type RecordTypes = {
   [TABLE_THREADS]: StorageThreadType;
   [TABLE_MESSAGES]: MastraDBMessage;
@@ -115,8 +112,6 @@ export type RecordTypes = {
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
   [TABLE_AGENT_VERSIONS]: AgentVersion;
-  // Observational memory is not supported by Cloudflare - this is a placeholder to satisfy types
-  [TABLE_OBSERVATIONAL_MEMORY_LOCAL]: never;
 };
 
 export type ListOptions = {

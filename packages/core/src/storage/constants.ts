@@ -13,11 +13,7 @@ export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
 export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
 
-/**
- * Core table names that all storage adapters must implement.
- * Does NOT include optional/experimental tables like observational memory.
- */
-export type CORE_TABLE_NAMES =
+export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
   | typeof TABLE_MESSAGES
   | typeof TABLE_THREADS
@@ -27,12 +23,6 @@ export type CORE_TABLE_NAMES =
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
   | typeof TABLE_AGENT_VERSIONS;
-
-/**
- * All table names including optional/experimental tables.
- * Use CORE_TABLE_NAMES for required table mappings.
- */
-export type TABLE_NAMES = CORE_TABLE_NAMES | typeof TABLE_OBSERVATIONAL_MEMORY;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -156,8 +146,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
 };
 
 /**
- * Schema definitions for all tables.
- * Includes both core tables and optional tables like observational memory.
+ * Schema definitions for all core tables.
  */
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
@@ -222,5 +211,12 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+};
+
+/**
+ * Schema for the observational memory table.
+ * Exported separately as OM is optional and not part of TABLE_NAMES.
+ */
+export const OBSERVATIONAL_MEMORY_TABLE_SCHEMA = {
   [TABLE_OBSERVATIONAL_MEMORY]: OBSERVATIONAL_MEMORY_SCHEMA,
 };

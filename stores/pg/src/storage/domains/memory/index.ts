@@ -97,7 +97,7 @@ export class MemoryPG extends MemoryStorage {
     const omSchema = (TABLE_SCHEMAS as Record<string, any>)[OM_TABLE];
     if (omSchema) {
       await this.#db.createTable({
-        tableName: OM_TABLE,
+        tableName: OM_TABLE as any,
         schema: omSchema,
       });
     }

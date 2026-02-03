@@ -60,7 +60,7 @@ export class MemoryLibSQL extends MemoryStorage {
     const omSchema = (TABLE_SCHEMAS as Record<string, any>)[OM_TABLE];
     if (omSchema) {
       await this.#db.createTable({
-        tableName: OM_TABLE,
+        tableName: OM_TABLE as any,
         schema: omSchema,
       });
     }
@@ -84,7 +84,7 @@ export class MemoryLibSQL extends MemoryStorage {
     await this.#db.deleteData({ tableName: TABLE_THREADS });
     await this.#db.deleteData({ tableName: TABLE_RESOURCES });
     if (OM_TABLE) {
-      await this.#db.deleteData({ tableName: OM_TABLE });
+      await this.#db.deleteData({ tableName: OM_TABLE as any });
     }
   }
 

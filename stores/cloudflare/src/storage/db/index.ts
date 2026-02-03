@@ -9,12 +9,12 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type { StorageColumn, CORE_TABLE_NAMES } from '@mastra/core/storage';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import type { CloudflareDomainConfig, ListOptions, RecordTypes } from '../types';
 
 export interface CloudflareKVDBConfig {
-  bindings?: Record<CORE_TABLE_NAMES, KVNamespace>;
+  bindings?: Record<TABLE_NAMES, KVNamespace>;
   namespacePrefix?: string;
   client?: Cloudflare;
   accountId?: string;
@@ -67,7 +67,7 @@ export class CloudflareKVDB extends MastraBase {
     this.accountId = config.accountId;
   }
 
-  private getBinding(tableName: CORE_TABLE_NAMES) {
+  private getBinding(tableName: TABLE_NAMES) {
     if (!this.bindings) {
       throw new Error(`Cannot use Workers API binding for ${tableName}: Store initialized with REST API configuration`);
     }
@@ -76,7 +76,7 @@ export class CloudflareKVDB extends MastraBase {
     return binding;
   }
 
-  getKey<T extends CORE_TABLE_NAMES>(tableName: T, record: Record<string, string>): string {
+  getKey<T extends TABLE_NAMES>(tableName: T, record: Record<string, string>): string {
     const prefix = this.namespacePrefix ? `${this.namespacePrefix}:` : '';
     switch (tableName) {
       case TABLE_THREADS:
@@ -105,7 +105,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  private getSchemaKey(tableName: CORE_TABLE_NAMES): string {
+  private getSchemaKey(tableName: TABLE_NAMES): string {
     const prefix = this.namespacePrefix ? `${this.namespacePrefix}:` : '';
     return `${prefix}schema:${tableName}`;
   }
@@ -229,7 +229,7 @@ export class CloudflareKVDB extends MastraBase {
     return namespaceId;
   }
 
-  private async getNamespaceId(tableName: CORE_TABLE_NAMES): Promise<string> {
+  private async getNamespaceId(tableName: TABLE_NAMES): Promise<string> {
     const prefix = this.namespacePrefix ? `${this.namespacePrefix}_` : '';
 
     try {
@@ -240,7 +240,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  private async getNamespaceValue(tableName: CORE_TABLE_NAMES, key: string) {
+  private async getNamespaceValue(tableName: TABLE_NAMES, key: string) {
     try {
       if (this.bindings) {
         const binding = this.getBinding(tableName);
@@ -264,7 +264,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  async getKV(tableName: CORE_TABLE_NAMES, key: string): Promise<any> {
+  async getKV(tableName: TABLE_NAMES, key: string): Promise<any> {
     try {
       const text = await this.getNamespaceValue(tableName, key);
       return this.safeParse(text);
@@ -274,7 +274,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  private async getTableSchema(tableName: CORE_TABLE_NAMES): Promise<Record<string, StorageColumn> | null> {
+  private async getTableSchema(tableName: TABLE_NAMES): Promise<Record<string, StorageColumn> | null> {
     try {
       const schemaKey = this.getSchemaKey(tableName);
       return await this.getKV(tableName, schemaKey);
@@ -394,7 +394,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  async insert({ tableName, record }: { tableName: CORE_TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
       const key = this.getKey(tableName, record);
       const processedRecord = { ...record } as RecordTypes[TABLE_NAMES];
@@ -415,7 +415,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  async load<R>({ tableName, keys }: { tableName: CORE_TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     try {
       const key = this.getKey(tableName, keys as Partial<RecordTypes[typeof tableName]>);
       const data = await this.getKV(tableName, key);
@@ -475,7 +475,7 @@ export class CloudflareKVDB extends MastraBase {
     value,
     metadata,
   }: {
-    tableName: CORE_TABLE_NAMES;
+    tableName: TABLE_NAMES;
     key: string;
     value: string;
     metadata?: any;
@@ -508,7 +508,7 @@ export class CloudflareKVDB extends MastraBase {
     value,
     metadata,
   }: {
-    tableName: CORE_TABLE_NAMES;
+    tableName: TABLE_NAMES;
     key: string;
     value: any;
     metadata?: any;
@@ -525,7 +525,7 @@ export class CloudflareKVDB extends MastraBase {
     tableName,
     schema,
   }: {
-    tableName: CORE_TABLE_NAMES;
+    tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
     try {
@@ -551,7 +551,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  async clearTable({ tableName }: { tableName: CORE_TABLE_NAMES }): Promise<void> {
+  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       const keys = await this.listKV(tableName);
       if (keys.length > 0) {
@@ -572,7 +572,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  async dropTable({ tableName }: { tableName: CORE_TABLE_NAMES }): Promise<void> {
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       const keys = await this.listKV(tableName);
       if (keys.length > 0) {
@@ -593,7 +593,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  async listNamespaceKeys(tableName: CORE_TABLE_NAMES, options?: ListOptions) {
+  async listNamespaceKeys(tableName: TABLE_NAMES, options?: ListOptions) {
     try {
       if (this.bindings) {
         const binding = this.getBinding(tableName);
@@ -626,7 +626,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  private async deleteNamespaceValue(tableName: CORE_TABLE_NAMES, key: string) {
+  private async deleteNamespaceValue(tableName: TABLE_NAMES, key: string) {
     if (this.bindings) {
       const binding = this.getBinding(tableName);
       await binding.delete(key);
@@ -638,7 +638,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  async deleteKV(tableName: CORE_TABLE_NAMES, key: string): Promise<void> {
+  async deleteKV(tableName: TABLE_NAMES, key: string): Promise<void> {
     try {
       await this.deleteNamespaceValue(tableName, key);
     } catch (error: any) {
@@ -647,7 +647,7 @@ export class CloudflareKVDB extends MastraBase {
     }
   }
 
-  async listKV(tableName: CORE_TABLE_NAMES, options?: ListOptions): Promise<Array<{ name: string }>> {
+  async listKV(tableName: TABLE_NAMES, options?: ListOptions): Promise<Array<{ name: string }>> {
     try {
       return await this.listNamespaceKeys(tableName, options);
     } catch (error: any) {
