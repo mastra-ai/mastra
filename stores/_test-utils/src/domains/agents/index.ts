@@ -212,6 +212,10 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           metadata: { key2: 'updated', key3: 'value3' },
         });
 
+        const refreshed = await agentsStorage.getAgentById({ id: agent.id });
+        expect(refreshed?.metadata?.key2).toBe('updated');
+        expect(refreshed?.metadata?.key3).toBe('value3');
+
         // Note: For InMemory adapter, metadata is MERGED
         // For DB adapters (PG, MongoDB, LibSQL), metadata is REPLACED
         // This test will need to be adapter-specific or check both behaviors
