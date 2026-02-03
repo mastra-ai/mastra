@@ -27,9 +27,6 @@
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*"
@@ -43,5 +40,12 @@
     "typescript": "^5.3.3",
     "vitest": "catalog:",
     "zod": "^3.25.76"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }
