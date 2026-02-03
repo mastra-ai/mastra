@@ -238,7 +238,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Delete all messages with the matching thread_id
       const messagesTable = await this.client.openTable(TABLE_MESSAGES);
-      await messagesTable.delete(`thread_id = '${threadId}'`);
+      await messagesTable.delete(`thread_id = '${this.escapeSql(threadId)}'`);
     } catch (error: any) {
       throw new MastraError(
         {
@@ -439,14 +439,16 @@ export class StoreMemoryLance extends MemoryStorage {
         // Get all unique thread IDs from include items
         const includeThreadIds = [
           ...new Set(
-            include.map(item => item.threadId || (Array.isArray(threadId) ? threadId[0] : threadId)).filter(Boolean),
+            include
+              .map(item => item.threadId || (Array.isArray(threadId) ? threadId[0] : threadId))
+              .filter((t): t is string => !!t),
           ),
         ];
 
         // Fetch all messages from all relevant threads
         const allThreadMessages: any[] = [];
         for (const tid of includeThreadIds) {
-          const threadQuery = table.query().where(`thread_id = '${tid}'`);
+          const threadQuery = table.query().where(`thread_id = '${this.escapeSql(tid)}'`);
           let threadRecords = await threadQuery.toArray();
           allThreadMessages.push(...threadRecords);
         }

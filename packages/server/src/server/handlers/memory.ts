@@ -197,6 +197,7 @@ async function getOMConfigFromAgent(
 ): Promise<{
   enabled: boolean;
   scope?: 'thread' | 'resource';
+  shareTokenBudget?: boolean;
   messageTokens?: number | { min: number; max: number };
   observationTokens?: number | { min: number; max: number };
   observationModel?: string;
@@ -221,6 +222,7 @@ async function getOMConfigFromAgent(
       return {
         enabled: true,
         scope: resolvedConfig.scope || 'resource',
+        shareTokenBudget: resolvedConfig.shareTokenBudget,
         messageTokens: resolvedConfig.observation?.messageTokens,
         observationTokens: resolvedConfig.reflection?.observationTokens,
         observationModel: resolvedConfig.observation?.model,
@@ -233,6 +235,7 @@ async function getOMConfigFromAgent(
     return {
       enabled: true,
       scope: processorConfig.scope || 'resource',
+      shareTokenBudget: processorConfig.shareTokenBudget,
       messageTokens: processorConfig.observation?.messageTokens,
       observationTokens: processorConfig.reflection?.observationTokens,
       observationModel: undefined,

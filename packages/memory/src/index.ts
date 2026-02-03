@@ -1649,6 +1649,7 @@ Notes:
             messageTokens: omConfig.observation.messageTokens,
             modelSettings: omConfig.observation.modelSettings,
             maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
+            providerOptions: omConfig.observation.providerOptions,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -1656,6 +1657,7 @@ Notes:
             model: omConfig.reflection.model,
             observationTokens: omConfig.reflection.observationTokens,
             modelSettings: omConfig.reflection.modelSettings,
+            providerOptions: omConfig.reflection.providerOptions,
           }
         : undefined,
     });

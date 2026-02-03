@@ -369,6 +369,7 @@ export const memoryStatusResponseSchema = z.object({
 const observationalMemoryConfigSchema = z.object({
   enabled: z.boolean(),
   scope: z.enum(['thread', 'resource']).optional(),
+  shareTokenBudget: z.boolean().optional(),
   messageTokens: z.union([z.number(), z.object({ min: z.number(), max: z.number() })]).optional(),
   observationTokens: z.union([z.number(), z.object({ min: z.number(), max: z.number() })]).optional(),
   observationModel: z.string().optional(),

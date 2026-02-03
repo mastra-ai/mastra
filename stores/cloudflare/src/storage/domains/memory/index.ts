@@ -813,7 +813,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         {
           id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
+          category: ErrorCategory.USER,
           details: { threadId: Array.isArray(threadId) ? JSON.stringify(threadId) : String(threadId ?? '') },
         },
         new Error('threadId must be a non-empty string or array of non-empty strings'),
