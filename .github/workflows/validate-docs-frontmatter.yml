@@ -22,13 +22,9 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v5
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22.13.0'
-          cache: 'npm'
-          cache-dependency-path: docs/package-lock.json
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Validate frontmatter
         working-directory: ./docs
-        run: npx tsx scripts/validate-frontmatter.ts
+        run: pnpm dlx tsx scripts/validate-frontmatter.ts
