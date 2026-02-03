@@ -15,7 +15,7 @@ import { SectionHeader } from '@/domains/cms';
 
 import { LLMProviders, LLMModels } from '@/domains/llm';
 
-import type { AgentFormValues } from '../agent-edit/form-validation';
+import type { AgentFormValues } from './utils/form-validation';
 import { ToolsSection, WorkflowsSection, AgentsSection, ScorersSection } from './sections';
 import { VariableDialog } from './variable-dialog';
 

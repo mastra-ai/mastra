@@ -7,7 +7,7 @@ import { WorkflowIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import type { AgentFormValues } from '../../agent-edit/form-validation';
+import type { AgentFormValues } from '../utils/form-validation';
 
 interface EntityConfig {
   description?: string;

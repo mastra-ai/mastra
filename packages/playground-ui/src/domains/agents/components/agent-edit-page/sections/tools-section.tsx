@@ -7,7 +7,7 @@ import { ToolsIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import type { AgentFormValues } from '../../agent-edit/form-validation';
+import type { AgentFormValues } from '../utils/form-validation';
 
 interface EntityConfig {
   description?: string;

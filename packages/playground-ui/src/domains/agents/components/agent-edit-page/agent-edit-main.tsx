@@ -6,7 +6,7 @@ import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 import { SectionHeader } from '@/domains/cms';
 
-import type { AgentFormValues } from '../agent-edit/form-validation';
+import type { AgentFormValues } from './utils/form-validation';
 
 interface AgentEditMainProps {
   form: UseFormReturn<AgentFormValues>;
