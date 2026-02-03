@@ -7,8 +7,8 @@
  * @see https://e2b.dev/docs
  */
 
+import type { IMastraLogger } from '@mastra/core/logger';
 import type {
-  WorkspaceSandbox,
   SandboxInfo,
   ExecuteCommandOptions,
   CommandResult,
@@ -20,9 +20,9 @@ import type {
 import { BaseSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
+
 import { createDefaultMountableTemplate } from './utils/template';
 import type { TemplateSpec } from './utils/template';
-import type { IMastraLogger } from '@mastra/core/logger';
 
 // =============================================================================
 // Mount Configuration Types

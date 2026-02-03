@@ -4,7 +4,8 @@
  * A filesystem implementation backed by Google Cloud Storage.
  */
 
-import { Storage, Bucket } from '@google-cloud/storage';
+import { Storage } from '@google-cloud/storage';
+import type { Bucket } from '@google-cloud/storage';
 
 import type {
   WorkspaceFilesystem,
