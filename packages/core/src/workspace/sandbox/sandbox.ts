@@ -30,7 +30,7 @@ import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
 import type { Lifecycle, ProviderStatus } from '../lifecycle';
 
-import type { MountManager } from './mount-manager';
+import { MountManager } from './mount-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 // =============================================================================
@@ -137,23 +137,13 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
 /**
  * Base sandbox class for all sandbox providers.
  *
- * For mounting support, providers should:
- * 1. Add `override readonly mounts: MountManager` (makes it non-optional)
- * 2. Create MountManager in constructor
- * 3. Implement `mount()` and `unmount()` methods
+ * MountManager is automatically created if the subclass implements `mount()`.
+ * Use `override readonly mounts: MountManager` to get non-optional typing.
  *
  * @example
  * ```typescript
  * class E2BSandbox extends BaseSandbox {
- *   override readonly mounts: MountManager;
- *
- *   constructor() {
- *     super({ name: 'E2BSandbox' });
- *     this.mounts = new MountManager({
- *       mount: this.mount.bind(this),
- *       logger: this.logger,
- *     });
- *   }
+ *   override readonly mounts: MountManager;  // Non-optional type
  *
  *   async mount(filesystem, mountPath) { ... }
  *   async unmount(mountPath) { ... }
@@ -169,10 +159,19 @@ export abstract class BaseSandbox extends MastraBase implements WorkspaceSandbox
   abstract readonly provider: string;
   abstract status: ProviderStatus;
 
-  /** Mount manager - override with non-optional type if sandbox supports mounting */
+  /** Mount manager - automatically created if subclass implements mount() */
   readonly mounts?: MountManager;
 
   constructor(options: { name: string }) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
+
+    // Automatically create MountManager if subclass implements mount()
+    const mountFn = (this as unknown as WorkspaceSandbox).mount;
+    if (mountFn) {
+      (this as { mounts?: MountManager }).mounts = new MountManager({
+        mount: mountFn.bind(this),
+        logger: this.logger,
+      });
+    }
   }
 }

@@ -17,7 +17,8 @@ import type {
   FilesystemMountConfig,
   ProviderStatus,
 } from '@mastra/core/workspace';
-import { BaseSandbox, MountManager, SandboxNotReadyError } from '@mastra/core/workspace';
+import type { MountManager } from '@mastra/core/workspace';
+import { BaseSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
 
@@ -126,7 +127,7 @@ export class E2BSandbox extends BaseSandbox {
   private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
   private readonly configuredRuntimes: SandboxRuntime[];
-  override readonly mounts: MountManager; // Non-optional override
+  declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
 
   /** Resolved template ID after building (if needed) */
   private _resolvedTemplateId?: string;
@@ -146,12 +147,6 @@ export class E2BSandbox extends BaseSandbox {
     this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
     this.configuredRuntimes = options.runtimes ?? ['node', 'python', 'bash'];
-
-    // Create mount manager for tracking filesystem mounts
-    this.mounts = new MountManager({
-      mount: this.mount.bind(this),
-      logger: this.logger,
-    });
 
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
