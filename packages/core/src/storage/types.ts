@@ -1,6 +1,8 @@
 import type { z } from 'zod';
+import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
-import type { MastraDBMessage, StorageThreadType } from '../memory/types';
+import type { ScoringSamplingConfig } from '../evals/types';
+import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
 import { getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
@@ -242,12 +244,69 @@ export type ThreadSortDirection = 'ASC' | 'DESC';
  */
 export interface StorageScorerConfig {
   /** Sampling configuration for this scorer */
-  sampling?: {
-    type: 'ratio' | 'count';
-    rate?: number;
-    count?: number;
-  };
+  sampling?: ScoringSamplingConfig;
 }
+
+/**
+ * Model configuration stored in agent snapshots.
+ */
+export interface StorageModelConfig {
+  /** Model provider (e.g., 'openai', 'anthropic') */
+  provider: string;
+  /** Model name (e.g., 'gpt-4o', 'claude-3-opus') */
+  name: string;
+  /** Temperature for generation */
+  temperature?: number;
+  /** Top-p sampling parameter */
+  topP?: number;
+  /** Frequency penalty */
+  frequencyPenalty?: number;
+  /** Presence penalty */
+  presencePenalty?: number;
+  /** Maximum completion tokens */
+  maxCompletionTokens?: number;
+  /** Additional provider-specific options */
+  [key: string]: unknown;
+}
+
+/**
+ * Default options stored in agent snapshots.
+ * Based on AgentExecutionOptionsBase but omitting non-serializable properties.
+ *
+ * Non-serializable properties that are omitted:
+ * - Callbacks (onStepFinish, onFinish, onChunk, onError, onAbort, prepareStep)
+ * - Runtime objects (requestContext, abortSignal, tracingContext)
+ * - Functions and processor instances (inputProcessors, outputProcessors, clientTools, scorers)
+ * - Tools/toolsets (contain functions, stored separately as references)
+ * - Complex types (context, memory, instructions, system, stopWhen)
+ */
+export type StorageDefaultOptions = Omit<
+  AgentExecutionOptionsBase<any>,
+  // Callback functions
+  | 'onStepFinish'
+  | 'onFinish'
+  | 'onChunk'
+  | 'onError'
+  | 'onAbort'
+  | 'prepareStep'
+  // Runtime objects
+  | 'abortSignal'
+  | 'requestContext'
+  | 'tracingContext'
+  // Functions and processor instances
+  | 'inputProcessors'
+  | 'outputProcessors'
+  | 'clientTools'
+  | 'scorers'
+  | 'toolsets'
+  // Complex types
+  | 'context' // ModelMessage includes complex content types (images, files)
+  | 'memory' // AgentMemoryOption might contain runtime memory instances
+  | 'instructions' // SystemMessage can be arrays or complex message objects
+  | 'system' // SystemMessage can be arrays or complex message objects
+  | 'stopWhen' // StopCondition is a complex union type from AI SDK
+  | 'providerOptions' // ProviderOptions includes provider-specific types from external packages
+>;
 
 /**
  * Agent version snapshot type containing ALL agent configuration fields.
@@ -261,11 +320,11 @@ export interface StorageAgentSnapshotType {
   /** System instructions/prompt */
   instructions: string;
   /** Model configuration (provider, name, etc.) */
-  model: Record<string, unknown>;
+  model: StorageModelConfig;
   /** Array of tool keys to resolve from Mastra's tool registry */
   tools?: string[];
   /** Default options for generate/stream calls */
-  defaultOptions?: Record<string, unknown>;
+  defaultOptions?: StorageDefaultOptions;
   /** Array of workflow keys to resolve from Mastra's workflow registry */
   workflows?: string[];
   /** Array of agent keys to resolve from Mastra's agent registry */
@@ -275,12 +334,12 @@ export interface StorageAgentSnapshotType {
    * Format: "provider_toolkitSlug_toolSlug" (e.g., "composio_hackernews_HACKERNEWS_GET_FRONTPAGE")
    */
   integrationTools?: string[];
-  /** Input processor configurations */
-  inputProcessors?: Record<string, unknown>[];
-  /** Output processor configurations */
-  outputProcessors?: Record<string, unknown>[];
+  /** Array of processor keys to resolve from Mastra's processor registry */
+  inputProcessors?: string[];
+  /** Array of processor keys to resolve from Mastra's processor registry */
+  outputProcessors?: string[];
   /** Memory configuration object */
-  memory?: Record<string, unknown>;
+  memory?: SerializedMemoryConfig;
   /** Scorer keys with optional sampling config, to resolve from Mastra's scorer registry */
   scorers?: Record<string, StorageScorerConfig>;
 }
@@ -335,6 +394,8 @@ export type StorageUpdateAgentInput = {
   metadata?: Record<string, unknown>;
   /** FK to agent_versions.id - the currently active version */
   activeVersionId?: string;
+  /** Agent status: 'draft' or 'published' */
+  status?: string;
 } & Partial<StorageAgentSnapshotType>;
 
 export type StorageListAgentsInput = {
