@@ -10,7 +10,6 @@ import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
 import type { Workflow } from '../workflows';
-import type { Workspace } from '../workspace/workspace';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
 
@@ -117,11 +116,6 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
    * Use this to implement retry limits within your processor.
    */
   retryCount: number;
-  /**
-   * Workspace available for this step. When provided, processors can access
-   * workspace.filesystem and workspace.sandbox for file operations and command execution.
-   */
-  workspace?: Workspace;
 }
 
 export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 'systemMessages' | 'abort'>;
@@ -155,11 +149,6 @@ export type ProcessInputStepResult = {
    * Use this to implement retry limits within your processor.
    */
   retryCount?: number;
-  /**
-   * Workspace to use for this step. When provided, this workspace will be passed to tool
-   * execution context, allowing tools to access workspace.filesystem and workspace.sandbox.
-   */
-  workspace?: Workspace;
 };
 
 export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & { model?: MastraLanguageModel };
