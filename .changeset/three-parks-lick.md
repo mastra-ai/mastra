@@ -1,11 +1,10 @@
 ---
 '@mastra/core': minor
-'@mastra/server': minor
 ---
 
-Added workspace registration and tool context support. Workspaces can now be registered with Mastra for O(1) lookup via `addWorkspace()`, `getWorkspaceById()`, and `listWorkspaces()`. Tools can access the workspace through `context.workspace` during execution, enabling filesystem and sandbox operations. Supports dynamic workspace configuration via agent config functions.
+Added workspace registration and tool context support.
 
-**Workspace Registration**
+**Workspace Registration** - Register workspaces with Mastra for O(1) lookup via `addWorkspace()`, `getWorkspaceById()`, and `listWorkspaces()`. Agent workspaces are auto-registered when adding agents.
 
 ```typescript
 const mastra = new Mastra({
@@ -17,7 +16,7 @@ mastra.addWorkspace(workspace);
 const ws = mastra.getWorkspaceById('my-workspace');
 ```
 
-**Tool Workspace Access**
+**Tool Workspace Access** - Tools can access the workspace through `context.workspace` during execution, enabling filesystem and sandbox operations.
 
 ```typescript
 const myTool = createTool({
@@ -30,12 +29,11 @@ const myTool = createTool({
 });
 ```
 
-**Dynamic Workspace Configuration**
+**Dynamic Workspace Configuration** - Workspace can be configured dynamically via agent config functions, following the same pattern as dynamic model configuration.
 
 ```typescript
 const agent = new Agent({
   workspace: ({ mastra, requestContext }) => {
-    // Return workspace dynamically based on context
     return mastra.getWorkspaceById(requestContext?.get('workspaceId'));
   },
 });
