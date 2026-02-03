@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Icon } from '@/ds/icons';
 import { AgentCMSBlockRules } from './agent-cms-block-rules';
 import { useState } from 'react';
+import { CodeEditor } from '@/ds/components/CodeEditor';
 
 export interface AgentCMSBlockProps {
   index: number;
@@ -45,11 +46,13 @@ const AgentCMSBlockContent = ({ placeholder, dragHandleProps, onDelete, schema }
           )}
         </div>
 
-        <Textarea
+        <CodeEditor
           value={item}
-          onChange={e => setItem(e.target.value)}
+          onChange={setItem}
           placeholder={placeholder}
           className="border-none rounded-none text-neutral6"
+          language="markdown"
+          highlightVariables
         />
         <AgentCMSBlockRules schema={schema} rules={rules} onChange={setRules} />
       </div>
