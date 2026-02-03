@@ -2,43 +2,16 @@ import type { AssistantContent, CoreMessage, ToolContent, UserContent } from '@i
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodObject } from 'zod';
 
+import type { AgentExecutionOptions } from '../agent/agent.types';
+import type { AgentConfig } from '../agent/types';
 export type { MastraDBMessage } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
-import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
-
-// Dynamic model types for Observational Memory (identical to Agent's model types)
-type ObservationalMemoryDynamicModel = ({
-  requestContext,
-  mastra,
-}: {
-  requestContext: RequestContext;
-  mastra?: Mastra;
-}) => Promise<MastraModelConfig> | MastraModelConfig;
-
-type ObservationalMemoryModelWithRetries = {
-  id?: string;
-  model: MastraModelConfig | ObservationalMemoryDynamicModel;
-  maxRetries?: number;
-  enabled?: boolean;
-};
-
-/**
- * Model configuration for Observational Memory Observer/Reflector agents.
- * Supports the same patterns as Agent's model configuration:
- * - Static model config (string or object)
- * - Dynamic function that receives requestContext
- * - Array of models with retry configuration
- */
-export type ObservationalMemoryModelConfig =
-  | MastraModelConfig
-  | ObservationalMemoryDynamicModel
-  | ObservationalMemoryModelWithRetries[];
 
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { MastraLanguageModel };
@@ -94,28 +67,36 @@ export type ThreadMastraMetadata = {
   om?: ThreadOMMetadata;
 };
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Helper to get OM metadata from a thread's metadata object.
- * Returns undefined if not present.
+ * Returns undefined if not present or if the structure is invalid.
  */
 export function getThreadOMMetadata(threadMetadata?: Record<string, unknown>): ThreadOMMetadata | undefined {
   if (!threadMetadata) return undefined;
-  const mastra = threadMetadata.mastra as ThreadMastraMetadata | undefined;
-  return mastra?.om;
+  const mastra = threadMetadata.mastra;
+  if (!isPlainObject(mastra)) return undefined;
+  const om = mastra.om;
+  if (!isPlainObject(om)) return undefined;
+  return om as ThreadOMMetadata;
 }
 
 /**
  * Helper to set OM metadata on a thread's metadata object.
  * Creates the nested structure if it doesn't exist.
  * Returns a new metadata object (does not mutate the original).
+ * Safely handles cases where existing mastra/om values are not objects.
  */
 export function setThreadOMMetadata(
   threadMetadata: Record<string, unknown> | undefined,
   omMetadata: ThreadOMMetadata,
 ): Record<string, unknown> {
   const existing = threadMetadata ?? {};
-  const existingMastra = (existing.mastra as ThreadMastraMetadata) ?? {};
-  const existingOM = existingMastra.om ?? {};
+  const existingMastra = isPlainObject(existing.mastra) ? existing.mastra : {};
+  const existingOM = isPlainObject(existingMastra.om) ? existingMastra.om : {};
 
   return {
     ...existing,
@@ -392,22 +373,9 @@ export type SemanticRecall = {
 
 /**
  * Model settings for Observer/Reflector agents in Observational Memory.
+ * Uses the same settings as Agent.generate() modelSettings (temperature, maxOutputTokens, topP, etc.).
  */
-export interface ObservationalMemoryModelSettings {
-  /**
-   * Temperature for generation.
-   * Lower values produce more consistent output.
-   * @default 0.3
-   */
-  temperature?: number;
-
-  /**
-   * Maximum output tokens.
-   * High value to prevent truncation of observations.
-   * @default 100000
-   */
-  maxOutputTokens?: number;
-}
+export type ObservationalMemoryModelSettings = AgentExecutionOptions['modelSettings'];
 
 /**
  * Configuration for the observation step in Observational Memory.
@@ -423,7 +391,7 @@ export interface ObservationalMemoryObservationConfig {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: ObservationalMemoryModelConfig;
+  model?: AgentConfig['model'];
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -479,7 +447,7 @@ export interface ObservationalMemoryReflectionConfig {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: ObservationalMemoryModelConfig;
+  model?: AgentConfig['model'];
 
   /**
    * Token count of observations that triggers reflection.
@@ -555,7 +523,7 @@ export interface ObservationalMemoryOptions {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: ObservationalMemoryModelConfig;
+  model?: AgentConfig['model'];
 
   /**
    * Observation step configuration for extracting observations from conversations.

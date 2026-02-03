@@ -204,11 +204,11 @@ async function getOMConfigFromAgent(
   reflectionModel?: string;
 } | null> {
   try {
-    // Guard against older @mastra/core versions that don't have findProcessor
-    if (typeof agent.findProcessor !== 'function') {
+    // Guard against older @mastra/core versions that don't have resolveProcessorById
+    if (typeof agent.resolveProcessorById !== 'function') {
       return null;
     }
-    const omProcessor = await agent.findProcessor('observational-memory', requestContext);
+    const omProcessor = await agent.resolveProcessorById('observational-memory', requestContext);
     if (!omProcessor) {
       return null;
     }

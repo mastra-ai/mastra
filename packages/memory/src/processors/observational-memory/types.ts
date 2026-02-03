@@ -1,26 +1,5 @@
-import type { MastraModelConfig } from '@mastra/core/llm';
-import type { Mastra } from '@mastra/core/mastra';
-import type { RequestContext } from '@mastra/core/request-context';
-
-// This is used in place of DynamicArgument so that model router IDE autocomplete works.
-// Without this TS doesn't understand the function/string union type from DynamicArgument
-// (Copied from @mastra/core/agent/types.ts to keep identical)
-type DynamicModel = ({
-  requestContext,
-  mastra,
-}: {
-  requestContext: RequestContext;
-  mastra?: Mastra;
-}) => Promise<MastraModelConfig> | MastraModelConfig;
-
-type ModelWithRetries = {
-  id?: string;
-  model: MastraModelConfig | DynamicModel;
-  maxRetries?: number; //defaults to 0
-  enabled?: boolean; //defaults to true
-};
-
-export type ObservationalMemoryModelConfig = MastraModelConfig | DynamicModel | ModelWithRetries[];
+import type { AgentConfig } from '@mastra/core/agent';
+import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 
 /**
  * Threshold can be a simple number or a dynamic range.
@@ -43,23 +22,10 @@ export type ThresholdRange = {
 };
 
 /**
- * Model settings for Observer/Reflector agents
+ * Model settings for Observer/Reflector agents.
+ * Re-exported from @mastra/core/memory for convenience.
  */
-export interface ModelSettings {
-  /**
-   * Temperature for generation.
-   * Lower values produce more consistent output.
-   * @default 0.3
-   */
-  temperature?: number;
-
-  /**
-   * Maximum output tokens.
-   * High value to prevent truncation of observations.
-   * @default 100000
-   */
-  maxOutputTokens?: number;
-}
+export type ModelSettings = ObservationalMemoryModelSettings;
 
 /**
  * Google-specific provider options
@@ -95,7 +61,7 @@ export interface ObservationConfig {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: ObservationalMemoryModelConfig;
+  model?: AgentConfig['model'];
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -142,7 +108,7 @@ export interface ReflectionConfig {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: ObservationalMemoryModelConfig;
+  model?: AgentConfig['model'];
 
   /**
    * Token count of observations that triggers reflection.
@@ -154,7 +120,7 @@ export interface ReflectionConfig {
 
   /**
    * Model settings for the Reflector agent.
-   * @default { temperature: 0.3, maxOutputTokens: 100_000 }
+   * @default { temperature: 0, maxOutputTokens: 100_000 }
    */
   modelSettings?: ModelSettings;
 

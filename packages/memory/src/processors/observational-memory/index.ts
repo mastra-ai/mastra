@@ -20,13 +20,7 @@ export {
 } from './observational-memory';
 
 // Types
-export type {
-  ObservationConfig,
-  ReflectionConfig,
-  ObserverResult,
-  ReflectorResult,
-  ObservationalMemoryModelConfig,
-} from './types';
+export type { ObservationConfig, ReflectionConfig, ObserverResult, ReflectorResult } from './types';
 
 // Observer Agent
 export {

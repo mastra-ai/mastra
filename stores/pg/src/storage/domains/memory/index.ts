@@ -10,9 +10,15 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
-  TABLE_OBSERVATIONAL_MEMORY,
   createStorageErrorId,
 } from '@mastra/core/storage';
+
+/**
+ * Local constant for the observational memory table name.
+ * Defined locally to avoid a static import that crashes on older @mastra/core
+ * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
+ */
+const OM_TABLE = 'mastra_observational_memory' as const;
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -63,7 +69,7 @@ function inPlaceholders(count: number, startIndex = 1): string {
 }
 
 export class MemoryPG extends MemoryStorage {
-  readonly supportsObservationalMemory = !!TABLE_OBSERVATIONAL_MEMORY;
+  readonly supportsObservationalMemory = true;
 
   #db: PgDB;
   #schema: string;
@@ -71,12 +77,7 @@ export class MemoryPG extends MemoryStorage {
   #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
-  static readonly MANAGED_TABLES = [
-    TABLE_THREADS,
-    TABLE_MESSAGES,
-    TABLE_RESOURCES,
-    ...(TABLE_OBSERVATIONAL_MEMORY ? [TABLE_OBSERVATIONAL_MEMORY] : []),
-  ] as const;
+  static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, OM_TABLE] as const;
 
   constructor(config: PgDomainConfig) {
     super();
@@ -92,10 +93,11 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
-    if (TABLE_OBSERVATIONAL_MEMORY) {
+    const omSchema = (TABLE_SCHEMAS as Record<string, any>)[OM_TABLE];
+    if (omSchema) {
       await this.#db.createTable({
-        tableName: TABLE_OBSERVATIONAL_MEMORY,
-        schema: TABLE_SCHEMAS[TABLE_OBSERVATIONAL_MEMORY],
+        tableName: OM_TABLE,
+        schema: omSchema,
       });
     }
     await this.#db.alterTable({
@@ -103,10 +105,10 @@ export class MemoryPG extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
-    if (TABLE_OBSERVATIONAL_MEMORY) {
+    if (omSchema) {
       // Create index on lookupKey for efficient OM queries
       const omTableName = getTableName({
-        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
       await this.#db.client.none(`CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`);
@@ -1413,7 +1415,7 @@ export class MemoryPG extends MemoryStorage {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const tableName = getTableName({
-        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
       const result = await this.#db.client.oneOrNone(
@@ -1443,7 +1445,7 @@ export class MemoryPG extends MemoryStorage {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const tableName = getTableName({
-        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
       const result = await this.#db.client.manyOrNone(
@@ -1491,7 +1493,7 @@ export class MemoryPG extends MemoryStorage {
       };
 
       const tableName = getTableName({
-        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
       const nowStr = now.toISOString();
@@ -1548,7 +1550,7 @@ export class MemoryPG extends MemoryStorage {
     try {
       const now = new Date();
       const tableName = getTableName({
-        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
 
@@ -1629,7 +1631,7 @@ export class MemoryPG extends MemoryStorage {
       };
 
       const tableName = getTableName({
-        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
       const nowStr = now.toISOString();
@@ -1686,7 +1688,7 @@ export class MemoryPG extends MemoryStorage {
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
     try {
       const tableName = getTableName({
-        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
       const nowStr = new Date().toISOString();
@@ -1723,7 +1725,7 @@ export class MemoryPG extends MemoryStorage {
   async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
     try {
       const tableName = getTableName({
-        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
       const nowStr = new Date().toISOString();
@@ -1761,7 +1763,7 @@ export class MemoryPG extends MemoryStorage {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const tableName = getTableName({
-        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE "lookupKey" = $1`, [lookupKey]);
@@ -1781,7 +1783,7 @@ export class MemoryPG extends MemoryStorage {
   async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
     try {
       const tableName = getTableName({
-        indexName: TABLE_OBSERVATIONAL_MEMORY,
+        indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
       const nowStr = new Date().toISOString();
