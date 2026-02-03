@@ -22,6 +22,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
+    "build:docs": "cd ../../docs && pnpm build",
     "prepare-docs": "tsx ./scripts/prepare-docs.ts",
     "build:cli": "tsup --silent --config tsup.config.ts",
     "pretest": "pnpm turbo build --filter @mastra/mcp-docs-server",

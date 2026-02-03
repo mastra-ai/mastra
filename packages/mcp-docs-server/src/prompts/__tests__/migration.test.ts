@@ -289,7 +289,7 @@ describe('migrationPromptMessages', () => {
           extra: {} as MCPRequestHandlerExtra,
         });
 
-        const hasToolReference = messages.some(m => m.content.text.includes('mastraMigration'));
+        const hasToolReference = messages.some(m => (m.content.text as string).includes('mastraMigration'));
         expect(hasToolReference).toBe(true);
       }
     });
@@ -303,7 +303,7 @@ describe('migrationPromptMessages', () => {
       const userMessage = messages.find(m => m.role === 'user');
       // Should contain numbered steps or clear instructions
       const hasStructuredInstructions =
-        userMessage?.content.text.includes('1.') || userMessage?.content.text.includes('step');
+        (userMessage?.content.text as string).includes('1.') || (userMessage?.content.text as string).includes('step');
 
       expect(hasStructuredInstructions).toBe(true);
     });

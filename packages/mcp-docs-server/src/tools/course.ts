@@ -32,7 +32,7 @@ const courseDir = fromPackageRoot('.docs/course');
 
 // Define the introduction prompt shown only when a user registers for the course
 const introductionPrompt = `
-This is a course to help a new user learn about Mastra, the open-source AI Agent framework built in Typescript.
+This is a course to help a new user learn about Mastra, the open-source AI Agent framework built in TypeScript.
 The following is the introduction content, please provide this text to the user EXACTLY as written below. Do not provide any other text or instructions:
 
 # Welcome to the Mastra Course!
@@ -61,14 +61,13 @@ Type "start mastra course" and let's get started with your first lesson!
 
 // Define the prompt that wraps each lesson step
 const lessonPrompt = `
-  This is a course to help a new user learn about Mastra, the open-source AI Agent framework built in Typescript.
+  This is a course to help a new user learn about Mastra, the open-source AI Agent framework built in TypeScript.
   Please help the user through the steps of the course by walking them through the content and following the course
   to write the initial version of the code for them. The goal is to show them how the code works and explain it as they go
   as the course goes on. Each lesson is broken up into steps. You should return the content of the step and ask the user
   to move to the next step when they are ready. If the step contains instructions to write code, you should write the code
   for the user when possible. You should always briefly explain the step before writing the code. Please ensure to 
-  return any text in markdown blockquotes exactly as written in your response. When the user ask about their course progress or course status,
-  make sure to include the course status url in your response. This is important.
+  return any text in markdown blockquotes exactly as written in your response. When the user ask about their course progress or course status, make sure to include the course status URL in your response. This is important.
 `;
 
 // Define the prompt wrapper for each course step

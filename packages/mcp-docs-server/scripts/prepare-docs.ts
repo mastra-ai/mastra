@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fromPackageRoot, fromRepoRoot, log } from '../src/utils';
 
 const BUILD_DIR = fromRepoRoot('docs/build');
+const MANIFEST_PATH = path.join(BUILD_DIR, 'llms-manifest.json');
 const COURSE_SOURCE = fromRepoRoot('docs/src/course');
 const DOCS_DEST = fromPackageRoot('.docs');
 const COURSE_DEST = path.join(DOCS_DEST, 'course');
@@ -10,17 +11,22 @@ const COURSE_DEST = path.join(DOCS_DEST, 'course');
 // Top-level categories that should keep their index.md files
 const TOP_LEVEL_CATEGORIES = ['docs', 'guides', 'models', 'reference'];
 
-// Walk directory and find all llms.txt files
-async function* walkLlmsTxtFiles(dir: string): AsyncGenerator<string> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      yield* walkLlmsTxtFiles(fullPath);
-    } else if (entry.isFile() && entry.name === 'llms.txt') {
-      yield fullPath;
-    }
-  }
+interface ManifestEntry {
+  path: string;
+  title: string;
+  category: string;
+  folderPath: string;
+}
+
+interface Manifest {
+  version: string;
+  generatedAt: string;
+  packages: Record<string, ManifestEntry[]>;
+}
+
+async function loadManifest(): Promise<Manifest> {
+  const content = await fs.readFile(MANIFEST_PATH, 'utf-8');
+  return JSON.parse(content) as Manifest;
 }
 
 // Copy a directory recursively (for course content which uses .md files directly)
@@ -65,7 +71,7 @@ function getDestinationPath(relativePath: string): string {
 }
 
 async function copyLlmsTxtFiles() {
-  log('Scanning build directory for llms.txt files...');
+  log('Loading manifest and copying documentation files...');
 
   // Clean up existing .docs directory
   try {
@@ -78,16 +84,17 @@ async function copyLlmsTxtFiles() {
   // Create destination directory
   await fs.mkdir(DOCS_DEST, { recursive: true });
 
+  // Load manifest
+  const manifest = await loadManifest();
+  const allEntries = Object.values(manifest.packages).flat();
+
   let copiedCount = 0;
   const errors: string[] = [];
 
-  // Walk the build directory and copy all llms.txt files
-  for await (const sourcePath of walkLlmsTxtFiles(BUILD_DIR)) {
-    // Get relative path from build dir (e.g., docs/agents/overview/llms.txt)
-    const relativePath = path.relative(BUILD_DIR, sourcePath);
-
-    // Convert to destination path based on the rules
-    const destRelativePath = getDestinationPath(relativePath);
+  // Copy all files listed in the manifest
+  for (const entry of allEntries) {
+    const sourcePath = path.join(BUILD_DIR, entry.path);
+    const destRelativePath = getDestinationPath(entry.path);
     const destPath = path.join(DOCS_DEST, destRelativePath);
 
     try {
@@ -98,7 +105,7 @@ async function copyLlmsTxtFiles() {
       await fs.copyFile(sourcePath, destPath);
       copiedCount++;
     } catch (error) {
-      const errorMsg = `Failed to copy ${relativePath}: ${error instanceof Error ? error.message : String(error)}`;
+      const errorMsg = `Failed to copy ${entry.path}: ${error instanceof Error ? error.message : String(error)}`;
       errors.push(errorMsg);
       log(`⚠️ ${errorMsg}`);
     }
