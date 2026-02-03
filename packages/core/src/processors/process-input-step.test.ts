@@ -1,9 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { IMastraLogger } from '../logger';
+import { LocalFilesystem } from '../workspace/filesystem';
+import { Workspace } from '../workspace/workspace';
 import { ProcessorRunner } from './runner';
 import type { Processor } from './index';
 
@@ -2031,6 +2036,232 @@ describe('processInputStep', () => {
       const allMessages = messageList.get.all.db();
       expect(allMessages.length).toBe(2);
       expect(allMessages[1].id).toBe('result-msg');
+    });
+  });
+
+  describe('workspace in processInputStep', () => {
+    let tempDir: string;
+
+    beforeEach(async () => {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'processor-workspace-test-'));
+    });
+
+    afterEach(async () => {
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
+
+    const createWorkspace = (id: string) => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      return new Workspace({
+        id,
+        name: `Test Workspace ${id}`,
+        filesystem,
+      });
+    };
+
+    it('should pass workspace to processInputStep', async () => {
+      const workspace = createWorkspace('test-workspace');
+      let capturedWorkspace: Workspace | undefined;
+
+      const workspaceProcessor: Processor = {
+        id: 'workspace-processor',
+        processInputStep: async args => {
+          capturedWorkspace = args.workspace;
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [workspaceProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('test message')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        workspace,
+      });
+
+      expect(capturedWorkspace).toBe(workspace);
+      expect(capturedWorkspace?.id).toBe('test-workspace');
+    });
+
+    it('should pass undefined workspace when not provided', async () => {
+      let capturedWorkspace: Workspace | undefined = undefined;
+      let wasCalled = false;
+
+      const workspaceProcessor: Processor = {
+        id: 'workspace-processor',
+        processInputStep: async args => {
+          wasCalled = true;
+          capturedWorkspace = args.workspace;
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [workspaceProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('test message')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        // No workspace provided
+      });
+
+      expect(wasCalled).toBe(true);
+      expect(capturedWorkspace).toBeUndefined();
+    });
+
+    it('should allow processor to return a different workspace', async () => {
+      const originalWorkspace = createWorkspace('original-workspace');
+      const newWorkspace = createWorkspace('new-workspace');
+
+      const workspaceSwapProcessor: Processor = {
+        id: 'workspace-swap-processor',
+        processInputStep: async args => {
+          // Processor receives original workspace and returns a different one
+          expect(args.workspace?.id).toBe('original-workspace');
+          return { workspace: newWorkspace };
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [workspaceSwapProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('test message')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        workspace: originalWorkspace,
+      });
+
+      // Result should contain the new workspace
+      expect(result.workspace).toBe(newWorkspace);
+      expect(result.workspace?.id).toBe('new-workspace');
+    });
+
+    it('should chain workspace through multiple processors', async () => {
+      const workspace1 = createWorkspace('workspace-1');
+      const workspace2 = createWorkspace('workspace-2');
+      const workspace3 = createWorkspace('workspace-3');
+      const capturedWorkspaces: (string | undefined)[] = [];
+
+      const processor1: Processor = {
+        id: 'processor-1',
+        processInputStep: async args => {
+          capturedWorkspaces.push(args.workspace?.id);
+          return { workspace: workspace2 };
+        },
+      };
+
+      const processor2: Processor = {
+        id: 'processor-2',
+        processInputStep: async args => {
+          capturedWorkspaces.push(args.workspace?.id);
+          return { workspace: workspace3 };
+        },
+      };
+
+      const processor3: Processor = {
+        id: 'processor-3',
+        processInputStep: async args => {
+          capturedWorkspaces.push(args.workspace?.id);
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor1, processor2, processor3],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('test message')], 'input');
+
+      const result = await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        workspace: workspace1,
+      });
+
+      // Each processor should see the workspace from the previous one
+      expect(capturedWorkspaces).toEqual(['workspace-1', 'workspace-2', 'workspace-3']);
+      // Final result should have workspace-3
+      expect(result.workspace?.id).toBe('workspace-3');
+    });
+
+    it('should allow processor to access workspace filesystem', async () => {
+      const workspace = createWorkspace('fs-workspace');
+      let filesystemAvailable = false;
+
+      const fsProcessor: Processor = {
+        id: 'fs-processor',
+        processInputStep: async args => {
+          filesystemAvailable = !!args.workspace?.filesystem;
+          // Write a test file to verify filesystem works
+          if (args.workspace?.filesystem) {
+            await args.workspace.filesystem.writeFile('processor-test.txt', 'Hello from processor!');
+          }
+          return {};
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [fsProcessor],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('test message')], 'input');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+        workspace,
+      });
+
+      expect(filesystemAvailable).toBe(true);
+
+      // Verify file was written
+      const filePath = path.join(tempDir, 'processor-test.txt');
+      const content = await fs.readFile(filePath, 'utf-8');
+      expect(content).toBe('Hello from processor!');
     });
   });
 });
