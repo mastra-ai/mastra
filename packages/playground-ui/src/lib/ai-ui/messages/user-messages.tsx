@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip
 import { useAttachmentSrc } from '../hooks/use-attachment-src';
 import { ImageEntry, PdfEntry, TxtEntry } from '../attachments/attachment-preview-dialog';
 
-
 export interface InMessageAttachmentProps {
   type: string;
   contentType?: string;
@@ -42,7 +41,11 @@ export const UserMessage = () => {
   const messageId = message?.id;
 
   return (
-    <MessagePrimitive.Root className="w-full flex items-end pb-4 pt-2 flex-col" data-message-id={messageId} data-message-index={message?.index}>
+    <MessagePrimitive.Root
+      className="w-full flex items-end pb-4 pt-2 flex-col"
+      data-message-id={messageId}
+      data-message-index={message?.index}
+    >
       {/* <UserActionBar /> */}
       <div className="max-w-[366px] px-5 py-3 text-neutral6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
         <MessagePrimitive.Parts

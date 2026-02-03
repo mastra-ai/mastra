@@ -8,7 +8,6 @@ import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
 
-
 /**
  * Content item type for assistant message content parts.
  */

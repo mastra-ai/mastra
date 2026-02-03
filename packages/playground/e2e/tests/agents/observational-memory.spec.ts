@@ -98,7 +98,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await expect(page.locator('h2')).toContainText('OM Agent');
 
       // ACT: Send a message to trigger the agent
-      const chatInput = page.locator('textarea[placeholder*=\"message\"]').first();
+      const chatInput = page.locator('textarea[placeholder*="message"]').first();
       await chatInput.fill('Hello, please help me with something');
       await chatInput.press('Enter');
 
@@ -164,8 +164,6 @@ test.describe('Observational Memory - Behavior Tests', () => {
       const observationMarker = threadWrapper.getByText(/Observed.*→.*tokens/i).first();
       await expect(observationMarker).toBeVisible({ timeout: 15000 });
     });
-
-
   });
 
   test.describe('Observation Persistence', () => {
@@ -206,14 +204,19 @@ test.describe('Observational Memory - Behavior Tests', () => {
 
       const urlAfterReload = page.url();
       console.log('URL after reload:', urlAfterReload);
-      
+
       // Wait for messages to load
       await page.waitForTimeout(3000);
       await page.screenshot({ path: 'test-results/persistence-after-reload.png' });
 
       // ASSERT: The observation marker should still be visible after reload
       // This verifies the data-om-* parts were persisted to storage
-      await expect(page.locator('[data-testid="thread-wrapper"]').getByText(/Observed.*→.*tokens/i).first()).toBeVisible({
+      await expect(
+        page
+          .locator('[data-testid="thread-wrapper"]')
+          .getByText(/Observed.*→.*tokens/i)
+          .first(),
+      ).toBeVisible({
         timeout: 10000,
       });
 

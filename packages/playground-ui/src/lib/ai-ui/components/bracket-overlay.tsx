@@ -157,13 +157,7 @@ export function BracketOverlay({ containerRef }: { containerRef: React.RefObject
         // Show only the hovered highlight, or show latest when nothing is hovered
         const isVisible = hoveredCycleId ? isHovered : isLatest;
 
-        return (
-          <HighlightBlock
-            key={highlight.cycleId}
-            highlight={highlight}
-            visible={isVisible}
-          />
-        );
+        return <HighlightBlock key={highlight.cycleId} highlight={highlight} visible={isVisible} />;
       })}
     </div>
   );
@@ -178,12 +172,12 @@ function findPreviousBadge(badges: HTMLElement[], currentIndex: number, omType: 
   for (let j = currentIndex - 1; j >= 0; j--) {
     const badge = badges[j];
     const badgeState = badge.getAttribute('data-om-state');
-    
+
     // Skip failed badges - they shouldn't be used as anchors
     if (badgeState === 'failed') {
       continue;
     }
-    
+
     if (omType === 'observation') {
       // Observations anchor to any previous non-failed badge
       return badge;

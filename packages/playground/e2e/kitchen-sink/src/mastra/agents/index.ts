@@ -131,6 +131,7 @@ const omTriggerTool = createTool({
 let count = 0;
 
 // Helper function to create a delayed readable stream
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createDelayedStream(chunks: Array<any>, delayMs: number = 10) {
   return new ReadableStream({
     async start(controller) {
@@ -175,6 +176,7 @@ export const weatherAgent = new Agent({
 
     return new aiTest.MockLanguageModelV2({
       doGenerate: async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chunk = fixtureData[count] as Array<any>;
 
         count++;
@@ -183,6 +185,7 @@ export const weatherAgent = new Agent({
         }
 
         // Extract text from fixture chunks
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const textChunks = chunk.filter((item: any) => item.type === 'text-delta').map((item: any) => item.delta);
         const text = textChunks.join('');
 
@@ -200,6 +203,7 @@ export const weatherAgent = new Agent({
         };
       },
       doStream: async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chunk = fixtureData[count] as Array<any>;
 
         count++;
@@ -251,7 +255,7 @@ Always use the test tool first before responding to the user.`,
     responseText: omResponseText,
     delayMs: 10,
   }),
-  tools: { 'test': omTriggerTool },
+  tools: { test: omTriggerTool },
   memory: omMemory,
 });
 
@@ -275,6 +279,6 @@ Always use the test tool first before responding to the user.`,
     responseText: omResponseText,
     delayMs: 10,
   }),
-  tools: { 'test': omTriggerTool },
+  tools: { test: omTriggerTool },
   memory: omAdaptiveMemory,
 });

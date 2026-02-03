@@ -99,7 +99,12 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   if (isStart) {
     const tokensToObserve = omData.tokensToObserve;
     return (
-      <div className="mb-3" data-om-badge={cycleId} data-om-state={state} data-om-type={isReflection ? "reflection" : "observation"}>
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+      >
         <div
           className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${bgColor} ${textColor} text-xs font-medium my-1`}
         >
@@ -138,7 +143,12 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
     };
 
     return (
-      <div className="mb-3" data-om-badge={cycleId} data-om-state={state} data-om-type={isReflection ? "reflection" : "observation"}>
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+      >
         <div className="my-1">
           <button
             onClick={handleToggle}
@@ -196,7 +206,11 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                     onClick={() => setIsTaskExpanded(!isTaskExpanded)}
                     className="flex items-center gap-1 text-[10px] font-medium text-foreground uppercase tracking-wide hover:opacity-80 transition-opacity"
                   >
-                    {isTaskExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                    {isTaskExpanded ? (
+                      <ChevronDown className="w-2.5 h-2.5" />
+                    ) : (
+                      <ChevronRight className="w-2.5 h-2.5" />
+                    )}
                     Current Task
                   </button>
                   {isTaskExpanded && (
@@ -237,7 +251,12 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
     const disconnectedLabel = isReflection ? 'Reflection interrupted' : 'Observation interrupted';
     const tokensToObserve = omData.tokensToObserve;
     return (
-      <div className="mb-3" data-om-badge={cycleId} data-om-state={state} data-om-type={isReflection ? "reflection" : "observation"}>
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+      >
         <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-yellow-500/10 text-yellow-600 text-xs font-medium my-1">
           <Unplug className="w-3 h-3" />
           <span>
@@ -253,7 +272,12 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
     const error = omData.error;
     const failedLabel = isReflection ? 'Reflection failed' : 'Observation failed';
     return (
-      <div className="mb-3" data-om-badge={cycleId} data-om-state={state} data-om-type={isReflection ? "reflection" : "observation"}>
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+      >
         <div className="my-1">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -276,7 +300,12 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
 
   // Unknown marker type - render generic
   return (
-    <div className="mb-3" data-om-badge={cycleId} data-om-state={state} data-om-type={isReflection ? "reflection" : "observation"}>
+    <div
+      className="mb-3"
+      data-om-badge={cycleId}
+      data-om-state={state}
+      data-om-type={isReflection ? 'reflection' : 'observation'}
+    >
       <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-500/10 text-gray-600 text-xs font-medium my-1">
         <Brain className="w-3 h-3" />
         <span>{toolName}</span>
