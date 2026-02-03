@@ -1,7 +1,8 @@
-import { X } from 'lucide-react';
+import { X, CircleCheck, CircleX, CircleAlert, Info } from 'lucide-react';
 import React from 'react';
 import { ExternalToast, toast as sonnerToast } from 'sonner';
 
+import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
 export { Toaster } from 'sonner';
@@ -9,17 +10,21 @@ export { Toaster } from 'sonner';
 const defaultOptions: ExternalToast = {
   duration: 5000,
   cancel: {
-    label: <X size={'14'} />,
+    label: (
+      <Icon>
+        <X />
+      </Icon>
+    ),
     onClick: () => {},
   },
   unstyled: true,
   classNames: {
     toast:
-      'bg-surface2 w-full backdrop-accent h-auto rounded-lg gap-2 border border p-4 flex items-start justify-between rounded-lg pointer-events-auto',
-    title: 'text-white font-semibold text-xs mb-1 -mt-1',
-    description: '!text-text text-sm !font-light',
+      'bg-surface3 w-full h-auto rounded-lg gap-2 border border-border1 px-3 py-2 flex items-center justify-between pointer-events-auto shadow-card [&>[data-content]]:flex-1',
+    title: 'text-xs font-medium text-neutral5',
+    description: 'text-xs text-neutral3',
     cancelButton:
-      '!bg-transparent !p-0 flex items-center justify-center !text-text opacity-50 hover:opacity-100 ml-4 shrink-0',
+      '!bg-transparent hover:!bg-surface2 !border-none !rounded-md !p-1.5 !m-0 !text-neutral3 hover:!text-neutral6 shrink-0 transition-all',
     actionButton: '!bg-white flex items-center justify-center font-medium !text-black order-last hover:opacity-80',
   },
 };
@@ -62,14 +67,16 @@ export const toast = (message: string | string[] | React.ReactNode, options: Ext
 toast.success = (message: string | string[], options: ExternalToast = {}) => {
   const successOptions: ExternalToast = {
     ...options,
+    icon: (
+      <Icon className="text-accent1 shrink-0">
+        <CircleCheck />
+      </Icon>
+    ),
     classNames: {
       ...options.classNames,
-      toast: cn(
-        'bg-green-950/20 border-green-900/50 dark:bg-green-950/20 dark:border-green-900/50',
-        options.classNames?.toast,
-      ),
-      title: cn('text-green-200 dark:text-green-200', options.classNames?.title),
-      description: cn('text-green-300 dark:text-green-300', options.classNames?.description),
+      toast: cn('bg-accent1Darker border-accent1/30 border-l-[3px] border-l-accent1', options.classNames?.toast),
+      title: cn('text-xs text-neutral5', options.classNames?.title),
+      description: cn('text-xs text-neutral4', options.classNames?.description),
     },
   };
 
@@ -83,11 +90,16 @@ toast.success = (message: string | string[], options: ExternalToast = {}) => {
 toast.error = (message: string | string[], options: ExternalToast = {}) => {
   const errorOptions: ExternalToast = {
     ...options,
+    icon: (
+      <Icon className="text-accent2 shrink-0">
+        <CircleX />
+      </Icon>
+    ),
     classNames: {
       ...options.classNames,
-      toast: cn('bg-red-950/20 border-red-900/50 dark:bg-red-950/20 dark:border-red-900/50', options.classNames?.toast),
-      title: cn('text-red-200 dark:text-red-200', options.classNames?.title),
-      description: cn('text-red-300 dark:text-red-300', options.classNames?.description),
+      toast: cn('bg-accent2Darker border-accent2/30 border-l-[3px] border-l-accent2', options.classNames?.toast),
+      title: cn('text-xs text-neutral5', options.classNames?.title),
+      description: cn('text-xs text-neutral4', options.classNames?.description),
     },
   };
 
@@ -101,14 +113,16 @@ toast.error = (message: string | string[], options: ExternalToast = {}) => {
 toast.warning = (message: string | string[], options: ExternalToast = {}) => {
   const warningOptions: ExternalToast = {
     ...options,
+    icon: (
+      <Icon className="text-accent6 shrink-0">
+        <CircleAlert />
+      </Icon>
+    ),
     classNames: {
       ...options.classNames,
-      toast: cn(
-        'bg-yellow-950/20 border-yellow-900/50 dark:bg-yellow-950/20 dark:border-yellow-900/50',
-        options.classNames?.toast,
-      ),
-      title: cn('text-yellow-200 dark:text-yellow-200', options.classNames?.title),
-      description: cn('text-yellow-300 dark:text-yellow-300', options.classNames?.description),
+      toast: cn('bg-accent6Darker border-accent6/30 border-l-[3px] border-l-accent6', options.classNames?.toast),
+      title: cn('text-xs text-neutral5', options.classNames?.title),
+      description: cn('text-xs text-neutral4', options.classNames?.description),
     },
   };
 
@@ -122,14 +136,16 @@ toast.warning = (message: string | string[], options: ExternalToast = {}) => {
 toast.info = (message: string | string[], options: ExternalToast = {}) => {
   const infoOptions: ExternalToast = {
     ...options,
+    icon: (
+      <Icon className="text-accent3 shrink-0">
+        <Info />
+      </Icon>
+    ),
     classNames: {
       ...options.classNames,
-      toast: cn(
-        'bg-blue-950/20 border-blue-900/50 dark:bg-blue-950/20 dark:border-blue-900/50',
-        options.classNames?.toast,
-      ),
-      title: cn('text-blue-200 dark:text-blue-200', options.classNames?.title),
-      description: cn('text-blue-300 dark:text-blue-300', options.classNames?.description),
+      toast: cn('bg-accent3Darker border-accent3/30 border-l-[3px] border-l-accent3', options.classNames?.toast),
+      title: cn('text-xs text-neutral5', options.classNames?.title),
+      description: cn('text-xs text-neutral4', options.classNames?.description),
     },
   };
 
