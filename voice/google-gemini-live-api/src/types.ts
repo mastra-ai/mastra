@@ -10,6 +10,7 @@ export type GeminiVoiceModel =
   | 'gemini-2.0-flash-exp-image-generation'
   | 'gemini-2.0-flash-live-001'
   | 'gemini-live-2.5-flash-preview-native-audio'
+  | 'gemini-live-2.5-flash-native-audio'
   | 'gemini-2.5-flash-exp-native-audio-thinking-dialog'
   | 'gemini-live-2.5-flash-preview'
   | 'gemini-2.6.flash-preview-tts';
