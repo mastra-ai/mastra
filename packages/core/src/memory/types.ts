@@ -607,18 +607,6 @@ export function isObservationalMemoryEnabled(
 }
 
 /**
- * Normalize a `boolean | ObservationalMemoryOptions` value to `ObservationalMemoryOptions`.
- * Returns `undefined` if disabled.
- */
-export function normalizeObservationalMemoryConfig(
-  config: boolean | ObservationalMemoryOptions | undefined,
-): ObservationalMemoryOptions | undefined {
-  if (!isObservationalMemoryEnabled(config)) return undefined;
-  if (config === true) return {};
-  return config;
-}
-
-/**
  * Configuration for memory behaviors and retrieval strategies.
  *
  * Controls three types of memory: conversation history (recent messages), semantic recall

@@ -6,19 +6,29 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
+import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 import type {
   MemoryConfig,
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
   MessageDeleteInput,
+  ObservationalMemoryOptions,
 } from '@mastra/core/memory';
-import {
-  MastraMemory,
-  extractWorkingMemoryContent,
-  removeWorkingMemoryTags,
-  normalizeObservationalMemoryConfig,
-} from '@mastra/core/memory';
+
+/**
+ * Normalize a `boolean | object` observational memory config.
+ * Returns the options object if enabled, undefined if disabled.
+ * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
+ */
+function normalizeObservationalMemoryConfig(
+  config: boolean | ObservationalMemoryOptions | undefined,
+): ObservationalMemoryOptions | undefined {
+  if (config === true) return {};
+  if (config === false || config === undefined) return undefined;
+  if (typeof config === 'object' && (config as ObservationalMemoryOptions).enabled === false) return undefined;
+  return config as ObservationalMemoryOptions;
+}
 import type {
   InputProcessor,
   InputProcessorOrWorkflow,
