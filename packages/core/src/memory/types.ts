@@ -6,6 +6,7 @@ import type { AgentExecutionOptions } from '../agent/agent.types';
 import type { AgentConfig } from '../agent/types';
 export type { MastraDBMessage } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
+import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage';
@@ -839,3 +840,51 @@ export type WorkingMemoryTemplate = {
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];
+
+/**
+ * Serialized memory configuration that can be stored in the database
+ * This is a subset of SharedMemoryConfig with serializable types only
+ */
+export type SerializedMemoryConfig = {
+  /**
+   * Vector database identifier. The vector instance should be registered
+   * with the Mastra instance to resolve from this ID.
+   * Set to false to disable vector search entirely.
+   */
+  vector?: string | false;
+
+  /**
+   * Configuration for memory behaviors, omitting WorkingMemory and threads
+   */
+  options?: {
+    /** Treat memory as read-only (no new messages stored) */
+    readOnly?: boolean;
+
+    /** Number of recent messages to include, or false to disable */
+    lastMessages?: number | false;
+
+    /** Semantic recall configuration */
+    semanticRecall?: boolean | SemanticRecall;
+
+    /** Title generation configuration (serialized form) */
+    generateTitle?:
+      | boolean
+      | {
+          /** Model ID in format provider/model-name */
+          model: ModelRouterModelId;
+          /** Custom instructions for title generation */
+          instructions?: string;
+        };
+  };
+
+  /**
+   * Embedding model ID in the format "provider/model"
+   * (e.g., "openai/text-embedding-3-small")
+   */
+  embedder?: EmbeddingModelId;
+
+  /**
+   * Options to pass to the embedder, omitting telemetry
+   */
+  embedderOptions?: Omit<MastraEmbeddingOptions, 'telemetry'>;
+};

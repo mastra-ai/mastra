@@ -552,8 +552,8 @@ export class MemoryPG extends MemoryStorage {
         SELECT ${selectColumns}
         FROM ${tableName} m
         WHERE m.thread_id = (SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx})
-          AND m."createdAt" <= (SELECT "createdAt" FROM ${tableName} WHERE id = $${paramIdx})
-        ORDER BY m."createdAt" DESC
+          AND COALESCE(m."createdAtZ", m."createdAt") <= (SELECT COALESCE("createdAtZ", "createdAt") FROM ${tableName} WHERE id = $${paramIdx})
+        ORDER BY COALESCE(m."createdAtZ", m."createdAt") DESC
         LIMIT $${paramIdx + 1}
       )`);
       params.push(id, withPreviousMessages + 1); // +1 to include the target message itself
@@ -566,8 +566,8 @@ export class MemoryPG extends MemoryStorage {
           SELECT ${selectColumns}
           FROM ${tableName} m
           WHERE m.thread_id = (SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx})
-            AND m."createdAt" > (SELECT "createdAt" FROM ${tableName} WHERE id = $${paramIdx})
-          ORDER BY m."createdAt" ASC
+            AND COALESCE(m."createdAtZ", m."createdAt") > (SELECT COALESCE("createdAtZ", "createdAt") FROM ${tableName} WHERE id = $${paramIdx})
+          ORDER BY COALESCE(m."createdAtZ", m."createdAt") ASC
           LIMIT $${paramIdx + 1}
         )`);
         params.push(id, withNextMessages);
@@ -718,13 +718,13 @@ export class MemoryPG extends MemoryStorage {
 
       if (filter?.dateRange?.start) {
         const startOp = filter.dateRange.startExclusive ? '>' : '>=';
-        conditions.push(`"createdAt" ${startOp} $${paramIndex++}`);
+        conditions.push(`COALESCE("createdAtZ", "createdAt") ${startOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.start);
       }
 
       if (filter?.dateRange?.end) {
         const endOp = filter.dateRange.endExclusive ? '<' : '<=';
-        conditions.push(`"createdAt" ${endOp} $${paramIndex++}`);
+        conditions.push(`COALESCE("createdAtZ", "createdAt") ${endOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.end);
       }
 
@@ -1391,11 +1391,11 @@ export class MemoryPG extends MemoryStorage {
 
         // Apply date filters
         if (options?.messageFilter?.startDate) {
-          messageQuery += ` AND "createdAt" >= $${paramIndex++}`;
+          messageQuery += ` AND COALESCE("createdAtZ", "createdAt") >= $${paramIndex++}`;
           messageParams.push(options.messageFilter.startDate);
         }
         if (options?.messageFilter?.endDate) {
-          messageQuery += ` AND "createdAt" <= $${paramIndex++}`;
+          messageQuery += ` AND COALESCE("createdAtZ", "createdAt") <= $${paramIndex++}`;
           messageParams.push(options.messageFilter.endDate);
         }
 
