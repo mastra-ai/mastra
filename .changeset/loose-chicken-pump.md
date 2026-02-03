@@ -13,7 +13,7 @@ Added [Standard Schema](https://github.com/standard-schema/standard-schema) supp
 **Example usage:**
 
 ```typescript
-import { toStandardSchema } from '@mastra/schema-compat/standard-schema';
+import { toStandardSchema } from '@mastra/schema-compat/schema';
 import { z } from 'zod';
 
 // Convert a Zod schema to Standard Schema
