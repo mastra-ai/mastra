@@ -2100,6 +2100,20 @@ export class Agent<
       });
       for (const [toolName, tool] of clientToolsForInput) {
         const { execute, ...rest } = tool;
+
+        this.logger.debug(`[Agent:${this.name}] - Processing client tool ${toolName}`, {
+          runId,
+          hasInputSchema: !!('inputSchema' in rest ? rest.inputSchema : (rest as any).parameters),
+          hasOutputSchema: !!('outputSchema' in rest && rest.outputSchema),
+          inputSchemaType: ('inputSchema' in rest ? rest.inputSchema : (rest as any).parameters)
+            ? typeof ('inputSchema' in rest ? rest.inputSchema : (rest as any).parameters)
+            : 'undefined',
+          outputSchemaType: ('outputSchema' in rest && rest.outputSchema)
+            ? typeof rest.outputSchema
+            : 'undefined',
+          hasExecute: !!execute,
+        });
+
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -2116,6 +2130,15 @@ export class Agent<
           requireApproval: (tool as any).requireApproval,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool', autoResumeSuspendedTools);
+
+        this.logger.debug(`[Agent:${this.name}] - Converted client tool ${toolName} to CoreTool`, {
+          runId,
+          hasParameters: !!(convertedToCoreTool as any).parameters,
+          parametersType: (convertedToCoreTool as any).parameters
+            ? typeof (convertedToCoreTool as any).parameters
+            : 'undefined',
+        });
+
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }

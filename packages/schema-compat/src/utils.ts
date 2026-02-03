@@ -69,6 +69,65 @@ export function isZodType(value: unknown): value is ZodType {
 }
 
 /**
+ * Checks if a value is a plain JSON Schema object.
+ *
+ * A plain JSON Schema is identified by:
+ * - Being an object
+ * - Having a 'type' property
+ * - NOT being a Zod schema (no _def or parse methods)
+ * - NOT being an AI SDK Schema (no jsonSchema property with nested structure)
+ *
+ * @param value - The value to check
+ * @returns True if the value is a plain JSON Schema object, false otherwise
+ *
+ * @example
+ * ```typescript
+ * const jsonSchema = { type: 'object', properties: { name: { type: 'string' } } };
+ * isPlainJSONSchema(jsonSchema); // true
+ *
+ * const zodSchema = z.object({ name: z.string() });
+ * isPlainJSONSchema(zodSchema); // false
+ * ```
+ */
+export function isPlainJSONSchema(value: unknown): value is JSONSchema7 {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  // Check it's not a Zod schema
+  if (isZodType(value)) {
+    return false;
+  }
+
+  // Check it's not an AI SDK Schema (which has a jsonSchema property)
+  if ('jsonSchema' in value && typeof (value as any).jsonSchema === 'object') {
+    return false;
+  }
+
+  // Check it has JSON Schema characteristics
+  // Must have a type property (string or array for union types)
+  if ('type' in value) {
+    const type = (value as any).type;
+    const validTypes = ['object', 'array', 'string', 'number', 'boolean', 'null', 'integer'];
+
+    if (typeof type === 'string' && validTypes.includes(type)) {
+      return true;
+    }
+
+    if (Array.isArray(type) && type.every(t => typeof t === 'string' && validTypes.includes(t))) {
+      return true;
+    }
+  }
+
+  // Also check for $schema which is common in JSON Schemas
+  if ('$schema' in value && typeof (value as any).$schema === 'string') {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Converts an AI SDK Schema or Zod schema to a Zod schema.
  *
  * If the input is already a Zod schema, it returns it unchanged.
