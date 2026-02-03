@@ -4,6 +4,8 @@
  * Stores session data in signed cookies. No server-side storage required.
  */
 
+import { createHmac } from 'node:crypto';
+
 import type { Session, ISessionProvider } from '../../interfaces';
 
 /**
@@ -206,20 +208,10 @@ export class CookieSessionProvider implements ISessionProvider {
   }
 
   /**
-   * Create HMAC signature.
+   * Create HMAC-SHA256 signature.
    */
   private sign(data: string): string {
-    // Simple HMAC-like signature using the secret
-    // In production, use a proper crypto library
-    let hash = 0;
-    const combined = this.secret + data + this.secret;
-
-    for (let i = 0; i < combined.length; i++) {
-      const char = combined.charCodeAt(i);
-      hash = ((hash << 5) - hash + char) | 0;
-    }
-
-    return Math.abs(hash).toString(36);
+    return createHmac('sha256', this.secret).update(data).digest('base64url');
   }
 
   /**
