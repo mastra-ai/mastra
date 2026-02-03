@@ -28,6 +28,8 @@ export {
   RESOURCES,
   ACTIONS,
   PERMISSIONS,
+  PERMISSION_PATTERNS,
+  P,
   isValidPermissionPattern,
   validatePermissions,
 } from './permissions.generated';
