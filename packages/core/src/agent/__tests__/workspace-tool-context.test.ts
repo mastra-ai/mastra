@@ -672,3 +672,12 @@ describe('Dynamic workspace configuration', () => {
     expect(capturedWorkspaceId).toBe('async-workspace');
   });
 });
+
+// Note: Processor workspace integration (passing workspace to/from processors) is not yet implemented.
+// The types (ProcessInputStepArgs.workspace, ProcessInputStepResult.workspace) were added to define
+// the interface, but the execution flow doesn't yet pass workspace to processors or handle
+// workspace returned from processors. This is a future enhancement.
+//
+// Current dynamic workspace support is via:
+// 1. Agent config function: workspace: ({ requestContext, mastra }) => Workspace
+// 2. prepareStep returning workspace (via PrepareStepResult.workspace type)
