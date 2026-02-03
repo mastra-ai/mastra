@@ -5,14 +5,15 @@ import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Icon } from '@/ds/icons/Icon';
-import { Plus, Upload } from 'lucide-react';
+import { Plus, Upload, FileJson } from 'lucide-react';
 import { useItemSelection } from '../../hooks/use-item-selection';
 import { exportItemsToCSV } from '../../utils/csv-export';
+import { exportItemsToJSON } from '../../utils/json-export';
 import { ItemsToolbar } from './items-toolbar';
 import { toast } from '@/lib/toast';
 import { format, isToday } from 'date-fns';
 
-type SelectionMode = 'idle' | 'export' | 'create-dataset' | 'delete';
+type SelectionMode = 'idle' | 'export' | 'export-json' | 'create-dataset' | 'delete';
 
 const itemsListColumns = [
   { name: 'input', label: 'Input', size: '1fr' },
@@ -28,6 +29,7 @@ export interface DatasetItemListProps {
   isLoading: boolean;
   onAddClick: () => void;
   onImportClick?: () => void;
+  onImportJsonClick?: () => void;
   onBulkDeleteClick?: (itemIds: string[]) => void;
   onCreateDatasetClick?: (items: DatasetItem[]) => void;
   datasetName?: string;
@@ -53,6 +55,7 @@ export function DatasetItemList({
   isLoading,
   onAddClick,
   onImportClick,
+  onImportJsonClick,
   onBulkDeleteClick,
   onCreateDatasetClick,
   datasetName,
@@ -95,6 +98,15 @@ export function DatasetItemList({
         console.error('CSV export error:', error);
       }
       handleCancelSelection(); // Clear immediately for export
+    } else if (selectionMode === 'export-json') {
+      try {
+        exportItemsToJSON(selectedItems, `${datasetName || 'dataset'}-items.json`);
+        toast.success(`Exported ${selection.selectedCount} items to JSON`);
+      } catch (error) {
+        toast.error('Failed to export items to JSON');
+        console.error('JSON export error:', error);
+      }
+      handleCancelSelection(); // Clear immediately for export
     } else if (selectionMode === 'create-dataset') {
       onCreateDatasetClick?.(selectedItems);
       // Don't clear yet - parent increments clearSelectionTrigger after dialog closes
@@ -109,7 +121,13 @@ export function DatasetItemList({
   }
 
   if (items.length === 0) {
-    return <EmptyDatasetItemList onAddClick={onAddClick} onImportClick={onImportClick} />;
+    return (
+      <EmptyDatasetItemList
+        onAddClick={onAddClick}
+        onImportClick={onImportClick}
+        onImportJsonClick={onImportJsonClick}
+      />
+    );
   }
 
   const isSelectionActive = selectionMode !== 'idle';
@@ -137,7 +155,9 @@ export function DatasetItemList({
       <ItemsToolbar
         onAddClick={onAddClick}
         onImportClick={onImportClick ?? (() => {})}
+        onImportJsonClick={onImportJsonClick ?? (() => {})}
         onExportClick={() => setSelectionMode('export')}
+        onExportJsonClick={() => setSelectionMode('export-json')}
         onCreateDatasetClick={() => setSelectionMode('create-dataset')}
         onDeleteClick={() => setSelectionMode('delete')}
         hasItems={items.length > 0}
@@ -249,9 +269,10 @@ function DatasetItemListSkeleton() {
 interface EmptyDatasetItemListProps {
   onAddClick: () => void;
   onImportClick?: () => void;
+  onImportJsonClick?: () => void;
 }
 
-function EmptyDatasetItemList({ onAddClick, onImportClick }: EmptyDatasetItemListProps) {
+function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: EmptyDatasetItemListProps) {
   return (
     <div className="flex h-full items-center justify-center py-12">
       <EmptyState
@@ -272,6 +293,14 @@ function EmptyDatasetItemList({ onAddClick, onImportClick }: EmptyDatasetItemLis
                   <Upload />
                 </Icon>
                 Import CSV
+              </Button>
+            )}
+            {onImportJsonClick && (
+              <Button size="lg" variant="outline" onClick={onImportJsonClick}>
+                <Icon>
+                  <FileJson />
+                </Icon>
+                Import JSON
               </Button>
             )}
           </div>

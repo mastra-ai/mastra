@@ -7,6 +7,7 @@ import { ItemsMasterDetail } from './items-master-detail';
 import { RunHistory } from './run-history';
 import { DatasetHeader } from './dataset-header';
 import { CSVImportDialog } from '../csv-import';
+import { JSONImportDialog } from '../json-import';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
 import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
 import { AlertDialog } from '@/ds/components/AlertDialog';
@@ -37,6 +38,7 @@ export function DatasetDetail({
 }: DatasetDetailProps) {
   const [activeTab, setActiveTab] = useState<TabValue>('items');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importJsonDialogOpen, setImportJsonDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [itemsForCreate, setItemsForCreate] = useState<DatasetItem[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -148,6 +150,7 @@ export function DatasetDetail({
                   onItemClose={handleItemClose}
                   onAddClick={onAddItemClick ?? (() => {})}
                   onImportClick={() => setImportDialogOpen(true)}
+                  onImportJsonClick={() => setImportJsonDialogOpen(true)}
                   onBulkDeleteClick={handleBulkDeleteClick}
                   onCreateDatasetClick={handleCreateDatasetClick}
                   datasetName={dataset?.name}
@@ -168,6 +171,9 @@ export function DatasetDetail({
 
       {/* CSV Import Dialog */}
       <CSVImportDialog datasetId={datasetId} open={importDialogOpen} onOpenChange={setImportDialogOpen} />
+
+      {/* JSON Import Dialog */}
+      <JSONImportDialog datasetId={datasetId} open={importJsonDialogOpen} onOpenChange={setImportJsonDialogOpen} />
 
       {/* Create Dataset From Items Dialog */}
       <CreateDatasetFromItemsDialog

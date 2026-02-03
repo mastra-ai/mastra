@@ -20,7 +20,9 @@ export interface ItemsToolbarProps {
   // Normal mode actions
   onAddClick: () => void;
   onImportClick: () => void;
+  onImportJsonClick: () => void;
   onExportClick: () => void;
+  onExportJsonClick: () => void;
   onCreateDatasetClick: () => void;
   onDeleteClick: () => void;
   hasItems: boolean;
@@ -30,16 +32,17 @@ export interface ItemsToolbarProps {
   selectedCount: number;
   onExecuteAction: () => void;
   onCancelSelection: () => void;
-  selectionMode: 'idle' | 'export' | 'create-dataset' | 'delete';
+  selectionMode: 'idle' | 'export' | 'export-json' | 'create-dataset' | 'delete';
 }
 
 interface ActionsMenuProps {
   onExportClick: () => void;
+  onExportJsonClick: () => void;
   onCreateDatasetClick: () => void;
   onDeleteClick: () => void;
 }
 
-function ActionsMenu({ onExportClick, onCreateDatasetClick, onDeleteClick }: ActionsMenuProps) {
+function ActionsMenu({ onExportClick, onExportJsonClick, onCreateDatasetClick, onDeleteClick }: ActionsMenuProps) {
   const [open, setOpen] = useState(false);
 
   const handleAction = (callback: () => void) => {
@@ -65,7 +68,18 @@ function ActionsMenu({ onExportClick, onCreateDatasetClick, onDeleteClick }: Act
             <Icon>
               <Download className="w-4 h-4" />
             </Icon>
-            Select and Export Items
+            Select and Export Items as CSV
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2"
+            onClick={() => handleAction(onExportJsonClick)}
+          >
+            <Icon>
+              <FileJson className="w-4 h-4" />
+            </Icon>
+            Select and Export Items as JSON
           </Button>
           <Button
             variant="ghost"
@@ -104,7 +118,9 @@ function ActionsMenu({ onExportClick, onCreateDatasetClick, onDeleteClick }: Act
 export function ItemsToolbar({
   onAddClick,
   onImportClick,
+  onImportJsonClick,
   onExportClick,
+  onExportJsonClick,
   onCreateDatasetClick,
   onDeleteClick,
   hasItems,
@@ -123,6 +139,7 @@ export function ItemsToolbar({
         <ButtonsGroup>
           <Button variant="standard" size="default" disabled={selectedCount === 0} onClick={onExecuteAction}>
             {selectionMode === 'export' && 'Export CSV'}
+            {selectionMode === 'export-json' && 'Export JSON'}
             {selectionMode === 'create-dataset' && 'Create Dataset'}
             {selectionMode === 'delete' && 'Delete'}
           </Button>
@@ -150,17 +167,33 @@ export function ItemsToolbar({
           </PopoverTrigger>
 
           <PopoverContent>
-            <Button variant="ghost" size="sm" className="w-full justify-start gap-2" onClick={onImportClick}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start gap-2"
+              onClick={() => {
+                onImportClick();
+                setOpen(false);
+              }}
+            >
               <Icon>
                 <Upload />
               </Icon>
               Import CSV
             </Button>
-            <Button variant="ghost" size="sm" className="w-full justify-start gap-2" disabled>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start gap-2"
+              onClick={() => {
+                onImportJsonClick();
+                setOpen(false);
+              }}
+            >
               <Icon>
                 <FileJson />
               </Icon>
-              Import JSON (Coming Soon)
+              Import JSON
             </Button>
           </PopoverContent>
         </Popover>
@@ -169,6 +202,7 @@ export function ItemsToolbar({
       {hasItems && (
         <ActionsMenu
           onExportClick={onExportClick}
+          onExportJsonClick={onExportJsonClick}
           onCreateDatasetClick={onCreateDatasetClick}
           onDeleteClick={onDeleteClick}
         />

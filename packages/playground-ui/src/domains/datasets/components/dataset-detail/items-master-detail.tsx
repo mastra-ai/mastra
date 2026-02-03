@@ -16,6 +16,7 @@ export interface ItemsMasterDetailProps {
   // Pass-through props for ItemsList
   onAddClick: () => void;
   onImportClick?: () => void;
+  onImportJsonClick?: () => void;
   onBulkDeleteClick?: (itemIds: string[]) => void;
   onCreateDatasetClick?: (items: DatasetItem[]) => void;
   datasetName?: string;

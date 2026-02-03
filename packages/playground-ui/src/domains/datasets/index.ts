@@ -11,9 +11,14 @@ export * from './hooks/use-csv-parser';
 export * from './utils/csv-validation';
 export * from './utils/json-cell-parser';
 
+// JSON import utilities
+export * from './hooks/use-json-parser';
+export * from './utils/json-validation';
+
 // Selection and export utilities
 export * from './hooks/use-item-selection';
 export * from './utils/csv-export';
+export * from './utils/json-export';
 
 // Components
 export { DatasetsTable } from './components/datasets-table/datasets-table';
@@ -33,6 +38,9 @@ export { EditItemDialog } from './components/edit-item-dialog';
 
 // CSV import components
 export { CSVImportDialog } from './components/csv-import';
+
+// JSON import components
+export { JSONImportDialog } from './components/json-import';
 
 // Run trigger components
 export { RunTriggerDialog } from './components/run-trigger/run-trigger-dialog';
