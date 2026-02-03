@@ -1981,7 +1981,9 @@ NOTE: Any messages following this system reminder are newer than your memories.
    * Without this, messages would be lost because MessageHistory is disabled when OM is active.
    */
   async processOutputResult(args: ProcessOutputResultArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext, state } = args;
+    const { messageList, requestContext, state: _state } = args;
+    // Default state to {} for backward compat with older @mastra/core that doesn't pass state
+    const state = _state ?? ({} as Record<string, unknown>);
 
     const context = this.getThreadContext(requestContext, messageList);
     if (!context) {
