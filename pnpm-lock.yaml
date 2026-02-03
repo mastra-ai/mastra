@@ -2712,9 +2712,6 @@ importers:
 
   packages/editor:
     dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../core
       '@mastra/memory':
         specifier: workspace:*
         version: link:../memory
@@ -2728,6 +2725,9 @@ importers:
       '@internal/ai-v6':
         specifier: workspace:*
         version: link:../_vendored/ai_v6
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../core
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
