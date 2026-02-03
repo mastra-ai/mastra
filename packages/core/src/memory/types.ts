@@ -13,12 +13,6 @@ import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
 
-/**
- * Model configuration for Observational Memory Observer/Reflector agents.
- * Uses the same type as Agent's model configuration.
- */
-export type ObservationalMemoryModelConfig = AgentConfig['model'];
-
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { MastraLanguageModel };
 
@@ -389,7 +383,7 @@ export interface ObservationalMemoryObservationConfig {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: ObservationalMemoryModelConfig;
+  model?: AgentConfig['model'];
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -445,7 +439,7 @@ export interface ObservationalMemoryReflectionConfig {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: ObservationalMemoryModelConfig;
+  model?: AgentConfig['model'];
 
   /**
    * Token count of observations that triggers reflection.
@@ -521,7 +515,7 @@ export interface ObservationalMemoryOptions {
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: ObservationalMemoryModelConfig;
+  model?: AgentConfig['model'];
 
   /**
    * Observation step configuration for extracting observations from conversations.
