@@ -72,6 +72,7 @@ export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
 export * from './ds/components/Text';
 export * from './ds/components/JSONSchemaForm';
+export * from './ds/components/ContentBlocks';
 
 // Form utilities (AutoForm)
 export * from './lib/form';
