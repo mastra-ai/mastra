@@ -31,8 +31,6 @@ export function CardItems({ titles, items }: CardItemsProps) {
     setActiveTab(sluggify(tab))
   }
 
-  const currentItems = items[titles.find(tab => sluggify(tab) === activeTab) ?? ''] ?? []
-
   return (
     <div className="card__grid">
       <div className="mt-6 flex flex-wrap items-center gap-2">
@@ -49,20 +47,33 @@ export function CardItems({ titles, items }: CardItemsProps) {
           </button>
         ))}
       </div>
-      <div className="mt-6 grid w-full gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {currentItems.map(item => (
-          <Link
-            key={`${item.title}-${item.href}`}
-            to={item.href}
-            style={{
-              textDecoration: 'none',
-            }}
-            className="group mb-0 min-w-0 rounded-[10px] border-[0.5px] border-(--border) bg-(--mastra-surface-3) p-2 px-4 text-center text-sm wrap-break-word transition-opacity hover:opacity-80 dark:border-[#343434]"
+      {/* Render all tab panels, hide inactive ones with CSS for llms.txt extraction */}
+      {titles.map(title => {
+        const tabSlug = sluggify(title)
+        const tabItems = items[title] ?? []
+        const isActive = activeTab === tabSlug
+
+        return (
+          <div
+            key={tabSlug}
+            className={cn('mt-6 grid w-full gap-3 md:grid-cols-2 lg:grid-cols-3', !isActive && 'hidden')}
+            data-tab={tabSlug}
           >
-            {item.title}
-          </Link>
-        ))}
-      </div>
+            {tabItems.map(item => (
+              <Link
+                key={`${item.title}-${item.href}`}
+                to={item.href}
+                style={{
+                  textDecoration: 'none',
+                }}
+                className="group mb-0 min-w-0 rounded-[10px] border-[0.5px] border-(--border) bg-(--mastra-surface-3) p-2 px-4 text-center text-sm wrap-break-word transition-opacity hover:opacity-80 dark:border-[#343434]"
+              >
+                {item.title}
+              </Link>
+            ))}
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover
 
 import { usePromptEnhancer } from '../../hooks/use-prompt-enhancer';
 import { useAgent } from '../../hooks/use-agent';
-import { useLLMProviders, useAllModels, cleanProviderId, ProviderLogo } from '@/domains/llm';
+import { useLLMProviders, useAllModels, findProviderById, ProviderLogo } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm';
 import { Provider } from '@mastra/client-js';
 
@@ -239,15 +239,13 @@ export function InstructionsEnhancer({
 
   // Get only models from connected providers
   const connectedModels = allModels.filter((m: ModelInfo) => {
-    const cleanId = cleanProviderId(m.provider);
-    const provider = providers.find((p: Provider) => cleanProviderId(p.id) === cleanId);
+    const provider = findProviderById(providers, m.provider);
     return provider?.connected === true;
   });
 
   // Check if a provider has an API key configured
   const isProviderConnected = (providerId: string) => {
-    const cleanId = cleanProviderId(providerId);
-    const provider = providers.find((p: Provider) => cleanProviderId(p.id) === cleanId);
+    const provider = findProviderById(providers, providerId);
     return provider?.connected === true;
   };
 
