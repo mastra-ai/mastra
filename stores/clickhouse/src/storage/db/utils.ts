@@ -93,6 +93,11 @@ export function transformRow<R>(row: any): R {
     row.endedAt = new Date(row.endedAt);
   }
 
+  // Normalize metadata: ClickHouse Nullable(String) can return null or ''
+  if ('metadata' in row && (!row.metadata || row.metadata === '')) {
+    row.metadata = {};
+  }
+
   // Parse JSONB fields if they're JSON strings
   for (const field of JSON_FIELDS) {
     if (row[field] && typeof row[field] === 'string') {

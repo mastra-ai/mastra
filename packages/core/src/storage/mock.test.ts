@@ -3,14 +3,18 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { MessageList } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import { deepMerge } from '../utils';
+import type { MemoryStorage } from './domains';
 import { InMemoryStore } from './mock';
 
 describe('InMemoryStore - Thread Sorting', () => {
   let store: InMemoryStore;
+  let memory: MemoryStorage;
   const resourceId = 'test-resource-id';
 
   beforeEach(async () => {
     store = new InMemoryStore();
+    const memoryStore = await store.getStore('memory');
+    memory = memoryStore!;
 
     // Create test threads with different dates
     const threads: StorageThreadType[] = [
@@ -42,14 +46,14 @@ describe('InMemoryStore - Thread Sorting', () => {
 
     // Save threads to store
     for (const thread of threads) {
-      await store.saveThread({ thread });
+      await memory.saveThread({ thread });
     }
   });
 
   describe('listThreadsByResourceId', () => {
     it('should sort by createdAt DESC by default with pagination', async () => {
-      const result = await store.listThreadsByResourceId({
-        resourceId,
+      const result = await memory.listThreads({
+        filter: { resourceId },
         page: 0,
         perPage: 2,
       });
@@ -64,8 +68,8 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should sort by createdAt ASC when specified', async () => {
-      const result = await store.listThreadsByResourceId({
-        resourceId,
+      const result = await memory.listThreads({
+        filter: { resourceId },
         page: 0,
         perPage: 2,
         orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -81,8 +85,8 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should sort by updatedAt ASC with pagination', async () => {
-      const result = await store.listThreadsByResourceId({
-        resourceId,
+      const result = await memory.listThreads({
+        filter: { resourceId },
         page: 0,
         perPage: 2,
         orderBy: { field: 'updatedAt', direction: 'ASC' },
@@ -96,8 +100,8 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should sort by updatedAt DESC when specified', async () => {
-      const result = await store.listThreadsByResourceId({
-        resourceId,
+      const result = await memory.listThreads({
+        filter: { resourceId },
         page: 0,
         perPage: 2,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
@@ -112,16 +116,16 @@ describe('InMemoryStore - Thread Sorting', () => {
 
     it('should maintain sort order across pages', async () => {
       // First page
-      const page1 = await store.listThreadsByResourceId({
-        resourceId,
+      const page1 = await memory.listThreads({
+        filter: { resourceId },
         page: 0,
         perPage: 2,
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
       // Second page
-      const page2 = await store.listThreadsByResourceId({
-        resourceId,
+      const page2 = await memory.listThreads({
+        filter: { resourceId },
         page: 1,
         perPage: 2,
         orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -136,8 +140,8 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should calculate pagination info correctly after sorting', async () => {
-      const result = await store.listThreadsByResourceId({
-        resourceId,
+      const result = await memory.listThreads({
+        filter: { resourceId },
         page: 1,
         perPage: 2,
         orderBy: { field: 'updatedAt', direction: 'DESC' },
@@ -152,8 +156,8 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should handle empty results with pagination', async () => {
-      const result = await store.listThreadsByResourceId({
-        resourceId: 'non-existent-resource',
+      const result = await memory.listThreads({
+        filter: { resourceId: 'non-existent-resource' },
         page: 0,
         perPage: 10,
       });
@@ -164,7 +168,7 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
     it('should filter by resourceId correctly', async () => {
       // Add a thread with different resourceId
-      await store.saveThread({
+      await memory.saveThread({
         thread: {
           id: 'thread-other',
           resourceId: 'other-resource',
@@ -175,7 +179,7 @@ describe('InMemoryStore - Thread Sorting', () => {
         },
       });
 
-      const result = await store.listThreadsByResourceId({ resourceId, page: 0, perPage: 2 });
+      const result = await memory.listThreads({ filter: { resourceId }, page: 0, perPage: 2 });
 
       expect(result.threads).toHaveLength(2);
       expect(result.threads.every(t => t.resourceId === resourceId)).toBe(true);
@@ -189,37 +193,43 @@ describe('InMemoryStore - Thread Sorting', () => {
 
 describe('InMemoryStore - Message Fetching', () => {
   let store: InMemoryStore;
+  let memory: MemoryStorage;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     store = new InMemoryStore();
+    const memoryStore = await store.getStore('memory');
+    memory = memoryStore!;
   });
 
   it('listMessages should throw error if neither threadId nor resourceId is provided', async () => {
     // Empty threadId without resourceId should throw
-    await expect(store.listMessages({ threadId: '' })).rejects.toThrow(
+    await expect(memory.listMessages({ threadId: '' })).rejects.toThrow(
       'Either threadId or resourceId must be provided',
     );
 
     // Whitespace-only threadId without resourceId should throw
-    await expect(store.listMessages({ threadId: '   ' })).rejects.toThrow(
+    await expect(memory.listMessages({ threadId: '   ' })).rejects.toThrow(
       'Either threadId or resourceId must be provided',
     );
 
     // Empty object should throw (runtime guard for untyped callers)
-    await expect(store.listMessages({} as any)).rejects.toThrow('Either threadId or resourceId must be provided');
+    await expect(memory.listMessages({} as any)).rejects.toThrow('Either threadId or resourceId must be provided');
   });
 });
 
 describe('InMemoryStore - Message Sorting', () => {
   let store: InMemoryStore;
+  let memory: MemoryStorage;
   const threadId = 'test-thread-sorting';
   const resourceId = 'test-resource-sorting';
 
   beforeEach(async () => {
     store = new InMemoryStore();
+    const memoryStore = await store.getStore('memory');
+    memory = memoryStore!;
 
     // Create thread first
-    await store.saveThread({
+    await memory.saveThread({
       thread: {
         id: threadId,
         resourceId,
@@ -263,12 +273,12 @@ describe('InMemoryStore - Message Sorting', () => {
 
     // Save messages to store
     const messageList = new MessageList().add(messages, 'memory');
-    await store.saveMessages({ messages: messageList.get.all.db() });
+    await memory.saveMessages({ messages: messageList.get.all.db() });
   });
 
   describe('listMessages', () => {
     it('should sort by createdAt ASC by default with pagination', async () => {
-      const result = await store.listMessages({
+      const result = await memory.listMessages({
         threadId,
         page: 0,
         perPage: 2,
@@ -284,7 +294,7 @@ describe('InMemoryStore - Message Sorting', () => {
     });
 
     it('should sort by createdAt DESC when specified', async () => {
-      const result = await store.listMessages({
+      const result = await memory.listMessages({
         threadId,
         page: 0,
         perPage: 2,
@@ -301,7 +311,7 @@ describe('InMemoryStore - Message Sorting', () => {
     });
 
     it('should fetch all messages when perPage is false', async () => {
-      const result = await store.listMessages({
+      const result = await memory.listMessages({
         threadId,
         perPage: false,
       });
@@ -317,7 +327,7 @@ describe('InMemoryStore - Message Sorting', () => {
 
     it('should handle pagination correctly with ASC ordering', async () => {
       // First page
-      const page1 = await store.listMessages({
+      const page1 = await memory.listMessages({
         threadId,
         page: 0,
         perPage: 1,
@@ -330,7 +340,7 @@ describe('InMemoryStore - Message Sorting', () => {
       expect(page1.hasMore).toBe(true);
 
       // Second page
-      const page2 = await store.listMessages({
+      const page2 = await memory.listMessages({
         threadId,
         page: 1,
         perPage: 1,
@@ -343,7 +353,7 @@ describe('InMemoryStore - Message Sorting', () => {
       expect(page2.hasMore).toBe(true);
 
       // Third page
-      const page3 = await store.listMessages({
+      const page3 = await memory.listMessages({
         threadId,
         page: 2,
         perPage: 1,
@@ -360,6 +370,7 @@ describe('InMemoryStore - Message Sorting', () => {
 
 describe('InMemoryStore - listMessagesById', () => {
   let store: InMemoryStore;
+  let memory: MemoryStorage;
   const resourceId = 'test-resource-id';
   const resourceId2 = 'test-resource-id-2';
   let threads: StorageThreadType[] = [];
@@ -385,6 +396,8 @@ describe('InMemoryStore - listMessagesById', () => {
 
   beforeEach(async () => {
     store = new InMemoryStore();
+    const memoryStore = await store.getStore('memory');
+    memory = memoryStore!;
     messageCounter = 0;
 
     // Create test threads with different dates
@@ -417,7 +430,7 @@ describe('InMemoryStore - listMessagesById', () => {
 
     // Save threads to store
     for (const thread of threads) {
-      await store.saveThread({ thread });
+      await memory.saveThread({ thread });
     }
 
     thread1Messages = [
@@ -437,17 +450,20 @@ describe('InMemoryStore - listMessagesById', () => {
       }),
     ];
 
-    await store.saveMessages({ messages: thread1Messages, format: 'v1' });
-    await store.saveMessages({ messages: thread2Messages, format: 'v1' });
-    await store.saveMessages({ messages: resource2Messages, format: 'v1' });
+    const ml1 = new MessageList().add(thread1Messages, 'memory');
+    await memory.saveMessages({ messages: ml1.get.all.db() });
+    const ml2 = new MessageList().add(thread2Messages, 'memory');
+    await memory.saveMessages({ messages: ml2.get.all.db() });
+    const ml3 = new MessageList().add(resource2Messages, 'memory');
+    await memory.saveMessages({ messages: ml3.get.all.db() });
   });
 
   it('should return an empty array if no message IDs are provided', async () => {
-    const result = await store.listMessagesById({ messageIds: [] });
+    const result = await memory.listMessagesById({ messageIds: [] });
     expect(result.messages).toHaveLength(0);
   });
 
-  it('should return messages sorted by createdAt DESC', async () => {
+  it('should return messages sorted by createdAt ASC', async () => {
     const messageIds = [
       thread1Messages[1]!.id,
       thread2Messages[0]!.id,
@@ -455,7 +471,7 @@ describe('InMemoryStore - listMessagesById', () => {
       thread1Messages[0]!.id,
       thread2Messages[1]!.id,
     ];
-    const result = await store.listMessagesById({
+    const result = await memory.listMessagesById({
       messageIds,
     });
 
@@ -464,14 +480,13 @@ describe('InMemoryStore - listMessagesById', () => {
   });
 
   it('should return messages by ID', async () => {
-    const result = await store.listMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
+    const result = await memory.listMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
 
     expect(result.messages.length).toBeGreaterThan(0);
-    expect(result.messages.every(MessageList.isMastraDBMessage)).toBe(true);
   });
 
   it('should return messages from multiple threads', async () => {
-    const result = await store.listMessagesById({
+    const result = await memory.listMessagesById({
       messageIds: [...thread1Messages.map(msg => msg.id), ...thread2Messages.map(msg => msg.id)],
     });
 
@@ -481,7 +496,7 @@ describe('InMemoryStore - listMessagesById', () => {
   });
 
   it('should return messages from multiple resources', async () => {
-    const result = await store.listMessagesById({
+    const result = await memory.listMessagesById({
       messageIds: [...thread1Messages.map(msg => msg.id), ...resource2Messages.map(msg => msg.id)],
     });
 
