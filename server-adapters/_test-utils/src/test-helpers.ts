@@ -294,8 +294,8 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   // Create memory and pre-populate with test thread
   const memory = createMockMemory();
   await memory.createThread({
-    threadId: 'test-thread',
-    resourceId: 'test-resource',
+    threadId: `test-thread-${Date.now()}`,
+    resourceId: `test-resource-${Date.now()}`,
     metadata: {},
   });
 
@@ -522,10 +522,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // This is needed because when agentId is not provided, the handler falls back to storage directly
     const memoryStore = await storage.getStore('memory');
     if (memoryStore) {
+      const threadId = `test-thread-${Date.now()}`;
+      const resourceId = `test-resource-${Date.now()}`;
       await memoryStore.saveThread({
         thread: {
-          id: 'test-thread',
-          resourceId: 'test-resource',
+          id: threadId,
+          resourceId: resourceId,
           createdAt: new Date(),
           updatedAt: new Date(),
           metadata: {},
@@ -535,7 +537,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         messages: [
           {
             id: 'test-message-1',
-            threadId: 'test-thread',
+            threadId: threadId,
             role: 'user',
             content: {
               format: 2,

@@ -57,16 +57,18 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'content') return 'test content'; // For write/index operations
   if (field === 'query') return 'test'; // For search operations
 
-  if (field.includes('agent')) return 'test-agent';
-  if (field.includes('workflow')) return 'test-workflow';
-  if (field.includes('tool')) return 'test-tool';
-  if (field.includes('skill')) return 'test-skill';
+  // Generate unique IDs by adding timestamp to avoid conflicts in parallel tests
+  const timestamp = Date.now();
+  if (field.includes('agent')) return `test-agent-${timestamp}`;
+  if (field.includes('workflow')) return `test-workflow-${timestamp}`;
+  if (field.includes('tool')) return `test-tool-${timestamp}`;
+  if (field.includes('skill')) return `test-skill-${timestamp}`;
   if (field.includes('reference') && field.includes('path')) return 'test-reference.md';
-  if (field.includes('thread')) return 'test-thread';
-  if (field.includes('resource')) return 'test-resource';
-  if (field.includes('run')) return 'test-run';
-  if (field.includes('step')) return 'test-step';
-  if (field.includes('task')) return 'test-task';
+  if (field.includes('thread')) return `test-thread-${timestamp}`;
+  if (field.includes('resource')) return `test-resource-${timestamp}`;
+  if (field.includes('run')) return `test-run-${timestamp}`;
+  if (field.includes('step')) return `test-step-${timestamp}`;
+  if (field.includes('task')) return `test-task-${timestamp}`;
   if (field.includes('scorer') || field.includes('score')) return 'test-scorer';
   if (field.includes('processor')) return 'test-processor';
   if (field.includes('trace')) return 'test-trace';
@@ -126,6 +128,8 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodObject') {
     const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
     const obj: any = {};
+    const optionalFields: Array<[string, any]> = [];
+    
     for (const [key, fieldSchema] of Object.entries(shape)) {
       const fieldTypeName = getZodTypeName(fieldSchema as z.ZodTypeAny);
       if (fieldTypeName === 'ZodOptional') {
@@ -136,11 +140,24 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
           const fieldDef = getZodDef(fieldSchema as z.ZodTypeAny);
           const innerType = fieldDef.innerType;
           obj[key] = generateValidDataFromSchema(innerType, key);
+        } else {
+          // Collect optional fields to potentially add one later
+          const fieldDef = getZodDef(fieldSchema as z.ZodTypeAny);
+          const innerType = fieldDef.innerType;
+          optionalFields.push([key, generateValidDataFromSchema(innerType, key)]);
         }
         continue;
       }
       obj[key] = generateValidDataFromSchema(fieldSchema as z.ZodTypeAny, key);
     }
+    
+    // If the object would be empty (all fields are optional), add at least one field
+    // to avoid empty body errors in PATCH/POST requests
+    if (Object.keys(obj).length === 0 && optionalFields.length > 0) {
+      const [key, value] = optionalFields[0];
+      obj[key] = value;
+    }
+    
     return obj;
   }
 
@@ -195,8 +212,8 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
       return {
         role: 'user',
         content: [{ type: 'text', text: 'test message' }],
-        threadId: 'test-thread',
-        resourceId: 'test-resource',
+        threadId: `test-thread-${Date.now()}`,
+        resourceId: `test-resource-${Date.now()}`,
       };
     }
     return 'test-value';
@@ -207,6 +224,7 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
 
 export function getDefaultValidPathParams(route: ServerRoute): Record<string, any> {
   const params: Record<string, any> = {};
+  const timestamp = Date.now();
 
   // For stored agent routes (versions), use 'test-stored-agent' to match test context
   // For regular agent routes, use 'test-agent'
@@ -217,8 +235,8 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   }
   if (route.path.includes(':workflowId')) params.workflowId = 'test-workflow';
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
-  if (route.path.includes(':threadId')) params.threadId = 'test-thread';
-  if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
+  if (route.path.includes(':threadId')) params.threadId = `test-thread-${timestamp}`;
+  if (route.path.includes(':resourceId')) params.resourceId = `test-resource-${timestamp}`;
   if (route.path.includes(':modelConfigId')) params.modelConfigId = 'id1';
   if (route.path.includes(':scorerId')) params.scorerId = 'test-scorer';
   if (route.path.includes(':traceId')) params.traceId = 'test-trace';
