@@ -21,7 +21,6 @@ const selectTriggerSizeClasses = {
   sm: `${formElementSizes.sm} px-2 text-ui-sm`,
   md: `${formElementSizes.md} px-3 text-ui-sm`,
   lg: `${formElementSizes.lg} px-3 text-ui-sm`,
-  xl: `${formElementSizes.xl} px-4 text-ui-md`,
 };
 
 export type SelectTriggerProps = React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {

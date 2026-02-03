@@ -15,7 +15,6 @@ const sizeClasses = {
   sm: `${formElementSizes.sm} w-form-sm`,
   md: `${formElementSizes.md} w-form-md`,
   lg: `${formElementSizes.lg} w-form-lg`,
-  xl: `${formElementSizes.xl} w-form-xl`,
 };
 
 const iconSizeMap = {
