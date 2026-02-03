@@ -1,6 +1,13 @@
 import { MastraBase } from '../base';
 
-import type { AgentsStorage, ScoresStorage, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
+import type {
+  AgentsStorage,
+  IntegrationsStorage,
+  ScoresStorage,
+  WorkflowsStorage,
+  MemoryStorage,
+  ObservabilityStorage,
+} from './domains';
 
 export type StorageDomains = {
   workflows: WorkflowsStorage;
@@ -8,6 +15,7 @@ export type StorageDomains = {
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
+  integrations?: IntegrationsStorage;
 };
 
 /**
@@ -198,6 +206,7 @@ export class MastraCompositeStore extends MastraBase {
         scores: domainOverrides.scores ?? defaultStores?.scores,
         observability: domainOverrides.observability ?? defaultStores?.observability,
         agents: domainOverrides.agents ?? defaultStores?.agents,
+        integrations: domainOverrides.integrations ?? defaultStores?.integrations,
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -206,7 +215,7 @@ export class MastraCompositeStore extends MastraBase {
   /**
    * Get a domain-specific storage interface.
    *
-   * @param storeName - The name of the domain to access ('memory', 'workflows', 'scores', 'observability', 'agents')
+   * @param storeName - The name of the domain to access ('memory', 'workflows', 'scores', 'observability', 'agents', 'integrations')
    * @returns The domain storage interface, or undefined if not available
    *
    * @example
@@ -252,6 +261,10 @@ export class MastraCompositeStore extends MastraBase {
 
     if (this.stores?.agents) {
       initTasks.push(this.stores.agents.init());
+    }
+
+    if (this.stores?.integrations) {
+      initTasks.push(this.stores.integrations.init());
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);
