@@ -490,8 +490,8 @@ export class StoreMemoryLance extends MemoryStorage {
       });
 
       // Calculate hasMore based on paginated records count, not finalMessages (which includes context)
-      const fetchedAll = perPageInput === false || offset + perPage >= total;
-      const hasMore = !fetchedAll;
+      const fetchedAll = perPageInput === false || paginatedRecords.length >= total;
+      const hasMore = !fetchedAll && offset + perPage < total;
 
       return {
         messages: finalMessages,
