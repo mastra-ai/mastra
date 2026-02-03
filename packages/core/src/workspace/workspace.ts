@@ -35,7 +35,9 @@ import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
 import type { WorkspaceFilesystem } from './filesystem';
+import { MastraFilesystem } from './filesystem/mastra-filesystem';
 import type { WorkspaceSandbox } from './sandbox';
+import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
 import type { WorkspaceSkills, SkillsResolver } from './skills';
@@ -61,12 +63,14 @@ export interface WorkspaceConfig {
   /**
    * Filesystem provider instance.
    * Use LocalFilesystem for a folder on disk, or AgentFS for Turso-backed storage.
+   * Extend MastraFilesystem for automatic logger integration.
    */
   filesystem?: WorkspaceFilesystem;
 
   /**
    * Sandbox provider instance.
    * Use ComputeSDKSandbox to access E2B, Modal, Docker, etc.
+   * Extend MastraSandbox for automatic logger integration.
    */
   sandbox?: WorkspaceSandbox;
 
@@ -646,13 +650,13 @@ export class Workspace {
    * @internal
    */
   __setLogger(logger: IMastraLogger): void {
-    // Propagate logger to filesystem provider if it supports it
-    if (this._fs?.__setLogger) {
+    // Propagate logger to filesystem provider if it extends MastraFilesystem
+    if (this._fs instanceof MastraFilesystem) {
       this._fs.__setLogger(logger);
     }
 
-    // Propagate logger to sandbox provider if it supports it
-    if (this._sandbox?.__setLogger) {
+    // Propagate logger to sandbox provider if it extends MastraSandbox
+    if (this._sandbox instanceof MastraSandbox) {
       this._sandbox.__setLogger(logger);
     }
   }

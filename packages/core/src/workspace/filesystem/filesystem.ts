@@ -19,7 +19,6 @@
  * ```
  */
 
-import type { IMastraLogger } from '../../logger';
 import type { Lifecycle, ProviderStatus } from '../lifecycle';
 
 // =============================================================================
@@ -152,15 +151,6 @@ export interface WorkspaceFilesystem extends Lifecycle<FilesystemInfo> {
 
   /** Provider type identifier */
   readonly provider: string;
-
-  /**
-   * Set the logger for this filesystem provider.
-   * Called by Workspace when the Mastra logger is set.
-   * Optional - providers that don't extend MastraFilesystem can implement this
-   * to receive the logger, or ignore it entirely.
-   * @internal
-   */
-  __setLogger?(logger: IMastraLogger): void;
 
   /**
    * When true, all write operations to this filesystem are blocked.

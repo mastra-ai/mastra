@@ -24,7 +24,6 @@
  * ```
  */
 
-import type { IMastraLogger } from '../../logger';
 import type { Lifecycle, ProviderStatus } from '../lifecycle';
 
 // =============================================================================
@@ -102,15 +101,6 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
 
   /** Provider type identifier */
   readonly provider: string;
-
-  /**
-   * Set the logger for this sandbox provider.
-   * Called by Workspace when the Mastra logger is set.
-   * Optional - providers that don't extend MastraSandbox can implement this
-   * to receive the logger, or ignore it entirely.
-   * @internal
-   */
-  __setLogger?(logger: IMastraLogger): void;
 
   /**
    * Working directory for command execution (if applicable).
