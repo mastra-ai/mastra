@@ -17,7 +17,7 @@ import type {
   FilesystemMountConfig,
   ProviderStatus,
 } from '@mastra/core/workspace';
-import { BaseSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MountableSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
 
@@ -112,7 +112,7 @@ export interface E2BSandboxOptions {
  *
  * ```
  */
-export class E2BSandbox extends BaseSandbox {
+export class E2BSandbox extends MountableSandbox {
   readonly id: string;
   readonly name = 'E2BSandbox';
   readonly provider = 'e2b';
@@ -585,7 +585,7 @@ export class E2BSandbox extends BaseSandbox {
         this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
         await this.reconcileMounts(expectedPaths);
         this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete, mounting pending filesystems...`);
-        await this.mounts.processPending((fs, path) => this.mount(fs, path));
+        await this.mounts.processPending();
         return;
       }
 
@@ -638,7 +638,7 @@ export class E2BSandbox extends BaseSandbox {
       this._status = 'running';
 
       // Mount any pending filesystems
-      await this.mounts.processPending((fs, path) => this.mount(fs, path));
+      await this.mounts.processPending();
     } catch (error) {
       this._status = 'error';
       throw error;

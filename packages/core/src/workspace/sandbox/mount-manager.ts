@@ -14,6 +14,38 @@ import type { FilesystemMountConfig, MountResult } from '../filesystem/mount';
 import type { MountEntry, MountState } from './types';
 
 /**
+ * Mount function signature.
+ */
+export type MountFn = (filesystem: WorkspaceFilesystem, mountPath: string) => Promise<MountResult>;
+
+/**
+ * onMount hook result.
+ * - false: skip mount
+ * - { success, error? }: hook handled it
+ * - void: use default mount
+ */
+export type OnMountResult = false | { success: boolean; error?: string } | void;
+
+/**
+ * onMount hook function.
+ */
+export type OnMountHook = (args: {
+  filesystem: WorkspaceFilesystem;
+  mountPath: string;
+  config: FilesystemMountConfig | undefined;
+}) => Promise<OnMountResult> | OnMountResult;
+
+/**
+ * MountManager configuration.
+ */
+export interface MountManagerConfig {
+  /** The mount implementation from the sandbox */
+  mount: MountFn;
+  /** Logger instance */
+  logger: IMastraLogger;
+}
+
+/**
  * Manages filesystem mounts for a sandbox.
  *
  * Provides methods for tracking mount state, updating entries,
@@ -21,8 +53,22 @@ import type { MountEntry, MountState } from './types';
  */
 export class MountManager {
   private _entries: Map<string, MountEntry> = new Map();
+  private _mountFn: MountFn;
+  private _onMount?: OnMountHook;
+  private logger: IMastraLogger;
 
-  constructor(private logger: IMastraLogger) {}
+  constructor(config: MountManagerConfig) {
+    this._mountFn = config.mount;
+    this.logger = config.logger;
+  }
+
+  /**
+   * Set the onMount hook for custom mount handling.
+   * Called before each mount - can skip, handle, or defer to default.
+   */
+  setOnMount(hook: OnMountHook | undefined): void {
+    this._onMount = hook;
+  }
 
   // ---------------------------------------------------------------------------
   // Entry Access
@@ -123,36 +169,73 @@ export class MountManager {
   /**
    * Process all pending mounts.
    * Call this after sandbox is ready (in start()).
-   *
-   * @param mountFn - The mount implementation to use for each filesystem
    */
-  async processPending(
-    mountFn?: (filesystem: WorkspaceFilesystem, mountPath: string) => Promise<MountResult>,
-  ): Promise<void> {
+  async processPending(): Promise<void> {
     for (const [path, entry] of this._entries) {
       if (entry.state !== 'pending') {
         continue;
       }
 
-      // Check if filesystem supports mounting
-      if (!entry.filesystem.getMountConfig) {
+      // Get config if available
+      const config = entry.filesystem.getMountConfig?.();
+
+      // Call onMount hook if configured
+      if (this._onMount) {
+        try {
+          const hookResult = await this._onMount({
+            filesystem: entry.filesystem,
+            mountPath: path,
+            config,
+          });
+
+          // false = skip mount entirely
+          if (hookResult === false) {
+            entry.state = 'unsupported';
+            entry.error = 'Skipped by onMount hook';
+            continue;
+          }
+
+          // { success, error? } = hook handled it
+          if (hookResult && typeof hookResult === 'object') {
+            if (hookResult.success) {
+              entry.state = 'mounted';
+              entry.config = config;
+              entry.configHash = config ? this.hashConfig(config) : undefined;
+            } else {
+              entry.state = 'error';
+              entry.error = hookResult.error ?? 'Mount hook failed';
+            }
+            continue;
+          }
+
+          // void = continue with default mount
+        } catch (err) {
+          entry.state = 'error';
+          entry.error = `Mount hook error: ${String(err)}`;
+          continue;
+        }
+      }
+
+      // Check if filesystem supports mounting (for default behavior)
+      if (!config) {
         entry.state = 'unsupported';
         entry.error = 'Filesystem does not support mounting';
         continue;
       }
 
-      // Get and store the mount config
-      entry.config = entry.filesystem.getMountConfig();
-      entry.configHash = this.hashConfig(entry.config);
+      // Store config and mark as mounting
+      entry.config = config;
+      entry.configHash = this.hashConfig(config);
       entry.state = 'mounting';
 
+      // Call the sandbox's mount implementation
       try {
-        const result = await mountFn?.(entry.filesystem, path);
-        if (result?.success) {
+        const result = await this._mountFn(entry.filesystem, path);
+        if (result.success) {
           entry.state = 'mounted';
         } else {
           entry.state = 'error';
-          entry.error = result?.error ?? 'Mount failed';
+          entry.error = result.error ?? 'Mount failed';
         }
       } catch (err) {
         entry.state = 'error';

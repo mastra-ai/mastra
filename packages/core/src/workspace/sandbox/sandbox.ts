@@ -96,12 +96,12 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
 
   /**
    * Mount manager for tracking and processing filesystem mounts.
-   * Use this to set pending mounts, check mount state, etc.
+   * Only available if the sandbox implements mount().
    *
    * @example
    * ```typescript
    * // Add pending mounts
-   * sandbox.mounts?.add({ '/data': { filesystem, enabled: true } });
+   * sandbox.mounts?.add({ '/data': s3fs });
    *
    * // Check mount entries
    * const entries = sandbox.mounts?.entries;
@@ -134,6 +134,10 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
 // Base Sandbox Class
 // =============================================================================
 
+/**
+ * Base sandbox class for providers that don't support mounting.
+ * For mounting support, extend MountableSandbox instead.
+ */
 export abstract class BaseSandbox extends MastraBase implements WorkspaceSandbox {
   /** Unique identifier for this sandbox instance */
   abstract readonly id: string;
@@ -143,11 +147,46 @@ export abstract class BaseSandbox extends MastraBase implements WorkspaceSandbox
   abstract readonly provider: string;
   abstract status: ProviderStatus;
 
+  constructor(options: { name: string }) {
+    super({ name: options.name, component: RegisteredLogger.WORKSPACE });
+  }
+}
+
+// =============================================================================
+// Mountable Sandbox Class
+// =============================================================================
+
+/**
+ * Base sandbox class for providers that support filesystem mounting.
+ * Extends BaseSandbox and adds mounting capabilities.
+ *
+ * Providers extending this class must implement the `mount` method.
+ * The `mounts` property (MountManager) is automatically created.
+ *
+ * @example
+ * ```typescript
+ * class E2BSandbox extends MountableSandbox {
+ *   async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
+ *     // FUSE mount implementation
+ *   }
+ * }
+ * ```
+ */
+export abstract class MountableSandbox extends BaseSandbox {
   /** Mount manager for tracking and processing filesystem mounts */
   readonly mounts: MountManager;
 
+  /** Mount a filesystem at a path in the sandbox */
+  abstract mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult>;
+
+  /** Unmount a filesystem from a path in the sandbox */
+  abstract unmount(mountPath: string): Promise<void>;
+
   constructor(options: { name: string }) {
-    super({ name: options.name, component: RegisteredLogger.WORKSPACE });
-    this.mounts = new MountManager(this.logger);
+    super(options);
+    this.mounts = new MountManager({
+      mount: this.mount.bind(this),
+      logger: this.logger,
+    });
   }
 }

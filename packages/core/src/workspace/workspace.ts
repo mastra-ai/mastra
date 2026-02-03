@@ -34,7 +34,7 @@ import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
 import { CompositeFilesystem } from './filesystem';
-import type { WorkspaceFilesystem, FilesystemIcon, MountResult, FilesystemMountConfig } from './filesystem';
+import type { WorkspaceFilesystem, FilesystemIcon, FilesystemMountConfig } from './filesystem';
 import type { WorkspaceSandbox } from './sandbox';
 import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
@@ -386,7 +386,6 @@ export class Workspace {
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
   private readonly _mounts?: Record<string, WorkspaceFilesystem>;
-  private readonly _mountResults: Map<string, MountResult> = new Map();
 
   constructor(config: WorkspaceConfig) {
     this.id = config.id ?? this.generateId();
@@ -409,6 +408,17 @@ export class Workspace {
 
       // Inform sandbox about mounts so it can process them on start()
       this._sandbox?.mounts?.add(config.mounts);
+
+      // Set onMount hook if configured (wrap to add workspace context)
+      if (config.onMount && this._sandbox?.mounts) {
+        this._sandbox.mounts.setOnMount(args =>
+          config.onMount!({
+            ...args,
+            sandbox: this._sandbox!,
+            workspace: this,
+          }),
+        );
+      }
     } else {
       this._fs = config.filesystem;
     }
@@ -670,11 +680,6 @@ export class Workspace {
         await this._sandbox.start();
       }
 
-      // Auto-mount filesystems into sandbox if mounts are configured
-      if (this._mounts && this._sandbox) {
-        await this.mountFilesystems();
-      }
-
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
         await this.rebuildSearchIndex(this._config.autoIndexPaths ?? []);
@@ -685,87 +690,6 @@ export class Workspace {
       this._status = 'error';
       throw error;
     }
-  }
-
-  /**
-   * Mount all configured filesystems into the sandbox.
-   */
-  private async mountFilesystems(): Promise<void> {
-    if (!this._mounts || !this._sandbox) return;
-
-    for (const [mountPath, filesystem] of Object.entries(this._mounts)) {
-      try {
-        const config = filesystem.getMountConfig?.();
-
-        // Call onMount hook if configured
-        if (this._config.onMount) {
-          const hookResult = await this._config.onMount({
-            filesystem,
-            mountPath,
-            config,
-            sandbox: this._sandbox,
-            workspace: this,
-          });
-
-          // false = skip mount entirely
-          if (hookResult === false) {
-            this._mountResults.set(mountPath, {
-              success: true,
-              mountPath,
-              error: 'Skipped by onMount hook',
-            });
-            // Update mount manager state
-            this._sandbox.mounts?.set(mountPath, { state: 'unsupported', error: 'Skipped by onMount hook' });
-            continue;
-          }
-
-          // { success: boolean, error?: string } = hook handled it
-          if (hookResult && typeof hookResult === 'object') {
-            this._mountResults.set(mountPath, {
-              success: hookResult.success,
-              mountPath,
-              error: hookResult.error,
-            });
-            // Update mount manager state
-            if (hookResult.success) {
-              this._sandbox.mounts?.set(mountPath, { filesystem, state: 'mounted', config });
-            } else {
-              this._sandbox.mounts?.set(mountPath, { filesystem, state: 'error', config, error: hookResult.error });
-            }
-            continue;
-          }
-
-          // undefined/void = continue with default mounting
-        }
-
-        // Mount the filesystem into the sandbox
-        // mount() returns MountResult with success/error
-        const result = await this._sandbox.mount?.(filesystem, mountPath);
-        if (result) {
-          this._mountResults.set(mountPath, result);
-        } else {
-          this._mountResults.set(mountPath, {
-            success: false,
-            mountPath,
-            error: 'Sandbox does not support mounting',
-          });
-        }
-      } catch (error) {
-        this._mountResults.set(mountPath, {
-          success: false,
-          mountPath,
-          error: String(error),
-        });
-      }
-    }
-  }
-
-  /**
-   * Get the mount results from initialization.
-   * Useful for checking which filesystems were successfully mounted.
-   */
-  getMountResults(): ReadonlyMap<string, MountResult> {
-    return this._mountResults;
   }
 
   /**
