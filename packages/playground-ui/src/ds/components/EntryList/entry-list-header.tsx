@@ -1,10 +1,10 @@
 import { getColumnTemplate } from './shared';
-import { Column } from './types';
+import { EntryListColumn } from './types';
 
 import { cn } from '@/lib/utils';
 
 export type EntryListHeaderProps = {
-  columns?: Column[];
+  columns?: EntryListColumn[];
 };
 
 export function EntryListHeader({ columns }: EntryListHeaderProps) {

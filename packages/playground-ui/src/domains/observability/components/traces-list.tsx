@@ -1,6 +1,6 @@
 import { EntryList } from '@/ds/components/EntryList';
 import { getShortId } from '@/ds/components/Text';
-import { SpanRecord } from '@mastra/core/storage';
+import { TraceSpan } from '@mastra/core/storage';
 import { format, isToday } from 'date-fns';
 
 export const tracesListColumns = [
@@ -12,7 +12,7 @@ export const tracesListColumns = [
   { name: 'status', label: 'Status', size: '3rem' },
 ];
 
-type Trace = Pick<SpanRecord, 'traceId' | 'name' | 'entityType' | 'entityId' | 'entityName'> & {
+type Trace = Pick<TraceSpan, 'traceId' | 'name' | 'entityType' | 'entityId' | 'entityName' | 'status'> & {
   attributes?: Record<string, any> | null;
   createdAt: Date | string;
 };
@@ -67,7 +67,7 @@ export function TracesList({
                       trace?.entityId ||
                       trace?.attributes?.agentId ||
                       trace?.attributes?.workflowId,
-                    status: trace?.attributes?.status,
+                    status: trace?.status,
                   };
 
                   return (

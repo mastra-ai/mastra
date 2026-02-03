@@ -1,11 +1,11 @@
-import { type Column } from './types';
+import { type EntryListColumn } from './types';
 import { EntryListEntries } from './entry-list-entries';
 import { EntryListEntry } from './entry-list-entry';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 
 export type EntryListEntriesSkeletonProps = {
-  columns?: Column[];
+  columns?: EntryListColumn[];
   numberOfRows?: number;
 };
 

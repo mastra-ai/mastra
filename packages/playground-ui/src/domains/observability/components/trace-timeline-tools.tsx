@@ -57,6 +57,7 @@ export function TraceTimelineTools({
     <div className="flex gap-3 items-center justify-between">
       <div className="flex">
         <SearchField
+          name="span-name-search"
           value={localSearchPhrase}
           onChange={e => {
             setLocalSearchPhrase(e.target.value);
