@@ -1,16 +1,5 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "lib": ["ES2022"],
-    "declaration": true,
-    "outDir": "./dist",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "moduleResolution": "node"
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "extends": "../../tsconfig.node.json",
+  "include": ["src/**/*", "tsup.config.ts", "scripts/**/*"],
+  "exclude": ["node_modules", "**/*.test.ts"]
 }

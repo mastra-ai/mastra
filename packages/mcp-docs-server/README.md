@@ -119,24 +119,6 @@ const response = await agent.stream('Show me the quick start example', {
 - Explore both general guides and API reference documentation
 - Automatically lists available paths when a requested path isn't found
 
-### Examples Tool (`mastraExamples`)
-
-- Access code examples showing Mastra.ai implementation patterns
-- List all available examples
-- Get detailed source code for specific examples
-
-### Blog Tool (`mastraBlog`)
-
-- Access technical blog posts and articles
-- Posts are properly formatted with code block handling
-- Supports various date formats in blog metadata
-
-### Changes Tool (`mastraChanges`)
-
-- Access package changelogs
-- List all available package changelogs
-- Get detailed changelog content for specific packages
-
 ### Migration Tool (`mastraMigration`)
 
 - Get migration guidance for Mastra version upgrades and breaking changes

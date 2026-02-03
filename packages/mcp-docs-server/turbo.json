@@ -4,8 +4,7 @@
   "tasks": {
     "prepare-docs": {
       "cache": false,
-      "outputs": [".docs/**"],
-      "dependsOn": ["build:cli"]
+      "outputs": [".docs/**"]
     },
     "build": {
       "dependsOn": ["build:cli", "prepare-docs"]

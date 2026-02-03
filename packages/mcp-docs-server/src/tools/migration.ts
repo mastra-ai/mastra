@@ -38,7 +38,7 @@ function parseMdxSections(content: string): ParsedSection[] {
     if (inFrontmatter) continue;
 
     // Match headings (## or ###)
-    const headingMatch = line.match(/^(#{2,3})\s+(.+)$/);
+    const headingMatch = line?.match(/^(#{2,3})\s+(.+)$/);
     if (headingMatch && frontmatterEnded) {
       // Save previous section
       if (currentSection) {
@@ -47,9 +47,9 @@ function parseMdxSections(content: string): ParsedSection[] {
       }
 
       // Start new section
-      const level = headingMatch[1].length;
+      const level = headingMatch[1]?.length ?? 0;
       currentSection = {
-        title: headingMatch[2],
+        title: headingMatch[2] || 'Untitled',
         level,
         content: line + '\n',
         startLine: index,

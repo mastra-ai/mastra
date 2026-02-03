@@ -383,7 +383,7 @@ async function scanCourseContent(): Promise<CourseState> {
   const validLessons = lessons.filter((lesson): lesson is NonNullable<typeof lesson> => lesson !== null);
 
   return {
-    currentLesson: validLessons.length > 0 ? validLessons[0].name : '',
+    currentLesson: validLessons.length > 0 ? (validLessons[0]?.name ?? '') : '',
     lessons: validLessons,
   };
 }
@@ -439,7 +439,7 @@ async function mergeCourseStates(currentState: CourseState, newState: CourseStat
 
   // If the current lesson doesn't exist in the new state, reset to the first lesson
   if (!mergedLessons.some(lesson => lesson.name === currentLesson) && mergedLessons.length > 0) {
-    currentLesson = mergedLessons[0].name;
+    currentLesson = mergedLessons[0]?.name ?? '';
   }
 
   return {
@@ -771,7 +771,9 @@ export const nextMastraCourseStep = {
       }
 
       // Mark the current step as completed
-      currentLesson.steps[currentStepIndex].status = 2; // Completed
+      if (currentLesson.steps[currentStepIndex]?.status) {
+        currentLesson.steps[currentStepIndex].status = 2; // Completed
+      }
 
       // Find the next step in the current lesson
       const nextStepIndex = currentLesson.steps.findIndex(
@@ -781,16 +783,18 @@ export const nextMastraCourseStep = {
       // If there's a next step in the current lesson
       if (nextStepIndex !== -1) {
         // Mark the next step as in progress
-        currentLesson.steps[nextStepIndex].status = 1; // In progress
+        if (currentLesson.steps[nextStepIndex]) {
+          currentLesson.steps[nextStepIndex].status = 1; // In progress
+        }
 
         // Save the updated state
         await saveCourseState(courseState, deviceId);
 
         // Get the content for the next step
         const nextStep = currentLesson.steps[nextStepIndex];
-        const stepContent = await readCourseStep(currentLessonName, nextStep.name);
+        const stepContent = await readCourseStep(currentLessonName, nextStep?.name ?? 'Unknown Step');
 
-        return `🎉 Step "${currentLesson.steps[currentStepIndex].name}" completed!\n\n📘 Continuing Lesson: ${currentLessonName}\n📝 Next Step: ${nextStep.name}\n\n${stepContent}\n\nWhen you've completed this step, use the \`nextMastraCourseStep\` tool to continue.`;
+        return `🎉 Step "${currentLesson.steps[currentStepIndex]?.name ?? 'Unknown Step'}" completed!\n\n📘 Continuing Lesson: ${currentLessonName}\n📝 Next Step: ${nextStep?.name ?? 'Unknown Step'}\n\n${stepContent}\n\nWhen you've completed this step, use the \`nextMastraCourseStep\` tool to continue.`;
       }
 
       // All steps in the current lesson are completed
@@ -806,7 +810,7 @@ export const nextMastraCourseStep = {
         courseState.currentLesson = nextLesson.name;
 
         // Mark the first step of the next lesson as in progress
-        if (nextLesson.steps.length > 0) {
+        if (nextLesson.steps.length > 0 && nextLesson.steps[0]) {
           nextLesson.steps[0].status = 1; // In progress
         }
 
@@ -818,9 +822,9 @@ export const nextMastraCourseStep = {
 
         // Get the content for the first step of the next lesson
         const firstStep = nextLesson.steps[0];
-        const stepContent = await readCourseStep(nextLesson.name, firstStep.name);
+        const stepContent = await readCourseStep(nextLesson.name, firstStep?.name ?? 'Unknown Step');
 
-        return `🎉 Congratulations! You've completed the "${currentLessonName}" lesson!\n\n📘 Starting New Lesson: ${nextLesson.name}\n📝 First Step: ${firstStep.name}\n\n${stepContent}\n\nWhen you've completed this step, use the \`nextMastraCourseStep\` tool to continue.`;
+        return `🎉 Congratulations! You've completed the "${currentLessonName}" lesson!\n\n📘 Starting New Lesson: ${nextLesson.name}\n📝 First Step: ${firstStep?.name ?? 'Unknown Step'}\n\n${stepContent}\n\nWhen you've completed this step, use the \`nextMastraCourseStep\` tool to continue.`;
       }
 
       // All lessons are completed

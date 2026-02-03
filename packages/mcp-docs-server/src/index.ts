@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises';
 import { MCPServer } from '@mastra/mcp';
 import { logger, createLogger } from './logger';
-import { prepare } from './prepare-docs/prepare';
 import { migrationPromptMessages } from './prompts/migration';
 import {
   startMastraCourse,
@@ -16,16 +15,6 @@ import { migrationTool } from './tools/migration';
 import { fromPackageRoot } from './utils';
 
 let server: MCPServer;
-
-if (process.env.REBUILD_DOCS_ON_START === 'true') {
-  void logger.info('Rebuilding docs on start');
-  try {
-    await prepare();
-    void logger.info('Docs rebuilt successfully');
-  } catch (error) {
-    void logger.error('Failed to rebuild docs', error);
-  }
-}
 
 server = new MCPServer({
   name: 'Mastra Documentation Server',

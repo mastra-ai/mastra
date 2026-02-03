@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fromPackageRoot, fromRepoRoot, log } from '../utils.js';
+import { fromPackageRoot, fromRepoRoot, log } from '../../src/utils';
 
 const DOCS_SOURCE = fromRepoRoot('docs/src/content/en/docs');
 const REFERENCE_SOURCE = fromRepoRoot('docs/src/content/en/reference');
