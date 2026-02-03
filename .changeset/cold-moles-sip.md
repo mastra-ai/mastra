@@ -2,4 +2,7 @@
 'mastra': minor
 ---
 
-Added skills installation support to create-mastra CLI. Users can now install official Mastra agent skills during project creation with an interactive multi-select prompt. The prompt shows 10 popular agents (Claude Code, Cursor, Windsurf, etc.) by default, with an option to expand and view all 40 supported agents. The new --skills flag accepts comma-separated agent names (e.g., `--skills claude-code,cursor`) for non-interactive setup.
+**New feature:** You can install the Mastra skill during the `create-mastra` wizard.
+
+The wizard now asks you to install the official Mastra skill. Choose your favorite agent and your newly created project is set up.
+For non-interactive setup, use the `--skills` flag that accepts comma-separate agent names (e.g. `--skills claude-code`).
