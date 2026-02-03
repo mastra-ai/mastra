@@ -24,7 +24,7 @@ export const memory = new Memory({
   }),
   vector: new LibSQLVector({
     id: 'weather-memory-vector',
-    connectionUrl: 'file:mastra.db', // relative path from bundled .mastra/output dir
+    url: `file:${dbPath}`,
   }),
   embedder: openai.embedding('text-embedding-3-small'),
 });
@@ -33,14 +33,14 @@ export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'test',
   instructions:
-    'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. When asked for clipboard contents use the clipboard tool to get the clipboard contents.',
+    'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. IMPORTANT: When asked about clipboard contents (e.g., "what\'s in my clipboard?", "clipboard contents", etc.), you MUST use the clipboard tool - do not try to answer without calling the tool.',
   model: 'openai/gpt-4o',
   memory,
   tools: {
     get_weather: weatherTool,
     clipboard: createTool({
       id: 'clipboard',
-      description: 'Returns the contents of the users clipboard',
+      description: 'Returns the contents of the users clipboard. ALWAYS call this tool when user asks about clipboard.',
       inputSchema: z.object({}),
     }),
   },
@@ -54,7 +54,7 @@ const memoryWithProcessor = new Memory({
   }),
   vector: new LibSQLVector({
     id: 'processor-memory-vector',
-    connectionUrl: 'file:mastra.db',
+    url: 'file:mastra.db',
   }),
   options: {
     semanticRecall: {

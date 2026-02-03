@@ -1627,6 +1627,141 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(agentCallCount).toBe(1); // But main agent should still be called
     });
 
+    it('should generate title for pre-created thread with any title (issue #11757)', async () => {
+      // This test validates that generateTitle works for pre-created threads with ANY title.
+      // When generateTitle: true is configured, title generation should trigger on the first
+      // user message, regardless of the initial title. No metadata flags are needed.
+      // See: https://github.com/mastra-ai/mastra/issues/11757
+      let titleGenerationCallCount = 0;
+      let agentCallCount = 0;
+      let updatedThreadTitle = '';
+
+      const mockMemory = new MockMemory();
+
+      // Pre-create the thread with a CUSTOM title (simulating client SDK pre-creation)
+      // This is a common pattern: apps create threads before the first message for URL routing
+      const customTitle = 'New Chat'; // Any custom title - generateTitle should still work
+      const threadId = 'pre-created-thread-custom-title';
+      await mockMemory.saveThread({
+        thread: {
+          id: threadId,
+          title: customTitle,
+          resourceId: 'user-123',
+          createdAt: new Date('2024-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        },
+      });
+
+      // Override getMergedThreadConfig to return generateTitle: true
+      mockMemory.getMergedThreadConfig = () => {
+        return {
+          generateTitle: true,
+        };
+      };
+
+      // Track when createThread is called to update title
+      const originalCreateThread = mockMemory.createThread.bind(mockMemory);
+      mockMemory.createThread = async (params: any) => {
+        if (params.title && params.title !== customTitle) {
+          updatedThreadTitle = params.title;
+        }
+        return originalCreateThread(params);
+      };
+
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 5, completionTokens: 10 },
+                text: 'Help with coding project',
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'Agent Response',
+              };
+            }
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                text: 'Help with coding project',
+                content: [{ type: 'text', text: 'Help with coding project' }],
+                warnings: [],
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: 'Agent Response',
+                content: [{ type: 'text', text: 'Agent Response' }],
+                warnings: [],
+              };
+            }
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'pre-created-thread-agent',
+        name: 'Pre-created Thread Agent',
+        instructions: 'test agent',
+        model: testModel,
+        memory: mockMemory,
+      });
+
+      // Send first message to the pre-created thread
+      if (version === 'v1') {
+        await agent.generateLegacy('Help me with my coding project', {
+          memory: {
+            resource: 'user-123',
+            thread: threadId, // Use existing thread ID (not object with title)
+          },
+        });
+      } else {
+        await agent.generate('Help me with my coding project', {
+          memory: {
+            resource: 'user-123',
+            thread: threadId, // Use existing thread ID (not object with title)
+          },
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Title generation should trigger because:
+      // 1. generateTitle: true is configured
+      // 2. This is the first user message (no existing user messages in memory)
+      // The initial title ("New Chat") doesn't matter - generateTitle option wins
+      expect(titleGenerationCallCount).toBe(1);
+      expect(agentCallCount).toBe(1); // Main agent should still be called
+      expect(updatedThreadTitle).toBe('Help with coding project');
+    });
+
     it('should handle errors in title generation gracefully', async () => {
       const mockMemory = new MockMemory();
 
@@ -2789,179 +2924,174 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
   });
 
   describe(`${version} - context parameter handling`, () => {
-    const formatArray: ('mastra' | 'aisdk')[] = version === 'v1' ? ['mastra'] : ['mastra', 'aisdk'];
-    formatArray.forEach(format => {
-      it(`should handle system messages in context parameter ${version === 'v2' ? `format: ${format}` : ''}`, async () => {
-        const agent = new Agent({
-          id: 'test-system-context-agent',
-          name: 'Test System Context',
-          model: openaiModel,
-          instructions: 'You are a helpful assistant.',
+    it(`should handle system messages in context parameter`, async () => {
+      const agent = new Agent({
+        id: 'test-system-context-agent',
+        name: 'Test System Context',
+        model: openaiModel,
+        instructions: 'You are a helpful assistant.',
+      });
+
+      const systemMessage = {
+        role: 'system' as const,
+        content: 'Additional system instructions from context',
+      };
+
+      const userMessage = {
+        role: 'user' as const,
+        content: 'What are your instructions?',
+      };
+
+      // Test with complex system message content (only for v2 as v1 doesn't support array content)
+      const complexSystemMessage =
+        version === 'v2'
+          ? {
+              role: 'system' as const,
+              content: [{ type: 'text' as const, text: 'Complex system message from context' }],
+            }
+          : {
+              role: 'system' as const,
+              content: 'Complex system message from context',
+            };
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.streamLegacy('Tell me about yourself', {
+          context: [systemMessage, userMessage, complexSystemMessage],
         });
+      } else {
+        result = await agent.stream('Tell me about yourself', {
+          context: [systemMessage, userMessage, complexSystemMessage],
+        });
+      }
 
-        const systemMessage = {
-          role: 'system' as const,
-          content: 'Additional system instructions from context',
-        };
+      // Consume the stream
+      const parts: any[] = [];
+      for await (const part of result.fullStream) {
+        parts.push(part);
+      }
 
-        const userMessage = {
-          role: 'user' as const,
-          content: 'What are your instructions?',
-        };
-
-        // Test with complex system message content (only for v2 as v1 doesn't support array content)
-        const complexSystemMessage =
-          version === 'v2'
-            ? {
-                role: 'system' as const,
-                content: [{ type: 'text' as const, text: 'Complex system message from context' }],
-              }
-            : {
-                role: 'system' as const,
-                content: 'Complex system message from context',
-              };
-
-        let result;
-        if (version === 'v1') {
-          result = await agent.streamLegacy('Tell me about yourself', {
-            context: [systemMessage, userMessage, complexSystemMessage],
-          });
-        } else {
-          result = await agent.stream('Tell me about yourself', {
-            context: [systemMessage, userMessage, complexSystemMessage],
-            format,
-          });
+      // Check the request format based on version
+      let messages: any[];
+      if (version === 'v1') {
+        const requestData = await result.request;
+        // v1 might not have body in test mocks
+        if (!requestData?.body) {
+          // We can't validate the exact request format in v1 mock
+          // but the test passes if no errors are thrown
+          return;
         }
+        messages = JSON.parse(requestData.body).messages;
+      } else {
+        const requestData = await (result as any).getFullOutput();
+        messages = requestData.request.body.input;
+      }
 
-        // Consume the stream
-        const parts: any[] = [];
-        for await (const part of result.fullStream) {
-          parts.push(part);
-        }
+      // Count system messages
+      const systemMessages = messages.filter((m: any) => m.role === 'system');
 
-        // Check the request format based on version
-        let messages: any[];
-        if (version === 'v1') {
-          const requestData = await result.request;
-          // v1 might not have body in test mocks
-          if (!requestData?.body) {
-            // We can't validate the exact request format in v1 mock
-            // but the test passes if no errors are thrown
-            return;
-          }
-          messages = JSON.parse(requestData.body).messages;
-        } else {
-          const requestData = await (result as any).getFullOutput();
-          messages = requestData.request.body.input;
-        }
+      // Should have exactly 3 system messages (default + 2 from context)
+      expect(systemMessages.length).toBe(3);
 
-        // Count system messages
-        const systemMessages = messages.filter((m: any) => m.role === 'system');
+      // Should have the agent's default instructions as first system message
+      expect(messages[0].role).toBe('system');
+      expect(messages[0].content).toBe('You are a helpful assistant.');
 
-        // Should have exactly 3 system messages (default + 2 from context)
-        expect(systemMessages.length).toBe(3);
+      // Should have the context system messages
+      expect(
+        systemMessages.find((m: any) => m.content === 'Additional system instructions from context'),
+      ).toBeDefined();
 
-        // Should have the agent's default instructions as first system message
-        expect(messages[0].role).toBe('system');
-        expect(messages[0].content).toBe('You are a helpful assistant.');
+      expect(
+        systemMessages.find(
+          (m: any) =>
+            m.content === 'Complex system message from context' ||
+            m.content?.[0]?.text === 'Complex system message from context',
+        ),
+      ).toBeDefined();
 
-        // Should have the context system messages
+      // Should have the context user message
+      const userMessages = messages.filter((m: any) => m.role === 'user');
+      expect(userMessages.length).toBe(2);
+
+      // Check for context user message
+      if (version === 'v1') {
         expect(
-          systemMessages.find((m: any) => m.content === 'Additional system instructions from context'),
-        ).toBeDefined();
-
-        expect(
-          systemMessages.find(
+          userMessages.find(
             (m: any) =>
-              m.content === 'Complex system message from context' ||
-              m.content?.[0]?.text === 'Complex system message from context',
+              m.content?.[0]?.text === 'What are your instructions?' || m.content === 'What are your instructions?',
           ),
         ).toBeDefined();
+      } else {
+        expect(userMessages.find((m: any) => m.content?.[0]?.text === 'What are your instructions?')).toBeDefined();
+      }
+    }, 20000);
 
-        // Should have the context user message
-        const userMessages = messages.filter((m: any) => m.role === 'user');
-        expect(userMessages.length).toBe(2);
-
-        // Check for context user message
-        if (version === 'v1') {
-          expect(
-            userMessages.find(
-              (m: any) =>
-                m.content?.[0]?.text === 'What are your instructions?' || m.content === 'What are your instructions?',
-            ),
-          ).toBeDefined();
-        } else {
-          expect(userMessages.find((m: any) => m.content?.[0]?.text === 'What are your instructions?')).toBeDefined();
-        }
-      }, 20000);
-
-      it(`should handle mixed message types in context parameter ${version === 'v2' ? `format: ${format}` : ''}`, async () => {
-        const agent = new Agent({
-          id: 'test-mixed-context',
-          name: 'Test Mixed Context',
-          model: openaiModel,
-          instructions: 'You are a helpful assistant.',
-        });
-
-        const contextMessages = [
-          {
-            role: 'user' as const,
-            content: 'Previous user question',
-          },
-          {
-            role: 'assistant' as const,
-            content: 'Previous assistant response',
-          },
-          {
-            role: 'system' as const,
-            content: 'Additional context instructions',
-          },
-        ];
-
-        let result;
-        if (version === 'v1') {
-          result = await agent.streamLegacy('Current question', {
-            context: contextMessages,
-          });
-        } else {
-          result = await agent.stream('Current question', {
-            context: contextMessages,
-            format,
-          });
-        }
-
-        // Consume the stream
-        for await (const _part of result.fullStream) {
-          // Just consume the stream
-        }
-
-        // Check the request format based on version
-        let messages: any[];
-        if (version === 'v1') {
-          const requestData = await result.request;
-          if (!requestData?.body) {
-            return; // Can't validate in mock
-          }
-          messages = JSON.parse(requestData.body).messages;
-        } else {
-          const requestData = await (result as any).getFullOutput();
-          messages = requestData.request.body.input;
-        }
-
-        // Verify message order and content
-        const systemMessages = messages.filter((m: any) => m.role === 'system');
-        const userMessages = messages.filter((m: any) => m.role === 'user');
-        const assistantMessages = messages.filter((m: any) => m.role === 'assistant');
-
-        // Should have 2 system messages (default + context)
-        expect(systemMessages.length).toBe(2);
-
-        // Should have 2 user messages (context + current)
-        expect(userMessages.length).toBe(2);
-
-        // Should have 1 assistant message (from context)
-        expect(assistantMessages.length).toBe(1);
+    it(`should handle mixed message types in context parameter`, async () => {
+      const agent = new Agent({
+        id: 'test-mixed-context',
+        name: 'Test Mixed Context',
+        model: openaiModel,
+        instructions: 'You are a helpful assistant.',
       });
+
+      const contextMessages = [
+        {
+          role: 'user' as const,
+          content: 'Previous user question',
+        },
+        {
+          role: 'assistant' as const,
+          content: 'Previous assistant response',
+        },
+        {
+          role: 'system' as const,
+          content: 'Additional context instructions',
+        },
+      ];
+
+      let result;
+      if (version === 'v1') {
+        result = await agent.streamLegacy('Current question', {
+          context: contextMessages,
+        });
+      } else {
+        result = await agent.stream('Current question', {
+          context: contextMessages,
+        });
+      }
+
+      // Consume the stream
+      for await (const _part of result.fullStream) {
+        // Just consume the stream
+      }
+
+      // Check the request format based on version
+      let messages: any[];
+      if (version === 'v1') {
+        const requestData = await result.request;
+        if (!requestData?.body) {
+          return; // Can't validate in mock
+        }
+        messages = JSON.parse(requestData.body).messages;
+      } else {
+        const requestData = await (result as any).getFullOutput();
+        messages = requestData.request.body.input;
+      }
+
+      // Verify message order and content
+      const systemMessages = messages.filter((m: any) => m.role === 'system');
+      const userMessages = messages.filter((m: any) => m.role === 'user');
+      const assistantMessages = messages.filter((m: any) => m.role === 'assistant');
+
+      // Should have 2 system messages (default + context)
+      expect(systemMessages.length).toBe(2);
+
+      // Should have 2 user messages (context + current)
+      expect(userMessages.length).toBe(2);
+
+      // Should have 1 assistant message (from context)
+      expect(assistantMessages.length).toBe(1);
     });
   });
 
@@ -3199,64 +3329,55 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(thread?.resourceId).toBe('user-1');
     });
 
-    it('generate - should still work with deprecated threadId and resourceId', async () => {
-      const mockMemory = new MockMemory();
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'test',
-        model: dummyModel,
-        memory: mockMemory,
-      });
+    it.skipIf(version !== 'v1')(
+      'generate - should still work with deprecated threadId and resourceId (legacy only)',
+      async () => {
+        const mockMemory = new MockMemory();
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test',
+          model: dummyModel,
+          memory: mockMemory,
+        });
 
-      if (version === 'v1') {
         await agent.generateLegacy('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
-      } else {
-        await agent.generate('hello', {
+
+        const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+        expect(thread).toBeDefined();
+        expect(thread?.id).toBe('thread-1');
+        expect(thread?.resourceId).toBe('user-1');
+      },
+    );
+
+    it.skipIf(version !== 'v1')(
+      'stream - should still work with deprecated threadId and resourceId (legacy only)',
+      async () => {
+        const mockMemory = new MockMemory();
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test',
+          model: dummyModel,
+          memory: mockMemory,
+        });
+
+        const stream = await agent.streamLegacy('hello', {
           resourceId: 'user-1',
           threadId: 'thread-1',
         });
-      }
 
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
-      expect(thread).toBeDefined();
-      expect(thread?.id).toBe('thread-1');
-      expect(thread?.resourceId).toBe('user-1');
-    });
+        await stream.consumeStream();
 
-    it('stream - should still work with deprecated threadId and resourceId', async () => {
-      const mockMemory = new MockMemory();
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'test',
-        model: dummyModel,
-        memory: mockMemory,
-      });
-
-      let stream;
-      if (version === 'v1') {
-        stream = await agent.streamLegacy('hello', {
-          resourceId: 'user-1',
-          threadId: 'thread-1',
-        });
-      } else {
-        stream = await agent.stream('hello', {
-          resourceId: 'user-1',
-          threadId: 'thread-1',
-        });
-      }
-
-      await stream.consumeStream();
-
-      const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
-      expect(thread).toBeDefined();
-      expect(thread?.id).toBe('thread-1');
-      expect(thread?.resourceId).toBe('user-1');
-    });
+        const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+        expect(thread).toBeDefined();
+        expect(thread?.id).toBe('thread-1');
+        expect(thread?.resourceId).toBe('user-1');
+      },
+    );
   });
 
   describe(`${version} - Dynamic instructions with mastra instance`, () => {
@@ -4130,8 +4251,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             );
           } else {
             await agent.generate('Please echo this and then use the error tool. Be verbose and take multiple steps.', {
-              threadId: 'thread-partial-rescue-generate',
-              resourceId: 'resource-partial-rescue-generate',
+              memory: {
+                thread: 'thread-partial-rescue-generate',
+                resource: 'resource-partial-rescue-generate',
+              },
               savePerStep: true,
               onStepFinish: (result: any) => {
                 if (result.toolCalls && result.toolCalls.length > 1) {
@@ -4214,8 +4337,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('Echo: Please echo this long message and explain why.', {
-            threadId: 'thread-echo-generate',
-            resourceId: 'resource-echo-generate',
+            memory: {
+              thread: 'thread-echo-generate',
+              resource: 'resource-echo-generate',
+            },
             savePerStep: true,
           });
         }
@@ -4292,8 +4417,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           await agent.generate(
             'Echo: Please echo this message. Uppercase: please also uppercase this message. Explain both results.',
             {
-              threadId: 'thread-multi-generate',
-              resourceId: 'resource-multi-generate',
+              memory: {
+                thread: 'thread-multi-generate',
+                resource: 'resource-multi-generate',
+              },
               savePerStep: true,
             },
           );
@@ -4333,8 +4460,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('repeat tool calls', {
-            threadId: 'thread-1-generate',
-            resourceId: 'resource-1-generate',
+            memory: {
+              thread: 'thread-1-generate',
+              resource: 'resource-1-generate',
+            },
           });
         }
 
@@ -4376,8 +4505,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('no progress', {
-            threadId: `thread-2-${version}-generate`,
-            resourceId: `resource-2-${version}-generate`,
+            memory: {
+              thread: `thread-2-${version}-generate`,
+              resource: `resource-2-${version}-generate`,
+            },
           });
         }
 
@@ -4420,8 +4551,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         } else {
           await agent.generate('interrupt before step', {
-            threadId: 'thread-3-generate',
-            resourceId: 'resource-3-generate',
+            memory: {
+              thread: 'thread-3-generate',
+              resource: 'resource-3-generate',
+            },
           });
         }
       } catch (err: any) {
@@ -7351,9 +7484,9 @@ describe('Agent Tests', () => {
 //       expect((agent.listTools() as Agent['tools']).vercelTool).toBeDefined();
 
 //       // Verify both tools can be executed
-//       // @ts-ignore
+//       // @ts-expect-error
 //       await (agent.listTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
-//       // @ts-ignore
+//       // @ts-expect-error
 //       await (agent.listTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
 
 //       expect(mastraExecute).toHaveBeenCalled();

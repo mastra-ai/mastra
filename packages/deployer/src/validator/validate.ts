@@ -1,7 +1,7 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import type { SpawnOptions } from 'node:child_process';
 import { dirname } from 'node:path';
-import { slash } from '../build/utils';
+import { pathToFileURL } from 'node:url';
 
 type ValidationArgs = {
   message: string;
@@ -96,7 +96,7 @@ globalThis.__dirname = dirname(__filename);
       '--input-type=module',
       '--enable-source-maps',
       '-e',
-      `${prefixCode};import('file://${slash(file)}').catch(err => {
+      `${prefixCode};import('${pathToFileURL(file).href}').catch(err => {
         ${errorHandler.toString()}
         errorHandler(err);
       })`.replaceAll(/\n/g, ''),

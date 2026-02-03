@@ -7,16 +7,34 @@ packages:
 
 # Sensitive Data Filter
 
-The Sensitive Data Filter is a span processor that automatically redacts sensitive information from your traces before they're exported. This ensures that passwords, API keys, tokens, and other confidential data never leave your application or get stored in observability platforms.
+The Sensitive Data Filter is a span processor that redacts sensitive information from your traces during the processing pipeline before export. This ensures that passwords, API keys, tokens, and other confidential data never leave your application or get stored in observability platforms.
 
 ## Default Configuration
 
-By default, the Sensitive Data Filter is automatically enabled when you use the standard Mastra configuration:
+The Sensitive Data Filter is included in the recommended observability configuration:
 
 ```ts title="src/mastra/index.ts"
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
+
 export const mastra = new Mastra({
   observability: new Observability({
-    default: { enabled: true }, // Automatically includes SensitiveDataFilter
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(),
+          new CloudExporter(),
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive fields before export
+        ],
+      },
+    },
   }),
   storage: new LibSQLStore({
     id: 'mastra-storage',
@@ -25,7 +43,7 @@ export const mastra = new Mastra({
 });
 ```
 
-With the default configuration, the filter automatically redacts these common sensitive field names:
+With the default configuration, the filter redacts these common sensitive field names:
 
 - `password`
 - `token`
@@ -294,4 +312,4 @@ This ensures that processing errors don't prevent traces from being exported or 
 
 ## Related
 
-- [SensitiveDataFilter API](/reference/v1/observability/tracing/processors/sensitive-data-filter)
+- [SensitiveDataFilter API](/reference/observability/tracing/processors/sensitive-data-filter)

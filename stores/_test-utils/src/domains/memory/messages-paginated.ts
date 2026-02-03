@@ -3,7 +3,7 @@ import { createSampleMessageV2 } from './data';
 import { resetRole, createSampleThread } from './data';
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
-import { MessageList } from '@mastra/core/agent';
+import { MessageList, TypeDetector } from '@mastra/core/agent';
 
 export function createListMessagesTest({ storage }: { storage: MastraStorage }) {
   let memoryStorage: MemoryStorage;
@@ -1040,7 +1040,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       });
 
       expect(messages.length).toBeGreaterThan(0);
-      expect(messages.every(MessageList.isMastraDBMessage)).toBe(true);
+      expect(messages.every(TypeDetector.isMastraDBMessage)).toBe(true);
     });
 
     it('should return messages in MastraDBMessage format', async () => {
@@ -1049,7 +1049,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       });
 
       expect(v2messages.length).toBeGreaterThan(0);
-      expect(v2messages.every(MessageList.isMastraDBMessage)).toBe(true);
+      expect(v2messages.every(TypeDetector.isMastraDBMessage)).toBe(true);
     });
 
     it('should return messages from multiple threads', async () => {

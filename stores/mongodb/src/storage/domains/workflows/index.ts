@@ -342,7 +342,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         parsedSnapshot = typeof row.snapshot === 'string' ? safelyParseJSON(row.snapshot as string) : row.snapshot;
       } catch (e) {
         // If parsing fails, return the raw snapshot string
-        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
       }
     }
 

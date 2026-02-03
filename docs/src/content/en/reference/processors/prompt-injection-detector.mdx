@@ -108,7 +108,7 @@ const processor = new PromptInjectionDetector({
     },
     {
       name: "processInput",
-      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>",
       description: "Processes input messages to detect prompt injection attempts before sending to LLM",
       isOptional: false,
     },
@@ -140,4 +140,4 @@ export const agent = new Agent({
 
 ## Related
 
-- [Guardrails](/docs/v1/agents/guardrails)
+- [Guardrails](/docs/agents/guardrails)

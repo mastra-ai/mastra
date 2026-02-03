@@ -1,0 +1,14 @@
+@import '../src/index.css';
+@tailwind base;
+@tailwind utilities;
+
+:root {
+  --font-inter: 'Inter', sans-serif;
+  --tasa-explorer: 'TasaExplorer', sans-serif;
+  --geist-mono: 'GeistMonoVF', monospace;
+  --radius: 0.5rem;
+  --top-bar-height: 40px;
+  --color-thumb: rgb(64, 64, 64);
+  --color-thumb-hover: rgb(96, 96, 96);
+  --color-track: transparent;
+}

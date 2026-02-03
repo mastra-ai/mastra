@@ -1,5 +1,5 @@
 ---
-title: Chunking and Embedding Documents | RAG | Mastra Docs
+title: Chunking and Embedding Documents | RAG
 description: Guide on chunking and embedding documents in Mastra for efficient processing and retrieval.
 packages:
   - "@mastra/core"
@@ -58,7 +58,6 @@ const chunks = await doc.chunk({
   minSize: 50,
   overlap: 0,
   sentenceEnders: ["."],
-  keepSeparator: true,
 });
 ```
 
@@ -76,7 +75,7 @@ const chunks = await doc.chunk({
 Metadata extraction may use LLM calls, so ensure your API key is set.
 :::
 
-We go deeper into chunking strategies in our [`chunk()` reference documentation](/reference/v1/rag/chunk).
+We go deeper into chunking strategies in our [`chunk()` reference documentation](/reference/rag/chunk).
 
 ## Step 2: Embedding Generation
 
@@ -96,7 +95,7 @@ const { embeddings } = await embedMany({
 });
 ```
 
-Mastra supports OpenAI and Google embedding models. For a complete list of supported embedding models, see the [embeddings reference](/reference/v1/rag/embeddings).
+Mastra supports OpenAI and Google embedding models. For a complete list of supported embedding models, see the [embeddings reference](/reference/rag/embeddings).
 
 The model router automatically handles API key detection from environment variables.
 
@@ -190,10 +189,10 @@ await vectorStore.upsert({
 
 For more examples of different chunking strategies and embedding configurations, see:
 
-- [Chunk Reference](/reference/v1/rag/chunk)
-- [Embeddings Reference](/reference/v1/rag/embeddings)
+- [Chunk Reference](/reference/rag/chunk)
+- [Embeddings Reference](/reference/rag/embeddings)
 
 For more details on vector databases and embeddings, see:
 
 - [Vector Databases](./vector-databases)
-- [Embedding API Reference](/reference/v1/rag/embeddings)
+- [Embedding API Reference](/reference/rag/embeddings)

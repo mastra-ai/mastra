@@ -794,6 +794,76 @@ describe('CloudExporter', () => {
     });
   });
 
+  describe('Public Flush API', () => {
+    const mockSpan = getMockSpan({
+      id: 'span-123',
+      name: 'test-span',
+      type: SpanType.MODEL_GENERATION,
+      isEvent: false,
+      traceId: 'trace-456',
+      input: { prompt: 'test' },
+      output: { response: 'result' },
+    });
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
+    });
+
+    it('should flush buffered events without shutting down', async () => {
+      const loggerDebugSpy = vi.spyOn((exporter as any).logger, 'debug');
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: mockSpan,
+      });
+
+      const buffer = (exporter as any).buffer;
+      expect(buffer.totalSize).toBe(1);
+
+      // Call public flush() method
+      await exporter.flush();
+
+      expect(loggerDebugSpy).toHaveBeenCalledWith('Flushing buffered events', { bufferedEvents: 1 });
+      expect(mockFetchWithRetry).toHaveBeenCalled();
+
+      // Buffer should be empty after flush
+      expect(buffer.totalSize).toBe(0);
+
+      // Exporter should still be usable after flush
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: { ...mockSpan, id: 'span-456' },
+      });
+      expect(buffer.totalSize).toBe(1);
+    });
+
+    it('should be a no-op when buffer is empty', async () => {
+      const buffer = (exporter as any).buffer;
+      expect(buffer.totalSize).toBe(0);
+
+      // Call flush on empty buffer
+      await exporter.flush();
+
+      // Should not have called the API
+      expect(mockFetchWithRetry).not.toHaveBeenCalled();
+    });
+
+    it('should skip flush when exporter is disabled', async () => {
+      const disabledExporter = new CloudExporter({
+        // Missing access token will disable the exporter
+        accessToken: undefined,
+        endpoint: 'http://localhost:3000',
+      });
+
+      // Should not throw
+      await expect(disabledExporter.flush()).resolves.not.toThrow();
+
+      // Should not call API since exporter is disabled
+      expect(mockFetchWithRetry).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Shutdown Functionality', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
@@ -834,7 +904,7 @@ describe('CloudExporter', () => {
     });
 
     it('should flush remaining events on shutdown', async () => {
-      const flushSpy = vi.spyOn(exporter as any, 'flush').mockResolvedValue(undefined);
+      const flushSpy = vi.spyOn(exporter, 'flush').mockResolvedValue(undefined);
       const loggerInfoSpy = vi.spyOn((exporter as any).logger, 'info');
 
       // Add events to buffer
@@ -853,15 +923,12 @@ describe('CloudExporter', () => {
 
       await exporter.shutdown();
 
-      expect(loggerInfoSpy).toHaveBeenCalledWith('Flushing remaining events on shutdown', {
-        remainingEvents: 2,
-      });
       expect(flushSpy).toHaveBeenCalled();
       expect(loggerInfoSpy).toHaveBeenCalledWith('CloudExporter shutdown complete');
     });
 
     it('should handle shutdown with empty buffer gracefully', async () => {
-      const flushSpy = vi.spyOn(exporter as any, 'flush');
+      const flushSpy = vi.spyOn(exporter, 'flush');
       const loggerInfoSpy = vi.spyOn((exporter as any).logger, 'info');
 
       const buffer = (exporter as any).buffer;
@@ -869,8 +936,8 @@ describe('CloudExporter', () => {
 
       await exporter.shutdown();
 
-      // Should not call flush for empty buffer
-      expect(flushSpy).not.toHaveBeenCalled();
+      // flush() is called but it's a no-op for empty buffer
+      expect(flushSpy).toHaveBeenCalled();
       expect(loggerInfoSpy).toHaveBeenCalledWith('CloudExporter shutdown complete');
     });
 

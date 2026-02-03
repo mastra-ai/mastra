@@ -179,7 +179,7 @@ export type DocsInput = z.infer<typeof docsInputSchema>;
 
 export const docsTool = {
   name: 'mastraDocs',
-  description: `Get Mastra.ai documentation. 
+  description: `[🌐 REMOTE] Get Mastra.ai documentation. 
     Request paths to explore the docs. References contain API docs. 
     Other paths contain guides. The user doesn\'t know about files and directories. 
     You can also use keywords from the user query to find relevant documentation, but prioritize paths. 

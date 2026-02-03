@@ -10,7 +10,6 @@ import type { AgentExecutionOptions, AgentInstructions } from '../agent';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ProcessInputStepArgs, ProcessInputStepResult, Processor } from '../processors';
-import type { OutputSchema } from '../stream';
 import { getSettings as getToolLoopAgentSettings } from './utils';
 import type { ToolLoopAgentLike } from './utils';
 
@@ -54,7 +53,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
     const tools = 'tools' in this.agent ? (this.agent as ToolLoopAgent).tools : undefined;
 
     // Build default options from ToolLoopAgent config params
-    const defaultOptions: Omit<AgentExecutionOptions<OutputSchema>, 'abortSignal'> = {};
+    const defaultOptions: Omit<AgentExecutionOptions<unknown>, 'abortSignal'> = {};
 
     // AgentExecutionOptions
     if (this.settings.toolChoice) {

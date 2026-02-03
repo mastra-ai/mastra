@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { copyFile, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { exports as resolveExports } from 'resolve.exports';
 
 type PackageJSON = {
@@ -23,7 +24,7 @@ function getDtsFile(pkg: PackageJSON, key: string, condition: string = 'types'):
 }
 
 export async function copyAIDtsFiles(): Promise<string[]> {
-  const rootDir = dirname(dirname(new URL(import.meta.url).pathname));
+  const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 
   const aiPkgDir = join(rootDir, 'node_modules', 'ai');
   const aiPkgJSON = await readPackageJSON(join(aiPkgDir, 'package.json'));

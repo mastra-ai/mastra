@@ -1,11 +1,12 @@
 import { usePlaygroundStore } from '@/store/playground-store';
 import { useTool } from '@/domains/tools/hooks';
 import { useExecuteTool } from '@/domains/tools/hooks/use-execute-tool';
-import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { z } from 'zod';
 import { Txt } from '@/ds/components/Txt';
+import { Skeleton } from '@/ds/components/Skeleton';
 import ToolExecutor from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useMemo, useEffect } from 'react';
@@ -46,13 +47,21 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any) => {
+  const handleExecuteTool = async (data: any, schemaRequestContext?: Record<string, any>) => {
     if (!tool) return;
+
+    // Merge global playground request context with schema request context.
+    // Schema values take precedence and explicitly override global values,
+    // including when schema values are empty strings (user intentionally cleared them).
+    const requestContext = {
+      ...(playgroundRequestContext ?? {}),
+      ...(schemaRequestContext ?? {}),
+    };
 
     return executeTool({
       toolId: tool.id,
       input: data,
-      requestContext: playgroundRequestContext,
+      requestContext,
     });
   };
 
@@ -60,12 +69,21 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
     : z.object({});
 
-  if (isLoading || error) return null;
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <Skeleton className="h-8 w-48 mb-4" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (error) return null;
 
   if (!tool)
     return (
       <div className="py-12 text-center px-6">
-        <Txt variant="header-md" className="text-icon3">
+        <Txt variant="header-md" className="text-neutral3">
           Tool not found
         </Txt>
       </div>
@@ -79,6 +97,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description}
       toolId={tool.id}
+      requestContextSchema={tool.requestContextSchema}
     />
   );
 };

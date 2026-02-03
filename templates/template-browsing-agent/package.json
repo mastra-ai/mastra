@@ -17,18 +17,18 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/core": "beta",
-    "@mastra/libsql": "beta",
-    "@mastra/loggers": "beta",
-    "@mastra/memory": "beta",
-    "@mastra/observability": "beta",
-    "@browserbasehq/stagehand": "^2.5.2",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@browserbasehq/stagehand": "^2.5.6",
     "zod": "^3.25.67"
   },
   "devDependencies": {
-    "@types/node": "^24.0.4",
-    "mastra": "beta",
-    "dotenv": "^16.4.5",
+    "@types/node": "^24.10.9",
+    "mastra": "latest",
+    "dotenv": "^16.6.1",
     "typescript": "^5.9.3"
   }
 }

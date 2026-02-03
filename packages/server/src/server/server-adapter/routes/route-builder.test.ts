@@ -379,6 +379,34 @@ describe('wrapSchemaForQueryParams', () => {
         expect(withNull.data.tags).toBeNull();
       }
     });
+
+    it('should wrap nested optional fields created by .partial()', () => {
+      // When .partial() is called on a schema with already-optional fields,
+      // it creates nested optionals: ZodOptional<ZodOptional<ZodObject>>
+      const dateRangeSchema = z.object({
+        start: z.coerce.date().optional(),
+        end: z.coerce.date().optional(),
+      });
+
+      const baseSchema = z.object({
+        startedAt: dateRangeSchema.optional(), // already optional
+      });
+
+      // .partial() wraps all fields with another ZodOptional
+      const partialSchema = baseSchema.partial();
+      const querySchema = wrapSchemaForQueryParams(partialSchema);
+
+      // Test with JSON string - this was failing before the fix
+      const withValue = querySchema.safeParse({ startedAt: '{"start": "2024-01-01"}' });
+      expect(withValue.success).toBe(true);
+      if (withValue.success) {
+        expect(withValue.data.startedAt?.start).toBeInstanceOf(Date);
+      }
+
+      // Test without value
+      const withoutValue = querySchema.safeParse({});
+      expect(withoutValue.success).toBe(true);
+    });
   });
 
   describe('mixed schema', () => {

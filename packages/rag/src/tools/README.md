@@ -135,6 +135,50 @@ const config: DatabaseConfig = {
 };
 ```
 
+## Dynamic Vector Store for Multi-Tenant Applications
+
+For multi-tenant applications where each tenant has isolated data (e.g., separate PostgreSQL schemas), you can pass a resolver function instead of a static vector store:
+
+```typescript
+import { createVectorQueryTool, VectorStoreResolver } from '@mastra/rag/tools';
+import { PgVector } from '@mastra/pg';
+
+// Resolver function receives requestContext and mastra instance
+const vectorStoreResolver: VectorStoreResolver = async ({ requestContext }) => {
+  const tenantId = requestContext?.get('tenantId');
+
+  return new PgVector({
+    id: `pg-vector-${tenantId}`,
+    connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+    schemaName: `tenant_${tenantId}`, // Each tenant has their own schema
+  });
+};
+
+const vectorQueryTool = createVectorQueryTool({
+  indexName: 'embeddings',
+  model: embedModel,
+  vectorStore: vectorStoreResolver, // Dynamic resolution!
+});
+
+// Usage with tenant context
+const requestContext = new RequestContext();
+requestContext.set('tenantId', 'acme-corp');
+
+const result = await vectorQueryTool.execute({ queryText: 'search query', topK: 5 }, { requestContext });
+```
+
+The same pattern works with `createGraphRAGTool`:
+
+```typescript
+import { createGraphRAGTool } from '@mastra/rag/tools';
+
+const graphTool = createGraphRAGTool({
+  indexName: 'embeddings',
+  model: embedModel,
+  vectorStore: vectorStoreResolver,
+});
+```
+
 ## Migration Guide
 
 Existing code will continue to work without changes. To add database-specific configurations:

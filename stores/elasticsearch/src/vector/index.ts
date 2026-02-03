@@ -13,7 +13,7 @@ import type {
   UpsertVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
 import { ElasticSearchFilterTranslator } from './filter';
 import type { ElasticSearchVectorFilter } from './filter';
 
@@ -31,6 +31,8 @@ const REVERSE_METRIC_MAPPING = {
 
 type ElasticSearchVectorParams = QueryVectorParams<ElasticSearchVectorFilter>;
 
+export type ElasticSearchAuth = { apiKey: string } | { username: string; password: string } | { bearer: string };
+
 export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter> {
   private client: ElasticSearchClient;
 
@@ -38,10 +40,11 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
    * Creates a new ElasticSearchVector client.
    *
    * @param {string} url - The url of the ElasticSearch node.
+   * @param {ElasticSearchAuth} [auth] - The authentication credentials for ElasticSearch.
    */
-  constructor({ url, id }: { url: string } & { id: string }) {
+  constructor({ url, id, auth }: { url: string } & { id: string } & { auth?: ElasticSearchAuth }) {
     super({ id });
-    this.client = new ElasticSearchClient({ node: url });
+    this.client = new ElasticSearchClient({ node: url, ...(auth && { auth }) });
   }
 
   /**
@@ -69,7 +72,6 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
         mappings: {
           properties: {
             metadata: { type: 'object' },
-            id: { type: 'keyword' },
             embedding: {
               type: 'dense_vector',
               dims: dimension,
@@ -202,20 +204,8 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
    */
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     try {
-      await this.client.indices.delete({ index: indexName });
+      await this.client.indices.delete({ index: indexName }, { ignore: [404] });
     } catch (error: any) {
-      // Check if error is "index not found" - allow idempotent delete
-      const isIndexNotFound =
-        error?.statusCode === 404 ||
-        error?.body?.error?.type === 'index_not_found_exception' ||
-        error?.meta?.statusCode === 404;
-
-      if (isIndexNotFound) {
-        // Silently return for idempotent delete behavior
-        return;
-      }
-
-      // For all other errors, wrap, log, track, and rethrow
       const mastraError = new MastraError(
         {
           id: createVectorErrorId('ELASTICSEARCH', 'DELETE_INDEX', 'FAILED'),
@@ -241,6 +231,9 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
    * @returns {Promise<string[]>} A promise that resolves to an array of IDs of the upserted vectors.
    */
   async upsert({ indexName, vectors, metadata = [], ids }: UpsertVectorParams): Promise<string[]> {
+    // Validate input parameters and vector values
+    validateUpsert('ELASTICSEARCH', vectors, metadata, ids, true);
+
     const vectorIds = ids || vectors.map(() => crypto.randomUUID());
     const operations = [];
 
@@ -260,7 +253,6 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
         };
 
         const document = {
-          id: vectorIds[i],
           embedding: vectors[i],
           metadata: metadata[i] || {},
         };
@@ -372,8 +364,14 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     topK = 10,
     includeVector = false,
   }: ElasticSearchVectorParams): Promise<QueryResult[]> {
+    // Validate topK parameter
+    validateTopK('ELASTICSEARCH', topK);
+
     try {
       const translatedFilter = this.transformFilter(filter);
+
+      // Decide which fields to fetch from _source
+      const sourceFields = includeVector ? ['metadata', 'embedding'] : ['metadata'];
 
       const response = await this.client.search({
         index: indexName,
@@ -384,13 +382,13 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
           num_candidates: topK * 2,
           ...(translatedFilter ? { filter: translatedFilter } : {}),
         },
-        _source: ['id', 'metadata', 'embedding'],
+        _source: sourceFields,
       });
 
       const results = response.hits.hits.map((hit: any) => {
         const source = hit._source || {};
         return {
-          id: String(source.id || ''),
+          id: String(hit._id),
           score: typeof hit._score === 'number' ? hit._score : 0,
           metadata: source.metadata || {},
           ...(includeVector && { vector: source.embedding as number[] }),
@@ -513,6 +511,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
         .get({
           index: indexName,
           id: id,
+          _source: ['embedding', 'metadata'],
         })
         .catch(() => {
           throw new Error(`Document with ID ${id} not found in index ${indexName}`);
@@ -538,9 +537,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     }
 
     const source = existingDoc._source as any;
-    const updatedDoc: Record<string, any> = {
-      id: source?.id || id,
-    };
+    const updatedDoc: Record<string, any> = {};
 
     try {
       // Update vector if provided

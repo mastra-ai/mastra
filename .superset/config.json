@@ -1,4 +1,8 @@
 {
-  "setup": ["pnpm i && pnpm build"],
+  "setup": [
+    "pnpm install",
+    "cp \"$SUPERSET_ROOT_PATH/.env.local\" .env.local 2>/dev/null || :",
+    "nohup pnpm build > /dev/null 2>&1 &"
+  ],
   "teardown": []
 }

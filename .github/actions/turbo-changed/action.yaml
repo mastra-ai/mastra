@@ -1,0 +1,165 @@
+name: Turbo Changed
+description: |
+  Detect if package task inputs have changed using Turborepo's task hash comparison.
+  This respects the `inputs` configuration in turbo.json, so files excluded from task inputs
+  (like *.md files) won't trigger a change detection.
+
+  Automatically includes all transitive dependencies in the check - if you specify @mastra/core,
+  it will also check all packages that @mastra/core depends on (like @mastra/schema-compat).
+
+inputs:
+  packages:
+    description: 'Comma-separated list of packages to check (e.g., @mastra/rag or @mastra/core,@mastra/server). Dependencies are automatically included.'
+    required: true
+  tasks:
+    description: 'Comma-separated list of tasks to check (e.g., build,test)'
+    required: false
+    default: 'build,test'
+  base-ref:
+    description: 'The base ref to compare against (e.g., origin/main)'
+    required: false
+    default: 'origin/main'
+
+outputs:
+  changed:
+    description: 'Whether any of the specified package/task inputs changed (true/false)'
+    value: ${{ steps.compare.outputs.changed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install turbo
+      shell: bash
+      run: pnpm install -g turbo
+
+    - name: Disable turbo telemetry
+      shell: bash
+      run: turbo telemetry disable
+
+    - name: Compare turbo task hashes
+      id: compare
+      shell: bash
+      run: |
+        set -e
+        set -o pipefail
+
+        PACKAGES="${{ inputs.packages }}"
+        TASKS="${{ inputs.tasks }}"
+        BASE_REF="${{ inputs.base-ref }}"
+
+        # Build turbo filter string from packages
+        # e.g., "@mastra/core,@mastra/server" -> "--filter=@mastra/core --filter=@mastra/server"
+        build_filter_args() {
+          local packages=$1
+          local filters=""
+          IFS=',' read -ra pkg_array <<< "$packages"
+          for pkg in "${pkg_array[@]}"; do
+            pkg=$(echo "$pkg" | xargs)  # trim whitespace
+            filters="$filters --filter=$pkg"
+          done
+          echo "$filters"
+        }
+
+        # Get all task hashes for the given packages and task (including dependencies)
+        # Returns JSON object with package#task as key and hash as value
+        get_all_task_hashes() {
+          local task=$1
+          local filter_args=$2
+          # Run turbo dry-run and extract all package/task/hash combinations
+          # This automatically includes all transitive dependencies
+          # Note: Uses turbo directly (installed globally) - no pnpm install needed
+          turbo "$task" $filter_args --dry-run=json 2>/dev/null | \
+            jq -r '.tasks[] | "\(.package)#\(.task)=\(.hash)"'
+        }
+
+        # Save current ref to return to later
+        CURRENT_REF=$(git rev-parse HEAD)
+
+        # Build filter arguments
+        FILTER_ARGS=$(build_filter_args "$PACKAGES")
+        echo "Filter args: $FILTER_ARGS"
+
+        # Convert comma-separated tasks to array
+        IFS=',' read -ra TASK_ARRAY <<< "$TASKS"
+
+        # Initialize results
+        declare -A HEAD_HASHES
+        declare -A BASE_HASHES
+        CHANGED=false
+
+        # Get current HEAD hashes for all packages and their dependencies
+        echo ""
+        echo "Getting task hashes for HEAD ($CURRENT_REF)..."
+        echo "(includes all transitive dependencies)"
+        for task in "${TASK_ARRAY[@]}"; do
+          task=$(echo "$task" | xargs)  # trim whitespace
+          echo "  Task: $task"
+          
+          while IFS= read -r line; do
+            if [ -n "$line" ]; then
+              key="${line%=*}"
+              hash="${line#*=}"
+              HEAD_HASHES["$key"]="$hash"
+              pkg="${key%#*}"
+              echo "    $pkg: $hash"
+            fi
+          done <<< "$(get_all_task_hashes "$task" "$FILTER_ARGS")"
+        done
+
+        # Validate we got some hashes
+        if [ ${#HEAD_HASHES[@]} -eq 0 ]; then
+          echo "::error::No task hashes found for HEAD. Check that the packages exist and have the specified tasks."
+          exit 1
+        fi
+
+        # Get base branch hashes
+        echo ""
+        echo "Getting task hashes for $BASE_REF..."
+        git checkout "$BASE_REF" --quiet 2>/dev/null || {
+          echo "Warning: Could not checkout $BASE_REF, fetching..."
+          git fetch origin "${BASE_REF#origin/}" --quiet
+          git checkout "$BASE_REF" --quiet
+        }
+
+        for task in "${TASK_ARRAY[@]}"; do
+          task=$(echo "$task" | xargs)  # trim whitespace
+          echo "  Task: $task"
+          
+          while IFS= read -r line; do
+            if [ -n "$line" ]; then
+              key="${line%=*}"
+              hash="${line#*=}"
+              BASE_HASHES["$key"]="$hash"
+              pkg="${key%#*}"
+              echo "    $pkg: $hash"
+            fi
+          done <<< "$(get_all_task_hashes "$task" "$FILTER_ARGS")"
+        done
+
+        # Return to original ref
+        git checkout "$CURRENT_REF" --quiet
+
+        # Compare hashes
+        echo ""
+        echo "Comparing hashes..."
+
+        # Get all unique keys from both HEAD and BASE
+        declare -A ALL_KEYS
+        for key in "${!HEAD_HASHES[@]}"; do ALL_KEYS["$key"]=1; done
+        for key in "${!BASE_HASHES[@]}"; do ALL_KEYS["$key"]=1; done
+
+        for key in "${!ALL_KEYS[@]}"; do
+          head_hash="${HEAD_HASHES[$key]:-}"
+          base_hash="${BASE_HASHES[$key]:-}"
+          
+          if [ "$head_hash" != "$base_hash" ]; then
+            echo "  $key: CHANGED (${base_hash:-new} -> ${head_hash:-removed})"
+            CHANGED=true
+          else
+            echo "  $key: unchanged"
+          fi
+        done
+
+        echo ""
+        echo "Result: changed=$CHANGED"
+        echo "changed=$CHANGED" >> $GITHUB_OUTPUT

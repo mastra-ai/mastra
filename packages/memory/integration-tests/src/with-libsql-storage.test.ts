@@ -32,7 +32,7 @@ describe('Memory with LibSQL Integration', () => {
       id: randomUUID(),
     }),
     vector: new LibSQLVector({
-      connectionUrl: 'file:libsql-test.db',
+      url: 'file:libsql-test.db',
       id: randomUUID(),
     }),
     embedder: fastembed,
@@ -44,7 +44,7 @@ describe('Memory with LibSQL Integration', () => {
     storageConfigForWorker: { url: 'file:libsql-test.db', id: randomUUID() },
     memoryOptionsForWorker: memoryOptions,
     vectorConfigForWorker: {
-      connectionUrl: 'file:libsql-test.db',
+      url: 'file:libsql-test.db',
       id: randomUUID(),
     },
   });

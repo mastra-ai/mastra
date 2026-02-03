@@ -1,8 +1,6 @@
-'use client';
-
 import { useEffect } from 'react';
 import { toast } from '@/lib/toast';
-import { Combobox } from '@/components/ui/combobox';
+import { Combobox } from '@/ds/components/Combobox';
 import { useAgents } from '../hooks/use-agents';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -14,6 +12,7 @@ export interface AgentComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
+  variant?: 'default' | 'light' | 'outline' | 'ghost';
 }
 
 export function AgentCombobox({
@@ -24,6 +23,7 @@ export function AgentCombobox({
   emptyText = 'No agents found.',
   className,
   disabled = false,
+  variant = 'default',
 }: AgentComboboxProps) {
   const { data: agents = {}, isLoading, isError, error } = useAgents();
   const { navigate, paths } = useLinkComponent();
@@ -58,7 +58,7 @@ export function AgentCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoading || isError}
-      variant="ghost"
+      variant={variant}
     />
   );
 }

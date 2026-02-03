@@ -91,11 +91,17 @@ export type ServerConfig = {
    */
   host?: string;
   /**
-   * Base path for Mastra Studio
+   * Base path for Mastra Studio UI
    * @default '/'
    * @example '/my-mastra-studio'
    */
   studioBase?: string;
+  /**
+   * Prefix for API routes
+   * @default '/api'
+   * @example '/mastra'
+   */
+  apiPrefix?: string;
   /**
    * Timeout for the server
    */
@@ -135,7 +141,7 @@ export type ServerConfig = {
   };
   /**
    * Body size limit for the server
-   * @default 4.5mb
+   * @default 4_718_592 bytes (4.5 MB)
    */
   bodySizeLimit?: number;
 

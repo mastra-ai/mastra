@@ -57,6 +57,12 @@ export class ScoresPG extends ScoresStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    // Add columns for backwards compatibility (v0.x to v1 migration)
+    await this.#db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ['spanId', 'requestContext'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }

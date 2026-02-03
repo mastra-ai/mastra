@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from './data';
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
-import { MessageList } from '@mastra/core/agent';
+import { MessageList, TypeDetector } from '@mastra/core/agent';
 
 export function createMessagesListTest({ storage }: { storage: MastraStorage }) {
   let memoryStorage: MemoryStorage;
@@ -78,7 +78,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       expect(result.messages).toHaveLength(5);
       expect(result.total).toBe(5);
-      expect(result.messages.every(MessageList.isMastraDBMessage)).toBe(true);
+      expect(result.messages.every(TypeDetector.isMastraDBMessage)).toBe(true);
     });
 
     it('should list messages with pagination', async () => {
@@ -373,7 +373,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         threadId: thread.id,
       });
 
-      expect(result.messages.every(MessageList.isMastraDBMessage)).toBe(true);
+      expect(result.messages.every(TypeDetector.isMastraDBMessage)).toBe(true);
     });
 
     it('should handle include with threadId parameter', async () => {
@@ -571,14 +571,13 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result0.total).toBe(5); // Total should still reflect actual count
         expect(result0.perPage).toBe(0);
 
-        // Test negative perPage - should fall back to default behavior (40)
-        const resultNeg = await memoryStorage.listMessages({
-          threadId: thread.id,
-          perPage: -5,
-        });
-        // Should fall back to default perPage (40) and return all 5 available messages
-        expect(resultNeg.messages).toHaveLength(5);
-        expect(resultNeg.perPage).toBe(40); // Verify fallback to default value
+        // Test negative perPage - should throw an error (invalid input)
+        await expect(
+          memoryStorage.listMessages({
+            threadId: thread.id,
+            perPage: -5,
+          }),
+        ).rejects.toThrow('perPage must be >= 0');
       });
     });
 

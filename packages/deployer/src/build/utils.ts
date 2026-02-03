@@ -1,7 +1,32 @@
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
-import { basename, join, relative } from 'node:path';
 import { builtinModules } from 'node:module';
+import { basename, join, relative } from 'node:path';
+
+/** The detected JavaScript runtime environment */
+export type RuntimePlatform = 'node' | 'bun';
+
+/**
+ * The esbuild/bundler platform setting.
+ * - 'node': Assumes Node.js environment, externalizes built-in modules
+ * - 'browser': Assumes browser environment, polyfills Node APIs
+ * - 'neutral': Runtime-agnostic, preserves all globals as-is (used for Bun)
+ */
+export type BundlerPlatform = 'node' | 'browser' | 'neutral';
+
+/**
+ * Detect the current JavaScript runtime environment.
+ *
+ * This is used by the bundler to determine the appropriate esbuild platform
+ * setting. When running under Bun, we need to use 'neutral' platform to
+ * preserve Bun-specific globals (like Bun.s3).
+ */
+export function detectRuntime(): RuntimePlatform {
+  if (process.versions?.bun) {
+    return 'bun';
+  }
+  return 'node';
+}
 
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   const dirPath = join(dir, '.mastra');
@@ -124,17 +149,19 @@ export function findNativePackageModule(moduleIds: string[]): string | undefined
 }
 
 /**
- * Ensures that server.studioBase is normalized.
- *
- * - If server.studioBase is '/' or empty, returns empty string
- * - Normalizes multiple slashes to single slash (e.g., '//' → '/')
- * - Removes trailing slashes (e.g., '/admin/' → '/admin')
+ * Ensures that server.studioBase is normalized:
  * - Adds leading slash if missing (e.g., 'admin' → '/admin')
+ * - Removes trailing slashes (e.g., '/admin/' → '/admin')
+ * - Normalizes multiple slashes to single slash (e.g., '//api' → '/api')
+ * - Returns empty string for root paths ('/' or '')
  *
  * @param studioBase - The studioBase path to normalize
  * @returns Normalized studioBase path string
+ * @throws Error if path contains invalid characters ('..', '?', '#')
  */
 export function normalizeStudioBase(studioBase: string): string {
+  studioBase = studioBase.trim();
+
   // Validate: no path traversal, no query params, no special chars
   if (studioBase.includes('..') || studioBase.includes('?') || studioBase.includes('#')) {
     throw new Error(`Invalid base path: "${studioBase}". Base path cannot contain '..', '?', or '#'`);

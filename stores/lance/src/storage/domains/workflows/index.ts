@@ -25,27 +25,6 @@ function escapeSql(str: string): string {
   return str.replace(/'/g, "''");
 }
 
-function parseWorkflowRun(row: any): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      // If parsing fails, return the raw snapshot string
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-
-  return {
-    workflowName: row.workflow_name,
-    runId: row.run_id,
-    snapshot: parsedSnapshot,
-    createdAt: ensureDate(row.createdAt)!,
-    updatedAt: ensureDate(row.updatedAt)!,
-    resourceId: row.resourceId,
-  };
-}
-
 export class StoreWorkflowsLance extends WorkflowsStorage {
   client: Connection;
   #db: LanceDB;
@@ -54,6 +33,26 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     const client = resolveLanceConfig(config);
     this.client = client;
     this.#db = new LanceDB({ client });
+  }
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: ensureDate(row.createdAt)!,
+      updatedAt: ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
   }
 
   async init(): Promise<void> {
@@ -248,7 +247,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       const records = await query.toArray();
       if (records.length === 0) return null;
       const record = records[0];
-      return parseWorkflowRun(record);
+      return this.parseWorkflowRun(record);
     } catch (error: any) {
       throw new MastraError(
         {
@@ -348,7 +347,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       const records = await query.toArray();
 
       return {
-        runs: records.map(record => parseWorkflowRun(record)),
+        runs: records.map(record => this.parseWorkflowRun(record)),
         total: total || records.length,
       };
     } catch (error: any) {

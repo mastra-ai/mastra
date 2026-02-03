@@ -1046,4 +1046,73 @@ describe('jsonSchemaToZod', () => {
       expect(result).toMatchSnapshot();
     });
   });
+
+  describe('oneOf schema handling', () => {
+    it('should generate valid JavaScript without TypeScript generic syntax', () => {
+      const schema: JsonSchema = {
+        type: 'array',
+        items: {
+          oneOf: [{ type: 'string' }, { type: 'number' }],
+        },
+      };
+
+      const result = jsonSchemaToZod(schema);
+
+      // The upstream json-schema-to-zod generates `reduce<z.ZodError[]>` which is
+      // TypeScript syntax that fails when evaluated at runtime with Function()
+      expect(result).not.toContain('<z.ZodError[]>');
+      expect(result).toContain('.reduce('); // Should have plain reduce without generic
+    });
+
+    it('should produce schema that can be evaluated with Function() at runtime', () => {
+      const schema: JsonSchema = {
+        type: 'object',
+        properties: {
+          results: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                rows: {
+                  type: 'array',
+                  items: {
+                    oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'null' }],
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+
+      const result = jsonSchemaToZod(schema);
+
+      // Should be valid JavaScript that can be evaluated with Function()
+      const { z } = require('zod');
+      expect(() => {
+        Function('z', `"use strict";return (${result});`)(z);
+      }).not.toThrow();
+    });
+
+    it('should correctly validate data against oneOf schemas', () => {
+      const schema: JsonSchema = {
+        type: 'array',
+        items: {
+          oneOf: [{ type: 'string' }, { type: 'number' }],
+        },
+      };
+
+      const result = jsonSchemaToZod(schema);
+      const { z } = require('zod');
+      const zodSchema = Function('z', `"use strict";return (${result});`)(z);
+
+      // Valid data (strings only - matches exactly one schema)
+      const validResult = zodSchema.safeParse(['hello', 'world']);
+      expect(validResult.success).toBe(true);
+
+      // Invalid data (object doesn't match any oneOf schema)
+      const invalidResult = zodSchema.safeParse([{ invalid: 'object' }]);
+      expect(invalidResult.success).toBe(false);
+    });
+  });
 });

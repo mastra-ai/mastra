@@ -22,7 +22,7 @@ export default createTransformer((fileInfo, api, options, context) => {
   const { j, root } = context;
 
   const COMMENT_MESSAGE =
-    'FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives';
+    'FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives';
 
   const STATEMENT_TYPES = new Set([
     'VariableDeclaration',

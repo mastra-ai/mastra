@@ -1,25 +1,26 @@
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
-import { esmShim } from './plugins/esm-shim';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'rollup';
+import { rollup } from 'rollup';
+import type { InputOptions, OutputOptions, Plugin } from 'rollup';
+import type { analyzeBundle } from './analyze';
 import { esbuild } from './plugins/esbuild';
-import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import { analyzeBundle } from './analyze';
-import { removeAllOptionsFromMastraExceptPlugin } from './plugins/remove-all-except';
-import { tsConfigPaths } from './plugins/tsconfig-paths';
-import { join } from 'node:path';
-import { slash } from './utils';
-import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
+import { esmShim } from './plugins/esm-shim';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
+import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
+import { tsConfigPaths } from './plugins/tsconfig-paths';
+import { slash } from './utils';
+import type { BundlerPlatform } from './utils';
 
 export async function getInputOptions(
   entryFile: string,
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
-  platform: 'node' | 'browser',
+  platform: BundlerPlatform,
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
   {
     sourcemap = false,
@@ -37,8 +38,9 @@ export async function getInputOptions(
     externalsPreset?: boolean;
   },
 ): Promise<InputOptions> {
+  // For 'neutral' platform (Bun), use similar settings to 'node' for module resolution
   let nodeResolvePlugin =
-    platform === 'node'
+    platform === 'node' || platform === 'neutral'
       ? nodeResolve({
           preferBuiltins: true,
           exportConditions: ['node'],
@@ -48,7 +50,7 @@ export async function getInputOptions(
           browser: true,
         });
 
-  const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies);
+  const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
   const externals = externalsPreset ? [] : Array.from(externalsCopy);
 
   const normalizedEntryFile = slash(entryFile);
@@ -137,11 +139,11 @@ export async function getInputOptions(
       // for debugging
       // {
       //   name: 'logger',
-      //   //@ts-ignore
+      //   //@ts-expect-error
       //   resolveId(id, ...args) {
       //     console.log({ id, args });
       //   },
-      //   // @ts-ignore
+      //   // @ts-expect-error
       // transform(code, id) {
       //   if (code.includes('class Duplexify ')) {
       //     console.log({ duplex: id });

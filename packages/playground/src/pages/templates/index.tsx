@@ -70,7 +70,7 @@ export default function Templates() {
         </HeaderTitle>
       </Header>
 
-      <div className={cn('overflow-y-auto w-full h-full px-[2rem] pb-[3rem] z-[1]')}>
+      <div className={cn('overflow-y-auto w-full h-full px-8 pb-12 z-10')}>
         <TemplatesTools
           selectedTag={selectedTag}
           onTagChange={value => handleFilterChange(value, 'tag')}

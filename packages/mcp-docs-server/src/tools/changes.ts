@@ -66,7 +66,7 @@ export type ChangesInput = z.infer<typeof changesInputSchema>;
 
 export const changesTool = {
   name: 'mastraChanges',
-  description: `Get changelog information for Mastra.ai packages. ${packagesListing}`,
+  description: `[🌐 REMOTE] Get changelog information for Mastra.ai packages. ${packagesListing}`,
   parameters: changesInputSchema,
   execute: async (args: ChangesInput) => {
     void logger.debug('Executing mastraChanges tool', { package: args.package });

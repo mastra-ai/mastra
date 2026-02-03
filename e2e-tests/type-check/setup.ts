@@ -32,7 +32,7 @@ export default async function setup(project: TestProject) {
   project.provide('tag', tag);
   project.provide('registry', registry.toString());
 
-  await publishPackages(['--filter="@mastra/core..."'], tag, rootDir, registry);
+  await publishPackages(['--filter="@mastra/core..."', '--filter="@mastra/client-js..."'], tag, rootDir, registry);
 
   return () => {
     teardown();

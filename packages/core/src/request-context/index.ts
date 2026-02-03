@@ -86,24 +86,29 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   /**
    * Get all keys in the container
    */
-  public keys<R = Values extends Record<string, any> ? keyof Values : string>(): IterableIterator<R> {
-    return this.registry.keys() as IterableIterator<R>;
+  public keys(): IterableIterator<Values extends Record<string, any> ? keyof Values : string> {
+    return this.registry.keys() as IterableIterator<Values extends Record<string, any> ? keyof Values : string>;
   }
 
   /**
    * Get all values in the container
    */
-  public values<R = Values extends Record<string, any> ? Values[keyof Values] : unknown>(): IterableIterator<R> {
-    return this.registry.values() as IterableIterator<R>;
+  public values(): IterableIterator<Values extends Record<string, any> ? Values[keyof Values] : unknown> {
+    return this.registry.values() as IterableIterator<
+      Values extends Record<string, any> ? Values[keyof Values] : unknown
+    >;
   }
 
   /**
-   * Get all entries in the container
+   * Get all entries in the container.
+   * Returns a discriminated union of tuples for proper type narrowing when iterating.
    */
-  public entries<R = Values extends Record<string, any> ? Values[keyof Values] : unknown>(): IterableIterator<
-    [string, R]
+  public entries(): IterableIterator<
+    Values extends Record<string, any> ? { [K in keyof Values]: [K, Values[K]] }[keyof Values] : [string, unknown]
   > {
-    return this.registry.entries() as IterableIterator<[string, R]>;
+    return this.registry.entries() as IterableIterator<
+      Values extends Record<string, any> ? { [K in keyof Values]: [K, Values[K]] }[keyof Values] : [string, unknown]
+    >;
   }
 
   /**
@@ -114,17 +119,65 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   }
 
   /**
-   * Execute a function for each entry in the container
+   * Execute a function for each entry in the container.
+   * The callback receives properly typed key-value pairs.
    */
-  public forEach<T = any>(callbackfn: (value: T, key: string, map: Map<string, any>) => void): void {
-    this.registry.forEach(callbackfn as any);
+  public forEach<K extends Values extends Record<string, any> ? keyof Values : string>(
+    callbackfn: (
+      value: Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : unknown) : unknown,
+      key: K,
+      map: Map<string, unknown>,
+    ) => void,
+  ): void {
+    this.registry.forEach(callbackfn as (value: unknown, key: string, map: Map<string, unknown>) => void);
   }
 
   /**
-   * Custom JSON serialization method
-   * Converts the internal Map to a plain object for proper JSON serialization
+   * Custom JSON serialization method.
+   * Converts the internal Map to a plain object for proper JSON serialization.
+   * Non-serializable values (e.g., RPC proxies, functions, circular references)
+   * are skipped to prevent serialization errors when storing to database.
    */
   public toJSON(): Record<string, any> {
-    return Object.fromEntries(this.registry);
+    const result: Record<string, any> = {};
+    for (const [key, value] of this.registry.entries()) {
+      if (this.isSerializable(value)) {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Check if a value can be safely serialized to JSON.
+   */
+  private isSerializable(value: unknown): boolean {
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'function') return false;
+    if (typeof value === 'symbol') return false;
+    if (typeof value !== 'object') return true;
+
+    try {
+      JSON.stringify(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get all values as a typed object for destructuring.
+   * Returns Record<string, any> when untyped, or the Values type when typed.
+   *
+   * @example
+   * ```typescript
+   * const ctx = new RequestContext<{ userId: string; apiKey: string }>();
+   * ctx.set('userId', 'user-123');
+   * ctx.set('apiKey', 'key-456');
+   * const { userId, apiKey } = ctx.all;
+   * ```
+   */
+  public get all(): Values extends Record<string, any> ? Values : Record<string, any> {
+    return Object.fromEntries(this.registry) as Values extends Record<string, any> ? Values : Record<string, any>;
   }
 }

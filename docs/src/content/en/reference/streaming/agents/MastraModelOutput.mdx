@@ -51,7 +51,7 @@ These properties provide real-time access to model outputs as they're generated:
     },
     {
       name: "objectStream",
-      type: "ReadableStream<PartialSchemaOutput<OUTPUT>>",
+      type: "ReadableStream<Partial<OUTPUT>>",
       description:
         "Stream of progressive structured object updates when using output schemas. Emits partial objects as they're built up, allowing real-time visualization of structured data generation.",
       properties: [
@@ -60,7 +60,7 @@ These properties provide real-time access to model outputs as they're generated:
           parameters: [
             {
               name: "PartialSchemaOutput",
-              type: "PartialSchemaOutput<OUTPUT>",
+              type: "Partial<OUTPUT>",
               description:
                 "Partially completed object matching the defined schema",
             },
@@ -70,7 +70,7 @@ These properties provide real-time access to model outputs as they're generated:
     },
     {
       name: "elementStream",
-      type: "ReadableStream<InferSchemaOutput<OUTPUT> extends (infer T)[] ? T : never>",
+      type: "ReadableStream<OUTPUT extends (infer T)[] ? T : never>",
       description:
         "Stream of individual array elements when the output schema defines an array type. Each element is emitted as it's completed rather than waiting for the entire array.",
     },
@@ -91,7 +91,7 @@ These properties resolve to final values after the stream completes:
     },
     {
       name: "object",
-      type: "Promise<InferSchemaOutput<OUTPUT>>",
+      type: "Promise<OUTPUT>",
       description:
         "The complete structured object response when using output schemas. Validated against the schema before resolving. Rejects if validation fails.",
       properties: [
@@ -100,7 +100,7 @@ These properties resolve to final values after the stream completes:
           parameters: [
             {
               name: "InferSchemaOutput",
-              type: "InferSchemaOutput<OUTPUT>",
+              type: "OUTPUT",
               description:
                 "Fully typed object matching the exact schema definition",
             },
@@ -261,6 +261,55 @@ These properties resolve to final values after the stream completes:
         },
       ],
     },
+    {
+      name: "response",
+      type: "Promise<Response>",
+      description:
+        "Response metadata and messages from the model provider.",
+      properties: [
+        {
+          type: "Response",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              isOptional: true,
+              description: "Response ID from the model provider",
+            },
+            {
+              name: "timestamp",
+              type: "Date",
+              isOptional: true,
+              description: "Response timestamp",
+            },
+            {
+              name: "modelId",
+              type: "string",
+              isOptional: true,
+              description: "Model identifier used for this response",
+            },
+            {
+              name: "headers",
+              type: "Record<string, string>",
+              isOptional: true,
+              description: "Response headers from the model provider",
+            },
+            {
+              name: "messages",
+              type: "ResponseMessage[]",
+              isOptional: true,
+              description: "Response messages in model format",
+            },
+            {
+              name: "uiMessages",
+              type: "UIMessage[]",
+              isOptional: true,
+              description: "Response messages in UI format, includes any metadata added by output processors",
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
@@ -297,7 +346,7 @@ These properties resolve to final values after the stream completes:
             },
             {
               name: "object",
-              type: "InferSchemaOutput<OUTPUT>",
+              type: "OUTPUT",
               isOptional: true,
               description: "Structured output if schema was provided",
             },
@@ -327,6 +376,11 @@ These properties resolve to final values after the stream completes:
               type: "string",
               isOptional: true,
               description: "Why generation finished",
+            },
+            {
+              name: "response",
+              type: "Response",
+              description: "Response metadata and messages from the model provider",
             },
           ],
         },
@@ -443,6 +497,11 @@ for await (const chunk of stream.fullStream) {
       break;
     case "finish":
       console.log(`Done! Reason: ${chunk.payload.stepResult.reason}`);
+      // Access response messages with any metadata added by output processors
+      const uiMessages = chunk.payload.response?.uiMessages;
+      if (uiMessages) {
+        console.log("Response messages:", uiMessages);
+      }
       break;
   }
 }

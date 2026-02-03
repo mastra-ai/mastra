@@ -12,10 +12,36 @@ import type {
   UpsertVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsert, validateTopK } from '@mastra/core/vector';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
+import type { ClientOptions } from '@opensearch-project/opensearch';
 import { OpenSearchFilterTranslator } from './filter';
 import type { OpenSearchVectorFilter } from './filter';
+
+/**
+ * Configuration for OpenSearchVector.
+ *
+ * Extends the OpenSearch ClientOptions with a required id.
+ * All OpenSearch client options are supported (node, auth, ssl, compression, etc.).
+ *
+ * @example
+ * ```typescript
+ * // Simple URL config
+ * const vector = new OpenSearchVector({
+ *   id: 'my-vector',
+ *   node: 'http://localhost:9200',
+ * });
+ *
+ * // With authentication
+ * const vector = new OpenSearchVector({
+ *   id: 'my-vector',
+ *   node: 'https://my-opensearch-cluster.com',
+ *   auth: { username: 'admin', password: 'secret' },
+ *   ssl: { rejectUnauthorized: false },
+ * });
+ * ```
+ */
+export type OpenSearchVectorConfig = ClientOptions & { id: string };
 
 const METRIC_MAPPING = {
   cosine: 'cosinesimil',
@@ -37,11 +63,12 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
   /**
    * Creates a new OpenSearchVector client.
    *
-   * @param {string} url - The url of the OpenSearch node.
+   * @param config - OpenSearch client configuration options plus a required id.
+   * @see OpenSearchVectorConfig for all available options.
    */
-  constructor({ url, id }: { url: string } & { id: string }) {
+  constructor({ id, ...clientOptions }: OpenSearchVectorConfig) {
     super({ id });
-    this.client = new OpenSearchClient({ node: url });
+    this.client = new OpenSearchClient(clientOptions);
   }
 
   /**
@@ -185,6 +212,9 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
    * @returns {Promise<string[]>} A promise that resolves to an array of IDs of the upserted vectors.
    */
   async upsert({ indexName, vectors, metadata = [], ids }: UpsertVectorParams): Promise<string[]> {
+    // Validate input parameters and vector values
+    validateUpsert('OPENSEARCH', vectors, metadata, ids, true);
+
     const vectorIds = ids || vectors.map(() => crypto.randomUUID());
     const operations = [];
 
@@ -248,6 +278,9 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     topK = 10,
     includeVector = false,
   }: OpenSearchVectorParams): Promise<QueryResult[]> {
+    // Validate topK parameter
+    validateTopK('OPENSEARCH', topK);
+
     try {
       const translatedFilter = this.transformFilter(filter);
 

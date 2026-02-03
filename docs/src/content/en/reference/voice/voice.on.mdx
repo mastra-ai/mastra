@@ -113,7 +113,7 @@ const speaker = new Speaker({
 
 const realtimeVoice = new OpenAIRealtimeVoice();
 const voice = new CompositeVoice({
-  realtimeProvider: realtimeVoice,
+  realtime: realtimeVoice,
 });
 
 // Connect to the real-time service

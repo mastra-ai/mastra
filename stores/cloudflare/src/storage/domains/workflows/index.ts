@@ -154,7 +154,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
       } catch (e) {
         // If parsing fails, return the raw snapshot string
-        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
       }
     }
 

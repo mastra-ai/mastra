@@ -258,7 +258,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find(query).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find(query).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);
@@ -319,7 +319,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find({ runId }).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find({ runId }).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);
@@ -382,7 +382,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find({ entityId, entityType }).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find({ entityId, entityType }).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);
@@ -446,7 +446,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find(query).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find(query).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);

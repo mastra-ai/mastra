@@ -1,6 +1,6 @@
 {
   "name": "@mastra/s3vectors",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0",
   "description": "Amazon S3 Vectors store provider for Mastra",
   "type": "module",
   "files": [
@@ -32,19 +32,19 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@aws-sdk/client-s3vectors": "^3.901.0",
-    "uuid": "^11.1.0"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "dotenv": "^17.0.0",
+    "dotenv": "^17.2.3",
     "eslint": "^9.37.0",
-    "tsup": "^8.5.0",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

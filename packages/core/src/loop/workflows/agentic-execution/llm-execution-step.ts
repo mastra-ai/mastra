@@ -1,6 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
+import { APICallError } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
@@ -16,7 +17,6 @@ import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
-import type { OutputSchema } from '../../../stream/base/schema';
 import type {
   ChunkType,
   ExecuteStreamModelManager,
@@ -30,7 +30,7 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { isControllerOpen } from '../stream';
 
-type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
+type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
@@ -47,7 +47,7 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
   logger?: IMastraLogger;
 };
 
-async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
+async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
   messageList,
@@ -143,12 +143,41 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         });
         break;
 
+      case 'text-start': {
+        // Capture text-start's providerMetadata (e.g., openai.itemId: "msg_xxx")
+        // This is needed because, for example, OpenAI reasoning models send separate itemIds for
+        // reasoning (rs_xxx) and text (msg_xxx) parts. The text's itemId must be
+        // preserved so that when memory is replayed, OpenAI sees the required
+        // following item for the reasoning part.
+        if (chunk.payload.providerMetadata) {
+          runState.setState({
+            providerOptions: chunk.payload.providerMetadata,
+          });
+        }
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
+        break;
+      }
+
       case 'text-delta': {
         const textDeltasFromState = runState.state.textDeltas;
         textDeltasFromState.push(chunk.payload.text);
         runState.setState({
           textDeltas: textDeltasFromState,
           isStreaming: true,
+        });
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
+        break;
+      }
+
+      case 'text-end': {
+        // Clear providerOptions to prevent text's providerMetadata from leaking
+        // into subsequent parts (similar to reasoning-end clearing)
+        runState.setState({
+          providerOptions: undefined,
         });
         if (isControllerOpen(controller)) {
           controller.enqueue(chunk);
@@ -299,7 +328,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
               parts: [
                 {
                   type: 'file' as const,
-                  // @ts-expect-error
+                  // @ts-expect-error - data type mismatch, see TODO
                   data: chunk.payload.data, // TODO: incorrect string type
                   mimeType: chunk.payload.mimeType,
                 },
@@ -464,7 +493,7 @@ function executeStreamWithFallbackModels<T>(
   };
 }
 
-export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
+export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
   _internal,
   messageId,
@@ -496,7 +525,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   const initialSystemMessages = messageList.getAllSystemMessages();
 
   return createStep({
-    id: 'llm-execution',
+    id: 'llm-execution' as const,
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
@@ -509,7 +538,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
       let rawResponse: any;
 
       const { outputStream, callBail, runState, stepTools } = await executeStreamWithFallbackModels<{
-        outputStream: MastraModelOutput<OUTPUT | undefined>;
+        outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
         callBail?: boolean;
         stepTools?: TOOLS;
@@ -539,7 +568,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           activeTools?: (keyof TOOLS)[] | undefined;
           providerOptions?: SharedProviderOptions | undefined;
           modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
-          structuredOutput?: StructuredOutputOptions<OUTPUT> | undefined;
+          structuredOutput?: StructuredOutputOptions<OUTPUT>;
         } = {
           model,
           tools,
@@ -563,10 +592,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           });
 
           try {
+            // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
+            const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
             const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
-              tracingContext,
+              tracingContext: stepTracingContext,
               requestContext,
               model,
               steps: inputData.output?.steps || [],
@@ -634,10 +665,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           _internal: _internal!,
           model: currentStep.model,
         });
+
+        // Resolve supportedUrls - it may be a Promise (e.g., from ModelRouterLanguageModel)
+        // This allows providers like Mistral to expose their native URL support for PDFs
+        // See: https://github.com/mastra-ai/mastra/issues/12152
+        let resolvedSupportedUrls: Record<string, RegExp[]> | undefined;
+        const modelSupportedUrls = currentStep.model?.supportedUrls;
+        if (modelSupportedUrls) {
+          if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
+            resolvedSupportedUrls = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
+          } else {
+            resolvedSupportedUrls = modelSupportedUrls as Record<string, RegExp[]>;
+          }
+        }
+
         const messageListPromptArgs = {
           downloadRetries,
           downloadConcurrency,
-          supportedUrls: currentStep.model?.supportedUrls as Record<string, RegExp[]>,
+          supportedUrls: resolvedSupportedUrls,
         };
         let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
@@ -691,6 +736,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
                       Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
                       If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.
+
+                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. 
                       `;
                 }
 
@@ -759,13 +806,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           );
         }
 
-        const outputStream = new MastraModelOutput({
+        const outputStream = new MastraModelOutput<OUTPUT>({
           model: {
             modelId: currentStep.model.modelId,
             provider: currentStep.model.provider,
             version: currentStep.model.specificationVersion,
           },
-          stream: modelResult as ReadableStream<ChunkType>,
+          stream: modelResult as ReadableStream<ChunkType<OUTPUT>>,
           messageList,
           messageId,
           options: {
@@ -799,7 +846,28 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             logger,
           });
         } catch (error) {
-          logger?.error('Error in LLM Execution Step', error);
+          const provider = model?.provider;
+          const modelIdStr = model?.modelId;
+          const isUpstreamError = APICallError.isInstance(error);
+
+          if (isUpstreamError) {
+            const providerInfo = provider ? ` from ${provider}` : '';
+            const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
+            logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+              error,
+              runId,
+              ...(provider && { provider }),
+              ...(modelIdStr && { modelId: modelIdStr }),
+            });
+          } else {
+            logger?.error('Error in LLM execution', {
+              error,
+              runId,
+              ...(provider && { provider }),
+              ...(modelIdStr && { modelId: modelIdStr }),
+            });
+          }
+
           if (isAbortError(error) && options?.abortSignal?.aborted) {
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
@@ -865,7 +933,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           output: {
             text,
             toolCalls: [],
-            usage: usage ?? inputData.output?.usage,
+            usage: usage ?? inputData.output.usage,
             steps: [],
           },
           messages: {
@@ -944,6 +1012,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           // Get current processor retry count from iteration data
           const currentRetryCount = inputData.processorRetryCount || 0;
 
+          // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
+          const outputStepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
           await processorRunner.runProcessOutputStep({
             steps: inputData.output?.steps ?? [],
             messages: messageList.get.all.db(),
@@ -952,7 +1022,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             finishReason: immediateFinishReason,
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
-            tracingContext,
+            tracingContext: outputStepTracingContext,
             requestContext,
             retryCount: currentRetryCount,
           });
@@ -1086,7 +1156,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         output: {
           text,
           toolCalls: shouldRetry ? [] : toolCalls, // Clear tool calls on retry
-          tools: stepTools,
           usage: usage ?? inputData.output?.usage,
           steps,
           ...(object ? { object } : {}),

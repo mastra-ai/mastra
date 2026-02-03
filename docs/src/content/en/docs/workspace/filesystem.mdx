@@ -1,0 +1,81 @@
+---
+title: "Filesystem | Workspace"
+description: Configure filesystem providers to give agents persistent file storage.
+packages:
+  - "@mastra/core"
+---
+
+# Filesystem
+
+Filesystem providers give agents the ability to read, write, and manage files. When you configure a filesystem on a workspace, agents receive tools for file operations.
+
+A filesystem provider handles all file operations for a workspace:
+
+- **Read** - Read file contents
+- **Write** - Create and update files
+- **List** - Browse directories
+- **Delete** - Remove files and directories
+- **Stat** - Get file metadata
+
+## Supported providers
+
+Available providers:
+
+- [`LocalFilesystem`](/reference/workspace/local-filesystem) - Stores files in a directory on disk
+
+:::tip
+
+`LocalFilesystem` is the simplest way to get started as it requires no external services.
+
+:::
+
+## Basic usage
+
+Create a workspace with a filesystem and assign it to an agent. The agent can then read, write, and manage files as part of its tasks:
+
+```typescript title="src/mastra/agents/file-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+});
+
+const agent = new Agent({
+  id: 'file-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a helpful file management assistant.',
+  workspace,
+});
+
+// The agent now has filesystem tools available
+const response = await agent.generate('List all files in the workspace');
+```
+
+## Read-only mode
+
+To prevent agents from modifying files, enable read-only mode:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+    // highlight-next-line
+    readOnly: true,
+  }),
+});
+```
+
+When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are not added to the agent's toolset. The agent can still read and list files.
+
+## Agent tools
+
+When you configure a filesystem on a workspace, agents receive tools for reading, writing, listing, and deleting files. See [workspace class reference](/reference/workspace/workspace-class#filesystem-tools) for details.
+
+## Related
+
+- [LocalFilesystem reference](/reference/workspace/local-filesystem)
+- [Workspace overview](/docs/workspace/overview)
+- [Sandbox](/docs/workspace/sandbox)

@@ -331,7 +331,13 @@ const addAnnotations = (schema: JsonSchemaObject, parsed: string): string => {
 };
 
 export function jsonSchemaToZod(schema: JsonSchema, options: Options = {}): string {
-  return jsonSchemaToZodOriginal(schema, { ...options, parserOverride });
+  const result = jsonSchemaToZodOriginal(schema, { ...options, parserOverride });
+
+  // Fix: The upstream json-schema-to-zod generates TypeScript syntax `reduce<z.ZodError[]>`
+  // in parseOneOf which fails when evaluated at runtime with Function().
+  // This catches any oneOf usage that bypasses our parserOverride (e.g., non-object contexts).
+  // See: https://github.com/mastra-ai/mastra/issues/11610
+  return result.replace(/\.reduce<[^>]+>/g, '.reduce');
 }
 
 // Re-export all named exports from json-schema-to-zod (excluding the default export)

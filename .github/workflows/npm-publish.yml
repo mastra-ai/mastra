@@ -29,7 +29,6 @@ on:
   push:
     branches:
       - main
-      - 0.x
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -75,14 +74,7 @@ jobs:
       - name: Determine publish tag
         id: determine-tag
         run: |
-          BRANCH_NAME="${{ github.ref_name }}"
-          if [[ "$BRANCH_NAME" == "main" ]]; then
-            echo "tag=beta" >> $GITHUB_OUTPUT
-          elif [[ "$BRANCH_NAME" == "0.x" ]]; then
-            echo "tag=alpha" >> $GITHUB_OUTPUT
-          else
-            echo "tag=alpha" >> $GITHUB_OUTPUT
-          fi
+          echo "tag=alpha" >> $GITHUB_OUTPUT
 
       - name: Publish packages
         run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public --no-git-checks

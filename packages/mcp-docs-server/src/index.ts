@@ -14,6 +14,7 @@ import {
   clearMastraCourseHistory,
 } from './tools/course';
 import { docsTool } from './tools/docs';
+import { embeddedDocsTools } from './tools/embedded-docs';
 import { examplesTool } from './tools/examples';
 import { migrationTool } from './tools/migration';
 import { fromPackageRoot } from './utils';
@@ -44,6 +45,8 @@ server = new MCPServer({
     startMastraCourseLesson,
     nextMastraCourseStep,
     clearMastraCourseHistory,
+    // Embedded docs tools for reading docs from installed packages
+    ...embeddedDocsTools,
   },
   prompts: migrationPromptMessages,
 });

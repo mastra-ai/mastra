@@ -5,8 +5,12 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import type { ServerRoute } from '@mastra/server/server-adapter';
-import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
+import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
+import {
+  MastraServer as MastraServerBase,
+  normalizeQueryParams,
+  redactStreamChunk,
+} from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
@@ -19,7 +23,7 @@ declare global {
       mastra: Mastra;
       requestContext: RequestContext;
       abortSignal: AbortSignal;
-      tools: ToolsInput;
+      registeredTools: ToolsInput;
       taskStore: InMemoryTaskStore;
       customRouteAuthConfig?: Map<string, boolean>;
     }
@@ -71,7 +75,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       // Set context in res.locals
       res.locals.requestContext = requestContext;
       res.locals.mastra = this.mastra;
-      res.locals.tools = this.tools || {};
+      res.locals.registeredTools = this.tools || {};
       if (this.taskStore) {
         res.locals.taskStore = this.taskStore;
       }
@@ -123,13 +127,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     }
   }
 
-  async getParams(
-    route: ServerRoute,
-    request: Request,
-  ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }> {
+  async getParams(route: ServerRoute, request: Request): Promise<ParsedRequestParams> {
     const urlParams = request.params;
-    const queryParams = request.query;
+    // Express's req.query can contain string | string[] | ParsedQs | ParsedQs[]
+    const queryParams = normalizeQueryParams(request.query as Record<string, unknown>);
     let body: unknown;
+    let bodyParseError: { message: string } | undefined;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
       const contentType = request.headers['content-type'] || '';
@@ -144,13 +147,16 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
           }
+          bodyParseError = {
+            message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+          };
         }
       } else {
         body = request.body;
       }
     }
 
-    return { urlParams, queryParams: queryParams as Record<string, string>, body };
+    return { urlParams, queryParams, body, bodyParseError };
   }
 
   /**
@@ -212,7 +218,15 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     });
   }
 
-  async sendResponse(route: ServerRoute, response: Response, result: unknown, request?: Request): Promise<void> {
+  async sendResponse(
+    route: ServerRoute,
+    response: Response,
+    result: unknown,
+    request?: Request,
+    prefix?: string,
+  ): Promise<void> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
     if (route.responseType === 'json') {
       response.json(result);
     } else if (route.responseType === 'stream') {
@@ -243,14 +257,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         return;
       }
 
-      const { server, httpPath } = result as MCPHttpTransportResult;
+      const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
 
       try {
+        // Merge class-level mcpOptions with route-specific options (route takes precedence)
+        const options = { ...this.mcpOptions, ...routeMcpOptions };
+
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req: request,
           res: response,
+          options: Object.keys(options).length > 0 ? options : undefined,
         });
         // Response handled by startHTTP
       } catch {
@@ -274,8 +292,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       try {
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath,
-          messagePath,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           req: request,
           res: response,
         });
@@ -290,7 +308,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     }
   }
 
-  async registerRoute(app: Application, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(
+    app: Application,
+    route: ServerRoute,
+    { prefix: prefixParam }: { prefix?: string } = {},
+  ): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     // Determine if body limits should be applied
     const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
 
@@ -321,11 +346,32 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       `${prefix}${route.path}`,
       ...middlewares,
       async (req: Request, res: Response) => {
+        // Check route-level authentication/authorization
+        const authError = await this.checkRouteAuth(route, {
+          path: String(req.path || '/'),
+          method: String(req.method || 'GET'),
+          getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
+          getQuery: name => req.query[name] as string | undefined,
+          requestContext: res.locals.requestContext,
+        });
+
+        if (authError) {
+          return res.status(authError.status).json({ error: authError.error });
+        }
+
         const params = await this.getParams(route, req);
+
+        // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
+        if (params.bodyParseError) {
+          return res.status(400).json({
+            error: 'Invalid request body',
+            issues: [{ field: 'body', message: params.bodyParseError.message }],
+          });
+        }
 
         if (params.queryParams) {
           try {
-            params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
+            params.queryParams = await this.parseQueryParams(route, params.queryParams);
           } catch (error) {
             console.error('Error parsing query params', error);
             // Zod validation errors should return 400 Bad Request with structured issues
@@ -361,14 +407,15 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           ...(typeof params.body === 'object' ? params.body : {}),
           requestContext: res.locals.requestContext,
           mastra: this.mastra,
-          tools: res.locals.tools,
+          registeredTools: res.locals.registeredTools,
           taskStore: res.locals.taskStore,
           abortSignal: res.locals.abortSignal,
+          routePrefix: prefix,
         };
 
         try {
           const result = await route.handler(handlerParams);
-          await this.sendResponse(route, res, result, req);
+          await this.sendResponse(route, res, result, req, prefix);
         } catch (error) {
           console.error('Error calling handler', error);
           // Check if it's an HTTPException or MastraError with a status code

@@ -17,21 +17,22 @@
     "@mastra/core": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
-    "@modelcontextprotocol/sdk": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.24.0",
     "chalk": "^5.4.1",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "mastra": "latest",
-    "tsx": "^4.19.3"
+    "tsx": "^4.21.0"
   },
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
       "@mastra/mcp": "link:../../packages/mcp",
       "@mastra/memory": "link:../../packages/memory",
-      "mastra": "link:../../packages/cli"
+      "mastra": "link:../../packages/cli",
+      "qs": "^6.14.1"
     }
   },
   "version": "0.0.1",

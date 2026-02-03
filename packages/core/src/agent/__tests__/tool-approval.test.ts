@@ -410,6 +410,115 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           expect(toolName).toBe('findUserTool');
         }
       }, 500000);
+
+      it('should call findUserTool with requireToolApproval and approve via generate', async () => {
+        mockFindUser.mockClear();
+
+        const findUserTool = createTool({
+          id: 'Find user tool',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          requireApproval: true,
+          execute: async input => {
+            return mockFindUser(input) as Promise<Record<string, any>>;
+          },
+        });
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserTool.',
+          model: openaiModel,
+          tools: { findUserTool },
+        });
+
+        const mastra = new Mastra({
+          agents: { userAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('userAgent');
+
+        // Use generate with requireToolApproval
+        const output = await agentOne.generate('Find the user with name - Dero Israel', {
+          requireToolApproval: true,
+        });
+
+        // Should be suspended waiting for approval
+        expect(output.finishReason).toBe('suspended');
+        expect(output.suspendPayload).toBeDefined();
+        expect(output.suspendPayload.toolName).toBe('findUserTool');
+
+        const toolCallId = output.suspendPayload.toolCallId;
+
+        // Approve using the generate method
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const resumeOutput = await agentOne.approveToolCallGenerate({ runId: output.runId!, toolCallId });
+
+        const toolResults = resumeOutput.toolResults;
+        const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
+
+        // Tool should have been executed after approval
+        expect(mockFindUser).toHaveBeenCalled();
+        expect((toolCall?.result as any)?.name).toBe('Dero Israel');
+      }, 500000);
+
+      it('should call findUserTool with requireToolApproval and decline via generate', async () => {
+        mockFindUser.mockClear();
+
+        const findUserTool = createTool({
+          id: 'Find user tool',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          requireApproval: true,
+          execute: async input => {
+            return mockFindUser(input) as Promise<Record<string, any>>;
+          },
+        });
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserTool.',
+          model: openaiModel,
+          tools: { findUserTool },
+        });
+
+        const mastra = new Mastra({
+          agents: { userAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('userAgent');
+
+        // Use generate with requireToolApproval
+        const output = await agentOne.generate('Find the user with name - Dero Israel', {
+          requireToolApproval: true,
+        });
+
+        // Should be suspended waiting for approval
+        expect(output.finishReason).toBe('suspended');
+        expect(output.suspendPayload).toBeDefined();
+        expect(output.suspendPayload.toolName).toBe('findUserTool');
+
+        const toolCallId = output.suspendPayload.toolCallId;
+
+        // Decline using the generate method
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const resumeOutput = await agentOne.declineToolCallGenerate({ runId: output.runId!, toolCallId });
+
+        const toolResults = resumeOutput.toolResults;
+
+        expect(toolResults.length).toBe(1);
+        expect(toolResults[0].payload?.result).toBe('Tool call was not approved by the user');
+        expect(mockFindUser).toHaveBeenCalledTimes(0);
+      }, 500000);
     });
 
     describe.skipIf(version === 'v1')('suspension', () => {
@@ -959,7 +1068,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             message: z.string(),
           }),
           resumeSchema: z.object({
-            age: z.number(),
+            noOfYears: z.number(),
           }),
           outputSchema: z.object({
             name: z.string(),
@@ -974,7 +1083,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             return {
               name: inputData?.name,
               email: 'test@test.com',
-              age: resumeData?.age,
+              age: resumeData?.noOfYears,
             };
           },
         });

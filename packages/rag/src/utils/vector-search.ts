@@ -49,14 +49,16 @@ export const vectorQuerySearch = async ({
       model: model,
       value: queryText,
       maxRetries,
-      ...(providerOptions && { providerOptions }),
+      // Type assertion needed: providerOptions type is a union, but embedV3 expects specific version
+      ...(providerOptions && { providerOptions: providerOptions as Parameters<typeof embedV3>[0]['providerOptions'] }),
     });
   } else if (model.specificationVersion === 'v2') {
     embeddingResult = await embedV2({
       model: model,
       value: queryText,
       maxRetries,
-      ...(providerOptions && { providerOptions }),
+      // Type assertion needed: providerOptions type is a union, but embedV2 expects specific version
+      ...(providerOptions && { providerOptions: providerOptions as Parameters<typeof embedV2>[0]['providerOptions'] }),
     });
   } else {
     embeddingResult = await embedV1({

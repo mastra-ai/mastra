@@ -22,15 +22,15 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/instrumentation": "^0.208.0",
     "@opentelemetry/semantic-conventions": "1.38.0",
-    "dotenv": "^17.2.0",
+    "dotenv": "^17.2.3",
     "hono": "^4.11.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@types/node": "^20.19.0",
+    "@types/node": "^20.19.30",
     "mastra": "latest",
     "prettier": "^3.6.2",
-    "tsx": "^4.19.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

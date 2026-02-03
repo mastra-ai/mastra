@@ -4,15 +4,11 @@ import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
 import virtual from '@rollup/plugin-virtual';
+import type { Unstable_RawConfig } from 'wrangler'; // Unstable_RawConfig is unstable, and no stable alternative exists. However, `wrangler` is a peerDep, allowing users to use latest properties.
 import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
-interface CFRoute {
-  pattern: string;
-  zone_name: string;
-  custom_domain?: boolean;
-}
-
+/** @deprecated TODO remove deprecated fields in next major version */
 interface D1DatabaseBinding {
   binding: string;
   database_name: string;
@@ -20,57 +16,85 @@ interface D1DatabaseBinding {
   preview_database_id?: string;
 }
 
+/** @deprecated TODO remove deprecated fields in next major version */
 interface KVNamespaceBinding {
   binding: string;
   id: string;
 }
 
 export class CloudflareDeployer extends Deployer {
-  routes?: CFRoute[] = [];
-  workerNamespace?: string;
-  env?: Record<string, any>;
-  projectName?: string;
-  d1Databases?: D1DatabaseBinding[];
-  kvNamespaces?: KVNamespaceBinding[];
+  readonly userConfig: Omit<Unstable_RawConfig, 'main'>;
 
-  constructor({
-    env,
-    projectName = 'mastra',
-    routes,
-    workerNamespace,
-    d1Databases,
-    kvNamespaces,
-  }: {
-    env?: Record<string, any>;
-    projectName?: string;
-    routes?: CFRoute[];
-    workerNamespace?: string;
-    d1Databases?: D1DatabaseBinding[];
-    kvNamespaces?: KVNamespaceBinding[];
-  }) {
+  constructor(
+    userConfig: Omit<Unstable_RawConfig, 'main'> &
+      // TODO remove deprecated fields in next major version
+      {
+        /** @deprecated `name` instead. */
+        projectName?: string;
+        /** @deprecated this parameter is not used internally. */
+        workerNamespace?: string;
+        /** @deprecated use `d1_databases` instead. */
+        d1Databases?: D1DatabaseBinding[];
+        /** @deprecated use `kv_namespaces` instead. */
+        kvNamespaces?: KVNamespaceBinding[];
+      },
+  ) {
     super({ name: 'CLOUDFLARE' });
 
-    this.projectName = projectName;
-    this.routes = routes;
-    this.workerNamespace = workerNamespace;
+    this.userConfig = { ...userConfig };
 
-    if (env) {
-      this.env = env;
+    if (userConfig.workerNamespace) {
+      console.warn('[CloudflareDeployer]: `workerNamespace` is no longer used');
     }
-
-    if (d1Databases) this.d1Databases = d1Databases;
-    if (kvNamespaces) this.kvNamespaces = kvNamespaces;
+    if (!userConfig.name && userConfig.projectName) {
+      this.userConfig.name = userConfig.projectName;
+      console.warn('[CloudflareDeployer]: `projectName` is deprecated, use `name` instead');
+    }
+    if (!userConfig.d1_databases && userConfig.d1Databases) {
+      this.userConfig.d1_databases = userConfig.d1Databases;
+      console.warn('[CloudflareDeployer]: `d1Databases` is deprecated, use `d1_databases` instead');
+    }
+    if (!userConfig.kv_namespaces && userConfig.kvNamespaces) {
+      this.userConfig.kv_namespaces = userConfig.kvNamespaces;
+      console.warn('[CloudflareDeployer]: `kvNamespaces` is deprecated, use `kv_namespaces` instead');
+    }
   }
 
   async writeFiles(outputDirectory: string): Promise<void> {
-    const env = await this.loadEnvVars();
-    const envsAsObject = Object.assign({}, Object.fromEntries(env.entries()), this.env);
+    const { vars: userVars, alias: userAlias, ...userConfig } = this.userConfig;
+    const loadedEnvVars = await this.loadEnvVars();
 
-    const cfWorkerName = this.projectName;
+    // Merge env vars from .env files with user-provided vars
+    const envsAsObject = Object.assign({}, Object.fromEntries(loadedEnvVars.entries()), userVars);
 
-    const wranglerConfig: Record<string, any> = {
-      name: cfWorkerName,
-      main: './index.mjs',
+    // Write TypeScript stub to prevent bundling the full TypeScript library (~10MB)
+    // The agent-builder package dynamically imports TypeScript for code validation,
+    // but gracefully falls back to basic validation when TypeScript is unavailable.
+    // This stub ensures the import doesn't fail while keeping the bundle small.
+    const typescriptStubPath = 'typescript-stub.mjs';
+    const typescriptStub = `// Stub for TypeScript - not available at runtime in Cloudflare Workers
+// The @mastra/agent-builder package will fall back to basic validation
+export default {};
+export const createSourceFile = () => null;
+export const createProgram = () => null;
+export const findConfigFile = () => null;
+export const readConfigFile = () => ({ error: new Error('TypeScript not available') });
+export const parseJsonConfigFileContent = () => ({ errors: [new Error('TypeScript not available')], fileNames: [], options: {} });
+export const flattenDiagnosticMessageText = (message) => typeof message === 'string' ? message : message?.messageText || '';
+export const ScriptTarget = { Latest: 99 };
+export const ModuleKind = { ESNext: 99 };
+export const JsxEmit = { ReactJSX: 4 };
+export const DiagnosticCategory = { Warning: 0, Error: 1, Suggestion: 2, Message: 3 };
+export const sys = {
+  fileExists: () => false,
+  readFile: () => undefined,
+};
+`;
+
+    await writeFile(join(outputDirectory, this.outputDir, typescriptStubPath), typescriptStub);
+
+    const wranglerConfig: Unstable_RawConfig = {
+      name: 'mastra',
       compatibility_date: '2025-04-01',
       compatibility_flags: ['nodejs_compat', 'nodejs_compat_populate_process_env'],
       observability: {
@@ -78,19 +102,16 @@ export class CloudflareDeployer extends Deployer {
           enabled: true,
         },
       },
+      ...userConfig,
+      main: './index.mjs',
       vars: envsAsObject,
+      // Alias TypeScript to stub to prevent wrangler from bundling the full library
+      alias: {
+        typescript: `./${typescriptStubPath}`,
+        ...userAlias,
+      },
     };
 
-    if (!this.workerNamespace && this.routes) {
-      wranglerConfig.routes = this.routes;
-    }
-
-    if (this.d1Databases?.length) {
-      wranglerConfig.d1_databases = this.d1Databases;
-    }
-    if (this.kvNamespaces?.length) {
-      wranglerConfig.kv_namespaces = this.kvNamespaces;
-    }
     await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig));
   }
 

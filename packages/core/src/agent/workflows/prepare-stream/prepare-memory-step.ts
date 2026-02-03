@@ -6,7 +6,6 @@ import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
@@ -33,7 +32,7 @@ function addSystemMessage(messageList: MessageList, content: SystemMessage | und
   }
 }
 
-interface PrepareMemoryStepOptions<OUTPUT extends OutputSchema | undefined = undefined> {
+interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
@@ -47,7 +46,7 @@ interface PrepareMemoryStepOptions<OUTPUT extends OutputSchema | undefined = und
   memory?: MastraMemory;
 }
 
-export function createPrepareMemoryStep<OUTPUT extends OutputSchema | undefined = undefined>({
+export function createPrepareMemoryStep<OUTPUT = undefined>({
   capabilities,
   options,
   threadFromArgs,
@@ -68,7 +67,7 @@ export function createPrepareMemoryStep<OUTPUT extends OutputSchema | undefined 
         threadId: thread?.id,
         resourceId,
         generateMessageId: capabilities.generateMessageId,
-        // @ts-ignore Flag for agent network messages
+        // @ts-expect-error Flag for agent network messages
         _agentNetworkAppend: capabilities._agentNetworkAppend,
       });
 

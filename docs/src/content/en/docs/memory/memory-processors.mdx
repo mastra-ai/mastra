@@ -15,7 +15,7 @@ Memory processors transform and filter messages as they pass through an agent wi
 
 When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve message history, working memory, and semantically relevant messages, then persist new messages after the model responds.
 
-Memory processors are [processors](/docs/v1/agents/processors) that operate specifically on memory-related messages and state.
+Memory processors are [processors](/docs/agents/processors) that operate specifically on memory-related messages and state.
 
 ## Built-in Memory Processors
 
@@ -115,7 +115,6 @@ const agent = new Agent({
     vector: new PineconeVector({
       id: "memory-vector",
       apiKey: process.env.PINECONE_API_KEY!,
-      environment: "us-east-1",
     }),
     embedder: new OpenAIEmbedder({
       model: "text-embedding-3-small",
@@ -178,7 +177,7 @@ If you manually add a memory processor to `inputProcessors` or `outputProcessors
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { MessageHistory } from "@mastra/memory/processors";
+import { MessageHistory } from "@mastra/core/processors";
 import { TokenLimiter } from "@mastra/core/processors";
 import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
@@ -273,7 +272,7 @@ const agent = new Agent({
 // If the guardrail aborts, nothing is saved to memory
 const result = await agent.generate("Hello");
 if (result.tripwire) {
-  console.log("Blocked:", result.tripwireReason);
+  console.log("Blocked:", result.tripwire.reason);
   // Memory is empty - no messages were persisted
 }
 ```
@@ -321,8 +320,8 @@ Both scenarios are safe - guardrails prevent inappropriate content from being pe
 
 ## Related documentation
 
-- [Processors](/docs/v1/agents/processors) - General processor concepts and custom processor creation
-- [Guardrails](/docs/v1/agents/guardrails) - Security and validation processors
-- [Memory Overview](/docs/v1/memory/overview) - Memory types and configuration
+- [Processors](/docs/agents/processors) - General processor concepts and custom processor creation
+- [Guardrails](/docs/agents/guardrails) - Security and validation processors
+- [Memory Overview](/docs/memory/overview) - Memory types and configuration
 
 When creating custom processors avoid mutating the input `messages` array or its objects directly.

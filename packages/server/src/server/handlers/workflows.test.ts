@@ -20,7 +20,6 @@ import {
   OBSERVE_STREAM_WORKFLOW_ROUTE,
   CANCEL_WORKFLOW_RUN_ROUTE,
   LIST_WORKFLOW_RUNS_ROUTE,
-  GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE,
   STREAM_WORKFLOW_ROUTE,
 } from './workflows';
 
@@ -438,136 +437,6 @@ describe('vNext Workflow Handlers', () => {
           runId: 'test-run',
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
-    });
-  });
-
-  describe('GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE', () => {
-    it('should throw error when workflowId is not provided', async () => {
-      await expect(
-        GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          runId: 'test-run',
-          workflowId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
-    });
-
-    it('should throw error when runId is not provided', async () => {
-      await expect(
-        GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          workflowId: 'test-workflow',
-          runId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
-    });
-
-    it('should throw error when workflow is not found', async () => {
-      await expect(
-        GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          workflowId: 'non-existent',
-          runId: 'test-run',
-        }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
-    });
-
-    it('should throw error when workflow run is not found', async () => {
-      await expect(
-        GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          workflowId: 'test-workflow',
-          runId: 'non-existent',
-        }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run execution result not found' }));
-    });
-
-    it('should get workflow run execution result successfully', async () => {
-      const run = await mockWorkflow.createRun({
-        runId: 'test-run',
-      });
-      await run.start({ inputData: {} });
-      const result = await GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-        mastra: mockMastra,
-        workflowId: 'test-workflow',
-        runId: 'test-run',
-      } as any);
-
-      expect(result).toEqual({
-        activeStepsPath: {},
-        error: undefined,
-        status: 'success',
-        result: { result: 'success' },
-        payload: {},
-        steps: {
-          'test-step': {
-            status: 'success',
-            output: { result: 'success' },
-            endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
-            payload: {},
-          },
-        },
-        serializedStepGraph: mockWorkflow.serializedStepGraph,
-      });
-    });
-
-    it('should get workflow run execution result with field filtering (status only)', async () => {
-      const run = await mockWorkflow.createRun({
-        runId: 'test-run-fields',
-      });
-      await run.start({ inputData: {} });
-      const result = await GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-        mastra: mockMastra,
-        workflowId: 'test-workflow',
-        runId: 'test-run-fields',
-        fields: 'status',
-      } as any);
-
-      // Should only return status field
-      expect(result).toEqual({
-        status: 'success',
-      });
-      expect(result.steps).toBeUndefined();
-      expect(result.result).toBeUndefined();
-    });
-
-    it('should get workflow run execution result with multiple fields', async () => {
-      const run = await mockWorkflow.createRun({
-        runId: 'test-run-multi-fields',
-      });
-      await run.start({ inputData: {} });
-      const result = await GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-        mastra: mockMastra,
-        workflowId: 'test-workflow',
-        runId: 'test-run-multi-fields',
-        fields: 'status,result,error',
-      } as any);
-
-      // Should only return requested fields
-      expect(result).toEqual({
-        status: 'success',
-        result: { result: 'success' },
-        error: undefined,
-      });
-      expect(result.steps).toBeUndefined();
-      expect(result.payload).toBeUndefined();
-      expect(result.activeStepsPath).toBeUndefined();
-    });
-
-    it('should reject invalid field names in query schema', () => {
-      const { queryParamSchema } = GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE;
-
-      // Valid fields should pass
-      expect(() => queryParamSchema?.parse({ fields: 'status,result' })).not.toThrow();
-
-      // Invalid field should fail
-      expect(() => queryParamSchema?.parse({ fields: 'invalidField' })).toThrow();
-      expect(() => queryParamSchema?.parse({ fields: 'status,invalidField' })).toThrow();
-
-      // Empty/undefined should pass
-      expect(() => queryParamSchema?.parse({})).not.toThrow();
-      expect(() => queryParamSchema?.parse({ fields: undefined })).not.toThrow();
     });
   });
 
@@ -1037,6 +906,106 @@ describe('vNext Workflow Handlers', () => {
       // Verify resourceId is stored
       const storedRun = await mockWorkflow.getWorkflowRunById('test-run-stream-resource');
       expect(storedRun?.resourceId).toBe(resourceId);
+    });
+  });
+
+  describe('requestContext passthrough', () => {
+    it('STREAM_WORKFLOW_ROUTE should pass requestContext to run.stream()', async () => {
+      const requestContext = createTestServerContext({ mastra: mockMastra }).requestContext;
+      requestContext.set('custom-key', 'stream-workflow-value');
+
+      // Create a run first to spy on it
+      const run = await mockWorkflow.createRun({ runId: 'test-run-rc-stream' });
+
+      // Spy on the stream method to capture options
+      let capturedOptions: any;
+      const originalStream = run.stream.bind(run);
+      vi.spyOn(run, 'stream').mockImplementation((options: any) => {
+        capturedOptions = options;
+        return originalStream(options);
+      });
+
+      // Also spy on workflow.createRun to return our spied run
+      vi.spyOn(mockWorkflow, 'createRun').mockResolvedValue(run);
+
+      await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-rc-stream',
+        requestContext,
+        inputData: {},
+      } as any);
+
+      // Verify requestContext was passed through
+      expect(capturedOptions.requestContext).toBeDefined();
+      expect(capturedOptions.requestContext.get('custom-key')).toBe('stream-workflow-value');
+    });
+
+    it('START_ASYNC_WORKFLOW_ROUTE should pass requestContext to run.start()', async () => {
+      const requestContext = createTestServerContext({ mastra: mockMastra }).requestContext;
+      requestContext.set('custom-key', 'start-async-value');
+
+      // Create a run first to spy on it
+      const run = await mockWorkflow.createRun({ runId: 'test-run-rc-start' });
+
+      // Spy on the start method to capture options
+      let capturedOptions: any;
+      const originalStart = run.start.bind(run);
+      vi.spyOn(run, 'start').mockImplementation((options: any) => {
+        capturedOptions = options;
+        return originalStart(options);
+      });
+
+      // Also spy on workflow.createRun to return our spied run
+      vi.spyOn(mockWorkflow, 'createRun').mockResolvedValue(run);
+
+      await START_ASYNC_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-rc-start',
+        requestContext,
+        inputData: {},
+      } as any);
+
+      // Verify requestContext was passed through
+      expect(capturedOptions.requestContext).toBeDefined();
+      expect(capturedOptions.requestContext.get('custom-key')).toBe('start-async-value');
+    });
+
+    it('RESUME_ASYNC_WORKFLOW_ROUTE should pass requestContext to run.resume()', async () => {
+      const requestContext = createTestServerContext({ mastra: mockMastra }).requestContext;
+      requestContext.set('custom-key', 'resume-async-value');
+
+      // Create and start a run that will suspend
+      const run = await reusableWorkflow.createRun({ runId: 'test-run-rc-resume' });
+      await run.start({ inputData: {} });
+
+      // Wait for it to suspend
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Spy on the resume method to capture options
+      let capturedOptions: any;
+      const originalResume = run.resume.bind(run);
+      vi.spyOn(run, 'resume').mockImplementation((options: any) => {
+        capturedOptions = options;
+        return originalResume(options);
+      });
+
+      // Spy on workflow.createRun to return our spied run
+      vi.spyOn(reusableWorkflow, 'createRun').mockResolvedValue(run);
+
+      await RESUME_ASYNC_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'reusable-workflow',
+        runId: 'test-run-rc-resume',
+        requestContext,
+        step: 'test-step',
+        resumeData: {},
+      } as any);
+
+      // Verify requestContext was passed through
+      expect(capturedOptions.requestContext).toBeDefined();
+      expect(capturedOptions.requestContext.get('custom-key')).toBe('resume-async-value');
     });
   });
 });

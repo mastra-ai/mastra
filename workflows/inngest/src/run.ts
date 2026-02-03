@@ -9,6 +9,7 @@ import { createTimeTravelExecutionParams, Run, hydrateSerializedStepErrors } fro
 import type {
   ExecutionEngine,
   ExecutionGraph,
+  OutputWriter,
   SerializedStepFlowEntry,
   Step,
   StepWithComponent,
@@ -20,15 +21,22 @@ import type {
 } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
-import type z from 'zod';
 import type { InngestEngineType } from './types';
 
 export class InngestRun<
   TEngineType = InngestEngineType,
-  TSteps extends Step<string, any, any, any, any, any, any>[] = Step<string, any, any, any, any, any, any>[],
-  TState extends z.ZodObject<any> = z.ZodObject<any>,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+    string,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    TEngineType
+  >[],
+  TState = unknown,
+  TInput = unknown,
+  TOutput = unknown,
 > extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
   private inngest: Inngest;
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -132,7 +140,14 @@ export class InngestRun<
 
       // Check completion
       if (runs?.[0]?.status === 'Completed' && runs?.[0]?.event_id === eventId) {
-        return runs[0];
+        // Ensure output is fully populated before returning (Inngest eventual consistency)
+        // The workflow function returns { result, runId }, so check for runId presence
+        if (runs?.[0]?.output?.runId !== undefined) {
+          return runs[0];
+        }
+        // Output not ready yet, continue polling with backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+        continue;
       }
 
       // Check failure
@@ -203,18 +218,33 @@ export class InngestRun<
     }
   }
 
-  async start(params: {
-    inputData?: z.infer<TInput>;
-    requestContext?: RequestContext;
-    initialState?: z.infer<TState>;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    perStep?: boolean;
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    return this._start(params);
+  async start(
+    args: (TInput extends unknown
+      ? {
+          inputData?: TInput;
+        }
+      : {
+          inputData: TInput;
+        }) &
+      (TState extends unknown
+        ? {
+            initialState?: TState;
+          }
+        : {
+            initialState: TState;
+          }) & {
+        requestContext?: RequestContext;
+        outputWriter?: OutputWriter;
+        tracingContext?: TracingContext;
+        tracingOptions?: TracingOptions;
+        outputOptions?: {
+          includeState?: boolean;
+          includeResumeLabels?: boolean;
+        };
+        perStep?: boolean;
+      },
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    return this._start(args);
   }
 
   /**
@@ -223,17 +253,30 @@ export class InngestRun<
    * The workflow executes independently in Inngest.
    * Use this when you don't need to wait for the result or want to avoid polling failures.
    */
-  async startAsync(params: {
-    inputData?: z.infer<TInput>;
-    requestContext?: RequestContext;
-    initialState?: z.infer<TState>;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    perStep?: boolean;
-  }): Promise<{ runId: string }> {
+  async startAsync(
+    args: (TInput extends unknown
+      ? {
+          inputData?: TInput;
+        }
+      : {
+          inputData: TInput;
+        }) &
+      (TState extends unknown
+        ? {
+            initialState?: TState;
+          }
+        : {
+            initialState: TState;
+          }) & {
+        requestContext?: RequestContext;
+        tracingOptions?: TracingOptions;
+        outputOptions?: {
+          includeState?: boolean;
+          includeResumeLabels?: boolean;
+        };
+        perStep?: boolean;
+      },
+  ): Promise<{ runId: string }> {
     // Persist initial snapshot
     const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
     await workflowsStore?.persistWorkflowSnapshot({
@@ -256,8 +299,8 @@ export class InngestRun<
     });
 
     // Validate inputs
-    const inputDataToUse = await this._validateInput(params.inputData);
-    const initialStateToUse = await this._validateInitialState(params.initialState ?? {});
+    const inputDataToUse = await this._validateInput(args.inputData);
+    const initialStateToUse = await this._validateInitialState(args.initialState ?? ({} as TState));
 
     // Send event to Inngest (fire-and-forget)
     const eventOutput = await this.inngest.send({
@@ -267,10 +310,10 @@ export class InngestRun<
         initialState: initialStateToUse,
         runId: this.runId,
         resourceId: this.resourceId,
-        outputOptions: params.outputOptions,
-        tracingOptions: params.tracingOptions,
-        requestContext: params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {},
-        perStep: params.perStep,
+        outputOptions: args.outputOptions,
+        tracingOptions: args.tracingOptions,
+        requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
+        perStep: args.perStep,
       },
     });
 
@@ -292,9 +335,9 @@ export class InngestRun<
     requestContext,
     perStep,
   }: {
-    inputData?: z.infer<TInput>;
+    inputData?: TInput;
     requestContext?: RequestContext;
-    initialState?: z.infer<TState>;
+    initialState?: TState;
     tracingOptions?: TracingOptions;
     outputOptions?: {
       includeState?: boolean;
@@ -324,7 +367,7 @@ export class InngestRun<
     });
 
     const inputDataToUse = await this._validateInput(inputData);
-    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
@@ -356,11 +399,11 @@ export class InngestRun<
     return result;
   }
 
-  async resume<TResumeSchema extends z.ZodType<any>>(params: {
-    resumeData?: z.infer<TResumeSchema>;
+  async resume<TResume>(params: {
+    resumeData?: TResume;
     step:
-      | Step<string, any, any, TResumeSchema, any>
-      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
+      | Step<string, any, any, TResume, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResume, any>]
       | string
       | string[];
     requestContext?: RequestContext;
@@ -378,11 +421,11 @@ export class InngestRun<
     return p;
   }
 
-  async _resume<TResumeSchema extends z.ZodType<any>>(params: {
-    resumeData?: z.infer<TResumeSchema>;
+  async _resume<TResume>(params: {
+    resumeData?: TResume;
     step:
-      | Step<string, any, any, TResumeSchema, any>
-      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
+      | Step<string, any, any, TResume, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResume, any>]
       | string
       | string[];
     requestContext?: RequestContext;
@@ -442,13 +485,13 @@ export class InngestRun<
     return result;
   }
 
-  async timeTravel<TInputSchema extends z.ZodType<any>>(params: {
-    inputData?: z.infer<TInputSchema>;
+  async timeTravel<TInput>(params: {
+    inputData?: TInput;
     resumeData?: any;
-    initialState?: z.infer<TState>;
+    initialState?: TState;
     step:
-      | Step<string, any, TInputSchema, any, any>
-      | [...Step<string, any, any, any, any>[], Step<string, any, TInputSchema, any, any>]
+      | Step<string, any, TInput, any, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, TInput, any, any>]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
@@ -473,13 +516,13 @@ export class InngestRun<
     return p;
   }
 
-  async _timeTravel<TInputSchema extends z.ZodType<any>>(params: {
-    inputData?: z.infer<TInputSchema>;
+  async _timeTravel<TInput>(params: {
+    inputData?: TInput;
     resumeData?: any;
-    initialState?: z.infer<TState>;
+    initialState?: TState;
     step:
-      | Step<string, any, TInputSchema, any, any>
-      | [...Step<string, any, any, any, any>[], Step<string, any, TInputSchema, any, any>]
+      | Step<string, any, TInput, any, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, TInput, any, any>]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
@@ -491,7 +534,7 @@ export class InngestRun<
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  }) {
     if (!params.step || (Array.isArray(params.step) && params.step?.length === 0)) {
       throw new Error('Step is required and must be a valid step or array of steps');
     }
@@ -612,7 +655,7 @@ export class InngestRun<
     };
   }
 
-  streamLegacy({ inputData, requestContext }: { inputData?: z.infer<TInput>; requestContext?: RequestContext } = {}): {
+  streamLegacy({ inputData, requestContext }: { inputData?: TInput; requestContext?: RequestContext } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   } {
@@ -620,9 +663,8 @@ export class InngestRun<
 
     const writer = writable.getWriter();
     void writer.write({
-      // @ts-ignore
+      // @ts-expect-error - stream event type mismatch
       type: 'start',
-      // @ts-ignore
       payload: { runId: this.runId },
     });
 
@@ -645,7 +687,7 @@ export class InngestRun<
     this.closeStreamAction = async () => {
       await writer.write({
         type: 'finish',
-        // @ts-ignore
+        // @ts-expect-error - stream event type mismatch
         payload: { runId: this.runId },
       });
       unwatch();
@@ -682,18 +724,18 @@ export class InngestRun<
     outputOptions,
     perStep,
   }: {
-    inputData?: z.input<TInput>;
+    inputData?: TInput;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     closeOnSuspend?: boolean;
-    initialState?: z.input<TState>;
+    initialState?: TState;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
-  } = {}): ReturnType<Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']> {
+  } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
     }
@@ -704,7 +746,6 @@ export class InngestRun<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           controller.enqueue({
             type,
@@ -769,7 +810,7 @@ export class InngestRun<
     return this.streamOutput;
   }
 
-  timeTravelStream<TInputSchema extends z.ZodType<any>>({
+  timeTravelStream<TTravelInput>({
     inputData,
     resumeData,
     initialState,
@@ -777,24 +818,23 @@ export class InngestRun<
     context,
     nestedStepsContext,
     requestContext,
+    // tracingContext,
     tracingOptions,
     outputOptions,
     perStep,
   }: {
-    inputData?: z.input<TInputSchema>;
-    initialState?: z.input<TState>;
+    inputData?: TTravelInput;
+    initialState?: TState;
     resumeData?: any;
     step:
-      | Step<string, any, TInputSchema, any, any, any, TEngineType>
-      | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, TInputSchema, any, any, any, TEngineType>,
-        ]
+      | Step<string, any, any, any, any, any, TEngineType>
+      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
       | string
       | string[];
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
     requestContext?: RequestContext;
+    tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     outputOptions?: {
       includeState?: boolean;
@@ -808,7 +848,6 @@ export class InngestRun<
     const stream = new ReadableStream<WorkflowStreamEvent>({
       async start(controller) {
         // TODO: fix this, watch doesn't have a type
-        // @ts-ignore
         const unwatch = self.watch(async ({ type, from = ChunkFrom.WORKFLOW, payload }) => {
           controller.enqueue({
             type,

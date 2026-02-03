@@ -45,6 +45,7 @@ export class MessageHistory implements Processor {
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRequestContext(args.requestContext);
     const threadId = memoryContext?.thread?.id;
+    const resourceId = memoryContext?.resourceId;
 
     if (!threadId) {
       return messageList;
@@ -53,6 +54,7 @@ export class MessageHistory implements Processor {
     // 1. Fetch historical messages from storage (as DB format)
     const result = await this.storage.listMessages({
       threadId,
+      resourceId,
       page: 0,
       perPage: this.lastMessages,
       orderBy: { field: 'createdAt', direction: 'DESC' },
@@ -90,9 +92,13 @@ export class MessageHistory implements Processor {
 
   /**
    * Filters messages before persisting to storage:
-   * 1. Removes incomplete tool calls (state === 'call' or 'partial-call')
+   * 1. Removes streaming tool calls (state === 'partial-call') - these are intermediate states
    * 2. Removes updateWorkingMemory tool invocations (hide args from message history)
    * 3. Strips <working_memory> tags from text content
+   *
+   * Note: We preserve 'call' state tool invocations because:
+   * - For server-side tools, 'call' should have been converted to 'result' by the time OUTPUT is processed
+   * - For client-side tools (no execute function), 'call' is the final state from the server's perspective
    */
   private filterMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages
@@ -111,11 +117,8 @@ export class MessageHistory implements Processor {
         if (Array.isArray(newMessage.content?.parts)) {
           newMessage.content.parts = newMessage.content.parts
             .map(p => {
-              // Filter out incomplete tool calls
-              if (
-                p.type === `tool-invocation` &&
-                (p.toolInvocation.state === `call` || p.toolInvocation.state === `partial-call`)
-              ) {
+              // Filter out streaming tool calls (partial-call is an intermediate state during streaming)
+              if (p.type === `tool-invocation` && p.toolInvocation.state === `partial-call`) {
                 return null;
               }
               // Filter out updateWorkingMemory tool invocations (hide args from message history)

@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        adapter: [hono, express]
+        adapter: [hono, express, fastify, koa]
     steps:
       - uses: actions/checkout@v5
 

@@ -2,7 +2,6 @@ import {
   Breadcrumb,
   Crumb,
   ScoresList,
-  scoresListColumns,
   Header,
   MainContentLayout,
   PageHeader,
@@ -16,19 +15,20 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
-  EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
   useAgents,
   useWorkflows,
-  HeaderGroup,
   ScorerCombobox,
   toast,
+  Spinner,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
 import { GaugeIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { ClientScoreRowData } from '@mastra/client-js';
+import { ScoreRowData } from '@mastra/core/evals';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
@@ -58,9 +58,11 @@ export default function Scorer() {
   });
 
   const agentOptions: EntityOptions[] =
-    scorer?.agentIds?.map(agentId => {
-      return { value: agentId, label: agents[agentId].name, type: 'AGENT' as const };
-    }) || [];
+    scorer?.agentIds
+      ?.filter(agentId => agents[agentId])
+      .map(agentId => {
+        return { value: agentId, label: agents[agentId].name, type: 'AGENT' as const };
+      }) || [];
 
   const workflowOptions: EntityOptions[] =
     scorer?.workflowIds?.map(workflowId => {
@@ -107,7 +109,7 @@ export default function Scorer() {
   if (isScorerLoading || scorerError || agentsError || workflowsError) return null;
 
   const scorerAgents =
-    scorer?.agentIds.map(agentId => {
+    scorer?.agentIds?.map(agentId => {
       return {
         name: agentId,
         id: Object.entries(agents).find(([_, value]) => value.name === agentId)?.[0],
@@ -115,7 +117,7 @@ export default function Scorer() {
     }) || [];
 
   const scorerWorkflows =
-    scorer?.workflowIds.map(workflowId => {
+    scorer?.workflowIds?.map(workflowId => {
       return {
         name: workflowId,
         id: Object.entries(workflows || {}).find(([_, value]) => value.name === workflowId)?.[0],
@@ -159,22 +161,19 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`} isCurrent>
+            <Crumb as={Link} to={`/scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
               Scorers
             </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              <ScorerCombobox value={scorerId} variant="ghost" />
+            </Crumb>
           </Breadcrumb>
 
-          <HeaderGroup>
-            <div className="w-48">
-              <ScorerCombobox value={scorerId} />
-            </div>
-          </HeaderGroup>
-
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/scorers/overview" target="_blank">
+            <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">
               <Icon>
                 <DocsIcon />
               </Icon>
@@ -184,7 +183,7 @@ export default function Scorer() {
         </Header>
 
         <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] w-full px-[3rem] mx-auto grid content-start gap-[2rem] h-full')}>
+          <div className={cn('max-w-[100rem] w-full px-12 mx-auto grid content-start gap-8 h-full')}>
             <PageHeader
               title={scorer?.scorer?.config?.name || 'loading'}
               description={scorer?.scorer?.config?.description || 'loading'}
@@ -202,12 +201,19 @@ export default function Scorer() {
             />
 
             {isLoadingScores ? (
-              <EntryListSkeleton columns={scoresListColumns} />
+              <div className="h-full w-full flex items-center justify-center">
+                <Spinner />
+              </div>
             ) : (
               <ScoresList
                 scores={scores}
                 selectedScoreId={selectedScoreId}
-                pagination={pagination}
+                pagination={{
+                  total: pagination?.total || 0,
+                  hasMore: pagination?.hasMore || false,
+                  perPage: pagination?.perPage || 0,
+                  page: pagination?.page || 0,
+                }}
                 onScoreClick={handleScoreClick}
                 onPageChange={setScoresPage}
                 errorMsg={scoresError?.message}
@@ -218,7 +224,7 @@ export default function Scorer() {
       </MainContentLayout>
       <ScoreDialog
         scorerName={scorer?.scorer?.config?.name}
-        score={scores.find(s => s.id === selectedScoreId)}
+        score={mapScore(scores.find(s => s.id === selectedScoreId))}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
         onNext={toNextScore}
@@ -228,3 +234,12 @@ export default function Scorer() {
     </>
   );
 }
+
+const mapScore = (score?: ClientScoreRowData): ScoreRowData | undefined => {
+  if (!score) return undefined;
+  return {
+    ...score,
+    createdAt: new Date(score.createdAt),
+    updatedAt: new Date(score.updatedAt),
+  };
+};

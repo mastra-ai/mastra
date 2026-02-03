@@ -14,8 +14,8 @@ The `MongoDBVector` class provides vector search using [MongoDB Atlas Vector Sea
 
 ## Installation
 
-```bash
-npm install @mastra/mongodb@beta
+```bash npm2yarn
+npm install @mastra/mongodb@latest
 ```
 
 ## Usage Example
@@ -25,8 +25,23 @@ import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
   id: 'mongodb-vector',
-  url: process.env.MONGODB_URL,
-  database: process.env.MONGODB_DATABASE,
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
+});
+```
+
+### Custom Embedding Field Path
+
+If you need to store embeddings in a nested field structure (e.g., to integrate with existing MongoDB collections), use the `embeddingFieldPath` option:
+
+```typescript
+import { MongoDBVector } from "@mastra/mongodb";
+
+const store = new MongoDBVector({
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
+  embeddingFieldPath: 'text.contentEmbedding', // Store embeddings at text.contentEmbedding
 });
 ```
 
@@ -40,12 +55,12 @@ const store = new MongoDBVector({
       description: "Unique identifier for this vector store instance",
     },
     {
-      name: "url",
+      name: "uri",
       type: "string",
-      description: "MongoDB connection string (URI)",
+      description: "MongoDB connection string",
     },
     {
-      name: "database",
+      name: "dbName",
       type: "string",
       description: "Name of the MongoDB database to use",
     },
@@ -54,6 +69,13 @@ const store = new MongoDBVector({
       type: "MongoClientOptions",
       isOptional: true,
       description: "Optional MongoDB client options",
+    },
+    {
+      name: "embeddingFieldPath",
+      type: "string",
+      isOptional: true,
+      defaultValue: "embedding",
+      description: "Path to the field that stores vector embeddings. Supports nested paths using dot notation (e.g., 'text.contentEmbedding').",
     },
   ]}
 />
@@ -359,8 +381,8 @@ Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve rel
 This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
 To use this, install `@mastra/fastembed`:
 
-```bash 
-npm install @mastra/fastembed@beta
+```bash npm2yarn
+npm install @mastra/fastembed@latest
 ```
 
 Add the following to your agent:
@@ -379,10 +401,12 @@ export const mongodbAgent = new Agent({
   model: "openai/gpt-5.1",
   memory: new Memory({
     storage: new MongoDBStore({
-      url: process.env.MONGODB_URI!,
+      id: 'mongodb-storage',
+      uri: process.env.MONGODB_URI!,
       dbName: process.env.MONGODB_DB_NAME!,
     }),
     vector: new MongoDBVector({
+      id: 'mongodb-vector',
       uri: process.env.MONGODB_URI!,
       dbName: process.env.MONGODB_DB_NAME!,
     }),
@@ -393,9 +417,7 @@ export const mongodbAgent = new Agent({
         topK: 3,
         messageRange: 2,
       },
-      threads: {
-        generateTitle: true, // generates descriptive thread titles automatically
-      },
+      generateTitle: true, // generates descriptive thread titles automatically
     },
   }),
 });

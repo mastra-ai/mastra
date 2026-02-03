@@ -2,7 +2,8 @@ import { isEmpty } from 'radash';
 import type z from 'zod';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
-import { removeUndefinedValues } from '../utils';
+import type { RequestContext } from '../request-context';
+import { isZodType, removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
 import type {
@@ -32,7 +33,7 @@ export async function validateStepInput({
 
   let validationError: Error | undefined;
 
-  if (validateInputs) {
+  if (validateInputs && isZodType(step.inputSchema)) {
     const inputSchema = step.inputSchema;
 
     const validatedInput = await inputSchema.safeParseAsync(prevOutput);
@@ -68,7 +69,7 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
 
   const resumeSchema = step.resumeSchema;
 
-  if (resumeSchema) {
+  if (resumeSchema && isZodType(resumeSchema)) {
     const validatedResumeData = await resumeSchema.safeParseAsync(resumeData);
     if (!validatedResumeData.success) {
       const errors = getZodErrors(validatedResumeData.error);
@@ -107,7 +108,7 @@ export async function validateStepSuspendData({
 
   const suspendSchema = step.suspendSchema;
 
-  if (suspendSchema && validateInputs) {
+  if (suspendSchema && validateInputs && isZodType(suspendSchema)) {
     const validatedSuspendData = await suspendSchema.safeParseAsync(suspendData);
     if (!validatedSuspendData.success) {
       const errors = getZodErrors(validatedSuspendData.error!);
@@ -146,7 +147,7 @@ export async function validateStepStateData({
 
   const stateSchema = step.stateSchema;
 
-  if (stateSchema && validateInputs) {
+  if (stateSchema && validateInputs && isZodType(stateSchema)) {
     const validatedStateData = await stateSchema.safeParseAsync(stateData);
     if (!validatedStateData.success) {
       const errors = getZodErrors(validatedStateData.error!);
@@ -157,6 +158,41 @@ export async function validateStepStateData({
     }
   }
   return { stateData, validationError };
+}
+
+export async function validateStepRequestContext({
+  requestContext,
+  step,
+  validateInputs,
+}: {
+  requestContext?: RequestContext;
+  step: Step<string, any, any>;
+  validateInputs: boolean;
+}) {
+  let validationError: Error | undefined;
+
+  const requestContextSchema = step.requestContextSchema;
+
+  if (requestContextSchema && validateInputs && isZodType(requestContextSchema)) {
+    // Get all values from requestContext
+    const contextValues = requestContext?.all ?? {};
+    const validatedRequestContext = await requestContextSchema.safeParseAsync(contextValues);
+    if (!validatedRequestContext.success) {
+      const errors = getZodErrors(validatedRequestContext.error!);
+      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      validationError = new MastraError(
+        {
+          id: 'WORKFLOW_STEP_REQUEST_CONTEXT_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: `Step request context validation failed for step '${step.id}': \n` + errorMessages,
+        },
+        // keep the original zod error as the cause for consumers
+        validatedRequestContext.error,
+      );
+    }
+  }
+  return { validationError };
 }
 
 export function getResumeLabelsByStepId(
@@ -389,4 +425,84 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
     }
   }
   return steps;
+}
+
+/**
+ * Cleans a single step result object by removing internal properties.
+ * This is a helper for cleanStepResult that handles one level of cleaning.
+ */
+function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
+  const { __state: _state, metadata, ...rest } = result;
+
+  // Strip nestedRunId from metadata but keep other user-defined fields
+  if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+    const { nestedRunId: _nestedRunId, ...userMetadata } = metadata as Record<string, unknown>;
+    if (Object.keys(userMetadata).length > 0) {
+      return { ...rest, metadata: userMetadata };
+    }
+  }
+
+  return rest;
+}
+
+/**
+ * Cleans step result data by removing internal properties at known structural levels.
+ *
+ * Removes:
+ * - `__state` properties (internal workflow state for state propagation)
+ * - `nestedRunId` from `metadata` objects (internal tracking for nested workflow retrieval)
+ *
+ * ## Why targeted cleaning instead of recursive?
+ *
+ * Internal properties only appear at specific, known locations:
+ *
+ * 1. **`__state`** - Added by step-executor.ts to every step result. For forEach,
+ *    suspended iterations store the full result (including __state) while completed
+ *    iterations only store the output value. See workflow-event-processor/index.ts:1227-1230.
+ *
+ * 2. **`metadata.nestedRunId`** - Added when nested workflows complete, stored at the
+ *    step result level. For forEach with nested workflows, each iteration result can
+ *    have this. See workflow-event-processor/index.ts:1449-1453.
+ *
+ * By only cleaning at the step result level and forEach iteration level, we avoid
+ * accidentally stripping user data that happens to use `__state` as a property name
+ * in their actual output values.
+ *
+ * @param stepResult - A step result object, or an array of iteration results (forEach)
+ * @returns The cleaned step result with internal properties removed
+ */
+export function cleanStepResult(stepResult: unknown): unknown {
+  if (stepResult === null || stepResult === undefined) {
+    return stepResult;
+  }
+
+  if (typeof stepResult !== 'object') {
+    return stepResult;
+  }
+
+  // Handle arrays (forEach iteration results) - clean each element at the result level only
+  if (Array.isArray(stepResult)) {
+    return stepResult.map(item => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        return cleanSingleResult(item as Record<string, unknown>);
+      }
+      return item;
+    });
+  }
+
+  const result = stepResult as Record<string, unknown>;
+  const cleaned = cleanSingleResult(result);
+
+  // If output is an array (forEach results), clean each iteration result
+  // Iteration results can have __state (for suspended) or metadata.nestedRunId (for nested workflows)
+  if (Array.isArray(cleaned.output)) {
+    cleaned.output = cleaned.output.map((item: unknown) => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        return cleanSingleResult(item as Record<string, unknown>);
+      }
+      return item;
+    });
+  }
+
+  return cleaned;
 }

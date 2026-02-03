@@ -2,7 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useInView } from './use-in-view';
 import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 const PER_PAGE = 20;
 
@@ -39,11 +39,11 @@ export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enable
   return { ...query, setEndOfListElement };
 };
 
-export const useWorkflowRunExecutionResult = (workflowId: string, runId: string, refetchInterval?: number) => {
+export const useWorkflowRun = (workflowId: string, runId: string, refetchInterval?: number) => {
   const client = useMastraClient();
   return useQuery({
-    queryKey: ['workflow-run-execution-result', workflowId, runId],
-    queryFn: () => client.getWorkflow(workflowId).runExecutionResult(runId),
+    queryKey: ['workflow-run', workflowId, runId],
+    queryFn: () => client.getWorkflow(workflowId).runById(runId),
     enabled: Boolean(workflowId && runId),
     gcTime: 0,
     staleTime: 0,

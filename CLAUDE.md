@@ -2,139 +2,87 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Scope Guidelines
+
+**IMPORTANT**: Unless explicitly mentioned in the user's prompt, do NOT check, search, read, or reference files in the `examples/` folder. Only include examples when the user specifically asks about them.
+
 ## Development Commands
 
-### Setup and Build
+### Build
 
-- `pnpm run setup` - Install dependencies and build CLI (required first step)
+- `pnpm run setup` - Install dependencies and build all packages (required first step)
 - `pnpm build` - Build all packages (excludes examples and docs)
-- `pnpm build:packages` - Build core packages only
-- `pnpm build:core` - Build core framework package
-- `pnpm build:cli` - Build CLI and playground package
-- `pnpm build:memory` - Build memory package
-- `pnpm build:rag` - Build RAG package
+- `pnpm build:packages` - Build only `packages/` directory
+- `pnpm build:core`, `pnpm build:memory`, `pnpm build:rag`, `pnpm build:evals` - Build individual packages
+- `pnpm build:cli` - Build CLI package
 - `pnpm build:combined-stores` - Build all storage adapters
 - `pnpm build:deployers` - Build deployment adapters
-- `pnpm build:evals` - Build evaluation framework
-- `NODE_OPTIONS="--max-old-space-size=4096" pnpm build` - Build with increased memory if needed
 
 ### Testing
 
-- `pnpm dev:services:up` - Start local Docker services (required for integration tests)
-- For faster testing: Build from root, then cd to specific package and run tests there
-  ```bash
-  pnpm build  # Build from monorepo root first
-  cd packages/memory
-  pnpm test   # Much faster than running all tests
-  ```
-- `pnpm test` - Run all tests (slow, use sparingly)
-- `pnpm test:watch` - Run tests in watch mode
+- `pnpm dev:services:up` / `pnpm dev:services:down` - Start/stop Docker services (required for integration tests)
+- Integration test folders and `/examples` folders need to run `pnpm i --ignore-workspace`
 - Package-specific tests: `pnpm test:core`, `pnpm test:cli`, `pnpm test:memory`, `pnpm test:rag`, etc.
+- For faster iteration: build from root first, then `cd` into a package and run `pnpm test` there
+- Core tests take a long time to run, for targetted changes, run the appropriate individual test suites.
 
-### Development
+### Linting and Formatting
 
-- `pnpm dev:services:down` - Stop local Docker services
-- `pnpm typecheck` - Run TypeScript checks across all packages
+- `pnpm typecheck` - TypeScript checks across all packages
 - `pnpm prettier:format` - Format code with Prettier
-- `pnpm format` - Run linting across all packages with auto-fix (excludes examples, docs, integrations, playground)
-
-## Documentation
-
-### Documentation Locations
-
-- **Main docs**: `docs/` directory - Contains the full documentation site built with Next.js
-- **Course content**: `docs/src/course/` - Tutorial and learning materials
-- **API reference**: Generated from code comments and exported types
-- **Package READMEs**: Each package/integration has its own README.md
-- **Development guide**: `DEVELOPMENT.md` - Setup and contribution instructions
-
-### Documentation Guidelines
-
-- Follow `.cursor/rules/writing-documentation.mdc` for writing style
-- Avoid marketing language, focus on technical implementation details
-- Examples should be practical and runnable
+- `pnpm format` - Lint all packages with auto-fix (excludes examples, docs, playground)
 
 ## Architecture Overview
 
-Mastra is a modular AI framework built around central orchestration with pluggable components. Key architectural patterns:
+Mastra is a modular AI framework built around central orchestration with pluggable components.
 
-### Core Components
+### Core Components (`packages/core/src/`)
 
-- **Mastra Class** (`packages/core/src/mastra/`) - Central configuration hub with dependency injection
-- **Agents** (`packages/core/src/agent/`) - Primary AI interaction abstraction with tools, memory, and voice
-- **Tools System** (`packages/core/src/tools/`) - Dynamic tool composition supporting multiple sources
-- **Memory System** (`packages/core/src/memory/`) - Thread-based conversation persistence with semantic recall
-- **Workflows** (`packages/core/src/workflows/`) - Step-based execution with suspend/resume capabilities
-- **Storage Layer** (`packages/core/src/storage/`) - Pluggable backends with standardized interfaces
+- **Mastra Class** (`mastra/`) - Central configuration hub with dependency injection
+- **Agents** (`agent/`) - AI interaction abstraction with tools, memory, and voice
+- **Tools** (`tools/`) - Dynamic tool composition from multiple sources (assigned, memory, toolsets, MCP)
+- **Memory** (`memory/`) - Thread-based conversation persistence with semantic recall and working memory
+- **Workflows** (`workflows/`) - Step-based execution with suspend/resume
+- **Storage** (`storage/`) - Pluggable backends with standardized interfaces
 
-### Package Structure
+### Repository Structure
 
-- **packages/** - Core framework packages (core, cli, deployer, rag, memory, evals, mcp, server)
-- **stores/** - Storage adapters (pg, chroma, pinecone, etc.)
-- **deployers/** - Platform deployment adapters (vercel, netlify, cloudflare)
-- **speech/** - Speech processing packages (voice synthesis and recognition)
-- **client-sdks/** - Client libraries for different platforms
-- **integrations/** - Third-party API integrations (github, firecrawl, etc.)
+- **packages/** - Core framework (core, cli, server, deployer, rag, memory, evals, mcp, mcp-docs-server, auth, agent-builder, create-mastra, playground, playground-ui, schema-compat, fastembed, loggers, codemod)
+- **stores/** - Storage and vector adapters (pg, chroma, pinecone, libsql, mongodb, qdrant, etc.)
+- **deployers/** - Platform deployment adapters (vercel, netlify, cloudflare, cloud)
+- **server-adapters/** - Server framework adapters (hono, express)
+- **voice/** - Voice synthesis and recognition packages
+- **client-sdks/** - Client libraries (ai-sdk, client-js, react)
+- **auth/** - Authentication providers (auth0, better-auth, clerk, firebase, supabase, workos)
+- **observability/** - Observability integrations
+- **communications/** - Communication channel packages
+- **pubsub/** - Pub/sub packages
+- **workflows/** - Workflow packages
 - **examples/** - Demo applications
-- **auth/** - Authentication provider integrations
+- **e2e-tests/** - End-to-end test suites
+- **templates/** - Project templates
 
 ### Key Patterns
 
 1. **Dependency Injection** - Components register with central Mastra instance
 2. **Plugin Architecture** - Pluggable storage, vectors, memory, deployers
-3. **Runtime Context** - Request-scoped context propagation for dynamic configuration
+3. **Request Context** - Request-scoped context propagation for dynamic configuration
 4. **Message List Abstraction** - Unified message handling across formats
-
-### Tools and Integrations
-
-- Tools are dynamically composed from multiple sources (assigned, memory, toolsets, MCP)
-- Integrations are OpenAPI-based with OAuth/API key authentication
-- MCP (Model Context Protocol) enables external tool integration
-
-### Storage and Memory
-
-- Pluggable storage backends with standardized interfaces
-- Memory system supports thread-based conversations, semantic recall, and working memory
-- Vector stores provide semantic search capabilities
 
 ## Development Guidelines
 
-### Documentation Writing
+### Documentation
 
-Follow `.cursor/rules/writing-documentation.mdc`:
+- Main docs in `docs/`, course content in `docs/src/course/`, dev guide in `DEVELOPMENT.md`
+- Follow `.cursor/rules/writing-documentation.mdc` for writing style: avoid marketing language ("powerful", "production-ready", "makes it easy"), focus on technical details, write for engineers
 
-- Avoid marketing language ("powerful", "complete", "out-of-the-box")
-- Don't use "your needs", "production-ready", "makes it easy"
-- Focus on technical details rather than benefits
-- Write for engineers, not marketing
+### Changesets
 
-### Monorepo Management
+Changelogs are authored via changesets in `.changeset/`. Follow `.claude/commands/changeset.md` for guidelines.
 
-- Use pnpm (v9.7.0+) for package management
-- Build dependencies are managed through turbo.json
+### Monorepo
+
+- pnpm (v10.18.0+) for package management, Turborepo for build orchestration
 - All packages use TypeScript with strict type checking
-- For testing: build from root first, then cd to specific package for faster iteration
-
-### Component Development
-
-- Components should integrate with central Mastra orchestration
-- Follow plugin patterns for extensibility
-- Implement standardized interfaces for storage/vector operations
-- Use telemetry decorators for observability
-- Support both sync and async operations where applicable
-
-### Testing Strategy
-
-- Integration tests require Docker services (`pnpm dev:services:up`)
-- Use Vitest for testing framework
-- Test files should be co-located with source code
-- For faster development: build from root, then test individual packages
-- Mock external services in unit tests
-
-### Common Issues
-
-- Memory errors during build: Use `NODE_OPTIONS="--max-old-space-size=4096"`
-- Missing dependencies: Run `pnpm setup` first
-- Test failures: Ensure Docker services are running and build from root first
-- Type errors: Run `pnpm typecheck` to check all packages
+- Vitest for testing, test files co-located with source code
 

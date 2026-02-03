@@ -93,7 +93,7 @@ Filter results based on metadata fields to narrow down the search space. This ap
 
 This is useful when you have documents from different sources, time periods, or with specific attributes. Mastra provides a unified MongoDB-style query syntax that works across all supported vector stores.
 
-For detailed information about available operators and syntax, see the [Metadata Filters Reference](/reference/v1/rag/metadata-filters).
+For detailed information about available operators and syntax, see the [Metadata Filters Reference](/reference/rag/metadata-filters).
 
 Basic filtering examples:
 
@@ -192,7 +192,7 @@ The Vector Query Tool supports database-specific configurations that enable you 
 These configurations are for **query-time options** like namespaces, performance tuning, and filtering—not for database connection setup. 
 
 
-Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ connectionUrl: '...' })`).
+Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ url: '...' })`).
 :::
 
 ```ts
@@ -280,14 +280,13 @@ requestContext.set("databaseConfig", {
   },
 });
 
-await pineconeQueryTool.execute({
-  context: { queryText: "search query" },
-  mastra,
-  requestContext,
-});
+await pineconeQueryTool.execute(
+  { queryText: "search query" },
+  { mastra, requestContext }
+);
 ```
 
-For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/v1/tools/vector-query-tool).
+For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/tools/vector-query-tool).
 
 ### Vector Store Prompts
 
@@ -570,6 +569,6 @@ const relevanceProvider = new ZeroEntropyRelevanceScorer("zerank-1");
 
 The re-ranked results combine vector similarity with semantic understanding to improve retrieval quality.
 
-For more details about re-ranking, see the [rerank()](/reference/v1/rag/rerankWithScorer) method.
+For more details about re-ranking, see the [rerank()](/reference/rag/rerankWithScorer) method.
 
-For graph-based retrieval that follows connections between chunks, see the [GraphRAG](/docs/v1/rag/graph-rag) documentation.
+For graph-based retrieval that follows connections between chunks, see the [GraphRAG](/docs/rag/graph-rag) documentation.

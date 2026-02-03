@@ -1,6 +1,10 @@
 import { cn } from '@/lib/utils';
-import { SideDialog, KeyValueList, TextAndIcon, getShortId, Section } from '@/components/ui/elements';
-import { ButtonsGroup, Sections } from '@/components/ui/containers';
+import { SideDialog } from '@/ds/components/SideDialog';
+import { KeyValueList } from '@/ds/components/KeyValueList';
+import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import { Section } from '@/ds/components/Section';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Sections } from '@/ds/components/Sections';
 import {
   PanelLeftIcon,
   HashIcon,
@@ -20,10 +24,11 @@ import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import { type UISpan, type UISpanState } from '../types';
 import { TraceTimelineTools } from './trace-timeline-tools';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
 import { type GetScorerResponse } from '@mastra/client-js';
+import { Icon } from '@/ds/icons/Icon';
 
 type TraceDialogProps = {
   traceSpans?: SpanRecord[];
@@ -254,10 +259,10 @@ export function TraceDialog({
 
             {traceDetails && (
               <Sections>
-                <div className="grid xl:grid-cols-[3fr_2fr] gap-[1rem] items-start">
+                <div className="grid xl:grid-cols-[3fr_2fr] gap-4 items-start">
                   <KeyValueList data={traceInfo} LinkComponent={Link} />
-                  <div className="bg-surface3 p-[1.5rem] rounded-lg grid gap-[1rem]">
-                    <h4 className="text-[1rem]">
+                  <div className="bg-surface3 p-6 rounded-lg grid gap-4">
+                    <h4 className="text-ui-lg">
                       <TextAndIcon>
                         <GaugeIcon /> Evaluate trace
                       </TextAndIcon>
@@ -265,7 +270,10 @@ export function TraceDialog({
 
                     <ButtonsGroup className="w-full">
                       <Button onClick={handleToScoring}>
-                        Scoring <CircleGaugeIcon />{' '}
+                        <Icon>
+                          <CircleGaugeIcon />
+                        </Icon>
+                        Scoring
                       </Button>
                       {spanScoresData?.scores?.[0] && (
                         <Button onClick={handleToLastScore}>
@@ -309,20 +317,20 @@ export function TraceDialog({
           </SideDialog.Content>
 
           {selectedSpan && combinedView && (
-            <div className="grid grid-rows-[auto_1fr] relative overflow-y-auto rounded-xl mx-[2rem] mb-[2rem] bg-surface4">
+            <div className="grid grid-rows-[auto_1fr] relative overflow-y-auto rounded-xl mx-8 mb-8 bg-surface4">
               <SideDialog.Top>
                 <TextAndIcon>
                   <ChevronsLeftRightEllipsisIcon /> {getShortId(selectedSpanId)}
                 </TextAndIcon>
                 |
                 <SideDialog.Nav onNext={toNextSpan()} onPrevious={toPreviousSpan()} />
-                <button className="ml-auto mr-[2rem]" onClick={() => setCombinedView(false)}>
+                <button className="ml-auto mr-8" onClick={() => setCombinedView(false)}>
                   <PanelLeftIcon /> <VisuallyHidden>Switch to dialog view</VisuallyHidden>
                 </button>
               </SideDialog.Top>
 
-              <div className={cn('h-full overflow-y-auto pb-[2rem] pl-[2rem]')}>
-                <div className="overflow-y-auto pr-[2rem] pt-[2rem] h-full">
+              <div className={cn('h-full overflow-y-auto pb-8 pl-8')}>
+                <div className="overflow-y-auto pr-8 pt-8 h-full">
                   <SideDialog.Header>
                     <SideDialog.Heading>
                       <EyeIcon />

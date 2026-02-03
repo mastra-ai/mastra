@@ -3,7 +3,6 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
 import { RequestContext } from '../../request-context';
-import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
@@ -25,10 +24,7 @@ export function isControllerOpen(controller: ReadableStreamDefaultController<any
   return controller.desiredSize !== 0 && controller.desiredSize !== null;
 }
 
-export function workflowLoopStream<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   resumeContext,
   requireToolApproval,
   models,

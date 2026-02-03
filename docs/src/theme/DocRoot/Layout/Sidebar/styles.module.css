@@ -1,13 +1,8 @@
-:root {
-  --doc-sidebar-width: 300px;
-  --doc-sidebar-hidden-width: 30px;
-}
-
 .docSidebarContainer {
   display: none;
 }
 
-@media (min-width: 997px) {
+@media (min-width: 62.25rem) {
   .docSidebarContainer {
     display: block;
     width: var(--doc-sidebar-width);

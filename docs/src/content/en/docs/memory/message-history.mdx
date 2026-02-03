@@ -2,71 +2,261 @@
 title: "Message History | Memory"
 description: "Learn how to configure message history in Mastra to store recent messages from the current conversation."
 packages:
+  - "@mastra/memory"
+  - "@mastra/libsql"
   - "@mastra/ai-sdk"
 ---
 
 # Message History
 
-Message history is the simplest kind of memory. It is a list of messages from the current conversation.
+Message history is the most basic and important form of memory. It gives the LLM a view of recent messages in the context window, enabling your agent to reference earlier exchanges and respond coherently. 
 
-Once enabled, each request includes the last 10 messages from the current memory thread, giving the agent short-term conversational context. This limit can be increased using the `lastMessages` parameter:
+You can also retrieve message history to display past conversations in your UI.
 
-```typescript
+:::info
+Each message belongs to a thread (the conversation) and a resource (the user or entity it's associated with). See [Threads and resources](/docs/memory/storage#threads-and-resources) for more detail.
+:::
+
+## Getting started
+
+Install the Mastra memory module along with a [storage adapter](/docs/memory/storage#supported-providers) for your database. The examples below use `@mastra/libsql`, which stores data locally in a `mastra.db` file.
+
+```bash npm2yarn
+npm install @mastra/memory@latest @mastra/libsql@latest
+```
+
+Message history requires a storage adapter to persist conversations. Configure storage on your Mastra instance if you haven't already:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db",
+  }),
+});
+```
+
+Give your agent a `Memory`:
+
+```typescript title="src/mastra/agents/your-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
 export const agent = new Agent({
   id: "test-agent",
   memory: new Memory({
     options: {
-      lastMessages: 20,
+      lastMessages: 10,
     },
   }),
 });
 ```
 
-## Querying Messages
+When you call the agent, messages are automatically saved to the database. You can specify a `threadId`, `resourceId`, and optional `metadata`:
 
-Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system.
-
-Storage in Mastra uses domain-specific stores. To access message operations, first get the memory store:
-
-```typescript
-// Get the memory store from storage
-const storage = mastra.getStorage();
-const memoryStore = await storage.getStore('memory');
-
-// Get messages for a thread with pagination
-const result = await memoryStore?.listMessages({
-  threadId: "your-thread-id",
-  page: 0,
-  perPage: 50
-});
-
-console.log(result?.messages); // MastraDBMessage[]
-console.log(result?.total); // Total count
-console.log(result?.hasMore); // Whether more pages exist
-
-// Get messages from multiple threads at once
-const multiThreadResult = await memoryStore?.listMessages({
-  threadId: ["thread-1", "thread-2", "thread-3"],
-  page: 0,
-  perPage: 100
-});
-
-// Get messages by their IDs
-const messages = await memoryStore?.listMessagesById({ messageIds: messageIdArr });
-```
-
-The `threadId` parameter accepts either a single thread ID string or an array of thread IDs to query messages from multiple threads in a single request.
-
-All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
+<Tabs>
+  <TabItem value="generate" label="Generate">
 
 ```typescript
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-
-const storage = mastra.getStorage();
-const memoryStore = await storage.getStore('memory');
-
-const result = await memoryStore?.listMessages({ threadId: "your-thread-id" });
-
-// Convert to AI SDK v5 UIMessage format for UI rendering
-const uiMessages = toAISdkV5Messages(result?.messages ?? []);
+await agent.generate("Hello", {
+  memory: {
+    thread: {
+      id: "thread-123",
+      title: "Support conversation",
+      metadata: { category: "billing" },
+    },
+    resource: "user-456",
+  },
+});
 ```
+
+  </TabItem>
+  <TabItem value="stream" label="Stream">
+
+```typescript
+await agent.stream("Hello", {
+  memory: {
+    thread: {
+      id: "thread-123",
+      title: "Support conversation",
+      metadata: { category: "billing" },
+    },
+    resource: "user-456",
+  },
+});
+```
+
+  </TabItem>
+</Tabs>
+
+:::info
+
+Threads and messages are created automatically when you call `agent.generate()` or `agent.stream()`, but you can also create them manually with [`createThread()`](/reference/memory/createThread) and [`saveMessages()`](/reference/memory/memory-class). 
+
+:::
+
+There are two ways to use this history:
+
+- **Automatic inclusion** - Mastra automatically fetches and includes recent messages in the context window. By default, it includes the last 10 messages, keeping agents grounded in the conversation. You can adjust this number with `lastMessages`, but in most cases you don't need to think about it.
+- [**Manual querying**](#querying) - For more control, use the `recall()` function to query threads and messages directly. This lets you choose exactly which memories are included in the context window, or fetch messages to render conversation history in your UI.
+
+## Accessing Memory
+
+To access memory functions for querying, cloning, or deleting threads and messages, call `getMemory()` on an agent:
+
+```typescript
+const agent = mastra.getAgent("weatherAgent");
+const memory = await agent.getMemory();
+```
+
+The `Memory` instance gives you access to functions for listing threads, recalling messages, cloning conversations, and more.
+
+## Querying
+
+Use these methods to fetch threads and messages for displaying conversation history in your UI or for custom memory retrieval logic.
+
+:::warning
+The memory system does not enforce access control. Before running any query, verify in your application logic that the current user is authorized to access the `resourceId` being queried.
+:::
+
+### Threads
+
+Use [`listThreads()`](/reference/memory/listThreads) to retrieve threads for a resource:
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  perPage: false,
+});
+```
+
+Paginate through threads:
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  page: 0,
+  perPage: 10,
+});
+
+console.log(result.threads); // thread objects
+console.log(result.hasMore); // more pages available?
+```
+
+You can also filter by metadata and control sort order:
+
+```typescript
+const result = await memory.listThreads({
+  filter: {
+    resourceId: "user-123",
+    metadata: { status: "active" },
+  },
+  orderBy: { field: "createdAt", direction: "DESC" },
+});
+```
+
+To fetch a single thread by ID, use [`getThreadById()`](/reference/memory/getThreadById):
+
+```typescript
+const thread = await memory.getThreadById({ threadId: "thread-123" });
+```
+
+### Messages
+
+Once you have a thread, use [`recall()`](/reference/memory/recall) to retrieve its messages. It supports pagination, date filtering, and [semantic search](/docs/memory/semantic-recall).
+
+Basic recall returns all messages from a thread:
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  perPage: false,
+});
+```
+
+Paginate through messages:
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  page: 0,
+  perPage: 50,
+});
+```
+
+Filter by date range:
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  filter: {
+    dateRange: {
+      start: new Date("2025-01-01"),
+      end: new Date("2025-06-01"),
+    },
+  },
+});
+```
+
+Fetch a single message by ID:
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  include: [{ id: "msg-123" }],
+});
+```
+
+Fetch multiple messages by ID with surrounding context:
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  include: [
+    { id: "msg-123" },
+    {
+      id: "msg-456",
+      withPreviousMessages: 3,
+      withNextMessages: 1,
+    },
+  ],
+});
+```
+
+Search by meaning (see [Semantic recall](/docs/memory/semantic-recall) for setup):
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  vectorSearchString: "project deadline discussion",
+  threadConfig: {
+    semanticRecall: true,
+  },
+});
+```
+
+### UI format
+
+Message queries return `MastraDBMessage[]` format. To display messages in a frontend, you may need to convert them to a format your UI library expects. For example, [`toAISdkV5Messages`](/reference/ai-sdk/to-ai-sdk-v5-messages) converts messages to AI SDK UI format.
+
+## Thread cloning
+
+Thread cloning creates a copy of an existing thread with its messages. This is useful for branching conversations, creating checkpoints before a potentially destructive operation, or testing variations of a conversation.
+
+```typescript
+const { thread, clonedMessages } = await memory.cloneThread({
+  sourceThreadId: "thread-123",
+  title: "Branched conversation",
+});
+```
+
+You can filter which messages get cloned (by count or date range), specify custom thread IDs, and use utility methods to inspect clone relationships. 
+
+See [`cloneThread()`](/reference/memory/cloneThread) and [clone utilities](/reference/memory/clone-utilities) for the full API.
+
+## Deleting messages
+
+To remove messages from a thread, use [`deleteMessages()`](/reference/memory/deleteMessages). You can delete by message ID or clear all messages from a thread.

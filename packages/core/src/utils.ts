@@ -24,7 +24,17 @@ export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Deep merges two objects, recursively merging nested objects and arrays
+ * Checks if a value is a plain object (not an array, function, Date, RegExp, etc.)
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Deep merges two objects, recursively merging nested plain objects.
+ * Arrays, functions, and other non-plain objects are replaced (not merged).
  */
 export function deepMerge<T extends object = object>(target: T, source: Partial<T>): T {
   const output = { ...target };
@@ -32,24 +42,60 @@ export function deepMerge<T extends object = object>(target: T, source: Partial<
   if (!source) return output;
 
   Object.keys(source).forEach(key => {
-    const targetValue = output[key as keyof T];
-    const sourceValue = source[key as keyof T];
+    const targetValue = (output as Record<string, unknown>)[key];
+    const sourceValue = (source as Record<string, unknown>)[key];
 
-    if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
-      (output as any)[key] = sourceValue;
-    } else if (
-      sourceValue instanceof Object &&
-      targetValue instanceof Object &&
-      !Array.isArray(sourceValue) &&
-      !Array.isArray(targetValue)
-    ) {
-      (output as any)[key] = deepMerge(targetValue, sourceValue as T);
+    // Only deep merge if both values are plain objects
+    if (isPlainObject(targetValue) && isPlainObject(sourceValue)) {
+      (output as Record<string, unknown>)[key] = deepMerge(targetValue, sourceValue);
     } else if (sourceValue !== undefined) {
-      (output as any)[key] = sourceValue;
+      // For arrays, functions, primitives, and other non-plain objects: replace
+      (output as Record<string, unknown>)[key] = sourceValue;
     }
   });
 
   return output;
+}
+
+/**
+ * Deep equality comparison for comparing two values.
+ * Handles primitives, arrays, objects, and Date instances.
+ */
+export function deepEqual(a: unknown, b: unknown): boolean {
+  // Handle identical references and primitives
+  if (a === b) return true;
+
+  // Handle null/undefined
+  if (a == null || b == null) return a === b;
+
+  // Handle different types
+  if (typeof a !== typeof b) return false;
+
+  // Handle arrays
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return a.every((item, index) => deepEqual(item, b[index]));
+  }
+
+  // Handle dates (must check before generic objects since Date is also an object)
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime();
+  }
+
+  // Handle objects (after Date check to avoid treating Dates as plain objects)
+  if (typeof a === 'object' && typeof b === 'object') {
+    const aObj = a as Record<string, unknown>;
+    const bObj = b as Record<string, unknown>;
+    const aKeys = Object.keys(aObj);
+    const bKeys = Object.keys(bObj);
+
+    if (aKeys.length !== bKeys.length) return false;
+
+    // Verify that bObj has the same keys as aObj before comparing values
+    return aKeys.every(key => Object.prototype.hasOwnProperty.call(bObj, key) && deepEqual(aObj[key], bObj[key]));
+  }
+
+  return false;
 }
 
 export function generateEmptyFromSchema(schema: string) {

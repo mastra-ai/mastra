@@ -9,11 +9,11 @@ import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons';
 import { RefreshCcwIcon } from 'lucide-react';
 import { usePromptEnhancer } from '../../hooks/use-prompt-enhancer';
-import Spinner from '@/components/ui/spinner';
-import { Input } from '@/components/ui/input';
+import { Spinner } from '@/ds/components/Spinner';
+import { Input } from '@/ds/components/Input';
 import { useAgent } from '../../hooks/use-agent';
 import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers';
-import { cleanProviderId } from '../agent-metadata/utils';
+import { findProviderById } from '../agent-metadata/utils';
 
 export const PromptEnhancer = ({ agentId }: { agentId: string }) => {
   const { isDirty, prompt, setPrompt, resetPrompt } = useAgentPromptExperiment();
@@ -38,7 +38,7 @@ export const PromptEnhancer = ({ agentId }: { agentId: string }) => {
       )}
 
       <div className="space-y-2">
-        <div className="rounded-md bg-[#1a1a1a] p-1 font-mono">
+        <div className="rounded-md bg-surface4 p-1 font-mono">
           <CodeMirror
             value={prompt}
             editable={true}
@@ -73,8 +73,7 @@ const PromptEnhancerTextarea = ({ agentId }: { agentId: string }) => {
 
   // Check if a provider has an API key configured
   const isProviderConnected = (providerId: string) => {
-    const cleanId = cleanProviderId(providerId);
-    const provider = providers.find(p => cleanProviderId(p.id) === cleanId);
+    const provider = findProviderById(providers, providerId);
     return provider?.connected === true;
   };
 

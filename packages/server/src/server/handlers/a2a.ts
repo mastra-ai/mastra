@@ -23,6 +23,7 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { convertInstructionsToString } from '../utils';
+import { getAgentFromSystem } from './agents';
 
 const messageSendParamsSchema = z.object({
   message: z.object({
@@ -63,20 +64,16 @@ export async function getAgentCardByIdHandler({
     url: string;
   };
 }): Promise<AgentCard> {
-  const agent = mastra.getAgentById(agentId);
+  const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
 
-  if (!agent) {
-    throw new Error(`Agent with ID ${agentId} not found`);
-  }
-
-  const [instructions, tools] = await Promise.all([
-    agent.getInstructions({ requestContext }),
-    agent.listTools({ requestContext }),
-  ]);
+  const [instructions, tools]: [
+    Awaited<ReturnType<typeof agent.getInstructions>>,
+    Awaited<ReturnType<typeof agent.listTools>>,
+  ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
 
   // Extract agent information to create the AgentCard
   const agentCard: AgentCard = {
-    name: agent.id || agentId,
+    name: agent.id || (agentId as string),
     description: convertInstructionsToString(instructions),
     url: executionUrl,
     provider,
@@ -368,7 +365,7 @@ export async function getAgentExecutionHandler({
   taskStore: InMemoryTaskStore;
   logger?: IMastraLogger;
 }): Promise<any> {
-  const agent = mastra.getAgentById(agentId);
+  const agent = await getAgentFromSystem({ mastra, agentId });
 
   let taskId: string | undefined; // For error context
 
@@ -446,6 +443,7 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
   summary: 'Get agent card',
   description: 'Returns the agent card information for A2A protocol discovery',
   tags: ['Agent-to-Agent'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext }) => {
     const executionUrl = `/a2a/${agentId}`;
     const provider = {
@@ -454,16 +452,12 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
     };
     const version = '1.0';
 
-    const agent = mastra.getAgentById(agentId as string);
+    const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
 
-    if (!agent) {
-      throw new Error(`Agent with ID ${agentId} not found`);
-    }
-
-    const [instructions, tools] = await Promise.all([
-      agent.getInstructions({ requestContext }),
-      agent.listTools({ requestContext }),
-    ]);
+    const [instructions, tools]: [
+      Awaited<ReturnType<typeof agent.getInstructions>>,
+      Awaited<ReturnType<typeof agent.listTools>>,
+    ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
 
     const agentCard: AgentCard = {
       name: agent.id || (agentId as string),
@@ -500,6 +494,7 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   summary: 'Execute agent',
   description: 'Executes an agent action via JSON-RPC 2.0 over A2A protocol',
   tags: ['Agent-to-Agent'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext, taskStore, ...bodyParams }) => {
     const { id: requestId, method, params } = bodyParams;
 

@@ -114,6 +114,14 @@ Processes a tracing event according to the resolved strategy.
   ]}
 />
 
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+Force flushes any buffered events to storage without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+
 ### shutdown
 
 ```typescript
@@ -191,17 +199,17 @@ const customExporter = new DefaultExporter({
 
 ### Documentation
 
-- [Tracing Overview](/docs/v1/observability/tracing/overview) - Complete guide
-- [Exporters](/docs/v1/observability/tracing/overview#exporters) - Exporter concepts
+- [Tracing Overview](/docs/observability/tracing/overview) - Complete guide
+- [Exporters](/docs/observability/tracing/overview#exporters) - Exporter concepts
 
 ### Other Exporters
 
-- [CloudExporter](/reference/v1/observability/tracing/exporters/cloud-exporter) - Mastra Cloud
-- [ConsoleExporter](/reference/v1/observability/tracing/exporters/console-exporter) - Debug output
-- [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
-- [Braintrust](/reference/v1/observability/tracing/exporters/braintrust) - Braintrust integration
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - Mastra Cloud
+- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter) - Debug output
+- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse integration
+- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust integration
 
 ### Reference
 
-- [Configuration](/reference/v1/observability/tracing/configuration) - Configuration options
-- [Interfaces](/reference/v1/observability/tracing/interfaces) - Type definitions
+- [Configuration](/reference/observability/tracing/configuration) - Configuration options
+- [Interfaces](/reference/observability/tracing/interfaces) - Type definitions

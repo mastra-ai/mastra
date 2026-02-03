@@ -34,12 +34,23 @@ export function resolveMongoDBConfig(config: MongoDBConfig | MongoDBDomainConfig
     }
   }
 
-  // User: standard url/dbName config
+  // User: standard uri/dbName config (url supported for backward compatibility)
+  const connectionString = config.uri ?? config.url;
+  if (!connectionString) {
+    throw new MastraError({
+      id: createStorageErrorId('MONGODB', 'CONSTRUCTOR', 'MISSING_URI'),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      details: { dbName: config?.dbName },
+      text: 'MongoDBStore requires a connection string. Provide "uri" (recommended) or "url" in the constructor options.',
+    });
+  }
+
   try {
     return MongoDBConnector.fromDatabaseConfig({
       id: 'id' in config ? config.id : 'domain',
       options: config.options,
-      url: config.url,
+      url: connectionString,
       dbName: config.dbName,
     });
   } catch (error) {
@@ -48,7 +59,7 @@ export function resolveMongoDBConfig(config: MongoDBConfig | MongoDBDomainConfig
         id: createStorageErrorId('MONGODB', 'CONSTRUCTOR', 'FAILED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        details: { url: config?.url, dbName: config?.dbName },
+        details: { uri: config?.uri ?? '', url: config?.url ?? '', dbName: config?.dbName ?? '' },
       },
       error,
     );

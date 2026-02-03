@@ -52,7 +52,7 @@ async function initializeAndRun() {
         const { UpstashStore } = await import('@mastra/upstash');
         const { LibSQLVector: UpstashLibSQLVector } = await import('@mastra/libsql');
         store = new UpstashStore({ ...(storageConfig as UpstashConfig), id: 'upstash-storage' });
-        vector = new UpstashLibSQLVector({ connectionUrl: 'file:upstash-test-vector.db', id: 'upstash-vector' });
+        vector = new UpstashLibSQLVector({ url: 'file:upstash-test-vector.db', id: 'upstash-vector' });
         break;
       case 'pg':
         const { PostgresStore, PgVector } = await import('@mastra/pg');

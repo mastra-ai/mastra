@@ -1,8 +1,6 @@
-'use client';
-
 import { useEffect } from 'react';
-import { toast } from 'sonner';
-import { Combobox } from '@/components/ui/combobox';
+import { toast } from '@/lib/toast';
+import { Combobox } from '@/ds/components/Combobox';
 import { useMCPServers } from '../hooks/use-mcp-servers';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -14,6 +12,7 @@ export interface MCPServerComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
+  variant?: 'default' | 'light' | 'outline' | 'ghost';
 }
 
 export function MCPServerCombobox({
@@ -24,6 +23,7 @@ export function MCPServerCombobox({
   emptyText = 'No MCP servers found.',
   className,
   disabled = false,
+  variant = 'default',
 }: MCPServerComboboxProps) {
   const { data: mcpServers = [], isLoading, isError, error } = useMCPServers();
   const { navigate, paths } = useLinkComponent();
@@ -58,7 +58,7 @@ export function MCPServerCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoading || isError}
-      variant="ghost"
+      variant={variant}
     />
   );
 }

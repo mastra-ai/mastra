@@ -194,12 +194,6 @@ export const agent = new Agent({
         "Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.",
     },
     {
-      name: "evals",
-      type: "Record<string, Metric>",
-      isOptional: true,
-      description: "Evaluation metrics for scoring agent responses.",
-    },
-    {
       name: "memory",
       type: "MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>",
       isOptional: true,
@@ -233,6 +227,13 @@ export const agent = new Agent({
       description:
         "Maximum number of times a processor can request retrying the LLM step.",
     },
+    {
+      name: "requestContextSchema",
+      type: "z.ZodType<any>",
+      isOptional: true,
+      description:
+        "Zod schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.",
+    },
   ]}
 />
 
@@ -242,7 +243,7 @@ export const agent = new Agent({
   content={[
     {
       name: "agent",
-      type: "Agent<TAgentId, TTools, TMetrics>",
+      type: "Agent<TAgentId, TTools>",
       description: "A new Agent instance with the specified configuration.",
     },
   ]}
@@ -250,4 +251,4 @@ export const agent = new Agent({
 
 ## Related
 
-- [Agents overview](/docs/v1/agents/overview)
+- [Agents overview](/docs/agents/overview)

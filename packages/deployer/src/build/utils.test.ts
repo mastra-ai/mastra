@@ -1,6 +1,13 @@
 import { posix } from 'node:path';
-import { describe, it, expect } from 'vitest';
-import { getPackageName, getCompiledDepCachePath, slash, findNativePackageModule, normalizeStudioBase } from './utils';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  getPackageName,
+  getCompiledDepCachePath,
+  slash,
+  findNativePackageModule,
+  normalizeStudioBase,
+  detectRuntime,
+} from './utils';
 
 describe('getPackageName', () => {
   it('should return the full scoped package name for scoped packages', () => {
@@ -388,63 +395,45 @@ describe('normalizeStudioBase', () => {
 
   describe('validation - path traversal', () => {
     it('should throw error for path with parent directory traversal', () => {
-      expect(() => normalizeStudioBase('../secret')).toThrow(
-        "Invalid base path: \"../secret\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('../secret')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
 
     it('should throw error for path with traversal in middle', () => {
-      expect(() => normalizeStudioBase('/admin/../secret')).toThrow(
-        "Invalid base path: \"/admin/../secret\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('/admin/../secret')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
 
     it('should throw error for path with multiple traversals', () => {
-      expect(() => normalizeStudioBase('../../secret')).toThrow(
-        "Invalid base path: \"../../secret\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('../../secret')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
   });
 
   describe('validation - query parameters', () => {
     it('should throw error for path with query string', () => {
-      expect(() => normalizeStudioBase('/admin?query=1')).toThrow(
-        "Invalid base path: \"/admin?query=1\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('/admin?query=1')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
 
     it('should throw error for path with multiple query parameters', () => {
-      expect(() => normalizeStudioBase('/admin?a=1&b=2')).toThrow(
-        "Invalid base path: \"/admin?a=1&b=2\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('/admin?a=1&b=2')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
   });
 
   describe('validation - hash fragments', () => {
     it('should throw error for path with hash', () => {
-      expect(() => normalizeStudioBase('/admin#section')).toThrow(
-        "Invalid base path: \"/admin#section\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('/admin#section')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
 
     it('should throw error for path with just hash', () => {
-      expect(() => normalizeStudioBase('#anchor')).toThrow(
-        "Invalid base path: \"#anchor\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('#anchor')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
   });
 
   describe('validation - combined invalid characters', () => {
     it('should throw error for path with query and hash', () => {
-      expect(() => normalizeStudioBase('/admin?query=1#section')).toThrow(
-        "Invalid base path: \"/admin?query=1#section\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('/admin?query=1#section')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
 
     it('should throw error for path with traversal and query', () => {
-      expect(() => normalizeStudioBase('../admin?query=1')).toThrow(
-        "Invalid base path: \"../admin?query=1\". Base path cannot contain '..', '?', or '#'",
-      );
+      expect(() => normalizeStudioBase('../admin?query=1')).toThrow(/cannot contain '\.\.'.*'\?'.*'#'/);
     });
   });
 
@@ -504,5 +493,36 @@ describe('normalizeStudioBase', () => {
       expect(normalizeStudioBase('/Admin')).toBe('/Admin');
       expect(normalizeStudioBase('MyApp')).toBe('/MyApp');
     });
+  });
+});
+
+/**
+ * Tests for runtime detection utilities
+ * @see GitHub Issue #11253: Bun S3 API's not working inside Mastra Workflows
+ */
+describe('detectRuntime', () => {
+  const originalBunVersion = process.versions.bun;
+
+  beforeEach(() => {
+    // Clean up bun version before each test
+    delete (process.versions as Record<string, string | undefined>).bun;
+  });
+
+  afterEach(() => {
+    // Restore original bun version
+    if (originalBunVersion) {
+      (process.versions as Record<string, string | undefined>).bun = originalBunVersion;
+    } else {
+      delete (process.versions as Record<string, string | undefined>).bun;
+    }
+  });
+
+  it('should return "node" when process.versions.bun is not present', () => {
+    expect(detectRuntime()).toBe('node');
+  });
+
+  it('should return "bun" when process.versions.bun is present', () => {
+    (process.versions as Record<string, string | undefined>).bun = '1.0.0';
+    expect(detectRuntime()).toBe('bun');
   });
 });

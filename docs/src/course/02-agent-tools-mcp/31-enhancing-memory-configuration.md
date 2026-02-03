@@ -3,18 +3,18 @@
 Finally, let's enhance our memory configuration to make our agent even more helpful:
 
 ```typescript
-import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 
 const memory = new Memory({
   storage: new LibSQLStore({
-    id: "learning-memory-storage",
-    url: "file:../../memory.db",
+    id: 'learning-memory-storage',
+    url: 'file:../../memory.db',
   }),
   vector: new LibSQLVector({
-    id: "learning-memory-vector",
-    connectionUrl: "file:../../memory.db",
+    id: 'learning-memory-vector',
+    url: 'file:../../memory.db',
   }),
-  embedder: "openai/text-embedding-3-small",
+  embedder: 'openai/text-embedding-3-small',
   options: {
     // Keep last 20 messages in context
     lastMessages: 20,
@@ -39,14 +39,14 @@ const memory = new Memory({
        </user>`,
     },
   },
-});
+})
 ```
 
 And update the agent instructions to use this enhanced memory:
 
 ```typescript
 export const personalAssistantAgent = new Agent({
-  name: "Personal Assistant",
+  name: 'Personal Assistant',
   instructions: `
     // ... existing instructions ...
     
@@ -61,10 +61,10 @@ export const personalAssistantAgent = new Agent({
     Always maintain a helpful and professional tone.
     Use the stored information to provide more personalized responses.
   `,
-  model: "openai/gpt-4.1-mini",
+  model: 'openai/gpt-4.1-mini',
   tools: { ...mcpTools },
   memory,
-});
+})
 ```
 
 This enhanced memory configuration gives your agent more sophisticated memory capabilities:

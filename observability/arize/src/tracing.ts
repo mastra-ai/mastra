@@ -1,5 +1,4 @@
 import { SEMRESATTRS_PROJECT_NAME } from '@arizeai/openinference-semantic-conventions';
-import { ConsoleLogger } from '@mastra/core/logger';
 import { OtelExporter } from '@mastra/otel-exporter';
 import type { OtelExporterConfig } from '@mastra/otel-exporter';
 
@@ -39,38 +38,75 @@ export type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
 export class ArizeExporter extends OtelExporter {
   name = 'arize';
 
-  constructor(config: ArizeExporterConfig) {
-    const logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
-    let endpoint: string | undefined = config.endpoint;
+  constructor(config: ArizeExporterConfig = {}) {
+    // Read configuration from config or environment variables
+    // Priority: config > ARIZE_* env vars > PHOENIX_* env vars
+    const spaceId = config.spaceId ?? process.env.ARIZE_SPACE_ID;
+    const apiKey = config.apiKey ?? process.env.ARIZE_API_KEY ?? process.env.PHOENIX_API_KEY;
+    const projectName = config.projectName ?? process.env.ARIZE_PROJECT_NAME ?? process.env.PHOENIX_PROJECT_NAME;
+
+    // Determine endpoint: config > PHOENIX_ENDPOINT > ARIZE_AX_ENDPOINT (if spaceId is set)
+    let endpoint: string | undefined = config.endpoint ?? process.env.PHOENIX_ENDPOINT;
+
     const headers: Record<string, string> = {
       ...config.headers,
     };
-    if (config.spaceId) {
-      // arize ax header configuration
-      headers['space_id'] = config.spaceId;
-      headers['api_key'] = config.apiKey ?? '';
-      endpoint = config.endpoint || ARIZE_AX_ENDPOINT;
-    } else if (config.apiKey) {
+
+    // Validate credentials based on mode
+    let disabledReason: string | undefined;
+
+    if (spaceId) {
+      // Arize AX mode requires an API key
+      if (!apiKey) {
+        disabledReason =
+          `${LOG_PREFIX} API key is required for Arize AX. ` +
+          `Set ARIZE_API_KEY environment variable or pass apiKey in config.`;
+      } else {
+        // arize ax header configuration
+        headers['space_id'] = spaceId;
+        headers['api_key'] = apiKey;
+        endpoint = endpoint || ARIZE_AX_ENDPOINT;
+      }
+    } else if (apiKey) {
       // standard otel header configuration
-      headers['Authorization'] = `Bearer ${config.apiKey}`;
+      headers['Authorization'] = `Bearer ${apiKey}`;
     }
-    if (!endpoint) {
-      logger.error(`${LOG_PREFIX} Endpoint is required in configuration. Disabling exporter.`);
+
+    if (!disabledReason && !endpoint) {
+      disabledReason =
+        `${LOG_PREFIX} Endpoint is required in configuration. ` +
+        `Set PHOENIX_ENDPOINT environment variable, or ARIZE_SPACE_ID for Arize AX, or pass endpoint in config.`;
+    }
+
+    // If disabled, create with minimal config and disable
+    if (disabledReason) {
+      super({
+        ...config,
+        provider: {
+          custom: {
+            endpoint: 'http://disabled',
+            headers: {},
+            protocol: 'http/protobuf',
+          },
+        },
+      });
+      this.setDisabled(disabledReason);
       return;
     }
+
     super({
       exporter: new OpenInferenceOTLPTraceExporter({
-        url: endpoint,
+        url: endpoint!,
         headers,
       }),
       ...config,
       resourceAttributes: {
-        [SEMRESATTRS_PROJECT_NAME]: config.projectName,
+        ...(projectName ? { [SEMRESATTRS_PROJECT_NAME]: projectName } : {}),
         ...config.resourceAttributes,
       },
       provider: {
         custom: {
-          endpoint,
+          endpoint: endpoint!,
           headers,
           protocol: 'http/protobuf',
         },
