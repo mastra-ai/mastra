@@ -9,6 +9,7 @@ import { DatasetHeader } from './dataset-header';
 import { CSVImportDialog } from '../csv-import';
 import { JSONImportDialog } from '../json-import';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
+import { AddItemsToDatasetDialog } from '../add-items-to-dataset-dialog';
 import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { transitions } from '@/ds/primitives/transitions';
@@ -41,6 +42,8 @@ export function DatasetDetail({
   const [importJsonDialogOpen, setImportJsonDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [itemsForCreate, setItemsForCreate] = useState<DatasetItem[]>([]);
+  const [addToDatasetDialogOpen, setAddToDatasetDialogOpen] = useState(false);
+  const [itemsForAddToDataset, setItemsForAddToDataset] = useState<DatasetItem[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemIdsToDelete, setItemIdsToDelete] = useState<string[]>([]);
   const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
@@ -72,6 +75,21 @@ export function DatasetDetail({
   const handleCreateDatasetClick = (selectedItems: DatasetItem[]) => {
     setItemsForCreate(selectedItems);
     setCreateDialogOpen(true);
+  };
+
+  // Handler for Add to Dataset action from selection
+  const handleAddToDatasetClick = (selectedItems: DatasetItem[]) => {
+    setItemsForAddToDataset(selectedItems);
+    setAddToDatasetDialogOpen(true);
+  };
+
+  // Clear selection when add to dataset dialog closes
+  const handleAddToDatasetDialogOpenChange = (open: boolean) => {
+    setAddToDatasetDialogOpen(open);
+    if (!open) {
+      setItemsForAddToDataset([]);
+      setClearSelectionTrigger(prev => prev + 1);
+    }
   };
 
   // Handler for bulk delete action from selection
@@ -153,6 +171,7 @@ export function DatasetDetail({
                   onImportJsonClick={() => setImportJsonDialogOpen(true)}
                   onBulkDeleteClick={handleBulkDeleteClick}
                   onCreateDatasetClick={handleCreateDatasetClick}
+                  onAddToDatasetClick={handleAddToDatasetClick}
                   datasetName={dataset?.name}
                   clearSelectionTrigger={clearSelectionTrigger}
                   setEndOfListElement={setEndOfListElement}
@@ -181,6 +200,14 @@ export function DatasetDetail({
         onOpenChange={handleCreateDialogOpenChange}
         items={itemsForCreate}
         onSuccess={handleCreateSuccess}
+      />
+
+      {/* Add Items to Dataset Dialog */}
+      <AddItemsToDatasetDialog
+        open={addToDatasetDialogOpen}
+        onOpenChange={handleAddToDatasetDialogOpenChange}
+        items={itemsForAddToDataset}
+        currentDatasetId={datasetId}
       />
 
       {/* Bulk Delete Confirmation Dialog */}

@@ -13,7 +13,7 @@ import { ItemsToolbar } from './items-toolbar';
 import { toast } from '@/lib/toast';
 import { format, isToday } from 'date-fns';
 
-type SelectionMode = 'idle' | 'export' | 'export-json' | 'create-dataset' | 'delete';
+type SelectionMode = 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete';
 
 const itemsListColumns = [
   { name: 'input', label: 'Input', size: '1fr' },
@@ -32,6 +32,7 @@ export interface DatasetItemListProps {
   onImportJsonClick?: () => void;
   onBulkDeleteClick?: (itemIds: string[]) => void;
   onCreateDatasetClick?: (items: DatasetItem[]) => void;
+  onAddToDatasetClick?: (items: DatasetItem[]) => void;
   datasetName?: string;
   clearSelectionTrigger?: number;
   onItemClick?: (itemId: string) => void;
@@ -58,6 +59,7 @@ export function DatasetItemList({
   onImportJsonClick,
   onBulkDeleteClick,
   onCreateDatasetClick,
+  onAddToDatasetClick,
   datasetName,
   clearSelectionTrigger,
   onItemClick,
@@ -110,6 +112,9 @@ export function DatasetItemList({
     } else if (selectionMode === 'create-dataset') {
       onCreateDatasetClick?.(selectedItems);
       // Don't clear yet - parent increments clearSelectionTrigger after dialog closes
+    } else if (selectionMode === 'add-to-dataset') {
+      onAddToDatasetClick?.(selectedItems);
+      // Don't clear yet - parent increments clearSelectionTrigger after dialog closes
     } else if (selectionMode === 'delete') {
       onBulkDeleteClick?.(Array.from(selection.selectedIds));
       // Don't clear yet - parent increments clearSelectionTrigger after delete completes
@@ -159,6 +164,7 @@ export function DatasetItemList({
         onExportClick={() => setSelectionMode('export')}
         onExportJsonClick={() => setSelectionMode('export-json')}
         onCreateDatasetClick={() => setSelectionMode('create-dataset')}
+        onAddToDatasetClick={() => setSelectionMode('add-to-dataset')}
         onDeleteClick={() => setSelectionMode('delete')}
         hasItems={items.length > 0}
         isSelectionActive={isSelectionActive}

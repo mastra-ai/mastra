@@ -24,6 +24,7 @@ export * from './utils/json-export';
 export { DatasetsTable } from './components/datasets-table/datasets-table';
 export { CreateDatasetDialog } from './components/create-dataset-dialog';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
+export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialog';
 export { EditDatasetDialog } from './components/edit-dataset-dialog';
 export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
 export { EmptyDatasetsTable } from './components/empty-datasets-table';

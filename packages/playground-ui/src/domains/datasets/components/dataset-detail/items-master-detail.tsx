@@ -19,6 +19,7 @@ export interface ItemsMasterDetailProps {
   onImportJsonClick?: () => void;
   onBulkDeleteClick?: (itemIds: string[]) => void;
   onCreateDatasetClick?: (items: DatasetItem[]) => void;
+  onAddToDatasetClick?: (items: DatasetItem[]) => void;
   datasetName?: string;
   clearSelectionTrigger?: number;
   // Infinite scroll props

@@ -8,14 +8,16 @@ import {
   Plus,
   Upload,
   FileJson,
-  MoreVertical,
   Download,
   FolderPlus,
   FolderOutput,
   Trash2,
   ChevronDownIcon,
+  AmpersandIcon,
+  MoveRightIcon,
 } from 'lucide-react';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Badge } from '@/ds/components/Badge';
 export interface ItemsToolbarProps {
   // Normal mode actions
   onAddClick: () => void;
@@ -24,6 +26,7 @@ export interface ItemsToolbarProps {
   onExportClick: () => void;
   onExportJsonClick: () => void;
   onCreateDatasetClick: () => void;
+  onAddToDatasetClick: () => void;
   onDeleteClick: () => void;
   hasItems: boolean;
 
@@ -32,17 +35,24 @@ export interface ItemsToolbarProps {
   selectedCount: number;
   onExecuteAction: () => void;
   onCancelSelection: () => void;
-  selectionMode: 'idle' | 'export' | 'export-json' | 'create-dataset' | 'delete';
+  selectionMode: 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete';
 }
 
 interface ActionsMenuProps {
   onExportClick: () => void;
   onExportJsonClick: () => void;
   onCreateDatasetClick: () => void;
+  onAddToDatasetClick: () => void;
   onDeleteClick: () => void;
 }
 
-function ActionsMenu({ onExportClick, onExportJsonClick, onCreateDatasetClick, onDeleteClick }: ActionsMenuProps) {
+function ActionsMenu({
+  onExportClick,
+  onExportJsonClick,
+  onCreateDatasetClick,
+  onAddToDatasetClick,
+  onDeleteClick,
+}: ActionsMenuProps) {
   const [open, setOpen] = useState(false);
 
   const handleAction = (callback: () => void) => {
@@ -54,7 +64,7 @@ function ActionsMenu({ onExportClick, onExportJsonClick, onCreateDatasetClick, o
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="secondary" size="default" aria-label="Actions menu">
-          <MoreVertical />
+          Select <AmpersandIcon />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-1 bg-surface4 ">
@@ -68,7 +78,7 @@ function ActionsMenu({ onExportClick, onExportJsonClick, onCreateDatasetClick, o
             <Icon>
               <Download className="w-4 h-4" />
             </Icon>
-            Select and Export Items as CSV
+            Export Items as CSV
           </Button>
           <Button
             variant="ghost"
@@ -79,7 +89,7 @@ function ActionsMenu({ onExportClick, onExportJsonClick, onCreateDatasetClick, o
             <Icon>
               <FileJson className="w-4 h-4" />
             </Icon>
-            Select and Export Items as JSON
+            Export Items as JSON
           </Button>
           <Button
             variant="ghost"
@@ -90,13 +100,18 @@ function ActionsMenu({ onExportClick, onExportJsonClick, onCreateDatasetClick, o
             <Icon>
               <FolderPlus className="w-4 h-4" />
             </Icon>
-            Select Items to Create Dataset
+            Create Dataset from Items
           </Button>
-          <Button variant="ghost" size="sm" className="w-full justify-start gap-2" disabled>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2"
+            onClick={() => handleAction(onAddToDatasetClick)}
+          >
             <Icon>
               <FolderOutput className="w-4 h-4" />
             </Icon>
-            Add to Dataset (Coming Soon)
+            Add Items to another Dataset
           </Button>
           <Button
             variant="ghost"
@@ -107,7 +122,7 @@ function ActionsMenu({ onExportClick, onExportJsonClick, onCreateDatasetClick, o
             <Icon>
               <Trash2 className="w-4 h-4" />
             </Icon>
-            Select Items to Delete
+            Delete Items
           </Button>
         </div>
       </PopoverContent>
@@ -122,6 +137,7 @@ export function ItemsToolbar({
   onExportClick,
   onExportJsonClick,
   onCreateDatasetClick,
+  onAddToDatasetClick,
   onDeleteClick,
   hasItems,
   isSelectionActive,
@@ -134,14 +150,19 @@ export function ItemsToolbar({
 
   if (isSelectionActive) {
     return (
-      <div className="flex justify-between">
-        <span className="text-sm text-neutral3 flex items-center">{selectedCount} selected</span>
+      <div className="flex gap-5">
+        <div className="text-sm text-neutral3 flex items-center gap-2 pl-6">
+          <Badge className="text-ui-md">{selectedCount}</Badge>
+          <span>selected items</span>
+          <MoveRightIcon />
+        </div>
         <ButtonsGroup>
           <Button variant="standard" size="default" disabled={selectedCount === 0} onClick={onExecuteAction}>
-            {selectionMode === 'export' && 'Export CSV'}
-            {selectionMode === 'export-json' && 'Export JSON'}
-            {selectionMode === 'create-dataset' && 'Create Dataset'}
-            {selectionMode === 'delete' && 'Delete'}
+            {selectionMode === 'export' && 'Export Items as CSV'}
+            {selectionMode === 'export-json' && 'Export Items as JSON'}
+            {selectionMode === 'create-dataset' && 'Create a new Dataset with Items'}
+            {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
+            {selectionMode === 'delete' && 'Delete Items'}
           </Button>
           <Button variant="secondary" size="default" onClick={onCancelSelection}>
             Cancel
@@ -204,6 +225,7 @@ export function ItemsToolbar({
           onExportClick={onExportClick}
           onExportJsonClick={onExportJsonClick}
           onCreateDatasetClick={onCreateDatasetClick}
+          onAddToDatasetClick={onAddToDatasetClick}
           onDeleteClick={onDeleteClick}
         />
       )}
