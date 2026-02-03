@@ -1,21 +1,10 @@
-import * as React from "react";
+import * as React from 'react';
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/ds/components/Select/select";
-import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
+import { cn } from '@/lib/utils';
 
-import type { FieldOption, JsonSchema, RuleFieldSelectProps } from "./types";
-import {
-  getFieldOptionsFromSchema,
-  getFieldOptionAtPath,
-  getChildFieldOptions,
-  parseFieldPath,
-} from "./schema-utils";
+import type { FieldOption, JsonSchema, RuleFieldSelectProps } from './types';
+import { getFieldOptionsFromSchema, getFieldOptionAtPath, getChildFieldOptions, parseFieldPath } from './schema-utils';
 
 /**
  * A single level of field selection
@@ -32,21 +21,19 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
   options,
   value,
   onChange,
-  placeholder = "Select field",
+  placeholder = 'Select field',
   className,
 }) => {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={cn("min-w-[140px] text-neutral6", className)} size="sm">
+      <SelectTrigger className={cn('min-w-[140px] text-neutral6', className)} size="sm">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
-        {options.map((option) => (
+        {options.map(option => (
           <SelectItem key={option.path} value={option.path}>
             {option.label}
-            {option.hasChildren && (
-              <span className="ml-1 text-neutral3">...</span>
-            )}
+            {option.hasChildren && <span className="ml-1 text-neutral3">...</span>}
           </SelectItem>
         ))}
       </SelectContent>
@@ -57,12 +44,7 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
 /**
  * Recursive field selector that shows additional dropdowns for nested objects/arrays
  */
-export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({
-  schema,
-  value,
-  onChange,
-  className,
-}) => {
+export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({ schema, value, onChange, className }) => {
   // Parse the current path into segments
   const pathSegments = React.useMemo(() => parseFieldPath(value), [value]);
 
@@ -80,12 +62,12 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({
 
     result.push({
       options: rootOptions,
-      value: pathSegments[0] || "",
-      basePath: "",
+      value: pathSegments[0] || '',
+      basePath: '',
     });
 
     // For each segment, check if we need to add more selectors
-    let currentPath = "";
+    let currentPath = '';
     for (let i = 0; i < pathSegments.length; i++) {
       const segment = pathSegments[i];
       currentPath = currentPath ? `${currentPath}.${segment}` : segment;
@@ -99,7 +81,7 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({
 
       // Check if there's a next segment selected
       const nextSegment = pathSegments[i + 1];
-      const nextPath = nextSegment ? `${currentPath}.${nextSegment}` : "";
+      const nextPath = nextSegment ? `${currentPath}.${nextSegment}` : '';
 
       result.push({
         options: childOptions,
@@ -117,27 +99,23 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({
       // When changing a level, we truncate any deeper selections
       onChange(newValue);
     },
-    [onChange]
+    [onChange],
   );
 
   if (selectors.length === 0) {
-    return (
-      <div className={cn("text-sm text-neutral3", className)}>
-        No fields available
-      </div>
-    );
+    return <div className={cn('text-sm text-neutral3', className)}>No fields available</div>;
   }
 
   return (
-    <div className={cn("flex items-center gap-1", className)}>
+    <div className={cn('flex items-center gap-1', className)}>
       {selectors.map((selector, index) => (
         <React.Fragment key={`${selector.basePath}-${index}`}>
           {index > 0 && <span className="text-neutral3">.</span>}
           <FieldLevelSelect
             options={selector.options}
             value={selector.value}
-            onChange={(newValue) => handleChange(index, newValue)}
-            placeholder={index === 0 ? "Select field" : "Select property"}
+            onChange={newValue => handleChange(index, newValue)}
+            placeholder={index === 0 ? 'Select field' : 'Select property'}
           />
         </React.Fragment>
       ))}

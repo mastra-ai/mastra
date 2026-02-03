@@ -1,9 +1,9 @@
-import * as React from "react";
+import * as React from 'react';
 
-import { Input } from "@/ds/components/Input/input";
-import { cn } from "@/lib/utils";
+import { Input } from '@/ds/components/Input/input';
+import { cn } from '@/lib/utils';
 
-import type { RuleValueInputProps } from "./types";
+import type { RuleValueInputProps } from './types';
 
 /**
  * Parses a string value to the appropriate type
@@ -12,22 +12,18 @@ const parseValue = (stringValue: string): unknown => {
   const trimmed = stringValue.trim();
 
   // Empty string
-  if (trimmed === "") return "";
+  if (trimmed === '') return '';
 
   // Boolean
-  if (trimmed === "true") return true;
-  if (trimmed === "false") return false;
+  if (trimmed === 'true') return true;
+  if (trimmed === 'false') return false;
 
   // Null
-  if (trimmed === "null") return null;
+  if (trimmed === 'null') return null;
 
   // Reject special number strings - keep as strings
   const lowerTrimmed = trimmed.toLowerCase();
-  if (
-    lowerTrimmed === "infinity" ||
-    lowerTrimmed === "-infinity" ||
-    lowerTrimmed === "nan"
-  ) {
+  if (lowerTrimmed === 'infinity' || lowerTrimmed === '-infinity' || lowerTrimmed === 'nan') {
     return trimmed;
   }
 
@@ -43,18 +39,18 @@ const parseValue = (stringValue: string): unknown => {
  * Parses a comma-separated string into an array of values
  */
 const parseArrayValue = (stringValue: string): unknown[] => {
-  if (stringValue.trim() === "") return [];
+  if (stringValue.trim() === '') return [];
 
-  return stringValue.split(",").map((item) => parseValue(item.trim()));
+  return stringValue.split(',').map(item => parseValue(item.trim()));
 };
 
 /**
  * Converts a value to a display string
  */
 const valueToString = (value: unknown): string => {
-  if (value === null) return "null";
-  if (value === undefined) return "";
-  if (Array.isArray(value)) return value.map(valueToString).join(", ");
+  if (value === null) return 'null';
+  if (value === undefined) return '';
+  if (Array.isArray(value)) return value.map(valueToString).join(', ');
   return String(value);
 };
 
@@ -71,12 +67,12 @@ export const RuleValueInput: React.FC<RuleValueInputProps> = ({
   placeholder,
   className,
 }) => {
-  const isArrayOperator = operator === "in" || operator === "not_in";
+  const isArrayOperator = operator === 'in' || operator === 'not_in';
 
   // Convert the current value to a display string
   const displayValue = React.useMemo(() => {
     if (isArrayOperator && Array.isArray(value)) {
-      return value.map(valueToString).join(", ");
+      return value.map(valueToString).join(', ');
     }
     return valueToString(value);
   }, [value, isArrayOperator]);
@@ -91,19 +87,17 @@ export const RuleValueInput: React.FC<RuleValueInputProps> = ({
         onChange(parseValue(inputValue));
       }
     },
-    [onChange, isArrayOperator]
+    [onChange, isArrayOperator],
   );
 
-  const defaultPlaceholder = isArrayOperator
-    ? "Enter values (comma-separated)"
-    : "Enter value";
+  const defaultPlaceholder = isArrayOperator ? 'Enter values (comma-separated)' : 'Enter value';
 
   return (
     <Input
       value={displayValue}
       onChange={handleChange}
       placeholder={placeholder || defaultPlaceholder}
-      className={cn("min-w-[160px]", className)}
+      className={cn('min-w-[160px]', className)}
       size="sm"
     />
   );

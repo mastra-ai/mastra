@@ -1,4 +1,4 @@
-import type { FieldOption, JsonSchema, JsonSchemaProperty } from "./types";
+import type { FieldOption, JsonSchema, JsonSchemaProperty } from './types';
 
 /**
  * Gets the primary type from a JSON Schema property
@@ -6,9 +6,9 @@ import type { FieldOption, JsonSchema, JsonSchemaProperty } from "./types";
 export const getPropertyType = (property: JsonSchemaProperty): string => {
   if (Array.isArray(property.type)) {
     // Return the first non-null type
-    return property.type.find((t) => t !== "null") || "string";
+    return property.type.find(t => t !== 'null') || 'string';
   }
-  return property.type || "string";
+  return property.type || 'string';
 };
 
 /**
@@ -17,13 +17,13 @@ export const getPropertyType = (property: JsonSchemaProperty): string => {
 export const hasNestedChildren = (property: JsonSchemaProperty): boolean => {
   const type = getPropertyType(property);
 
-  if (type === "object" && property.properties) {
+  if (type === 'object' && property.properties) {
     return Object.keys(property.properties).length > 0;
   }
 
-  if (type === "array" && property.items) {
+  if (type === 'array' && property.items) {
     const itemType = getPropertyType(property.items);
-    return itemType === "object" && !!property.items.properties;
+    return itemType === 'object' && !!property.items.properties;
   }
 
   return false;
@@ -34,7 +34,7 @@ export const hasNestedChildren = (property: JsonSchemaProperty): boolean => {
  */
 export const getFieldOptionsFromProperties = (
   properties: Record<string, JsonSchemaProperty> | undefined,
-  parentPath: string = ""
+  parentPath: string = '',
 ): FieldOption[] => {
   if (!properties) return [];
 
@@ -48,8 +48,8 @@ export const getFieldOptionsFromProperties = (
       label: property.title || key,
       type,
       hasChildren,
-      children: type === "object" ? property.properties : undefined,
-      items: type === "array" ? property.items : undefined,
+      children: type === 'object' ? property.properties : undefined,
+      items: type === 'array' ? property.items : undefined,
     };
   });
 };
@@ -64,22 +64,16 @@ export const getFieldOptionsFromSchema = (schema: JsonSchema): FieldOption[] => 
 /**
  * Gets child field options for a given field option
  */
-export const getChildFieldOptions = (
-  fieldOption: FieldOption,
-  currentPath: string
-): FieldOption[] => {
-  if (fieldOption.type === "object" && fieldOption.children) {
+export const getChildFieldOptions = (fieldOption: FieldOption, currentPath: string): FieldOption[] => {
+  if (fieldOption.type === 'object' && fieldOption.children) {
     return getFieldOptionsFromProperties(fieldOption.children, currentPath);
   }
 
-  if (fieldOption.type === "array" && fieldOption.items) {
+  if (fieldOption.type === 'array' && fieldOption.items) {
     const itemType = getPropertyType(fieldOption.items);
-    if (itemType === "object" && fieldOption.items.properties) {
+    if (itemType === 'object' && fieldOption.items.properties) {
       // For arrays, we use the current path directly (user will access via index or iteration)
-      return getFieldOptionsFromProperties(
-        fieldOption.items.properties,
-        currentPath
-      );
+      return getFieldOptionsFromProperties(fieldOption.items.properties, currentPath);
     }
   }
 
@@ -90,21 +84,18 @@ export const getChildFieldOptions = (
  * Parses a field path into segments
  */
 export const parseFieldPath = (path: string): string[] => {
-  return path.split(".").filter(Boolean);
+  return path.split('.').filter(Boolean);
 };
 
 /**
  * Gets the field option at a specific path in the schema
  */
-export const getFieldOptionAtPath = (
-  schema: JsonSchema,
-  path: string
-): FieldOption | undefined => {
+export const getFieldOptionAtPath = (schema: JsonSchema, path: string): FieldOption | undefined => {
   const segments = parseFieldPath(path);
   if (segments.length === 0) return undefined;
 
   let currentProperties = schema.properties;
-  let currentPath = "";
+  let currentPath = '';
   let result: FieldOption | undefined;
 
   for (let i = 0; i < segments.length; i++) {
@@ -123,14 +114,14 @@ export const getFieldOptionAtPath = (
       label: property.title || segment,
       type,
       hasChildren,
-      children: type === "object" ? property.properties : undefined,
-      items: type === "array" ? property.items : undefined,
+      children: type === 'object' ? property.properties : undefined,
+      items: type === 'array' ? property.items : undefined,
     };
 
     // Navigate deeper
-    if (type === "object" && property.properties) {
+    if (type === 'object' && property.properties) {
       currentProperties = property.properties;
-    } else if (type === "array" && property.items?.properties) {
+    } else if (type === 'array' && property.items?.properties) {
       currentProperties = property.items.properties;
     } else {
       currentProperties = undefined;

@@ -1,1 +1,1 @@
-export { isEligible } from "./is-eligible";
+export { isEligible } from './is-eligible';

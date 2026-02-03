@@ -1,12 +1,12 @@
 export type ConditionOperator =
-  | "equals"
-  | "not_equals"
-  | "contains"
-  | "not_contains"
-  | "greater_than"
-  | "less_than"
-  | "in"
-  | "not_in";
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'greater_than'
+  | 'less_than'
+  | 'in'
+  | 'not_in';
 
 export type RuleValue = unknown | Array<unknown>;
 

@@ -1,4 +1,4 @@
-import type { ConditionOperator, Rule } from "../types";
+import type { ConditionOperator, Rule } from '../types';
 
 /**
  * JSON Schema property definition (simplified for rule building)
@@ -117,26 +117,26 @@ export type RuleValueInputProps = {
  * Operator labels for display
  */
 export const OPERATOR_LABELS: Record<ConditionOperator, string> = {
-  equals: "equals",
-  not_equals: "not equals",
-  contains: "contains",
-  not_contains: "not contains",
-  greater_than: "greater than",
-  less_than: "less than",
-  in: "in",
-  not_in: "not in",
+  equals: 'equals',
+  not_equals: 'not equals',
+  contains: 'contains',
+  not_contains: 'not contains',
+  greater_than: 'greater than',
+  less_than: 'less than',
+  in: 'in',
+  not_in: 'not in',
 };
 
 /**
  * All available operators
  */
 export const OPERATORS: ConditionOperator[] = [
-  "equals",
-  "not_equals",
-  "contains",
-  "not_contains",
-  "greater_than",
-  "less_than",
-  "in",
-  "not_in",
+  'equals',
+  'not_equals',
+  'contains',
+  'not_contains',
+  'greater_than',
+  'less_than',
+  'in',
+  'not_in',
 ];

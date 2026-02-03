@@ -1,27 +1,21 @@
-import { Rule, RuleContext } from "../types";
+import { Rule, RuleContext } from '../types';
 
-const isString = (value: unknown): value is string => typeof value === "string";
+const isString = (value: unknown): value is string => typeof value === 'string';
 
-const isNumber = (value: unknown): value is number =>
-  typeof value === "number" && !Number.isNaN(value);
+const isNumber = (value: unknown): value is number => typeof value === 'number' && !Number.isNaN(value);
 
-const areBothNumbers = (a: unknown, b: unknown): boolean =>
-  isNumber(a) && isNumber(b);
+const areBothNumbers = (a: unknown, b: unknown): boolean => isNumber(a) && isNumber(b);
 
-const areBothStrings = (a: unknown, b: unknown): boolean =>
-  isString(a) && isString(b);
+const areBothStrings = (a: unknown, b: unknown): boolean => isString(a) && isString(b);
 
-const isDate = (value: unknown): value is Date =>
-  value instanceof Date && !Number.isNaN(value.getTime());
+const isDate = (value: unknown): value is Date => value instanceof Date && !Number.isNaN(value.getTime());
 
-const areBothDates = (a: unknown, b: unknown): boolean =>
-  isDate(a) && isDate(b);
+const areBothDates = (a: unknown, b: unknown): boolean => isDate(a) && isDate(b);
 
 /**
  * Checks if a value is null or undefined.
  */
-const isNullish = (value: unknown): value is null | undefined =>
-  typeof value === "undefined" || value === null;
+const isNullish = (value: unknown): value is null | undefined => typeof value === 'undefined' || value === null;
 
 /**
  * Gets a nested value from an object using dot notation.
@@ -32,7 +26,7 @@ const isNullish = (value: unknown): value is null | undefined =>
  * @returns The value at the path, or undefined if not found
  */
 const getNestedValue = (obj: RuleContext, path: string): unknown => {
-  const keys = path.split(".").filter(Boolean);
+  const keys = path.split('.').filter(Boolean);
 
   let current: unknown = obj;
 
@@ -41,7 +35,7 @@ const getNestedValue = (obj: RuleContext, path: string): unknown => {
       return undefined;
     }
 
-    if (typeof current !== "object") {
+    if (typeof current !== 'object') {
       return undefined;
     }
 
@@ -61,15 +55,15 @@ const getNestedValue = (obj: RuleContext, path: string): unknown => {
 export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
   if (rules.length === 0) return true;
 
-  return rules.every((rule) => {
+  return rules.every(rule => {
     switch (rule.operator) {
-      case "equals":
+      case 'equals':
         return getNestedValue(context, rule.field) === rule.value;
 
-      case "not_equals":
+      case 'not_equals':
         return getNestedValue(context, rule.field) !== rule.value;
 
-      case "greater_than": {
+      case 'greater_than': {
         const fieldValue = getNestedValue(context, rule.field);
 
         if (isNullish(fieldValue) || isNullish(rule.value)) return false;
@@ -89,7 +83,7 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
         return false;
       }
 
-      case "less_than": {
+      case 'less_than': {
         const fieldValue = getNestedValue(context, rule.field);
 
         if (isNullish(fieldValue) || isNullish(rule.value)) return false;
@@ -109,7 +103,7 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
         return false;
       }
 
-      case "contains": {
+      case 'contains': {
         const fieldValue = getNestedValue(context, rule.field);
 
         // String contains string
@@ -126,7 +120,7 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
         return false;
       }
 
-      case "not_contains": {
+      case 'not_contains': {
         const fieldValue = getNestedValue(context, rule.field);
 
         // String does not contain string
@@ -143,20 +137,16 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
         return false;
       }
 
-      case "in": {
+      case 'in': {
         const fieldValue = getNestedValue(context, rule.field);
 
-        return (
-          Array.isArray(rule.value) && rule.value.indexOf(fieldValue) !== -1
-        );
+        return Array.isArray(rule.value) && rule.value.indexOf(fieldValue) !== -1;
       }
 
-      case "not_in": {
+      case 'not_in': {
         const fieldValue = getNestedValue(context, rule.field);
 
-        return (
-          Array.isArray(rule.value) && rule.value.indexOf(fieldValue) === -1
-        );
+        return Array.isArray(rule.value) && rule.value.indexOf(fieldValue) === -1;
       }
 
       default:

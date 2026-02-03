@@ -1,37 +1,30 @@
-import * as React from "react";
-import { Trash2 } from "lucide-react";
+import * as React from 'react';
+import { Trash2 } from 'lucide-react';
 
-import { cn } from "@/lib/utils";
-import type { ConditionOperator, Rule } from "../types";
+import { cn } from '@/lib/utils';
+import type { ConditionOperator, Rule } from '../types';
 
-import { RuleFieldSelect } from "./rule-field-select";
-import { RuleOperatorSelect } from "./rule-operator-select";
-import { RuleValueInput } from "./rule-value-input";
-import type { RuleRowProps } from "./types";
+import { RuleFieldSelect } from './rule-field-select';
+import { RuleOperatorSelect } from './rule-operator-select';
+import { RuleValueInput } from './rule-value-input';
+import type { RuleRowProps } from './types';
 
 /**
  * A single rule row with field selector, operator selector, and value input
  */
-export const RuleRow: React.FC<RuleRowProps> = ({
-  schema,
-  rule,
-  onChange,
-  onRemove,
-  className,
-}) => {
+export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemove, className }) => {
   const handleFieldChange = React.useCallback(
     (field: string) => {
       onChange({ ...rule, field });
     },
-    [rule, onChange]
+    [rule, onChange],
   );
 
   const handleOperatorChange = React.useCallback(
     (operator: ConditionOperator) => {
       // Reset value when changing to/from array operators
-      const isArrayOperator = operator === "in" || operator === "not_in";
-      const wasArrayOperator =
-        rule.operator === "in" || rule.operator === "not_in";
+      const isArrayOperator = operator === 'in' || operator === 'not_in';
+      const wasArrayOperator = rule.operator === 'in' || rule.operator === 'not_in';
 
       let newValue = rule.value;
       if (isArrayOperator && !wasArrayOperator) {
@@ -44,46 +37,30 @@ export const RuleRow: React.FC<RuleRowProps> = ({
 
       onChange({ ...rule, operator, value: newValue });
     },
-    [rule, onChange]
+    [rule, onChange],
   );
 
   const handleValueChange = React.useCallback(
     (value: unknown) => {
       onChange({ ...rule, value });
     },
-    [rule, onChange]
+    [rule, onChange],
   );
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 p-2 rounded-md bg-surface2 border border-border1",
-        className
-      )}
-    >
-      <RuleFieldSelect
-        schema={schema}
-        value={rule.field}
-        onChange={handleFieldChange}
-      />
+    <div className={cn('flex items-center gap-2 p-2 rounded-md bg-surface2 border border-border1', className)}>
+      <RuleFieldSelect schema={schema} value={rule.field} onChange={handleFieldChange} />
 
-      <RuleOperatorSelect
-        value={rule.operator}
-        onChange={handleOperatorChange}
-      />
+      <RuleOperatorSelect value={rule.operator} onChange={handleOperatorChange} />
 
-      <RuleValueInput
-        value={rule.value}
-        onChange={handleValueChange}
-        operator={rule.operator}
-      />
+      <RuleValueInput value={rule.value} onChange={handleValueChange} operator={rule.operator} />
 
       <button
         type="button"
         onClick={onRemove}
         className={cn(
-          "p-1.5 rounded-md text-neutral3 hover:text-accent2 hover:bg-surface4",
-          "transition-colors duration-normal"
+          'p-1.5 rounded-md text-neutral3 hover:text-accent2 hover:bg-surface4',
+          'transition-colors duration-normal',
         )}
         aria-label="Remove rule"
       >
