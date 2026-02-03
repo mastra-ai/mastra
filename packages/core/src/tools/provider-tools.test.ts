@@ -159,6 +159,7 @@ describe('provider-defined tools', () => {
     await result.consumeStream();
 
     expect(result).toBeDefined();
+    console.log(await result);
 
     const text = await result.text;
 
