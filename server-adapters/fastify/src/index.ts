@@ -98,12 +98,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // reply.hijack() bypasses Fastify's response handling, so we need to preserve
     // any headers that were set by hooks/plugins and manually include them
     const rawHeaders = reply.getHeaders();
-    // Filter out undefined values to satisfy OutgoingHttpHeaders type
+    // Filter out undefined values and conflicting headers (content-length, transfer-encoding)
+    // Having both Content-Length and Transfer-Encoding: chunked violates RFC 7230
     const existingHeaders: Record<string, string | number | string[]> = {};
     for (const [key, value] of Object.entries(rawHeaders)) {
-      if (value !== undefined) {
-        existingHeaders[key] = value;
-      }
+      if (value === undefined) continue;
+      const lowerKey = key.toLowerCase();
+      if (lowerKey === 'content-length' || lowerKey === 'transfer-encoding') continue;
+      existingHeaders[key] = value;
     }
 
     // Hijack the reply to take control of the response
