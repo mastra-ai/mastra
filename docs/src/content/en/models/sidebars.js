@@ -138,6 +138,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/berget',
+          label: 'Berget.AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
         },
