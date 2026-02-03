@@ -8,6 +8,7 @@ import {
   useStoredAgentMutations,
   AgentEditMain,
   AgentEditSidebar,
+  AgentVersionsPanel,
   AgentLayout,
   useAgentEditForm,
   Header,
@@ -132,6 +133,7 @@ function CmsAgentsEditForm({ agent, agentId }: CmsAgentsEditFormProps) {
           mode="edit"
         />
       }
+      rightSlot={<AgentVersionsPanel agentId={agentId} />}
     >
       <form ref={formRef} className="h-full">
         <AgentEditMain form={form} />

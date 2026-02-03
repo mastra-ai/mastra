@@ -156,6 +156,7 @@ export function AgentEditSidebar({
             </div>
           </ScrollArea>
         </TabContent>
+
       </Tabs>
 
       {/* Sticky footer with Pregenerate and Create/Update Agent buttons */}
