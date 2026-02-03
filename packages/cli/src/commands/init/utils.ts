@@ -740,12 +740,13 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           const POPULAR_AGENTS: { value: string; label: string }[] = [
             { value: 'claude-code', label: 'Claude Code' },
             { value: 'cursor', label: 'Cursor' },
+            { value: 'codex', label: 'Codex' },
+            { value: 'opencode', label: 'OpenCode' },
             { value: 'windsurf', label: 'Windsurf' },
             { value: 'github-copilot', label: 'GitHub Copilot' },
             { value: 'cline', label: 'Cline' },
             { value: 'continue', label: 'Continue' },
             { value: 'gemini-cli', label: 'Gemini CLI' },
-            { value: 'opencode', label: 'OpenCode' },
             { value: 'replit', label: 'Replit' },
             { value: 'roo', label: 'Roo Code' },
           ];
@@ -758,7 +759,6 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             { value: 'antigravity', label: 'Antigravity' },
             { value: 'augment', label: 'Augment' },
             { value: 'codebuddy', label: 'CodeBuddy' },
-            { value: 'codex', label: 'Codex' },
             { value: 'command-code', label: 'Command Code' },
             { value: 'crush', label: 'Crush' },
             { value: 'droid', label: 'Droid' },
@@ -788,7 +788,8 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           // Show popular agents first with "Show all" option
           const initialSelection = await p.multiselect({
             message: 'Select agent(s) to install skills for:',
-            options: [...POPULAR_AGENTS, { value: '__show_all__', label: '+ Show all agents (30 more)' }],
+            options: [...POPULAR_AGENTS, { value: '__show_all__', label: '+ Show all agents (29 more)' }],
+            initialValues: ['claude-code', 'codex', 'opencode', 'cursor'],
             required: true,
           });
 
