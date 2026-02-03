@@ -29,12 +29,11 @@ import { Mastra } from '@mastra/core';
 // Initialize editor with Mastra
 const mastra = new Mastra({
   /* config */
+  editor: new MastraEditor();
 });
-const editor = new MastraEditor();
-mastra.registerEditor(editor);
 
 // Store an agent configuration
-const agentId = await mastra.storage.agents.createAgent({
+const agentId = await mastra.storage.stores?.agents?.createAgent({
   name: 'customer-support',
   instructions: 'Help customers with inquiries',
   model: { provider: 'openai', name: 'gpt-4' },
@@ -44,11 +43,11 @@ const agentId = await mastra.storage.agents.createAgent({
 });
 
 // Retrieve and use the stored agent
-const agent = await editor.getStoredAgentById('customer-support');
-const response = await agent.generate('How do I reset my password?');
+const agent = await mastra.getEditor()?.getStoredAgentById(agentId);
+const response = await agent?.generate('How do I reset my password?');
 
 // List all stored agents
-const agents = await editor.listStoredAgents({ pageSize: 10 });
+const agents = await mastra.getEditor()?.listStoredAgents({ pageSize: 10 });
 ```
 
 **Storage Improvements:**
