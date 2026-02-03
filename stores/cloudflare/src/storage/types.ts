@@ -13,8 +13,12 @@ import type {
   TABLE_SPANS,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
+  TABLE_STORED_SCORERS,
+  TABLE_STORED_SCORER_VERSIONS,
   SpanRecord,
   StorageAgentType,
+  StoredScorerType,
+  StoredScorerVersionType,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
 import type { WorkflowRunState } from '@mastra/core/workflows';
@@ -112,6 +116,8 @@ export type RecordTypes = {
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
   [TABLE_AGENT_VERSIONS]: AgentVersion;
+  [TABLE_STORED_SCORERS]: StoredScorerType;
+  [TABLE_STORED_SCORER_VERSIONS]: StoredScorerVersionType;
 };
 
 export type ListOptions = {

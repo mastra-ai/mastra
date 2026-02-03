@@ -518,6 +518,57 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
+    // Add test stored scorer for stored scorers routes
+    const storedScorers = await storage.getStore('storedScorers');
+    if (storedScorers) {
+      const storedScorer = await storedScorers.createScorer({
+        scorer: {
+          id: 'test-scorer',
+          name: 'Test Stored Scorer',
+          description: 'A test stored scorer for integration tests',
+          prompt: 'Evaluate the quality of the response on a scale from 0 to 1.',
+          model: { provider: 'openai', name: 'gpt-4o' },
+          scoreRange: { min: 0, max: 1 },
+        },
+      });
+
+      // Create version 1 for the scorer
+      const version1 = await storedScorers.createScorerVersion({
+        id: 'test-scorer-version-1',
+        scorerId: 'test-scorer',
+        versionNumber: 1,
+        snapshot: {
+          name: 'Test Stored Scorer',
+          prompt: 'Evaluate the quality of the response on a scale from 0 to 1.',
+          model: { provider: 'openai', name: 'gpt-4o' },
+          scoreRange: { min: 0, max: 1 },
+        },
+        changedFields: [],
+        changeMessage: 'Initial version',
+      });
+
+      // Set version 1 as active
+      await storedScorers.updateScorer({
+        id: 'test-scorer',
+        activeVersionId: version1.id,
+      });
+
+      // Create version 2 (non-active, used in comparisons and deletable)
+      await storedScorers.createScorerVersion({
+        id: 'test-version-id',
+        scorerId: 'test-scorer',
+        versionNumber: 2,
+        snapshot: {
+          name: 'Test Stored Scorer',
+          prompt: 'Updated prompt for version 2.',
+          model: { provider: 'openai', name: 'gpt-4o' },
+          scoreRange: { min: 0, max: 1 },
+        },
+        changedFields: ['prompt'],
+        changeMessage: 'Second test version',
+      });
+    }
+
     // Add test thread and messages to Mastra's storage for memory routes without agentId
     // This is needed because when agentId is not provided, the handler falls back to storage directly
     const memoryStore = await storage.getStore('memory');

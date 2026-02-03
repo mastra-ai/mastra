@@ -6,6 +6,7 @@ import type { MastraServerCache } from '../cache';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import { resolveStoredScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
@@ -20,7 +21,13 @@ import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraCompositeStore, WorkflowRuns, StorageResolvedAgentType, StorageScorerConfig } from '../storage';
+import type {
+  MastraCompositeStore,
+  WorkflowRuns,
+  StorageResolvedAgentType,
+  StorageScorerConfig,
+  StoredScorerType,
+} from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
@@ -866,7 +873,7 @@ export class Mastra<
       if (options?.raw) {
         return resolvedAgent;
       }
-      return this.#createAgentFromStoredConfig(resolvedAgent);
+      return await this.#createAgentFromStoredConfig(resolvedAgent);
     }
 
     if (options?.versionNumber !== undefined) {
@@ -896,7 +903,7 @@ export class Mastra<
       if (options?.raw) {
         return resolvedAgent;
       }
-      return this.#createAgentFromStoredConfig(resolvedAgent);
+      return await this.#createAgentFromStoredConfig(resolvedAgent);
     }
 
     // Default behavior: get the current agent config with version resolution
@@ -920,7 +927,7 @@ export class Mastra<
       return storedAgent;
     }
 
-    const agent = this.#createAgentFromStoredConfig(storedAgent);
+    const agent = await this.#createAgentFromStoredConfig(storedAgent);
     // Cache the agent for future requests
     this.#storedAgentsCache.set(id, agent);
     return agent;
@@ -1051,8 +1058,8 @@ export class Mastra<
       return result;
     }
 
-    // Transform stored configs into Agent instances
-    const agents = result.agents.map(storedAgent => this.#createAgentFromStoredConfig(storedAgent));
+    // Transform stored configs into Agent instances (async to support stored scorers)
+    const agents = await Promise.all(result.agents.map(storedAgent => this.#createAgentFromStoredConfig(storedAgent)));
 
     return {
       agents,
@@ -1064,10 +1071,238 @@ export class Mastra<
   }
 
   /**
+   * Retrieves a stored scorer by its ID from the database.
+   *
+   * Returns a raw `StoredScorerType` configuration object containing the scorer's
+   * prompt, model, score range, and other metadata.
+   *
+   * @param id - The unique identifier of the scorer
+   *
+   * @returns The stored scorer configuration or null if not found
+   * @throws {MastraError} When storage is not configured or doesn't support stored scorers
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   storage: new PostgresStore({ connectionString: process.env.DATABASE_URL })
+   * });
+   *
+   * // Get a stored scorer by ID
+   * const scorer = await mastra.getStoredScorerById('my-scorer-id');
+   * if (scorer) {
+   *   console.log(scorer.name, scorer.prompt, scorer.scoreRange);
+   * }
+   * ```
+   */
+  public async getStoredScorerById(id: string): Promise<StoredScorerType | null> {
+    const storage = this.#storage;
+
+    if (!storage) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_STORED_SCORER_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Storage is not configured',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    const scorersStore = await storage.getStore('storedScorers');
+    if (!scorersStore) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_STORED_SCORER_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Stored scorers storage is not available',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    // Use getScorerByIdResolved to get version-resolved config
+    const storedScorer = await scorersStore.getScorerByIdResolved({ id });
+
+    return storedScorer;
+  }
+
+  /**
+   * Lists all stored scorers from the database with optional pagination.
+   *
+   * Returns raw `StoredScorerType` configuration objects. These can be resolved
+   * to executable `MastraScorer` instances using `resolveStoredScorer`.
+   *
+   * @param args - Options for pagination and filtering
+   * @param args.page - Zero-indexed page number (default: 0)
+   * @param args.perPage - Items per page, or false for all (default: 100)
+   * @param args.orderBy - Sort order configuration
+   * @param args.ownerId - Filter by owner identifier
+   * @param args.metadata - Filter by metadata key-value pairs
+   *
+   * @returns Paginated list of stored scorer configurations
+   * @throws {MastraError} When storage is not configured or doesn't support stored scorers
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   storage: new PostgresStore({ connectionString: process.env.DATABASE_URL })
+   * });
+   *
+   * // List all stored scorers
+   * const result = await mastra.listStoredScorers();
+   * for (const scorer of result.scorers) {
+   *   console.log(scorer.name, scorer.description);
+   * }
+   *
+   * // With pagination and filtering
+   * const paginated = await mastra.listStoredScorers({
+   *   page: 0,
+   *   perPage: 10,
+   *   orderBy: { field: 'createdAt', direction: 'DESC' },
+   *   ownerId: 'user-123'
+   * });
+   * ```
+   */
+  public async listStoredScorers(args?: {
+    page?: number;
+    perPage?: number | false;
+    orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
+    ownerId?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{
+    scorers: StoredScorerType[];
+    total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
+  }> {
+    const storage = this.#storage;
+
+    if (!storage) {
+      const error = new MastraError({
+        id: 'MASTRA_LIST_STORED_SCORERS_STORAGE_NOT_CONFIGURED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Storage is not configured',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    const scorersStore = await storage.getStore('storedScorers');
+    if (!scorersStore) {
+      const error = new MastraError({
+        id: 'MASTRA_LIST_STORED_SCORERS_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Stored scorers storage is not available',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    // Use listScorersResolved to get version-resolved configs
+    const result = await scorersStore.listScorersResolved({
+      page: args?.page,
+      perPage: args?.perPage,
+      orderBy: args?.orderBy,
+      ownerId: args?.ownerId,
+      metadata: args?.metadata,
+    });
+
+    return result;
+  }
+
+  /**
+   * Resolves a stored scorer by ID and converts it to an executable `MastraScorer` instance.
+   *
+   * This method fetches the scorer configuration from storage and transforms it
+   * into a functional scorer that can be used to evaluate agent outputs.
+   *
+   * @param id - The unique identifier of the stored scorer
+   *
+   * @returns An executable MastraScorer instance or null if the scorer is not found
+   * @throws {MastraError} When storage is not configured or doesn't support stored scorers
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   storage: new PostgresStore({ connectionString: process.env.DATABASE_URL })
+   * });
+   *
+   * // Resolve and use a stored scorer
+   * const scorer = await mastra.resolveStoredScorer('helpfulness-scorer');
+   * if (scorer) {
+   *   const result = await scorer.score({
+   *     input: 'What is the weather?',
+   *     output: 'It is sunny today.',
+   *   });
+   *   console.log('Score:', result.score);
+   * }
+   * ```
+   */
+  public async resolveStoredScorer(id: string): Promise<MastraScorer | null> {
+    const storedScorer = await this.getStoredScorerById(id);
+
+    if (!storedScorer) {
+      return null;
+    }
+
+    // Use the resolveStoredScorer utility to convert the stored config to a MastraScorer
+    return resolveStoredScorer(storedScorer, this);
+  }
+
+  /**
+   * Unified method to get a scorer by ID, checking code-defined scorers first,
+   * then falling back to stored scorers from the database.
+   *
+   * This method provides a single interface for retrieving scorers regardless
+   * of their source, making it easier to work with both types transparently.
+   *
+   * @param id - The unique identifier of the scorer
+   *
+   * @returns An executable MastraScorer instance or null if not found
+   * @throws {MastraError} When storage operations fail
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   scorers: {
+   *     codeScorer: new MastraScorer({ id: 'code-scorer', name: 'Code Scorer' })
+   *   },
+   *   storage: new PostgresStore({ connectionString: process.env.DATABASE_URL })
+   * });
+   *
+   * // Works for both code-defined and stored scorers
+   * const scorer = await mastra.getScorerUnified('code-scorer');
+   * // or
+   * const storedScorer = await mastra.getScorerUnified('stored-scorer-id');
+   *
+   * if (scorer) {
+   *   const result = await scorer.score({ input: '...', output: '...' });
+   * }
+   * ```
+   */
+  public async getScorerUnified(id: string): Promise<MastraScorer | null> {
+    // First, try to find in code-defined scorers
+    try {
+      const scorer = this.getScorerById(id);
+      return scorer;
+    } catch {
+      // Not found in code-defined scorers, try stored scorers
+      return this.resolveStoredScorer(id);
+    }
+  }
+
+  /**
    * Creates an Agent instance from a stored agent configuration.
    * @private
    */
-  #createAgentFromStoredConfig(storedAgent: StorageResolvedAgentType): Agent {
+  async #createAgentFromStoredConfig(storedAgent: StorageResolvedAgentType): Promise<Agent> {
     // Build model config from stored data
     // The model field stores { provider, name, ...otherConfig }
     const modelConfig = storedAgent.model as { provider?: string; name?: string; [key: string]: unknown };
@@ -1098,8 +1333,8 @@ export class Mastra<
     // Resolve memory from the stored memory reference
     const memory = this.#resolveStoredMemory(storedAgent.memory);
 
-    // Resolve scorers from the stored scorer references
-    const scorers = this.#resolveStoredScorers(storedAgent.scorers);
+    // Resolve scorers from the stored scorer references (async to support stored scorers)
+    const scorers = await this.#resolveStoredScorers(storedAgent.scorers);
 
     // Create the agent instance
     const agent = new Agent({
@@ -1251,9 +1486,10 @@ export class Mastra<
 
   /**
    * Resolves scorer references from stored configuration to actual scorer instances.
+   * Supports both code-defined and stored scorers from the database.
    * @private
    */
-  #resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): MastraScorers | undefined {
+  async #resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): Promise<MastraScorers | undefined> {
     if (!storedScorers || Object.keys(storedScorers).length === 0) {
       return undefined;
     }
@@ -1261,7 +1497,7 @@ export class Mastra<
     const resolvedScorers: MastraScorers = {};
 
     for (const [scorerKey, scorerConfig] of Object.entries(storedScorers)) {
-      // Try to find the scorer in registered scorers by key
+      // Try to find the scorer in registered scorers by key first
       try {
         const scorer = this.getScorer(scorerKey as keyof TScorers);
         resolvedScorers[scorerKey] = {
@@ -1269,7 +1505,7 @@ export class Mastra<
           sampling: scorerConfig.sampling as ScoringSamplingConfig | undefined,
         };
       } catch {
-        // Try by ID
+        // Try by ID in registered scorers
         try {
           const scorer = this.getScorerById(scorerKey);
           resolvedScorers[scorerKey] = {
@@ -1277,7 +1513,20 @@ export class Mastra<
             sampling: scorerConfig.sampling as ScoringSamplingConfig | undefined,
           };
         } catch {
-          this.#logger?.warn(`Scorer "${scorerKey}" referenced in stored agent but not registered in Mastra`);
+          // Try to resolve from stored scorers in the database
+          try {
+            const scorer = await this.resolveStoredScorer(scorerKey);
+            if (scorer) {
+              resolvedScorers[scorerKey] = {
+                scorer,
+                sampling: scorerConfig.sampling as ScoringSamplingConfig | undefined,
+              };
+            } else {
+              this.#logger?.warn(`Scorer "${scorerKey}" referenced in stored agent but not registered in Mastra`);
+            }
+          } catch {
+            this.#logger?.warn(`Scorer "${scorerKey}" referenced in stored agent but not registered in Mastra`);
+          }
         }
       }
     }
