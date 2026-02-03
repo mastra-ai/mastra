@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { Agent, Mastra } from '@mastra/core';
 import { createTool } from '@mastra/core/tools';
@@ -10,7 +10,6 @@ import {
   convertArrayToReadableStream,
   LanguageModelV2,
   MockLanguageModelV2,
-  MockEmbeddingModelV2,
 } from '@internal/ai-sdk-v5/test';
 import {
   ProcessInputArgs,
