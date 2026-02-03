@@ -2,6 +2,10 @@ import { Agent } from '@mastra/core/agent';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
+import { E2BSandbox } from '@mastra/e2b';
+import { S3Filesystem } from '@mastra/s3';
+import { ConsoleLogger } from '@mastra/core/logger';
 
 /**
  * Developer agent - inherits globalWorkspace from Mastra instance.
@@ -35,5 +39,26 @@ export const developerAgent = new Agent({
         scope: 'thread', // Search within the current thread only
       },
     },
+  }),
+
+  workspace: new Workspace({
+    name: 'Cloud Workspace',
+    id: 'cloud-workspace',
+    mounts: {
+      '/local': new LocalFilesystem({
+        basePath: './workspace',
+      }),
+      '/bucket': new S3Filesystem({
+        bucket: process.env.S3_BUCKET as string,
+        region: 'auto',
+        accessKeyId: process.env.S3_ACCESS_KEY_ID as string,
+        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY as string,
+        endpoint: process.env.S3_ENDPOINT as string,
+      }),
+    },
+    sandbox: new E2BSandbox({
+      id: 'developer-e2b-sandbox',
+      logger: new ConsoleLogger({ level: 'debug' }),
+    }),
   }),
 });
