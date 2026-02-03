@@ -10,11 +10,15 @@ export type AgentCMSBlockRulesProps = {
   rules: Rule[];
   onChange: (rules: Rule[]) => void;
   className?: string;
-  schema: JsonSchema;
+  schema?: JsonSchema;
 };
 
 export const AgentCMSBlockRules = ({ rules, onChange, schema }: AgentCMSBlockRulesProps) => {
   const [open, setOpen] = useState(false);
+
+  if (!schema) {
+    return null;
+  }
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -25,7 +29,7 @@ export const AgentCMSBlockRules = ({ rules, onChange, schema }: AgentCMSBlockRul
               className={cn('transition-transform duration-normal ease-out-custom', open ? 'rotate-90' : 'rotate-0')}
             />
           </Icon>
-          Conditional rules
+          Display block conditionally
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>

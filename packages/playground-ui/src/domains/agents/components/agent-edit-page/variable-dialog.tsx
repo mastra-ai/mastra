@@ -1,16 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { PlusIcon } from 'lucide-react';
 
 import { SideDialog } from '@/ds/components/SideDialog';
 import { Button } from '@/ds/components/Button';
-import { JSONSchemaForm, type SchemaField, createField } from '@/ds/components/JSONSchemaForm';
+import { JSONSchemaForm, type SchemaField, type JSONSchemaOutput } from '@/ds/components/JSONSchemaForm';
 import { VariablesIcon } from '@/ds/icons';
+import type { JsonSchema } from '@/lib/json-schema';
 
 export interface VariableDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultValue?: SchemaField[];
-  onSave: (fields: SchemaField[]) => void;
+  defaultValue?: JsonSchema;
+  onSave: (schema: JsonSchema) => void;
 }
 
 function RecursiveFieldRenderer({
@@ -64,27 +65,17 @@ function RecursiveFieldRenderer({
   );
 }
 
-function getInitialFields(defaultValue: SchemaField[]): SchemaField[] {
-  return defaultValue.length > 0 ? defaultValue : [createField()];
-}
-
-export function VariableDialog({ isOpen, onClose, defaultValue = [], onSave }: VariableDialogProps) {
-  const [localFields, setLocalFields] = useState<SchemaField[]>(() => getInitialFields(defaultValue));
-
-  // Sync local state when dialog opens with new defaultValue
-  useEffect(() => {
-    if (isOpen) {
-      setLocalFields(getInitialFields(defaultValue));
-    }
-  }, [isOpen, defaultValue]);
+export function VariableDialog({ isOpen, onClose, defaultValue, onSave }: VariableDialogProps) {
+  const [currentSchema, setCurrentSchema] = useState<JSONSchemaOutput | null>(null);
 
   const handleSave = () => {
-    onSave(localFields);
+    if (currentSchema) {
+      onSave(currentSchema);
+    }
     onClose();
   };
 
   const handleCancel = () => {
-    setLocalFields(defaultValue);
     onClose();
   };
 
@@ -106,7 +97,7 @@ export function VariableDialog({ isOpen, onClose, defaultValue = [], onSave }: V
       </SideDialog.Top>
       <SideDialog.Content className="flex flex-col">
         <div className="flex-1">
-          <JSONSchemaForm.Root defaultValue={localFields} onFieldsChange={setLocalFields} maxDepth={5}>
+          <JSONSchemaForm.Root onChange={setCurrentSchema} maxDepth={5}>
             <JSONSchemaForm.FieldList>
               {(field, _index, { parentPath, depth }) => (
                 <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />

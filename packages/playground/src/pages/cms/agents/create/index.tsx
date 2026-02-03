@@ -4,7 +4,7 @@ import {
   toast,
   useLinkComponent,
   useStoredAgentMutations,
-  AgentEditMain,
+  AgentEditMainContentBlocks,
   AgentEditSidebar,
   AgentLayout,
   useAgentEditForm,
@@ -74,7 +74,7 @@ function CmsAgentsCreatePage() {
       }
     >
       <form ref={formRef} className="h-full">
-        <AgentEditMain form={form} />
+        <AgentEditMainContentBlocks form={form} />
       </form>
     </AgentLayout>
   );

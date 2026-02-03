@@ -5,13 +5,13 @@ import { Check } from 'lucide-react';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons';
+import { Icon, VariablesIcon } from '@/ds/icons';
 import { Spinner } from '@/ds/components/Spinner';
-import type { SchemaField } from '@/ds/components/JSONSchemaForm';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { Label } from '@/ds/components/Label';
 import { SectionHeader } from '@/domains/cms';
+import type { JsonSchema } from '@/lib/json-schema';
 
 import { LLMProviders, LLMModels } from '@/domains/llm';
 
@@ -49,8 +49,8 @@ export function AgentEditSidebar({
   // Variable dialog state
   const [isVariableDialogOpen, setIsVariableDialogOpen] = useState(false);
 
-  const handleSaveVariables = (fields: SchemaField[]) => {
-    form.setValue('variables', fields, { shouldDirty: true });
+  const handleSaveVariables = (schema: JsonSchema) => {
+    form.setValue('variables', schema, { shouldDirty: true });
     setIsVariableDialogOpen(false);
   };
 
@@ -169,18 +169,17 @@ export function AgentEditSidebar({
             </div>
           </ScrollArea>
         </TabContent>
-
       </Tabs>
 
       {/* Sticky footer with Pregenerate and Create/Update Agent buttons */}
       {!readOnly && (
         <div className="flex-shrink-0 p-4 border-t border-border1 flex flex-col gap-2">
-          {/* <Button variant="outline" onClick={() => setIsVariableDialogOpen(true)} className="w-full" type="button">
+          <Button variant="outline" onClick={() => setIsVariableDialogOpen(true)} className="w-full" type="button">
             <Icon>
               <VariablesIcon />
             </Icon>
             Manage variables
-          </Button> */}
+          </Button>
 
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
@@ -203,7 +202,7 @@ export function AgentEditSidebar({
       <VariableDialog
         isOpen={isVariableDialogOpen}
         onClose={() => setIsVariableDialogOpen(false)}
-        defaultValue={watchedVariables ?? []}
+        defaultValue={watchedVariables}
         onSave={handleSaveVariables}
       />
     </div>

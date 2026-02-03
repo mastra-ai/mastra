@@ -15,14 +15,14 @@ export interface AgentCMSBlockProps {
   onDelete?: (index: number) => void;
   placeholder?: string;
   className?: string;
-  schema: JsonSchema;
+  schema?: JsonSchema;
 }
 
 interface AgentCMSBlockContentProps {
   placeholder?: string;
   dragHandleProps?: DraggableProvidedDragHandleProps | null;
   onDelete?: () => void;
-  schema: JsonSchema;
+  schema?: JsonSchema;
 }
 
 const AgentCMSBlockContent = ({ placeholder, dragHandleProps, onDelete, schema }: AgentCMSBlockContentProps) => {
@@ -50,7 +50,7 @@ const AgentCMSBlockContent = ({ placeholder, dragHandleProps, onDelete, schema }
           value={item}
           onChange={setItem}
           placeholder={placeholder}
-          className="border-none rounded-none text-neutral6"
+          className="border-none rounded-none text-neutral6 min-h-[200px]"
           language="markdown"
           highlightVariables
         />

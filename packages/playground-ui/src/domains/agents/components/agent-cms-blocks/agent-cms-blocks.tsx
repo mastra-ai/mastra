@@ -9,7 +9,7 @@ export interface AgentCMSBlocksProps {
   onChange: (items: Array<string>) => void;
   className?: string;
   placeholder?: string;
-  schema: JsonSchema;
+  schema?: JsonSchema;
 }
 
 export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema }: AgentCMSBlocksProps) => {

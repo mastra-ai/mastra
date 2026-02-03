@@ -1,4 +1,5 @@
 export * from './agent-edit-main';
+export * from './agent-edit-main-blocks';
 export * from './agent-edit-sidebar';
 export * from './agent-versions-panel';
 export * from './use-agent-edit-form';

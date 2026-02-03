@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { SchemaField } from '@/ds/components/JSONSchemaForm';
+import type { JsonSchema } from '@/lib/json-schema';
 
 const scoringSamplingConfigSchema = z.object({
   type: z.enum(['ratio', 'count']),
@@ -28,7 +28,7 @@ export const agentFormSchema = z.object({
   workflows: z.record(z.string(), entityConfigSchema).optional(),
   agents: z.record(z.string(), entityConfigSchema).optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
-  variables: z.custom<SchemaField[]>().optional(),
+  variables: z.custom<JsonSchema>().optional(),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;

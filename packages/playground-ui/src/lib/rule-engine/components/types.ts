@@ -1,27 +1,7 @@
 import type { ConditionOperator, Rule } from '../types';
+import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 
-/**
- * JSON Schema property definition (simplified for rule building)
- */
-export type JsonSchemaProperty = {
-  type?: string | string[];
-  properties?: Record<string, JsonSchemaProperty>;
-  items?: JsonSchemaProperty;
-  enum?: unknown[];
-  title?: string;
-  description?: string;
-};
-
-/**
- * JSON Schema definition for rule building
- */
-export type JsonSchema = {
-  type?: string;
-  properties?: Record<string, JsonSchemaProperty>;
-  required?: string[];
-  title?: string;
-  description?: string;
-};
+export type { JsonSchema, JsonSchemaProperty };
 
 /**
  * Represents a field option extracted from JSON Schema
