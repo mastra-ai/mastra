@@ -48,6 +48,14 @@ export function parseMcp(value: string) {
   return value;
 }
 
+export function parseSkills(value: string) {
+  // Skills flag accepts comma-separated agent names
+  return value
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
 export function parseComponents(value: string) {
   const parsedValue = value.split(',');
 

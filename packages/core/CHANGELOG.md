@@ -1,5 +1,79 @@
 # @mastra/core
 
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- Added ToolSearchProcessor for dynamic tool discovery. ([#12290](https://github.com/mastra-ai/mastra/pull/12290))
+
+  Agents can now discover and load tools on demand instead of having all tools available upfront. This reduces context token usage by ~94% when working with large tool libraries.
+
+  **New API:**
+
+  ```typescript
+  import { ToolSearchProcessor } from '@mastra/core/processors';
+  import { Agent } from '@mastra/core';
+
+  // Create a processor with searchable tools
+  const toolSearch = new ToolSearchProcessor({
+    tools: {
+      createIssue: githubTools.createIssue,
+      sendEmail: emailTools.send,
+      // ... hundreds of tools
+    },
+    search: {
+      topK: 5, // Return top 5 results (default: 5)
+      minScore: 0.1, // Filter results below this score (default: 0)
+    },
+  });
+
+  // Attach processor to agent
+  const agent = new Agent({
+    name: 'my-agent',
+    inputProcessors: [toolSearch],
+    tools: {
+      /* always-available tools */
+    },
+  });
+  ```
+
+  **How it works:**
+
+  The processor automatically provides two meta-tools to the agent:
+  - `search_tools` - Search for available tools by keyword relevance
+  - `load_tool` - Load a specific tool into the conversation
+
+  The agent discovers what it needs via search and loads tools on demand. Loaded tools are available immediately and persist within the conversation thread.
+
+  **Why:**
+
+  When agents have access to 100+ tools (from MCP servers or integrations), including all tool definitions in the context can consume significant tokens (~1,500 tokens per tool). This pattern reduces context usage by giving agents only the tools they need, when they need them.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`e6fc281`](https://github.com/mastra-ai/mastra/commit/e6fc281896a3584e9e06465b356a44fe7faade65))
+
+- Fixed processors returning `{ tools: {}, toolChoice: 'none' }` being ignored. Previously, when a processor returned empty tools with an explicit `toolChoice: 'none'` to prevent tool calls, the toolChoice was discarded and defaulted to 'auto'. This fix preserves the explicit 'none' value, enabling patterns like ensuring a final text response when `maxSteps` is reached. ([#12601](https://github.com/mastra-ai/mastra/pull/12601))
+
+- Fix moonshotai/kimi-k2.5 multi-step tool calling failing with "reasoning_content is missing in assistant tool call message" ([#12530](https://github.com/mastra-ai/mastra/pull/12530))
+  - Changed moonshotai and moonshotai-cn (China version) providers to use Anthropic-compatible API endpoints instead of OpenAI-compatible
+    - moonshotai: `https://api.moonshot.ai/anthropic/v1`
+    - moonshotai-cn: `https://api.moonshot.cn/anthropic/v1`
+  - This properly handles reasoning_content for kimi-k2.5 model
+
+- Catch up evented workflows on parity with default execution engine ([#12555](https://github.com/mastra-ai/mastra/pull/12555))
+
+- Expose token usage from embedding operations ([#12556](https://github.com/mastra-ai/mastra/pull/12556))
+  - `saveMessages` now returns `usage: { tokens: number }` with aggregated token count from all embeddings
+  - `recall` now returns `usage: { tokens: number }` from the vector search query embedding
+  - Updated abstract method signatures in `MastraMemory` to include optional `usage` in return types
+
+  This allows users to track embedding token usage when using the Memory class.
+
+- Improved workspace filesystem error handling: return 404 for not-found errors instead of 500, show user-friendly error messages in UI, and add MastraClientError class with status/body properties for better error handling ([#12533](https://github.com/mastra-ai/mastra/pull/12533))
+
+- Fixed JSON parsing in agent network to handle malformed LLM output. Uses parsePartialJson from AI SDK to recover truncated JSON, missing braces, and unescaped control characters instead of failing immediately. This reduces unnecessary retry round-trips when the routing agent generates slightly malformed JSON for tool/workflow prompts. Fixes #12519. ([#12526](https://github.com/mastra-ai/mastra/pull/12526))
+
 ## 1.1.0
 
 ### Minor Changes
