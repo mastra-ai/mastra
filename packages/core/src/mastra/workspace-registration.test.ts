@@ -372,8 +372,8 @@ describe('Workspace Registration', () => {
     });
 
     it('should auto-register different workspaces from same dynamic function', async () => {
-      const workspace1 = createWorkspace('thread-workspace-1');
-      const workspace2 = createWorkspace('thread-workspace-2');
+      const workspace1 = createWorkspace('context-workspace-1');
+      const workspace2 = createWorkspace('context-workspace-2');
 
       const agent = new Agent({
         id: 'multi-workspace-agent',
@@ -381,9 +381,9 @@ describe('Workspace Registration', () => {
         instructions: 'Test',
         model: createMockModel(),
         workspace: ({ requestContext }) => {
-          // Simulate thread-scoped workspaces
-          const threadId = requestContext?.get('threadId');
-          return threadId === 'thread-2' ? workspace2 : workspace1;
+          // Select workspace based on requestContext value
+          const workspaceKey = requestContext?.get('workspaceKey');
+          return workspaceKey === 'second' ? workspace2 : workspace1;
         },
       });
 
@@ -395,17 +395,17 @@ describe('Workspace Registration', () => {
       // First call - should register workspace1
       const { RequestContext } = await import('../request-context');
       const ctx1 = new RequestContext();
-      ctx1.set('threadId', 'thread-1');
+      ctx1.set('workspaceKey', 'first');
       await agent.getWorkspace({ requestContext: ctx1 });
 
-      expect(mastra.getWorkspaceById('thread-workspace-1')).toBe(workspace1);
+      expect(mastra.getWorkspaceById('context-workspace-1')).toBe(workspace1);
 
       // Second call with different context - should register workspace2
       const ctx2 = new RequestContext();
-      ctx2.set('threadId', 'thread-2');
+      ctx2.set('workspaceKey', 'second');
       await agent.getWorkspace({ requestContext: ctx2 });
 
-      expect(mastra.getWorkspaceById('thread-workspace-2')).toBe(workspace2);
+      expect(mastra.getWorkspaceById('context-workspace-2')).toBe(workspace2);
 
       // Both should be in the registry
       const workspaces = mastra.listWorkspaces();

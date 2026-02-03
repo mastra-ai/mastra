@@ -34,15 +34,9 @@ const myTool = createTool({
 ```typescript
 const agent = new Agent({
   workspace: ({ mastra, requestContext }) => {
-    // Thread-scoped workspaces - each new workspace is auto-registered
-    const threadId = requestContext?.get('threadId');
-    return new Workspace({
-      id: `workspace-${threadId}`,
-      filesystem: new LocalFilesystem({ basePath: `/data/${threadId}` }),
-    });
+    // Return workspace dynamically based on context
+    const workspaceId = requestContext?.get('workspaceId') || 'default';
+    return mastra.getWorkspaceById(workspaceId);
   },
 });
-
-// Later, all dynamically created workspaces are accessible
-const allWorkspaces = mastra.listWorkspaces(); // includes thread-scoped ones
 ```
