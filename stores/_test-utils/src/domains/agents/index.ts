@@ -249,7 +249,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(resolved?.instructions).toBe('Updated instructions');
       });
 
-      it('should update activeVersionId and mark as published', async () => {
+      it('should update activeVersionId while keeping status draft', async () => {
         const agent = createSampleAgent();
         const created = await agentsStorage.createAgent({ agent });
         const originalVersionId = created.activeVersionId;
