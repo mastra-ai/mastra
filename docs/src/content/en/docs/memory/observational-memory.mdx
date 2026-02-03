@@ -12,6 +12,8 @@ Observational Memory (OM) is Mastra's memory system for long-context agentic mem
 
 ## Quick Start
 
+Enable `observationalMemory` on the memory options:
+
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
@@ -22,6 +24,7 @@ export const agent = new Agent({
   model: "openai/gpt-5-mini",
   memory: new Memory({
     options: {
+      // highlight-next-line
       observationalMemory: true,
     },
   }),
@@ -30,7 +33,7 @@ export const agent = new Agent({
 
 That's it. The agent now has humanlike long-term memory that persists across conversations.
 
-> **Note:** Observational Memory currently only supports `@mastra/pg`, `@mastra/libsql`, and `@mastra/mongodb` storage adapters.
+> **Note:** OM currently only supports `@mastra/pg`, `@mastra/libsql`, and `@mastra/mongodb` storage adapters.
 
 ## How It Works
 
@@ -86,7 +89,7 @@ The result is a three-tier system:
 
 Each tier is progressively refined to drop context rot/waste and gracefully degrade old irrelevant memories.
 
-### Example: browser automation
+### Example: Browser automation
 
 Consider an agent using Playwright MCP to automate a browser. Each page snapshot might be 50,000+ tokens. After a few pages, the context window is full of stale snapshots that actively hurt the agent's ability to follow instructions.
 
@@ -126,7 +129,11 @@ const memory = new Memory({
 });
 ```
 
+:::warning
+
 **Understand what this does before enabling it.** In resource scope, the context window for each thread is a perspective on *all* threads simultaneously. Any unobserved messages across all threads are in context. When the total unobserved tokens across threads meets the threshold, observations are created (separated by thread in context).
+
+:::
 
 This means if a user has 100 threads of unobserved messages, the first message sent will cause the Observer to block the response and iteratively chunk through every unobserved message across all threads until the context is small enough to fit. For users with many existing threads, this initial observation pass could take significant time.
 
