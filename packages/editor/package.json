@@ -6,6 +6,10 @@
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
@@ -13,6 +17,18 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "validate:package": "echo 'Validating package.json...'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/editor"
+  },
+  "homepage": "https://mastra.ai",
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "@mastra/core": "workspace:*",
