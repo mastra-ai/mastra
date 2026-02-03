@@ -154,25 +154,41 @@ function getStorageFromContext({ mastra }: Pick<MemoryContext, 'mastra'>): Mastr
 async function getAgentFromContext({
   mastra,
   agentId,
-}: Pick<MemoryContext, 'mastra' | 'agentId'>): Promise<Agent | null> {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'>): Promise<Agent | null> {
   if (!agentId) return null;
 
   const logger = mastra.getLogger();
-  let agent = null;
+  let agent: Agent | null = null;
 
+  // First try registered agents
   try {
     agent = mastra.getAgentById(agentId);
   } catch (error) {
-    logger.debug('Error getting agent from mastra, searching agents for agent', error);
+    logger.debug('Error getting agent from mastra', error);
   }
 
+  // Then try stored agents
   if (!agent) {
-    logger.debug('Agent not found, searching agents for agent', { agentId });
+    logger.debug('Agent not found in registered agents, trying stored agents', { agentId });
+    try {
+      const storedAgent = (await mastra.getEditor()?.getStoredAgentById(agentId)) ?? null;
+      if (storedAgent) {
+        agent = storedAgent;
+      }
+    } catch (error) {
+      logger.debug('Error getting stored agent', error);
+    }
+  }
+
+  // Finally search sub-agents with requestContext
+  if (!agent) {
+    logger.debug('Stored agent not found, searching sub-agents', { agentId });
     const agents = mastra.listAgents();
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
         try {
-          const nestedAgents = await ag.listAgents();
+          const nestedAgents = await ag.listAgents({ requestContext });
           if (nestedAgents[agentId]) {
             agent = nestedAgents[agentId];
             break;
@@ -302,7 +318,7 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
 
       if (memory) {
         // Check for Observational Memory
-        const agent = await getAgentFromContext({ mastra, agentId });
+        const agent = await getAgentFromContext({ mastra, agentId, requestContext });
         let omStatus:
           | {
               enabled: boolean;
@@ -384,7 +400,7 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
       const config = memory.getMergedThreadConfig({});
 
       // Check for Observational Memory config
-      const agent = await getAgentFromContext({ mastra, agentId });
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       let omConfig:
         | {
             enabled: boolean;
@@ -424,7 +440,7 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
   handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
     try {
       // Verify agent has OM enabled
-      const agent = await getAgentFromContext({ mastra, agentId });
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (!agent) {
         throw new HTTPException(404, { message: 'Agent not found' });
       }
