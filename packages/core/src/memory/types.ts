@@ -476,7 +476,7 @@ export interface ObservationalMemoryReflectionConfig {
 
   /**
    * Model settings for the Reflector agent.
-   * @default { temperature: 0.3, maxOutputTokens: 100_000 }
+   * @default { temperature: 0, maxOutputTokens: 100_000 }
    */
   modelSettings?: ObservationalMemoryModelSettings;
 }
