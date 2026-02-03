@@ -15,7 +15,6 @@ import {
 import animate from 'tailwindcss-animate';
 import assistantUi from '@assistant-ui/react-ui/tailwindcss';
 import containerQueries from '@tailwindcss/container-queries';
-import typography from '@tailwindcss/typography';
 
 export default {
   darkMode: ['class'],
@@ -93,5 +92,5 @@ export default {
       },
     },
   },
-  plugins: [animate, assistantUi, containerQueries, typography],
+  plugins: [animate, assistantUi, containerQueries],
 } satisfies Config;
