@@ -111,7 +111,7 @@ function ActionsMenu({
             <Icon>
               <FolderOutput className="w-4 h-4" />
             </Icon>
-            Add Items to another Dataset
+            Copy Items to Dataset
           </Button>
           <Button
             variant="ghost"

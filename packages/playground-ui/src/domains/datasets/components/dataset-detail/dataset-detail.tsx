@@ -10,6 +10,7 @@ import { CSVImportDialog } from '../csv-import';
 import { JSONImportDialog } from '../json-import';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
 import { AddItemsToDatasetDialog } from '../add-items-to-dataset-dialog';
+import { DuplicateDatasetDialog } from '../duplicate-dataset-dialog';
 import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { transitions } from '@/ds/primitives/transitions';
@@ -46,6 +47,7 @@ export function DatasetDetail({
   const [itemsForAddToDataset, setItemsForAddToDataset] = useState<DatasetItem[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemIdsToDelete, setItemIdsToDelete] = useState<string[]>([]);
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
   const [featuredItemId, setSelectedItemId] = useState<string | null>(null);
 
@@ -140,6 +142,7 @@ export function DatasetDetail({
             version={dataset?.version}
             isLoading={isDatasetLoading}
             onEditClick={onEditClick}
+            onDuplicateClick={() => setDuplicateDialogOpen(true)}
             onDeleteClick={onDeleteClick}
             runTriggerSlot={runTriggerSlot}
             onRunClick={onRunClick}
@@ -208,6 +211,16 @@ export function DatasetDetail({
         onOpenChange={handleAddToDatasetDialogOpenChange}
         items={itemsForAddToDataset}
         currentDatasetId={datasetId}
+      />
+
+      {/* Duplicate Dataset Dialog */}
+      <DuplicateDatasetDialog
+        open={duplicateDialogOpen}
+        onOpenChange={setDuplicateDialogOpen}
+        sourceDatasetId={datasetId}
+        sourceDatasetName={dataset?.name || ''}
+        sourceDatasetDescription={(dataset as { description?: string } | undefined)?.description}
+        onSuccess={onNavigateToDataset}
       />
 
       {/* Bulk Delete Confirmation Dialog */}

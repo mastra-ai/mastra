@@ -13,6 +13,7 @@ export interface DatasetHeaderProps {
   version?: Date | string;
   isLoading?: boolean;
   onEditClick?: () => void;
+  onDuplicateClick?: () => void;
   onDeleteClick?: () => void;
   runTriggerSlot?: React.ReactNode;
   onRunClick?: () => void;
@@ -33,14 +34,15 @@ function formatVersion(version: Date | string | undefined): string {
 
 interface HeaderActionsMenuProps {
   onEditClick?: () => void;
+  onDuplicateClick?: () => void;
   onDeleteClick?: () => void;
 }
 
 /**
  * Three-dot actions menu for dataset header.
- * Options: Edit Dataset, Duplicate Dataset (disabled), Delete Dataset
+ * Options: Edit Dataset, Duplicate Dataset, Delete Dataset
  */
-function HeaderActionsMenu({ onEditClick, onDeleteClick }: HeaderActionsMenuProps) {
+function HeaderActionsMenu({ onEditClick, onDuplicateClick, onDeleteClick }: HeaderActionsMenuProps) {
   const [open, setOpen] = useState(false);
 
   const handleAction = (callback?: () => void) => {
@@ -68,12 +70,16 @@ function HeaderActionsMenu({ onEditClick, onDeleteClick }: HeaderActionsMenuProp
             </Icon>
             Edit Dataset
           </Button>
-          <Button variant="ghost" size="sm" className="w-full justify-start gap-2" disabled>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2"
+            onClick={() => handleAction(onDuplicateClick)}
+          >
             <Icon>
               <Copy className="w-4 h-4" />
             </Icon>
-            <span className="flex-1 text-left">Duplicate Dataset</span>
-            <span className="text-xs text-neutral3">Coming Soon</span>
+            Duplicate Dataset
           </Button>
           <Button
             variant="ghost"
@@ -102,6 +108,7 @@ export function DatasetHeader({
   version,
   isLoading = false,
   onEditClick,
+  onDuplicateClick,
   onDeleteClick,
   runTriggerSlot,
   onRunClick,
@@ -133,7 +140,11 @@ export function DatasetHeader({
             Run Experiment
           </Button>
         ) : null}
-        <HeaderActionsMenu onEditClick={onEditClick} onDeleteClick={onDeleteClick} />
+        <HeaderActionsMenu
+          onEditClick={onEditClick}
+          onDuplicateClick={onDuplicateClick}
+          onDeleteClick={onDeleteClick}
+        />
       </div>
     </header>
   );
