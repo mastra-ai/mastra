@@ -138,12 +138,12 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
  * Base sandbox class for all sandbox providers.
  *
  * MountManager is automatically created if the subclass implements `mount()`.
- * Use `override readonly mounts: MountManager` to get non-optional typing.
+ * Use `declare readonly mounts: MountManager` to get non-optional typing.
  *
  * @example
  * ```typescript
  * class E2BSandbox extends BaseSandbox {
- *   override readonly mounts: MountManager;  // Non-optional type
+ *   declare readonly mounts: MountManager;  // Non-optional type
  *
  *   async mount(filesystem, mountPath) { ... }
  *   async unmount(mountPath) { ... }
@@ -158,9 +158,6 @@ export abstract class BaseSandbox extends MastraBase implements WorkspaceSandbox
   /** Provider type identifier */
   abstract readonly provider: string;
   abstract status: ProviderStatus;
-
-  /** Mount manager - automatically created if subclass implements mount() */
-  readonly mounts?: MountManager;
 
   constructor(options: { name: string }) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
