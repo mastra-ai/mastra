@@ -44,7 +44,7 @@ export type {
 export type { FilesystemMountConfig, MountResult, FilesystemIcon } from './filesystem';
 
 // Sandbox
-export { BaseSandbox, MountableSandbox, MountManager } from './sandbox';
+export { BaseSandbox, MountManager } from './sandbox';
 export type { WorkspaceSandbox, ExecutionResult, CommandResult, ExecuteCommandOptions, SandboxInfo } from './sandbox';
 export type { MountManagerConfig, MountFn, OnMountHook, OnMountResult } from './sandbox';
 

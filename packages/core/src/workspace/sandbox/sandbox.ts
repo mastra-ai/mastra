@@ -30,7 +30,7 @@ import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
 import type { Lifecycle, ProviderStatus } from '../lifecycle';
 
-import { MountManager } from './mount-manager';
+import type { MountManager } from './mount-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 // =============================================================================
@@ -135,8 +135,30 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
 // =============================================================================
 
 /**
- * Base sandbox class for providers that don't support mounting.
- * For mounting support, extend MountableSandbox instead.
+ * Base sandbox class for all sandbox providers.
+ *
+ * For mounting support, providers should:
+ * 1. Add `override readonly mounts: MountManager` (makes it non-optional)
+ * 2. Create MountManager in constructor
+ * 3. Implement `mount()` and `unmount()` methods
+ *
+ * @example
+ * ```typescript
+ * class E2BSandbox extends BaseSandbox {
+ *   override readonly mounts: MountManager;
+ *
+ *   constructor() {
+ *     super({ name: 'E2BSandbox' });
+ *     this.mounts = new MountManager({
+ *       mount: this.mount.bind(this),
+ *       logger: this.logger,
+ *     });
+ *   }
+ *
+ *   async mount(filesystem, mountPath) { ... }
+ *   async unmount(mountPath) { ... }
+ * }
+ * ```
  */
 export abstract class BaseSandbox extends MastraBase implements WorkspaceSandbox {
   /** Unique identifier for this sandbox instance */
@@ -147,46 +169,10 @@ export abstract class BaseSandbox extends MastraBase implements WorkspaceSandbox
   abstract readonly provider: string;
   abstract status: ProviderStatus;
 
+  /** Mount manager - override with non-optional type if sandbox supports mounting */
+  readonly mounts?: MountManager;
+
   constructor(options: { name: string }) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
-  }
-}
-
-// =============================================================================
-// Mountable Sandbox Class
-// =============================================================================
-
-/**
- * Base sandbox class for providers that support filesystem mounting.
- * Extends BaseSandbox and adds mounting capabilities.
- *
- * Providers extending this class must implement the `mount` method.
- * The `mounts` property (MountManager) is automatically created.
- *
- * @example
- * ```typescript
- * class E2BSandbox extends MountableSandbox {
- *   async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
- *     // FUSE mount implementation
- *   }
- * }
- * ```
- */
-export abstract class MountableSandbox extends BaseSandbox {
-  /** Mount manager for tracking and processing filesystem mounts */
-  readonly mounts: MountManager;
-
-  /** Mount a filesystem at a path in the sandbox */
-  abstract mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult>;
-
-  /** Unmount a filesystem from a path in the sandbox */
-  abstract unmount(mountPath: string): Promise<void>;
-
-  constructor(options: { name: string }) {
-    super(options);
-    this.mounts = new MountManager({
-      mount: this.mount.bind(this),
-      logger: this.logger,
-    });
   }
 }
