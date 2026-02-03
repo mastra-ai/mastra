@@ -1,4 +1,4 @@
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { MemorySearchParams } from '@/types/memory';
