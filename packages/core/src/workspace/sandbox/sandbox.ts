@@ -159,14 +159,17 @@ export abstract class BaseSandbox extends MastraBase implements WorkspaceSandbox
   abstract readonly provider: string;
   abstract status: ProviderStatus;
 
+  // Declare optional mount-related properties (from interface)
+  readonly mounts?: MountManager;
+  mount?(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult>;
+
   constructor(options: { name: string }) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
 
     // Automatically create MountManager if subclass implements mount()
-    const mountFn = (this as unknown as WorkspaceSandbox).mount;
-    if (mountFn) {
-      (this as { mounts?: MountManager }).mounts = new MountManager({
-        mount: mountFn.bind(this),
+    if (this.mount) {
+      this.mounts = new MountManager({
+        mount: this.mount.bind(this),
         logger: this.logger,
       });
     }
