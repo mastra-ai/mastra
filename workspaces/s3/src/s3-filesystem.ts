@@ -5,7 +5,16 @@
  * Works with AWS S3, Cloudflare R2, MinIO, DigitalOcean Spaces, etc.
  */
 
-import type { S3Client } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  CopyObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
+  HeadObjectCommand,
+} from '@aws-sdk/client-s3';
 
 import type {
   WorkspaceFilesystem,
@@ -107,10 +116,16 @@ export interface S3FilesystemOptions {
   description?: string;
   /** AWS region (use 'auto' for R2) */
   region: string;
-  /** AWS access key ID */
-  accessKeyId: string;
-  /** AWS secret access key */
-  secretAccessKey: string;
+  /**
+   * AWS access key ID.
+   * Optional - omit for public buckets (read-only access).
+   */
+  accessKeyId?: string;
+  /**
+   * AWS secret access key.
+   * Optional - omit for public buckets (read-only access).
+   */
+  secretAccessKey?: string;
   /**
    * Custom endpoint URL for S3-compatible storage.
    * Examples:
@@ -184,8 +199,8 @@ export class S3Filesystem implements WorkspaceFilesystem {
 
   private readonly bucket: string;
   private readonly region: string;
-  private readonly accessKeyId: string;
-  private readonly secretAccessKey: string;
+  private readonly accessKeyId?: string;
+  private readonly secretAccessKey?: string;
   private readonly endpoint?: string;
   private readonly forcePathStyle: boolean;
   private readonly prefix: string;
@@ -213,14 +228,19 @@ export class S3Filesystem implements WorkspaceFilesystem {
    * Returns S3-compatible config that works with s3fs-fuse.
    */
   getMountConfig(): S3MountConfig {
-    return {
+    const config: S3MountConfig = {
       type: 's3',
       bucket: this.bucket,
       region: this.region,
-      accessKeyId: this.accessKeyId,
-      secretAccessKey: this.secretAccessKey,
       endpoint: this.endpoint,
     };
+
+    if (this.accessKeyId && this.secretAccessKey) {
+      config.accessKeyId = this.accessKeyId;
+      config.secretAccessKey = this.secretAccessKey;
+    }
+
+    return config;
   }
 
   /**
@@ -278,19 +298,25 @@ export class S3Filesystem implements WorkspaceFilesystem {
     }
   }
 
-  private async getClient(): Promise<S3Client> {
+  private getClient(): S3Client {
     if (this._client) return this._client;
 
-    const { S3Client: S3ClientClass } = await import('@aws-sdk/client-s3');
+    const hasCredentials = this.accessKeyId && this.secretAccessKey;
 
-    this._client = new S3ClientClass({
+    this._client = new S3Client({
       region: this.region,
-      credentials: {
-        accessKeyId: this.accessKeyId,
-        secretAccessKey: this.secretAccessKey,
-      },
+      credentials: hasCredentials
+        ? {
+            accessKeyId: this.accessKeyId!,
+            secretAccessKey: this.secretAccessKey!,
+          }
+        : // Anonymous access for public buckets - use empty credentials
+          // to prevent SDK from trying to find credentials elsewhere
+          { accessKeyId: '', secretAccessKey: '' },
       endpoint: this.endpoint,
       forcePathStyle: this.forcePathStyle,
+      // Skip signing for anonymous access (public buckets)
+      ...(hasCredentials ? {} : { signer: { sign: async request => request } }),
     });
 
     return this._client;
@@ -307,8 +333,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
   // ---------------------------------------------------------------------------
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
-    const client = await this.getClient();
-    const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+    const client = this.getClient();
 
     try {
       const response = await client.send(
@@ -335,8 +360,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
   }
 
   async writeFile(path: string, content: FileContent, _options?: WriteOptions): Promise<void> {
-    const client = await this.getClient();
-    const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+    const client = this.getClient();
 
     const body = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
     const contentType = getMimeType(path);
@@ -372,8 +396,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
       return;
     }
 
-    const client = await this.getClient();
-    const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+    const client = this.getClient();
 
     try {
       await client.send(
@@ -390,8 +413,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
   }
 
   async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
-    const client = await this.getClient();
-    const { CopyObjectCommand } = await import('@aws-sdk/client-s3');
+    const client = this.getClient();
 
     try {
       await client.send(
@@ -431,8 +453,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
     }
 
     // Delete all objects with this prefix
-    const client = await this.getClient();
-    const { ListObjectsV2Command, DeleteObjectsCommand } = await import('@aws-sdk/client-s3');
+    const client = this.getClient();
 
     const prefix = this.toKey(path).replace(/\/$/, '') + '/';
 
@@ -464,8 +485,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
   }
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
-    const client = await this.getClient();
-    const { ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+    const client = this.getClient();
 
     const prefix = this.toKey(path).replace(/\/$/, '');
     const searchPrefix = prefix ? prefix + '/' : '';
@@ -547,8 +567,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
   // ---------------------------------------------------------------------------
 
   async exists(path: string): Promise<boolean> {
-    const client = await this.getClient();
-    const { HeadObjectCommand, ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+    const client = this.getClient();
 
     // Check if it's a file
     try {
@@ -576,8 +595,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
   }
 
   async stat(path: string): Promise<FileStat> {
-    const client = await this.getClient();
-    const { HeadObjectCommand } = await import('@aws-sdk/client-s3');
+    const client = this.getClient();
 
     try {
       const response: { ContentLength?: number; LastModified?: Date } = await client.send(
@@ -615,8 +633,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
   }
 
   async isFile(path: string): Promise<boolean> {
-    const client = await this.getClient();
-    const { HeadObjectCommand } = await import('@aws-sdk/client-s3');
+    const client = this.getClient();
 
     try {
       await client.send(
@@ -632,8 +649,7 @@ export class S3Filesystem implements WorkspaceFilesystem {
   }
 
   async isDirectory(path: string): Promise<boolean> {
-    const client = await this.getClient();
-    const { ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+    const client = this.getClient();
 
     const response: { Contents?: unknown[] } = await client.send(
       new ListObjectsV2Command({
@@ -651,8 +667,8 @@ export class S3Filesystem implements WorkspaceFilesystem {
   // ---------------------------------------------------------------------------
 
   async init(): Promise<void> {
-    // Verify we can access the bucket
-    await this.getClient();
+    // Verify we can access the bucket by creating the client
+    this.getClient();
   }
 
   async destroy(): Promise<void> {
