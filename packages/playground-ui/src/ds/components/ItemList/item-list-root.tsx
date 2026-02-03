@@ -5,5 +5,5 @@ export type ItemListRootProps = {
 };
 
 export function ItemListRoot({ children }: ItemListRootProps) {
-  return <div className="grid">{children}</div>;
+  return <div className="grid grid-rows-[auto_1fr] overflow-y-auto">{children}</div>;
 }

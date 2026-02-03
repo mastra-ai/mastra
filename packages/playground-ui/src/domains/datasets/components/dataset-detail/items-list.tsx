@@ -34,6 +34,9 @@ export interface DatasetItemListProps {
   clearSelectionTrigger?: number;
   onItemClick?: (itemId: string) => void;
   featuredItemId?: string | null;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
 }
 
 /**
@@ -56,6 +59,9 @@ export function DatasetItemList({
   clearSelectionTrigger,
   onItemClick,
   featuredItemId,
+  setEndOfListElement,
+  isFetchingNextPage,
+  hasNextPage,
 }: DatasetItemListProps) {
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
   const selection = useItemSelection();
@@ -143,25 +149,25 @@ export function DatasetItemList({
       />
 
       <ItemList>
-        <ItemList.Trim>
-          <ItemList.Header columns={columns}>
-            {columns?.map(col => (
-              <>
-                {col.name === 'checkbox' ? (
-                  <ItemList.HeaderCol key={col.name} className="flex items-center justify-center">
-                    <Checkbox
-                      checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-                      onCheckedChange={handleSelectAllToggle}
-                      aria-label="Select all items"
-                    />
-                  </ItemList.HeaderCol>
-                ) : (
-                  <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
-                )}
-              </>
-            ))}
-          </ItemList.Header>
+        <ItemList.Header columns={columns}>
+          {columns?.map(col => (
+            <>
+              {col.name === 'checkbox' ? (
+                <ItemList.HeaderCol key={col.name} className="flex items-center justify-center">
+                  <Checkbox
+                    checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                    onCheckedChange={handleSelectAllToggle}
+                    aria-label="Select all items"
+                  />
+                </ItemList.HeaderCol>
+              ) : (
+                <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
+              )}
+            </>
+          ))}
+        </ItemList.Header>
 
+        <ItemList.Scroller>
           <ItemList.Items>
             {items.map(item => {
               const createdAtDate = new Date(item.createdAt);
@@ -205,7 +211,15 @@ export function DatasetItemList({
               );
             })}
           </ItemList.Items>
-        </ItemList.Trim>
+
+          <ItemList.NextPageLoading
+            setEndOfListElement={setEndOfListElement}
+            loadingText="Loading more items..."
+            noMoreDataText="All items loaded"
+            isLoading={isFetchingNextPage}
+            hasMore={hasNextPage}
+          />
+        </ItemList.Scroller>
       </ItemList>
     </div>
   );
@@ -214,22 +228,20 @@ export function DatasetItemList({
 function DatasetItemListSkeleton() {
   return (
     <ItemList>
-      <ItemList.Trim>
-        <ItemList.Header columns={itemsListColumns} />
-        <ItemList.Items>
-          {Array.from({ length: 5 }).map((_, index) => (
-            <ItemList.Row key={index}>
-              <ItemList.RowButton columns={itemsListColumns}>
-                {itemsListColumns.map((col, colIndex) => (
-                  <ItemList.ItemText key={colIndex} isLoading>
-                    Loading...
-                  </ItemList.ItemText>
-                ))}
-              </ItemList.RowButton>
-            </ItemList.Row>
-          ))}
-        </ItemList.Items>
-      </ItemList.Trim>
+      <ItemList.Header columns={itemsListColumns} />
+      <ItemList.Items>
+        {Array.from({ length: 5 }).map((_, index) => (
+          <ItemList.Row key={index}>
+            <ItemList.RowButton columns={itemsListColumns}>
+              {itemsListColumns.map((col, colIndex) => (
+                <ItemList.ItemText key={colIndex} isLoading>
+                  Loading...
+                </ItemList.ItemText>
+              ))}
+            </ItemList.RowButton>
+          </ItemList.Row>
+        ))}
+      </ItemList.Items>
     </ItemList>
   );
 }

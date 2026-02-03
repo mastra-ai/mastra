@@ -5,5 +5,5 @@ export type ItemListItemsProps = {
 };
 
 export function ItemListItems({ children }: ItemListItemsProps) {
-  return <ul className="grid overflow-y-auto">{children}</ul>;
+  return <ul className="grid content-start">{children}</ul>;
 }

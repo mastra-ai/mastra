@@ -20,6 +20,10 @@ export interface ItemsMasterDetailProps {
   onCreateDatasetClick?: (items: DatasetItem[]) => void;
   datasetName?: string;
   clearSelectionTrigger?: number;
+  // Infinite scroll props
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
 }
 
 /**

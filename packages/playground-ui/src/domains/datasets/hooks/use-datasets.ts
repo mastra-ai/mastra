@@ -1,5 +1,7 @@
 import { useMastraClient } from '@mastra/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useInView } from '@/hooks/use-in-view';
 
 /**
  * Hook to list all datasets with optional pagination
@@ -24,14 +26,47 @@ export const useDataset = (datasetId: string) => {
   });
 };
 
+const PER_PAGE = 10;
+
 /**
- * Hook to list items in a dataset with optional pagination
+ * Hook to list items in a dataset with infinite scroll pagination
  */
-export const useDatasetItems = (datasetId: string, pagination?: { page?: number; perPage?: number }) => {
+export const useDatasetItems = (datasetId: string) => {
   const client = useMastraClient();
-  return useQuery({
-    queryKey: ['dataset-items', datasetId, pagination],
-    queryFn: () => client.listDatasetItems(datasetId, pagination),
+  const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
+
+  const query = useInfiniteQuery({
+    queryKey: ['dataset-items', datasetId],
+    queryFn: async ({ pageParam }) => {
+      const res = await client.listDatasetItems(datasetId, {
+        page: pageParam,
+        perPage: PER_PAGE,
+      });
+      return res;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _, lastPageParam) => {
+      if (!lastPage?.items?.length) {
+        return undefined;
+      }
+      const totalFetched = (lastPageParam + 1) * PER_PAGE;
+      if (totalFetched >= lastPage.pagination.total) {
+        return undefined;
+      }
+      return lastPageParam + 1;
+    },
     enabled: Boolean(datasetId),
+    select: data => {
+      return data.pages.flatMap(page => page.items);
+    },
+    retry: false,
   });
+
+  useEffect(() => {
+    if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
+      query.fetchNextPage();
+    }
+  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
+
+  return { ...query, setEndOfListElement };
 };

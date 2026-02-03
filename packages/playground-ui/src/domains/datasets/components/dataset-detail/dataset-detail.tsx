@@ -45,11 +45,16 @@ export function DatasetDetail({
   const [featuredItemId, setSelectedItemId] = useState<string | null>(null);
 
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
-  const { data: itemsData, isLoading: isItemsLoading } = useDatasetItems(datasetId);
+  const {
+    data: items = [],
+    isLoading: isItemsLoading,
+    setEndOfListElement,
+    isFetchingNextPage,
+    hasNextPage,
+  } = useDatasetItems(datasetId);
   const { data: runsData, isLoading: isRunsLoading } = useDatasetRuns(datasetId);
   const { deleteItems } = useDatasetMutations();
 
-  const items = itemsData?.items ?? [];
   const runs = runsData?.runs ?? [];
 
   // Item selection handlers
@@ -147,6 +152,9 @@ export function DatasetDetail({
                   onCreateDatasetClick={handleCreateDatasetClick}
                   datasetName={dataset?.name}
                   clearSelectionTrigger={clearSelectionTrigger}
+                  setEndOfListElement={setEndOfListElement}
+                  isFetchingNextPage={isFetchingNextPage}
+                  hasNextPage={hasNextPage}
                 />
               </TabContent>
 
