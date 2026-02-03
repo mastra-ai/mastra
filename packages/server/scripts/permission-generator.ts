@@ -47,26 +47,6 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
 };
 
 /**
- * Converts a permission pattern to a valid TypeScript const name.
- * e.g., 'agents:read' -> 'AgentsRead', '*:read' -> 'AllRead', 'agents:*' -> 'AgentsAll'
- */
-function patternToConstName(pattern: string): string {
-  if (pattern === '*') return 'All';
-
-  return pattern
-    .split(':')
-    .map(part => {
-      if (part === '*') return 'All';
-      // Handle kebab-case like 'agent-builder' -> 'AgentBuilder'
-      return part
-        .split('-')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join('');
-    })
-    .join('');
-}
-
-/**
  * Generates a human-readable description for a permission pattern.
  */
 function getPermissionDescription(pattern: string): string {
@@ -148,15 +128,6 @@ export function generatePermissionFileContent(data: PermissionData): string {
     })
     .join(',\n');
 
-  // Generate P namespace with named constants for autocomplete
-  const pNamespaceEntries = allPatterns
-    .map(pattern => {
-      const desc = getPermissionDescription(pattern);
-      const name = patternToConstName(pattern);
-      return `  /** ${desc} */\n  export const ${name} = '${pattern}' as const;`;
-    })
-    .join('\n');
-
   return `/**
  * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
  *
@@ -197,30 +168,11 @@ export type Action = (typeof ACTIONS)[number];
 
 /**
  * All valid permission patterns.
+ * Use \`keyof typeof PERMISSION_PATTERNS\` or the \`PermissionPattern\` type.
  */
 export const PERMISSION_PATTERNS = {
 ${patternEntries},
 } as const;
-
-/**
- * Permission constants with TSDoc descriptions for IDE autocomplete.
- *
- * Use these instead of string literals to get descriptions in autocomplete:
- * @example
- * \`\`\`typescript
- * import { P } from '@mastra/core/auth';
- *
- * const roleMapping = {
- *   admin: [P.All],           // "Full access to all resources and actions"
- *   viewer: [P.AllRead],      // "View all resources"
- *   agent_user: [P.AgentsExecute, P.AgentsRead],
- * };
- * \`\`\`
- */
-// eslint-disable-next-line @typescript-eslint/no-namespace
-export namespace P {
-${pNamespaceEntries}
-}
 
 /**
  * Permission pattern that can be used in role definitions.
