@@ -15,6 +15,7 @@ import {
   Trash2,
   ChevronDownIcon,
 } from 'lucide-react';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 export interface ItemsToolbarProps {
   // Normal mode actions
   onAddClick: () => void;
@@ -119,16 +120,16 @@ export function ItemsToolbar({
     return (
       <div className="flex justify-between">
         <span className="text-sm text-neutral3 flex items-center">{selectedCount} selected</span>
-        <div>
-          <Button variant="primary" size="sm" disabled={selectedCount === 0} onClick={onExecuteAction}>
+        <ButtonsGroup>
+          <Button variant="standard" size="default" disabled={selectedCount === 0} onClick={onExecuteAction}>
             {selectionMode === 'export' && 'Export CSV'}
             {selectionMode === 'create-dataset' && 'Create Dataset'}
             {selectionMode === 'delete' && 'Delete'}
           </Button>
-          <Button variant="ghost" size="sm" onClick={onCancelSelection}>
+          <Button variant="secondary" size="default" onClick={onCancelSelection}>
             Cancel
           </Button>
-        </div>
+        </ButtonsGroup>
       </div>
     );
   }

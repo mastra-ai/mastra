@@ -42,7 +42,7 @@ export function DatasetDetail({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemIdsToDelete, setItemIdsToDelete] = useState<string[]>([]);
   const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [featuredItemId, setSelectedItemId] = useState<string | null>(null);
 
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
   const { data: itemsData, isLoading: isItemsLoading } = useDatasetItems(datasetId);
@@ -105,7 +105,7 @@ export function DatasetDetail({
         <div
           className={cn(
             'grid grid-rows-[auto_1fr] mx-auto h-full w-full m-auto',
-            selectedItemId ? 'max-w-[100rem]' : 'max-w-[60rem]',
+            featuredItemId ? 'max-w-[100rem]' : 'max-w-[60rem]',
           )}
         >
           {/* Header */}
@@ -138,7 +138,7 @@ export function DatasetDetail({
                   datasetId={datasetId}
                   items={items}
                   isLoading={isItemsLoading}
-                  selectedItemId={selectedItemId}
+                  featuredItemId={featuredItemId}
                   onItemSelect={handleItemSelect}
                   onItemClose={handleItemClose}
                   onAddClick={onAddItemClick ?? (() => {})}

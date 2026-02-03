@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { DatasetItem } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { EntryList } from '@/ds/components/EntryList';
+import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Icon } from '@/ds/icons/Icon';
 import { Plus, Upload } from 'lucide-react';
@@ -21,9 +21,9 @@ const itemsListColumns = [
   { name: 'date', label: 'Created', size: '5rem' },
 ];
 
-const itemsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '2.5rem' }, ...itemsListColumns];
+const itemsListColumnsWithCheckbox = [{ name: 'checkbox', label: 'c', size: '2.5rem' }, ...itemsListColumns];
 
-export interface ItemsListProps {
+export interface DatasetItemListProps {
   items: DatasetItem[];
   isLoading: boolean;
   onAddClick: () => void;
@@ -33,7 +33,7 @@ export interface ItemsListProps {
   datasetName?: string;
   clearSelectionTrigger?: number;
   onItemClick?: (itemId: string) => void;
-  selectedItemId?: string | null;
+  featuredItemId?: string | null;
 }
 
 /**
@@ -45,7 +45,7 @@ function truncateValue(value: unknown, maxLength = 100): string {
   return str.slice(0, maxLength) + '...';
 }
 
-export function ItemsList({
+export function DatasetItemList({
   items,
   isLoading,
   onAddClick,
@@ -55,8 +55,8 @@ export function ItemsList({
   datasetName,
   clearSelectionTrigger,
   onItemClick,
-  selectedItemId,
-}: ItemsListProps) {
+  featuredItemId,
+}: DatasetItemListProps) {
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
   const selection = useItemSelection();
 
@@ -99,11 +99,11 @@ export function ItemsList({
   };
 
   if (isLoading) {
-    return <ItemsListSkeleton />;
+    return <DatasetItemListSkeleton />;
   }
 
   if (items.length === 0) {
-    return <EmptyItemsList onAddClick={onAddClick} onImportClick={onImportClick} />;
+    return <EmptyDatasetItemList onAddClick={onAddClick} onImportClick={onImportClick} />;
   }
 
   const isSelectionActive = selectionMode !== 'idle';
@@ -142,32 +142,27 @@ export function ItemsList({
         selectionMode={selectionMode}
       />
 
-      <EntryList>
-        <EntryList.Trim>
-          {isSelectionActive ? (
-            <div className="sticky top-0 bg-surface4 z-10 rounded-t-lg px-6">
-              <div
-                className="grid gap-6 text-left uppercase py-3 text-neutral3 text-ui-sm"
-                style={{
-                  gridTemplateColumns: columns.map(c => c.size).join(' '),
-                }}
-              >
-                <div className="flex items-center justify-center">
-                  <Checkbox
-                    checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-                    onCheckedChange={handleSelectAllToggle}
-                    aria-label="Select all items"
-                  />
-                </div>
-                {itemsListColumns.map(col => (
-                  <span key={col.name}>{col.label}</span>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <EntryList.Header columns={columns} />
-          )}
-          <EntryList.Entries>
+      <ItemList>
+        <ItemList.Trim>
+          <ItemList.Header columns={columns}>
+            {columns?.map(col => (
+              <>
+                {col.name === 'checkbox' ? (
+                  <ItemList.HeaderCol key={col.name} className="flex items-center justify-center">
+                    <Checkbox
+                      checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                      onCheckedChange={handleSelectAllToggle}
+                      aria-label="Select all items"
+                    />
+                  </ItemList.HeaderCol>
+                ) : (
+                  <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
+                )}
+              </>
+            ))}
+          </ItemList.Header>
+
+          <ItemList.Items>
             {items.map(item => {
               const createdAtDate = new Date(item.createdAt);
               const isTodayDate = isToday(createdAtDate);
@@ -181,67 +176,70 @@ export function ItemsList({
               };
 
               return (
-                <EntryList.Entry
-                  key={item.id}
-                  entry={entry}
-                  isSelected={selectedItemId === item.id}
-                  columns={columns}
-                  onClick={handleEntryClick}
-                >
-                  {isSelectionActive && (
-                    <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                      <Checkbox
-                        checked={selection.selectedIds.has(item.id)}
-                        onCheckedChange={() => {}}
-                        onClick={e => {
-                          e.stopPropagation();
-                          selection.toggle(item.id, e.shiftKey, allIds);
-                        }}
-                        aria-label={`Select item ${item.id}`}
-                      />
-                    </div>
-                  )}
-                  <EntryList.EntryText>{entry.input}</EntryList.EntryText>
-                  <EntryList.EntryText>{entry.expectedOutput}</EntryList.EntryText>
-                  <EntryList.EntryText>{entry.metadata}</EntryList.EntryText>
-                  <EntryList.EntryText>{entry.date}</EntryList.EntryText>
-                </EntryList.Entry>
+                <ItemList.Row key={item.id} isSelected={featuredItemId === item.id}>
+                  <ItemList.RowButton
+                    entry={entry}
+                    isSelected={featuredItemId === item.id}
+                    columns={columns}
+                    onClick={handleEntryClick}
+                  >
+                    {isSelectionActive && (
+                      <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selection.selectedIds.has(item.id)}
+                          onCheckedChange={() => {}}
+                          onClick={e => {
+                            e.stopPropagation();
+                            selection.toggle(item.id, e.shiftKey, allIds);
+                          }}
+                          aria-label={`Select item ${item.id}`}
+                        />
+                      </div>
+                    )}
+                    <ItemList.ItemText>{entry.input}</ItemList.ItemText>
+                    <ItemList.ItemText>{entry.expectedOutput}</ItemList.ItemText>
+                    <ItemList.ItemText>{entry.metadata}</ItemList.ItemText>
+                    <ItemList.ItemText>{entry.date}</ItemList.ItemText>
+                  </ItemList.RowButton>
+                </ItemList.Row>
               );
             })}
-          </EntryList.Entries>
-        </EntryList.Trim>
-      </EntryList>
+          </ItemList.Items>
+        </ItemList.Trim>
+      </ItemList>
     </div>
   );
 }
 
-function ItemsListSkeleton() {
+function DatasetItemListSkeleton() {
   return (
-    <EntryList>
-      <EntryList.Trim>
-        <EntryList.Header columns={itemsListColumns} />
-        <EntryList.Entries>
+    <ItemList>
+      <ItemList.Trim>
+        <ItemList.Header columns={itemsListColumns} />
+        <ItemList.Items>
           {Array.from({ length: 5 }).map((_, index) => (
-            <EntryList.Entry key={index} columns={itemsListColumns} isLoading>
-              {itemsListColumns.map((col, colIndex) => (
-                <EntryList.EntryText key={colIndex} isLoading>
-                  Loading...
-                </EntryList.EntryText>
-              ))}
-            </EntryList.Entry>
+            <ItemList.Row key={index}>
+              <ItemList.RowButton columns={itemsListColumns}>
+                {itemsListColumns.map((col, colIndex) => (
+                  <ItemList.ItemText key={colIndex} isLoading>
+                    Loading...
+                  </ItemList.ItemText>
+                ))}
+              </ItemList.RowButton>
+            </ItemList.Row>
           ))}
-        </EntryList.Entries>
-      </EntryList.Trim>
-    </EntryList>
+        </ItemList.Items>
+      </ItemList.Trim>
+    </ItemList>
   );
 }
 
-interface EmptyItemsListProps {
+interface EmptyDatasetItemListProps {
   onAddClick: () => void;
   onImportClick?: () => void;
 }
 
-function EmptyItemsList({ onAddClick, onImportClick }: EmptyItemsListProps) {
+function EmptyDatasetItemList({ onAddClick, onImportClick }: EmptyDatasetItemListProps) {
   return (
     <div className="flex h-full items-center justify-center py-12">
       <EmptyState

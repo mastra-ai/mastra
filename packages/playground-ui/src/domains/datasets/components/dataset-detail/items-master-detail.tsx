@@ -3,14 +3,14 @@
 import type { DatasetItem } from '@mastra/client-js';
 import { cn } from '@/lib/utils';
 import { transitions } from '@/ds/primitives/transitions';
-import { ItemsList } from './items-list';
+import { DatasetItemList } from './items-list';
 import { ItemDetailPanel } from './item-detail-panel';
 
 export interface ItemsMasterDetailProps {
   datasetId: string;
   items: DatasetItem[];
   isLoading: boolean;
-  selectedItemId: string | null;
+  featuredItemId: string | null;
   onItemSelect: (itemId: string) => void;
   onItemClose: () => void;
   // Pass-through props for ItemsList
@@ -30,15 +30,15 @@ export function ItemsMasterDetail({
   datasetId,
   items,
   isLoading,
-  selectedItemId,
+  featuredItemId,
   onItemSelect,
   onItemClose,
   ...listProps
 }: ItemsMasterDetailProps) {
-  const selectedItem = items.find(i => i.id === selectedItemId) ?? null;
+  const selectedItem = items.find(i => i.id === featuredItemId) ?? null;
 
   const handleItemClick = (itemId: string) => {
-    if (itemId === selectedItemId) {
+    if (itemId === featuredItemId) {
       onItemClose();
     } else {
       onItemSelect(itemId);
@@ -50,16 +50,16 @@ export function ItemsMasterDetail({
       className={cn(
         'grid h-full overflow-hidden gap-10',
         transitions.allSlow, // 300ms transition
-        selectedItemId ? 'grid-cols-[1fr_auto]' : 'grid-cols-1',
+        featuredItemId ? 'grid-cols-[1fr_auto]' : 'grid-cols-1',
       )}
     >
       {/* List column - always visible */}
       <div className={cn('flex flex-col h-full overflow-hidden')}>
-        <ItemsList
+        <DatasetItemList
           items={items}
           isLoading={isLoading}
           onItemClick={handleItemClick}
-          selectedItemId={selectedItemId}
+          featuredItemId={featuredItemId}
           {...listProps}
         />
       </div>
