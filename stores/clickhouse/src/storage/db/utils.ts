@@ -1,4 +1,4 @@
-import type { TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
+import type { CORE_TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -8,10 +8,11 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   safelyParseJSON,
   TABLE_SPANS,
+  TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
 } from '@mastra/core/storage';
 
-export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
+export const TABLE_ENGINES: Record<CORE_TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
   [TABLE_WORKFLOW_SNAPSHOT]: `ReplacingMergeTree()`,
   [TABLE_TRACES]: `MergeTree()`,
@@ -22,7 +23,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   // keeping the row with the highest updatedAt value. Combined with ORDER BY (traceId, spanId),
   // this provides eventual uniqueness for the (traceId, spanId) composite key.
   [TABLE_SPANS]: `ReplacingMergeTree(updatedAt)`,
-  mastra_agents: `ReplacingMergeTree()`,
+  [TABLE_AGENTS]: `ReplacingMergeTree()`,
   [TABLE_AGENT_VERSIONS]: `MergeTree()`,
 };
 
@@ -55,7 +56,7 @@ export type ClickhouseConfig = {
   username: string;
   password: string;
   ttl?: {
-    [TableKey in TABLE_NAMES]?: {
+    [TableKey in CORE_TABLE_NAMES]?: {
       row?: { interval: number; unit: IntervalUnit; ttlKey?: string };
       columns?: Partial<{
         [ColumnKey in keyof (typeof TABLE_SCHEMAS)[TableKey]]: {
