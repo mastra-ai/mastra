@@ -44,7 +44,10 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
  */
 const scorerConfigSchema = z.object({
   sampling: z
-    .union([z.object({ type: z.literal('none') }), z.object({ type: z.literal('ratio'), rate: z.number() })])
+    .union([
+      z.object({ type: z.literal('none') }),
+      z.object({ type: z.literal('ratio'), rate: z.number().min(0).max(1) }),
+    ])
     .optional(),
 });
 
