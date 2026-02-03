@@ -8,24 +8,7 @@ packages:
 
 # Observational Memory
 
-You don't remember every word of every conversation you've ever had. You observe what happened subconsciously, without choosing to. Over time, your brain reflects on those observations — reorganizing, combining, and condensing them into long-term memory.
-
-Observational Memory (OM) works the same way. Two background agents — an **Observer** and a **Reflector** — watch your agent's conversations and maintain a dense observation-based long-term memory.
-
-This solves two problems that agents face in long conversations:
-
-- **Context rot**: the more raw message history an agent carries, the worse it performs. Responses get less focused, instructions get ignored, and important details get lost in the noise.
-- **Context waste**: most of that history contains tokens which are no longer needed to keep the agent on task. Ten 50k-token tool call results can usually be represented as 500 tokens of observations instead of 500,000 tokens of raw output.
-
-On the [LongMemEval](https://github.com/xiaowu0162/LongMemEval) benchmark, gpt-4o answers questions correctly only 60.2% of the time when given all previous sessions directly. With OM, gpt-4o answers correctly 84% of the time across 57 million input tokens (with deafult settings) — and 95% when using gpt-5-mini. OM allows small context windows to behave like very large ones.
-
-### Example: browser automation
-
-Consider an agent using Playwright MCP to automate a browser. Each page snapshot might be 50,000 tokens. After a few pages, the context window is full of stale snapshots that actively hurt the agent's ability to follow instructions.
-
-With OM, when the snapshot comes in, the Observer watches the interaction and makes observations about what the page contained and what the agent did with it. The agent then continues with a concise understanding of what happened — not the raw 50k snapshot, but a few hundred tokens of observations about what was on the page and what actions were taken. The agent stays on task with full context of what it's seen, without carrying the weight of every raw snapshot.
-
-This applies to any token-heavy workflow: document analysis, coding sessions, research tasks, multi-step tool use.
+Observational Memory (OM) is Mastra's memory system for long-context agentic memory. Two background agents — an **Observer** and a **Reflector** — watch your agent's conversations and maintain a dense observation log that replaces raw message history as it grows.
 
 ## Quick Start
 
@@ -51,38 +34,47 @@ That's it. The agent now has humanlike long-term memory that persists across con
 
 ## How It Works
 
-Every time an agent responds, it sees a context window containing its system prompt, recent message history, and any injected context (tool results, semantic recall, working memory, etc). The context window is finite — even models with large token limits perform worse when the window is full.
+You don't remember every word of every conversation you've ever had. You observe what happened subconsciously, then your brain reflects — reorganizing, combining, and condensing into long-term memory. OM works the same way.
 
-### Message history as working memory
+Every time an agent responds, it sees a context window containing its system prompt, recent message history, and any injected context (tool results, semantic recall, working memory, etc). The context window is finite — even models with large token limits perform worse when the window is full. This causes two problems in long conversations:
 
-Raw message history is like human working memory — it's the space dedicated to the current task. It contains the exact back-and-forth of the conversation: what the user said, what the agent responded, tool calls and results.
+- **Context rot**: the more raw message history an agent carries, the worse it performs. Responses get less focused, instructions get ignored, and important details get lost in the noise.
+- **Context waste**: most of that history contains tokens which are no longer needed to keep the agent on task. Ten 50k-token tool call results can usually be represented as 500 tokens of observations instead of 500,000 tokens of raw output.
 
-> **Note:** This is different from Mastra's [Working Memory](/docs/memory/working-memory) feature, which is a structured scratchpad. OM is a successor to that approach for long-term memory.
+### Message history
 
-This is high-fidelity but expensive. A 50-message conversation might use 30,000+ tokens of context, most of which contain tokens no longer needed to keep the agent on task.
+Raw message history is the space dedicated to the current task. It contains the exact back-and-forth of the conversation: what the user said, what the agent responded, tool calls and results.
+
+This is high-fidelity but expensive. A 50-message conversation could use 100,000+ tokens of context, most of which contain tokens no longer needed to keep the agent on task.
 
 ### Observations as long-term memory
 
-When unobserved message tokens exceed a threshold (default: 30,000 tokens), the Observer is called. It watches the conversation and makes observations — a list of concise, dense notes about what actually happened:
+When message history tokens exceed a threshold (default: 30,000 tokens), the Observer is called. It watches the conversation and makes observations — a list of concise, dense notes about what actually happened:
 
 ```
-📅 2025-01-15
-🔴 User is building a Next.js app with Supabase auth
-🔴 App uses server components with client-side hydration
- User asked about middleware configuration for protected routes
-🔴 Agent provided middleware setup using createServerClient pattern
- User's app name is "Acme Dashboard"
+Date: 2026-01-15
+- 🔴 12:10 User is building a Next.js app with Supabase auth, due in 1 week (meaning January 22nd 2026 - 1 week from now)
+  - 🔴 12:10 App uses server components with client-side hydration
+  - 🟡 12:12 User asked about middleware configuration for protected routes
+  - 🟡 12:13 Agent provided middleware setup using createServerClient pattern
+  - 🔴 12:15 User stated the app name is "Acme Dashboard"
 ```
 
-New observations are appended to any previous observations, replacing the messages they observed. The compression is typically between 5x and 40x — instead of 30,000 tokens of back-and-forth, the agent sees a compact list of observations about what happened. 
+New observations are appended to any previous observations, replacing the messages they observed. The compression is typically between 5x and 40x — instead of 30,000 tokens of back-and-forth, the agent sees a compact list of observations about what happened. The more tool calls there are, the higher the compression ratio typically is.
 
-The system also injects temporal markers automatically. When the Observer references relative time (e.g., "the user plans to do X in a week"), the system converts it to an absolute date and adds context like "(meaning June 4th 2027 — 4 months from today)" or "(3 weeks ago)".
+#### Observation formatting
 
-The Observer also tracks a **current task** (what the agent is working on right now) and a **suggested response** (how the agent should respond next to maintain conversation continuity). These are injected into the agent's context alongside the observations, so the agent picks up where it left off even when large portions of the message history are replaced.
+Observations are output as raw appendable text. They're structured as a bullet point list, with indentation to represent grouped observations, emojis to represent information priority, and timestamps to indicate when the observations occurred.
+
+The system injects temporal markers automatically. When the Observer references relative time (e.g., "the user plans to do X in a week"), the system converts it to an absolute date and adds context like "(meaning June 4th 2027 — 4 months from today)" or "(meaning Jan 2025 - 1 year ago)".
+
+#### Task and response extraction
+
+The Observer tracks a **current task** (what the agent is working on right now) and a **suggested response** (how the agent should respond next to maintain conversation continuity, since message history is being replaced). These are injected into the agent's context alongside the observations, so the agent picks up where it left off even when large portions of the message history are replaced.
 
 ### Reflections
 
-As observations accumulate over time, they eventually hit their own threshold (default: 40,000 tokens). The Reflector then restructures them — combining related items, reflecting on overarching patterns, and condensing where possible. Reflections always completely replace all previous observations.
+As observations accumulate over time, they eventually hit their own threshold (default: 40,000 tokens). The Reflector then restructures them — combining related items, reflecting on overarching patterns, and condensing where possible. Reflections always completely replace all previous observations and are intended to condense the size of observations to save context window space.
 
 If the Reflector's output isn't smaller than the input, it's automatically run a second time with a tweaked prompt that instructs it to condense more aggressively.
 
@@ -90,9 +82,17 @@ The result is a three-tier system:
 
 1. **Recent messages** — exact conversation history for the current task
 2. **Observations** — a log of what the Observer has seen
-3. **Reflections** — condensed, reorganized observations after the Reflector runs
+3. **Reflections** — condensed, reorganized observations when memory becomes too long
 
-Each tier is progressively refined to drop context rot and waste. The agent always has access to all three, but the total context stays small and focused.
+Each tier is progressively refined to drop context rot/waste and gracefully degrade old irrelevant memories.
+
+### Example: browser automation
+
+Consider an agent using Playwright MCP to automate a browser. Each page snapshot might be 50,000+ tokens. After a few pages, the context window is full of stale snapshots that actively hurt the agent's ability to follow instructions.
+
+With OM, when the snapshot comes in, the Observer watches the interaction and makes observations about what the page contained and what the agent did with it. The agent then continues with a concise understanding of what happened — not the raw 50k snapshot, but a few hundred tokens of observations about what was on the page and what actions were taken. The agent stays on task with full context of what it's seen, without carrying the weight of every raw snapshot.
+
+This applies to any token-heavy workflow: document analysis, coding sessions, research tasks, multi-step tool use, even long text conversations.
 
 ## Scopes
 
@@ -103,9 +103,13 @@ Observational Memory supports two scopes:
 Observations are kept per-conversation. Each thread has its own observations. This is the simplest mode — each conversation is independent.
 
 ```typescript
-observationalMemory: {
-  scope: "thread",
-}
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      scope: "thread",
+    },
+  },
+});
 ```
 
 ### Resource scope (use carefully)
@@ -113,18 +117,24 @@ observationalMemory: {
 Observations are shared across all threads for a resource (typically a user). This enables cross-conversation memory — the agent remembers what happened in previous conversations with the same user.
 
 ```typescript
-observationalMemory: {
-  scope: "resource",
-}
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      scope: "resource",
+    },
+  },
+});
 ```
 
-**Understand what this does before enabling it.** In resource scope, the context window for each thread is a perspective on *all* threads simultaneously. Any unobserved messages across all threads are in context. When the total unobserved tokens across threads meets the threshold, observations are created (separated per thread).
+**Understand what this does before enabling it.** In resource scope, the context window for each thread is a perspective on *all* threads simultaneously. Any unobserved messages across all threads are in context. When the total unobserved tokens across threads meets the threshold, observations are created (separated by thread in context).
 
 This means if a user has 100 threads of unobserved messages, the first message sent will cause the Observer to block the response and iteratively chunk through every unobserved message across all threads until the context is small enough to fit. For users with many existing threads, this initial observation pass could take significant time.
 
+For existing apps, it will be easier to use thread scope.
+
 ## Token Budgets
 
-Observational Memory uses token thresholds to decide when to observe and when to reflect. The default values are based on the settings used to achieve our SOTA results using OM in [LongMemEval](https://github.com/xiaowu0162/LongMemEval).
+Observational Memory uses token thresholds to decide when to observe and when to reflect.
 
 ### Message tokens
 
@@ -132,30 +142,71 @@ Observational Memory uses token thresholds to decide when to observe and when to
 
 Lower values mean the Observer runs more frequently, but it also tends to capture more fine details since it's observing smaller batches of messages. This often leads to quicker reflection too, since more observations accumulate faster. Higher values let more raw history accumulate before observing.
 
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        messageTokens: 15_000,
+      },
+    },
+  },
+});
+```
+
 ### Batch size
 
 `observation.maxTokensPerBatch` (default: 10,000) controls how many tokens the Observer processes at once when there are multiple threads in resource scope.
 
 This is independent of `messageTokens`. For example, you might want to observe at 20,000 message tokens but still use 5,000 token batches — the Observer will notice more details in each smaller batch rather than processing everything at once.
 
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        messageTokens: 20_000,
+        maxTokensPerBatch: 5_000,
+      },
+    },
+  },
+});
+```
+
 ### Observation tokens
 
 `reflection.observationTokens` (default: 40,000) controls when the Reflector runs. When observation tokens exceed this value, the Reflector condenses them.
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      reflection: {
+        observationTokens: 20_000,
+      },
+    },
+  },
+});
+```
 
 ### Shared token budget
 
 By default, message tokens and observation tokens have independent thresholds. With `shareTokenBudget: true`, message history can borrow from the observation token budget:
 
 ```typescript
-observationalMemory: {
-  shareTokenBudget: true,
-  observation: {
-    messageTokens: 20_000,
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      shareTokenBudget: true,
+      observation: {
+        messageTokens: 20_000,
+      },
+      reflection: {
+        observationTokens: 44_000,
+      },
+    },
   },
-  reflection: {
-    observationTokens: 44_000,
-  },
-}
+});
 ```
 
 The total budget here is 64,000 tokens (20k + 44k). While observations are still small, message history can expand beyond its 20k threshold into the unused observation space. This lets you choose a rough max context window size and stay within it — if you want to stay under 64k tokens total, this configuration does that while still allowing longer message history when observations haven't accumulated yet.
@@ -171,26 +222,35 @@ The default is `google/gemini-2.5-flash`. This is what we've tested with the mos
 ### Alternative models
 
 We've also been testing the system with `deepseek`, `qwen3`, and `glm-4.7` for the Observer and they work well. For the Reflector, make sure the model's context window has enough headroom to fit all observations — Gemini Flash's 1M context window is a safe choice. If your `reflection.observationTokens` threshold is lower (e.g., 20k-40k), context window size matters less and smaller models work fine.
+Note that Claude 4.5 models currently do not work well as observer or reflector - something about their training seems to prevent them from fully observing all message history correctly.
 
 Set a single model for both agents:
 
 ```typescript
-observationalMemory: {
-  model: "deepseek/deepseek-reasoner",
-}
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: "deepseek/deepseek-reasoner",
+    },
+  },
+});
 ```
 
 Or use different models for each:
 
 ```typescript
-observationalMemory: {
-  observation: {
-    model: "deepseek/deepseek-chat",
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        model: "deepseek/deepseek-chat",
+      },
+      reflection: {
+        model: "deepseek/deepseek-reasoner",
+      },
+    },
   },
-  reflection: {
-    model: "deepseek/deepseek-reasoner",
-  },
-}
+});
 ```
 
 ## Viewing in Mastra Studio
