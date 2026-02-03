@@ -767,8 +767,8 @@ describe('MastraEditor with LibSQL Integration', () => {
       const result = await retrievedAgent?.generate('What is the weather in Tokyo?');
       expect(result?.text).toBeDefined();
 
-      // Test a workflow tool directly
-      const greetingWorkflow = tools?.['greeting-workflow'];
+      // Test a workflow directly
+      const greetingWorkflow = workflows?.['greeting-workflow'];
       if (greetingWorkflow && 'execute' in greetingWorkflow && greetingWorkflow.execute) {
         const workflowResult = await greetingWorkflow.execute(
           { name: 'Test User' },
