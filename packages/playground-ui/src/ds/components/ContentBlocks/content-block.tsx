@@ -1,9 +1,13 @@
-import { Draggable, DraggableStyle } from '@hello-pangea/dnd';
+import { Draggable, DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 import { ContentBlockContext, ContentBlocksContext } from './content-blocks.context';
 import { useContext } from 'react';
 
+export type ContentBlockChildren =
+  | React.ReactNode
+  | ((dragHandleProps: DraggableProvidedDragHandleProps | null) => React.ReactNode);
+
 export interface ContentBlockProps {
-  children: React.ReactNode;
+  children: ContentBlockChildren;
   index: number;
   className?: string;
 }
@@ -18,6 +22,8 @@ export const ContentBlock = ({ children, index, className }: ContentBlockProps) 
     onChange(newItems);
   };
 
+  const isRenderProp = typeof children === 'function';
+
   return (
     <ContentBlockContext.Provider value={{ item, modifyAtIndex }}>
       <Draggable draggableId={`draggable-content-block-${index}`} index={index}>
@@ -25,11 +31,11 @@ export const ContentBlock = ({ children, index, className }: ContentBlockProps) 
           <div
             ref={provided.innerRef}
             {...provided.draggableProps}
-            {...provided.dragHandleProps}
+            {...(isRenderProp ? {} : provided.dragHandleProps)}
             className={className}
-            style={{ backgroundColor: snapshot.isDragging ? 'lightgray' : 'white', ...provided.draggableProps.style }}
+            style={provided.draggableProps.style}
           >
-            {children}
+            {isRenderProp ? children(provided.dragHandleProps) : children}
           </div>
         )}
       </Draggable>

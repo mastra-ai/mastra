@@ -25,22 +25,12 @@ export const ContentBlocks = ({ children, items, onChange, className }: ContentB
     onChange(nextItems);
   };
 
-  const getListStyle = (isDraggingOver: boolean) => ({
-    background: isDraggingOver ? 'lightblue' : 'lightgrey',
-    width: 250,
-  });
-
   return (
     <ContentBlocksContext.Provider value={{ items, onChange }}>
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="droppable">
           {(provided, snapshot) => (
-            <div
-              {...provided.droppableProps}
-              ref={provided.innerRef}
-              style={getListStyle(snapshot.isDraggingOver)}
-              className={className}
-            >
+            <div {...provided.droppableProps} ref={provided.innerRef} className={className}>
               {children}
               {provided.placeholder}
             </div>
