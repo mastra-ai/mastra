@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChevronRight } from 'lucide-react';
+import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { SchemaField } from './schema-settings/schema-field';
@@ -12,6 +13,7 @@ import { useScorerSchema } from '../hooks/use-scorer-schema';
 import type { JSONSchema7 } from 'json-schema';
 
 type SourceType = 'custom' | 'agent' | 'workflow' | 'scorer';
+type ScorerTargetType = 'agent' | 'custom';
 
 interface SchemaConfigSectionProps {
   inputSchema: Record<string, unknown> | null | undefined;
@@ -38,6 +40,7 @@ export function SchemaConfigSection({
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [sourceType, setSourceType] = useState<SourceType>('custom');
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
+  const [scorerTargetType, setScorerTargetType] = useState<ScorerTargetType>('agent');
 
   // Fetch workflows for workflow source selection
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
@@ -68,7 +71,7 @@ export function SchemaConfigSection({
         };
       case 'scorer':
         return {
-          inputSchema: scorerSchema.inputSchema,
+          inputSchema: scorerTargetType === 'agent' ? scorerSchema.agentInputSchema : scorerSchema.customInputSchema,
           outputSchema: scorerSchema.outputSchema,
         };
       default:
@@ -77,33 +80,59 @@ export function SchemaConfigSection({
   };
 
   const sourceSchemas = getSourceSchemas();
+  // Auto-populate when not custom (scorer always auto-populates with agent or custom schema)
   const isAutoPopulate = sourceType !== 'custom';
 
-  // Auto-populate input schema when source changes and field is enabled
+  // Track previous source key to detect source changes
+  const prevSourceKeyRef = useRef<string | null>(null);
+
+  // Auto-populate when source changes
+  // - When source/workflow changes: re-populate all ENABLED schemas (even if not empty)
+  // - When toggling on a schema: populate if empty (handled by SchemaField)
   useEffect(() => {
     if (sourceType === 'custom') return;
     if (!sourceSchemas.inputSchema && !sourceSchemas.outputSchema) return;
 
-    // Only auto-populate if current schema is empty or default
-    const isEmptyInput =
-      !inputSchema || (inputSchema.type === 'object' && Object.keys(inputSchema.properties || {}).length === 0);
-    const isEmptyOutput =
-      !outputSchema || (outputSchema.type === 'object' && Object.keys(outputSchema.properties || {}).length === 0);
+    // Create a key representing the current source selection
+    const currentSourceKey =
+      sourceType === 'workflow'
+        ? `workflow:${selectedWorkflow}`
+        : sourceType === 'scorer'
+          ? `scorer:${scorerTargetType}`
+          : sourceType;
 
-    if (isEmptyInput && sourceSchemas.inputSchema) {
+    // Check if source changed (not just initial render)
+    const sourceChanged = prevSourceKeyRef.current !== null && prevSourceKeyRef.current !== currentSourceKey;
+    prevSourceKeyRef.current = currentSourceKey;
+
+    // For workflow, also need to wait for schema to load
+    if (sourceType === 'workflow' && !workflowSchema) return;
+
+    const isInputEnabled = inputSchema !== null && inputSchema !== undefined;
+    const isOutputEnabled = outputSchema !== null && outputSchema !== undefined;
+
+    // Check if schemas are empty (for initial population when toggling on)
+    const isInputEmpty =
+      inputSchema && inputSchema.type === 'object' && Object.keys(inputSchema.properties || {}).length === 0;
+    const isOutputEmpty =
+      outputSchema && outputSchema.type === 'object' && Object.keys(outputSchema.properties || {}).length === 0;
+
+    // Populate if: source changed and schema is enabled, OR schema is enabled but empty
+    const shouldPopulateInput = sourceSchemas.inputSchema && isInputEnabled && (sourceChanged || isInputEmpty);
+    const shouldPopulateOutput = sourceSchemas.outputSchema && isOutputEnabled && (sourceChanged || isOutputEmpty);
+
+    if (shouldPopulateInput || shouldPopulateOutput) {
       onChange({
-        inputSchema: sourceSchemas.inputSchema as Record<string, unknown>,
-        outputSchema: outputSchema ?? null,
-      });
-    }
-    if (isEmptyOutput && sourceSchemas.outputSchema) {
-      onChange({
-        inputSchema: inputSchema ?? null,
-        outputSchema: sourceSchemas.outputSchema as Record<string, unknown>,
+        inputSchema: shouldPopulateInput
+          ? (sourceSchemas.inputSchema as Record<string, unknown>)
+          : (inputSchema ?? null),
+        outputSchema: shouldPopulateOutput
+          ? (sourceSchemas.outputSchema as Record<string, unknown>)
+          : (outputSchema ?? null),
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceType, selectedWorkflow, workflowSchema]);
+  }, [sourceType, selectedWorkflow, workflowSchema, scorerTargetType]);
 
   const handleInputSchemaChange = (schema: Record<string, unknown> | null) => {
     onChange({ inputSchema: schema, outputSchema: outputSchema ?? null });
@@ -129,6 +158,23 @@ export function SchemaConfigSection({
       </CollapsibleTrigger>
 
       <CollapsibleContent className="pt-4 space-y-4">
+        {/* JSON Schema info notification */}
+        <Alert variant="info">
+          <AlertTitle>JSON Schema Format</AlertTitle>
+          <AlertDescription as="p">
+            Schemas use{' '}
+            <a
+              href="https://json-schema.org/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-accent5Lighter"
+            >
+              JSON Schema
+            </a>{' '}
+            for validation and type checking.
+          </AlertDescription>
+        </Alert>
+
         {/* Source selector */}
         <div className="space-y-2">
           <label className="text-sm font-medium text-neutral4">Import From</label>
@@ -175,10 +221,33 @@ export function SchemaConfigSection({
             {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
               <span className="text-xs text-neutral3">Loading schema...</span>
             )}
+
+            {/* Scorer target type picker */}
+            {sourceType === 'scorer' && (
+              <Select
+                value={scorerTargetType}
+                onValueChange={v => setScorerTargetType(v as ScorerTargetType)}
+                disabled={disabled}
+              >
+                <SelectTrigger size="sm" className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="agent">Agent</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Helper text for scorer */}
-          {sourceType === 'scorer' && <p className="text-xs text-neutral3">For calibrating agent-type scorers</p>}
+          {sourceType === 'scorer' && (
+            <p className="text-xs text-neutral3">
+              {scorerTargetType === 'agent'
+                ? 'For calibrating agent-type scorers'
+                : 'For calibrating custom scorers (input/output as any)'}
+            </p>
+          )}
         </div>
 
         {/* Schema fields */}
