@@ -1195,11 +1195,11 @@ export class MemoryPG extends MemoryStorage {
 
         // Apply date filters
         if (options?.messageFilter?.startDate) {
-          messageQuery += ` AND "createdAt" >= $${paramIndex++}`;
+          messageQuery += ` AND COALESCE("createdAtZ", "createdAt") >= $${paramIndex++}`;
           messageParams.push(options.messageFilter.startDate);
         }
         if (options?.messageFilter?.endDate) {
-          messageQuery += ` AND "createdAt" <= $${paramIndex++}`;
+          messageQuery += ` AND COALESCE("createdAtZ", "createdAt") <= $${paramIndex++}`;
           messageParams.push(options.messageFilter.endDate);
         }
 
