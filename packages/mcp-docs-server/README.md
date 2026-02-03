@@ -1,115 +1,12 @@
 # @mastra/mcp-docs-server
 
-A Model Context Protocol (MCP) server that provides AI assistants with direct access to Mastra.ai's complete knowledge base. This includes comprehensive documentation with MDX support, a collection of production-ready code examples, technical blog posts, and detailed package changelogs. The server integrates with popular AI development environments like Cursor and Windsurf, as well as Mastra agents, making it easy to build documentation-aware AI assistants that can provide accurate, up-to-date information about Mastra.ai's ecosystem.
+The `@mastra/mcp-docs-server` package provides direct access to Mastra’s full knowledge base via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex or any tool that supports MCP.
 
-## Installation
+These tools are designed to help agents retrieve precise, task-specific information — whether you're adding a feature to an agent, scaffolding a new project, or exploring how something works.
 
-### In Cursor
+## Usage
 
-Create or update `.cursor/mcp.json` in your project root:
-
-MacOS/Linux
-
-```json
-{
-  "mcpServers": {
-    "mastra": {
-      "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server"]
-    }
-  }
-}
-```
-
-Windows
-
-```json
-{
-  "mcpServers": {
-    "mastra": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
-    }
-  }
-}
-```
-
-This will make all Mastra documentation tools available in your Cursor workspace.
-Note that the MCP server won't be enabled by default. You'll need to go to Cursor settings -> MCP settings and click "enable" on the Mastra MCP server.
-
-### In Windsurf
-
-Create or update `~/.codeium/windsurf/mcp_config.json`:
-
-MacOS/Linux
-
-```json
-{
-  "mcpServers": {
-    "mastra": {
-      "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server"]
-    }
-  }
-}
-```
-
-Windows
-
-```json
-{
-  "mcpServers": {
-    "mastra": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
-    }
-  }
-}
-```
-
-This will make all Mastra documentation tools available in your Windsurf workspace.
-Note that Windsurf MCP tool calling doesn't work very well. You will need to fully quit and re-open Windsurf after adding this.
-If a tool call fails you will need to go into Windsurf MCP settings and re-start the MCP server.
-
-### In Claude Code
-
-After installing Claude Code run:
-
-```sh
-claude mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
-```
-
-### In a Mastra Agent
-
-```typescript
-import { MCPClient } from '@mastra/mcp';
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-
-// Configure MCP with the docs server
-const mcp = new MCPClient({
-  servers: {
-    mastra: {
-      command: 'npx',
-      args: ['-y', '@mastra/mcp-docs-server'],
-    },
-  },
-});
-
-// Create an agent with access to all documentation tools
-const agent = new Agent({
-  id: 'doc-assistant',
-  name: 'Documentation Assistant',
-  instructions: 'You help users find and understand Mastra.ai documentation.',
-  model: openai('gpt-4'),
-  tools: await mcp.listTools(),
-});
-
-// Or use toolsets dynamically in generate/stream
-const response = await agent.stream('Show me the quick start example', {
-  toolsets: await mcp.listToolsets(),
-});
-```
+Follow the [official installation](https://mastra.ai/docs/getting-started/mcp-docs-server) instructions to add the MCP server to your agent.
 
 ## Tools
 
