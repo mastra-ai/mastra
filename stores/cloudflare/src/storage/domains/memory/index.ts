@@ -846,7 +846,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       effectiveThreadIds = allThreadIds;
       if (effectiveThreadIds.length === 0) {
         // No threads for this resource, return empty with pagination info
-        return { messages: [], total: 0, page: 0, perPage: normalizePerPage(perPageInput, 40), hasMore: false };
+        return { messages: [], total: 0, page, perPage: normalizePerPage(perPageInput, 40), hasMore: false };
       }
     }
 

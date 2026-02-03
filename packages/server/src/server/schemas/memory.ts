@@ -564,7 +564,7 @@ const observationalMemoryRecordSchema = z.object({
   bufferedReflection: z.string().optional(),
   originType: z.enum(['initial', 'observation', 'reflection']),
   generationCount: z.number(),
-  lastObservedAt: z.date().optional(),
+  lastObservedAt: z.date().optional().nullable(),
   totalTokensObserved: z.number(),
   observationTokenCount: z.number(),
   pendingMessageTokens: z.number(),

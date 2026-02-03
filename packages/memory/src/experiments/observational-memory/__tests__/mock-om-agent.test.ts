@@ -290,7 +290,7 @@ const omTriggerTool = createTool({
 });
 
 // =============================================================================
-// Long response text to exceed the 50-token threshold
+// Long response text to exceed the configured messageTokens threshold
 // =============================================================================
 
 const longResponseText = `I understand your request completely. Let me provide you with a comprehensive and detailed response that covers all the important aspects of what you asked about. Here are my thoughts and recommendations based on the information you provided. I hope this detailed explanation helps clarify everything you need to know about the topic at hand. Please let me know if you have any follow-up questions or need additional clarification on any of these points.`;

@@ -217,8 +217,9 @@ function parseReflectorSectionXml(content: string): ParsedReflectorSection {
       .filter(Boolean)
       .join('\n');
   } else {
-    // Fallback: if no XML tags, treat entire output as observations (legacy support)
-    result.observations = extractReflectorListItems(content);
+    // Fallback: if no XML tags, try extracting list items first, then fall back to full content
+    const listItems = extractReflectorListItems(content);
+    result.observations = listItems || content.trim();
   }
 
   // Extract <current-task> content (first match only)

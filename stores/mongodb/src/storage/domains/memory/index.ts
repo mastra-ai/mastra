@@ -1113,12 +1113,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     try {
       const now = new Date();
       const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const safeTokenCount = Number.isFinite(input.tokenCount) && input.tokenCount >= 0 ? input.tokenCount : 0;
 
       const updateDoc: any = {
         activeObservations: input.observations,
         lastObservedAt: input.lastObservedAt,
         pendingMessageTokens: 0,
-        observationTokenCount: input.tokenCount,
+        observationTokenCount: safeTokenCount,
         updatedAt: now,
       };
 
@@ -1126,7 +1127,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         { id: input.id },
         {
           $set: updateDoc,
-          $inc: { totalTokensObserved: input.tokenCount },
+          $inc: { totalTokensObserved: safeTokenCount },
         },
       );
 

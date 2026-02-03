@@ -437,11 +437,15 @@ export class StoreMemoryLance extends MemoryStorage {
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
         // Get all unique thread IDs from include items
-        const threadIds = [...new Set(include.map(item => item.threadId || threadId))];
+        const includeThreadIds = [
+          ...new Set(
+            include.map(item => item.threadId || (Array.isArray(threadId) ? threadId[0] : threadId)).filter(Boolean),
+          ),
+        ];
 
         // Fetch all messages from all relevant threads
         const allThreadMessages: any[] = [];
-        for (const tid of threadIds) {
+        for (const tid of includeThreadIds) {
           const threadQuery = table.query().where(`thread_id = '${tid}'`);
           let threadRecords = await threadQuery.toArray();
           allThreadMessages.push(...threadRecords);
@@ -483,8 +487,8 @@ export class StoreMemoryLance extends MemoryStorage {
         return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
-      // Calculate hasMore based on pagination against total matching records
-      const fetchedAll = perPageInput === false || finalMessages.length >= total;
+      // Calculate hasMore based on paginated records count, not finalMessages (which includes context)
+      const fetchedAll = perPageInput === false || paginatedRecords.length >= total;
       const hasMore = !fetchedAll && offset + perPage < total;
 
       return {
