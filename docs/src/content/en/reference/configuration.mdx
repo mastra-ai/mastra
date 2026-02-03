@@ -432,10 +432,9 @@ export const mastra = new Mastra({
 
 **Type:** `Workspace`
 
-A Mastra workspace gives agents a persistent environment for storing files and executing commands. Agents inherit the global workspace on the `Mastra` class unless the have their own workspace configured.
+A Mastra workspace gives agents a persistent environment for storing files and executing commands. Agents inherit the global workspace on the `Mastra` class unless they have their own workspace configured.
 
-Visit the [Workspace documentation](/docs/workspace/overview) to learn more.
-
+See the [Workspace documentation](/docs/workspace/overview) for implementation details.
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
