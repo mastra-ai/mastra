@@ -30,6 +30,7 @@
  * ```
  */
 
+import type { IMastraLogger } from '../logger';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
@@ -633,5 +634,26 @@ export class Workspace {
         : undefined,
       instructions,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Logger Integration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Set the logger for this workspace and propagate to providers.
+   * Called by Mastra when the logger is set.
+   * @internal
+   */
+  __setLogger(logger: IMastraLogger): void {
+    // Propagate logger to filesystem provider if it supports it
+    if (this._fs?.__setLogger) {
+      this._fs.__setLogger(logger);
+    }
+
+    // Propagate logger to sandbox provider if it supports it
+    if (this._sandbox?.__setLogger) {
+      this._sandbox.__setLogger(logger);
+    }
   }
 }

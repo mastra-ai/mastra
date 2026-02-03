@@ -17,9 +17,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import type { ProviderStatus } from '../lifecycle';
+import { MastraSandbox } from './mastra-sandbox';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
-import type { WorkspaceSandbox, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
+import type { SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
 import { IsolationUnavailableError } from './sandbox';
 
 interface ExecStreamingOptions extends Omit<SpawnOptions, 'timeout' | 'stdio'> {
@@ -156,9 +157,9 @@ export interface LocalSandboxOptions {
  * const result = await workspace.executeCommand('node', ['script.js']);
  * ```
  */
-export class LocalSandbox implements WorkspaceSandbox {
+export class LocalSandbox extends MastraSandbox {
   readonly id: string;
-  readonly name = 'LocalSandbox';
+  override readonly name = 'LocalSandbox';
   readonly provider = 'local';
 
   status: ProviderStatus = 'stopped';
@@ -177,7 +178,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   /**
    * The working directory where commands are executed.
    */
-  get workingDirectory(): string {
+  override get workingDirectory(): string {
     return this._workingDirectory;
   }
 
@@ -205,6 +206,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   }
 
   constructor(options: LocalSandboxOptions = {}) {
+    super({ name: 'LocalSandbox' });
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
     // Default working directory is .sandbox/ in cwd - isolated from seatbelt profiles
@@ -239,7 +241,8 @@ export class LocalSandbox implements WorkspaceSandbox {
     };
   }
 
-  async start(): Promise<void> {
+  override async start(): Promise<void> {
+    this.logger.debug('Starting sandbox', { workingDirectory: this._workingDirectory, isolation: this._isolation });
     this.status = 'starting';
 
     try {
@@ -287,17 +290,21 @@ export class LocalSandbox implements WorkspaceSandbox {
       }
 
       this.status = 'running';
+      this.logger.debug('Sandbox started', { workingDirectory: this._workingDirectory, status: this.status });
     } catch (error) {
       this.status = 'error';
+      this.logger.error('Failed to start sandbox', { workingDirectory: this._workingDirectory, error });
       throw error;
     }
   }
 
-  async stop(): Promise<void> {
+  override async stop(): Promise<void> {
+    this.logger.debug('Stopping sandbox', { workingDirectory: this._workingDirectory });
     this.status = 'stopped';
   }
 
-  async destroy(): Promise<void> {
+  override async destroy(): Promise<void> {
+    this.logger.debug('Destroying sandbox', { workingDirectory: this._workingDirectory });
     // Clean up seatbelt profile only if it was auto-generated (not user-provided)
     if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {
       try {
@@ -323,11 +330,11 @@ export class LocalSandbox implements WorkspaceSandbox {
     await this.stop();
   }
 
-  async isReady(): Promise<boolean> {
+  override async isReady(): Promise<boolean> {
     return this.status === 'running';
   }
 
-  async getInfo(): Promise<SandboxInfo> {
+  override async getInfo(): Promise<SandboxInfo> {
     return {
       id: this.id,
       name: this.name,
@@ -355,7 +362,7 @@ export class LocalSandbox implements WorkspaceSandbox {
     };
   }
 
-  getInstructions(): string {
+  override getInstructions(): string {
     if (this.workingDirectory) {
       return `Local command execution. Working directory: "${this.workingDirectory}".`;
     }
@@ -378,11 +385,13 @@ export class LocalSandbox implements WorkspaceSandbox {
     });
   }
 
-  async executeCommand(
+  override async executeCommand(
     command: string,
     args: string[] = [],
     options: ExecuteCommandOptions = {},
   ): Promise<CommandResult> {
+    this.logger.debug('Executing command', { command, args, cwd: options.cwd ?? this.workingDirectory });
+
     // Auto-start if not running (lazy initialization)
     if (this.status !== 'running') {
       await this.start();
@@ -404,20 +413,30 @@ export class LocalSandbox implements WorkspaceSandbox {
         onStderr: options.onStderr,
       });
 
-      return {
+      const commandResult: CommandResult = {
         success: result.exitCode === 0,
         stdout: result.stdout,
         stderr: result.stderr,
         exitCode: result.exitCode,
         executionTimeMs: Date.now() - startTime,
       };
+
+      this.logger.info('Command completed', {
+        command,
+        exitCode: commandResult.exitCode,
+        executionTimeMs: commandResult.executionTimeMs,
+      });
+
+      return commandResult;
     } catch (error: unknown) {
+      const executionTimeMs = Date.now() - startTime;
+      this.logger.error('Command failed', { command, error, executionTimeMs });
       return {
         success: false,
         stdout: '',
         stderr: error instanceof Error ? error.message : String(error),
         exitCode: 1,
-        executionTimeMs: Date.now() - startTime,
+        executionTimeMs,
       };
     }
   }
