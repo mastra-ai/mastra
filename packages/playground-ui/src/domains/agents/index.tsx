@@ -20,6 +20,5 @@ export * from './components/agent-entity-header';
 export * from './components/agent-information/agent-memory';
 export * from './components/agent-layout';
 export * from './components/agent-cms-blocks';
-export * from './components/agent-edit/agent-edit-form';
 export * from './components/agent-edit-page/utils/form-validation';
 export * from './components/agent-edit-page';
