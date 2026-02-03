@@ -3,46 +3,21 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodObject } from 'zod';
 
 import type { AgentExecutionOptions } from '../agent/agent.types';
+import type { AgentConfig } from '../agent/types';
 export type { MastraDBMessage } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
-import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
 
-// Dynamic model types for Observational Memory (identical to Agent's model types in agent/types.ts)
-// TODO(v2): Export DynamicModel and ModelWithRetries from agent/types.ts and reuse here.
-// Currently duplicated for backward compatibility - importing from agent/types would break
-// users with new @mastra/memory but old @mastra/core that doesn't export those types.
-type ObservationalMemoryDynamicModel = ({
-  requestContext,
-  mastra,
-}: {
-  requestContext: RequestContext;
-  mastra?: Mastra;
-}) => Promise<MastraModelConfig> | MastraModelConfig;
-
-type ObservationalMemoryModelWithRetries = {
-  id?: string;
-  model: MastraModelConfig | ObservationalMemoryDynamicModel;
-  maxRetries?: number;
-  enabled?: boolean;
-};
-
 /**
  * Model configuration for Observational Memory Observer/Reflector agents.
- * Supports the same patterns as Agent's model configuration:
- * - Static model config (string or object)
- * - Dynamic function that receives requestContext
- * - Array of models with retry configuration
+ * Uses the same type as Agent's model configuration.
  */
-export type ObservationalMemoryModelConfig =
-  | MastraModelConfig
-  | ObservationalMemoryDynamicModel
-  | ObservationalMemoryModelWithRetries[];
+export type ObservationalMemoryModelConfig = AgentConfig['model'];
 
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { MastraLanguageModel };
