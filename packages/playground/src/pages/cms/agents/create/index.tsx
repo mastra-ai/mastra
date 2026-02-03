@@ -39,10 +39,10 @@ function CmsAgentsCreatePage() {
         description: values.description || undefined,
         instructions: values.instructions,
         model: values.model as Record<string, unknown>,
-        tools: values.tools && values.tools.length > 0 ? values.tools : undefined,
-        workflows: values.workflows && values.workflows.length > 0 ? values.workflows : undefined,
-        agents: values.agents && values.agents.length > 0 ? values.agents : undefined,
-        memory: values.memory ? ({ key: values.memory } as Record<string, unknown>) : undefined,
+        tools: values.tools && Object.keys(values.tools).length > 0 ? Object.keys(values.tools) : undefined,
+        workflows:
+          values.workflows && Object.keys(values.workflows).length > 0 ? Object.keys(values.workflows) : undefined,
+        agents: values.agents && Object.keys(values.agents).length > 0 ? Object.keys(values.agents) : undefined,
         scorers: values.scorers && Object.keys(values.scorers).length > 0 ? values.scorers : undefined,
       };
 
