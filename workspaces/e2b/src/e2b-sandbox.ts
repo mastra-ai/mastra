@@ -649,6 +649,15 @@ export class E2BSandbox extends BaseSandbox {
     const hasCredentials = config.accessKeyId && config.secretAccessKey;
     const credentialsPath = '/tmp/.passwd-s3fs';
 
+    // S3-compatible services (R2, MinIO, etc.) require credentials
+    // public_bucket=1 only works for truly public AWS S3 buckets
+    if (!hasCredentials && config.endpoint) {
+      throw new Error(
+        `S3-compatible storage (detected endpoint: ${config.endpoint}) requires credentials. ` +
+          `The public_bucket option only works for AWS S3 public buckets, not R2, MinIO, etc.`,
+      );
+    }
+
     if (hasCredentials) {
       // Write credentials file (remove old one first to avoid permission issues)
       const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
@@ -689,18 +698,6 @@ export class E2BSandbox extends BaseSandbox {
       const result = await this._sandbox.commands.run(mountCmd);
       if (result.exitCode !== 0) {
         throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
-      }
-
-      // Validate the mount actually works by trying to list files
-      // s3fs succeeds at creating mount point even without valid access
-      const validateResult = await this._sandbox.commands.run(`ls "${mountPath}" 2>&1`, { timeoutMs: 10000 });
-      if (validateResult.exitCode !== 0 || validateResult.stdout.includes('Authorization')) {
-        // Mount created but not functional - unmount and fail
-        await this._sandbox.commands.run(`sudo fusermount -u "${mountPath}" 2>/dev/null || true`);
-        const errorMsg = hasCredentials
-          ? 'Mount created but access denied - check your credentials'
-          : 'Mount created but access denied - this bucket may require credentials (public_bucket=1 only works for truly public AWS S3 buckets)';
-        throw new Error(errorMsg);
       }
     } catch (error: unknown) {
       const errorObj = error as { result?: { exitCode: number; stdout: string; stderr: string } };
