@@ -52,13 +52,16 @@ export interface E2BS3MountConfig extends FilesystemMountConfig {
 
 /**
  * GCS mount config for E2B (mounted via gcsfuse).
+ *
+ * If credentials are not provided, the bucket will be mounted as read-only
+ * using anonymous access (for public buckets only).
  */
 export interface E2BGCSMountConfig extends FilesystemMountConfig {
   type: 'gcs';
   /** GCS bucket name */
   bucket: string;
-  /** Service account key JSON (required for mounting) */
-  serviceAccountKey: string;
+  /** Service account key JSON (optional - omit for public buckets) */
+  serviceAccountKey?: string;
 }
 
 /**
@@ -708,14 +711,45 @@ export class E2BSandbox extends BaseSandbox {
       );
     }
 
-    // Write service account key
-    await this._sandbox.files.write('/tmp/gcs-key.json', config.serviceAccountKey);
+    // Get user's uid/gid for proper file ownership
+    const idResult = await this._sandbox.commands.run('id -u && id -g');
+    const [uid, gid] = idResult.stdout.trim().split('\n');
 
-    // Mount using gcsfuse
-    const mountCmd = `GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcs-key.json gcsfuse ${config.bucket} ${mountPath}`;
+    // Build mount options
+    const mountOptions: string[] = [];
+
+    // Set uid/gid so mounted files are owned by user, not root
+    if (uid && gid) {
+      mountOptions.push(`uid=${uid}`, `gid=${gid}`);
+    }
+
+    const hasCredentials = !!config.serviceAccountKey;
+    let mountCmd: string;
+
+    if (hasCredentials) {
+      // Write service account key
+      const keyPath = '/tmp/gcs-key.json';
+      await this._sandbox.commands.run(`sudo rm -f ${keyPath}`);
+      await this._sandbox.files.write(keyPath, config.serviceAccountKey!);
+      await this._sandbox.commands.run(`chmod 600 ${keyPath}`);
+
+      // Mount with credentials
+      const optionsStr = mountOptions.length > 0 ? `-o ${mountOptions.join(' -o ')}` : '';
+      mountCmd = `GOOGLE_APPLICATION_CREDENTIALS=${keyPath} gcsfuse ${optionsStr} ${config.bucket} ${mountPath}`;
+    } else {
+      // Public bucket mode - read-only access without credentials
+      mountOptions.push('anonymous_access');
+      this.logger.debug('[E2B Mount] No credentials provided, mounting GCS as public bucket (read-only)');
+
+      const optionsStr = mountOptions.length > 0 ? `-o ${mountOptions.join(' -o ')}` : '';
+      mountCmd = `gcsfuse ${optionsStr} ${config.bucket} ${mountPath}`;
+    }
+
+    this.logger.debug('[E2B Mount] Mounting GCS:', mountCmd);
+
     const result = await this._sandbox.commands.run(mountCmd);
     if (result.exitCode !== 0) {
-      throw new Error(`Failed to mount GCS bucket: ${result.stderr}`);
+      throw new Error(`Failed to mount GCS bucket: ${result.stderr || result.stdout}`);
     }
   }
 
