@@ -93,6 +93,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/302ai',
+          label: '302.AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/abacus',
           label: 'Abacus',
         },
@@ -300,6 +305,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
+        },
+        {
+          type: 'doc',
+          id: 'providers/nova',
+          label: 'Nova',
         },
         {
           type: 'doc',

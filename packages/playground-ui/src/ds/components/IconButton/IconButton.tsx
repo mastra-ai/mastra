@@ -46,6 +46,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
           <button
             ref={ref}
             disabled={disabled}
+            aria-label={typeof tooltip === 'string' ? tooltip : undefined}
             className={cn(
               baseButtonStyles,
               formElementFocus,

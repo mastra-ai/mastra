@@ -1,6 +1,7 @@
 import './index.css';
 
 export * from './domains/agents/index';
+export * from './domains/llm/index';
 export * from './domains/processors/index';
 export * from './domains/scores/index';
 export * from './domains/tools/index';
@@ -70,6 +71,7 @@ export * from './ds/components/SideDialog';
 export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
 export * from './ds/components/Text';
+export * from './ds/components/JSONSchemaForm';
 
 // Form utilities (AutoForm)
 export * from './lib/form';
@@ -93,6 +95,8 @@ export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
 export * from './lib/toast';
 export * from './domains/configuration/index';
+export * from './domains/workspace/index';
+export * from './domains/request-context/index';
 export * from './lib/mastra-platform';
 export * from './lib/experimental-features';
 export * from './lib/command';

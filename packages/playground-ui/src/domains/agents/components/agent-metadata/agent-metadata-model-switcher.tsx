@@ -1,14 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Spinner } from '@/ds/components/Spinner';
-import { Info, RotateCcw } from 'lucide-react';
-import { ProviderLogo } from './provider-logo';
-import { UpdateModelParams } from '@mastra/client-js';
+import { RotateCcw } from 'lucide-react';
+import { UpdateModelParams, Provider } from '@mastra/client-js';
 import { useModelReset } from '../../context/model-reset-context';
-import { cleanProviderId } from './utils';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 import { Button } from '@/ds/components/Button';
-import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers';
-import { Combobox, ComboboxOption } from '@/ds/components/Combobox';
+import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -35,7 +32,7 @@ export const AgentMetadataModelSwitcher = ({
   const [providerOpen, setProviderOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
 
-  const { data: dataProviders, isLoading: providersLoading } = useAgentsModelProviders();
+  const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
 
   const providers = dataProviders?.providers || [];
 
@@ -47,99 +44,19 @@ export const AgentMetadataModelSwitcher = ({
 
   const currentModelProvider = cleanProviderId(selectedProvider);
 
-  // Get all models with their provider info
-  const allModels = useMemo(() => {
-    return providers.flatMap(provider =>
-      provider.models.map(model => ({
-        provider: provider.id,
-        providerName: provider.name,
-        model: model,
-      })),
-    );
-  }, [providers]);
-
-  // Filter and sort providers based on connection status and popularity
-  const sortedProviders = useMemo(() => {
-    // Define popular providers in order
-    const popularProviders = ['openai', 'anthropic', 'google', 'openrouter', 'netlify'];
-
-    const getPopularityIndex = (providerId: string) => {
-      const cleanId = providerId.toLowerCase().split('.')[0];
-      const index = popularProviders.indexOf(cleanId);
-      return index === -1 ? popularProviders.length : index;
-    };
-
-    // Sort by: 1) connection status, 2) popularity, 3) alphabetically
-    return [...providers].sort((a, b) => {
-      // First, sort by connection status - connected providers first
-      if (a.connected && !b.connected) return -1;
-      if (!a.connected && b.connected) return 1;
-
-      // Then by popularity
-      const aPopularity = getPopularityIndex(a.id);
-      const bPopularity = getPopularityIndex(b.id);
-      if (aPopularity !== bPopularity) {
-        return aPopularity - bPopularity;
-      }
-
-      // Finally, alphabetically by name
-      return a.name.localeCompare(b.name);
-    });
-  }, [providers]);
-
-  // Create provider options with icons
-  const providerOptions: ComboboxOption[] = useMemo(() => {
-    return sortedProviders.map(provider => ({
-      label: provider.name,
-      value: provider.id,
-      start: (
-        <div className="relative">
-          <ProviderLogo providerId={provider.id} size={16} />
-          <div
-            className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
-              provider.connected ? 'bg-accent1' : 'bg-accent2'
-            }`}
-            title={provider.connected ? 'Connected' : 'Not connected'}
-          />
-        </div>
-      ),
-      end: provider.docUrl ? (
-        <Info
-          className="w-4 h-4 text-gray-500 hover:text-gray-700 cursor-pointer"
-          onClick={e => {
-            e.stopPropagation();
-            window.open(provider.docUrl, '_blank', 'noopener,noreferrer');
-          }}
-        />
-      ) : null,
-    }));
-  }, [sortedProviders]);
-
-  // Filter models based on selected provider
-  const filteredModels = useMemo(() => {
-    if (!currentModelProvider) return [];
-    return allModels.filter(m => m.provider === currentModelProvider).sort((a, b) => a.model.localeCompare(b.model));
-  }, [allModels, currentModelProvider]);
-
-  // Create model options
-  const modelOptions: ComboboxOption[] = useMemo(() => {
-    return filteredModels.map(m => ({
-      label: m.model,
-      value: m.model,
-    }));
-  }, [filteredModels]);
+  // Resolve the full provider ID (handles gateway prefix, e.g., 'custom' -> 'acme/custom')
+  const resolvedProvider = findProviderById(providers, currentModelProvider);
+  const fullProviderId = resolvedProvider?.id || currentModelProvider;
 
   // Auto-save when model changes
   const handleModelSelect = async (modelId: string) => {
     setSelectedModel(modelId);
 
-    const providerToUse = currentModelProvider || selectedProvider;
-
-    if (modelId && providerToUse) {
+    if (modelId && fullProviderId) {
       setLoading(true);
       try {
         const result = await updateModel({
-          provider: providerToUse as UpdateModelParams['provider'],
+          provider: fullProviderId as UpdateModelParams['provider'],
           modelId,
         });
         console.log('Model updated:', result);
@@ -156,9 +73,10 @@ export const AgentMetadataModelSwitcher = ({
     const cleanedId = cleanProviderId(providerId);
     setSelectedProvider(cleanedId);
 
-    // Only clear model selection when switching to a different provider
+    // Only clear model selection and open model combobox when switching to a different provider
     if (cleanedId !== currentModelProvider) {
       setSelectedModel('');
+      setModelOpen(true);
     }
   };
 
@@ -182,10 +100,12 @@ export const AgentMetadataModelSwitcher = ({
         setSelectedProvider(cleanProviderId(originalProvider));
         setSelectedModel(originalModel);
 
-        // Update back to original configuration
-        if (originalProvider && originalModel) {
+        // Update back to original configuration - resolve full provider ID
+        const resolvedOriginalProvider = findProviderById(providers, originalProvider);
+        const fullOriginalProviderId = resolvedOriginalProvider?.id || originalProvider;
+        if (fullOriginalProviderId && originalModel) {
           updateModel({
-            provider: originalProvider as UpdateModelParams['provider'],
+            provider: fullOriginalProviderId as UpdateModelParams['provider'],
             modelId: originalModel,
           }).catch(error => {
             console.error('Failed to reset model:', error);
@@ -240,34 +160,29 @@ export const AgentMetadataModelSwitcher = ({
     }
   };
 
-  const currentProvider = providers.find(p => p.id === currentModelProvider);
+  const currentProvider = findProviderById(providers, currentModelProvider);
 
   return (
     <div className="@container">
       <div className="flex flex-col @xs:flex-row items-stretch @xs:items-center gap-2 w-full">
         <div className="w-full @xs:w-2/5">
-          <Combobox
-            options={providerOptions}
+          <LLMProviders
             value={currentModelProvider}
             onValueChange={handleProviderSelect}
-            placeholder="Select provider..."
-            searchPlaceholder="Search providers..."
-            emptyText="No providers found"
             variant="default"
-            size="md"
+            open={providerOpen}
+            onOpenChange={setProviderOpen}
           />
         </div>
 
         <div className="w-full @xs:w-3/5">
-          <Combobox
-            options={modelOptions}
+          <LLMModels
+            llmId={currentModelProvider}
             value={selectedModel}
             onValueChange={handleModelSelect}
-            placeholder="Select model..."
-            searchPlaceholder="Search or enter custom model..."
-            emptyText="No models found"
             variant="default"
-            size="md"
+            open={modelOpen}
+            onOpenChange={setModelOpen}
           />
         </div>
 

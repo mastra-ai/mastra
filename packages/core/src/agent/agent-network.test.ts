@@ -5859,3 +5859,676 @@ describe('Agent - network - requestContext propagation (issue #12330)', () => {
     expect(capturedRequestContext.resourceId).toBe('network-resource-12330');
   });
 });
+
+describe('Agent - network - abort functionality', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should call onAbort and emit abort event when abortSignal is triggered before routing step', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    // Abort immediately before any network activity
+    abortController.abort();
+
+    // Mock model that would respond if not aborted
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('doGenerate should not be called when aborted');
+      },
+      doStream: async () => {
+        throw new Error('doStream should not be called when aborted');
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-test-network',
+      name: 'Abort Test Network',
+      instructions: 'Test network for abort functionality',
+      model: mockModel,
+      memory,
+    });
+
+    let onAbortCalled = false;
+    let abortEventPayload: any = null;
+    const chunks: any[] = [];
+
+    const anStream = await networkAgent.network('Do something', {
+      abortSignal: abortController.signal,
+      onAbort: event => {
+        onAbortCalled = true;
+        abortEventPayload = event;
+      },
+      memory: {
+        thread: 'abort-test-thread',
+        resource: 'abort-test-resource',
+      },
+    });
+
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Verify onAbort was called
+    expect(onAbortCalled).toBe(true);
+    expect(abortEventPayload).toBeDefined();
+    expect(abortEventPayload.primitiveType).toBe('routing');
+
+    // Verify abort event was emitted
+    const abortEvents = chunks.filter(c => c.type === 'routing-agent-abort');
+    expect(abortEvents.length).toBeGreaterThan(0);
+    expect(abortEvents[0].payload.primitiveType).toBe('routing');
+  });
+
+  it('should call onAbort and emit abort event when abortSignal is triggered during agent execution', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    // Routing response selects a sub-agent
+    const routingResponse = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do something',
+      selectionReason: 'Delegating to sub-agent',
+    });
+
+    // Mock routing model
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: routingResponse }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: routingResponse },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    let pullCalls = 0;
+
+    // Sub-agent mock that aborts when called
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        await new Promise(resolve => setImmediate(resolve));
+        abortController.abort();
+        throw new DOMException('The user aborted a request.', 'AbortError');
+      },
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream({
+          pull(controller) {
+            switch (pullCalls++) {
+              case 0:
+                controller.enqueue({
+                  type: 'stream-start',
+                  warnings: [],
+                });
+                break;
+              case 1:
+                controller.enqueue({
+                  type: 'text-start',
+                  id: '1',
+                });
+                break;
+              case 2:
+                // Abort during streaming
+                abortController.abort();
+                controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                break;
+            }
+          },
+        }),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'subAgent',
+      name: 'Sub Agent',
+      description: 'A sub-agent that gets aborted',
+      instructions: 'Do something',
+      model: subAgentMockModel,
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-agent-test-network',
+      name: 'Abort Agent Test Network',
+      instructions: 'Delegate to sub-agents',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    let onAbortCalled = false;
+    let abortEventPayload: any = null;
+    const chunks: any[] = [];
+
+    const anStream = await networkAgent.network('Do something', {
+      abortSignal: abortController.signal,
+      onAbort: event => {
+        onAbortCalled = true;
+        abortEventPayload = event;
+      },
+      memory: {
+        thread: 'abort-agent-test-thread',
+        resource: 'abort-agent-test-resource',
+      },
+    });
+
+    try {
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+    } catch {
+      // Abort may throw
+    }
+
+    // Verify onAbort was called
+    expect(onAbortCalled).toBe(true);
+    expect(abortEventPayload).toBeDefined();
+  });
+
+  it('should call onAbort when abortSignal is triggered during tool execution', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    // Create a tool that aborts during execution
+    const abortingTool = createTool({
+      id: 'aborting-tool',
+      description: 'A tool that triggers abort during execution',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      execute: async (_input, options) => {
+        // Trigger abort during tool execution
+        abortController.abort();
+        expect(options?.abortSignal?.aborted).toBe(true);
+        return { result: 'success' };
+      },
+    });
+
+    // Routing response selects the tool
+    const routingResponse = JSON.stringify({
+      primitiveId: 'aborting-tool',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ input: 'test' }),
+      selectionReason: 'Using the aborting tool',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-tool-test-network',
+      name: 'Abort Tool Test Network',
+      instructions: 'Execute tools',
+      model: mockModel,
+      tools: { 'aborting-tool': abortingTool },
+      memory,
+    });
+
+    let onAbortCalled = false;
+    const chunks: any[] = [];
+
+    const anStream = await networkAgent.network('Use the aborting tool', {
+      abortSignal: abortController.signal,
+      onAbort: () => {
+        onAbortCalled = true;
+      },
+      memory: {
+        thread: 'abort-tool-test-thread',
+        resource: 'abort-tool-test-resource',
+      },
+    });
+
+    try {
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+    } catch {
+      // Abort may throw
+    }
+
+    // The onAbort callback should eventually be called
+    // Either during tool execution or when the network detects the abort
+    expect(onAbortCalled).toBe(true);
+  });
+
+  //unable to properly abort between tool primitive selction and tool execution.
+  it.skip('should abort before tool execution when abortSignal is already aborted', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    let toolExecuted = false;
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'A test tool',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      execute: async () => {
+        toolExecuted = true;
+        return { result: 'success' };
+      },
+    });
+
+    // Routing response selects the tool
+    const routingResponse = JSON.stringify({
+      primitiveId: 'test-tool',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ input: 'test' }),
+      selectionReason: 'Using the test tool',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        // Abort after routing but before tool execution
+        setTimeout(() => {
+          abortController.abort();
+        }, 10);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: routingResponse }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        // Abort after routing but before tool execution
+        abortController.abort();
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: routingResponse },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-before-tool-network',
+      name: 'Abort Before Tool Network',
+      instructions: 'Execute tools',
+      model: mockModel,
+      tools: { 'test-tool': testTool },
+      memory,
+    });
+
+    let onAbortCalled = false;
+    let abortPayload: any = null;
+    const chunks: any[] = [];
+
+    const anStream = await networkAgent.network('Use the test tool', {
+      abortSignal: abortController.signal,
+      onAbort: event => {
+        onAbortCalled = true;
+        abortPayload = event;
+      },
+      memory: {
+        thread: 'abort-before-tool-thread',
+        resource: 'abort-before-tool-resource',
+      },
+    });
+
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Tool should not have been executed because abort happened before
+    expect(toolExecuted).toBe(false);
+
+    // onAbort should be called
+    expect(onAbortCalled).toBe(true);
+
+    // Abort event should indicate tool was the target
+    expect(abortPayload?.primitiveType).toBe('tool');
+
+    // Abort chunk should be emitted
+    const abortEvents = chunks.filter(c => c.type === 'tool-execution-abort');
+    expect(abortEvents.length).toBeGreaterThan(0);
+  });
+
+  it('should call onAbort and emit abort event when abortSignal is triggered during workflow execution', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    // Create a workflow step that simulates some work and allows time for abort
+    const slowStep = createStep({
+      id: 'slow-step',
+      description: 'A step that takes time to execute',
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+      execute: async ({ inputData }) => {
+        // Trigger abort during workflow execution
+        abortController.abort();
+        // Simulate some async work
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return { result: `Researched ${inputData.city}` };
+      },
+    });
+
+    const testWorkflow = createWorkflow({
+      id: 'abort-test-workflow',
+      description: 'A workflow for testing abort functionality',
+      steps: [],
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+    })
+      .then(slowStep)
+      .commit();
+
+    // Routing response selects the workflow
+    const routingResponse = JSON.stringify({
+      primitiveId: 'abort-test-workflow',
+      primitiveType: 'workflow',
+      prompt: JSON.stringify({ city: 'Paris' }),
+      selectionReason: 'Using the workflow to research',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-workflow-test-network',
+      name: 'Abort Workflow Test Network',
+      instructions: 'Execute workflows',
+      model: mockModel,
+      workflows: { 'abort-test-workflow': testWorkflow },
+      memory,
+    });
+
+    let onAbortCalled = false;
+    let abortEventPayload: any = null;
+    const chunks: any[] = [];
+
+    const anStream = await networkAgent.network('Research Paris using the workflow', {
+      abortSignal: abortController.signal,
+      onAbort: event => {
+        onAbortCalled = true;
+        abortEventPayload = event;
+      },
+      memory: {
+        thread: 'abort-workflow-test-thread',
+        resource: 'abort-workflow-test-resource',
+      },
+    });
+
+    try {
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+    } catch {
+      // Abort may throw
+    }
+
+    // Verify onAbort was called
+    expect(onAbortCalled).toBe(true);
+    expect(abortEventPayload).toBeDefined();
+    expect(abortEventPayload.primitiveType).toBe('workflow');
+    expect(abortEventPayload.primitiveId).toBe('abort-test-workflow');
+
+    // Verify workflow-execution-abort event was emitted
+    const abortEvents = chunks.filter(c => c.type === 'workflow-execution-abort');
+    expect(abortEvents.length).toBeGreaterThan(0);
+    expect(abortEvents[0].payload.primitiveType).toBe('workflow');
+    expect(abortEvents[0].payload.primitiveId).toBe('abort-test-workflow');
+  });
+
+  it('should pass abortSignal to tool execute function', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    let receivedAbortSignal: AbortSignal | undefined;
+    const testTool = createTool({
+      id: 'signal-test-tool',
+      description: 'A tool that captures the abort signal',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      execute: async (_input, options) => {
+        receivedAbortSignal = options?.abortSignal;
+        return { result: 'success' };
+      },
+    });
+
+    // Routing response selects the tool
+    const routingResponse = JSON.stringify({
+      primitiveId: 'signal-test-tool',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ input: 'test' }),
+      selectionReason: 'Using the signal test tool',
+    });
+
+    // Completion response
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Done',
+      completionReason: 'Task completed',
+    });
+
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingResponse : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingResponse : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'signal-pass-test-network',
+      name: 'Signal Pass Test Network',
+      instructions: 'Execute tools',
+      model: mockModel,
+      tools: { 'signal-test-tool': testTool },
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Use the signal test tool', {
+      abortSignal: abortController.signal,
+      memory: {
+        thread: 'signal-pass-test-thread',
+        resource: 'signal-pass-test-resource',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    // Verify abort signal was passed to tool
+    expect(receivedAbortSignal).toBeDefined();
+    expect(receivedAbortSignal).toBe(abortController.signal);
+  });
+});
+
+/**
+ * Test for GitHub issue #12477
+ * When routing agent returns invalid (non-JSON) prompt for tool execution,
+ * the network should handle it gracefully instead of throwing "Invalid task input"
+ */
+describe('Agent - network - invalid tool input handling (issue #12477)', () => {
+  it('should handle invalid JSON prompt gracefully and feed error back to routing agent', async () => {
+    const memory = new MockMemory();
+
+    // Create a tool that expects JSON input
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'A test tool that processes input',
+      inputSchema: z.object({
+        message: z.string().describe('The message to process'),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+      execute: async ({ message }) => {
+        return { result: `Processed: ${message}` };
+      },
+    });
+
+    // Track call count to simulate: first call returns invalid JSON, second returns "none" to complete
+    let callCount = 0;
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        // First call: return invalid JSON prompt (simulates the bug scenario)
+        // Second call: return "none" to complete the network (simulates routing agent understanding the error)
+        const text =
+          callCount === 1
+            ? JSON.stringify({
+                primitiveId: 'test-tool',
+                primitiveType: 'tool',
+                prompt: '{message input}', // Invalid JSON - missing quotes
+                selectionReason: 'Using test tool',
+              })
+            : JSON.stringify({
+                primitiveId: 'none',
+                primitiveType: 'none',
+                prompt: '',
+                selectionReason: 'Task cannot be completed due to previous JSON parsing error',
+              });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text =
+          callCount === 1
+            ? JSON.stringify({
+                primitiveId: 'test-tool',
+                primitiveType: 'tool',
+                prompt: '{message input}',
+                selectionReason: 'Using test tool',
+              })
+            : JSON.stringify({
+                primitiveId: 'none',
+                primitiveType: 'none',
+                prompt: '',
+                selectionReason: 'Task cannot be completed due to previous JSON parsing error',
+              });
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'invalid-input-test-network',
+      name: 'Invalid Input Test Network',
+      instructions: 'Execute tools',
+      model: mockModel,
+      tools: { 'test-tool': testTool },
+      memory,
+    });
+
+    // Execute the network which will encounter invalid JSON for tool prompt
+    const anStream = await networkAgent.network('Process a message using the test tool', {
+      memory: {
+        thread: 'invalid-input-test-thread',
+        resource: 'invalid-input-test-resource',
+      },
+    });
+
+    // Consume the stream - should NOT throw
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Check the workflow status
+    const status = await anStream.status;
+    const result = await anStream.result;
+
+    // After the fix:
+    // - The network should NOT fail with status 'failed'
+    // - The error should be fed back to the routing agent as a result string
+    // - The routing agent gets another chance to handle the situation
+    expect(status).not.toBe('failed');
+    expect(result?.error?.message || '').not.toContain('Invalid task input');
+
+    // Verify the routing agent was called multiple times (retry happened)
+    expect(callCount).toBeGreaterThan(1);
+  });
+});

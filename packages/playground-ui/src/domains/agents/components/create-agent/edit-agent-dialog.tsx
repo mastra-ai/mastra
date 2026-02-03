@@ -18,6 +18,7 @@ export interface EditAgentDialogProps {
 }
 
 export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDelete }: EditAgentDialogProps) {
+  const dialogContentRef = React.useRef<HTMLDivElement>(null);
   const { data: agent, isLoading: isLoadingAgent } = useStoredAgent(agentId);
   const { updateStoredAgent, deleteStoredAgent } = useStoredAgentMutations(agentId);
 
@@ -52,7 +53,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
         integrationTools: integrationToolIds,
         workflows: values.workflows,
         agents: values.agents,
-        memory: values.memory,
+        memory: values.memory ? ({ key: values.memory } as Record<string, unknown>) : undefined,
         scorers: values.scorers,
       });
       toast.success('Agent updated successfully');
@@ -102,14 +103,19 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
       tools: allTools,
       workflows: agent.workflows || [],
       agents: agent.agents || [],
-      memory: agent.memory || '',
+      memory:
+        agent.memory && typeof agent.memory === 'object' && 'key' in agent.memory
+          ? String(agent.memory.key)
+          : typeof agent.memory === 'string'
+            ? agent.memory
+            : '',
       scorers: agent.scorers || {},
     };
   }, [agent]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent ref={dialogContentRef} className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Agent</DialogTitle>
         </DialogHeader>
@@ -128,6 +134,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
             isSubmitting={updateStoredAgent.isPending}
             isDeleting={deleteStoredAgent.isPending}
             excludeAgentId={agentId}
+            container={dialogContentRef}
           />
         ) : (
           <div className="flex items-center justify-center py-8 px-6 text-icon3">Agent not found</div>

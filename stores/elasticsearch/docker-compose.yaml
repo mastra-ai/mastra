@@ -1,10 +1,6 @@
-version: '3.8'
-
 services:
   elasticsearch:
-    # TODO: ES 9.x breaks updateVector - client.get() no longer returns dense_vector fields
-    # See: https://github.com/mastra-ai/mastra/issues/11628
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.4
     platform: linux/amd64
     ports:
       - '9200:9200'
