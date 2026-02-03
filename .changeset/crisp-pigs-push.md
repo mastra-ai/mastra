@@ -29,7 +29,7 @@ import { Mastra } from '@mastra/core';
 // Initialize editor with Mastra
 const mastra = new Mastra({
   /* config */
-  editor: new MastraEditor();
+  editor: new MastraEditor()
 });
 
 // Store an agent configuration
