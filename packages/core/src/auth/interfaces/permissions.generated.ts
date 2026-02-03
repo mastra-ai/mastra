@@ -15,19 +15,15 @@ export const RESOURCES = [
   'a2a',
   'agent-builder',
   'agents',
-  'auth',
   'logs',
   'mcp',
   'memory',
   'observability',
   'processors',
   'scores',
-  'settings',
   'stored-agents',
-  'studio',
   'system',
   'tools',
-  'users',
   'vector',
   'workflows',
   'workspaces',
@@ -40,14 +36,14 @@ export type Resource = (typeof RESOURCES)[number];
 
 /**
  * All permission actions.
- * Derived from METHOD_TO_ACTION mapping:
+ * Derived from HTTP methods and route overrides:
  * - GET → read
  * - POST → write or execute (context-dependent)
  * - PUT/PATCH → write
  * - DELETE → delete
- * Plus Studio-specific actions: admin, invite
+ * - Additional actions from explicit requiresPermission overrides
  */
-export const ACTIONS = ['admin', 'delete', 'execute', 'invite', 'read', 'write'] as const;
+export const ACTIONS = ['delete', 'execute', 'read', 'write'] as const;
 
 /**
  * Action type union.
@@ -55,129 +51,70 @@ export const ACTIONS = ['admin', 'delete', 'execute', 'invite', 'read', 'write']
 export type Action = (typeof ACTIONS)[number];
 
 /**
- * All valid resource:action permission combinations.
+ * All valid permission patterns.
+ * Use `keyof typeof PERMISSION_PATTERNS` or the `PermissionPattern` type.
  */
-export const PERMISSIONS = [
-  'a2a:admin',
-  'a2a:delete',
-  'a2a:execute',
-  'a2a:invite',
-  'a2a:read',
-  'a2a:write',
-  'agent-builder:admin',
-  'agent-builder:delete',
-  'agent-builder:execute',
-  'agent-builder:invite',
-  'agent-builder:read',
-  'agent-builder:write',
-  'agents:admin',
-  'agents:delete',
-  'agents:execute',
-  'agents:invite',
-  'agents:read',
-  'agents:write',
-  'auth:admin',
-  'auth:delete',
-  'auth:execute',
-  'auth:invite',
-  'auth:read',
-  'auth:write',
-  'logs:admin',
-  'logs:delete',
-  'logs:execute',
-  'logs:invite',
-  'logs:read',
-  'logs:write',
-  'mcp:admin',
-  'mcp:delete',
-  'mcp:execute',
-  'mcp:invite',
-  'mcp:read',
-  'mcp:write',
-  'memory:admin',
-  'memory:delete',
-  'memory:execute',
-  'memory:invite',
-  'memory:read',
-  'memory:write',
-  'observability:admin',
-  'observability:delete',
-  'observability:execute',
-  'observability:invite',
-  'observability:read',
-  'observability:write',
-  'processors:admin',
-  'processors:delete',
-  'processors:execute',
-  'processors:invite',
-  'processors:read',
-  'processors:write',
-  'scores:admin',
-  'scores:delete',
-  'scores:execute',
-  'scores:invite',
-  'scores:read',
-  'scores:write',
-  'settings:admin',
-  'settings:delete',
-  'settings:execute',
-  'settings:invite',
-  'settings:read',
-  'settings:write',
-  'stored-agents:admin',
-  'stored-agents:delete',
-  'stored-agents:execute',
-  'stored-agents:invite',
-  'stored-agents:read',
-  'stored-agents:write',
-  'studio:admin',
-  'studio:delete',
-  'studio:execute',
-  'studio:invite',
-  'studio:read',
-  'studio:write',
-  'system:admin',
-  'system:delete',
-  'system:execute',
-  'system:invite',
-  'system:read',
-  'system:write',
-  'tools:admin',
-  'tools:delete',
-  'tools:execute',
-  'tools:invite',
-  'tools:read',
-  'tools:write',
-  'users:admin',
-  'users:delete',
-  'users:execute',
-  'users:invite',
-  'users:read',
-  'users:write',
-  'vector:admin',
-  'vector:delete',
-  'vector:execute',
-  'vector:invite',
-  'vector:read',
-  'vector:write',
-  'workflows:admin',
-  'workflows:delete',
-  'workflows:execute',
-  'workflows:invite',
-  'workflows:read',
-  'workflows:write',
-  'workspaces:admin',
-  'workspaces:delete',
-  'workspaces:execute',
-  'workspaces:invite',
-  'workspaces:read',
-  'workspaces:write',
-] as const;
-
-/**
- * Specific permission type (e.g., 'agents:read', 'workflows:execute').
- */
-export type Permission = (typeof PERMISSIONS)[number];
+export const PERMISSION_PATTERNS = {
+  '*': '*',
+  '*:delete': '*:delete',
+  '*:execute': '*:execute',
+  '*:read': '*:read',
+  '*:write': '*:write',
+  'a2a:*': 'a2a:*',
+  'agent-builder:*': 'agent-builder:*',
+  'agents:*': 'agents:*',
+  'logs:*': 'logs:*',
+  'mcp:*': 'mcp:*',
+  'memory:*': 'memory:*',
+  'observability:*': 'observability:*',
+  'processors:*': 'processors:*',
+  'scores:*': 'scores:*',
+  'stored-agents:*': 'stored-agents:*',
+  'system:*': 'system:*',
+  'tools:*': 'tools:*',
+  'vector:*': 'vector:*',
+  'workflows:*': 'workflows:*',
+  'workspaces:*': 'workspaces:*',
+  'a2a:read': 'a2a:read',
+  'a2a:write': 'a2a:write',
+  'agent-builder:execute': 'agent-builder:execute',
+  'agent-builder:read': 'agent-builder:read',
+  'agent-builder:write': 'agent-builder:write',
+  'agents:execute': 'agents:execute',
+  'agents:read': 'agents:read',
+  'agents:write': 'agents:write',
+  'logs:read': 'logs:read',
+  'mcp:execute': 'mcp:execute',
+  'mcp:read': 'mcp:read',
+  'mcp:write': 'mcp:write',
+  'memory:delete': 'memory:delete',
+  'memory:execute': 'memory:execute',
+  'memory:read': 'memory:read',
+  'memory:write': 'memory:write',
+  'observability:read': 'observability:read',
+  'observability:write': 'observability:write',
+  'processors:execute': 'processors:execute',
+  'processors:read': 'processors:read',
+  'scores:read': 'scores:read',
+  'scores:write': 'scores:write',
+  'stored-agents:delete': 'stored-agents:delete',
+  'stored-agents:read': 'stored-agents:read',
+  'stored-agents:write': 'stored-agents:write',
+  'system:read': 'system:read',
+  'tools:execute': 'tools:execute',
+  'tools:read': 'tools:read',
+  'vector:delete': 'vector:delete',
+  'vector:execute': 'vector:execute',
+  'vector:read': 'vector:read',
+  'vector:write': 'vector:write',
+  'workflows:delete': 'workflows:delete',
+  'workflows:execute': 'workflows:execute',
+  'workflows:read': 'workflows:read',
+  'workflows:write': 'workflows:write',
+  'workspaces:delete': 'workspaces:delete',
+  'workspaces:read': 'workspaces:read',
+  'workspaces:write': 'workspaces:write',
+} as const;
 
 /**
  * Permission pattern that can be used in role definitions.
@@ -187,7 +124,57 @@ export type Permission = (typeof PERMISSIONS)[number];
  * - Action wildcards: '*:read', '*:write' (an action across all resources)
  * - Global wildcard: '*' (full access)
  */
-export type PermissionPattern = Permission | '*' | `${Resource}:*` | `*:${Action}`;
+export type PermissionPattern = keyof typeof PERMISSION_PATTERNS;
+
+/**
+ * All valid resource:action permission combinations (excludes wildcards).
+ */
+export const PERMISSIONS = [
+  'a2a:read',
+  'a2a:write',
+  'agent-builder:execute',
+  'agent-builder:read',
+  'agent-builder:write',
+  'agents:execute',
+  'agents:read',
+  'agents:write',
+  'logs:read',
+  'mcp:execute',
+  'mcp:read',
+  'mcp:write',
+  'memory:delete',
+  'memory:execute',
+  'memory:read',
+  'memory:write',
+  'observability:read',
+  'observability:write',
+  'processors:execute',
+  'processors:read',
+  'scores:read',
+  'scores:write',
+  'stored-agents:delete',
+  'stored-agents:read',
+  'stored-agents:write',
+  'system:read',
+  'tools:execute',
+  'tools:read',
+  'vector:delete',
+  'vector:execute',
+  'vector:read',
+  'vector:write',
+  'workflows:delete',
+  'workflows:execute',
+  'workflows:read',
+  'workflows:write',
+  'workspaces:delete',
+  'workspaces:read',
+  'workspaces:write',
+] as const;
+
+/**
+ * Specific permission type (e.g., 'agents:read', 'workflows:execute').
+ */
+export type Permission = (typeof PERMISSIONS)[number];
 
 /**
  * Type-safe role mapping configuration.
@@ -213,18 +200,7 @@ export type TypedRoleMapping = {
  * Useful for runtime validation of permission strings.
  */
 export function isValidPermissionPattern(pattern: string): pattern is PermissionPattern {
-  if (pattern === '*') return true;
-  // Resource wildcard: 'agents:*'
-  if (pattern.endsWith(':*')) {
-    const resource = pattern.slice(0, -2);
-    return (RESOURCES as readonly string[]).includes(resource);
-  }
-  // Action wildcard: '*:read'
-  if (pattern.startsWith('*:')) {
-    const action = pattern.slice(2);
-    return (ACTIONS as readonly string[]).includes(action);
-  }
-  return (PERMISSIONS as readonly string[]).includes(pattern);
+  return pattern in PERMISSION_PATTERNS;
 }
 
 /**

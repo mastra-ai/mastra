@@ -11,19 +11,13 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
-import { extractResource, deriveAction } from '../src/server/server-adapter/routes/permissions.js';
+import { getEffectivePermission } from '../src/server/server-adapter/routes/permissions.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /** Path to the generated permissions file in @mastra/core */
 export const OUTPUT_PATH = path.join(__dirname, '../../core/src/auth/interfaces/permissions.generated.ts');
-
-/** Studio-specific resources that don't have routes but are used in role definitions */
-const STUDIO_RESOURCES = ['studio', 'users', 'settings'];
-
-/** Studio-specific actions not derived from HTTP methods */
-const STUDIO_ACTIONS = ['admin', 'invite'];
 
 export interface PermissionData {
   resources: string[];
@@ -32,48 +26,28 @@ export interface PermissionData {
 }
 
 /**
- * Derives permission data from SERVER_ROUTES.
+ * Derives permission data from SERVER_ROUTES using getEffectivePermission.
+ * This ensures the generated permissions match runtime behavior exactly.
  */
 export function derivePermissionData(): PermissionData {
   const resourceSet = new Set<string>();
+  const actionSet = new Set<string>();
   const permissionSet = new Set<string>();
 
   for (const route of SERVER_ROUTES) {
-    // Skip routes with ALL method (MCP transports)
-    if (route.method === 'ALL') continue;
-
-    const resource = extractResource(route.path);
-    if (resource) {
-      resourceSet.add(resource);
-      const action = deriveAction(route.method, route.path);
-      permissionSet.add(`${resource}:${action}`);
+    const permission = getEffectivePermission(route);
+    if (permission) {
+      const [resource, action] = permission.split(':');
+      if (resource && action) {
+        resourceSet.add(resource);
+        actionSet.add(action);
+        permissionSet.add(permission);
+      }
     }
-  }
-
-  // Add Studio-specific resources
-  for (const resource of STUDIO_RESOURCES) {
-    resourceSet.add(resource);
   }
 
   const resources = [...resourceSet].sort();
-
-  // Actions: derive from routes + add Studio-specific actions
-  const routeActions = new Set<string>();
-  for (const route of SERVER_ROUTES) {
-    if (route.method !== 'ALL') {
-      routeActions.add(deriveAction(route.method, route.path));
-    }
-  }
-  const actions = [...new Set([...routeActions, ...STUDIO_ACTIONS])].sort();
-
-  // Generate all permission combinations (resource x action matrix)
-  // This ensures all valid combinations exist for wildcards to work correctly
-  for (const resource of resources) {
-    for (const action of actions) {
-      permissionSet.add(`${resource}:${action}`);
-    }
-  }
-
+  const actions = [...actionSet].sort();
   const permissions = [...permissionSet].sort();
 
   return { resources, actions, permissions };
@@ -84,6 +58,17 @@ export function derivePermissionData(): PermissionData {
  */
 export function generatePermissionFileContent(data: PermissionData): string {
   const { resources, actions, permissions } = data;
+
+  // Build all permission patterns (wildcards + specific permissions)
+  const allPatterns: string[] = [
+    '*', // Global wildcard
+    ...actions.map(a => `*:${a}`), // Action wildcards
+    ...resources.map(r => `${r}:*`), // Resource wildcards
+    ...permissions, // Specific permissions
+  ];
+
+  // Generate the PERMISSION_PATTERNS object entries
+  const patternEntries = allPatterns.map(pattern => `  '${pattern}': '${pattern}'`).join(',\n');
 
   return `/**
  * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
@@ -109,12 +94,12 @@ export type Resource = (typeof RESOURCES)[number];
 
 /**
  * All permission actions.
- * Derived from METHOD_TO_ACTION mapping:
+ * Derived from HTTP methods and route overrides:
  * - GET → read
  * - POST → write or execute (context-dependent)
  * - PUT/PATCH → write
  * - DELETE → delete
- * Plus Studio-specific actions: admin, invite
+ * - Additional actions from explicit requiresPermission overrides
  */
 export const ACTIONS = [${actions.map(a => `'${a}'`).join(', ')}] as const;
 
@@ -124,16 +109,12 @@ export const ACTIONS = [${actions.map(a => `'${a}'`).join(', ')}] as const;
 export type Action = (typeof ACTIONS)[number];
 
 /**
- * All valid resource:action permission combinations.
+ * All valid permission patterns.
+ * Use \`keyof typeof PERMISSION_PATTERNS\` or the \`PermissionPattern\` type.
  */
-export const PERMISSIONS = [
-${permissions.map(p => `  '${p}',`).join('\n')}
-] as const;
-
-/**
- * Specific permission type (e.g., 'agents:read', 'workflows:execute').
- */
-export type Permission = (typeof PERMISSIONS)[number];
+export const PERMISSION_PATTERNS = {
+${patternEntries},
+} as const;
 
 /**
  * Permission pattern that can be used in role definitions.
@@ -143,7 +124,19 @@ export type Permission = (typeof PERMISSIONS)[number];
  * - Action wildcards: '*:read', '*:write' (an action across all resources)
  * - Global wildcard: '*' (full access)
  */
-export type PermissionPattern = Permission | '*' | \`\${Resource}:*\` | \`*:\${Action}\`;
+export type PermissionPattern = keyof typeof PERMISSION_PATTERNS;
+
+/**
+ * All valid resource:action permission combinations (excludes wildcards).
+ */
+export const PERMISSIONS = [
+${permissions.map(p => `  '${p}',`).join('\n')}
+] as const;
+
+/**
+ * Specific permission type (e.g., 'agents:read', 'workflows:execute').
+ */
+export type Permission = (typeof PERMISSIONS)[number];
 
 /**
  * Type-safe role mapping configuration.
@@ -169,18 +162,7 @@ export type TypedRoleMapping = {
  * Useful for runtime validation of permission strings.
  */
 export function isValidPermissionPattern(pattern: string): pattern is PermissionPattern {
-  if (pattern === '*') return true;
-  // Resource wildcard: 'agents:*'
-  if (pattern.endsWith(':*')) {
-    const resource = pattern.slice(0, -2);
-    return (RESOURCES as readonly string[]).includes(resource);
-  }
-  // Action wildcard: '*:read'
-  if (pattern.startsWith('*:')) {
-    const action = pattern.slice(2);
-    return (ACTIONS as readonly string[]).includes(action);
-  }
-  return (PERMISSIONS as readonly string[]).includes(pattern);
+  return pattern in PERMISSION_PATTERNS;
 }
 
 /**

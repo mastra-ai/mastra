@@ -36,8 +36,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
       '*:read',
       '*:write',
       '*:execute',
-      'users:invite',
-      // Note: admins cannot delete resources or users
+      // Note: admins cannot delete resources
     ],
   },
   {
@@ -54,105 +53,8 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
   },
 ];
 
-/**
- * All available Studio permissions.
- *
- * Permission format: `{resource}:{action}`
- *
- * Resources:
- * - studio: General Studio access
- * - agents: Agent management
- * - workflows: Workflow management
- * - memory: Memory/thread access
- * - tools: Tool management
- * - logs: Log viewing
- * - users: User management
- * - settings: Settings access
- *
- * Actions:
- * - read: View resource
- * - write: Create/update resource
- * - execute: Run/execute resource
- * - delete: Delete resource
- * - admin: Administrative actions
- */
-export const STUDIO_PERMISSIONS = [
-  // Studio
-  'studio:read',
-  'studio:write',
-  'studio:execute',
-  'studio:admin',
-
-  // Agents
-  'agents:read',
-  'agents:write',
-  'agents:execute',
-  'agents:delete',
-
-  // Workflows
-  'workflows:read',
-  'workflows:write',
-  'workflows:execute',
-  'workflows:delete',
-
-  // Memory
-  'memory:read',
-  'memory:write',
-  'memory:delete',
-
-  // Tools
-  'tools:read',
-  'tools:write',
-  'tools:delete',
-
-  // Logs
-  'logs:read',
-  'logs:delete',
-
-  // Users
-  'users:read',
-  'users:write',
-  'users:invite',
-  'users:delete',
-
-  // Settings
-  'settings:read',
-  'settings:write',
-] as const;
-
-/**
- * Type for valid Studio permissions.
- */
-export type StudioPermission = (typeof STUDIO_PERMISSIONS)[number];
-
-/**
- * Extract resource names from StudioPermission.
- * Infers 'agents' from 'agents:read', 'studio' from 'studio:write', etc.
- */
-type Resource = StudioPermission extends `${infer R}:${string}` ? R : never;
-
-/**
- * Resource-level wildcard permissions.
- * Patterns like 'agents:*', 'studio:*', 'workflows:*', etc.
- */
-type ResourceWildcard = `${Resource}:*`;
-
-/**
- * Resource-scoped permissions with instance ID.
- * Patterns like 'agents:read:my-agent', 'workflows:execute:my-workflow', etc.
- */
-type ResourceActionId = `${StudioPermission}:${string}`;
-
-/**
- * All valid permission values for RoleDefinition.permissions.
- *
- * Includes:
- * - StudioPermission: 'studio:read', 'agents:write', etc.
- * - '*': Global wildcard (owner role)
- * - ResourceWildcard: 'studio:*', 'agents:*', etc.
- * - ResourceActionId: 'agents:read:my-agent', etc.
- */
-export type Permission = StudioPermission | '*' | ResourceWildcard | ResourceActionId;
+// Re-export Permission types from generated file
+export type { Permission, PermissionPattern } from '../interfaces/permissions.generated';
 
 /**
  * Get role by ID from default roles.
@@ -173,8 +75,8 @@ export function getDefaultRole(roleId: string): RoleDefinition | undefined {
  * @param roles - Role definitions (defaults to DEFAULT_ROLES)
  * @returns Array of resolved permissions
  */
-export function resolvePermissions(roleIds: string[], roles: RoleDefinition[] = DEFAULT_ROLES): Permission[] {
-  const permissions = new Set<Permission>();
+export function resolvePermissions(roleIds: string[], roles: RoleDefinition[] = DEFAULT_ROLES): string[] {
+  const permissions = new Set<string>();
   const visited = new Set<string>();
 
   function resolveRole(roleId: string) {
@@ -184,11 +86,8 @@ export function resolvePermissions(roleIds: string[], roles: RoleDefinition[] = 
     const role = roles.find(r => r.id === roleId);
     if (!role) return;
 
-    // Add permissions from this role
-    // Cast required: RoleDefinition.permissions is string[] for interface compatibility,
-    // but runtime values are always valid Permission types
     for (const permission of role.permissions) {
-      permissions.add(permission as Permission);
+      permissions.add(permission);
     }
 
     // Resolve inherited roles
