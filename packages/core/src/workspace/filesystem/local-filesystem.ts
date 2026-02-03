@@ -56,9 +56,11 @@ export interface LocalFilesystemOptions {
   readOnly?: boolean;
   /**
    * Optional logger for filesystem operations.
+   * Useful when using LocalFilesystem standalone (without Mastra).
    * If not provided, a default console logger is used.
-   * When the filesystem is used with a Mastra instance, the Mastra logger
-   * will be automatically injected and override this setting.
+   *
+   * Note: When the filesystem is used with a Mastra instance, the Mastra
+   * logger is used instead (consistent with all Mastra primitives).
    */
   logger?: IMastraLogger;
 }

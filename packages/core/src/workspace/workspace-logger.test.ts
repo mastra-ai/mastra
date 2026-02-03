@@ -407,23 +407,25 @@ describe('Workspace Logger Integration', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith('Destroying sandbox', expect.any(Object));
     });
 
-    it('Mastra logger should override custom constructor logger', async () => {
+    it('should use Mastra logger when provider is connected to Mastra instance', async () => {
       const constructorLogger = createMockLogger();
       const mastraLogger = createMockLogger();
 
+      // User provides custom logger for standalone use
       const filesystem = new LocalFilesystem({
         basePath: tempDir,
         logger: constructorLogger,
       });
       const workspace = new Workspace({ filesystem });
 
-      // Simulate Mastra injecting its logger
+      // When connected to Mastra, the Mastra logger is used instead
+      // This is consistent with how all Mastra primitives work
       workspace.__setLogger(mastraLogger);
 
       await workspace.init();
       await workspace.filesystem!.writeFile('/override-test.txt', 'test');
 
-      // Mastra logger should be used, not the constructor logger
+      // Mastra logger is used when provider is part of a Mastra instance
       expect(mastraLogger.debug).toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
       expect(mastraLogger.debug).toHaveBeenCalledWith('Writing file', expect.any(Object));
       expect(constructorLogger.debug).not.toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));

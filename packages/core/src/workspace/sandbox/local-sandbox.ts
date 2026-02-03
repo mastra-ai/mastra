@@ -139,9 +139,11 @@ export interface LocalSandboxOptions {
   nativeSandbox?: NativeSandboxConfig;
   /**
    * Optional logger for sandbox operations.
+   * Useful when using LocalSandbox standalone (without Mastra).
    * If not provided, a default console logger is used.
-   * When the sandbox is used with a Mastra instance, the Mastra logger
-   * will be automatically injected and override this setting.
+   *
+   * Note: When the sandbox is used with a Mastra instance, the Mastra
+   * logger is used instead (consistent with all Mastra primitives).
    */
   logger?: IMastraLogger;
 }
