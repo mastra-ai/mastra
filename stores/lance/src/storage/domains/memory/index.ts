@@ -238,7 +238,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Delete all messages with the matching thread_id
       const messagesTable = await this.client.openTable(TABLE_MESSAGES);
-      await messagesTable.delete(`thread_id = '${this.escapeSql(threadId)}'`);
+      await messagesTable.delete(`thread_id = '${threadId}'`);
     } catch (error: any) {
       throw new MastraError(
         {
@@ -305,38 +305,20 @@ export class StoreMemoryLance extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Check if threadId is a valid non-empty string or array of non-empty strings
-    const hasThreadId =
-      threadId !== undefined &&
-      (typeof threadId === 'string'
-        ? threadId.trim().length > 0
-        : Array.isArray(threadId) &&
-          threadId.length > 0 &&
-          threadId.every(id => typeof id === 'string' && id.trim().length > 0));
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
 
-    // Either threadId or resourceId must be provided
-    if (!hasThreadId && !resourceId) {
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LANCE', 'LIST_MESSAGES', 'INVALID_PARAMS'),
+          id: createStorageErrorId('LANCE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
-            resourceId: resourceId ?? '',
-          },
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('Either threadId or resourceId must be provided'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
-
-    // Normalize threadId to array only if present
-    const threadIds = hasThreadId
-      ? (Array.isArray(threadId) ? threadId : [threadId!])
-          .filter(id => id !== undefined && id !== null)
-          .map(id => (typeof id === 'string' ? id : String(id)).trim())
-          .filter(id => id.length > 0)
-      : [];
 
     const perPage = normalizePerPage(perPageInput, 40);
     // When perPage is false (get all), ignore page offset
@@ -360,16 +342,12 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const table = await this.client.openTable(TABLE_MESSAGES);
 
-      // Build query conditions - threadId is optional if resourceId is provided
-      const conditions: string[] = [];
-
-      if (threadIds.length > 0) {
-        const threadCondition =
-          threadIds.length === 1
-            ? `thread_id = '${this.escapeSql(threadIds[0]!)}'`
-            : `thread_id IN (${threadIds.map(t => `'${this.escapeSql(t)}'`).join(', ')})`;
-        conditions.push(threadCondition);
-      }
+      // Build query conditions for multiple threads
+      const threadCondition =
+        threadIds.length === 1
+          ? `thread_id = '${this.escapeSql(threadIds[0]!)}'`
+          : `thread_id IN (${threadIds.map(t => `'${this.escapeSql(t)}'`).join(', ')})`;
+      const conditions: string[] = [threadCondition];
 
       if (resourceId) {
         conditions.push(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
@@ -393,7 +371,7 @@ export class StoreMemoryLance extends MemoryStorage {
         conditions.push(`\`createdAt\` ${endOp} ${endTime}`);
       }
 
-      const whereClause = conditions.length > 0 ? conditions.join(' AND ') : '1=1';
+      const whereClause = conditions.join(' AND ');
 
       // Get total count
       const total = await table.countRows(whereClause);
@@ -437,18 +415,12 @@ export class StoreMemoryLance extends MemoryStorage {
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
         // Get all unique thread IDs from include items
-        const includeThreadIds = [
-          ...new Set(
-            include
-              .map(item => item.threadId || (Array.isArray(threadId) ? threadId[0] : threadId))
-              .filter((t): t is string => !!t),
-          ),
-        ];
+        const threadIds = [...new Set(include.map(item => item.threadId || threadId))];
 
         // Fetch all messages from all relevant threads
         const allThreadMessages: any[] = [];
-        for (const tid of includeThreadIds) {
-          const threadQuery = table.query().where(`thread_id = '${this.escapeSql(tid)}'`);
+        for (const tid of threadIds) {
+          const threadQuery = table.query().where(`thread_id = '${tid}'`);
           let threadRecords = await threadQuery.toArray();
           allThreadMessages.push(...threadRecords);
         }
@@ -489,8 +461,12 @@ export class StoreMemoryLance extends MemoryStorage {
         return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
-      // Calculate hasMore based on paginated records count, not finalMessages (which includes context)
-      const fetchedAll = perPageInput === false || paginatedRecords.length >= total;
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const fetchedAll = perPageInput === false || allThreadMessagesReturned;
       const hasMore = !fetchedAll && offset + perPage < total;
 
       return {
@@ -507,7 +483,7 @@ export class StoreMemoryLance extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },
