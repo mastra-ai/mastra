@@ -28,7 +28,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
     ...(options.graphOptions || {}),
   };
   // Initialize GraphRAG
-  const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
+  let graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
   let isInitialized = false;
 
   const inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
@@ -93,19 +93,62 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
 
         // Initialize graph if not done yet
         if (!isInitialized) {
-          // Get all chunks and embeddings for graph construction
-          const chunks = results.map(result => ({
-            text: result?.metadata?.text,
-            metadata: result.metadata ?? {},
-          }));
-          const embeddings = results.map(result => ({
-            vector: result.vector || [],
-          }));
+          // Try to load a persisted graph from storage
+          const storage = mastra?.getStorage?.();
+          const graphragStore = storage ? await storage.getStore('graphrag') : undefined;
+          let loadedFromStorage = false;
 
-          if (logger) {
-            logger.debug('Initializing graph', { chunkCount: chunks.length, embeddingCount: embeddings.length });
+          if (graphragStore) {
+            try {
+              const saved = await graphragStore.loadGraph({ graphId: indexName });
+              if (saved) {
+                graphRag = GraphRAG.deserialize(saved as any);
+                loadedFromStorage = true;
+                if (logger) {
+                  logger.debug('Loaded graph from storage', { graphId: indexName });
+                }
+              }
+            } catch (loadErr) {
+              if (logger) {
+                logger.debug('Failed to load graph from storage, will rebuild', {
+                  error: loadErr instanceof Error ? loadErr.message : String(loadErr),
+                });
+              }
+            }
           }
-          graphRag.createGraph(chunks, embeddings);
+
+          if (!loadedFromStorage) {
+            // Get all chunks and embeddings for graph construction
+            const chunks = results.map(result => ({
+              text: result?.metadata?.text,
+              metadata: result.metadata ?? {},
+            }));
+            const embeddings = results.map(result => ({
+              vector: result.vector || [],
+            }));
+
+            if (logger) {
+              logger.debug('Initializing graph', { chunkCount: chunks.length, embeddingCount: embeddings.length });
+            }
+            graphRag.createGraph(chunks, embeddings);
+
+            // Persist the newly built graph
+            if (graphragStore) {
+              try {
+                await graphragStore.saveGraph({ graphId: indexName, data: graphRag.serialize() as any });
+                if (logger) {
+                  logger.debug('Saved graph to storage', { graphId: indexName });
+                }
+              } catch (saveErr) {
+                if (logger) {
+                  logger.debug('Failed to save graph to storage', {
+                    error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+                  });
+                }
+              }
+            }
+          }
+
           isInitialized = true;
         } else if (logger) {
           logger.debug('Graph already initialized, skipping graph construction');

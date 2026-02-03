@@ -374,4 +374,150 @@ describe('GraphRAG', () => {
       expect(rerankedResults.length).toBe(2);
     });
   });
+
+  describe('persistence', () => {
+    function buildGraph(): GraphRAG {
+      const graph = new GraphRAG(3);
+      graph.addNode({ id: '1', content: 'Node 1', embedding: [1, 2, 3], metadata: { type: 'a' } });
+      graph.addNode({ id: '2', content: 'Node 2', embedding: [4, 5, 6], metadata: { type: 'b' } });
+      graph.addNode({ id: '3', content: 'Node 3', embedding: [7, 8, 9], metadata: { type: 'a' } });
+      graph.addEdge({ source: '1', target: '2', weight: 0.8, type: 'semantic' });
+      graph.addEdge({ source: '2', target: '3', weight: 0.9, type: 'semantic' });
+      return graph;
+    }
+
+    it('should serialize graph state to a JSON-compatible object', () => {
+      const graph = buildGraph();
+      const serialized = graph.serialize();
+
+      expect(serialized).toBeDefined();
+      expect(serialized.nodes).toBeInstanceOf(Array);
+      expect(serialized.edges).toBeInstanceOf(Array);
+      expect(serialized.dimension).toBe(3);
+      expect(serialized.threshold).toBe(0.7);
+      // Nodes include embeddings and metadata
+      expect(serialized.nodes).toHaveLength(3);
+      expect(serialized.nodes[0]).toMatchObject({
+        id: '1',
+        content: 'Node 1',
+        embedding: [1, 2, 3],
+        metadata: { type: 'a' },
+      });
+      // Edges: 2 original + 2 reverse = 4
+      expect(serialized.edges).toHaveLength(4);
+    });
+
+    it('should produce JSON-stringifiable output from serialize', () => {
+      const graph = buildGraph();
+      const serialized = graph.serialize();
+      const json = JSON.stringify(serialized);
+
+      expect(typeof json).toBe('string');
+      const parsed = JSON.parse(json);
+      expect(parsed.nodes).toHaveLength(3);
+      expect(parsed.edges).toHaveLength(4);
+      expect(parsed.dimension).toBe(3);
+    });
+
+    it('should deserialize a saved graph and restore all nodes', () => {
+      const original = buildGraph();
+      const serialized = original.serialize();
+
+      const restored = GraphRAG.deserialize(serialized);
+
+      expect(restored.getNodes()).toHaveLength(3);
+      expect(
+        restored
+          .getNodes()
+          .map(n => n.id)
+          .sort(),
+      ).toEqual(['1', '2', '3']);
+    });
+
+    it('should deserialize a saved graph and restore all edges', () => {
+      const original = buildGraph();
+      const serialized = original.serialize();
+
+      const restored = GraphRAG.deserialize(serialized);
+
+      // Edges should be identical to original (including reverse edges)
+      expect(restored.getEdges()).toHaveLength(original.getEdges().length);
+    });
+
+    it('should restore node embeddings correctly', () => {
+      const original = buildGraph();
+      const serialized = original.serialize();
+
+      const restored = GraphRAG.deserialize(serialized);
+
+      const restoredNodes = restored.getNodes();
+      const node1 = restoredNodes.find(n => n.id === '1');
+      expect(node1?.embedding).toEqual([1, 2, 3]);
+      const node2 = restoredNodes.find(n => n.id === '2');
+      expect(node2?.embedding).toEqual([4, 5, 6]);
+    });
+
+    it('should restore node metadata correctly', () => {
+      const original = buildGraph();
+      const serialized = original.serialize();
+
+      const restored = GraphRAG.deserialize(serialized);
+
+      const node1 = restored.getNodes().find(n => n.id === '1');
+      expect(node1?.metadata).toEqual({ type: 'a' });
+    });
+
+    it('should produce query results identical to original after round-trip', () => {
+      const original = buildGraph();
+      const serialized = original.serialize();
+      const restored = GraphRAG.deserialize(serialized);
+
+      const queryParams = { query: [2, 3, 4], topK: 2, randomWalkSteps: 50, restartProb: 0.15 };
+
+      // Mock random for deterministic comparison
+      vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+      const originalResults = original.query(queryParams);
+
+      vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+      const restoredResults = restored.query(queryParams);
+
+      expect(restoredResults).toEqual(originalResults);
+    });
+
+    it('should survive JSON round-trip (serialize -> stringify -> parse -> deserialize)', () => {
+      const original = buildGraph();
+      const serialized = original.serialize();
+      const json = JSON.stringify(serialized);
+      const parsed = JSON.parse(json);
+      const restored = GraphRAG.deserialize(parsed);
+
+      expect(restored.getNodes()).toHaveLength(3);
+      expect(restored.getEdges()).toHaveLength(original.getEdges().length);
+    });
+
+    it('should allow adding new nodes to a deserialized graph', () => {
+      const original = buildGraph();
+      const serialized = original.serialize();
+      const restored = GraphRAG.deserialize(serialized);
+
+      restored.addNode({ id: '4', content: 'Node 4', embedding: [10, 11, 12] });
+
+      expect(restored.getNodes()).toHaveLength(4);
+    });
+
+    it('should restore dimension and threshold so validation still works', () => {
+      const original = new GraphRAG(3, 0.5);
+      original.addNode({ id: '1', content: 'test', embedding: [1, 2, 3] });
+
+      const serialized = original.serialize();
+      const restored = GraphRAG.deserialize(serialized);
+
+      // Wrong dimension should throw
+      expect(() => restored.addNode({ id: '2', content: 'bad', embedding: [1, 2] })).toThrow(
+        'Embedding dimension must be 3',
+      );
+    });
+  });
 });

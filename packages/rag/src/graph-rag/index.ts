@@ -36,6 +36,13 @@ export interface GraphEmbedding {
   vector: number[];
 }
 
+export interface SerializedGraphRAG {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  dimension: number;
+  threshold: number;
+}
+
 export class GraphRAG {
   private nodes: Map<string, GraphNode>;
   private edges: GraphEdge[];
@@ -87,6 +94,24 @@ export class GraphRAG {
 
   getEdgesByType(type: string): GraphEdge[] {
     return this.edges.filter(edge => edge.type === type);
+  }
+
+  serialize(): SerializedGraphRAG {
+    return {
+      nodes: Array.from(this.nodes.values()),
+      edges: [...this.edges],
+      dimension: this.dimension,
+      threshold: this.threshold,
+    };
+  }
+
+  static deserialize(data: SerializedGraphRAG): GraphRAG {
+    const graph = new GraphRAG(data.dimension, data.threshold);
+    for (const node of data.nodes) {
+      graph.nodes.set(node.id, { ...node });
+    }
+    graph.edges = data.edges.map(edge => ({ ...edge }));
+    return graph;
   }
 
   clear(): void {
