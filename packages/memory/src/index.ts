@@ -1630,7 +1630,8 @@ Notes:
     if (!memoryStore.supportsObservationalMemory) {
       throw new Error(
         `Observational memory is enabled but the storage adapter (${memoryStore.constructor.name}) does not support it. ` +
-          `Please use a storage adapter that supports observational memory (libsql, pg, mongodb) or disable observational memory.`,
+          `If you're using @mastra/libsql, @mastra/pg, or @mastra/mongodb, upgrade to the latest version. ` +
+          `Otherwise, use one of those adapters or disable observational memory.`,
       );
     }
     // Dynamic import to avoid loading OM code when not needed and to prevent
