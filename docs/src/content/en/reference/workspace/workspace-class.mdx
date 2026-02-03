@@ -225,7 +225,7 @@ await workspace.init();
 
 Calling `init()` is optional in most cases:
 - **Sandbox**: Auto-starts on first `executeCommand()` call. Use `init()` to avoid first-command latency.
-- **Filesystem**: Only needed if the base directory doesn't exist yet.
+- **Filesystem**: Creates the base directory and runs any provider-specific setup. Some providers auto-create the directory on first operation.
 - **Search**: Required only if using `autoIndexPaths` for auto-indexing.
 
 Initialization performs:
