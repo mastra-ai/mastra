@@ -342,6 +342,96 @@ describe('Workspace Logger Integration', () => {
   });
 
   // ===========================================================================
+  // Custom logger in constructor
+  // ===========================================================================
+  describe('Custom logger in constructor', () => {
+    it('should accept custom logger in LocalFilesystem constructor', async () => {
+      const mockLogger = createMockLogger();
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
+        logger: mockLogger,
+      });
+
+      await filesystem.init();
+
+      expect(mockLogger.debug).toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
+    });
+
+    it('should accept custom logger in LocalSandbox constructor', async () => {
+      const mockLogger = createMockLogger();
+      const sandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        logger: mockLogger,
+      });
+
+      await sandbox.start();
+
+      expect(mockLogger.debug).toHaveBeenCalledWith('Starting sandbox', expect.any(Object));
+
+      await sandbox.destroy();
+    });
+
+    it('should use custom logger for all filesystem operations', async () => {
+      const mockLogger = createMockLogger();
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
+        logger: mockLogger,
+      });
+
+      await filesystem.init();
+      await filesystem.writeFile('/custom-logger-test.txt', 'test content');
+      await filesystem.readFile('/custom-logger-test.txt');
+      await filesystem.deleteFile('/custom-logger-test.txt');
+
+      expect(mockLogger.debug).toHaveBeenCalledWith('Writing file', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Reading file', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Deleting file', expect.any(Object));
+    });
+
+    it('should use custom logger for all sandbox operations', async () => {
+      const mockLogger = createMockLogger();
+      const sandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        env: process.env,
+        logger: mockLogger,
+      });
+
+      await sandbox.start();
+      await sandbox.executeCommand!('echo', ['custom logger test']);
+      await sandbox.stop();
+      await sandbox.destroy();
+
+      expect(mockLogger.debug).toHaveBeenCalledWith('Starting sandbox', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Executing command', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Stopping sandbox', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Destroying sandbox', expect.any(Object));
+    });
+
+    it('Mastra logger should override custom constructor logger', async () => {
+      const constructorLogger = createMockLogger();
+      const mastraLogger = createMockLogger();
+
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
+        logger: constructorLogger,
+      });
+      const workspace = new Workspace({ filesystem });
+
+      // Simulate Mastra injecting its logger
+      workspace.__setLogger(mastraLogger);
+
+      await workspace.init();
+      await workspace.filesystem!.writeFile('/override-test.txt', 'test');
+
+      // Mastra logger should be used, not the constructor logger
+      expect(mastraLogger.debug).toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
+      expect(mastraLogger.debug).toHaveBeenCalledWith('Writing file', expect.any(Object));
+      expect(constructorLogger.debug).not.toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
+      expect(constructorLogger.debug).not.toHaveBeenCalledWith('Writing file', expect.any(Object));
+    });
+  });
+
+  // ===========================================================================
   // LocalFilesystem logging
   // ===========================================================================
   describe('LocalFilesystem logging', () => {

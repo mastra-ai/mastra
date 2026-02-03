@@ -8,6 +8,7 @@
 import { constants as fsConstants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
+import type { IMastraLogger } from '../../logger';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -53,6 +54,13 @@ export interface LocalFilesystemOptions {
    * @default false
    */
   readOnly?: boolean;
+  /**
+   * Optional logger for filesystem operations.
+   * If not provided, a default console logger is used.
+   * When the filesystem is used with a Mastra instance, the Mastra logger
+   * will be automatically injected and override this setting.
+   */
+  logger?: IMastraLogger;
 }
 
 /**
@@ -98,6 +106,11 @@ export class LocalFilesystem extends MastraFilesystem {
     this._basePath = nodePath.resolve(options.basePath);
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
+
+    // Set custom logger if provided
+    if (options.logger) {
+      this.__setLogger(options.logger);
+    }
   }
 
   private generateId(): string {
