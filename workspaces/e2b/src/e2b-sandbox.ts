@@ -690,6 +690,18 @@ export class E2BSandbox extends BaseSandbox {
       if (result.exitCode !== 0) {
         throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
       }
+
+      // Validate the mount actually works by trying to list files
+      // s3fs succeeds at creating mount point even without valid access
+      const validateResult = await this._sandbox.commands.run(`ls "${mountPath}" 2>&1`, { timeoutMs: 10000 });
+      if (validateResult.exitCode !== 0 || validateResult.stdout.includes('Authorization')) {
+        // Mount created but not functional - unmount and fail
+        await this._sandbox.commands.run(`sudo fusermount -u "${mountPath}" 2>/dev/null || true`);
+        const errorMsg = hasCredentials
+          ? 'Mount created but access denied - check your credentials'
+          : 'Mount created but access denied - this bucket may require credentials (public_bucket=1 only works for truly public AWS S3 buckets)';
+        throw new Error(errorMsg);
+      }
     } catch (error: unknown) {
       const errorObj = error as { result?: { exitCode: number; stdout: string; stderr: string } };
       const stderr = errorObj.result?.stderr || '';
