@@ -920,7 +920,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // without going through workflow serialization (which would lose execute functions)
       if (_internal) {
         _internal.stepTools = stepTools;
-        _internal.stepWorkspace = stepWorkspace;
+        _internal.stepWorkspace = stepWorkspace ?? _internal.stepWorkspace;
       }
 
       if (callBail) {

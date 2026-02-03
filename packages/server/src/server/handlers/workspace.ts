@@ -108,18 +108,12 @@ function requireWorkspaceV1Support(): void {
 
 /**
  * Get a workspace by ID from Mastra's workspace registry.
- * If no workspaceId is provided, returns the global workspace.
  *
  * Backwards compatible: Falls back to searching through agents if
  * mastra.getWorkspaceById() is not available (older @mastra/core versions).
  */
-async function getWorkspaceById(mastra: any, workspaceId?: string): Promise<Workspace | undefined> {
+async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Workspace | undefined> {
   requireWorkspaceV1Support();
-
-  // If no workspaceId specified, return global workspace
-  if (!workspaceId) {
-    return mastra.getWorkspace?.();
-  }
 
   // Check if the global workspace matches
   const globalWorkspace = mastra.getWorkspace?.();
@@ -153,10 +147,9 @@ async function getWorkspaceById(mastra: any, workspaceId?: string): Promise<Work
 
 /**
  * Get skills from a specific workspace by ID.
- * If no workspaceId is provided, returns skills from the global workspace.
  * Note: getWorkspaceById already checks for workspace v1 support.
  */
-async function getSkillsById(mastra: any, workspaceId?: string): Promise<WorkspaceSkills | undefined> {
+async function getSkillsById(mastra: any, workspaceId: string): Promise<WorkspaceSkills | undefined> {
   const workspace = await getWorkspaceById(mastra, workspaceId);
   return workspace?.skills;
 }

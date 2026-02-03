@@ -650,8 +650,6 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
-        // Workspace for file operations
-        workspace,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -739,8 +737,6 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
-        // Workspace for file operations
-        workspace,
       };
 
       // Helper to execute phase with proper span lifecycle management
@@ -862,8 +858,6 @@ function createStepFromProcessor<TProcessorId extends string>(
                 modelSettings,
                 structuredOutput,
                 steps: steps ?? [],
-                // Workspace for file operations
-                workspace,
               });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
