@@ -38,13 +38,30 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'getting-started/mcp-docs-server',
-          label: 'MCP Docs Server',
-        },
-        {
-          type: 'doc',
           id: 'getting-started/manual-install',
           label: 'Manual Install',
+        },
+        {
+          type: 'category',
+          label: 'Build with AI',
+          collapsed: false,
+          items: [
+            {
+              type: 'doc',
+              id: 'getting-started/build-with-ai/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'getting-started/build-with-ai/skills',
+              label: 'Skills',
+            },
+            {
+              type: 'doc',
+              id: 'getting-started/build-with-ai/mcp-docs-server',
+              label: 'MCP Docs Server',
+            },
+          ],
         },
       ],
     },
