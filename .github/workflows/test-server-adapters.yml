@@ -27,7 +27,7 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Build packages
-        run: pnpm turbo build --filter "@mastra/${{ matrix.adapter }}" --filter "@mastra/editor"
+        run: pnpm build:lib
 
       - name: Run ${{ matrix.adapter }} adapter tests
         run: pnpm test
