@@ -146,7 +146,7 @@ export function BracketOverlay({ containerRef }: { containerRef: React.RefObject
 
   if (highlights.length === 0) return null;
 
-  // Only the very last highlight (most recent badge) is always visible
+  // Show the latest highlight by default, but hide it when hovering another badge
   const latestCycleId = highlights[highlights.length - 1]?.cycleId ?? null;
 
   return (
@@ -154,7 +154,8 @@ export function BracketOverlay({ containerRef }: { containerRef: React.RefObject
       {highlights.map(highlight => {
         const isLatest = highlight.cycleId === latestCycleId;
         const isHovered = highlight.cycleId === hoveredCycleId;
-        const isVisible = isLatest || isHovered;
+        // Show only the hovered highlight, or show latest when nothing is hovered
+        const isVisible = hoveredCycleId ? isHovered : isLatest;
 
         return (
           <HighlightBlock
@@ -170,18 +171,26 @@ export function BracketOverlay({ containerRef }: { containerRef: React.RefObject
 
 /**
  * Find the previous badge to anchor the highlight's top edge.
- * - Observations anchor to the previous badge of any type.
- * - Reflections anchor to the previous reflection badge only.
+ * - Observations anchor to the previous badge of any type (excluding failed ones).
+ * - Reflections anchor to the previous successful reflection badge only (skipping failed reflections).
  */
 function findPreviousBadge(badges: HTMLElement[], currentIndex: number, omType: OmType): HTMLElement | null {
   for (let j = currentIndex - 1; j >= 0; j--) {
-    if (omType === 'observation') {
-      // Observations anchor to any previous badge
-      return badges[j];
+    const badge = badges[j];
+    const badgeState = badge.getAttribute('data-om-state');
+    
+    // Skip failed badges - they shouldn't be used as anchors
+    if (badgeState === 'failed') {
+      continue;
     }
-    // Reflections anchor only to previous reflections
-    if (badges[j].getAttribute('data-om-type') === 'reflection') {
-      return badges[j];
+    
+    if (omType === 'observation') {
+      // Observations anchor to any previous non-failed badge
+      return badge;
+    }
+    // Reflections anchor only to previous successful reflections
+    if (badge.getAttribute('data-om-type') === 'reflection') {
+      return badge;
     }
   }
   return null;
