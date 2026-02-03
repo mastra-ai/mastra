@@ -16,7 +16,6 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import type { IMastraLogger } from '../../logger';
 import type { ProviderStatus } from '../lifecycle';
 import { MastraSandbox } from './mastra-sandbox';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
@@ -137,15 +136,6 @@ export interface LocalSandboxOptions {
    * Only used when isolation is 'seatbelt' or 'bwrap'.
    */
   nativeSandbox?: NativeSandboxConfig;
-  /**
-   * Optional logger for sandbox operations.
-   * Useful when using LocalSandbox standalone (without Mastra).
-   * If not provided, a default console logger is used.
-   *
-   * Note: When the sandbox is used with a Mastra instance, the Mastra
-   * logger is used instead (consistent with all Mastra primitives).
-   */
-  logger?: IMastraLogger;
 }
 
 /**
@@ -232,11 +222,6 @@ export class LocalSandbox extends MastraSandbox {
       throw new IsolationUnavailableError(requestedIsolation, detection.message);
     }
     this._isolation = requestedIsolation;
-
-    // Set custom logger if provided
-    if (options.logger) {
-      this.__setLogger(options.logger);
-    }
   }
 
   private generateId(): string {

@@ -11,7 +11,7 @@
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger/constants';
 import type { ProviderStatus } from '../lifecycle';
-import type { WorkspaceSandbox, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
+import type { WorkspaceSandbox } from './sandbox';
 
 /**
  * Abstract base class for sandbox providers with logger support.
@@ -23,6 +23,7 @@ import type { WorkspaceSandbox, SandboxInfo, ExecuteCommandOptions, CommandResul
  * ```typescript
  * class MyCustomSandbox extends MastraSandbox {
  *   readonly id = 'my-sandbox';
+ *   readonly name = 'MyCustomSandbox';
  *   readonly provider = 'custom';
  *   status: ProviderStatus = 'stopped';
  *
@@ -34,7 +35,7 @@ import type { WorkspaceSandbox, SandboxInfo, ExecuteCommandOptions, CommandResul
  *     this.logger.debug('Executing command', { command, args });
  *     // Implementation...
  *   }
- *   // ... other methods
+ *   // ... implement other WorkspaceSandbox methods
  * }
  * ```
  */
@@ -54,50 +55,4 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   constructor(options: { name: string }) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
   }
-
-  // ---------------------------------------------------------------------------
-  // Optional Methods - Subclasses can override
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Execute a shell command.
-   * Optional - if not implemented, the workspace_execute_command tool won't be available.
-   */
-  executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
-
-  /**
-   * Get instructions describing how this sandbox works.
-   * Used in tool descriptions to help agents understand execution context.
-   */
-  getInstructions?(): string;
-
-  /**
-   * One-time setup operations.
-   */
-  init?(): void | Promise<void>;
-
-  /**
-   * Begin active operation.
-   */
-  start?(): void | Promise<void>;
-
-  /**
-   * Pause operation, keeping state for potential restart.
-   */
-  stop?(): void | Promise<void>;
-
-  /**
-   * Clean up all resources.
-   */
-  destroy?(): void | Promise<void>;
-
-  /**
-   * Check if ready for operations.
-   */
-  isReady?(): boolean | Promise<boolean>;
-
-  /**
-   * Get status and metadata.
-   */
-  getInfo?(): SandboxInfo | Promise<SandboxInfo>;
 }

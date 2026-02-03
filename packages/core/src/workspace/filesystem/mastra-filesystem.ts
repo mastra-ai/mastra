@@ -13,7 +13,6 @@ import { RegisteredLogger } from '../../logger/constants';
 import type { ProviderStatus } from '../lifecycle';
 import type {
   WorkspaceFilesystem,
-  FilesystemInfo,
   FileContent,
   FileStat,
   FileEntry,
@@ -34,6 +33,7 @@ import type {
  * ```typescript
  * class MyCustomFilesystem extends MastraFilesystem {
  *   readonly id = 'my-fs';
+ *   readonly name = 'MyCustomFilesystem';
  *   readonly provider = 'custom';
  *   status: ProviderStatus = 'stopped';
  *
@@ -45,7 +45,7 @@ import type {
  *     this.logger.debug('Reading file', { path });
  *     // Implementation...
  *   }
- *   // ... other methods
+ *   // ... implement other WorkspaceFilesystem methods
  * }
  * ```
  */
@@ -62,18 +62,12 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   /** Current status of the filesystem */
   abstract status: ProviderStatus;
 
-  /**
-   * When true, all write operations to this filesystem are blocked.
-   * Read operations are still allowed.
-   */
-  readonly readOnly?: boolean;
-
   constructor(options: { name: string }) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
   }
 
   // ---------------------------------------------------------------------------
-  // Abstract Methods - Must be implemented by subclasses
+  // Abstract methods - implementations must provide these
   // ---------------------------------------------------------------------------
 
   abstract readFile(path: string, options?: ReadOptions): Promise<string | Buffer>;
@@ -87,44 +81,4 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   abstract readdir(path: string, options?: ListOptions): Promise<FileEntry[]>;
   abstract exists(path: string): Promise<boolean>;
   abstract stat(path: string): Promise<FileStat>;
-
-  // ---------------------------------------------------------------------------
-  // Optional Methods - Subclasses can override
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Get instructions describing how this filesystem works.
-   * Used in tool descriptions to help agents understand path semantics.
-   */
-  getInstructions?(): string;
-
-  /**
-   * One-time setup operations.
-   */
-  init?(): void | Promise<void>;
-
-  /**
-   * Begin active operation.
-   */
-  start?(): void | Promise<void>;
-
-  /**
-   * Pause operation, keeping state for potential restart.
-   */
-  stop?(): void | Promise<void>;
-
-  /**
-   * Clean up all resources.
-   */
-  destroy?(): void | Promise<void>;
-
-  /**
-   * Check if ready for operations.
-   */
-  isReady?(): boolean | Promise<boolean>;
-
-  /**
-   * Get status and metadata.
-   */
-  getInfo?(): FilesystemInfo | Promise<FilesystemInfo>;
 }
