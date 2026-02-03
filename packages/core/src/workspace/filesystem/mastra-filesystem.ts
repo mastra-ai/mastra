@@ -68,15 +68,6 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
    */
   readonly readOnly?: boolean;
 
-  /**
-   * Base path on disk where files are stored (if applicable).
-   * Not all filesystem implementations have a base path (e.g., in-memory filesystems).
-   * Subclasses can override this as a getter if needed.
-   */
-  get basePath(): string | undefined {
-    return undefined;
-  }
-
   constructor(options: { name: string }) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
   }

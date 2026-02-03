@@ -51,15 +51,6 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   /** Current status of the sandbox */
   abstract status: ProviderStatus;
 
-  /**
-   * Working directory for command execution (if applicable).
-   * Not all sandbox implementations have a fixed working directory.
-   * Subclasses can override this as a getter if needed.
-   */
-  get workingDirectory(): string | undefined {
-    return undefined;
-  }
-
   constructor(options: { name: string }) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
   }
