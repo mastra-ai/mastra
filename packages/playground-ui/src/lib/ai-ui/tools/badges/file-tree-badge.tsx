@@ -93,8 +93,19 @@ export const FileTreeBadge = ({
   // Get tree output from result
   const treeOutput = result?.tree || '';
   const summary = result?.summary || '';
-  const hasResult = !!treeOutput;
+  // Check for error - could be result.error (tool error) or result itself being an Error-like object
+  const errorMessage =
+    result?.error?.message || result?.error || (result?.message && !result?.tree ? result.message : null);
+  const hasError = !!errorMessage;
+  const hasResult = !!treeOutput || hasError;
   const toolCalled = toolCalledProp ?? hasResult;
+
+  // Expand when there's an error so user can see it
+  useEffect(() => {
+    if (hasError) {
+      setIsCollapsed(false);
+    }
+  }, [hasError]);
 
   // Extract filesystem metadata from result (if provided by the tool)
   const fsMeta: FilesystemMetadata | undefined = result?.metadata;
@@ -153,8 +164,15 @@ export const FileTreeBadge = ({
             </div>
           )}
 
+          {/* Error state */}
+          {toolCalled && hasError && (
+            <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2">
+              <span className="text-xs text-red-400">{String(errorMessage)}</span>
+            </div>
+          )}
+
           {/* Tree output panel - custom UI after tool has been called */}
-          {toolCalled && hasResult && (
+          {toolCalled && !hasError && treeOutput && (
             <div className="rounded-md border border-border1 bg-surface2 overflow-hidden">
               {/* Panel header with summary and copy button */}
               <div className="flex items-center justify-between px-3 py-1.5 border-b border-border1 bg-surface3">
@@ -185,7 +203,7 @@ export const FileTreeBadge = ({
           )}
 
           {/* Loading state */}
-          {toolCalled && !hasResult && (
+          {toolCalled && !hasResult && !hasError && (
             <div className="rounded-md border border-border1 bg-surface2 px-3 py-2">
               <span className="text-xs text-icon6">Loading...</span>
             </div>
