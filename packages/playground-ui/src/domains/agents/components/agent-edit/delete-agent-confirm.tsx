@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffectEvent } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { Button } from '@/ds/components/Button';

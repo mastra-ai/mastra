@@ -13,7 +13,6 @@ import {
   CREATE_STORED_AGENT_ROUTE,
   UPDATE_STORED_AGENT_ROUTE,
   DELETE_STORED_AGENT_ROUTE,
-  PREGENERATE_AGENT_CONFIG_ROUTE,
 } from '../../handlers/stored-agents';
 import type { ServerRoute } from '.';
 
@@ -25,11 +24,8 @@ import type { ServerRoute } from '.';
 export const STORED_AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   // ============================================================================
   // Stored Agents CRUD Routes
-  // IMPORTANT: Routes with literal paths (e.g., /pregenerate) must come BEFORE
-  // routes with path parameters (e.g., /:storedAgentId) to ensure correct matching.
   // ============================================================================
   LIST_STORED_AGENTS_ROUTE,
-  PREGENERATE_AGENT_CONFIG_ROUTE, // Must be before GET_STORED_AGENT_ROUTE
   GET_STORED_AGENT_ROUTE,
   CREATE_STORED_AGENT_ROUTE,
   UPDATE_STORED_AGENT_ROUTE,

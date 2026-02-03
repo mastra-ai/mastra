@@ -612,42 +612,6 @@ export interface TimeTravelParams {
 // ============================================================================
 
 /**
- * Available resource for pregenerate input
- */
-export interface AvailableResource {
-  id: string;
-  name: string;
-  description?: string;
-}
-
-/**
- * Parameters for pregenerating agent configuration
- */
-export interface PregenerateAgentConfigParams {
-  name: string;
-  description: string;
-  model: { provider: string; name: string };
-  availableTools?: AvailableResource[];
-  availableWorkflows?: AvailableResource[];
-  availableAgents?: AvailableResource[];
-  availableScorers?: AvailableResource[];
-}
-
-/**
- * Response from pregenerating agent configuration
- * Note: Fields are nullable (not optional) for JSON Schema compatibility
- * Scorers is an array of IDs - users configure sampling manually in the UI
- */
-export interface PregenerateAgentConfigResponse {
-  instructions: string;
-  tools: string[] | null;
-  workflows: string[] | null;
-  agents: string[] | null;
-  memory: string | null;
-  scorers: string[] | null;
-}
-
-/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {

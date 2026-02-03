@@ -1,5 +1,3 @@
-'use client';
-
 import * as React from 'react';
 import { useForm, Controller, Resolver } from 'react-hook-form';
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';

@@ -197,51 +197,6 @@ export const deleteStoredAgentResponseSchema = z.object({
   message: z.string(),
 });
 
-// ============================================================================
-// Pregenerate Agent Config Schemas
-// ============================================================================
-
-/**
- * Available resource schema for pregenerate input
- */
-const availableResourceSchema = z.object({
-  id: z.string().describe('Resource identifier'),
-  name: z.string().describe('Resource name'),
-  description: z.string().optional().describe('Resource description'),
-});
-
-/**
- * POST /stored/agents/pregenerate - Request body
- */
-export const pregenerateAgentConfigBodySchema = z.object({
-  name: z.string().describe('Agent name'),
-  description: z.string().describe('Agent description'),
-  model: z
-    .object({
-      provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
-      name: z.string().describe('Model name (e.g., gpt-4o, claude-3-5-sonnet)'),
-    })
-    .describe('Model configuration'),
-  availableTools: z.array(availableResourceSchema).optional().describe('Available tools to choose from'),
-  availableWorkflows: z.array(availableResourceSchema).optional().describe('Available workflows to choose from'),
-  availableAgents: z.array(availableResourceSchema).optional().describe('Available agents to choose from'),
-  availableScorers: z.array(availableResourceSchema).optional().describe('Available scorers to choose from'),
-});
-
-/**
- * POST /stored/agents/pregenerate - Response
- * Note: Fields are nullable (not optional) for JSON Schema compatibility with structured output
- * Scorers is simplified to just IDs - users configure sampling manually in the UI
- */
-export const pregenerateAgentConfigResponseSchema = z.object({
-  instructions: z.string().describe('Generated system instructions for the agent'),
-  tools: z.array(z.string()).nullable().describe('Array of selected tool IDs, or null if none'),
-  workflows: z.array(z.string()).nullable().describe('Array of selected workflow IDs, or null if none'),
-  agents: z.array(z.string()).nullable().describe('Array of selected agent IDs, or null if none'),
-  memory: z.string().nullable().describe('Memory configuration suggestion, or null if not needed'),
-  scorers: z.array(z.string()).nullable().describe('Array of selected scorer IDs, or null if none'),
-});
-
 /**
  * Exported for use in agent-versions.ts schemas
  */

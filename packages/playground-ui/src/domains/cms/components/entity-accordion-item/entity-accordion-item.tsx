@@ -1,5 +1,3 @@
-'use client';
-
 import { Trash2 } from 'lucide-react';
 
 import { IconButton } from '@/ds/components/IconButton';
@@ -30,12 +28,7 @@ export function EntityAccordionItem({
           <Icon size="sm">{icon}</Icon>
           <span className="text-xs font-medium text-icon6">{name}</span>
         </div>
-        <IconButton
-          tooltip={`Remove ${name}`}
-          onClick={onRemove}
-          variant="ghost"
-          size="sm"
-        >
+        <IconButton tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="sm">
           <Trash2 />
         </IconButton>
       </div>

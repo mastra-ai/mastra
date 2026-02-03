@@ -1,5 +1,3 @@
-'use client';
-
 import * as React from 'react';
 import { useId } from 'react';
 import { ChevronsUpDown, Search, Trash2 } from 'lucide-react';

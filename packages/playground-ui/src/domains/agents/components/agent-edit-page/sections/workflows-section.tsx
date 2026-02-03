@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
 import { ChevronRight } from 'lucide-react';

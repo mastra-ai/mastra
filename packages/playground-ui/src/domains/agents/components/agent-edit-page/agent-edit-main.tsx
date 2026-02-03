@@ -1,5 +1,3 @@
-'use client';
-
 import { Controller, UseFormReturn } from 'react-hook-form';
 import { FileText } from 'lucide-react';
 

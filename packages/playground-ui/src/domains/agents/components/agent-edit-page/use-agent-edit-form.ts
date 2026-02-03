@@ -1,5 +1,3 @@
-'use client';
-
 import { useForm, Resolver } from 'react-hook-form';
 
 import type { AgentFormValues } from '../agent-edit/form-validation';

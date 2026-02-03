@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
 import { Trash2, ChevronRight } from 'lucide-react';
@@ -193,12 +191,7 @@ function ScorerConfigPanel({
           </Icon>
           <span className="text-xs font-medium text-icon6">{scorerName}</span>
         </div>
-        <IconButton
-          tooltip={`Remove ${scorerName}`}
-          onClick={onRemove}
-          variant="ghost"
-          size="sm"
-        >
+        <IconButton tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="sm">
           <Trash2 />
         </IconButton>
       </div>
