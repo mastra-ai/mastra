@@ -20,14 +20,14 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./standard-schema": {
+    "./schema": {
       "import": {
-        "types": "./dist/standard-schema.d.ts",
-        "default": "./dist/standard-schema.js"
+        "types": "./dist/schema.d.ts",
+        "default": "./dist/schema.js"
       },
       "require": {
-        "types": "./dist/standard-schema.d.ts",
-        "default": "./dist/standard-schema.cjs"
+        "types": "./dist/schema.d.ts",
+        "default": "./dist/schema.cjs"
       }
     },
     "./zod-to-json": {
