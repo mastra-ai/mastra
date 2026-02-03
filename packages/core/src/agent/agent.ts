@@ -581,18 +581,19 @@ export class Agent<
   }
 
   /**
-   * Finds a processor by its ID from both input and output processors.
+   * Resolves a processor by its ID from both input and output processors.
+   * This method resolves dynamic processor functions and includes memory-derived processors.
    * Returns the processor if found, null otherwise.
    *
    * @example
    * ```typescript
-   * const omProcessor = await agent.findProcessor('observational-memory');
+   * const omProcessor = await agent.resolveProcessorById('observational-memory');
    * if (omProcessor) {
    *   // Observational memory is configured
    * }
    * ```
    */
-  public async findProcessor<TId extends string = string>(
+  public async resolveProcessorById<TId extends string = string>(
     processorId: TId,
     requestContext?: RequestContext,
   ): Promise<Processor<TId> | null> {
