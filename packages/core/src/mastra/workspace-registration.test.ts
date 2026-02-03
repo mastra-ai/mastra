@@ -33,8 +33,21 @@ describe('Workspace Registration', () => {
     }
   });
 
-  // Helper to wait for async workspace registration
-  const waitForWorkspaceRegistration = () => new Promise(resolve => setTimeout(resolve, 50));
+  // Helper to wait for async workspace registration with polling
+  const waitForWorkspaceRegistration = async (mastra?: Mastra, id?: string, timeout = 1000) => {
+    if (!mastra || !id) {
+      // Fallback for cases where we just need a small delay
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return;
+    }
+    const start = Date.now();
+    while (!mastra.listWorkspaces()[id]) {
+      if (Date.now() - start > timeout) {
+        throw new Error(`Workspace ${id} not registered within ${timeout}ms`);
+      }
+      await new Promise(r => setTimeout(r, 5));
+    }
+  };
 
   const createMockModel = () =>
     new MockLanguageModelV1({
