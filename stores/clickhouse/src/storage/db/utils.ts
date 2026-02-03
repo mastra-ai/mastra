@@ -1,6 +1,5 @@
-import type { CORE_TABLE_NAMES, TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
+import type { TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
 import {
-  TABLE_AGENTS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_SCORERS,
@@ -12,7 +11,7 @@ import {
   TABLE_AGENT_VERSIONS,
 } from '@mastra/core/storage';
 
-export const TABLE_ENGINES: Partial<Record<TABLE_NAMES, string>> & Record<CORE_TABLE_NAMES, string> = {
+export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
   [TABLE_WORKFLOW_SNAPSHOT]: `ReplacingMergeTree()`,
   [TABLE_TRACES]: `MergeTree()`,
@@ -23,7 +22,7 @@ export const TABLE_ENGINES: Partial<Record<TABLE_NAMES, string>> & Record<CORE_T
   // keeping the row with the highest updatedAt value. Combined with ORDER BY (traceId, spanId),
   // this provides eventual uniqueness for the (traceId, spanId) composite key.
   [TABLE_SPANS]: `ReplacingMergeTree(updatedAt)`,
-  [TABLE_AGENTS]: `ReplacingMergeTree()`,
+  mastra_agents: `ReplacingMergeTree()`,
   [TABLE_AGENT_VERSIONS]: `MergeTree()`,
 };
 
@@ -91,11 +90,6 @@ export function transformRow<R>(row: any): R {
   }
   if (row.endedAt) {
     row.endedAt = new Date(row.endedAt);
-  }
-
-  // Normalize metadata: ClickHouse Nullable(String) can return null or ''
-  if ('metadata' in row && (!row.metadata || row.metadata === '')) {
-    row.metadata = {};
   }
 
   // Parse JSONB fields if they're JSON strings
