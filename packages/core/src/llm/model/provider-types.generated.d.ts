@@ -1762,6 +1762,16 @@ export type ProviderModelsMap = {
     'glm-4.7',
     'glm-4.7-flash',
   ];
+  readonly berget: readonly [
+    'BAAI/bge-reranker-v2-m3',
+    'KBLab/kb-whisper-large',
+    'intfloat/multilingual-e5-large',
+    'intfloat/multilingual-e5-large-instruct',
+    'meta-llama/Llama-3.3-70B-Instruct',
+    'mistralai/Mistral-Small-3.2-24B-Instruct-2506',
+    'openai/gpt-oss-120b',
+    'zai-org/GLM-4.7',
+  ];
   readonly inference: readonly [
     'google/gemma-3',
     'meta/llama-3.1-8b-instruct',
@@ -2074,7 +2084,6 @@ export type ProviderModelsMap = {
     'gemini/gemini-2.0-flash-lite',
     'gemini/gemini-2.5-flash',
     'gemini/gemini-2.5-flash-image',
-    'gemini/gemini-2.5-flash-image-preview',
     'gemini/gemini-2.5-flash-lite',
     'gemini/gemini-2.5-flash-lite-preview-09-2025',
     'gemini/gemini-2.5-pro',
