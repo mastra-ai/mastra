@@ -15,9 +15,16 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "@mastra/redis": "workspace:*"
+    "@mastra/core": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/redis": "latest"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/redis": "link:../../stores/redis"
+    }
   },
   "devDependencies": {
     "dotenv": "^17.0.0",
