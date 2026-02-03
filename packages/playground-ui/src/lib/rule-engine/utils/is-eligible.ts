@@ -2,6 +2,21 @@ import { Rule, RuleContext } from "../types";
 
 const isString = (value: unknown): value is string => typeof value === "string";
 
+const isNumber = (value: unknown): value is number =>
+  typeof value === "number" && !Number.isNaN(value);
+
+const areBothNumbers = (a: unknown, b: unknown): boolean =>
+  isNumber(a) && isNumber(b);
+
+const areBothStrings = (a: unknown, b: unknown): boolean =>
+  isString(a) && isString(b);
+
+const isDate = (value: unknown): value is Date =>
+  value instanceof Date && !Number.isNaN(value.getTime());
+
+const areBothDates = (a: unknown, b: unknown): boolean =>
+  isDate(a) && isDate(b);
+
 /**
  * Checks if a value is null or undefined.
  */
@@ -17,7 +32,7 @@ const isNullish = (value: unknown): value is null | undefined =>
  * @returns The value at the path, or undefined if not found
  */
 const getNestedValue = (obj: RuleContext, path: string): unknown => {
-  const keys = path.split(".");
+  const keys = path.split(".").filter(Boolean);
 
   let current: unknown = obj;
 
@@ -59,7 +74,19 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
 
         if (isNullish(fieldValue) || isNullish(rule.value)) return false;
 
-        return fieldValue! > rule.value!;
+        // Only compare values of the same type
+        if (areBothNumbers(fieldValue, rule.value)) {
+          return fieldValue > rule.value;
+        }
+        if (areBothStrings(fieldValue, rule.value)) {
+          return fieldValue > rule.value;
+        }
+        if (areBothDates(fieldValue, rule.value)) {
+          return fieldValue > rule.value;
+        }
+
+        // Incompatible types - cannot compare
+        return false;
       }
 
       case "less_than": {
@@ -67,27 +94,53 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
 
         if (isNullish(fieldValue) || isNullish(rule.value)) return false;
 
-        return fieldValue! < rule.value!;
+        // Only compare values of the same type
+        if (areBothNumbers(fieldValue, rule.value)) {
+          return fieldValue < rule.value;
+        }
+        if (areBothStrings(fieldValue, rule.value)) {
+          return fieldValue < rule.value;
+        }
+        if (areBothDates(fieldValue, rule.value)) {
+          return fieldValue < rule.value;
+        }
+
+        // Incompatible types - cannot compare
+        return false;
       }
 
       case "contains": {
         const fieldValue = getNestedValue(context, rule.field);
 
-        return (
-          isString(fieldValue) &&
-          isString(rule.value) &&
-          fieldValue.includes(rule.value)
-        );
+        // String contains string
+        if (isString(fieldValue) && isString(rule.value)) {
+          return fieldValue.includes(rule.value);
+        }
+
+        // Array contains value
+        if (Array.isArray(fieldValue)) {
+          return fieldValue.includes(rule.value);
+        }
+
+        // Incompatible types
+        return false;
       }
 
       case "not_contains": {
         const fieldValue = getNestedValue(context, rule.field);
 
-        return (
-          isString(fieldValue) &&
-          isString(rule.value) &&
-          !fieldValue.includes(rule.value)
-        );
+        // String does not contain string
+        if (isString(fieldValue) && isString(rule.value)) {
+          return !fieldValue.includes(rule.value);
+        }
+
+        // Array does not contain value
+        if (Array.isArray(fieldValue)) {
+          return !fieldValue.includes(rule.value);
+        }
+
+        // Incompatible types - cannot determine containment
+        return false;
       }
 
       case "in": {

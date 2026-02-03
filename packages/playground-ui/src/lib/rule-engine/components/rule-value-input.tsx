@@ -21,9 +21,19 @@ const parseValue = (stringValue: string): unknown => {
   // Null
   if (trimmed === "null") return null;
 
+  // Reject special number strings - keep as strings
+  const lowerTrimmed = trimmed.toLowerCase();
+  if (
+    lowerTrimmed === "infinity" ||
+    lowerTrimmed === "-infinity" ||
+    lowerTrimmed === "nan"
+  ) {
+    return trimmed;
+  }
+
   // Number
   const num = Number(trimmed);
-  if (!Number.isNaN(num) && trimmed !== "") return num;
+  if (!Number.isNaN(num)) return num;
 
   // String (default)
   return stringValue;

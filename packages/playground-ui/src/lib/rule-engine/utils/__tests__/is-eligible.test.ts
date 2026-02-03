@@ -98,10 +98,10 @@ describe("isEligible", () => {
       ["b", "a", true],
       ["a", "b", false],
       ["apple", "Apple", true],
-      [true, false, true],
-      [false, true, false],
-      [10, "5", true],
-      ["10", 5, true],
+      [true, false, false], // booleans not comparable
+      [false, true, false], // booleans not comparable
+      [10, "5", false], // mixed number/string not comparable
+      ["10", 5, false], // mixed string/number not comparable
       [undefined, 0, false],
       [null, 0, false],
       [null, -1, false],
@@ -148,10 +148,10 @@ describe("isEligible", () => {
       ["a", "b", true],
       ["b", "a", false],
       ["Apple", "apple", true],
-      [false, true, true],
-      [true, false, false],
-      ["5", 10, true],
-      [5, "10", true],
+      [false, true, false], // booleans not comparable
+      [true, false, false], // booleans not comparable
+      ["5", 10, false], // mixed string/number not comparable
+      [5, "10", false], // mixed number/string not comparable
       [null, 0, false],
       [0, null, false],
       [undefined, null, false],
@@ -582,16 +582,16 @@ describe("isEligible", () => {
       expect(isEligible(rules, context)).toBe(false);
     });
 
-    it("handles empty path segments gracefully", () => {
+    it("handles empty path segments gracefully by filtering them out", () => {
       const rules: Rule[] = [
-        { field: "user..name", operator: "equals", value: undefined },
+        { field: "user..name", operator: "equals", value: "John" },
       ];
 
       const context: RuleContext = {
         user: { name: "John" },
       };
 
-      // Empty key "" doesn't exist on user object
+      // Empty segments are filtered: "user..name" becomes ["user", "name"]
       expect(isEligible(rules, context)).toBe(true);
     });
 
