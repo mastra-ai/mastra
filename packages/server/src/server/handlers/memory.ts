@@ -437,6 +437,7 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
   summary: 'Get observational memory data',
   description: 'Returns the current observational memory record and optional history for a resource/thread',
   tags: ['Memory'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
     try {
       // Verify agent has OM enabled
