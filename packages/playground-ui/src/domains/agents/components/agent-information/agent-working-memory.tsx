@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
