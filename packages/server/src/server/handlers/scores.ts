@@ -71,7 +71,7 @@ async function listScorersFromSystem({
 
   // Process stored agents (database-backed agents)
   try {
-    const storedAgentsResult = await mastra.listStoredAgents();
+    const storedAgentsResult = await mastra.getEditor()?.listStoredAgents();
     if (storedAgentsResult?.agents) {
       for (const storedAgent of storedAgentsResult.agents) {
         await processAgentScorers(storedAgent);
