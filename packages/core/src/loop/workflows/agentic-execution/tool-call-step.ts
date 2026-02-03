@@ -361,6 +361,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           outputWriter,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
+          // Pass workspace from _internal (set by llmExecutionStep via prepareStep/processInputStep)
+          workspace: _internal?.stepWorkspace,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             controller.enqueue({
               type: 'tool-call-suspended',

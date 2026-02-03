@@ -3094,6 +3094,7 @@ export class Agent<
     });
 
     const memory = await this.getMemory({ requestContext });
+    const workspace = await this.getWorkspace({ requestContext });
 
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,
@@ -3148,6 +3149,7 @@ export class Agent<
       agentId: this.id,
       agentName: this.name,
       toolCallId: options.toolCallId,
+      workspace,
     });
 
     const run = await executionWorkflow.createRun();
