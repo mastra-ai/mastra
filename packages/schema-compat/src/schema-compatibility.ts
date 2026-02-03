@@ -534,18 +534,6 @@ export abstract class SchemaCompatLayer {
     return jsonSchemaUtils.isUnionSchema(schema);
   }
 
-  protected isNullableSchema(schema: JSONSchema7): boolean {
-    return jsonSchemaUtils.isNullableSchema(schema);
-  }
-
-  protected isDateSchema(schema: JSONSchema7): boolean {
-    return jsonSchemaUtils.isStringSchema(schema) && (schema.format === 'date' || schema.format === 'date-time');
-  }
-
-  protected isEmptySchema(schema: JSONSchema7): boolean {
-    return Object.keys(schema).length === 0;
-  }
-
   /**
    * Checks if a property is optional within a parent object schema.
    * A property is optional if it's not in the parent's `required` array.

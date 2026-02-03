@@ -84,7 +84,15 @@ export class AiSdkSchemaWrapper<Input = unknown, Output = Input> implements Stan
         // Wrap PromiseLike in a proper Promise to satisfy the StandardSchemaV1 interface
         return Promise.resolve(
           result as PromiseLike<{ success: true; value: Output } | { success: false; error: Error }>,
-        ).then(res => this.#convertValidationResult(res));
+        )
+          .then(res => this.#convertValidationResult(res))
+          .catch((error: unknown) => {
+            // Convert rejected promises to the expected { issues: [...] } shape
+            const message = error instanceof Error ? error.message : 'Unknown validation error';
+            return {
+              issues: [{ message: `Schema validation error: ${message}` }],
+            } as StandardSchemaV1.Result<Output>;
+          });
       }
 
       // It's a sync result
