@@ -329,7 +329,7 @@ describe('Mock OM Agent Integration', () => {
       name: 'Test OM Agent',
       instructions: 'You are a helpful assistant. Always use the test tool first.',
       model: createMockOmModel(longResponseText) as any,
-      tools: { 'test': omTriggerTool },
+      tools: { test: omTriggerTool },
       memory,
     });
   });
