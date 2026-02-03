@@ -5,6 +5,10 @@ export * from './workspace';
 export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';
 export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
+// Base Classes for External Providers
+export { MastraFilesystem } from './filesystem';
+export { MastraSandbox } from './sandbox';
+
 // Errors
 export * from './errors';
 export {

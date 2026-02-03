@@ -2702,6 +2702,10 @@ export class Mastra<
       this.#serverAdapter.__setLogger(this.#logger);
     }
 
+    if (this.#workspace) {
+      this.#workspace.__setLogger(this.#logger);
+    }
+
     this.#observability.setLogger({ logger: this.#logger });
   }
 
