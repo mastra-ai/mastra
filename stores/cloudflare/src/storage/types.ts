@@ -7,7 +7,7 @@ import type {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_TRACES,
   TABLE_RESOURCES,
-  TABLE_NAMES,
+  CORE_TABLE_NAMES,
   StorageResourceType,
   TABLE_SCORERS,
   TABLE_SPANS,
@@ -70,7 +70,7 @@ export interface CloudflareRestConfig extends CloudflareBaseConfig {
 export interface CloudflareWorkersConfig extends CloudflareBaseConfig {
   /** KV namespace bindings from Workers environment */
   bindings: {
-    [key in TABLE_NAMES]: KVNamespace;
+    [key in CORE_TABLE_NAMES]: KVNamespace;
   };
   /** Optional prefix for keys within namespaces */
   keyPrefix?: string;
@@ -86,7 +86,7 @@ export type CloudflareStoreConfig = CloudflareRestConfig | CloudflareWorkersConf
  */
 export interface KVOperation {
   /** Table/namespace to operate on */
-  tableName: TABLE_NAMES;
+  tableName: CORE_TABLE_NAMES;
   /** Key to read/write */
   key: string;
   /** Value to write (for put operations) */
@@ -144,7 +144,7 @@ export interface CloudflareDomainClientConfig {
  */
 export interface CloudflareDomainBindingsConfig {
   bindings: {
-    [key in TABLE_NAMES]: KVNamespace;
+    [key in CORE_TABLE_NAMES]: KVNamespace;
   };
   keyPrefix?: string;
 }

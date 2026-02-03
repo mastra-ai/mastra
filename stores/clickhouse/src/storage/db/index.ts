@@ -10,7 +10,7 @@ import {
   TABLE_SCHEMAS,
   getDefaultValue,
 } from '@mastra/core/storage';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { StorageColumn, TABLE_NAMES, CORE_TABLE_NAMES } from '@mastra/core/storage';
 import type { ClickhouseConfig } from './utils';
 import { TABLE_ENGINES, transformRow } from './utils';
 
@@ -267,7 +267,7 @@ export class ClickhouseDB extends MastraBase {
           if (name === 'metadata' && (def.type === 'text' || def.type === 'jsonb') && isNullable) {
             constraints.push("DEFAULT '{}'");
           }
-          const columnTtl = this.ttl?.[tableName]?.columns?.[name];
+          const columnTtl = this.ttl?.[tableName as CORE_TABLE_NAMES]?.columns?.[name];
           return `"${name}" ${sqlType} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
         })
         .join(',\n');
@@ -418,12 +418,12 @@ export class ClickhouseDB extends MastraBase {
           if (name === 'metadata' && (def.type === 'text' || def.type === 'jsonb') && isNullable) {
             constraints.push("DEFAULT '{}'");
           }
-          const columnTtl = this.ttl?.[tableName]?.columns?.[name];
+          const columnTtl = this.ttl?.[tableName as CORE_TABLE_NAMES]?.columns?.[name];
           return `"${name}" ${sqlType} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
         })
         .join(',\n');
 
-      const rowTtl = this.ttl?.[tableName]?.row;
+      const rowTtl = this.ttl?.[tableName as CORE_TABLE_NAMES]?.row;
       let sql: string;
 
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
@@ -431,7 +431,7 @@ export class ClickhouseDB extends MastraBase {
             CREATE TABLE IF NOT EXISTS ${tableName} (
               ${['id String'].concat(columns)}
             )
-            ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
+            ENGINE = ${TABLE_ENGINES[tableName as CORE_TABLE_NAMES] ?? 'MergeTree()'}
             PRIMARY KEY (createdAt, run_id, workflow_name)
             ORDER BY (createdAt, run_id, workflow_name)
             ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
@@ -446,7 +446,7 @@ export class ClickhouseDB extends MastraBase {
             CREATE TABLE IF NOT EXISTS ${tableName} (
               ${columns}
             )
-            ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
+            ENGINE = ${TABLE_ENGINES[tableName as CORE_TABLE_NAMES] ?? 'MergeTree()'}
             PRIMARY KEY (traceId, spanId)
             ORDER BY (traceId, spanId)
             ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
@@ -457,10 +457,10 @@ export class ClickhouseDB extends MastraBase {
             CREATE TABLE IF NOT EXISTS ${tableName} (
               ${columns}
             )
-            ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
+            ENGINE = ${TABLE_ENGINES[tableName as CORE_TABLE_NAMES] ?? 'MergeTree()'}
             PRIMARY KEY (createdAt, ${'id'})
             ORDER BY (createdAt, ${'id'})
-            ${this.ttl?.[tableName]?.row ? `TTL toDateTime(createdAt) + INTERVAL ${this.ttl[tableName].row.interval} ${this.ttl[tableName].row.unit}` : ''}
+            ${this.ttl?.[tableName as CORE_TABLE_NAMES]?.row ? `TTL toDateTime(createdAt) + INTERVAL ${this.ttl[tableName as CORE_TABLE_NAMES]!.row!.interval} ${this.ttl[tableName as CORE_TABLE_NAMES]!.row!.unit}` : ''}
             SETTINGS index_granularity = 8192
           `;
       }
@@ -647,7 +647,7 @@ export class ClickhouseDB extends MastraBase {
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     try {
-      const engine = TABLE_ENGINES[tableName] ?? 'MergeTree()';
+      const engine = TABLE_ENGINES[tableName as CORE_TABLE_NAMES] ?? 'MergeTree()';
       const keyEntries = Object.entries(keys);
       const conditions = keyEntries
         .map(
