@@ -97,7 +97,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // Capture headers set by plugins (e.g., @fastify/cors) BEFORE hijacking
     // reply.hijack() bypasses Fastify's response handling, so we need to preserve
     // any headers that were set by hooks/plugins and manually include them
-    const existingHeaders = reply.getHeaders();
+    const rawHeaders = reply.getHeaders();
+    // Filter out undefined values to satisfy OutgoingHttpHeaders type
+    const existingHeaders: Record<string, string | number | string[]> = {};
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (value !== undefined) {
+        existingHeaders[key] = value;
+      }
+    }
 
     // Hijack the reply to take control of the response
     // This is required when writing directly to reply.raw
