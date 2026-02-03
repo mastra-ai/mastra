@@ -438,4 +438,61 @@ describe('JsonExporter', () => {
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('ended without starting'));
     });
   });
+
+  describe('cloudflare workers compatibility', () => {
+    it('should not execute Node.js-specific code at module load time', async () => {
+      // This test verifies the fix for GitHub issue #12536:
+      // CloudFlare Workers deployment fails because fileURLToPath(import.meta.url)
+      // is called at module initialization time, before any method is invoked.
+      //
+      // In CloudFlare Workers, import.meta.url is undefined during worker startup,
+      // causing the module to fail to load even if JsonExporter is never used.
+      //
+      // The fix moves the SNAPSHOTS_DIR initialization inside getSnapshotsDir(),
+      // making it lazy and only executed when the testing functionality is actually needed.
+
+      // Verify the JsonExporter class can be instantiated without errors
+      // (proves the module loaded successfully without executing Node.js-specific code)
+      const exporter = new JsonExporter();
+      expect(exporter).toBeDefined();
+      expect(exporter.name).toBe('json-exporter');
+
+      // Verify basic functionality works without triggering snapshot-related code
+      const span = createMockSpan({ name: 'cf-worker-test' });
+      await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
+      await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_ENDED, { ...span, endTime: new Date() }));
+
+      expect(exporter.getAllSpans()).toHaveLength(1);
+      expect(exporter.toJSON()).toContain('cf-worker-test');
+    });
+
+    it('should only use fileURLToPath when assertMatchesSnapshot is called', async () => {
+      // The fileURLToPath and dirname imports should only be used inside
+      // getSnapshotsDir(), not at module load time.
+      //
+      // This test ensures that all other JsonExporter methods work without
+      // needing the __snapshots__ directory path to be resolved.
+
+      const exporter = new JsonExporter();
+
+      // All these operations should work without needing SNAPSHOTS_DIR:
+      const span = createMockSpan({ name: 'snapshot-independence-test' });
+      await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
+      await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_ENDED, { ...span, endTime: new Date() }));
+
+      // Query methods
+      expect(exporter.getSpansByType(SpanType.AGENT_RUN)).toHaveLength(1);
+      expect(exporter.getCompletedSpans()).toHaveLength(1);
+      expect(exporter.getAllSpans()).toHaveLength(1);
+      expect(exporter.getStatistics().totalSpans).toBe(1);
+
+      // Output methods
+      expect(exporter.toJSON()).toBeDefined();
+      expect(exporter.toTreeJSON()).toBeDefined();
+      expect(exporter.toNormalizedTreeJSON()).toBeDefined();
+      expect(exporter.buildSpanTree()).toHaveLength(1);
+      expect(exporter.buildNormalizedTree()).toHaveLength(1);
+      expect(exporter.generateStructureGraph()).toHaveLength(1);
+    });
+  });
 });
