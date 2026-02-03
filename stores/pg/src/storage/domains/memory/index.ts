@@ -22,6 +22,7 @@ const OM_TABLE = 'mastra_observational_memory' as const;
 import type {
   StorageResourceType,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -655,16 +656,15 @@ export class MemoryPG extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const { threadId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Validate that either threadId or resourceId is provided
+    // Validate that threadId is provided
     const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
     const hasThreadId =
       threadId !== undefined &&
       (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
-    const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
 
-    if (!hasThreadId && !hasResourceId) {
+    if (!hasThreadId) {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_MESSAGES', 'INVALID_QUERY'),
@@ -672,15 +672,14 @@ export class MemoryPG extends MemoryStorage {
           category: ErrorCategory.USER,
           details: {
             threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
-            resourceId: resourceId ?? '',
           },
         },
-        new Error('Either threadId or resourceId must be provided'),
+        new Error('threadId is required'),
       );
     }
 
-    // Normalize threadId to array (only if provided)
-    const threadIds = hasThreadId ? (Array.isArray(threadId) ? threadId : [threadId!]) : [];
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId!];
 
     // Validate page parameter
     if (page < 0) {
@@ -711,19 +710,11 @@ export class MemoryPG extends MemoryStorage {
       const queryParams: any[] = [];
       let paramIndex = 1;
 
-      // Add thread filter only if threadIds are provided
-      if (threadIds.length > 0) {
-        const threadPlaceholders = threadIds.map((_, i) => `$${paramIndex + i}`).join(', ');
-        conditions.push(`thread_id IN (${threadPlaceholders})`);
-        queryParams.push(...threadIds);
-        paramIndex += threadIds.length;
-      }
-
-      // Add resourceId filter (can be used alone or with threadId)
-      if (resourceId) {
-        conditions.push(`"resourceId" = $${paramIndex++}`);
-        queryParams.push(resourceId);
-      }
+      // Add thread filter
+      const threadPlaceholders = threadIds.map((_, i) => `$${paramIndex + i}`).join(', ');
+      conditions.push(`thread_id IN (${threadPlaceholders})`);
+      queryParams.push(...threadIds);
+      paramIndex += threadIds.length;
 
       if (filter?.dateRange?.start) {
         const startOp = filter.dateRange.startExclusive ? '>' : '>=';
@@ -818,6 +809,163 @@ export class MemoryPG extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  public async listMessagesByResourceId(
+    args: StorageListMessagesByResourceIdInput,
+  ): Promise<StorageListMessagesOutput> {
+    const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+
+    // Validate that resourceId is provided
+    const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
+    if (!hasResourceId) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'LIST_MESSAGES_BY_RESOURCE_ID', 'INVALID_QUERY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            resourceId: resourceId ?? '',
+          },
+        },
+        new Error('resourceId is required'),
+      );
+    }
+
+    // Validate page parameter
+    if (page < 0) {
+      throw new MastraError({
+        id: createStorageErrorId('PG', 'LIST_MESSAGES_BY_RESOURCE_ID', 'INVALID_PAGE'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Page number must be non-negative',
+        details: {
+          resourceId,
+          page,
+        },
+      });
+    }
+
+    const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+      const orderByStatement = `ORDER BY "${field}" ${direction}`;
+
+      const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
+      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+
+      // Build WHERE conditions
+      const conditions: string[] = [];
+      const queryParams: any[] = [];
+      let paramIndex = 1;
+
+      // Add resourceId filter
+      conditions.push(`"resourceId" = $${paramIndex++}`);
+      queryParams.push(resourceId);
+
+      if (filter?.dateRange?.start) {
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`"createdAt" ${startOp} $${paramIndex++}`);
+        queryParams.push(filter.dateRange.start);
+      }
+
+      if (filter?.dateRange?.end) {
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`"createdAt" ${endOp} $${paramIndex++}`);
+        queryParams.push(filter.dateRange.end);
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
+      const countResult = await this.#db.client.one(countQuery, queryParams);
+      const total = parseInt(countResult.count, 10);
+
+      const limitValue = perPageInput === false ? total : perPage;
+      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
+      const messages: MessageRowFromDB[] = [...(rows || [])];
+
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      const messageIds = new Set(messages.map(m => m.id));
+      if (include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (includeMessages) {
+          for (const includeMsg of includeMessages) {
+            if (!messageIds.has(includeMsg.id)) {
+              messages.push(includeMsg);
+              messageIds.add(includeMsg.id);
+            }
+          }
+        }
+      }
+
+      const messagesWithParsedContent = messages.map(row => this.parseRow(row));
+
+      const list = new MessageList().add(messagesWithParsedContent, 'memory');
+      let finalMessages = list.get.all.db();
+
+      finalMessages = finalMessages.sort((a, b) => {
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+        if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
+        if (aValue == null) return 1;
+        if (bValue == null) return -1;
+
+        if (aValue === bValue) {
+          return a.id.localeCompare(b.id);
+        }
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
+      });
+
+      const hasMore = perPageInput !== false && offset + perPage < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('PG', 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
             resourceId: resourceId ?? '',
           },
         },

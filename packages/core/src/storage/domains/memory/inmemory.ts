@@ -7,6 +7,7 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -89,15 +90,14 @@ export class InMemoryMemory extends MemoryStorage {
 
   async listMessages({
     threadId,
-    resourceId,
+    resourceId: optionalResourceId,
     include,
     filter,
     perPage: perPageInput,
     page = 0,
     orderBy,
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    // Normalize threadId to array (may be undefined if querying by resourceId only)
-    // Treat empty strings and whitespace-only strings as undefined
+    // Normalize threadId to array (now required)
     const normalizedThreadId =
       threadId && (Array.isArray(threadId) ? threadId.filter(id => id.trim()) : threadId.trim() || undefined);
     const threadIds = normalizedThreadId
@@ -106,15 +106,16 @@ export class InMemoryMemory extends MemoryStorage {
         : [normalizedThreadId]
       : undefined;
 
-    // Validate: at least one of threadId or resourceId must be provided
-    if (!threadIds?.length && !resourceId) {
-      throw new Error('Either threadId or resourceId must be provided');
+    // Validate: threadId is required
+    if (!threadIds?.length) {
+      throw new Error('threadId must be provided for listMessages');
     }
 
     if (threadIds?.length) {
       this.logger.debug(`InMemoryMemory: listMessages called for threads ${threadIds.join(', ')}`);
-    } else {
-      this.logger.debug(`InMemoryMemory: listMessages called for resourceId ${resourceId}`);
+      if (optionalResourceId) {
+        this.logger.debug(`InMemoryMemory: filtering by resourceId ${optionalResourceId}`);
+      }
     }
 
     const threadIdSet = threadIds ? new Set(threadIds) : undefined;
@@ -138,12 +139,12 @@ export class InMemoryMemory extends MemoryStorage {
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-    // Step 1: Get messages matching threadId(s) and/or resourceId
+    // Step 1: Get messages matching threadId(s) and optionally resourceId
     let threadMessages = Array.from(this.db.messages.values()).filter((msg: any) => {
-      // If threadIds provided, message must be in one of them
+      // Message must be in one of the specified threads
       if (threadIdSet && !threadIdSet.has(msg.thread_id)) return false;
-      // If resourceId provided, message must match it
-      if (resourceId && msg.resourceId !== resourceId) return false;
+      // If optionalResourceId provided, message must match it
+      if (optionalResourceId && msg.resourceId !== optionalResourceId) return false;
       return true;
     });
 
@@ -295,6 +296,74 @@ export class InMemoryMemory extends MemoryStorage {
     return {
       messages,
       total: totalThreadMessages,
+      page,
+      perPage: perPageForResponse,
+      hasMore,
+    };
+  }
+
+  async listMessagesByResourceId({
+    resourceId,
+    filter,
+    perPage: perPageInput,
+    page = 0,
+    orderBy,
+  }: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
+    this.logger.debug(`InMemoryMemory: listMessagesByResourceId called for resource ${resourceId}`);
+
+    const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+
+    // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
+    const perPage = normalizePerPage(perPageInput, 40);
+
+    if (page < 0) {
+      throw new Error('page must be >= 0');
+    }
+
+    // Prevent unreasonably large page values that could cause performance issues
+    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
+    if (page * perPage > maxOffset) {
+      throw new Error('page value too large');
+    }
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    // Get all messages matching the resourceId (across all threads)
+    let messages = Array.from(this.db.messages.values()).filter((msg: any) => msg.resourceId === resourceId);
+
+    // Apply date filtering
+    messages = filterByDateRange(messages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
+
+    // Sort messages
+    messages.sort((a: any, b: any) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date(a[field]).getTime() : a[field];
+      const bValue = isDateField ? new Date(b[field]).getTime() : b[field];
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+
+    // Get total count for pagination
+    const total = messages.length;
+
+    // Apply pagination
+    const paginatedMessages = messages.slice(offset, offset + perPage);
+
+    const list = new MessageList().add(
+      paginatedMessages.map(m => this.parseStoredMessage(m)),
+      'memory',
+    );
+
+    const hasMore = offset + paginatedMessages.length < total;
+
+    return {
+      messages: list.get.all.db(),
+      total,
       page,
       perPage: perPageForResponse,
       hasMore,

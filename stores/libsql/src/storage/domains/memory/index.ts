@@ -6,6 +6,7 @@ import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -190,16 +191,15 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const { threadId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Validate that either threadId or resourceId is provided
+    // Validate that threadId is provided
     const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
     const hasThreadId =
       threadId !== undefined &&
       (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
-    const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
 
-    if (!hasThreadId && !hasResourceId) {
+    if (!hasThreadId) {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_QUERY'),
@@ -207,15 +207,14 @@ export class MemoryLibSQL extends MemoryStorage {
           category: ErrorCategory.USER,
           details: {
             threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
-            resourceId: resourceId ?? '',
           },
         },
-        new Error('Either threadId or resourceId must be provided'),
+        new Error('threadId is required'),
       );
     }
 
-    // Normalize threadId to array (only if provided)
-    const threadIds = hasThreadId ? (Array.isArray(threadId) ? threadId : [threadId!]) : [];
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId!];
 
     if (page < 0) {
       throw new MastraError(
@@ -241,18 +240,10 @@ export class MemoryLibSQL extends MemoryStorage {
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
 
-      // Add thread filter only if threadIds are provided
-      if (threadIds.length > 0) {
-        const threadPlaceholders = threadIds.map(() => '?').join(', ');
-        conditions.push(`thread_id IN (${threadPlaceholders})`);
-        queryParams.push(...threadIds);
-      }
-
-      // Add resourceId filter (can be used alone or with threadId)
-      if (resourceId) {
-        conditions.push(`"resourceId" = ?`);
-        queryParams.push(resourceId);
-      }
+      // Add thread filter (always present for listMessages)
+      const threadPlaceholders = threadIds.map(() => '?').join(', ');
+      conditions.push(`thread_id IN (${threadPlaceholders})`);
+      queryParams.push(...threadIds);
 
       if (filter?.dateRange?.start) {
         const startOp = filter.dateRange.startExclusive ? '>' : '>=';
@@ -356,8 +347,161 @@ export class MemoryLibSQL extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
-            resourceId: resourceId ?? '',
           },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  public async listMessagesByResourceId(
+    args: StorageListMessagesByResourceIdInput,
+  ): Promise<StorageListMessagesOutput> {
+    const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+
+    if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resourceId: resourceId ?? '' },
+        },
+        new Error('resourceId is required'),
+      );
+    }
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      // Determine sort field and direction
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+      const orderByStatement = `ORDER BY "${field}" ${direction}`;
+
+      // Build WHERE conditions
+      const conditions: string[] = [];
+      const queryParams: InValue[] = [];
+
+      // Add resourceId filter (required for listMessagesByResourceId)
+      conditions.push(`"resourceId" = ?`);
+      queryParams.push(resourceId);
+
+      if (filter?.dateRange?.start) {
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`"createdAt" ${startOp} ?`);
+        queryParams.push(
+          filter.dateRange.start instanceof Date ? filter.dateRange.start.toISOString() : filter.dateRange.start,
+        );
+      }
+
+      if (filter?.dateRange?.end) {
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`"createdAt" ${endOp} ?`);
+        queryParams.push(
+          filter.dateRange.end instanceof Date ? filter.dateRange.end.toISOString() : filter.dateRange.end,
+        );
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+      // Get total count
+      const countResult = await this.#client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      // Step 1: Get paginated messages
+      const limitValue = perPageInput === false ? total : perPage;
+      const dataResult = await this.#client.execute({
+        sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} ${orderByStatement} LIMIT ? OFFSET ?`,
+        args: [...queryParams, limitValue, offset],
+      });
+      const messages: MastraDBMessage[] = (dataResult.rows || []).map((row: any) => this.parseRow(row));
+
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(messages.map(m => m.id));
+      if (include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (includeMessages) {
+          // Deduplicate: only add messages that aren't already in the paginated results
+          for (const includeMsg of includeMessages) {
+            if (!messageIds.has(includeMsg.id)) {
+              messages.push(includeMsg);
+              messageIds.add(includeMsg.id);
+            }
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(messages, 'memory');
+      let finalMessages = list.get.all.db();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
+      });
+
+      // Calculate hasMore based on pagination window
+      const hasMore = perPageInput !== false && offset + perPage < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
         },
         error,
       );

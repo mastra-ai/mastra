@@ -1466,7 +1466,7 @@ describe('ObservationalMemory Integration', () => {
     });
   });
 
-  describe('resource-scoped message loading (listMessages by resourceId)', () => {
+  describe('resource-scoped message loading (listMessagesByResourceId)', () => {
     const resourceId = 'test-resource-for-messages';
 
     it('should load all messages for a resource across multiple threads', async () => {
@@ -1546,7 +1546,7 @@ describe('ObservationalMemory Integration', () => {
       await storage.saveMessages({ messages });
 
       // Query all messages for the resource (no threadId)
-      const result = await storage.listMessages({
+      const result = await storage.listMessagesByResourceId({
         resourceId,
         perPage: false,
         orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -1630,7 +1630,7 @@ describe('ObservationalMemory Integration', () => {
       await storage.saveMessages({ messages });
 
       // Query with dateRange.start (simulating lastObservedAt cursor)
-      const result = await storage.listMessages({
+      const result = await storage.listMessagesByResourceId({
         resourceId,
         perPage: false,
         orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -1676,7 +1676,7 @@ describe('ObservationalMemory Integration', () => {
       await storage.saveMessages({ messages });
 
       // Query with cursor after all messages
-      const result = await storage.listMessages({
+      const result = await storage.listMessagesByResourceId({
         resourceId,
         perPage: false,
         filter: {
@@ -1739,7 +1739,7 @@ describe('ObservationalMemory Integration', () => {
       await storage.saveMessages({ messages });
 
       // Query for target resource only
-      const result = await storage.listMessages({
+      const result = await storage.listMessagesByResourceId({
         resourceId,
         perPage: false,
       });

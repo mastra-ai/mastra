@@ -97,33 +97,33 @@ type StorageListMessagesOptions = {
 };
 
 /**
- * Input for listing messages - requires either threadId OR resourceId.
- * This is a discriminated union to ensure at least one is provided.
+ * Input for listing messages by thread ID.
+ * The resource ID can be optionally provided to filter messages within the thread.
  */
-export type StorageListMessagesInput =
-  | (StorageListMessagesOptions & {
-      /**
-       * Thread ID(s) to query messages from.
-       */
-      threadId: string | string[];
-      /**
-       * Optional resource ID to further filter messages.
-       */
-      resourceId?: string;
-    })
-  | (StorageListMessagesOptions & {
-      /**
-       * When querying by resourceId only, threadId must be undefined.
-       */
-      threadId?: undefined;
-      /**
-       * Resource ID to query ALL messages for the resource across all threads.
-       */
-      resourceId: string;
-    });
+export type StorageListMessagesInput = StorageListMessagesOptions & {
+  /**
+   * Thread ID(s) to query messages from.
+   */
+  threadId: string | string[];
+  /**
+   * Optional resource ID to further filter messages within the thread(s).
+   */
+  resourceId?: string;
+};
 
 export type StorageListMessagesOutput = PaginationInfo & {
   messages: MastraDBMessage[];
+};
+
+/**
+ * Input for listing messages by resource ID only (across all threads).
+ * Used by Observational Memory and LongMemEval for resource-scoped queries.
+ */
+export type StorageListMessagesByResourceIdInput = StorageListMessagesOptions & {
+  /**
+   * Resource ID to query ALL messages for the resource across all threads.
+   */
+  resourceId: string;
 };
 
 export type StorageListWorkflowRunsInput = {

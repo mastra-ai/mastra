@@ -583,7 +583,14 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       });
     });
 
-    describe('listMessages by resourceId only (without threadId)', () => {
+    describe('listMessagesByResourceId (resource-scoped queries)', () => {
+      // Skip for adapters that don't support OM/resource-scoped queries
+      beforeEach(ctx => {
+        if (!memoryStorage.supportsObservationalMemory) {
+          ctx.skip();
+        }
+      });
+
       it('should list all messages for a resource across multiple threads', async () => {
         // thread and thread2 are already created in beforeEach with different resourceIds
         // Create a third thread with the same resourceId as thread
@@ -609,7 +616,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         await memoryStorage.saveMessages({ messages: thread3Messages });
 
         // Query by resourceId only - should get messages from thread AND thread3
-        const result = await memoryStorage.listMessages({
+        const result = await memoryStorage.listMessagesByResourceId({
           resourceId: thread.resourceId,
           perPage: false,
         });
@@ -661,7 +668,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         await memoryStorage.saveMessages({ messages: resourceMessages });
 
         // Query by resourceId with dateRange.start (cursor-based loading)
-        const result = await memoryStorage.listMessages({
+        const result = await memoryStorage.listMessagesByResourceId({
           resourceId: resourceThread.resourceId,
           filter: {
             dateRange: { start: cutoffTime },
@@ -725,7 +732,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         await memoryStorage.saveMessages({ messages: [...threadAMessages, ...threadBMessages] });
 
         // Query by resourceId with dateRange.start
-        const result = await memoryStorage.listMessages({
+        const result = await memoryStorage.listMessagesByResourceId({
           resourceId: sharedResourceId,
           filter: {
             dateRange: { start: cutoffTime },
@@ -744,7 +751,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       });
 
       it('should return empty array when no messages match resourceId', async () => {
-        const result = await memoryStorage.listMessages({
+        const result = await memoryStorage.listMessagesByResourceId({
           resourceId: 'non-existent-resource',
           perPage: false,
         });
@@ -756,7 +763,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       it('should isolate messages by resourceId', async () => {
         // thread and thread2 have different resourceIds
         // Query for thread's resourceId should not include thread2's messages
-        const result = await memoryStorage.listMessages({
+        const result = await memoryStorage.listMessagesByResourceId({
           resourceId: thread.resourceId,
           perPage: false,
         });
@@ -768,7 +775,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       });
 
       it('should support pagination when querying by resourceId', async () => {
-        const result = await memoryStorage.listMessages({
+        const result = await memoryStorage.listMessagesByResourceId({
           resourceId: thread.resourceId,
           perPage: 2,
           page: 0,

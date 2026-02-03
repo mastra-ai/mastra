@@ -22,6 +22,7 @@ const OM_TABLE = 'mastra_observational_memory' as const;
 import type {
   StorageResourceType,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -235,16 +236,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const { threadId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Validate that either threadId or resourceId is provided
+    // Validate that threadId is provided
     const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
     const hasThreadId =
       threadId !== undefined &&
       (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
-    const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
 
-    if (!hasThreadId && !hasResourceId) {
+    if (!hasThreadId) {
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_QUERY'),
@@ -252,15 +252,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           category: ErrorCategory.USER,
           details: {
             threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
-            resourceId: resourceId ?? '',
           },
         },
-        new Error('Either threadId or resourceId must be provided'),
+        new Error('threadId is required'),
       );
     }
 
-    // Normalize threadId to array (only if provided)
-    const threadIds = hasThreadId ? (Array.isArray(threadId) ? threadId : [threadId!]) : [];
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId!];
 
     if (page < 0) {
       throw new MastraError(
@@ -287,15 +286,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Build query conditions
       const query: any = {};
 
-      // Add thread filter only if threadIds are provided
-      if (threadIds.length > 0) {
-        query.thread_id = threadIds.length === 1 ? threadIds[0] : { $in: threadIds };
-      }
-
-      // Add resourceId filter (can be used alone or with threadId)
-      if (resourceId) {
-        query.resourceId = resourceId;
-      }
+      // Add thread filter (always present for listMessages)
+      query.thread_id = threadIds.length === 1 ? threadIds[0] : { $in: threadIds };
 
       if (filter?.dateRange?.start) {
         const startOp = filter.dateRange.startExclusive ? '$gt' : '$gte';
@@ -373,14 +365,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       });
 
       // Calculate hasMore based on pagination window
-      // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window
-      const threadIdSet = new Set(threadIds);
-      const returnedThreadMessageIds = new Set(
-        finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
-      );
-      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      const hasMore = perPageInput !== false && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -397,8 +382,159 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
-            resourceId: resourceId ?? '',
           },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  public async listMessagesByResourceId(
+    args: StorageListMessagesByResourceIdInput,
+  ): Promise<StorageListMessagesOutput> {
+    const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+
+    if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resourceId: resourceId ?? '' },
+        },
+        new Error('resourceId is required'),
+      );
+    }
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      // Determine sort field and direction
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+      const sortOrder = direction === 'ASC' ? 1 : -1;
+
+      const collection = await this.getCollection(TABLE_MESSAGES);
+
+      // Build query conditions
+      const query: any = {};
+
+      // Add resourceId filter (required for listMessagesByResourceId)
+      query.resourceId = resourceId;
+
+      if (filter?.dateRange?.start) {
+        const startOp = filter.dateRange.startExclusive ? '$gt' : '$gte';
+        query.createdAt = { ...query.createdAt, [startOp]: formatDateForMongoDB(filter.dateRange.start) };
+      }
+
+      if (filter?.dateRange?.end) {
+        const endOp = filter.dateRange.endExclusive ? '$lt' : '$lte';
+        query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
+      }
+
+      // Get total count
+      const total = await collection.countDocuments(query);
+
+      const messages: any[] = [];
+
+      // Step 1: Get paginated messages
+      if (perPage !== 0) {
+        const sortObj: any = { [field]: sortOrder };
+        let cursor = collection.find(query).sort(sortObj).skip(offset);
+
+        // Only apply limit if not unlimited
+        // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+        if (perPageInput !== false) {
+          cursor = cursor.limit(perPage);
+        }
+
+        const dataResult = await cursor.toArray();
+        messages.push(...dataResult.map((row: any) => this.parseRow(row)));
+      }
+
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(messages.map(m => m.id));
+      if (include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (includeMessages) {
+          // Deduplicate: only add messages that aren't already in the paginated results
+          for (const includeMsg of includeMessages) {
+            if (!messageIds.has(includeMsg.id)) {
+              messages.push(includeMsg);
+              messageIds.add(includeMsg.id);
+            }
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(messages, 'memory');
+      let finalMessages = list.get.all.db();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        // Fallback to string comparison for non-numeric fields
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
+      });
+
+      // Calculate hasMore based on pagination window
+      const hasMore = perPageInput !== false && offset + perPage < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
         },
         error,
       );

@@ -2067,20 +2067,37 @@ NOTE: Any messages following this system reminder are newer than your memories.
     // This prevents re-loading the same messages that were already observed
     const startDate = lastObservedAt ? new Date(lastObservedAt.getTime() + 1) : undefined;
 
-    const result = await this.storage.listMessages({
-      // In resource scope, query by resourceId directly (no need to list threads first)
-      // In thread scope, query by threadId
-      ...(this.scope === 'resource' && resourceId ? { resourceId } : { threadId }),
-      perPage: false, // Get all messages (no pagination limit)
-      orderBy: { field: 'createdAt', direction: 'ASC' },
-      filter: startDate
-        ? {
-            dateRange: {
-              start: startDate,
-            },
-          }
-        : undefined,
-    });
+    let result: { messages: MastraDBMessage[] };
+
+    if (this.scope === 'resource' && resourceId) {
+      // Resource scope: use the new listMessagesByResourceId method
+      result = await this.storage.listMessagesByResourceId({
+        resourceId,
+        perPage: false, // Get all messages (no pagination limit)
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: startDate
+          ? {
+              dateRange: {
+                start: startDate,
+              },
+            }
+          : undefined,
+      });
+    } else {
+      // Thread scope: use listMessages with threadId
+      result = await this.storage.listMessages({
+        threadId,
+        perPage: false, // Get all messages (no pagination limit)
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: startDate
+          ? {
+              dateRange: {
+                start: startDate,
+              },
+            }
+          : undefined,
+      });
+    }
 
     return result.messages;
   }

@@ -1063,7 +1063,6 @@ export class InvestigateCommand {
     console.log(`\n📝 Latest OM Record:`);
     console.log(`   Created: ${latestRecord.createdAt}`);
     console.log(`   Last Observed: ${latestRecord.lastObservedAt}`);
-    console.log(`   Patterns: ${latestRecord.patterns?.length || 0}`);
 
     // Show observation stats
     const observations = latestRecord.activeObservations || '';
@@ -1132,7 +1131,7 @@ export class InvestigateCommand {
     }
 
     // Search in raw messages
-    const messagesResult = await storage.listMessages({ resourceId, perPage: false });
+    const messagesResult = await storage.listMessagesByResourceId({ resourceId, perPage: false });
     const messages = messagesResult.messages;
     const msgMatches = messages.filter((m: any) => {
       const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
@@ -1286,7 +1285,7 @@ export class InvestigateCommand {
     // Note: resourceId in storage is prefixed with "resource_"
     const resourceId = `resource_${questionId}`;
 
-    const messagesResult = await storage.listMessages({ resourceId, perPage: false });
+    const messagesResult = await storage.listMessagesByResourceId({ resourceId, perPage: false });
     const allMessages = messagesResult.messages;
     const msgMatches = allMessages.filter((m: any) => {
       const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
@@ -1398,7 +1397,7 @@ export class InvestigateCommand {
     console.log(`1️⃣  Raw Messages in Range:`);
     console.log(`${'─'.repeat(60)}`);
 
-    const messagesResult = await storage.listMessages({ resourceId, perPage: false });
+    const messagesResult = await storage.listMessagesByResourceId({ resourceId, perPage: false });
     const allMessages = messagesResult.messages;
 
     const messagesInRange = allMessages
@@ -2217,7 +2216,7 @@ export class InvestigateCommand {
     const resourceId = `resource_${questionId}`;
 
     // Get threads and check for cursors
-    const threadsResult = await storage.listThreadsByResourceId({ resourceId });
+    const threadsResult = await storage.listThreads({ filter: { resourceId }, perPage: false });
     const threads = threadsResult.threads || [];
     let threadsWithCursor = 0;
     let totalThreads = 0;
@@ -2279,7 +2278,7 @@ export class InvestigateCommand {
     }
 
     // 5. Get message and observation counts
-    const messagesResult = await storage.listMessages({ resourceId, perPage: false });
+    const messagesResult = await storage.listMessagesByResourceId({ resourceId, perPage: false });
     const messageCount = messagesResult.messages.length;
 
     // Count observation lines

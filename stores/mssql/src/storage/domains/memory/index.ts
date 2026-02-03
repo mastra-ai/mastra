@@ -644,38 +644,20 @@ export class MemoryMSSQL extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Check if threadId is a valid non-empty string or array of non-empty strings
-    const hasThreadId =
-      threadId !== undefined &&
-      (typeof threadId === 'string'
-        ? threadId.trim().length > 0
-        : Array.isArray(threadId) &&
-          threadId.length > 0 &&
-          threadId.every(id => typeof id === 'string' && id.trim().length > 0));
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
 
-    // Either threadId or resourceId must be provided
-    if (!hasThreadId && !resourceId) {
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'INVALID_PARAMS'),
+          id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
-            resourceId: resourceId ?? '',
-          },
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('Either threadId or resourceId must be provided'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
-
-    // Normalize threadId to array only if present
-    const threadIds = hasThreadId
-      ? (Array.isArray(threadId) ? threadId : [threadId!])
-          .filter(id => id !== undefined && id !== null)
-          .map(id => (typeof id === 'string' ? id : String(id)).trim())
-          .filter(id => id.length > 0)
-      : [];
 
     if (page < 0) {
       throw new MastraError({
@@ -684,7 +666,7 @@ export class MemoryMSSQL extends MemoryStorage {
         category: ErrorCategory.USER,
         text: 'Page number must be non-negative',
         details: {
-          threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+          threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
           page,
         },
       });
@@ -702,7 +684,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const baseQuery = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId FROM ${tableName}`;
 
       const filters: Record<string, any> = {
-        ...(threadIds.length > 0 ? { thread_id: threadIds.length === 1 ? threadIds[0] : { $in: threadIds } } : {}),
+        thread_id: threadIds.length === 1 ? threadIds[0] : { $in: threadIds },
         ...(resourceId ? { resourceId } : {}),
         ...buildDateRangeFilter(filter?.dateRange, 'createdAt'),
       };
@@ -814,7 +796,7 @@ export class MemoryMSSQL extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },

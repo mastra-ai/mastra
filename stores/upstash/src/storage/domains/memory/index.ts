@@ -613,30 +613,20 @@ export class StoreMemoryUpstash extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Validate that either threadId or resourceId is provided
-    const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
-    const hasThreadId =
-      threadId !== undefined &&
-      (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
-    const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
 
-    if (!hasThreadId && !hasResourceId) {
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
-            resourceId: resourceId ?? '',
-          },
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('Either threadId or resourceId must be provided'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
-
-    // Normalize threadId to array (only if provided)
-    const threadIds = hasThreadId ? (Array.isArray(threadId) ? threadId : [threadId!]) : [];
 
     const perPage = normalizePerPage(perPageInput, 40);
     // When perPage is false (get all), ignore page offset
@@ -662,37 +652,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
         includedMessages = included.map(this.parseStoredMessage);
       }
 
-      // Determine which thread IDs to query
-      let effectiveThreadIds = threadIds;
-
-      // If no threadIds but resourceId is provided, get all threads for the resource
-      if (effectiveThreadIds.length === 0 && hasResourceId) {
-        const MAX_THREADS = 10_000;
-        const PAGE_SIZE = 100;
-        const allThreadIds: string[] = [];
-        let currentPage = 0;
-        let hasMore = true;
-        while (hasMore && allThreadIds.length < MAX_THREADS) {
-          const result = await this.listThreads({
-            filter: { resourceId: resourceId! },
-            page: currentPage,
-            perPage: PAGE_SIZE,
-          });
-          allThreadIds.push(...result.threads.map(t => t.id));
-          hasMore = result.hasMore;
-          currentPage++;
-        }
-        if (hasMore) {
-          this.logger?.warn?.(
-            `Resource ${resourceId} has more than ${MAX_THREADS} threads. Only the first ${MAX_THREADS} will be queried for messages.`,
-          );
-        }
-        effectiveThreadIds = allThreadIds;
-      }
-
       // Get all message IDs from all thread sorted sets
       const allMessageIdsWithThreads: { threadId: string; messageId: string }[] = [];
-      for (const tid of effectiveThreadIds) {
+      for (const tid of threadIds) {
         const threadMessagesKey = getThreadMessagesKey(tid);
         const messageIds = await this.client.zrange(threadMessagesKey, 0, -1);
         for (const mid of messageIds) {
@@ -822,7 +784,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },

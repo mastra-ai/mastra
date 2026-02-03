@@ -5,6 +5,7 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -56,6 +57,20 @@ export abstract class MemoryStorage extends StorageDomain {
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
 
   abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
+
+  /**
+   * List messages by resource ID only (across all threads).
+   * Used by Observational Memory and LongMemEval for resource-scoped queries.
+   *
+   * @param args - Resource ID and pagination/filtering options
+   * @returns Paginated list of messages for the resource
+   */
+  async listMessagesByResourceId(_args: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
+    throw new Error(
+      `Resource-scoped message listing is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `Use an adapter that supports Observational Memory (pg, libsql, mongodb) or disable observational memory.`,
+    );
+  }
 
   abstract listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }>;
 
