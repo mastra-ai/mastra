@@ -29,18 +29,19 @@ export const useDataset = (datasetId: string) => {
 const PER_PAGE = 10;
 
 /**
- * Hook to list items in a dataset with infinite scroll pagination
+ * Hook to list items in a dataset with infinite scroll pagination and optional search
  */
-export const useDatasetItems = (datasetId: string) => {
+export const useDatasetItems = (datasetId: string, search?: string) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
-    queryKey: ['dataset-items', datasetId],
+    queryKey: ['dataset-items', datasetId, search],
     queryFn: async ({ pageParam }) => {
       const res = await client.listDatasetItems(datasetId, {
         page: pageParam,
         perPage: PER_PAGE,
+        search: search || undefined,
       });
       return res;
     },

@@ -15,9 +15,12 @@ import {
   ChevronDownIcon,
   AmpersandIcon,
   MoveRightIcon,
+  Search,
 } from 'lucide-react';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Badge } from '@/ds/components/Badge';
+import { Input } from '@/ds/components/Input';
+
 export interface ItemsToolbarProps {
   // Normal mode actions
   onAddClick: () => void;
@@ -29,6 +32,10 @@ export interface ItemsToolbarProps {
   onAddToDatasetClick: () => void;
   onDeleteClick: () => void;
   hasItems: boolean;
+
+  // Search props
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 
   // Selection mode state
   isSelectionActive: boolean;
@@ -140,6 +147,8 @@ export function ItemsToolbar({
   onAddToDatasetClick,
   onDeleteClick,
   hasItems,
+  searchQuery,
+  onSearchChange,
   isSelectionActive,
   selectedCount,
   onExecuteAction,
@@ -150,85 +159,115 @@ export function ItemsToolbar({
 
   if (isSelectionActive) {
     return (
-      <div className="flex gap-5">
-        <div className="text-sm text-neutral3 flex items-center gap-2 pl-6">
-          <Badge className="text-ui-md">{selectedCount}</Badge>
-          <span>selected items</span>
-          <MoveRightIcon />
+      <div className="flex items-center justify-between gap-4 w-full">
+        {/* Search input - always visible */}
+        <div className="relative flex-1 max-w-xs">
+          <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral4 pointer-events-none">
+            <Search className="w-4 h-4" />
+          </Icon>
+          <Input
+            placeholder="Search items..."
+            value={searchQuery ?? ''}
+            onChange={e => onSearchChange?.(e.target.value)}
+            className="pl-9"
+          />
         </div>
-        <ButtonsGroup>
-          <Button variant="standard" size="default" disabled={selectedCount === 0} onClick={onExecuteAction}>
-            {selectionMode === 'export' && 'Export Items as CSV'}
-            {selectionMode === 'export-json' && 'Export Items as JSON'}
-            {selectionMode === 'create-dataset' && 'Create a new Dataset with Items'}
-            {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
-            {selectionMode === 'delete' && 'Delete Items'}
-          </Button>
-          <Button variant="secondary" size="default" onClick={onCancelSelection}>
-            Cancel
-          </Button>
-        </ButtonsGroup>
+
+        <div className="flex gap-5">
+          <div className="text-sm text-neutral3 flex items-center gap-2 pl-6">
+            <Badge className="text-ui-md">{selectedCount}</Badge>
+            <span>selected items</span>
+            <MoveRightIcon />
+          </div>
+          <ButtonsGroup>
+            <Button variant="standard" size="default" disabled={selectedCount === 0} onClick={onExecuteAction}>
+              {selectionMode === 'export' && 'Export Items as CSV'}
+              {selectionMode === 'export-json' && 'Export Items as JSON'}
+              {selectionMode === 'create-dataset' && 'Create a new Dataset with Items'}
+              {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
+              {selectionMode === 'delete' && 'Delete Items'}
+            </Button>
+            <Button variant="secondary" size="default" onClick={onCancelSelection}>
+              Cancel
+            </Button>
+          </ButtonsGroup>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex justify-end gap-3">
-      <div className="flex items-center gap-[.1rem]">
-        <Button variant="secondary" size="default" hasRightSibling={true} onClick={onAddClick}>
-          <Plus />
-          New Item
-        </Button>
-
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Dataset actions menu">
-              <ChevronDownIcon />
-            </Button>
-          </PopoverTrigger>
-
-          <PopoverContent>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start gap-2"
-              onClick={() => {
-                onImportClick();
-                setOpen(false);
-              }}
-            >
-              <Icon>
-                <Upload />
-              </Icon>
-              Import CSV
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start gap-2"
-              onClick={() => {
-                onImportJsonClick();
-                setOpen(false);
-              }}
-            >
-              <Icon>
-                <FileJson />
-              </Icon>
-              Import JSON
-            </Button>
-          </PopoverContent>
-        </Popover>
+    <div className="flex items-center justify-between gap-4 w-full">
+      {/* Search input */}
+      <div className="relative flex-1 max-w-xs">
+        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral4 pointer-events-none">
+          <Search className="w-4 h-4" />
+        </Icon>
+        <Input
+          placeholder="Search items..."
+          value={searchQuery ?? ''}
+          onChange={e => onSearchChange?.(e.target.value)}
+          className="pl-9"
+        />
       </div>
 
-      {hasItems && (
-        <ActionsMenu
-          onExportClick={onExportClick}
-          onExportJsonClick={onExportJsonClick}
-          onCreateDatasetClick={onCreateDatasetClick}
-          onAddToDatasetClick={onAddToDatasetClick}
-          onDeleteClick={onDeleteClick}
-        />
-      )}
+      <div className="flex justify-end gap-3">
+        <div className="flex items-center gap-[.1rem]">
+          <Button variant="secondary" size="default" hasRightSibling={true} onClick={onAddClick}>
+            <Plus />
+            New Item
+          </Button>
+
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Dataset actions menu">
+                <ChevronDownIcon />
+              </Button>
+            </PopoverTrigger>
+
+            <PopoverContent>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2"
+                onClick={() => {
+                  onImportClick();
+                  setOpen(false);
+                }}
+              >
+                <Icon>
+                  <Upload />
+                </Icon>
+                Import CSV
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2"
+                onClick={() => {
+                  onImportJsonClick();
+                  setOpen(false);
+                }}
+              >
+                <Icon>
+                  <FileJson />
+                </Icon>
+                Import JSON
+              </Button>
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {hasItems && (
+          <ActionsMenu
+            onExportClick={onExportClick}
+            onExportJsonClick={onExportJsonClick}
+            onCreateDatasetClick={onCreateDatasetClick}
+            onAddToDatasetClick={onAddToDatasetClick}
+            onDeleteClick={onDeleteClick}
+          />
+        )}
+      </div>
     </div>
   );
 }

@@ -197,6 +197,20 @@ export class DatasetsInMemory extends DatasetsStorage {
       items = items.filter(item => item.version.getTime() <= versionTime);
     }
 
+    // Filter by search term if specified (case-insensitive partial match on input/expectedOutput)
+    if (args.search) {
+      const searchLower = args.search.toLowerCase();
+      items = items.filter(item => {
+        const inputStr = typeof item.input === 'string' ? item.input : JSON.stringify(item.input);
+        const outputStr = item.expectedOutput
+          ? typeof item.expectedOutput === 'string'
+            ? item.expectedOutput
+            : JSON.stringify(item.expectedOutput)
+          : '';
+        return inputStr.toLowerCase().includes(searchLower) || outputStr.toLowerCase().includes(searchLower);
+      });
+    }
+
     // Sort by createdAt descending
     items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 

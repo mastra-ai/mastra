@@ -627,6 +627,8 @@ export interface ListDatasetItemsInput {
   pagination: StoragePagination;
   /** Optional: filter items at or before this version timestamp */
   version?: Date;
+  /** Optional: search term to filter items by input/expectedOutput content */
+  search?: string;
 }
 
 /** Output for listing dataset items */

@@ -40,6 +40,9 @@ export interface DatasetItemListProps {
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
+  // Search props
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 /**
@@ -67,6 +70,8 @@ export function DatasetItemList({
   setEndOfListElement,
   isFetchingNextPage,
   hasNextPage,
+  searchQuery,
+  onSearchChange,
 }: DatasetItemListProps) {
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
   const selection = useItemSelection();
@@ -121,11 +126,9 @@ export function DatasetItemList({
     }
   };
 
-  if (isLoading) {
-    return <DatasetItemListSkeleton />;
-  }
-
-  if (items.length === 0) {
+  // Only show empty state if there are no items AND no search is active AND not loading
+  // If search is active with no results, we show the list with "no results" message
+  if (items.length === 0 && !searchQuery && !isLoading) {
     return (
       <EmptyDatasetItemList
         onAddClick={onAddClick}
@@ -157,6 +160,7 @@ export function DatasetItemList({
 
   return (
     <div className="grid grid-rows-[auto_1fr] gap-8 h-full">
+      {/* Toolbar with search */}
       <ItemsToolbar
         onAddClick={onAddClick}
         onImportClick={onImportClick ?? (() => {})}
@@ -167,6 +171,8 @@ export function DatasetItemList({
         onAddToDatasetClick={() => setSelectionMode('add-to-dataset')}
         onDeleteClick={() => setSelectionMode('delete')}
         hasItems={items.length > 0}
+        searchQuery={searchQuery}
+        onSearchChange={onSearchChange}
         isSelectionActive={isSelectionActive}
         selectedCount={selection.selectedCount}
         onExecuteAction={handleExecuteAction}
@@ -174,79 +180,88 @@ export function DatasetItemList({
         selectionMode={selectionMode}
       />
 
-      <ItemList>
-        <ItemList.Header columns={columns}>
-          {columns?.map(col => (
-            <>
-              {col.name === 'checkbox' ? (
-                <ItemList.HeaderCol key={col.name} className="flex items-center justify-center">
-                  <Checkbox
-                    checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-                    onCheckedChange={handleSelectAllToggle}
-                    aria-label="Select all items"
-                  />
-                </ItemList.HeaderCol>
+      {/* Show skeleton during loading, otherwise show the item list */}
+      {isLoading ? (
+        <DatasetItemListSkeleton />
+      ) : (
+        <ItemList>
+          <ItemList.Header columns={columns}>
+            {columns?.map(col => (
+              <>
+                {col.name === 'checkbox' ? (
+                  <ItemList.HeaderCol key={col.name} className="flex items-center justify-center">
+                    <Checkbox
+                      checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                      onCheckedChange={handleSelectAllToggle}
+                      aria-label="Select all items"
+                    />
+                  </ItemList.HeaderCol>
+                ) : (
+                  <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
+                )}
+              </>
+            ))}
+          </ItemList.Header>
+
+          <ItemList.Scroller>
+            <ItemList.Items>
+              {items.length === 0 && searchQuery ? (
+                <div className="flex items-center justify-center py-12 text-neutral4">No items match your search</div>
               ) : (
-                <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
+                items.map(item => {
+                  const createdAtDate = new Date(item.createdAt);
+                  const isTodayDate = isToday(createdAtDate);
+
+                  const entry = {
+                    id: item.id,
+                    input: truncateValue(item.input, 60),
+                    expectedOutput: item.expectedOutput ? truncateValue(item.expectedOutput, 40) : '-',
+                    metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
+                    date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
+                  };
+
+                  return (
+                    <ItemList.Row key={item.id} isSelected={featuredItemId === item.id}>
+                      <ItemList.RowButton
+                        entry={entry}
+                        isSelected={featuredItemId === item.id}
+                        columns={columns}
+                        onClick={handleEntryClick}
+                      >
+                        {isSelectionActive && (
+                          <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selection.selectedIds.has(item.id)}
+                              onCheckedChange={() => {}}
+                              onClick={e => {
+                                e.stopPropagation();
+                                selection.toggle(item.id, e.shiftKey, allIds);
+                              }}
+                              aria-label={`Select item ${item.id}`}
+                            />
+                          </div>
+                        )}
+                        <ItemList.ItemText>{entry.input}</ItemList.ItemText>
+                        <ItemList.ItemText>{entry.expectedOutput}</ItemList.ItemText>
+                        <ItemList.ItemText>{entry.metadata}</ItemList.ItemText>
+                        <ItemList.ItemText>{entry.date}</ItemList.ItemText>
+                      </ItemList.RowButton>
+                    </ItemList.Row>
+                  );
+                })
               )}
-            </>
-          ))}
-        </ItemList.Header>
+            </ItemList.Items>
 
-        <ItemList.Scroller>
-          <ItemList.Items>
-            {items.map(item => {
-              const createdAtDate = new Date(item.createdAt);
-              const isTodayDate = isToday(createdAtDate);
-
-              const entry = {
-                id: item.id,
-                input: truncateValue(item.input, 60),
-                expectedOutput: item.expectedOutput ? truncateValue(item.expectedOutput, 40) : '-',
-                metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
-                date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-              };
-
-              return (
-                <ItemList.Row key={item.id} isSelected={featuredItemId === item.id}>
-                  <ItemList.RowButton
-                    entry={entry}
-                    isSelected={featuredItemId === item.id}
-                    columns={columns}
-                    onClick={handleEntryClick}
-                  >
-                    {isSelectionActive && (
-                      <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                        <Checkbox
-                          checked={selection.selectedIds.has(item.id)}
-                          onCheckedChange={() => {}}
-                          onClick={e => {
-                            e.stopPropagation();
-                            selection.toggle(item.id, e.shiftKey, allIds);
-                          }}
-                          aria-label={`Select item ${item.id}`}
-                        />
-                      </div>
-                    )}
-                    <ItemList.ItemText>{entry.input}</ItemList.ItemText>
-                    <ItemList.ItemText>{entry.expectedOutput}</ItemList.ItemText>
-                    <ItemList.ItemText>{entry.metadata}</ItemList.ItemText>
-                    <ItemList.ItemText>{entry.date}</ItemList.ItemText>
-                  </ItemList.RowButton>
-                </ItemList.Row>
-              );
-            })}
-          </ItemList.Items>
-
-          <ItemList.NextPageLoading
-            setEndOfListElement={setEndOfListElement}
-            loadingText="Loading more items..."
-            noMoreDataText="All items loaded"
-            isLoading={isFetchingNextPage}
-            hasMore={hasNextPage}
-          />
-        </ItemList.Scroller>
-      </ItemList>
+            <ItemList.NextPageLoading
+              setEndOfListElement={setEndOfListElement}
+              loadingText="Loading more items..."
+              noMoreDataText="All items loaded"
+              isLoading={isFetchingNextPage}
+              hasMore={hasNextPage}
+            />
+          </ItemList.Scroller>
+        </ItemList>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDebounce } from 'use-debounce';
 import { DatasetItem } from '@mastra/client-js';
 import { useDataset, useDatasetItems } from '../../hooks/use-datasets';
 import { useDatasetRuns } from '../../hooks/use-dataset-runs';
@@ -50,6 +51,8 @@ export function DatasetDetail({
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
   const [featuredItemId, setSelectedItemId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch] = useDebounce(searchQuery, 300);
 
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
   const {
@@ -58,7 +61,7 @@ export function DatasetDetail({
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
-  } = useDatasetItems(datasetId);
+  } = useDatasetItems(datasetId, debouncedSearch || undefined);
   const { data: runsData, isLoading: isRunsLoading } = useDatasetRuns(datasetId);
   const { deleteItems } = useDatasetMutations();
 
@@ -180,6 +183,8 @@ export function DatasetDetail({
                   setEndOfListElement={setEndOfListElement}
                   isFetchingNextPage={isFetchingNextPage}
                   hasNextPage={hasNextPage}
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
                 />
               </TabContent>
 

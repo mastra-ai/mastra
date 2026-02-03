@@ -26,6 +26,9 @@ export interface ItemsMasterDetailProps {
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
+  // Search props
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 /**
