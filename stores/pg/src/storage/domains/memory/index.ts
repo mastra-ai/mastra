@@ -77,12 +77,7 @@ export class MemoryPG extends MemoryStorage {
   #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
-  static readonly MANAGED_TABLES = [
-    TABLE_THREADS,
-    TABLE_MESSAGES,
-    TABLE_RESOURCES,
-    OM_TABLE,
-  ] as const;
+  static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, OM_TABLE] as const;
 
   constructor(config: PgDomainConfig) {
     super();

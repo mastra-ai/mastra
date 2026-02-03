@@ -43,12 +43,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   #indexes?: MongoDBIndexConfig[];
 
   /** Collections managed by this domain */
-  static readonly MANAGED_COLLECTIONS = [
-    TABLE_THREADS,
-    TABLE_MESSAGES,
-    TABLE_RESOURCES,
-    OM_TABLE,
-  ] as const;
+  static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, OM_TABLE] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
