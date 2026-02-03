@@ -1,8 +1,4 @@
 /**
- * Experimental memory features.
- *
- * These APIs are experimental and may change without notice.
- * Use at your own risk in production.
+ * @deprecated Import from '@mastra/memory/processors' instead.
  */
-
-export * from './observational-memory';
+export * from '../processors/observational-memory';

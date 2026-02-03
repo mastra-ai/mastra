@@ -1625,8 +1625,7 @@ Notes:
     }
     // Dynamic import to avoid loading OM code when not needed and to prevent
     // import errors when paired with an older @mastra/core version
-    // @TODO update import path, will be imported from core package
-    const { ObservationalMemory } = await import('./experiments/observational-memory');
+    const { ObservationalMemory } = await import('./processors/observational-memory');
 
     return new ObservationalMemory({
       storage: memoryStore,

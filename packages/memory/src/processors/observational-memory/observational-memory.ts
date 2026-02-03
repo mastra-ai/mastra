@@ -450,7 +450,7 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
  *
  * @example
  * ```ts
- * import { ObservationalMemory } from '@mastra/memory/experiments';
+ * import { ObservationalMemory } from '@mastra/memory/processors';
  *
  * // Minimal configuration
  * const om = new ObservationalMemory({ storage });
