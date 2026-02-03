@@ -824,7 +824,7 @@ export class MastraLLMV1 extends MastraBase {
     Tools extends ToolSet = ToolSet,
   >(
     messages: string | string[] | CoreMessage[],
-    args: Omit<
+    args?: Omit<
       Output extends undefined
         ? GenerateTextWithMessagesArgs<Tools, StructuredOutput>
         : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput' | 'output'>,
@@ -832,7 +832,7 @@ export class MastraLLMV1 extends MastraBase {
     > & { output?: Output },
   ): Promise<GenerateReturn<Tools, Output, StructuredOutput>> {
     const msgs = this.convertToMessages(messages);
-    const { output, ...rest } = args;
+    const { output, ...rest } = args ?? ({} as NonNullable<typeof args>);
 
     if (!output) {
       return (await this.__text<Tools, StructuredOutput>({
@@ -857,7 +857,7 @@ export class MastraLLMV1 extends MastraBase {
     Tools extends ToolSet = ToolSet,
   >(
     messages: string | string[] | CoreMessage[],
-    args: Omit<
+    args?: Omit<
       Output extends undefined
         ? StreamTextWithMessagesArgs<Tools, StructuredOutput>
         : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput' | 'output'> & { maxSteps?: never },
@@ -865,7 +865,7 @@ export class MastraLLMV1 extends MastraBase {
     > & { output?: Output },
   ): StreamReturn<Tools, Output, StructuredOutput> {
     const msgs = this.convertToMessages(messages);
-    const { output, ...rest } = args;
+    const { output, ...rest } = args ?? ({} as NonNullable<typeof args>);
 
     if (!output) {
       const {

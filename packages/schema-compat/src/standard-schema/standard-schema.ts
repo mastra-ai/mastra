@@ -22,11 +22,6 @@ function jsonSchemaOverride(ctx: { zodSchema: unknown; jsonSchema: Record<string
       ctx.jsonSchema.type = 'string';
       ctx.jsonSchema.format = 'date-time';
     }
-
-    if (zodSchema._zod?.def?.type === 'optional') {
-      ctx.zodSchema = zodSchema.optional?.();
-      // ctx.jsonSchema.nullable = true;
-    }
   }
   return undefined;
 }

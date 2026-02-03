@@ -13,7 +13,7 @@ export default defineConfig({
         },
         resolve: {
           alias: {
-            // Alias 'zod' to 'zod-v3' so all imports resolve to the same v3 package
+            // Alias 'zod' to 'zod-v4' so all imports resolve to the same v4 package
             zod: 'zod-v4',
           },
         },

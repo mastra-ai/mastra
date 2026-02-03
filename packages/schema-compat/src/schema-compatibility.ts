@@ -261,7 +261,13 @@ export abstract class SchemaCompatLayer {
     let innerTypeName: string;
     if ('_zod' in value) {
       // Zod v4: type is lowercase without "Zod" prefix (e.g., "string", "object", "array")
-      const v4Type = value._zod.def.innerType._zod.def.type as string;
+      // Add defensive checks for nested property access
+      const innerType = value._zod?.def?.innerType;
+      const v4Type = innerType?._zod?.def?.type as string | undefined;
+      if (!v4Type) {
+        // If nested properties are missing, return the value unchanged
+        return value;
+      }
       // Convert to v3-style name for comparison (e.g., "string" -> "ZodString")
       innerTypeName = 'Zod' + v4Type.charAt(0).toUpperCase() + v4Type.slice(1);
     } else {
@@ -270,7 +276,11 @@ export abstract class SchemaCompatLayer {
 
     if (handleTypes.includes(innerTypeName)) {
       if ('_zod' in value) {
-        return this.processZodType(value._zod.def.innerType).optional();
+        const innerType = value._zod?.def?.innerType;
+        if (!innerType) {
+          return value;
+        }
+        return this.processZodType(innerType).optional();
       } else {
         return this.processZodType(value._def.innerType).optional();
       }
