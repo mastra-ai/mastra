@@ -101,7 +101,7 @@ export function createWorkspaceTools(workspace: Workspace) {
       tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE] = createTool({
         id: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
         description:
-          'Read the contents of a file from the workspace filesystem. Supports reading specific line ranges using offset/limit parameters.',
+          'Read the contents of a file from the workspace filesystem. Use offset/limit parameters to read specific line ranges for large files.',
         requireApproval: readFileConfig.requireApproval,
         inputSchema: z.object({
           path: z.string().describe('The path to the file to read (e.g., "/data/config.json")'),
@@ -253,8 +253,13 @@ export function createWorkspaceTools(workspace: Workspace) {
     if (!isReadOnly && editFileConfig.enabled) {
       tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE] = createTool({
         id: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
-        description:
-          'Edit a file by replacing specific text. The old_string must match exactly and be unique in the file (unless using replace_all). You should read the file first to ensure you have the exact text to replace.',
+        description: `Edit a file by replacing specific text. The old_string must match exactly and be unique in the file.
+
+Usage:
+- Read the file first to get the exact text to replace.
+- By default, ${WORKSPACE_TOOLS.FILESYSTEM.READ_FILE} output includes line number prefixes (e.g., "     1→"). Ensure you preserve the exact indentation as it appears AFTER the arrow. Never include any part of the line number prefix in old_string or new_string.
+- Include enough surrounding context (multiple lines) to make old_string unique. If it still isn't unique, include more lines.
+- Use replace_all only when intentionally replacing all occurrences.`,
         requireApproval: editFileConfig.requireApproval,
         inputSchema: z.object({
           path: z.string().describe('The path to the file to edit'),
@@ -623,7 +628,13 @@ Examples:
     if (workspace.sandbox.executeCommand && executeCommandConfig.enabled) {
       tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = createTool({
         id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
-        description: `Execute a shell command in the workspace sandbox. The output (stdout/stderr) is displayed to the user automatically in the tool result. ${pathInfo}`,
+        description: `Execute a shell command in the workspace sandbox.${pathInfo}
+
+Usage:
+- Verify parent directories exist before running commands that create files or directories.
+- Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
+- Commands timeout after 30 seconds by default. Use the timeout parameter for longer operations.
+- Use cwd to set the working directory, or commands run from the sandbox default.`,
         requireApproval: executeCommandConfig.requireApproval,
         inputSchema: z.object({
           command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),

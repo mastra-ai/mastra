@@ -288,11 +288,11 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       const providedConfigFields = Object.fromEntries(Object.entries(configFields).filter(([_, v]) => v !== undefined));
 
       // Handle auto-versioning with retry logic for race conditions
-      // This creates a version if there are meaningful config changes and updates activeVersionId
+      // This creates a version if there are meaningful config changes (does NOT update activeVersionId)
       await handleAutoVersioning(agentsStore, storedAgentId, existing, updatedAgent, providedConfigFields);
 
       // Clear the cached agent instance so the next request gets the updated config
-      mastra.clearStoredAgentCache(storedAgentId);
+      mastra.getEditor()?.clearStoredAgentCache(storedAgentId);
 
       // Return the resolved agent (thin record + version config)
       const resolved = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
@@ -341,7 +341,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       await agentsStore.deleteAgent({ id: storedAgentId });
 
       // Clear the cached agent instance
-      mastra.clearStoredAgentCache(storedAgentId);
+      mastra.getEditor()?.clearStoredAgentCache(storedAgentId);
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {
