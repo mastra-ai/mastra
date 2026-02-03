@@ -41,7 +41,7 @@ function parseDuration(duration: string): number {
 import { DatasetLoader } from '../data/loader';
 import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import type { LongMemEvalQuestion, MemoryConfigOptions, MemoryConfigType } from '../data/types';
-import type { CoreMessage } from 'ai';
+import type { ModelMessage } from 'ai';
 
 import { getMemoryConfig, getMemoryOptions, applyStratifiedSampling } from '../config';
 import { makeRetryModel } from '../retry-model';
@@ -1131,7 +1131,7 @@ export class PrepareCommand {
         const sessionDate = new Date(date);
 
         // Convert session to messages with historical timestamps
-        const messages: (CoreMessage & { createdAt?: Date })[] = [];
+        const messages: (ModelMessage & { createdAt?: Date })[] = [];
         for (let turnIdx = 0; turnIdx < session.length; turnIdx++) {
           const turn = session[turnIdx];
           if (!turn.content) continue;
