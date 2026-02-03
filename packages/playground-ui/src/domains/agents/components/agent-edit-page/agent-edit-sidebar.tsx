@@ -26,6 +26,7 @@ interface AgentEditSidebarProps {
   isSubmitting?: boolean;
   formRef?: RefObject<HTMLFormElement | null>;
   mode?: 'create' | 'edit';
+  readOnly?: boolean;
 }
 
 export function AgentEditSidebar({
@@ -35,6 +36,7 @@ export function AgentEditSidebar({
   isSubmitting = false,
   formRef,
   mode = 'create',
+  readOnly = false,
 }: AgentEditSidebarProps) {
   const {
     register,
@@ -76,6 +78,7 @@ export function AgentEditSidebar({
                   className="bg-surface3"
                   {...register('name')}
                   error={!!errors.name}
+                  disabled={readOnly}
                 />
                 {errors.name && <span className="text-xs text-accent2">{errors.name.message}</span>}
               </div>
@@ -91,6 +94,7 @@ export function AgentEditSidebar({
                   className="bg-surface3"
                   {...register('description')}
                   error={!!errors.description}
+                  disabled={readOnly}
                 />
                 {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
               </div>
@@ -104,12 +108,14 @@ export function AgentEditSidebar({
                   name="model.provider"
                   control={control}
                   render={({ field }) => (
-                    <LLMProviders
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      variant="light"
-                      container={formRef}
-                    />
+                    <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                      <LLMProviders
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        variant="light"
+                        container={formRef}
+                      />
+                    </div>
                   )}
                 />
                 {errors.model?.provider && (
@@ -126,13 +132,15 @@ export function AgentEditSidebar({
                   name="model.name"
                   control={control}
                   render={({ field }) => (
-                    <LLMModels
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      llmId={form.watch('model.provider') || ''}
-                      variant="light"
-                      container={formRef}
-                    />
+                    <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                      <LLMModels
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        llmId={form.watch('model.provider') || ''}
+                        variant="light"
+                        container={formRef}
+                      />
+                    </div>
                   )}
                 />
                 {errors.model?.name && <span className="text-xs text-accent2">{errors.model.name.message}</span>}
@@ -149,10 +157,15 @@ export function AgentEditSidebar({
                 subtitle="Extend your agent with tools, workflows, and other resources to enhance its abilities."
               />
 
-              <ToolsSection control={control} error={errors.tools?.root?.message} />
-              <WorkflowsSection control={control} error={errors.workflows?.root?.message} />
-              <AgentsSection control={control} error={errors.agents?.root?.message} currentAgentId={currentAgentId} />
-              <ScorersSection control={control} />
+              <ToolsSection control={control} error={errors.tools?.root?.message} readOnly={readOnly} />
+              <WorkflowsSection control={control} error={errors.workflows?.root?.message} readOnly={readOnly} />
+              <AgentsSection
+                control={control}
+                error={errors.agents?.root?.message}
+                currentAgentId={currentAgentId}
+                readOnly={readOnly}
+              />
+              <ScorersSection control={control} readOnly={readOnly} />
             </div>
           </ScrollArea>
         </TabContent>
@@ -160,30 +173,32 @@ export function AgentEditSidebar({
       </Tabs>
 
       {/* Sticky footer with Pregenerate and Create/Update Agent buttons */}
-      <div className="flex-shrink-0 p-4 border-t border-border1 flex flex-col gap-2">
-        {/* <Button variant="outline" onClick={() => setIsVariableDialogOpen(true)} className="w-full" type="button">
-          <Icon>
-            <VariablesIcon />
-          </Icon>
-          Manage variables
-        </Button> */}
+      {!readOnly && (
+        <div className="flex-shrink-0 p-4 border-t border-border1 flex flex-col gap-2">
+          {/* <Button variant="outline" onClick={() => setIsVariableDialogOpen(true)} className="w-full" type="button">
+            <Icon>
+              <VariablesIcon />
+            </Icon>
+            Manage variables
+          </Button> */}
 
-        <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
-          {isSubmitting ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              {mode === 'edit' ? 'Updating...' : 'Creating...'}
-            </>
-          ) : (
-            <>
-              <Icon>
-                <Check />
-              </Icon>
-              {mode === 'edit' ? 'Update agent' : 'Create agent'}
-            </>
-          )}
-        </Button>
-      </div>
+          <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
+            {isSubmitting ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                {mode === 'edit' ? 'Updating...' : 'Creating...'}
+              </>
+            ) : (
+              <>
+                <Icon>
+                  <Check />
+                </Icon>
+                {mode === 'edit' ? 'Update agent' : 'Create agent'}
+              </>
+            )}
+          </Button>
+        </div>
+      )}
 
       <VariableDialog
         isOpen={isVariableDialogOpen}

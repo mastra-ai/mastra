@@ -17,6 +17,7 @@ import type { AgentFormValues } from '../utils/form-validation';
 interface ScorersSectionProps {
   control: Control<AgentFormValues>;
   error?: string;
+  readOnly?: boolean;
 }
 
 interface ScoringSamplingConfig {
@@ -30,7 +31,7 @@ interface ScorerConfig {
   sampling?: ScoringSamplingConfig;
 }
 
-export function ScorersSection({ control, error }: ScorersSectionProps) {
+export function ScorersSection({ control, error, readOnly = false }: ScorersSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { data: scorers, isLoading } = useScorers();
   const selectedScorers = useWatch({ control, name: 'scorers' });
@@ -108,7 +109,7 @@ export function ScorersSection({ control, error }: ScorersSectionProps) {
                       placeholder="Select scorers..."
                       searchPlaceholder="Search scorers..."
                       emptyText="No scorers available"
-                      disabled={isLoading}
+                      disabled={isLoading || readOnly}
                       error={error}
                       variant="light"
                     />
@@ -124,6 +125,7 @@ export function ScorersSection({ control, error }: ScorersSectionProps) {
                             onDescriptionChange={desc => handleDescriptionChange(scorer.value, desc)}
                             onSamplingChange={config => handleSamplingChange(scorer.value, config)}
                             onRemove={() => handleRemove(scorer.value)}
+                            readOnly={readOnly}
                           />
                         ))}
                       </div>
@@ -147,6 +149,7 @@ interface ScorerConfigPanelProps {
   onDescriptionChange: (description: string) => void;
   onSamplingChange: (config: ScoringSamplingConfig | undefined) => void;
   onRemove: () => void;
+  readOnly?: boolean;
 }
 
 function ScorerConfigPanel({
@@ -157,6 +160,7 @@ function ScorerConfigPanel({
   onDescriptionChange,
   onSamplingChange,
   onRemove,
+  readOnly = false,
 }: ScorerConfigPanelProps) {
   const samplingType = samplingConfig?.type || 'none';
 
@@ -191,9 +195,11 @@ function ScorerConfigPanel({
           </Icon>
           <span className="text-xs font-medium text-icon6">{scorerName}</span>
         </div>
-        <IconButton tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="sm">
-          <Trash2 />
-        </IconButton>
+        {!readOnly && (
+          <IconButton tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="sm">
+            <Trash2 />
+          </IconButton>
+        )}
       </div>
 
       <Textarea
@@ -203,6 +209,7 @@ function ScorerConfigPanel({
         placeholder="Custom description for this scorer..."
         className="min-h-[40px] text-xs bg-surface3 border-dashed px-2 py-1"
         size="sm"
+        disabled={readOnly}
       />
 
       <div className="flex flex-col gap-2">
@@ -214,21 +221,22 @@ function ScorerConfigPanel({
           value={samplingType}
           onValueChange={handleTypeChange}
           className="flex flex-col gap-2"
+          disabled={readOnly}
         >
           <div className="flex items-center gap-2">
-            <RadioGroupItem value="none" id={`${scorerId}-none`} />
+            <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
             <Label htmlFor={`${scorerId}-none`} className="text-sm text-icon5 cursor-pointer">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
-            <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} />
+            <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
             <Label htmlFor={`${scorerId}-ratio`} className="text-sm text-icon5 cursor-pointer">
               Ratio (percentage)
             </Label>
           </div>
           <div className="flex items-center gap-2">
-            <RadioGroupItem value="count" id={`${scorerId}-count`} />
+            <RadioGroupItem value="count" id={`${scorerId}-count`} disabled={readOnly} />
             <Label htmlFor={`${scorerId}-count`} className="text-sm text-icon5 cursor-pointer">
               Count (fixed number)
             </Label>
@@ -249,6 +257,7 @@ function ScorerConfigPanel({
               value={samplingConfig?.rate ?? 0.1}
               onChange={e => handleRateChange(parseFloat(e.target.value))}
               className="h-8"
+              disabled={readOnly}
             />
           </div>
         )}
@@ -266,6 +275,7 @@ function ScorerConfigPanel({
               value={samplingConfig?.count ?? 10}
               onChange={e => handleCountChange(parseInt(e.target.value, 10))}
               className="h-8"
+              disabled={readOnly}
             />
           </div>
         )}

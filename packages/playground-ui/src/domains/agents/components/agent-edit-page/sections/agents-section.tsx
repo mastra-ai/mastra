@@ -17,9 +17,10 @@ interface AgentsSectionProps {
   control: Control<AgentFormValues>;
   error?: string;
   currentAgentId?: string;
+  readOnly?: boolean;
 }
 
-export function AgentsSection({ control, error, currentAgentId }: AgentsSectionProps) {
+export function AgentsSection({ control, error, currentAgentId, readOnly = false }: AgentsSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { data: agents, isLoading } = useAgents();
   const selectedAgents = useWatch({ control, name: 'agents' });
@@ -99,7 +100,7 @@ export function AgentsSection({ control, error, currentAgentId }: AgentsSectionP
                       placeholder="Select sub-agents..."
                       searchPlaceholder="Search agents..."
                       emptyText="No agents available"
-                      disabled={isLoading}
+                      disabled={isLoading || readOnly}
                       error={error}
                       variant="light"
                     />
@@ -112,8 +113,8 @@ export function AgentsSection({ control, error, currentAgentId }: AgentsSectionP
                             name={agent.label}
                             icon={<AgentIcon className="text-accent1" />}
                             description={field.value?.[agent.value]?.description || ''}
-                            onDescriptionChange={desc => handleDescriptionChange(agent.value, desc)}
-                            onRemove={() => handleRemove(agent.value)}
+                            onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(agent.value, desc)}
+                            onRemove={readOnly ? undefined : () => handleRemove(agent.value)}
                           />
                         ))}
                       </div>

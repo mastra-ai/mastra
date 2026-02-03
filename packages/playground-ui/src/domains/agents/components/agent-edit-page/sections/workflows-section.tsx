@@ -16,9 +16,10 @@ interface EntityConfig {
 interface WorkflowsSectionProps {
   control: Control<AgentFormValues>;
   error?: string;
+  readOnly?: boolean;
 }
 
-export function WorkflowsSection({ control, error }: WorkflowsSectionProps) {
+export function WorkflowsSection({ control, error, readOnly = false }: WorkflowsSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { data: workflows, isLoading } = useWorkflows();
   const selectedWorkflows = useWatch({ control, name: 'workflows' });
@@ -88,7 +89,7 @@ export function WorkflowsSection({ control, error }: WorkflowsSectionProps) {
                       placeholder="Select workflows..."
                       searchPlaceholder="Search workflows..."
                       emptyText="No workflows available"
-                      disabled={isLoading}
+                      disabled={isLoading || readOnly}
                       error={error}
                       variant="light"
                     />
@@ -101,8 +102,10 @@ export function WorkflowsSection({ control, error }: WorkflowsSectionProps) {
                             name={workflow.label}
                             icon={<WorkflowIcon className="text-accent3" />}
                             description={field.value?.[workflow.value]?.description || ''}
-                            onDescriptionChange={desc => handleDescriptionChange(workflow.value, desc)}
-                            onRemove={() => handleRemove(workflow.value)}
+                            onDescriptionChange={
+                              readOnly ? undefined : desc => handleDescriptionChange(workflow.value, desc)
+                            }
+                            onRemove={readOnly ? undefined : () => handleRemove(workflow.value)}
                           />
                         ))}
                       </div>

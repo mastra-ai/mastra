@@ -10,9 +10,10 @@ import type { AgentFormValues } from './utils/form-validation';
 
 interface AgentEditMainProps {
   form: UseFormReturn<AgentFormValues>;
+  readOnly?: boolean;
 }
 
-export function AgentEditMain({ form }: AgentEditMainProps) {
+export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
   const {
     control,
     formState: { errors },
@@ -35,15 +36,17 @@ export function AgentEditMain({ form }: AgentEditMainProps) {
           name="instructions"
           control={control}
           render={({ field }) => (
-            <CodeEditor
-              value={field.value}
-              onChange={field.onChange}
-              language="markdown"
-              showCopyButton={false}
-              placeholder="Enter agent instructions..."
-              wordWrap
-              className={cn('flex-1 min-h-[200px]', errors.instructions && 'border border-accent2')}
-            />
+            <div className={readOnly ? 'pointer-events-none' : ''}>
+              <CodeEditor
+                value={field.value}
+                onChange={readOnly ? undefined : field.onChange}
+                language="markdown"
+                showCopyButton={false}
+                placeholder="Enter agent instructions..."
+                wordWrap
+                className={cn('flex-1 min-h-[200px]', errors.instructions && 'border border-accent2')}
+              />
+            </div>
           )}
         />
         {errors.instructions && <span className="text-xs text-accent2">{errors.instructions.message}</span>}

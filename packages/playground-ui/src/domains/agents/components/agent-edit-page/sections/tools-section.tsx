@@ -16,9 +16,10 @@ interface EntityConfig {
 interface ToolsSectionProps {
   control: Control<AgentFormValues>;
   error?: string;
+  readOnly?: boolean;
 }
 
-export function ToolsSection({ control, error }: ToolsSectionProps) {
+export function ToolsSection({ control, error, readOnly = false }: ToolsSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { data: tools, isLoading } = useTools();
   const selectedTools = useWatch({ control, name: 'tools' });
@@ -88,7 +89,7 @@ export function ToolsSection({ control, error }: ToolsSectionProps) {
                       placeholder="Select tools..."
                       searchPlaceholder="Search tools..."
                       emptyText="No tools available"
-                      disabled={isLoading}
+                      disabled={isLoading || readOnly}
                       error={error}
                       variant="light"
                     />
@@ -101,8 +102,8 @@ export function ToolsSection({ control, error }: ToolsSectionProps) {
                             name={tool.label}
                             icon={<ToolsIcon className="text-accent6" />}
                             description={field.value?.[tool.value]?.description || ''}
-                            onDescriptionChange={desc => handleDescriptionChange(tool.value, desc)}
-                            onRemove={() => handleRemove(tool.value)}
+                            onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(tool.value, desc)}
+                            onRemove={readOnly ? undefined : () => handleRemove(tool.value)}
                           />
                         ))}
                       </div>

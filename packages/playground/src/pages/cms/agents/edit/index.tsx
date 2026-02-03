@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
+import type { AgentVersionResponse } from '@mastra/client-js';
 
 import {
   toast,
@@ -16,48 +17,75 @@ import {
   Icon,
   AgentIcon,
   Spinner,
+  useAgentVersion,
+  VersionPreviewBanner,
 } from '@mastra/playground-ui';
 
 // Type for the agent data (inferred from useStoredAgent)
 type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
 
+// Helper function to convert array to record format expected by form sections
+const arrayToRecord = (arr: string[]): Record<string, { description?: string }> => {
+  const record: Record<string, { description?: string }> = {};
+  for (const id of arr) {
+    record[id] = { description: undefined };
+  }
+  return record;
+};
+
 interface CmsAgentsEditFormProps {
   agent: StoredAgent;
   agentId: string;
+  selectedVersionId: string | null;
+  versionData?: AgentVersionResponse;
+  onVersionSelect: (versionId: string) => void;
+  onClearVersion: () => void;
 }
 
 // Form component - only rendered when agent data is available
-function CmsAgentsEditForm({ agent, agentId }: CmsAgentsEditFormProps) {
+function CmsAgentsEditForm({
+  agent,
+  agentId,
+  selectedVersionId,
+  versionData,
+  onVersionSelect,
+  onClearVersion,
+}: CmsAgentsEditFormProps) {
   const { navigate, paths } = useLinkComponent();
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
 
+  const isViewingVersion = !!selectedVersionId && !!versionData;
+
   // Transform agent data to form initial values
+  // Use version data when viewing a version, otherwise use current agent data
   const initialValues = useMemo(() => {
+    const dataSource = isViewingVersion ? versionData : agent;
+
     // Merge code-defined tools and integration tools
     const allTools: string[] = [];
-    if (agent.tools && Array.isArray(agent.tools)) {
-      allTools.push(...agent.tools);
+    if (dataSource.tools && Array.isArray(dataSource.tools)) {
+      allTools.push(...dataSource.tools);
     }
-    if (agent.integrationTools && Array.isArray(agent.integrationTools)) {
-      allTools.push(...agent.integrationTools);
+    if (dataSource.integrationTools && Array.isArray(dataSource.integrationTools)) {
+      allTools.push(...dataSource.integrationTools);
     }
 
     return {
-      name: agent.name || '',
-      description: agent.description || '',
-      instructions: agent.instructions || '',
+      name: dataSource.name || '',
+      description: dataSource.description || '',
+      instructions: dataSource.instructions || '',
       model: {
-        provider: (agent.model as { provider?: string; name?: string })?.provider || '',
-        name: (agent.model as { provider?: string; name?: string })?.name || '',
+        provider: (dataSource.model as { provider?: string; name?: string })?.provider || '',
+        name: (dataSource.model as { provider?: string; name?: string })?.name || '',
       },
-      tools: allTools,
-      workflows: agent.workflows || [],
-      agents: agent.agents || [],
-      scorers: agent.scorers || {},
+      tools: arrayToRecord(allTools),
+      workflows: arrayToRecord((dataSource.workflows as string[]) || []),
+      agents: arrayToRecord((dataSource.agents as string[]) || []),
+      scorers: dataSource.scorers || {},
     };
-  }, [agent]);
+  }, [agent, versionData, isViewingVersion]);
 
   const { form } = useAgentEditForm({ initialValues });
 
@@ -80,7 +108,7 @@ function CmsAgentsEditForm({ agent, agentId }: CmsAgentsEditFormProps) {
       const existingIntegrationTools = new Set(agent.integrationTools || []);
 
       if (values.tools) {
-        for (const toolId of values.tools) {
+        for (const toolId of Object.keys(values.tools)) {
           if (existingIntegrationTools.has(toolId)) {
             integrationToolIds.push(toolId);
           } else {
@@ -96,8 +124,8 @@ function CmsAgentsEditForm({ agent, agentId }: CmsAgentsEditFormProps) {
         model: values.model as Record<string, unknown>,
         tools: codeDefinedTools,
         integrationTools: integrationToolIds,
-        workflows: values.workflows,
-        agents: values.agents,
+        workflows: Object.keys(values.workflows || {}),
+        agents: Object.keys(values.agents || {}),
         scorers: values.scorers,
       });
 
@@ -131,12 +159,22 @@ function CmsAgentsEditForm({ agent, agentId }: CmsAgentsEditFormProps) {
           isSubmitting={isSubmitting}
           formRef={formRef}
           mode="edit"
+          readOnly={isViewingVersion}
         />
       }
-      rightSlot={<AgentVersionsPanel agentId={agentId} />}
+      rightSlot={
+        <AgentVersionsPanel
+          agentId={agentId}
+          selectedVersionId={selectedVersionId ?? undefined}
+          onVersionSelect={onVersionSelect}
+        />
+      }
     >
+      {isViewingVersion && versionData && (
+        <VersionPreviewBanner versionNumber={versionData.versionNumber} onClose={onClearVersion} />
+      )}
       <form ref={formRef} className="h-full">
-        <AgentEditMain form={form} />
+        <AgentEditMain form={form} readOnly={isViewingVersion} />
       </form>
     </AgentLayout>
   );
@@ -145,10 +183,32 @@ function CmsAgentsEditForm({ agent, agentId }: CmsAgentsEditFormProps) {
 // Wrapper component - handles data fetching and loading states
 function CmsAgentsEditPage() {
   const { agentId } = useParams<{ agentId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedVersionId = searchParams.get('versionId');
+
   const { data: agent, isLoading: isLoadingAgent } = useStoredAgent(agentId);
+  const { data: versionData, isLoading: isLoadingVersion } = useAgentVersion({
+    agentId: agentId ?? '',
+    versionId: selectedVersionId ?? '',
+  });
+
+  const handleVersionSelect = useCallback(
+    (versionId: string) => {
+      if (versionId) {
+        setSearchParams({ versionId });
+      } else {
+        setSearchParams({});
+      }
+    },
+    [setSearchParams],
+  );
+
+  const handleClearVersion = useCallback(() => {
+    setSearchParams({});
+  }, [setSearchParams]);
 
   // Loading state
-  if (isLoadingAgent) {
+  if (isLoadingAgent || (selectedVersionId && isLoadingVersion)) {
     return (
       <AgentLayout
         agentId="agent-edit"
@@ -198,7 +258,16 @@ function CmsAgentsEditPage() {
   }
 
   // Render form only when agent data is available
-  return <CmsAgentsEditForm agent={agent} agentId={agentId} />;
+  return (
+    <CmsAgentsEditForm
+      agent={agent}
+      agentId={agentId}
+      selectedVersionId={selectedVersionId}
+      versionData={versionData}
+      onVersionSelect={handleVersionSelect}
+      onClearVersion={handleClearVersion}
+    />
+  );
 }
 
 export { CmsAgentsEditPage };

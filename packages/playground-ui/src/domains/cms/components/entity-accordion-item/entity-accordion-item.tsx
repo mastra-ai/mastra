@@ -9,8 +9,8 @@ export interface EntityAccordionItemProps {
   name: string;
   icon: React.ReactNode;
   description: string;
-  onDescriptionChange: (description: string) => void;
-  onRemove: () => void;
+  onDescriptionChange?: (description: string) => void;
+  onRemove?: () => void;
 }
 
 export function EntityAccordionItem({
@@ -21,6 +21,8 @@ export function EntityAccordionItem({
   onDescriptionChange,
   onRemove,
 }: EntityAccordionItemProps) {
+  const isReadOnly = !onDescriptionChange && !onRemove;
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
@@ -28,18 +30,21 @@ export function EntityAccordionItem({
           <Icon size="sm">{icon}</Icon>
           <span className="text-xs font-medium text-icon6">{name}</span>
         </div>
-        <IconButton tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="sm">
-          <Trash2 />
-        </IconButton>
+        {onRemove && (
+          <IconButton tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="sm">
+            <Trash2 />
+          </IconButton>
+        )}
       </div>
 
       <Textarea
         id={`description-${id}`}
         value={description}
-        onChange={e => onDescriptionChange(e.target.value)}
+        onChange={onDescriptionChange ? e => onDescriptionChange(e.target.value) : undefined}
         placeholder="Custom description for this entity..."
         className="min-h-[40px] text-xs bg-surface3 border-dashed px-2 py-1"
         size="sm"
+        disabled={isReadOnly}
       />
     </div>
   );
