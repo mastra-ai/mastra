@@ -173,15 +173,17 @@ export const createStoredAgentResponseSchema = storedAgentSchema;
  */
 export const updateStoredAgentResponseSchema = z.union([
   // Case 1: Thin agent record (no version exists)
-  z.object({
-    id: z.string(),
-    status: z.string().describe('Agent status: draft or published'),
-    activeVersionId: z.string().optional(),
-    authorId: z.string().optional(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-    createdAt: z.coerce.date(),
-    updatedAt: z.coerce.date(),
-  }),
+  z
+    .object({
+      id: z.string(),
+      status: z.string().describe('Agent status: draft or published'),
+      activeVersionId: z.string().optional(),
+      authorId: z.string().optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+      createdAt: z.coerce.date(),
+      updatedAt: z.coerce.date(),
+    })
+    .strict(),
   // Case 2: Resolved agent (version exists) - all fields optional except required base fields
   storedAgentSchema,
 ]);
