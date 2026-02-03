@@ -8,9 +8,7 @@ packages:
 
 # Observational Memory
 
-Observational Memory is a memory processor that maintains long-term memory across conversations. It uses two background agents — an Observer that watches conversations and makes observations, and a Reflector that restructures observations by combining related items, reflecting on overarching patterns, and condensing where possible.
-
-This keeps the agent's context window small while preserving what matters across long conversations.
+Observational Memory (OM) is Mastra's memory system for long-context agentic memory. Two background agents — an **Observer** that watches conversations and creates observations, and a **Reflector** that restructures observations by combining related items, reflecting on overarching patterns, and condensing where possible — maintain an observation log that replaces raw message history as it grows.
 
 ## Usage
 
@@ -152,7 +150,7 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
       description:
         "Model settings for the Reflector agent.",
       isOptional: true,
-      defaultValue: "{ temperature: 0.3, maxOutputTokens: 100_000 }",
+      defaultValue: "{ temperature: 0, maxOutputTokens: 100_000 }",
     },
   ]}
 />
@@ -234,7 +232,7 @@ export const agent = new Agent({
 });
 ```
 
-When `shareTokenBudget` is enabled, the total budget is `messageTokens + observationTokens` (100k in this example). If observations only use 30k tokens, messages can expand to use up to 70k. If messages are short, observations have more room before triggering reflection.
+When `shareTokenBudget` is enabled, the total budget is `observation.messageTokens + reflection.observationTokens` (100k in this example). If observations only use 30k tokens, messages can expand to use up to 70k. If messages are short, observations have more room before triggering reflection.
 
 ### Custom model
 
