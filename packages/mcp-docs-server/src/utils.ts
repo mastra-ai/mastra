@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import z from 'zod';
 
 const mdxFileCache = new Map<string, string[]>();
 
@@ -168,17 +167,3 @@ export async function getMatchingPaths(path: string, queryKeywords: string[], ba
   const pathList = suggestedPaths.map(path => `- ${path}`).join('\n');
   return `Here are some paths that might be relevant based on your query:\n\n${pathList}`;
 }
-
-export const blogPostSchema = z.object({
-  slug: z.string(),
-  content: z.string(),
-  metadata: z.object({
-    title: z.string(),
-    publishedAt: z.string(),
-    summary: z.string(),
-    image: z.string().optional(),
-    author: z.string().optional(),
-    draft: z.boolean().optional().default(false),
-    categories: z.array(z.string()).or(z.string()),
-  }),
-});
