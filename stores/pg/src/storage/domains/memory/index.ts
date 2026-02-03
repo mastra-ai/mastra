@@ -523,8 +523,8 @@ export class MemoryPG extends MemoryStorage {
         SELECT ${selectColumns}
         FROM ${tableName} m
         WHERE m.thread_id = (SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx})
-          AND m."createdAt" <= (SELECT "createdAt" FROM ${tableName} WHERE id = $${paramIdx})
-        ORDER BY m."createdAt" DESC
+          AND COALESCE(m."createdAtZ", m."createdAt") <= (SELECT COALESCE("createdAtZ", "createdAt") FROM ${tableName} WHERE id = $${paramIdx})
+        ORDER BY COALESCE(m."createdAtZ", m."createdAt") DESC
         LIMIT $${paramIdx + 1}
       )`);
       params.push(id, withPreviousMessages + 1); // +1 to include the target message itself
