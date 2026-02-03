@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { Memory } from '@mastra/memory';
-import { ObservationalMemory, OBSERVATIONAL_MEMORY_DEFAULTS } from '@mastra/memory/experiments';
+import { ObservationalMemory, OBSERVATIONAL_MEMORY_DEFAULTS } from '@mastra/memory/processors';
 import { cachedOpenAI } from '../embeddings/cached-openai-provider';
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';

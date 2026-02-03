@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { readdir } from 'fs/promises';
 import { Memory } from '@mastra/memory';
-import { ObservationalMemory } from '@mastra/memory/experiments';
+import { ObservationalMemory } from '@mastra/memory/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import { MockLanguageModelV1, MockLanguageModelV2 } from '../test-utils/mock-model';
 import { cachedOpenAI } from '../embeddings/cached-openai-provider';

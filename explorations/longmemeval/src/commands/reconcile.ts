@@ -16,7 +16,10 @@ import { Agent } from '@mastra/core/agent';
 
 import { getMemoryConfig } from '../config';
 import type { MemoryConfigType } from '../data/types';
-import { buildObserverSystemPrompt, PATTERN_INSTRUCTIONS } from '@mastra/memory/experiments';
+import { buildObserverSystemPrompt } from '@mastra/memory/processors';
+
+// Patterns were removed from OM - this is a placeholder for legacy benchmark code
+const PATTERN_INSTRUCTIONS = '';
 
 export interface ReconcileOptions {
   /** The target config we're reconciling for */

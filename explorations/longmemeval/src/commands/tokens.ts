@@ -6,7 +6,7 @@ import { existsSync } from 'fs';
 
 import { DatasetLoader } from '../data/loader';
 import type { DatasetType, LongMemEvalQuestion } from '../data/types';
-import { TokenCounter } from '@mastra/memory/experiments';
+import { TokenCounter } from '@mastra/memory/processors';
 
 export interface TokensOptions {
   dataset: DatasetType;

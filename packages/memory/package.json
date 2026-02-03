@@ -30,16 +30,6 @@
         "default": "./dist/processors/index.cjs"
       }
     },
-    "./experiments": {
-      "import": {
-        "types": "./dist/experiments/index.d.ts",
-        "default": "./dist/experiments/index.js"
-      },
-      "require": {
-        "types": "./dist/experiments/index.d.ts",
-        "default": "./dist/experiments/index.cjs"
-      }
-    },
     "./package.json": "./package.json"
   },
   "scripts": {
