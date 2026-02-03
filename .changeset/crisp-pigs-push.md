@@ -56,9 +56,3 @@ const agents = await editor.listStoredAgents({ pageSize: 10 });
 - Fixed JSONB handling in LibSQL, PostgreSQL, and MongoDB adapters
 - Improved agent resolution queries to properly merge version data
 - Enhanced type safety for serialized configurations
-
-**Breaking Changes:**
-
-- `StorageDefaultOptions` now properly omits non-serializable fields from `AgentExecutionOptions`
-- `SerializedMemoryConfig.generateTitle.model` now expects `ModelRouterModelId` string instead of `DynamicArgument<MastraModelConfig>`
-- Added `IMastraEditor` interface that must be implemented by editor instances
