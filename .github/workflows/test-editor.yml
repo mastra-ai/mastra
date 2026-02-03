@@ -10,6 +10,9 @@ on:
       - 'stores/libsql/**'
       - '.github/workflows/test-editor.yml'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     # Only run on the main repository, not on forks
