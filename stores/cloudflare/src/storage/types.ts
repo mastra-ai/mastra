@@ -7,7 +7,7 @@ import type {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_TRACES,
   TABLE_RESOURCES,
-  CORE_TABLE_NAMES,
+  TABLE_NAMES,
   StorageResourceType,
   TABLE_SCORERS,
   TABLE_SPANS,
@@ -70,7 +70,7 @@ export interface CloudflareRestConfig extends CloudflareBaseConfig {
 export interface CloudflareWorkersConfig extends CloudflareBaseConfig {
   /** KV namespace bindings from Workers environment */
   bindings: {
-    [key in CORE_TABLE_NAMES]: KVNamespace;
+    [key in TABLE_NAMES]: KVNamespace;
   };
   /** Optional prefix for keys within namespaces */
   keyPrefix?: string;
@@ -86,7 +86,7 @@ export type CloudflareStoreConfig = CloudflareRestConfig | CloudflareWorkersConf
  */
 export interface KVOperation {
   /** Table/namespace to operate on */
-  tableName: CORE_TABLE_NAMES;
+  tableName: TABLE_NAMES;
   /** Key to read/write */
   key: string;
   /** Value to write (for put operations) */
@@ -102,6 +102,9 @@ export function isWorkersConfig(config: CloudflareStoreConfig): config is Cloudf
   return 'bindings' in config;
 }
 
+// Cloudflare doesn't support observational memory, but we need to satisfy the TABLE_NAMES type
+const TABLE_OBSERVATIONAL_MEMORY_LOCAL = 'mastra_observational_memory' as const;
+
 export type RecordTypes = {
   [TABLE_THREADS]: StorageThreadType;
   [TABLE_MESSAGES]: MastraDBMessage;
@@ -112,6 +115,8 @@ export type RecordTypes = {
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
   [TABLE_AGENT_VERSIONS]: AgentVersion;
+  // Observational memory is not supported by Cloudflare - this is a placeholder to satisfy types
+  [TABLE_OBSERVATIONAL_MEMORY_LOCAL]: never;
 };
 
 export type ListOptions = {
@@ -144,7 +149,7 @@ export interface CloudflareDomainClientConfig {
  */
 export interface CloudflareDomainBindingsConfig {
   bindings: {
-    [key in CORE_TABLE_NAMES]: KVNamespace;
+    [key in TABLE_NAMES]: KVNamespace;
   };
   keyPrefix?: string;
 }

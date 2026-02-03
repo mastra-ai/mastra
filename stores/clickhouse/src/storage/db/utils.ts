@@ -1,4 +1,4 @@
-import type { CORE_TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
+import type { TABLE_NAMES, TABLE_SCHEMAS, StorageColumn } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -12,7 +12,10 @@ import {
   TABLE_AGENT_VERSIONS,
 } from '@mastra/core/storage';
 
-export const TABLE_ENGINES: Record<CORE_TABLE_NAMES, string> = {
+// Clickhouse doesn't support observational memory, but we need to satisfy the TABLE_NAMES type
+const TABLE_OBSERVATIONAL_MEMORY_LOCAL = 'mastra_observational_memory' as const;
+
+export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
   [TABLE_WORKFLOW_SNAPSHOT]: `ReplacingMergeTree()`,
   [TABLE_TRACES]: `MergeTree()`,
@@ -25,6 +28,8 @@ export const TABLE_ENGINES: Record<CORE_TABLE_NAMES, string> = {
   [TABLE_SPANS]: `ReplacingMergeTree(updatedAt)`,
   [TABLE_AGENTS]: `ReplacingMergeTree()`,
   [TABLE_AGENT_VERSIONS]: `MergeTree()`,
+  // Observational memory is not supported by Clickhouse - this is a placeholder to satisfy types
+  [TABLE_OBSERVATIONAL_MEMORY_LOCAL]: `MergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
@@ -56,7 +61,7 @@ export type ClickhouseConfig = {
   username: string;
   password: string;
   ttl?: {
-    [TableKey in CORE_TABLE_NAMES]?: {
+    [TableKey in TABLE_NAMES]?: {
       row?: { interval: number; unit: IntervalUnit; ttlKey?: string };
       columns?: Partial<{
         [ColumnKey in keyof (typeof TABLE_SCHEMAS)[TableKey]]: {
