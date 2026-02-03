@@ -43,7 +43,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   abstract readonly id: string;
 
   /** Human-readable name (e.g., 'E2B Sandbox', 'Docker') */
-  abstract override readonly name: string;
+  abstract readonly name: string;
 
   /** Provider type identifier */
   abstract readonly provider: string;

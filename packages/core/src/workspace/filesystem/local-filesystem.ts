@@ -75,9 +75,9 @@ export interface LocalFilesystemOptions {
  */
 export class LocalFilesystem extends MastraFilesystem {
   readonly id: string;
-  override readonly name = 'LocalFilesystem';
+  readonly name = 'LocalFilesystem';
   readonly provider = 'local';
-  override readonly readOnly?: boolean;
+  readonly readOnly?: boolean;
 
   status: ProviderStatus = 'stopped';
 
@@ -88,7 +88,7 @@ export class LocalFilesystem extends MastraFilesystem {
    * The absolute base path on disk where files are stored.
    * Useful for understanding how workspace paths map to disk paths.
    */
-  override get basePath(): string {
+  get basePath(): string {
     return this._basePath;
   }
 
@@ -192,7 +192,7 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  override async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
+  async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
     this.logger.debug('Reading file', { path: inputPath, encoding: options?.encoding });
     await this.ensureInitialized();
     const absolutePath = this.resolvePath(inputPath);
@@ -217,7 +217,7 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  override async writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
+  async writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
     const contentSize = Buffer.isBuffer(content) ? content.length : content.length;
     this.logger.debug('Writing file', { path: inputPath, size: contentSize, recursive: options?.recursive });
     await this.ensureInitialized();
@@ -260,7 +260,7 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  override async appendFile(inputPath: string, content: FileContent): Promise<void> {
+  async appendFile(inputPath: string, content: FileContent): Promise<void> {
     const contentSize = Buffer.isBuffer(content) ? content.length : content.length;
     this.logger.debug('Appending to file', { path: inputPath, size: contentSize });
     await this.ensureInitialized();
@@ -272,7 +272,7 @@ export class LocalFilesystem extends MastraFilesystem {
     await fs.appendFile(absolutePath, this.toBuffer(content));
   }
 
-  override async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
+  async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
     this.logger.debug('Deleting file', { path: inputPath, force: options?.force });
     await this.ensureInitialized();
     this.assertWritable('deleteFile');
@@ -297,7 +297,7 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  override async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+  async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     this.logger.debug('Copying file', { src, dest, recursive: options?.recursive });
     await this.ensureInitialized();
     this.assertWritable('copyFile');
@@ -366,7 +366,7 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  override async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+  async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     this.logger.debug('Moving file', { src, dest, overwrite: options?.overwrite });
     await this.ensureInitialized();
     this.assertWritable('moveFile');
@@ -406,7 +406,7 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  override async mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
+  async mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
     this.logger.debug('Creating directory', { path: inputPath, recursive: options?.recursive });
     await this.ensureInitialized();
     this.assertWritable('mkdir');
@@ -431,7 +431,7 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  override async rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
+  async rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
     this.logger.debug('Removing directory', { path: inputPath, recursive: options?.recursive, force: options?.force });
     await this.ensureInitialized();
     this.assertWritable('rmdir');
@@ -467,7 +467,7 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  override async readdir(inputPath: string, options?: ListOptions): Promise<FileEntry[]> {
+  async readdir(inputPath: string, options?: ListOptions): Promise<FileEntry[]> {
     this.logger.debug('Reading directory', { path: inputPath, recursive: options?.recursive });
     await this.ensureInitialized();
     const absolutePath = this.resolvePath(inputPath);
@@ -559,14 +559,14 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  override async exists(inputPath: string): Promise<boolean> {
+  async exists(inputPath: string): Promise<boolean> {
     await this.ensureInitialized();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
     return fsExists(absolutePath);
   }
 
-  override async stat(inputPath: string): Promise<FileStat> {
+  async stat(inputPath: string): Promise<FileStat> {
     await this.ensureInitialized();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -577,7 +577,7 @@ export class LocalFilesystem extends MastraFilesystem {
     };
   }
 
-  override async init(): Promise<void> {
+  async init(): Promise<void> {
     this.logger.debug('Initializing filesystem', { basePath: this._basePath });
     this.status = 'starting';
     try {
@@ -591,12 +591,12 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  override async destroy(): Promise<void> {
+  async destroy(): Promise<void> {
     this.logger.debug('Destroying filesystem', { basePath: this._basePath });
     // LocalFilesystem doesn't clean up on destroy by default
   }
 
-  override getInfo(): FilesystemInfo {
+  getInfo(): FilesystemInfo {
     return {
       id: this.id,
       name: this.name,
@@ -607,7 +607,7 @@ export class LocalFilesystem extends MastraFilesystem {
     };
   }
 
-  override getInstructions(): string {
+  getInstructions(): string {
     return `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.`;
   }
 }

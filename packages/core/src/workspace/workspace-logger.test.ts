@@ -45,7 +45,7 @@ function createMockLogger(): IMastraLogger {
 
 class TestFilesystem extends MastraFilesystem {
   readonly id = 'test-fs';
-  override readonly name = 'TestFilesystem';
+  readonly name = 'TestFilesystem';
   readonly provider = 'test';
   status: ProviderStatus = 'stopped';
 
@@ -108,7 +108,7 @@ class TestFilesystem extends MastraFilesystem {
     };
   }
 
-  override async init(): Promise<void> {
+  async init(): Promise<void> {
     this.logger.debug('TestFilesystem.init called');
     this.status = 'running';
   }
@@ -121,7 +121,7 @@ class TestFilesystem extends MastraFilesystem {
 
 class TestSandbox extends MastraSandbox {
   readonly id = 'test-sandbox';
-  override readonly name = 'TestSandbox';
+  readonly name = 'TestSandbox';
   readonly provider = 'test';
   status: ProviderStatus = 'stopped';
 
@@ -129,11 +129,7 @@ class TestSandbox extends MastraSandbox {
     super({ name: 'TestSandbox' });
   }
 
-  override async executeCommand(
-    _command: string,
-    _args?: string[],
-    _options?: ExecuteCommandOptions,
-  ): Promise<CommandResult> {
+  async executeCommand(_command: string, _args?: string[], _options?: ExecuteCommandOptions): Promise<CommandResult> {
     this.logger.debug('TestSandbox.executeCommand called');
     return {
       success: true,
@@ -144,22 +140,22 @@ class TestSandbox extends MastraSandbox {
     };
   }
 
-  override async start(): Promise<void> {
+  async start(): Promise<void> {
     this.logger.debug('TestSandbox.start called');
     this.status = 'running';
   }
 
-  override async stop(): Promise<void> {
+  async stop(): Promise<void> {
     this.logger.debug('TestSandbox.stop called');
     this.status = 'stopped';
   }
 
-  override async destroy(): Promise<void> {
+  async destroy(): Promise<void> {
     this.logger.debug('TestSandbox.destroy called');
     this.status = 'destroyed';
   }
 
-  override async getInfo(): Promise<SandboxInfo> {
+  async getInfo(): Promise<SandboxInfo> {
     return {
       id: this.id,
       name: this.name,

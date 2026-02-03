@@ -54,7 +54,7 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   abstract readonly id: string;
 
   /** Human-readable name (e.g., 'LocalFilesystem', 'AgentFS') */
-  abstract override readonly name: string;
+  abstract readonly name: string;
 
   /** Provider type identifier */
   abstract readonly provider: string;

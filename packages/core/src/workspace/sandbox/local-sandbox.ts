@@ -159,7 +159,7 @@ export interface LocalSandboxOptions {
  */
 export class LocalSandbox extends MastraSandbox {
   readonly id: string;
-  override readonly name = 'LocalSandbox';
+  readonly name = 'LocalSandbox';
   readonly provider = 'local';
 
   status: ProviderStatus = 'stopped';
@@ -178,7 +178,7 @@ export class LocalSandbox extends MastraSandbox {
   /**
    * The working directory where commands are executed.
    */
-  override get workingDirectory(): string {
+  get workingDirectory(): string {
     return this._workingDirectory;
   }
 
@@ -241,7 +241,7 @@ export class LocalSandbox extends MastraSandbox {
     };
   }
 
-  override async start(): Promise<void> {
+  async start(): Promise<void> {
     this.logger.debug('Starting sandbox', { workingDirectory: this._workingDirectory, isolation: this._isolation });
     this.status = 'starting';
 
@@ -298,12 +298,12 @@ export class LocalSandbox extends MastraSandbox {
     }
   }
 
-  override async stop(): Promise<void> {
+  async stop(): Promise<void> {
     this.logger.debug('Stopping sandbox', { workingDirectory: this._workingDirectory });
     this.status = 'stopped';
   }
 
-  override async destroy(): Promise<void> {
+  async destroy(): Promise<void> {
     this.logger.debug('Destroying sandbox', { workingDirectory: this._workingDirectory });
     // Clean up seatbelt profile only if it was auto-generated (not user-provided)
     if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {
@@ -330,11 +330,11 @@ export class LocalSandbox extends MastraSandbox {
     await this.stop();
   }
 
-  override async isReady(): Promise<boolean> {
+  async isReady(): Promise<boolean> {
     return this.status === 'running';
   }
 
-  override async getInfo(): Promise<SandboxInfo> {
+  async getInfo(): Promise<SandboxInfo> {
     return {
       id: this.id,
       name: this.name,
@@ -362,7 +362,7 @@ export class LocalSandbox extends MastraSandbox {
     };
   }
 
-  override getInstructions(): string {
+  getInstructions(): string {
     if (this.workingDirectory) {
       return `Local command execution. Working directory: "${this.workingDirectory}".`;
     }
@@ -385,7 +385,7 @@ export class LocalSandbox extends MastraSandbox {
     });
   }
 
-  override async executeCommand(
+  async executeCommand(
     command: string,
     args: string[] = [],
     options: ExecuteCommandOptions = {},
