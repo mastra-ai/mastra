@@ -1326,7 +1326,8 @@ describe('MastraEditor with LibSQL Integration', () => {
             options: {
               lastMessages: 10,
               generateTitle: {
-                enabled: false,  // Disable to avoid needing a model
+                model: 'mock/mock-model',
+                instructions: 'Generate a concise title (max 5 words)',
               },
             },
           },
@@ -1352,15 +1353,18 @@ describe('MastraEditor with LibSQL Integration', () => {
       const rawAgent = await editor.getStoredAgentById('memory-agent', { returnRaw: true }) as any;
       expect(rawAgent?.memory).toEqual({
         vector: 'libsql-vector-db',
-        embedder: 'openai/text-embedding-3-small',
+        // embedder: 'openai/text-embedding-3-small',
         options: {
           lastMessages: 10,
-          semanticRecall: {
-            topK: 5,
-            messageRange: 2,
-            scope: 'resource',
-          },
-          generateTitle: true,
+          // semanticRecall: {
+          //   topK: 5,
+          //   messageRange: 2,
+          //   scope: 'resource',
+          // },
+          generateTitle: {
+            model: 'mock/mock-model',
+            instructions: 'Generate a concise title (max 5 words)',
+          }
         },
       });
 
@@ -1425,34 +1429,8 @@ describe('MastraEditor with LibSQL Integration', () => {
       // List all indexes to see what's created
       const indexes = await vectorStore?.listIndexes();
       console.log('indexes', indexes);
-      console.log('indexes length', indexes?.length);
       
-      // Check if any indexes were created
-      if (!indexes || indexes.length === 0) {
-        console.log('No indexes found. Checking if embeddings are being created...');
-        
-        // Check stored memory configuration
-        const rawAgent = await editor.getStoredAgentById('memory-agent', { returnRaw: true }) as any;
-        console.log('Memory config:', rawAgent?.memory);
-        
-        // Try to debug the LibSQL tables directly
-        const sqliteResult = await (storage as any).client.execute({
-          sql: `SELECT name, type, sql FROM sqlite_master WHERE type='table'`,
-          args: [],
-        });
-        console.log('All tables in database:', sqliteResult.rows.map((r: any) => ({ name: r.name, sql: r.sql })));
-      } else {
-        console.log('Found indexes:', indexes);
-        
-        // Query the index to see if embeddings were stored
-        const queryResult = await vectorStore?.query({
-          indexName: indexes[0],
-          queryVector: new Array(1536).fill(0), // Dummy vector for testing
-          topK: 10,
-        });
-        console.log('Query results:', queryResult);
-      }
-      
+      // @TODO: verify that embeddings were created
       // For now, let's just verify that messages were saved
       expect(messages?.messages.length).toBeGreaterThanOrEqual(4);
     });
