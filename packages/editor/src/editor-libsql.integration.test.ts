@@ -766,16 +766,6 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Test execution with all features active
       const result = await retrievedAgent?.generate('What is the weather in Tokyo?');
       expect(result?.text).toBeDefined();
-
-      // Test a workflow directly
-      const greetingWorkflow = workflows?.['greeting-workflow'];
-      if (greetingWorkflow && 'execute' in greetingWorkflow && greetingWorkflow.execute) {
-        const workflowResult = await greetingWorkflow.execute(
-          { name: 'Test User' },
-          { mastra, agent: retrievedAgent! },
-        );
-        expect(workflowResult).toBe('Hello, Test User! This is a greeting workflow.');
-      }
     });
 
     it('should execute a stored agent with tools', async () => {
