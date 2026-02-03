@@ -73,7 +73,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
     }
 
     // Observational Memory section
-    const omConfig = (config as any).observationalMemory;
+    const omConfig = config.observationalMemory;
     if (omConfig?.enabled) {
       const formatThreshold = (threshold: number | { min: number; max: number } | undefined) => {
         if (!threshold) return 'Default';

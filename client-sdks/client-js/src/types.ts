@@ -326,7 +326,19 @@ export interface GetMemoryConfigParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type GetMemoryConfigResponse = { config: MemoryConfig };
+export type GetMemoryConfigResponse = {
+  config: MemoryConfig & {
+    observationalMemory?: {
+      enabled: boolean;
+      scope?: 'thread' | 'resource';
+      shareTokenBudget?: boolean;
+      messageTokens?: number | { min: number; max: number };
+      observationTokens?: number | { min: number; max: number };
+      observationModel?: string;
+      reflectionModel?: string;
+    };
+  };
+};
 
 export interface UpdateMemoryThreadParams {
   title: string;

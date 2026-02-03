@@ -1,5 +1,6 @@
 import { Brain, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useEffect } from 'react';
 
 /**
  * Types for OM observation markers streamed from the agent.
@@ -73,14 +74,15 @@ interface ObservationMarkerProps {
  * Shows different states: in-progress, completed, or failed.
  */
 export const ObservationMarker = ({ part, onObservationComplete, onObservationFailed }: ObservationMarkerProps) => {
-  // Trigger callbacks when appropriate
-  if (part.type === 'data-om-observation-end' && onObservationComplete) {
-    // Use setTimeout to avoid calling during render
-    setTimeout(() => onObservationComplete(part.data), 0);
-  }
-  if (part.type === 'data-om-observation-failed' && onObservationFailed) {
-    setTimeout(() => onObservationFailed(part.data), 0);
-  }
+  // Trigger callbacks in useEffect to avoid calling during render
+  useEffect(() => {
+    if (part.type === 'data-om-observation-end' && onObservationComplete) {
+      onObservationComplete(part.data);
+    }
+    if (part.type === 'data-om-observation-failed' && onObservationFailed) {
+      onObservationFailed(part.data);
+    }
+  }, [part, onObservationComplete, onObservationFailed]);
 
   if (part.type === 'data-om-observation-start') {
     return <ObservationStartMarker data={part.data} />;

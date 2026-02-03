@@ -209,11 +209,13 @@ export const useMemoryWithOMStatus = ({
   });
 
   // Update isActive state when data changes
+  const isObserving = query.data?.observationalMemory?.isObserving;
+  const isReflecting = query.data?.observationalMemory?.isReflecting;
+
   useEffect(() => {
-    const newIsActive =
-      query.data?.observationalMemory?.isObserving || query.data?.observationalMemory?.isReflecting || false;
+    const newIsActive = isObserving || isReflecting || false;
     setIsActive(newIsActive);
-  }, [query.data?.observationalMemory?.isObserving, query.data?.observationalMemory?.isReflecting]);
+  }, [isObserving, isReflecting]);
 
   return query;
 };
