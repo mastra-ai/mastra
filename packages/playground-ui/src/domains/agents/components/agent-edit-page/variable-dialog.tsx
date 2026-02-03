@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { PlusIcon } from 'lucide-react';
 
 import { SideDialog } from '@/ds/components/SideDialog';
 import { Button } from '@/ds/components/Button';
-import { JSONSchemaForm, type SchemaField, type JSONSchemaOutput } from '@/ds/components/JSONSchemaForm';
+import { JSONSchemaForm, type SchemaField, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
 import { VariablesIcon } from '@/ds/icons';
 import type { JsonSchema } from '@/lib/json-schema';
 
@@ -66,7 +66,9 @@ function RecursiveFieldRenderer({
 }
 
 export function VariableDialog({ isOpen, onClose, defaultValue, onSave }: VariableDialogProps) {
-  const [currentSchema, setCurrentSchema] = useState<JSONSchemaOutput | null>(null);
+  const [currentSchema, setCurrentSchema] = useState<JsonSchema | null>(null);
+
+  const initialFields = useMemo(() => jsonSchemaToFields(defaultValue), [defaultValue]);
 
   const handleSave = () => {
     if (currentSchema) {
@@ -97,7 +99,7 @@ export function VariableDialog({ isOpen, onClose, defaultValue, onSave }: Variab
       </SideDialog.Top>
       <SideDialog.Content className="flex flex-col">
         <div className="flex-1">
-          <JSONSchemaForm.Root onChange={setCurrentSchema} maxDepth={5}>
+          <JSONSchemaForm.Root onChange={setCurrentSchema} defaultValue={initialFields} maxDepth={5}>
             <JSONSchemaForm.FieldList>
               {(field, _index, { parentPath, depth }) => (
                 <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />

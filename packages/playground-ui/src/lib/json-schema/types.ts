@@ -29,12 +29,3 @@ export interface JsonSchema {
   properties?: Record<string, JsonSchemaProperty>;
   required?: string[];
 }
-
-/**
- * JSON Schema output format (for form builders that produce schemas)
- */
-export interface JsonSchemaOutput {
-  type: 'object';
-  properties: Record<string, JsonSchemaProperty>;
-  required?: string[];
-}

@@ -1,8 +1,3 @@
-import type { JsonSchemaProperty, JsonSchemaOutput } from '@/lib/json-schema';
-
-// Re-export with original naming convention for backward compatibility
-export type { JsonSchemaProperty as JSONSchemaProperty, JsonSchemaOutput as JSONSchemaOutput };
-
 export type FieldType = 'string' | 'number' | 'boolean' | 'text' | 'object' | 'array';
 
 export interface SchemaField {
