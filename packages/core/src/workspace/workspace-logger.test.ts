@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import type { IMastraLogger } from '../logger';
+import { Mastra } from '../mastra';
 import { LocalFilesystem } from './filesystem';
 import type {
   FileStat,
@@ -519,6 +520,69 @@ describe('Workspace Logger Integration', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith('Executing command', expect.any(Object));
 
       await workspace.destroy();
+    });
+  });
+
+  // ===========================================================================
+  // Integration: Mastra with Workspace (full cascade)
+  // ===========================================================================
+  describe('Integration: Mastra with Workspace', () => {
+    it('should propagate logger from Mastra to workspace providers', async () => {
+      const mockLogger = createMockLogger();
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ filesystem, sandbox });
+
+      const mastra = new Mastra({
+        logger: mockLogger,
+        workspace,
+      });
+
+      // Get the workspace from mastra
+      const mastraWorkspace = mastra.getWorkspace();
+      expect(mastraWorkspace).toBe(workspace);
+
+      // Init the workspace - should use the logger from Mastra
+      await mastraWorkspace!.init();
+
+      // Verify logger was propagated through Mastra → Workspace → Providers
+      expect(mockLogger.debug).toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Starting sandbox', expect.any(Object));
+
+      // Filesystem operations should use the Mastra logger
+      await mastraWorkspace!.filesystem!.writeFile('/mastra-test.txt', 'hello from mastra');
+      expect(mockLogger.debug).toHaveBeenCalledWith('Writing file', expect.any(Object));
+
+      // Sandbox operations should use the Mastra logger
+      const result = await mastraWorkspace!.sandbox!.executeCommand!('echo', ['mastra']);
+      expect(result.success).toBe(true);
+      expect(mockLogger.debug).toHaveBeenCalledWith('Executing command', expect.any(Object));
+
+      await mastraWorkspace!.destroy();
+    });
+
+    it('should propagate logger when calling setLogger after construction', async () => {
+      const initialLogger = createMockLogger();
+      const newLogger = createMockLogger();
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem });
+
+      const mastra = new Mastra({
+        logger: initialLogger,
+        workspace,
+      });
+
+      // Change the logger
+      mastra.setLogger({ logger: newLogger });
+
+      // Init should use the new logger
+      await mastra.getWorkspace()!.init();
+
+      // The new logger should have received the calls, not the initial one
+      expect(newLogger.debug).toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
+      expect(initialLogger.debug).not.toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
+
+      await mastra.getWorkspace()!.destroy();
     });
   });
 });
