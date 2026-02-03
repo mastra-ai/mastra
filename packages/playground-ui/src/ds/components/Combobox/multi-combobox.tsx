@@ -5,19 +5,14 @@ import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
 import { type FormElementSize } from '@/ds/primitives/form-element';
 import { comboboxStyles } from './combobox-styles';
+import type { ComboboxOption } from './combobox';
 
-export type ComboboxOption = {
-  label: string;
-  value: string;
-  description?: string;
-  start?: React.ReactNode;
-  end?: React.ReactNode;
-};
+export type { ComboboxOption };
 
-export type ComboboxProps = {
+export type MultiComboboxProps = {
   options: ComboboxOption[];
-  value?: string;
-  onValueChange?: (value: string) => void;
+  value?: string[];
+  onValueChange?: (value: string[]) => void;
   placeholder?: string;
   searchPlaceholder?: string;
   emptyText?: string;
@@ -31,11 +26,11 @@ export type ComboboxProps = {
   error?: string;
 };
 
-export function Combobox({
+export function MultiCombobox({
   options,
-  value,
+  value = [],
   onValueChange,
-  placeholder = 'Select option...',
+  placeholder = 'Select options...',
   searchPlaceholder = 'Search...',
   emptyText = 'No option found.',
   className,
@@ -46,20 +41,23 @@ export function Combobox({
   onOpenChange,
   container,
   error,
-}: ComboboxProps) {
-  const selectedOption = options.find(option => option.value === value) ?? null;
+}: MultiComboboxProps) {
+  const selectedOptions = options.filter(option => value.includes(option.value));
 
-  const handleSelect = (item: ComboboxOption | null) => {
-    if (item) {
-      onValueChange?.(item.value);
+  const handleSelect = (items: ComboboxOption[] | null) => {
+    if (items) {
+      onValueChange?.(items.map(item => item.value));
     }
   };
+
+  const triggerText = selectedOptions.length === 0 ? placeholder : `${selectedOptions.length} selected`;
 
   return (
     <div className={comboboxStyles.root}>
       <BaseCombobox.Root
+        multiple
         items={options}
-        value={selectedOption}
+        value={selectedOptions}
         onValueChange={handleSelect}
         disabled={disabled}
         open={open}
@@ -73,9 +71,8 @@ export function Combobox({
             className,
           )}
         >
-          <span className="truncate flex items-center gap-2">
-            {selectedOption?.start}
-            <BaseCombobox.Value placeholder={placeholder} />
+          <span className={cn('truncate', selectedOptions.length === 0 && comboboxStyles.placeholder)}>
+            {triggerText}
           </span>
           <ChevronsUpDown className={comboboxStyles.chevron} />
         </BaseCombobox.Trigger>
@@ -89,29 +86,31 @@ export function Combobox({
               </div>
               <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
               <BaseCombobox.List className={comboboxStyles.list}>
-                {(option: ComboboxOption) => (
-                  <BaseCombobox.Item
-                    key={option.value}
-                    value={option}
-                    className={cn(comboboxStyles.item, comboboxStyles.itemSelected)}
-                  >
-                    <span className={comboboxStyles.checkContainer}>
-                      <BaseCombobox.ItemIndicator>
-                        <Check className={comboboxStyles.checkIcon} />
-                      </BaseCombobox.ItemIndicator>
-                    </span>
-                    <span className={comboboxStyles.optionContent}>
-                      {option.start}
-                      <span className={comboboxStyles.optionText}>
-                        <span>{option.label}</span>
-                        {option.description && (
-                          <span className={comboboxStyles.optionDescription}>{option.description}</span>
+                {(option: ComboboxOption) => {
+                  const isSelected = value.includes(option.value);
+                  return (
+                    <BaseCombobox.Item key={option.value} value={option} className={comboboxStyles.item}>
+                      <span
+                        className={cn(
+                          comboboxStyles.checkbox,
+                          isSelected ? comboboxStyles.checkboxSelected : comboboxStyles.checkboxUnselected,
                         )}
+                      >
+                        {isSelected && <Check className={comboboxStyles.checkboxIcon} />}
                       </span>
-                      {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
-                    </span>
-                  </BaseCombobox.Item>
-                )}
+                      <span className={comboboxStyles.optionContent}>
+                        {option.start}
+                        <span className={comboboxStyles.optionText}>
+                          <span>{option.label}</span>
+                          {option.description && (
+                            <span className={comboboxStyles.optionDescription}>{option.description}</span>
+                          )}
+                        </span>
+                        {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                      </span>
+                    </BaseCombobox.Item>
+                  );
+                }}
               </BaseCombobox.List>
             </BaseCombobox.Popup>
           </BaseCombobox.Positioner>
