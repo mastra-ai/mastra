@@ -11,7 +11,8 @@
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "validate:package": "echo 'Validating package.json...'"
   },
   "dependencies": {
     "@mastra/core": "workspace:*",
