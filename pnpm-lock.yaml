@@ -1333,28 +1333,6 @@ importers:
         specifier: 'catalog:'
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.32.0)(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
 
-  examples/memory-with-redis:
-    dependencies:
-      '@ai-sdk/openai':
-        specifier: latest
-        version: 3.0.53(zod@4.3.6)
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@mastra/memory':
-        specifier: workspace:*
-        version: link:../../packages/memory
-      '@mastra/redis':
-        specifier: workspace:*
-        version: link:../../stores/redis
-    devDependencies:
-      dotenv:
-        specifier: ^17.0.0
-        version: 17.3.1
-      tsx:
-        specifier: ^4.19.3
-        version: 4.21.0
-
   explorations/longmemeval:
     dependencies:
       '@ai-sdk/google':
