@@ -228,6 +228,65 @@ The method can return any combination of:
 - `modelSettings`: Modify model settings
 - `structuredOutput`: Modify structured output configuration
 
+#### Ensuring a final response with maxSteps
+
+When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep` to force a text response on the last step:
+
+```typescript title="src/mastra/processors/ensure-final-response.ts"
+import { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core/processors";
+
+export class EnsureFinalResponseProcessor implements Processor {
+  readonly id = "ensure-final-response";
+
+  private maxSteps: number;
+
+  constructor(maxSteps: number) {
+    this.maxSteps = maxSteps;
+  }
+
+  async processInputStep({ stepNumber, systemMessages }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // On the last step, prevent tool calls and instruct the LLM to summarize
+    if (stepNumber === this.maxSteps - 1) {
+      return {
+        tools: {},
+        toolChoice: "none",
+        systemMessages: [
+          ...systemMessages,
+          {
+            role: "system",
+            content:
+              "You have reached the maximum number of steps. Summarize your progress so far and provide a best-effort response. If the task is incomplete, clearly indicate what remains to be done.",
+          },
+        ],
+      };
+    }
+    return {};
+  }
+}
+```
+
+Use it with your agent:
+
+```typescript title="src/mastra/agents/bounded-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { EnsureFinalResponseProcessor } from "../processors/ensure-final-response";
+
+const MAX_STEPS = 5;
+
+const agent = new Agent({
+  id: "bounded-agent",
+  name: "Bounded Agent",
+  model: "openai/gpt-4o-mini",
+  tools: { /* your tools */ },
+  inputProcessors: [new EnsureFinalResponseProcessor(MAX_STEPS)],
+});
+
+// Pass maxSteps when calling generate/stream
+const result = await agent.generate("Your prompt", { maxSteps: MAX_STEPS });
+```
+
+This ensures that on the final allowed step (step 4 when `maxSteps` is 5, since steps are 0-indexed), the LLM generates a summary instead of attempting another tool call, and clearly indicates if the task is incomplete.
+
 #### Using prepareStep callback
 
 For simpler per-step logic, you can use the `prepareStep` callback on `generate()` or `stream()` instead of creating a full processor:
