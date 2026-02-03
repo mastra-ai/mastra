@@ -405,19 +405,19 @@ export class Workspace {
 
       this._mounts = config.mounts;
       this._fs = new CompositeFilesystem({ mounts: config.mounts });
-
-      // Inform sandbox about mounts so it can process them on start()
-      this._sandbox?.mounts?.add(config.mounts);
-
-      // Set onMount hook if configured (wrap to add workspace context)
-      if (config.onMount && this._sandbox?.mounts) {
-        this._sandbox.mounts.setOnMount(args =>
-          config.onMount!({
-            ...args,
-            sandbox: this._sandbox!,
-            workspace: this,
-          }),
-        );
+      if (this._sandbox?.mounts) {
+        // Inform sandbox about mounts so it can process them on start()
+        this._sandbox.mounts.add(config.mounts);
+        // Set onMount hook if configured (wrap to add workspace context)
+        if (config.onMount) {
+          this._sandbox.mounts.setOnMount(args =>
+            config.onMount!({
+              ...args,
+              sandbox: this._sandbox!,
+              workspace: this,
+            }),
+          );
+        }
       }
     } else {
       this._fs = config.filesystem;
