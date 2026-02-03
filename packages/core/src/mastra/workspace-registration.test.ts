@@ -344,4 +344,106 @@ describe('Workspace Registration', () => {
       expect(mastra.getWorkspace()).toBe(globalWorkspace);
     });
   });
+
+  describe('dynamic workspace auto-registration', () => {
+    it('should auto-register workspace created by dynamic function', async () => {
+      const dynamicWorkspace = createWorkspace('dynamic-created');
+
+      const agent = new Agent({
+        id: 'dynamic-agent',
+        name: 'Dynamic Agent',
+        instructions: 'Test',
+        model: createMockModel(),
+        workspace: () => dynamicWorkspace,
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { agent },
+      });
+
+      // Before calling getWorkspace, dynamic workspace is not registered
+      // (static registration at addAgent time calls getWorkspace which triggers registration)
+      await waitForWorkspaceRegistration();
+
+      // Now the workspace should be in the registry
+      const registered = mastra.getWorkspaceById('dynamic-created');
+      expect(registered).toBe(dynamicWorkspace);
+    });
+
+    it('should auto-register different workspaces from same dynamic function', async () => {
+      const workspace1 = createWorkspace('thread-workspace-1');
+      const workspace2 = createWorkspace('thread-workspace-2');
+
+      const agent = new Agent({
+        id: 'multi-workspace-agent',
+        name: 'Multi Workspace Agent',
+        instructions: 'Test',
+        model: createMockModel(),
+        workspace: ({ requestContext }) => {
+          // Simulate thread-scoped workspaces
+          const threadId = requestContext?.get('threadId');
+          return threadId === 'thread-2' ? workspace2 : workspace1;
+        },
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { agent },
+      });
+
+      // First call - should register workspace1
+      const { RequestContext } = await import('../request-context');
+      const ctx1 = new RequestContext();
+      ctx1.set('threadId', 'thread-1');
+      await agent.getWorkspace({ requestContext: ctx1 });
+
+      expect(mastra.getWorkspaceById('thread-workspace-1')).toBe(workspace1);
+
+      // Second call with different context - should register workspace2
+      const ctx2 = new RequestContext();
+      ctx2.set('threadId', 'thread-2');
+      await agent.getWorkspace({ requestContext: ctx2 });
+
+      expect(mastra.getWorkspaceById('thread-workspace-2')).toBe(workspace2);
+
+      // Both should be in the registry
+      const workspaces = mastra.listWorkspaces();
+      expect(Object.keys(workspaces)).toHaveLength(2);
+    });
+
+    it('should not duplicate registration for same workspace ID', async () => {
+      const workspace = createWorkspace('reused-workspace');
+      let callCount = 0;
+
+      const agent = new Agent({
+        id: 'reuse-agent',
+        name: 'Reuse Agent',
+        instructions: 'Test',
+        model: createMockModel(),
+        workspace: () => {
+          callCount++;
+          return workspace;
+        },
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { agent },
+      });
+
+      // Call getWorkspace multiple times
+      await agent.getWorkspace();
+      await agent.getWorkspace();
+      await agent.getWorkspace();
+
+      // Function called 4 times: once during addAgent registration + 3 explicit calls
+      expect(callCount).toBe(4);
+
+      // But workspace should only be registered once
+      const workspaces = mastra.listWorkspaces();
+      expect(Object.keys(workspaces)).toHaveLength(1);
+      expect(workspaces['reused-workspace']).toBe(workspace);
+    });
+  });
 });

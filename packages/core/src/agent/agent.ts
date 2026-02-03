@@ -773,6 +773,12 @@ export class Agent<
           this.logger.error(mastraError.toString());
           throw mastraError;
         }
+
+        // Auto-register dynamically created workspace with Mastra for lookup via listWorkspaces()/getWorkspaceById()
+        // This follows the same pattern as static workspace registration in Mastra.addAgent()
+        if (this.#mastra) {
+          this.#mastra.addWorkspace(resolvedWorkspace);
+        }
       }
 
       return resolvedWorkspace;
