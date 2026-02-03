@@ -3,6 +3,13 @@ export * from './workspace';
 
 // Built-in Providers
 export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';
+export {
+  CompositeFilesystem,
+  type CompositeFilesystemConfig,
+  // Deprecated aliases
+  VirtualFilesystem,
+  type VirtualFilesystemConfig,
+} from './filesystem';
 export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Errors
@@ -13,6 +20,9 @@ export {
   SandboxTimeoutError,
   SandboxNotReadyError,
   IsolationUnavailableError,
+  MountError,
+  MountNotSupportedError,
+  FilesystemNotMountableError,
   type SandboxOperation,
 } from './sandbox';
 
@@ -36,7 +46,19 @@ export type {
   CopyOptions,
 } from './filesystem';
 
+// Mount types
+export type {
+  FilesystemMountConfig,
+  S3MountConfig,
+  GCSMountConfig,
+  R2MountConfig,
+  MountConfig,
+  MountResult,
+  FilesystemIcon,
+} from './filesystem';
+
 // Sandbox
+export { BaseSandbox } from './sandbox';
 export type { WorkspaceSandbox, ExecutionResult, CommandResult, ExecuteCommandOptions, SandboxInfo } from './sandbox';
 
 // Native Sandbox

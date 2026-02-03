@@ -33,7 +33,8 @@
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
-import type { WorkspaceFilesystem } from './filesystem';
+import { CompositeFilesystem } from './filesystem';
+import type { WorkspaceFilesystem, FilesystemIcon, MountResult, FilesystemMountConfig } from './filesystem';
 import type { WorkspaceSandbox } from './sandbox';
 import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
@@ -41,6 +42,83 @@ import type { WorkspaceSkills, SkillsResolver } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
+
+// =============================================================================
+// Mount Hook Types
+// =============================================================================
+
+/**
+ * Arguments for the current mount operation.
+ */
+export interface MountOperationArgs {
+  /** The filesystem being mounted */
+  filesystem: WorkspaceFilesystem;
+  /** The mount configuration (S3MountConfig, etc.) */
+  config: FilesystemMountConfig | undefined;
+  /** The path where filesystem will be mounted in the sandbox */
+  mountPath: string;
+  /** The sandbox to mount into */
+  sandbox: WorkspaceSandbox;
+}
+
+/**
+ * Context available to mount hooks.
+ */
+export interface MountHookContext {
+  /** The workspace instance */
+  workspace: Workspace;
+  // Future: mastra?: Mastra;
+}
+
+/**
+ * Result of a mount hook.
+ * - 'mount': Use default mounting behavior
+ * - 'skip': Don't mount this filesystem into sandbox
+ * - 'handled': Hook already handled the mounting
+ * - void/undefined: Same as 'mount'
+ */
+export type MountHookResult = 'mount' | 'skip' | 'handled' | void;
+
+/**
+ * Mount hook function type.
+ *
+ * Called for each filesystem before mounting into sandbox.
+ * Return value controls mounting behavior.
+ */
+export type MountHook = (args: MountOperationArgs, ctx: MountHookContext) => Promise<MountHookResult> | MountHookResult;
+
+/**
+ * Mount entry configuration.
+ * Can be a filesystem directly (shorthand) or an object with options.
+ */
+export type MountEntry =
+  | WorkspaceFilesystem
+  | {
+      /** The filesystem to mount */
+      filesystem: WorkspaceFilesystem;
+      /**
+       * Whether to mount this filesystem into the sandbox.
+       * Set to false to make filesystem available via workspace API only.
+       * @default true
+       */
+      sandboxMount?: boolean;
+    };
+
+/**
+ * Helper to normalize MountEntry to filesystem and options.
+ */
+function normalizeMountEntry(entry: MountEntry): { filesystem: WorkspaceFilesystem; sandboxMount: boolean } {
+  if ('filesystem' in entry && typeof entry.filesystem === 'object' && entry.filesystem !== null) {
+    return {
+      filesystem: entry.filesystem,
+      sandboxMount: entry.sandboxMount ?? true,
+    };
+  }
+  return {
+    filesystem: entry as WorkspaceFilesystem,
+    sandboxMount: true,
+  };
+}
 
 // =============================================================================
 // Workspace Configuration
@@ -68,6 +146,76 @@ export interface WorkspaceConfig {
    * Use ComputeSDKSandbox to access E2B, Modal, Docker, etc.
    */
   sandbox?: WorkspaceSandbox;
+
+  /**
+   * Mount multiple filesystems at different paths.
+   * Creates a CompositeFilesystem that routes operations based on path.
+   *
+   * When a sandbox is configured, filesystems are automatically mounted
+   * into the sandbox at their respective paths during init().
+   *
+   * Each entry can be:
+   * - A filesystem directly (shorthand, sandboxMount defaults to true)
+   * - An object with `filesystem` and optional `sandboxMount: false`
+   *
+   * @example
+   * ```typescript
+   * const workspace = new Workspace({
+   *   sandbox: new E2BSandbox({ timeout: 60000 }),
+   *   mounts: {
+   *     // These get mounted into sandbox
+   *     '/data': new S3Filesystem({ bucket: 'my-data', ... }),
+   *     '/skills': new S3Filesystem({ bucket: 'skills', readOnly: true, ... }),
+   *     // This one is workspace-only, not mounted into sandbox
+   *     '/internal': { filesystem: new S3Filesystem({ ... }), sandboxMount: false },
+   *   },
+   * });
+   *
+   * await workspace.init();
+   * // /data and /skills mounted in sandbox, /internal only via workspace API
+   * ```
+   */
+  mounts?: Record<string, MountEntry>;
+
+  /**
+   * Hook called before mounting each filesystem into the sandbox.
+   *
+   * Returns:
+   * - 'mount': Use default mounting behavior
+   * - 'skip': Don't mount this filesystem
+   * - 'handled': Hook already did the mounting
+   * - void/undefined: Same as 'mount'
+   *
+   * This is useful for:
+   * - Custom mount commands or scripts
+   * - Syncing local files to sandbox instead of FUSE mounting
+   * - Skipping specific filesystems
+   *
+   * @example
+   * ```typescript
+   * const workspace = new Workspace({
+   *   sandbox: new E2BSandbox({ timeout: 60000 }),
+   *   mounts: {
+   *     '/data': new S3Filesystem({ bucket: 'data', ... }),
+   *     '/local': new LocalFilesystem({ basePath: './data' }),
+   *   },
+   *   onMount: async ({ filesystem, mountPath, sandbox }, { workspace }) => {
+   *     if (filesystem.provider === 'local') {
+   *       // Can't FUSE-mount local into remote sandbox
+   *       // Could sync files here if needed
+   *       return 'skip';
+   *     }
+   *     if (filesystem.id === 'custom-mount') {
+   *       // Custom mount logic
+   *       await sandbox.executeCommand?.('my-mount-script', [mountPath]);
+   *       return 'handled';
+   *     }
+   *     return 'mount'; // Use default
+   *   },
+   * });
+   * ```
+   */
+  onMount?: MountHook;
 
   // ---------------------------------------------------------------------------
   // Search Configuration
@@ -208,6 +356,10 @@ export interface WorkspaceInfo {
   /** Filesystem info (if available) */
   filesystem?: {
     provider: string;
+    /** Human-readable name */
+    name?: string;
+    /** Icon identifier for UI display */
+    icon?: FilesystemIcon;
     basePath?: string;
     readOnly?: boolean;
     status?: string;
@@ -257,6 +409,8 @@ export class Workspace {
   private readonly _config: WorkspaceConfig;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
+  private readonly _mounts?: Record<string, { filesystem: WorkspaceFilesystem; sandboxMount: boolean }>;
+  private readonly _mountResults: Map<string, MountResult> = new Map();
 
   constructor(config: WorkspaceConfig) {
     this.id = config.id ?? this.generateId();
@@ -265,8 +419,35 @@ export class Workspace {
     this.lastAccessedAt = new Date();
 
     this._config = config;
-    this._fs = config.filesystem;
     this._sandbox = config.sandbox;
+
+    // Normalize mounts to internal format
+    if (config.mounts && Object.keys(config.mounts).length > 0) {
+      // Validate: can't use both filesystem and mounts
+      if (config.filesystem) {
+        throw new WorkspaceError('Cannot use both "filesystem" and "mounts"', 'INVALID_CONFIG');
+      }
+
+      // Normalize mount entries
+      const normalizedMounts: Record<string, { filesystem: WorkspaceFilesystem; sandboxMount: boolean }> = {};
+      const filesystemsForVFS: Record<string, WorkspaceFilesystem> = {};
+
+      for (const [path, entry] of Object.entries(config.mounts)) {
+        const normalized = normalizeMountEntry(entry);
+        normalizedMounts[path] = normalized;
+        filesystemsForVFS[path] = normalized.filesystem;
+      }
+
+      this._mounts = normalizedMounts;
+      this._fs = new CompositeFilesystem({ mounts: filesystemsForVFS });
+
+      // Inform sandbox about mounts so it can mount them on start()
+      if (this._sandbox?.setMounts) {
+        this._sandbox.setMounts(normalizedMounts);
+      }
+    } else {
+      this._fs = config.filesystem;
+    }
 
     // Validate vector search config - embedder is required with vectorStore
     if (config.vectorStore && !config.embedder) {
@@ -511,7 +692,7 @@ export class Workspace {
 
   /**
    * Initialize the workspace.
-   * Starts the sandbox and initializes the filesystem.
+   * Starts the sandbox, initializes the filesystem, and auto-mounts filesystems.
    */
   async init(): Promise<void> {
     this._status = 'initializing';
@@ -525,6 +706,11 @@ export class Workspace {
         await this._sandbox.start();
       }
 
+      // Auto-mount filesystems into sandbox if mounts are configured
+      if (this._mounts && this._sandbox) {
+        await this.mountFilesystems();
+      }
+
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
         await this.rebuildSearchIndex(this._config.autoIndexPaths ?? []);
@@ -535,6 +721,87 @@ export class Workspace {
       this._status = 'error';
       throw error;
     }
+  }
+
+  /**
+   * Mount all configured filesystems into the sandbox.
+   */
+  private async mountFilesystems(): Promise<void> {
+    if (!this._mounts || !this._sandbox) return;
+
+    for (const [mountPath, { filesystem, sandboxMount }] of Object.entries(this._mounts)) {
+      // Skip if sandboxMount is false in config
+      if (!sandboxMount) {
+        this._mountResults.set(mountPath, {
+          success: true,
+          mountPath,
+          error: 'Skipped: sandboxMount is false',
+        });
+        continue;
+      }
+
+      try {
+        const config = filesystem.getMountConfig?.();
+
+        // Call onMount hook if configured
+        if (this._config.onMount) {
+          const args: MountOperationArgs = {
+            filesystem,
+            config,
+            mountPath,
+            sandbox: this._sandbox,
+          };
+          const ctx: MountHookContext = {
+            workspace: this,
+          };
+
+          const hookResult = await this._config.onMount(args, ctx);
+
+          if (hookResult === 'skip') {
+            this._mountResults.set(mountPath, {
+              success: true,
+              mountPath,
+              error: 'Skipped by onMount hook',
+            });
+            continue;
+          }
+
+          if (hookResult === 'handled') {
+            this._mountResults.set(mountPath, { success: true, mountPath });
+            continue;
+          }
+
+          // 'mount' or void - continue with default mounting
+        }
+
+        // Mount the filesystem into the sandbox
+        // mount() returns MountResult with success/error
+        const result = await this._sandbox.mount?.(filesystem, mountPath);
+        if (result) {
+          this._mountResults.set(mountPath, result);
+        } else {
+          this._mountResults.set(mountPath, {
+            success: false,
+            mountPath,
+            error: `Sandbox does not support mounting`,
+          });
+        }
+      } catch (error) {
+        this._mountResults.set(mountPath, {
+          success: false,
+          mountPath,
+          error: String(error),
+        });
+      }
+    }
+  }
+
+  /**
+   * Get the mount results from initialization.
+   * Useful for checking which filesystems were successfully mounted.
+   */
+  getMountResults(): ReadonlyMap<string, MountResult> {
+    return this._mountResults;
   }
 
   /**
@@ -576,6 +843,8 @@ export class Workspace {
       const fsInfo = await this._fs.getInfo?.();
       info.filesystem = {
         provider: this._fs.provider,
+        name: fsInfo?.name ?? this._fs.name,
+        icon: fsInfo?.icon,
         basePath: fsInfo?.basePath ?? this._fs.basePath,
         readOnly: fsInfo?.readOnly ?? this._fs.readOnly,
         status: fsInfo?.status,
