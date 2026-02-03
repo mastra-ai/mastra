@@ -737,6 +737,7 @@ export class ProcessorRunner {
       modelSettings: args.modelSettings,
       structuredOutput: args.structuredOutput,
       retryCount: args.retryCount ?? 0,
+      workspace: args.workspace,
     };
 
     // Run through all input processors that have processInputStep
@@ -793,6 +794,7 @@ export class ProcessorRunner {
         modelSettings: stepInput.modelSettings,
         structuredOutput: stepInput.structuredOutput,
         requestContext,
+        workspace: stepInput.workspace,
       };
 
       // Use the current span (the step span) as the parent for processor spans
