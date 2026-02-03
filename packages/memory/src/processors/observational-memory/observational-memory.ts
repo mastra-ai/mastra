@@ -1559,7 +1559,9 @@ ${suggestedResponse}
    * 5. Filter out already-observed messages
    */
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext, stepNumber, state, writer, abortSignal, abort } = args;
+    const { messageList, requestContext, stepNumber, state: _state, writer, abortSignal, abort } = args;
+    // Default state to {} for backward compat with older @mastra/core that doesn't pass state
+    const state = _state ?? ({} as Record<string, unknown>);
 
     const context = this.getThreadContext(requestContext, messageList);
     if (!context) {
