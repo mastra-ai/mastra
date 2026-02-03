@@ -67,28 +67,36 @@ export type ThreadMastraMetadata = {
   om?: ThreadOMMetadata;
 };
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Helper to get OM metadata from a thread's metadata object.
- * Returns undefined if not present.
+ * Returns undefined if not present or if the structure is invalid.
  */
 export function getThreadOMMetadata(threadMetadata?: Record<string, unknown>): ThreadOMMetadata | undefined {
   if (!threadMetadata) return undefined;
-  const mastra = threadMetadata.mastra as ThreadMastraMetadata | undefined;
-  return mastra?.om;
+  const mastra = threadMetadata.mastra;
+  if (!isPlainObject(mastra)) return undefined;
+  const om = mastra.om;
+  if (!isPlainObject(om)) return undefined;
+  return om as ThreadOMMetadata;
 }
 
 /**
  * Helper to set OM metadata on a thread's metadata object.
  * Creates the nested structure if it doesn't exist.
  * Returns a new metadata object (does not mutate the original).
+ * Safely handles cases where existing mastra/om values are not objects.
  */
 export function setThreadOMMetadata(
   threadMetadata: Record<string, unknown> | undefined,
   omMetadata: ThreadOMMetadata,
 ): Record<string, unknown> {
   const existing = threadMetadata ?? {};
-  const existingMastra = (existing.mastra as ThreadMastraMetadata) ?? {};
-  const existingOM = existingMastra.om ?? {};
+  const existingMastra = isPlainObject(existing.mastra) ? existing.mastra : {};
+  const existingOM = isPlainObject(existingMastra.om) ? existingMastra.om : {};
 
   return {
     ...existing,
