@@ -2277,9 +2277,6 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
-      '@internal/workflow-test-utils':
-        specifier: workspace:*
-        version: link:../../workflows/_test-utils
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.6
         version: 0.4.6(zod@3.25.76)

@@ -39,53 +39,35 @@ createWorkflowTestSuite({
     await workflowsStore?.dangerouslyClearAll();
   },
 
-  // Skip only tests that actually fail - verified by running without skips
+  // Skip only tests that actually fail - updated after BUG fixes 2026-02
   skipTests: {
-    // State management - state not properly propagated in evented engine
-    state: true,
-
-    // Error handling differences
-    errorIdentity: true, // Error properties lost in serialization
-    schemaValidationThrows: true, // Different validation behavior
-
-    // Abort behavior
-    abortStatus: true, // Returns 'failed' not 'canceled'
-    abortDuringStep: true, // 5s timeout waiting for abort signal
-
-    // Foreach
-    emptyForeach: true, // Empty array causes timeout
-    foreachPartialConcurrencyTiming: true, // Timing assertions are flaky in evented engine
-
-    // Resume tests - verified after core rebuild
-    // These now pass after rebuild:
-    resumeWithLabel: false,
-    resumeWithState: false,
-    resumeAutoDetect: false,
-    resumeForeach: false,
-    resumeForeachConcurrent: false,
-    // These still have issues:
-    resumeNested: true, // Still suspended after resume
-    resumeBranchingStatus: true, // branch-step-2 is undefined
-    resumeLoopInput: true, // Timeout - loop resume not working
-    resumeDountil: true, // Nested dountil suspend/resume behaves differently - #5650
-    resumeForeachIndex: true, // Wrong status - forEachIndex resume broken
-    resumeParallelMulti: true, // Only one parallel step getting suspended path
-    resumeMultiSuspendError: true, // Only 1 suspended step found, expects >1
-
-    // Storage
-    storageWithNestedWorkflows: true, // Different nested step naming
-
-    // Callbacks
-    callbackResourceId: true, // resourceId not passed to callbacks
-
-    // Validation - evented throws different errors
+    // Validation - evented resolves instead of throwing
     executionFlowNotDefined: true,
     executionGraphNotCommitted: true,
 
-    // Time travel conditional - different result structure
+    // Foreach - timing flaky, empty array timeout
+    foreachPartialConcurrencyTiming: true,
+    emptyForeach: true,
+
+    // Abort - returns 'success' not 'canceled', timeout on signal wait
+    abortStatus: true,
+    abortDuringStep: true,
+
+    // Suspend/resume - parallel suspend has race condition (each step publishes workflow.suspend independently)
+    resumeParallelMulti: true,
+    resumeMultiSuspendError: true,
+    resumeBranchingStatus: true,
+    // Suspend/resume - still failing (loop/foreach coordination)
+    resumeLoopInput: true,
+    resumeForeachIndex: true,
+    resumeNested: true, // Nested workflow resume path not working
+    resumeDountil: true,
+
+    // Time travel - different result structure
     timeTravelConditional: true,
 
-    // Streaming suspend/resume with legacy API - different event behavior
+    // Streaming - state test expects value before setState mutation, but evented mutates in-place
+    state: true,
     streamingSuspendResumeLegacy: true,
   },
 

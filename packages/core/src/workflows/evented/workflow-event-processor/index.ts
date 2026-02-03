@@ -1096,6 +1096,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           timeTravel, //timeTravel is passed in as workflow.step.end ends the step, not the workflow, the timeTravel info is passed to the next step to run.
           stepResults: {
             ...stepResults,
+            [step.step.id]: stepResult,
             __state: updatedState,
           },
           prevResult: stepResult,
