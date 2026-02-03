@@ -3,13 +3,7 @@ export * from './workspace';
 
 // Built-in Providers
 export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';
-export {
-  CompositeFilesystem,
-  type CompositeFilesystemConfig,
-  // Deprecated aliases
-  VirtualFilesystem,
-  type VirtualFilesystemConfig,
-} from './filesystem';
+export { CompositeFilesystem, type CompositeFilesystemConfig } from './filesystem';
 export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Errors

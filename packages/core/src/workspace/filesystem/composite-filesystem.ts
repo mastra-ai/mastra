@@ -332,13 +332,3 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     }
   }
 }
-
-/**
- * @deprecated Use CompositeFilesystem instead. This alias will be removed in a future version.
- */
-export const VirtualFilesystem = CompositeFilesystem;
-
-/**
- * @deprecated Use CompositeFilesystemConfig instead. This alias will be removed in a future version.
- */
-export type VirtualFilesystemConfig = CompositeFilesystemConfig;

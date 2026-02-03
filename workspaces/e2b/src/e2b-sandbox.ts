@@ -32,6 +32,9 @@ import type { IMastraLogger } from '@mastra/core/logger';
 /**
  * S3 mount config for E2B (mounted via s3fs-fuse).
  * Works with AWS S3 and S3-compatible stores (MinIO, etc.).
+ *
+ * If credentials are not provided, the bucket will be mounted as read-only
+ * using the public_bucket=1 option (for public buckets only).
  */
 export interface E2BS3MountConfig extends FilesystemMountConfig {
   type: 's3';
@@ -41,10 +44,10 @@ export interface E2BS3MountConfig extends FilesystemMountConfig {
   region: string;
   /** S3 endpoint for S3-compatible storage (MinIO, etc.) */
   endpoint?: string;
-  /** AWS access key ID (required for mounting) */
-  accessKeyId: string;
-  /** AWS secret access key (required for mounting) */
-  secretAccessKey: string;
+  /** AWS access key ID (optional - omit for public buckets) */
+  accessKeyId?: string;
+  /** AWS secret access key (optional - omit for public buckets) */
+  secretAccessKey?: string;
 }
 
 /**
@@ -639,18 +642,30 @@ export class E2BSandbox extends BaseSandbox {
     const idResult = await this._sandbox.commands.run('id -u && id -g');
     const [uid, gid] = idResult.stdout.trim().split('\n');
 
-    // Write credentials file (remove old one first to avoid permission issues)
-    const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
+    // Determine if we have credentials or using public bucket mode
+    const hasCredentials = config.accessKeyId && config.secretAccessKey;
     const credentialsPath = '/tmp/.passwd-s3fs';
-    await this._sandbox.commands.run(`sudo rm -f ${credentialsPath}`);
-    await this._sandbox.files.write(credentialsPath, credentialsContent);
-    await this._sandbox.commands.run(`chmod 600 ${credentialsPath}`);
+
+    if (hasCredentials) {
+      // Write credentials file (remove old one first to avoid permission issues)
+      const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
+      await this._sandbox.commands.run(`sudo rm -f ${credentialsPath}`);
+      await this._sandbox.files.write(credentialsPath, credentialsContent);
+      await this._sandbox.commands.run(`chmod 600 ${credentialsPath}`);
+    }
 
     // Build mount options
-    const mountOptions = [
-      `passwd_file=${credentialsPath}`,
-      'allow_other', // Allow non-root users to access the mount
-    ];
+    const mountOptions: string[] = [];
+
+    if (hasCredentials) {
+      mountOptions.push(`passwd_file=${credentialsPath}`);
+    } else {
+      // Public bucket mode - read-only access without credentials
+      mountOptions.push('public_bucket=1');
+      this.logger.debug('[E2B Mount] No credentials provided, mounting as public bucket (read-only)');
+    }
+
+    mountOptions.push('allow_other'); // Allow non-root users to access the mount
 
     // Set uid/gid so mounted files are owned by user, not root
     if (uid && gid) {
@@ -665,7 +680,7 @@ export class E2BSandbox extends BaseSandbox {
 
     // Mount with sudo (required for /dev/fuse access)
     const mountCmd = `sudo s3fs ${config.bucket} ${mountPath} -o ${mountOptions.join(' -o ')}`;
-    this.logger.debug('[E2B Mount] Mounting S3:', mountCmd.replace(credentialsPath, '***'));
+    this.logger.debug('[E2B Mount] Mounting S3:', hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
     try {
       const result = await this._sandbox.commands.run(mountCmd);
