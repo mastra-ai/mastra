@@ -395,21 +395,67 @@ export type SemanticRecall = {
 
 /**
  * Model settings for Observer/Reflector agents in Observational Memory.
+ * Supports all standard model settings: temperature, maxTokens, topP, topK,
+ * presencePenalty, frequencyPenalty, stopSequences, seed, and maxRetries.
+ *
+ * Note: Uses the same settings as Agent.generate() modelSettings.
  */
 export interface ObservationalMemoryModelSettings {
   /**
    * Temperature for generation.
    * Lower values produce more consistent output.
-   * @default 0.3
+   * @default 0.3 for observation, 0 for reflection
    */
   temperature?: number;
 
   /**
-   * Maximum output tokens.
+   * Maximum tokens to generate.
    * High value to prevent truncation of observations.
    * @default 100000
    */
-  maxOutputTokens?: number;
+  maxTokens?: number;
+
+  /**
+   * Nucleus sampling. This is a number between 0 and 1.
+   * E.g. 0.1 would mean that only tokens with the top 10% probability mass are considered.
+   * It is recommended to set either `temperature` or `topP`, but not both.
+   */
+  topP?: number;
+
+  /**
+   * Only sample from the top K options for each subsequent token.
+   * Used to remove "long tail" low probability responses.
+   */
+  topK?: number;
+
+  /**
+   * Presence penalty setting. Affects the likelihood of the model to repeat information
+   * already in the prompt. Range: -1 (increase repetition) to 1 (decrease repetition).
+   */
+  presencePenalty?: number;
+
+  /**
+   * Frequency penalty setting. Affects the likelihood of the model to repeatedly use
+   * the same words or phrases. Range: -1 (increase repetition) to 1 (decrease repetition).
+   */
+  frequencyPenalty?: number;
+
+  /**
+   * Stop sequences. If set, the model will stop generating text when one of these is generated.
+   */
+  stopSequences?: string[];
+
+  /**
+   * The seed (integer) to use for random sampling.
+   * If set and supported by the model, calls will generate deterministic results.
+   */
+  seed?: number;
+
+  /**
+   * Maximum number of retries for API calls. Set to 0 to disable retries.
+   * @default 2
+   */
+  maxRetries?: number;
 }
 
 /**
@@ -438,7 +484,7 @@ export interface ObservationalMemoryObservationConfig {
 
   /**
    * Model settings for the Observer agent.
-   * @default { temperature: 0.3, maxOutputTokens: 100_000 }
+   * @default { temperature: 0.3, maxTokens: 100_000 }
    */
   modelSettings?: ObservationalMemoryModelSettings;
 
@@ -494,7 +540,7 @@ export interface ObservationalMemoryReflectionConfig {
 
   /**
    * Model settings for the Reflector agent.
-   * @default { temperature: 0, maxOutputTokens: 100_000 }
+   * @default { temperature: 0, maxTokens: 100_000 }
    */
   modelSettings?: ObservationalMemoryModelSettings;
 
