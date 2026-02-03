@@ -28,7 +28,11 @@ export const useCodemirrorTheme = (): Extension => {
         // JSON styles
         { tag: [t.className, t.propertyName] },
         // Markdown styles
-        { tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6], color: '#BD93F9', fontWeight: 'bold' },
+        {
+          tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
+          color: '#BD93F9',
+          fontWeight: 'bold',
+        },
         { tag: t.emphasis, fontStyle: 'italic', color: '#F1FA8C' },
         { tag: t.strong, fontWeight: 'bold', color: '#FFB86C' },
         { tag: t.link, color: '#8BE9FD', textDecoration: 'underline' },
