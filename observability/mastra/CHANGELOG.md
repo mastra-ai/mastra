@@ -1,5 +1,25 @@
 # @mastra/observability
 
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- Increased default serialization limits for AI tracing. The maxStringLength is now 128KB (previously 1KB) and maxDepth is 8 (previously 6). These changes prevent truncation of large LLM prompts and responses during tracing. ([#12579](https://github.com/mastra-ai/mastra/pull/12579))
+
+  To restore the previous behavior, set `serializationOptions` in your observability config:
+
+  ```ts
+  serializationOptions: {
+    maxStringLength: 1024,
+    maxDepth: 6,
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`e6fc281`](https://github.com/mastra-ai/mastra/commit/e6fc281896a3584e9e06465b356a44fe7faade65), [`97be6c8`](https://github.com/mastra-ai/mastra/commit/97be6c8963130fca8a664fcf99d7b3a38e463595), [`5fe1fe0`](https://github.com/mastra-ai/mastra/commit/5fe1fe0109faf2c87db34b725d8a4571a594f80e), [`f6673b8`](https://github.com/mastra-ai/mastra/commit/f6673b893b65b7d273ad25ead42e990704cc1e17), [`cd6be8a`](https://github.com/mastra-ai/mastra/commit/cd6be8ad32741cd41cabf508355bb31b71e8a5bd), [`9eb4e8e`](https://github.com/mastra-ai/mastra/commit/9eb4e8e39efbdcfff7a40ff2ce07ce2714c65fa8), [`aa37c84`](https://github.com/mastra-ai/mastra/commit/aa37c84d29b7db68c72517337932ef486c316275), [`47eba72`](https://github.com/mastra-ai/mastra/commit/47eba72f0397d0d14fbe324b97940c3d55e5a525)]:
+  - @mastra/core@1.2.0-alpha.0
+
 ## 1.1.0
 
 ### Minor Changes
