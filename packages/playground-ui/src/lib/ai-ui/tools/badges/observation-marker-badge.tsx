@@ -56,10 +56,6 @@ const formatTokens = (tokens: number): string => {
  * the BracketOverlay can find it via DOM queries for positioning bracket lines.
  */
 export const ObservationMarkerBadge = ({ toolName, args, metadata }: ObservationMarkerBadgeProps) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isObservationsExpanded, setIsObservationsExpanded] = useState(true);
-  const [isTaskExpanded, setIsTaskExpanded] = useState(false);
-  const [isResponseExpanded, setIsResponseExpanded] = useState(false);
   const omData = (metadata?.omData || args) as OmMarkerData;
   const cycleId = omData.cycleId || '';
 
@@ -79,6 +75,12 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const isFailed = state === 'failed';
   const isDisconnected = state === 'disconnected';
   const isReflection = omData.operationType === 'reflection';
+
+  // Failed reflections should be expanded by default to draw attention to the error
+  const [isExpanded, setIsExpanded] = useState(isFailed && isReflection);
+  const [isObservationsExpanded, setIsObservationsExpanded] = useState(true);
+  const [isTaskExpanded, setIsTaskExpanded] = useState(false);
+  const [isResponseExpanded, setIsResponseExpanded] = useState(false);
 
   // Colors - same scheme for both observation and reflection
   const bgColor = 'bg-blue-500/10';
