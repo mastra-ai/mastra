@@ -417,6 +417,21 @@ export class E2BSandbox extends BaseSandbox {
     // Mark as mounting
     this.updateMountEntry(mountPath, filesystem, 'mounting', config);
 
+    // Check if directory exists and is non-empty (would shadow existing files)
+    try {
+      const checkResult = await this._sandbox.commands.run(
+        `[ -d "${mountPath}" ] && [ "$(ls -A "${mountPath}" 2>/dev/null)" ] && echo "non-empty" || echo "ok"`,
+      );
+      if (checkResult.stdout.trim() === 'non-empty') {
+        const error = `Cannot mount at ${mountPath}: directory exists and is not empty. Mounting would hide existing files. Use a different path or empty the directory first.`;
+        this.logger.error(`[E2B Mount] ${error}`);
+        this.updateMountEntry(mountPath, filesystem, 'error', config, error);
+        return { success: false, mountPath, error };
+      }
+    } catch {
+      // Check failed, proceed anyway
+    }
+
     // Create mount directory with sudo (for paths outside home dir like /data)
     // Then chown to current user so mount works without issues
     try {
@@ -433,13 +448,19 @@ export class E2BSandbox extends BaseSandbox {
     try {
       switch (config.type) {
         case 's3':
+          this.logger.debug(`[E2B Mount] Calling mountS3 for ${mountPath}...`);
           await this.mountS3(mountPath, config as E2BS3MountConfig);
+          this.logger.debug(`[E2B Mount] mountS3 completed for ${mountPath}`);
           break;
         case 'gcs':
+          this.logger.debug(`[E2B Mount] Calling mountGCS for ${mountPath}...`);
           await this.mountGCS(mountPath, config as E2BGCSMountConfig);
+          this.logger.debug(`[E2B Mount] mountGCS completed for ${mountPath}`);
           break;
         case 'r2':
+          this.logger.debug(`[E2B Mount] Calling mountR2 for ${mountPath}...`);
           await this.mountR2(mountPath, config as E2BR2MountConfig);
+          this.logger.debug(`[E2B Mount] mountR2 completed for ${mountPath}`);
           break;
         default:
           this.updateMountEntry(
@@ -456,7 +477,17 @@ export class E2BSandbox extends BaseSandbox {
           };
       }
     } catch (error) {
+      this.logger.error(`[E2B Mount] Mount error for ${mountPath}:`, error);
       this.updateMountEntry(mountPath, filesystem, 'error', config, String(error));
+
+      // Clean up the directory we created since mount failed
+      try {
+        await this._sandbox!.commands.run(`sudo rmdir "${mountPath}" 2>/dev/null || true`);
+        this.logger.debug(`[E2B Mount] Cleaned up directory after failed mount: ${mountPath}`);
+      } catch {
+        // Ignore cleanup errors
+      }
+
       return { success: false, mountPath, error: String(error) };
     }
 
@@ -471,15 +502,31 @@ export class E2BSandbox extends BaseSandbox {
   }
 
   /**
+   * Generate a simple hash for use as marker filename.
+   */
+  private markerFilename(mountPath: string): string {
+    // Simple hash - just use a sanitized version for the filename
+    // The actual path is stored inside the file
+    let hash = 0;
+    for (let i = 0; i < mountPath.length; i++) {
+      const char = mountPath.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return `mount-${Math.abs(hash).toString(36)}`;
+  }
+
+  /**
    * Write marker file for detecting config changes on reconnect.
-   * Uses the base class hashConfig() for consistent config comparison.
+   * Stores both the mount path and config hash in the file.
+   * Format: path|configHash
    */
   private async writeMarkerFile(mountPath: string, config: E2BMountConfig): Promise<void> {
     if (!this._sandbox) return;
 
-    const encodedPath = mountPath.replace(/\//g, '_');
-    const markerPath = `/tmp/.mastra-mounts/${encodedPath}`;
-    const markerContent = this.hashConfig(config);
+    const filename = this.markerFilename(mountPath);
+    const markerPath = `/tmp/.mastra-mounts/${filename}`;
+    const markerContent = `${mountPath}|${this.hashConfig(config)}`;
     try {
       await this._sandbox.commands.run('mkdir -p /tmp/.mastra-mounts');
       await this._sandbox.files.write(markerPath, markerContent);
@@ -516,8 +563,8 @@ export class E2BSandbox extends BaseSandbox {
     this._mounts.delete(mountPath);
 
     // Clean up marker file
-    const encodedPath = mountPath.replace(/\//g, '_');
-    const markerPath = `/tmp/.mastra-mounts/${encodedPath}`;
+    const filename = this.markerFilename(mountPath);
+    const markerPath = `/tmp/.mastra-mounts/${filename}`;
     await this._sandbox.commands.run(`rm -f "${markerPath}" 2>/dev/null || true`);
 
     // Remove empty mount directory (only if empty, rmdir fails on non-empty)
@@ -544,12 +591,15 @@ export class E2BSandbox extends BaseSandbox {
 
   /**
    * Unmount all stale mounts that are not in the expected mounts list.
+   * Also cleans up orphaned directories and marker files from failed mount attempts.
    * Call this after reconnecting to an existing sandbox to clean up old mounts.
    */
   async reconcileMounts(expectedMountPaths: string[]): Promise<void> {
     if (!this._sandbox) {
       throw new SandboxNotReadyError(this.id);
     }
+
+    this.logger.debug(`[E2B Mount] Reconciling mounts. Expected paths:`, expectedMountPaths);
 
     // Get current FUSE mounts in the sandbox
     const mountsResult = await this._sandbox.commands.run(
@@ -560,12 +610,63 @@ export class E2BSandbox extends BaseSandbox {
       .split('\n')
       .filter(p => p.length > 0);
 
+    this.logger.debug(`[E2B Mount] Current FUSE mounts in sandbox:`, currentMounts);
+
     // Find mounts that exist but shouldn't
     const staleMounts = currentMounts.filter(path => !expectedMountPaths.includes(path));
 
     for (const stalePath of staleMounts) {
-      this.logger.debug(`[E2B Mount] Found stale mount at ${stalePath}, unmounting...`);
+      this.logger.debug(`[E2B Mount] Found stale FUSE mount at ${stalePath}, unmounting...`);
       await this.unmount(stalePath);
+    }
+
+    // Also clean up orphaned marker files and empty directories from failed mounts
+    // Marker files store: path|configHash
+    try {
+      const markersResult = await this._sandbox.commands.run(
+        `ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""`,
+      );
+      const markerFiles = markersResult.stdout
+        .trim()
+        .split('\n')
+        .filter(f => f.length > 0 && f.startsWith('mount-'));
+
+      // Get the expected marker filenames for comparison
+      const expectedMarkerFiles = new Set(
+        expectedMountPaths.map(p => this.markerFilename(p)),
+      );
+
+      for (const markerFile of markerFiles) {
+        // If this marker file doesn't correspond to an expected mount path, clean it up
+        if (!expectedMarkerFiles.has(markerFile)) {
+          // Read the marker file to get the actual mount path
+          const markerResult = await this._sandbox.commands.run(
+            `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`,
+          );
+          const markerContent = markerResult.stdout.trim();
+          const [mountPath] = markerContent.split('|');
+
+          if (mountPath) {
+            // Only clean up if not currently FUSE mounted
+            if (!currentMounts.includes(mountPath)) {
+              this.logger.debug(`[E2B Mount] Cleaning up orphaned marker and directory for ${mountPath}`);
+
+              // Remove marker file
+              await this._sandbox.commands.run(`rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`);
+
+              // Try to remove the directory (will fail if not empty or doesn't exist, which is fine)
+              await this._sandbox.commands.run(`sudo rmdir "${mountPath}" 2>/dev/null || true`);
+            }
+          } else {
+            // Malformed marker file - just delete it
+            this.logger.debug(`[E2B Mount] Removing malformed marker file: ${markerFile}`);
+            await this._sandbox.commands.run(`rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`);
+          }
+        }
+      }
+    } catch {
+      // Ignore errors during orphan cleanup
+      this.logger.debug(`[E2B Mount] Error during orphan cleanup (non-fatal)`);
     }
   }
 
@@ -590,17 +691,22 @@ export class E2BSandbox extends BaseSandbox {
     }
 
     // Path is mounted - check if config matches via marker file
-    const encodedPath = mountPath.replace(/\//g, '_');
-    const markerPath = `/tmp/.mastra-mounts/${encodedPath}`;
-    const expectedMarker = this.hashConfig(config);
+    const filename = this.markerFilename(mountPath);
+    const markerPath = `/tmp/.mastra-mounts/${filename}`;
+    const expectedHash = this.hashConfig(config);
 
     try {
       const markerResult = await this._sandbox.commands.run(`cat "${markerPath}" 2>/dev/null || echo ""`);
       const markerContent = markerResult.stdout.trim();
 
-      this.logger.debug(`[E2B Mount] Current marker: "${markerContent}", expected: "${expectedMarker}"`);
+      // Parse marker content: path|configHash
+      const [storedPath, storedHash] = markerContent.split('|');
 
-      if (markerContent === expectedMarker) {
+      this.logger.debug(
+        `[E2B Mount] Marker check - stored: "${storedPath}|${storedHash}", expected: "${mountPath}|${expectedHash}"`,
+      );
+
+      if (storedPath === mountPath && storedHash === expectedHash) {
         return 'matching';
       }
     } catch {
@@ -696,6 +802,11 @@ export class E2BSandbox extends BaseSandbox {
 
     try {
       const result = await this._sandbox.commands.run(mountCmd);
+      this.logger.debug(`[E2B Mount] s3fs result:`, {
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      });
       if (result.exitCode !== 0) {
         throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
       }
@@ -703,6 +814,7 @@ export class E2BSandbox extends BaseSandbox {
       const errorObj = error as { result?: { exitCode: number; stdout: string; stderr: string } };
       const stderr = errorObj.result?.stderr || '';
       const stdout = errorObj.result?.stdout || '';
+      this.logger.error(`[E2B Mount] s3fs error:`, { stderr, stdout, error: String(error) });
       throw new Error(`Failed to mount S3 bucket: ${stderr || stdout || error}`);
     }
   }
@@ -757,6 +869,11 @@ export class E2BSandbox extends BaseSandbox {
     this.logger.debug('[E2B Mount] Mounting GCS:', mountCmd);
 
     const result = await this._sandbox.commands.run(mountCmd);
+    this.logger.debug(`[E2B Mount] gcsfuse result:`, {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
     if (result.exitCode !== 0) {
       throw new Error(`Failed to mount GCS bucket: ${result.stderr || result.stdout}`);
     }
@@ -805,7 +922,9 @@ export class E2BSandbox extends BaseSandbox {
         const expectedPaths = Array.from(this._mounts.keys()).filter(
           path => this._mounts.get(path)?.sandboxMount !== false,
         );
+        this.logger.debug(`[E2BSandbox] Running mount reconciliation...`);
         await this.reconcileMounts(expectedPaths);
+        this.logger.debug(`[E2BSandbox] Mount reconciliation complete, mounting pending filesystems...`);
         await this.mountPending();
         return;
       }
