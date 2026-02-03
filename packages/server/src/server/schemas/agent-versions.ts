@@ -113,7 +113,15 @@ export const getVersionResponseSchema = agentVersionSchema;
 /**
  * Response for POST /stored/agents/:agentId/versions
  */
-export const createVersionResponseSchema = agentVersionSchema;
+export const createVersionResponseSchema = agentVersionSchema.partial().merge(
+  z.object({
+    // These fields are always present in a version response
+    id: z.string().describe('Unique identifier for the version (UUID)'),
+    agentId: z.string().describe('ID of the agent this version belongs to'),
+    versionNumber: z.number().describe('Sequential version number (1, 2, 3, ...)'),
+    createdAt: z.coerce.date().describe('When this version was created'),
+  }),
+);
 
 /**
  * Response for POST /stored/agents/:agentId/versions/:versionId/activate

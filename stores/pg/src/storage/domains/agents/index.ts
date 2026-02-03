@@ -470,10 +470,7 @@ export class AgentsPG extends AgentsStorage {
       if (activeVersionId !== undefined) {
         setClauses.push(`"activeVersionId" = $${paramIndex++}`);
         values.push(activeVersionId);
-
-        // If activeVersionId is set, mark as published
-        setClauses.push(`status = $${paramIndex++}`);
-        values.push('published');
+        // Do NOT automatically set status='published' when activeVersionId is updated
       }
 
       if (metadata !== undefined) {

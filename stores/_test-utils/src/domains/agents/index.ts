@@ -33,7 +33,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         expect(savedAgent.id).toBe(agent.id);
         expect(savedAgent.status).toBe('draft'); // New behavior: starts as draft
-        expect(savedAgent.activeVersionId).toBeUndefined(); // New behavior: no active version initially
+        expect([null, undefined]).toContain(savedAgent.activeVersionId);
         expect(savedAgent.createdAt).toBeInstanceOf(Date);
         expect(savedAgent.updatedAt).toBeInstanceOf(Date);
 
@@ -43,7 +43,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(resolved?.name).toBe(agent.name);
         expect(resolved?.instructions).toBe(agent.instructions);
         expect(resolved?.model).toEqual(agent.model);
-        
+
         // Verify version 1 was created
         const versionCount = await agentsStorage.countVersions(agent.id);
         expect(versionCount).toBe(1);
@@ -88,7 +88,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         const resolved = await agentsStorage.getAgentByIdResolved({ id: minimalAgent.id });
         expect(resolved?.name).toBe('Minimal Agent');
-        expect(resolved?.description).toBeUndefined();
+        expect([null, undefined]).toContain(resolved?.description);
         expect(resolved?.tools).toBeUndefined();
       });
     });
@@ -108,8 +108,9 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(retrievedAgent).toBeDefined();
         expect(retrievedAgent?.id).toBe(agent.id);
         expect(retrievedAgent?.status).toBe('draft'); // New behavior
-        expect(retrievedAgent?.activeVersionId).toBeUndefined(); // New behavior
-        
+        // Different stores may use null or undefined for activeVersionId
+        expect([null, undefined]).toContain(retrievedAgent?.activeVersionId); // New behavior
+
         // Verify thin record has no config fields
         expect((retrievedAgent as any)?.name).toBeUndefined();
         expect((retrievedAgent as any)?.instructions).toBeUndefined();
@@ -142,7 +143,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           changedFields: ['name', 'instructions'],
           changeMessage: 'Activated version',
         });
-        
+
         await agentsStorage.updateAgent({
           id: agent.id,
           activeVersionId: versionId,
@@ -155,14 +156,14 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(resolved?.name).toBe('Active Version'); // From active version
         expect(resolved?.instructions).toBe('Active instructions');
       });
-      
+
       it('should fall back to latest version when no active version is set', async () => {
         const agent = createSampleAgent({
           name: 'Initial Name',
           instructions: 'Initial instructions',
         });
         await agentsStorage.createAgent({ agent });
-        
+
         // Create version 2
         await agentsStorage.createVersion({
           id: randomUUID(),
@@ -174,7 +175,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           changedFields: ['name', 'instructions'],
           changeMessage: 'Second version',
         });
-        
+
         // Create version 3 (latest)
         await agentsStorage.createVersion({
           id: randomUUID(),
@@ -202,7 +203,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           metadata: { key1: 'value1', key2: 'value2' },
         });
         await agentsStorage.createAgent({ agent });
-        
+
         const versionCountBefore = await agentsStorage.countVersions(agent.id);
         expect(versionCountBefore).toBe(1);
 
@@ -217,14 +218,14 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         const versionCountAfter = await agentsStorage.countVersions(agent.id);
         expect(versionCountAfter).toBe(1); // No new version for metadata update
       });
-      
+
       it('should create new version when updating config fields', async () => {
         const agent = createSampleAgent({
           name: 'Original Name',
           instructions: 'Original instructions',
         });
         await agentsStorage.createAgent({ agent });
-        
+
         const versionCountBefore = await agentsStorage.countVersions(agent.id);
         expect(versionCountBefore).toBe(1);
 
@@ -237,11 +238,11 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         // Agent status and activeVersionId should remain unchanged
         expect(updatedAgent.status).toBe('draft');
-        expect(updatedAgent.activeVersionId).toBeUndefined();
-        
+        expect([null, undefined]).toContain(updatedAgent.activeVersionId);
+
         const versionCountAfter = await agentsStorage.countVersions(agent.id);
         expect(versionCountAfter).toBe(2); // New version created
-        
+
         // Verify the new version has the updated config
         const resolved = await agentsStorage.getAgentByIdResolved({ id: agent.id });
         expect(resolved?.name).toBe('Updated Name');
@@ -272,7 +273,8 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         });
 
         expect(updatedAgent.activeVersionId).toBe(versionId);
-        expect(updatedAgent.status).toBe('published');
+        // Status should remain as 'draft' - publishing is a separate operation
+        expect(updatedAgent.status).toBe('draft');
         expect(updatedAgent.activeVersionId).not.toBe(originalVersionId);
       });
 
@@ -305,7 +307,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       it('should delete an existing agent and all its versions', async () => {
         const agent = createSampleAgent();
         await agentsStorage.createAgent({ agent });
-        
+
         // Create additional versions
         await agentsStorage.createVersion({
           id: randomUUID(),
@@ -538,7 +540,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         const finalAgent = await agentsStorage.getAgentById({ id: agent.id });
         expect(finalAgent).toBeDefined();
       });
-      
+
       it('should handle mixed metadata and config updates correctly', async () => {
         const agent = createSampleAgent({
           name: 'Initial Name',
@@ -546,22 +548,22 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           metadata: { category: 'test' },
         });
         await agentsStorage.createAgent({ agent });
-        
+
         // Mixed update: both metadata and config fields
         const versionCountBefore = await agentsStorage.countVersions(agent.id);
         expect(versionCountBefore).toBe(1);
-        
+
         await agentsStorage.updateAgent({
           id: agent.id,
           metadata: { category: 'updated', newField: 'value' }, // metadata update
           name: 'New Name', // config update
           instructions: 'New instructions', // config update
         });
-        
+
         // Should create a new version for config changes
         const versionCountAfter = await agentsStorage.countVersions(agent.id);
         expect(versionCountAfter).toBe(2);
-        
+
         // Verify both metadata and config updates applied
         const resolved = await agentsStorage.getAgentByIdResolved({ id: agent.id });
         expect(resolved?.name).toBe('New Name');

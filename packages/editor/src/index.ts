@@ -1,10 +1,5 @@
 import { Memory } from '@mastra/memory';
-import {
-  Agent,
-  Mastra,
-  IMastraEditor,
-  MastraEditorConfig,
-} from '@mastra/core';
+import { Agent, Mastra, IMastraEditor, MastraEditorConfig } from '@mastra/core';
 
 import type {
   MastraMemory,
@@ -19,11 +14,7 @@ import type {
   SharedMemoryConfig,
 } from '@mastra/core';
 
-import type {
-  Processor,
-  InputProcessorOrWorkflow,
-  OutputProcessorOrWorkflow,
-} from '@mastra/core/processors';
+import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 
 export type { MastraEditorConfig };
 
@@ -192,33 +183,21 @@ export class MastraEditor implements IMastraEditor {
   /**
    * List all stored agents with page-based pagination.
    */
-  public async listStoredAgents(options?: {
-    returnRaw?: false;
-    page?: number;
-    pageSize?: number;
-  }): Promise<{
+  public async listStoredAgents(options?: { returnRaw?: false; page?: number; pageSize?: number }): Promise<{
     agents: Agent[];
     total: number;
     page: number;
     perPage: number;
     hasMore: boolean;
   }>;
-  public async listStoredAgents(options: {
-    returnRaw: true;
-    page?: number;
-    pageSize?: number;
-  }): Promise<{
+  public async listStoredAgents(options: { returnRaw: true; page?: number; pageSize?: number }): Promise<{
     agents: StorageResolvedAgentType[];
     total: number;
     page: number;
     perPage: number;
     hasMore: boolean;
   }>;
-  public async listStoredAgents(options?: {
-    returnRaw?: boolean;
-    page?: number;
-    pageSize?: number;
-  }): Promise<{
+  public async listStoredAgents(options?: { returnRaw?: boolean; page?: number; pageSize?: number }): Promise<{
     agents: Agent[] | StorageResolvedAgentType[];
     total: number;
     page: number;
@@ -291,7 +270,10 @@ export class MastraEditor implements IMastraEditor {
     const workflows = this.resolveStoredWorkflows(storedAgent.workflows);
     const agents = this.resolveStoredAgents(storedAgent.agents);
     const memory = this.resolveStoredMemory(storedAgent.memory);
-    console.log(`[createAgentFromStoredConfig] Resolved memory: ${memory ? 'Memory instance created' : 'No memory'} for agent \"${storedAgent.id}\"`, { memory });
+    console.log(
+      `[createAgentFromStoredConfig] Resolved memory: ${memory ? 'Memory instance created' : 'No memory'} for agent \"${storedAgent.id}\"`,
+      { memory },
+    );
     const scorers = this.resolveStoredScorers(storedAgent.scorers);
     const inputProcessors = this.resolveStoredInputProcessors(storedAgent.inputProcessors);
     const outputProcessors = this.resolveStoredOutputProcessors(storedAgent.outputProcessors);
@@ -560,7 +542,10 @@ export class MastraEditor implements IMastraEditor {
     const resolved: OutputProcessorOrWorkflow[] = [];
     for (const key of storedProcessors) {
       const processor = this.findProcessor(key);
-      if (processor && (processor.processOutputStream || processor.processOutputResult || processor.processOutputStep)) {
+      if (
+        processor &&
+        (processor.processOutputStream || processor.processOutputResult || processor.processOutputStep)
+      ) {
         resolved.push(processor as OutputProcessorOrWorkflow);
       }
     }

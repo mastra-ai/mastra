@@ -60,7 +60,6 @@ export const createFullSampleAgent = ({
   tools: ['calculator', 'webSearch'],
   defaultOptions: {
     maxSteps: 5,
-    temperature: 0.5,
   },
   workflows: ['order-workflow', 'support-workflow'],
   agents: ['helper-agent'],

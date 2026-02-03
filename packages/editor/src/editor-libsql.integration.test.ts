@@ -6,8 +6,19 @@ import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
 import { MastraEditor } from './index';
 import { randomUUID } from 'crypto';
-import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2, MockEmbeddingModelV2 } from '@internal/ai-sdk-v5/test';
-import { ProcessInputArgs, ProcessInputResult, Processor, ProcessorMessageResult, ProcessOutputResultArgs } from '@mastra/core/processors';
+import {
+  convertArrayToReadableStream,
+  LanguageModelV2,
+  MockLanguageModelV2,
+  MockEmbeddingModelV2,
+} from '@internal/ai-sdk-v5/test';
+import {
+  ProcessInputArgs,
+  ProcessInputResult,
+  Processor,
+  ProcessorMessageResult,
+  ProcessOutputResultArgs,
+} from '@mastra/core/processors';
 import { MastraMessageContentV2 } from '@mastra/core/agent/message-list';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
@@ -31,7 +42,7 @@ const createTestVector = (id: string) => {
 // Mock LLM using MockLanguageModelV2
 const createMockLLM = (responses: { text?: string; toolCall?: any }[] = []) => {
   let responseIndex = 0;
-  
+
   return new MockLanguageModelV2({
     doGenerate: async () => {
       const response = responses[responseIndex] || { text: 'Default response' };
@@ -39,16 +50,16 @@ const createMockLLM = (responses: { text?: string; toolCall?: any }[] = []) => {
       if (responseIndex < responses.length - 1) {
         responseIndex++;
       }
-      
+
       const content: any[] = [];
-      
+
       if (response.text) {
         content.push({
           type: 'text',
           text: response.text,
         });
       }
-      
+
       if (response.toolCall) {
         content.push({
           type: 'tool-call',
@@ -57,7 +68,7 @@ const createMockLLM = (responses: { text?: string; toolCall?: any }[] = []) => {
           args: response.toolCall.args,
         });
       }
-      
+
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
@@ -71,7 +82,7 @@ const createMockLLM = (responses: { text?: string; toolCall?: any }[] = []) => {
       if (responseIndex < responses.length - 1) {
         responseIndex++;
       }
-      
+
       const chunks: any[] = [
         { type: 'stream-start', warnings: [] },
         {
@@ -81,15 +92,15 @@ const createMockLLM = (responses: { text?: string; toolCall?: any }[] = []) => {
           timestamp: new Date(0),
         },
       ];
-      
+
       if (response.text) {
         chunks.push(
           { type: 'text-start', id: 'text-1' },
           { type: 'text-delta', id: 'text-1', delta: response.text },
-          { type: 'text-end', id: 'text-1' }
+          { type: 'text-end', id: 'text-1' },
         );
       }
-      
+
       if (response.toolCall) {
         chunks.push(
           {
@@ -103,16 +114,16 @@ const createMockLLM = (responses: { text?: string; toolCall?: any }[] = []) => {
             id: 'tool-1',
             argsTextDelta: JSON.stringify(response.toolCall.args),
           },
-          { type: 'tool-call-end', id: 'tool-1' }
+          { type: 'tool-call-end', id: 'tool-1' },
         );
       }
-      
+
       chunks.push({
         type: 'finish',
         finishReason: 'stop',
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
       });
-      
+
       return {
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
@@ -128,7 +139,7 @@ class MockGateway extends MastraModelGateway {
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     return {
-      'mock': {
+      mock: {
         name: 'Mock Provider',
         models: ['mock-model'],
         apiKeyEnvVar: 'MOCK_API_KEY',
@@ -143,7 +154,7 @@ class MockGateway extends MastraModelGateway {
     console.log('MockGateway.getApiKey called with modelId:', modelId);
     return Promise.resolve('MOCK_API_KEY');
   }
-  
+
   async resolveEmbeddingModel({
     modelId,
     providerId,
@@ -153,7 +164,7 @@ class MockGateway extends MastraModelGateway {
     apiKey: string;
   }): Promise<any> {
     console.log('MockGateway.resolveEmbeddingModel called with:', { modelId, providerId });
-    
+
     // Mock embedding model that returns fixed-size vectors
     return {
       specificationVersion: 'v2',
@@ -180,7 +191,7 @@ class MockGateway extends MastraModelGateway {
     headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     console.log('MockGateway.resolveLanguageModel called with:', { modelId, providerId });
-    
+
     // Return different mock models based on modelId
     switch (modelId) {
       case 'mock/mock-model':
@@ -191,7 +202,7 @@ class MockGateway extends MastraModelGateway {
           { text: 'Another mock response' },
           { text: 'Third mock response' },
         ]);
-        
+
       case 'mock/weather-mock':
       case 'weather-mock':
         // Mock model for weather queries
@@ -207,18 +218,16 @@ class MockGateway extends MastraModelGateway {
             text: 'Based on the weather data, Paris is sunny and 22°C.',
           },
         ]);
-        
+
       case 'mock/structured-mock':
       case 'structured-mock':
         // Mock model that returns structured data for tests
-        return createMockLLM([
-          { text: 'Here is the location data: San Francisco' }
-        ]);
-        
+        return createMockLLM([{ text: 'Here is the location data: San Francisco' }]);
+
       default:
         // Fallback mock model
         return new MockLanguageModelV2({
-          doGenerate: async (options) => {
+          doGenerate: async options => {
             return {
               content: [{ type: 'text', text: 'Default mock response' }],
               finishReason: 'stop',
@@ -234,8 +243,6 @@ class MockGateway extends MastraModelGateway {
     }
   }
 }
-
-
 
 // Test primitives
 const weatherTool = createTool({
@@ -285,18 +292,18 @@ const processOrderWorkflow = createWorkflow({
   inputSchema: z.object({ orderId: z.string() }),
   outputSchema: z.object({ success: z.boolean(), paymentId: z.string() }),
   steps: [
-  createStep({
-    id: 'validate-order',
-    inputSchema: z.object({ orderId: z.string() }),
-    outputSchema: z.object({ valid: z.boolean(), orderId: z.string() }),
-    execute: async ({ inputData }) => ({ valid: true, orderId: inputData.orderId }),
-  }),
-  createStep({
-    id: 'process-payment',
-    inputSchema: z.object({ orderId: z.string() }),
-    outputSchema: z.object({ success: z.boolean(), paymentId: z.string() }),
-    execute: async ({ inputData }) => ({ success: true, paymentId: `pay_${inputData.orderId}` }),
-  }),
+    createStep({
+      id: 'validate-order',
+      inputSchema: z.object({ orderId: z.string() }),
+      outputSchema: z.object({ valid: z.boolean(), orderId: z.string() }),
+      execute: async ({ inputData }) => ({ valid: true, orderId: inputData.orderId }),
+    }),
+    createStep({
+      id: 'process-payment',
+      inputSchema: z.object({ orderId: z.string() }),
+      outputSchema: z.object({ success: z.boolean(), paymentId: z.string() }),
+      execute: async ({ inputData }) => ({ success: true, paymentId: `pay_${inputData.orderId}` }),
+    }),
   ],
 });
 
@@ -304,7 +311,7 @@ class ProcessorTest implements Processor {
   readonly id: string = 'processor-test';
   readonly name?: string = 'Processor Test';
   readonly description?: string = 'A test processor that modifies messages';
-  
+
   processInput(args: ProcessInputArgs<unknown>): ProcessInputResult {
     // Prepend "[INPUT PROCESSED]" to each message content
     const processedMessages = args.messages.map(msg => {
@@ -315,18 +322,18 @@ class ProcessorTest implements Processor {
           if ('text' in part && typeof part.text === 'string') {
             return {
               ...part,
-              text: `[INPUT PROCESSED] ${part.text}`
+              text: `[INPUT PROCESSED] ${part.text}`,
             };
           }
           return part;
         });
-        
+
         return {
           ...msg,
           content: {
             ...msg.content,
-            parts: modifiedParts
-          }
+            parts: modifiedParts,
+          },
         };
       }
       // Fallback for string content (shouldn't happen in practice)
@@ -335,17 +342,17 @@ class ProcessorTest implements Processor {
           ...msg,
           content: {
             format: 2 as const,
-            parts: [{ type: 'text' as const, text: `[INPUT PROCESSED] ${msg.content}` }]
-          } as MastraMessageContentV2
+            parts: [{ type: 'text' as const, text: `[INPUT PROCESSED] ${msg.content}` }],
+          } as MastraMessageContentV2,
         };
       }
       return msg;
     });
-    
+
     // Return the modified messages array
     return processedMessages;
   }
-  
+
   processOutputResult(args: ProcessOutputResultArgs<unknown>): ProcessorMessageResult {
     // Append "[OUTPUT PROCESSED]" to the last assistant message
     const processedMessages = args.messages.map((msg, index) => {
@@ -357,24 +364,24 @@ class ProcessorTest implements Processor {
             if ('text' in part && typeof part.text === 'string') {
               return {
                 ...part,
-                text: `${part.text} [OUTPUT PROCESSED]`
+                text: `${part.text} [OUTPUT PROCESSED]`,
               };
             }
             return part;
           });
-          
+
           return {
             ...msg,
             content: {
               ...msg.content,
-              parts: modifiedParts
-            }
+              parts: modifiedParts,
+            },
           };
         }
       }
       return msg;
     });
-    
+
     // Return the modified messages array
     return processedMessages;
   }
@@ -403,7 +410,7 @@ const weatherAgent = new Agent({
 
 const userAgent = new Agent({
   id: 'user-assistant',
-  name: 'User Assistant', 
+  name: 'User Assistant',
   description: 'An assistant that helps find user information',
   instructions: 'You are a helpful assistant that can search for users by name.',
   model: createMockLLM([
@@ -479,11 +486,11 @@ describe('MastraEditor with LibSQL Integration', () => {
     // Set mock API keys
     process.env.MOCK_API_KEY = 'test-key';
     process.env.OPENAI_API_KEY = 'test-openai-key'; // Mock OpenAI key for embeddings
-    
+
     // Create fresh storage for each test
     storage = createTestStorage();
     editor = new MastraEditor();
-    
+
     mastra = new Mastra({
       storage,
       editor,
@@ -529,7 +536,7 @@ describe('MastraEditor with LibSQL Integration', () => {
   describe('Basic Agent Storage and Retrieval', () => {
     it('should store and retrieve a simple agent', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'test-agent',
@@ -548,7 +555,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should handle agent with tools', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'tool-agent',
@@ -563,7 +570,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       expect(retrievedAgent).toBeInstanceOf(Agent);
       expect(retrievedAgent?.id).toBe('tool-agent');
-      
+
       // Verify tools are resolved
       const tools = await retrievedAgent?.listTools();
       expect(Object.keys(tools || {})).toContain('weather-tool');
@@ -572,7 +579,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should handle agent with workflows', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'workflow-agent',
@@ -596,7 +603,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should handle agent with nested agents', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'parent-agent',
@@ -620,7 +627,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should handle agent with scorers', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       const createdAgent = await agentsStore?.createAgent({
         agent: {
           id: 'scored-agent',
@@ -628,11 +635,11 @@ describe('MastraEditor with LibSQL Integration', () => {
           instructions: 'You are an assistant with scorers',
           model: { provider: 'openai', name: 'gpt-4' },
           scorers: {
-            'accuracy-scorer': {},  // Empty config means use default sampling
+            'accuracy-scorer': {}, // Empty config means use default sampling
           },
         },
       });
-      
+
       // Activate the version
       if (createdAgent && 'versionId' in createdAgent) {
         await agentsStore?.updateAgent({
@@ -640,18 +647,17 @@ describe('MastraEditor with LibSQL Integration', () => {
           activeVersionId: createdAgent.versionId as string,
         });
       }
-      
+
       const retrievedAgent = await editor.getStoredAgentById('scored-agent');
 
       expect(retrievedAgent).toBeInstanceOf(Agent);
       expect(retrievedAgent?.id).toBe('scored-agent');
-      
+
       // Test that scorers work by generating with returnScorerData
-      const result = await retrievedAgent?.generate(
-        [{ role: 'user', content: 'What is the capital of France?' }],
-        { returnScorerData: true }
-      );
-      
+      const result = await retrievedAgent?.generate([{ role: 'user', content: 'What is the capital of France?' }], {
+        returnScorerData: true,
+      });
+
       // When returnScorerData is true, scorers should be invoked
       expect(result).toBeDefined();
       expect(result?.text).toBeDefined();
@@ -662,7 +668,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should handle agent with processors', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       const created = await agentsStore?.createAgent({
         agent: {
           id: 'processor-agent',
@@ -677,7 +683,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Activate version
       if (created && 'versionId' in created) {
         await agentsStore?.updateAgent({
-          id: 'processor-agent', 
+          id: 'processor-agent',
           activeVersionId: created.versionId as string,
         });
       }
@@ -692,9 +698,9 @@ describe('MastraEditor with LibSQL Integration', () => {
       console.log('result', JSON.stringify(result, null, 2));
 
       const userMessage = result?.messages[0]?.content.parts[0]!;
-      
+
       // The output processor should have modified the response
-      expect("text" in userMessage && userMessage.text).toContain('[INPUT PROCESSED]');
+      expect('text' in userMessage && userMessage.text).toContain('[INPUT PROCESSED]');
       expect(result?.text).toContain('[OUTPUT PROCESSED]');
     });
   });
@@ -702,7 +708,7 @@ describe('MastraEditor with LibSQL Integration', () => {
   describe('Complex Agent with All Primitives', () => {
     it('should store and retrieve a complex agent with all primitives', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       const created = await agentsStore?.createAgent({
         agent: {
           id: 'all-primitives-agent',
@@ -743,30 +749,30 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(retrievedAgent?.id).toBe('all-primitives-agent');
       expect(retrievedAgent?.name).toBe('All Primitives Agent');
       expect(retrievedAgent?.getDescription()).toBe('An agent with all available primitives');
-      
+
       // Verify all primitives are resolved
       const tools = await retrievedAgent?.listTools();
       expect(Object.keys(tools || {})).toContain('weather-tool');
       expect(Object.keys(tools || {})).toContain('user-search');
-      
+
       const workflows = await retrievedAgent?.listWorkflows();
       expect(Object.keys(workflows || {})).toContain('greeting-workflow');
       expect(Object.keys(workflows || {})).toContain('process-order');
-      
+
       const agents = await retrievedAgent?.listAgents();
       expect(Object.keys(agents || {})).toContain('weather-assistant');
       expect(Object.keys(agents || {})).toContain('user-assistant');
-      
+
       // Test execution with all features active
       const result = await retrievedAgent?.generate('What is the weather in Tokyo?');
       expect(result?.text).toBeDefined();
-      
+
       // Test a workflow tool directly
       const greetingWorkflow = tools?.['greeting-workflow'];
       if (greetingWorkflow && 'execute' in greetingWorkflow && greetingWorkflow.execute) {
         const workflowResult = await greetingWorkflow.execute(
           { name: 'Test User' },
-          { mastra, agent: retrievedAgent! }
+          { mastra, agent: retrievedAgent! },
         );
         expect(workflowResult).toBe('Hello, Test User! This is a greeting workflow.');
       }
@@ -774,7 +780,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should execute a stored agent with tools', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       // Create an agent with weather tool - use weather-mock model which includes tool calls
       const created = await agentsStore?.createAgent({
         agent: {
@@ -785,17 +791,17 @@ describe('MastraEditor with LibSQL Integration', () => {
           tools: ['weather-tool'],
         },
       });
-      
+
       // Activate the version
       if (created && 'versionId' in created) {
-        await agentsStore?.updateAgent({ 
+        await agentsStore?.updateAgent({
           id: 'executable-agent',
           activeVersionId: created.versionId as string,
         });
       }
 
       const retrievedAgent = await editor.getStoredAgentById('executable-agent');
-      
+
       // Add the agent to mastra instance so it can resolve models
       if (retrievedAgent) {
         mastra.addAgent(retrievedAgent, 'executable-agent');
@@ -806,20 +812,17 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Test 1: Verify the tool is available on the agent
       const tools = await retrievedAgent?.listTools();
       expect(tools).toHaveProperty('weather-tool');
-      
+
       // Test 2: Execute the agent and verify it uses the tool
       const response = await retrievedAgent!.generate('What is the weather in Paris?');
       expect(response.text).toContain('Paris');
       expect(response.text).toContain('sunny'); // weather-tool returns "sunny and 22°C"
       expect(response.text).toContain('22°C');
-      
+
       // Test 3: Test the tool directly to ensure it's properly resolved
       const weatherTool = tools?.['weather-tool'];
       if (weatherTool && 'execute' in weatherTool && weatherTool.execute) {
-        const directResult = await weatherTool.execute(
-          { city: 'London' }, 
-          { mastra, agent: retrievedAgent! }
-        );
+        const directResult = await weatherTool.execute({ city: 'London' }, { mastra, agent: retrievedAgent! });
         expect(directResult).toBe('The weather in London is sunny and 22°C');
       }
     });
@@ -828,7 +831,7 @@ describe('MastraEditor with LibSQL Integration', () => {
   describe('Agent Versioning', () => {
     it('should handle multiple versions of an agent', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       // Create initial version
       await agentsStore?.createAgent({
         agent: {
@@ -851,7 +854,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const versionsAfterUpdate = await agentsStore?.listVersions({ agentId: 'versioned-agent' });
       const latestVersion = versionsAfterUpdate?.versions[0]; // Versions are ordered by createdAt DESC
       if (latestVersion) {
-        await agentsStore?.updateAgent({ 
+        await agentsStore?.updateAgent({
           id: 'versioned-agent',
           activeVersionId: latestVersion.id,
         });
@@ -864,10 +867,10 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Retrieve specific version
       const versions = await agentsStore?.listVersions({ agentId: 'versioned-agent' });
       const firstVersion = versions?.versions.find(v => v.versionNumber === 1);
-      
+
       if (firstVersion) {
-        const version1Agent = await editor.getStoredAgentById('versioned-agent', { 
-          versionId: firstVersion.id 
+        const version1Agent = await editor.getStoredAgentById('versioned-agent', {
+          versionId: firstVersion.id,
         });
         expect(version1Agent?.name).toBe('Version 1');
       } else {
@@ -877,7 +880,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should retrieve agent by version number', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       // Create initial version
       await agentsStore?.createAgent({
         agent: {
@@ -900,13 +903,13 @@ describe('MastraEditor with LibSQL Integration', () => {
       const versions = await agentsStore?.listVersions({ agentId: 'numbered-version-agent' });
 
       // Retrieve by version number
-      const version1Agent = await editor.getStoredAgentById('numbered-version-agent', { 
-        versionNumber: 1 
+      const version1Agent = await editor.getStoredAgentById('numbered-version-agent', {
+        versionNumber: 1,
       });
       expect(version1Agent?.name).toBe('Version 1');
 
-      const version2Agent = await editor.getStoredAgentById('numbered-version-agent', { 
-        versionNumber: 2 
+      const version2Agent = await editor.getStoredAgentById('numbered-version-agent', {
+        versionNumber: 2,
       });
       expect(version2Agent?.name).toBe('Version 2');
     });
@@ -915,7 +918,7 @@ describe('MastraEditor with LibSQL Integration', () => {
   describe('List Stored Agents', () => {
     it('should list all stored agents with pagination', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       // Create multiple agents
       for (let i = 1; i <= 5; i++) {
         const createdAgent = await agentsStore?.createAgent({
@@ -926,11 +929,11 @@ describe('MastraEditor with LibSQL Integration', () => {
             model: { provider: 'openai', name: 'gpt-4' },
           },
         });
-        
+
         // Get the first version that was created and activate it
         const versions = await agentsStore?.listVersions({ agentId: `list-agent-${i}` });
         if (versions?.versions[0]) {
-          await agentsStore?.updateAgent({ 
+          await agentsStore?.updateAgent({
             id: `list-agent-${i}`,
             activeVersionId: versions.versions[0].id,
           });
@@ -939,15 +942,15 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // First, check raw agents to debug
       const rawAgents = await editor.listStoredAgents({ returnRaw: true });
-      
+
       // Only consider agents that we created in this test
       const testAgentIds = ['list-agent-1', 'list-agent-2', 'list-agent-3', 'list-agent-4', 'list-agent-5'];
       const validAgents = rawAgents.agents.filter(a => testAgentIds.includes(a.id));
-      
+
       if (validAgents.length !== 5) {
         throw new Error(`Expected 5 test agents but found ${validAgents.length}`);
       }
-      
+
       // List with pagination
       const page1 = await editor.listStoredAgents({ pageSize: 3 });
       expect(page1.agents).toHaveLength(3);
@@ -957,9 +960,9 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Get page 2 (0-based, so page: 1 is the second page)
       try {
-        const page2 = await editor.listStoredAgents({ 
-          pageSize: 3, 
-          page: 1 
+        const page2 = await editor.listStoredAgents({
+          pageSize: 3,
+          page: 1,
         });
         expect(page2.agents).toHaveLength(2);
         expect(page2.hasMore).toBe(false);
@@ -967,18 +970,21 @@ describe('MastraEditor with LibSQL Integration', () => {
         console.error('Error listing page 2:', error);
         // List all raw agents to debug
         const rawAgents = await editor.listStoredAgents({ returnRaw: true });
-        console.log('All raw agents:', rawAgents.agents.map(a => ({ 
-          id: a.id, 
-          model: a.model,
-          activeVersionId: a.activeVersionId,
-        })));
+        console.log(
+          'All raw agents:',
+          rawAgents.agents.map(a => ({
+            id: a.id,
+            model: a.model,
+            activeVersionId: a.activeVersionId,
+          })),
+        );
         throw error;
       }
     });
 
     it('should return raw agent data when requested', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       const createdAgent = await agentsStore?.createAgent({
         agent: {
           id: 'raw-list-agent',
@@ -988,18 +994,18 @@ describe('MastraEditor with LibSQL Integration', () => {
           metadata: { custom: 'data' },
         },
       });
-      
+
       // Activate the first version
       const versions = await agentsStore?.listVersions({ agentId: 'raw-list-agent' });
       if (versions?.versions[0]) {
-        await agentsStore?.updateAgent({ 
+        await agentsStore?.updateAgent({
           id: 'raw-list-agent',
           activeVersionId: versions.versions[0].id,
         });
       }
 
       const rawResult = await editor.listStoredAgents({ returnRaw: true });
-      
+
       expect(rawResult.agents[0]).not.toBeInstanceOf(Agent);
       expect(rawResult.agents[0]?.id).toBe('raw-list-agent');
       // Raw data returns ISO date strings, not Date objects
@@ -1014,7 +1020,7 @@ describe('MastraEditor with LibSQL Integration', () => {
   describe('Cache Management', () => {
     it('should cache and clear cached agents', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'cached-agent',
@@ -1038,7 +1044,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const versionsAfterUpdate = await agentsStore?.listVersions({ agentId: 'cached-agent' });
       const latestVersion = versionsAfterUpdate?.versions[0]; // Versions are ordered by createdAt DESC
       if (latestVersion) {
-        await agentsStore?.updateAgent({ 
+        await agentsStore?.updateAgent({
           id: 'cached-agent',
           activeVersionId: latestVersion.id,
         });
@@ -1058,7 +1064,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should clear all cached agents', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       // Create multiple agents
       await agentsStore?.createAgent({
         agent: {
@@ -1090,25 +1096,25 @@ describe('MastraEditor with LibSQL Integration', () => {
         id: 'cache-test-1',
         name: 'Updated 1',
       });
-      
+
       // Activate the new version
       const versions1 = await agentsStore?.listVersions({ agentId: 'cache-test-1' });
       if (versions1?.versions[0]) {
-        await agentsStore?.updateAgent({ 
+        await agentsStore?.updateAgent({
           id: 'cache-test-1',
           activeVersionId: versions1.versions[0].id,
         });
       }
-      
+
       await agentsStore?.updateAgent({
         id: 'cache-test-2',
         name: 'Updated 2',
       });
-      
+
       // Activate the new version
       const versions2 = await agentsStore?.listVersions({ agentId: 'cache-test-2' });
       if (versions2?.versions[0]) {
-        await agentsStore?.updateAgent({ 
+        await agentsStore?.updateAgent({
           id: 'cache-test-2',
           activeVersionId: versions2.versions[0].id,
         });
@@ -1125,7 +1131,7 @@ describe('MastraEditor with LibSQL Integration', () => {
   describe('Error Handling', () => {
     it('should handle missing tools gracefully', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'missing-tools-agent',
@@ -1137,7 +1143,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       const agent = await editor.getStoredAgentById('missing-tools-agent');
-      
+
       expect(agent).toBeInstanceOf(Agent);
       const tools = await agent?.listTools();
       expect(Object.keys(tools || {})).not.toContain('non-existent-tool');
@@ -1145,7 +1151,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should handle missing workflows gracefully', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'missing-workflows-agent',
@@ -1157,13 +1163,13 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       const agent = await editor.getStoredAgentById('missing-workflows-agent');
-      
+
       expect(agent).toBeInstanceOf(Agent);
     });
 
     it('should handle missing nested agents gracefully', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'missing-agents-agent',
@@ -1175,13 +1181,13 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       const agent = await editor.getStoredAgentById('missing-agents-agent');
-      
+
       expect(agent).toBeInstanceOf(Agent);
     });
 
     it('should handle invalid model configuration', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'invalid-model-agent',
@@ -1191,16 +1197,14 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      await expect(editor.getStoredAgentById('invalid-model-agent')).rejects.toThrow(
-        'invalid model configuration'
-      );
+      await expect(editor.getStoredAgentById('invalid-model-agent')).rejects.toThrow('invalid model configuration');
     });
   });
 
   describe('Agent Registration', () => {
     it('should register stored agents with Mastra', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       const createdAgent = await agentsStore?.createAgent({
         agent: {
           id: 'registered-agent',
@@ -1209,23 +1213,23 @@ describe('MastraEditor with LibSQL Integration', () => {
           model: { provider: 'openai', name: 'gpt-4' },
         },
       });
-      
+
       // Activate the first version
       const versions = await agentsStore?.listVersions({ agentId: 'registered-agent' });
       if (versions?.versions[0]) {
-        await agentsStore?.updateAgent({ 
+        await agentsStore?.updateAgent({
           id: 'registered-agent',
           activeVersionId: versions.versions[0].id,
         });
       }
 
       const agent = await editor.getStoredAgentById('registered-agent');
-      
+
       // Check that the agent can be retrieved and is properly configured
       expect(agent).toBeDefined();
       expect(agent?.id).toBe('registered-agent');
       expect(agent?.name).toBe('Registered Agent');
-      
+
       // Verify the agent has Mastra primitives registered
       expect(agent?.source).toBe('stored');
     });
@@ -1234,7 +1238,7 @@ describe('MastraEditor with LibSQL Integration', () => {
   describe('Agent with Default Options', () => {
     it('should store and use defaultOptions in agent execution', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       const created = await agentsStore?.createAgent({
         agent: {
           id: 'default-options-agent',
@@ -1260,7 +1264,7 @@ describe('MastraEditor with LibSQL Integration', () => {
           },
           scorers: {
             'accuracy-scorer': {},
-          }
+          },
         },
       });
 
@@ -1273,7 +1277,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       }
 
       const retrievedAgent = await editor.getStoredAgentById('default-options-agent');
-      
+
       // Add to mastra
       if (retrievedAgent) {
         mastra.addAgent(retrievedAgent, 'default-options-agent');
@@ -1312,7 +1316,7 @@ describe('MastraEditor with LibSQL Integration', () => {
   describe('Agent with Memory', () => {
     it('should create and retrieve an agent with static memory configuration', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       // Create an agent with static memory configuration
       const created = await agentsStore?.createAgent({
         agent: {
@@ -1347,10 +1351,10 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(retrievedAgent).toBeInstanceOf(Agent);
       expect(retrievedAgent?.id).toBe('memory-agent');
       expect(retrievedAgent?.name).toBe('Memory Agent');
-      
+
       // Check that the agent was created with memory configuration
       // The actual memory instance would be resolved by the editor when creating the agent
-      const rawAgent = await editor.getStoredAgentById('memory-agent', { returnRaw: true }) as any;
+      const rawAgent = (await editor.getStoredAgentById('memory-agent', { returnRaw: true })) as any;
       expect(rawAgent?.memory).toEqual({
         vector: 'libsql-vector-db',
         // embedder: 'openai/text-embedding-3-small',
@@ -1364,7 +1368,7 @@ describe('MastraEditor with LibSQL Integration', () => {
           generateTitle: {
             model: 'mock/mock-model',
             instructions: 'Generate a concise title (max 5 words)',
-          }
+          },
         },
       });
 
@@ -1382,54 +1386,53 @@ describe('MastraEditor with LibSQL Integration', () => {
           thread: { id: threadId },
         },
       });
-      
+
       // Verify responses
       expect(result1?.text).toBeDefined();
       expect(result2?.text).toBeDefined();
-      
+
       // Give time for async embedding creation to complete
       // The SemanticRecall processor runs in processOutputResult which happens after generation
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       // Check if there were any errors during embedding creation
       // Let's re-check the logs
 
       // Debug: Check if the agent has a memory instance
       const memory = await retrievedAgent?.getMemory();
       console.log('Agent memory exists?', memory !== undefined);
-      
+
       // Debug: Check if semantic recall is configured
       const memoryConfig = (memory as any)?.config;
       console.log('Memory config:', memoryConfig?.semanticRecall);
-      
+
       // Verify thread was created in storage
       const thread = await memory?.getThreadById({ threadId });
       expect(thread?.id).toBe(threadId);
-      
-      
+
       // Verify messages were saved in storage
-      const messages = await memory?.recall({ 
+      const messages = await memory?.recall({
         threadId,
         resourceId: 'memory-agent',
       });
       expect(messages?.messages.length).toBeGreaterThanOrEqual(4); // At least 2 user + 2 assistant messages
-      
+
       // Check message content
       const userMessages = messages?.messages.filter(m => m.role === 'user');
       const assistantMessages = messages?.messages.filter(m => m.role === 'assistant');
       expect(userMessages?.length).toBeGreaterThanOrEqual(2);
       expect(assistantMessages?.length).toBeGreaterThanOrEqual(2);
-      
+
       // Verify embeddings were created (if indexes are created)
       const vectorStore = mastra.getVector('libsql-vector-db');
-      
+
       // Check if the vector store exists
       expect(vectorStore).toBeDefined();
-      
+
       // List all indexes to see what's created
       const indexes = await vectorStore?.listIndexes();
       console.log('indexes', indexes);
-      
+
       // @TODO: verify that embeddings were created
       // For now, let's just verify that messages were saved
       expect(messages?.messages.length).toBeGreaterThanOrEqual(4);
@@ -1437,7 +1440,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should handle streaming with stored agents', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'streaming-agent',
@@ -1451,7 +1454,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Activate version
       const versions = await agentsStore?.listVersions({ agentId: 'streaming-agent' });
       if (versions?.versions[0]) {
-        await agentsStore?.updateAgent({ 
+        await agentsStore?.updateAgent({
           id: 'streaming-agent',
           activeVersionId: versions.versions[0].id,
         });
@@ -1459,18 +1462,18 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       const agent = await editor.getStoredAgentById('streaming-agent');
       mastra.addAgent(agent!, 'streaming-agent');
-      
+
       // Test streaming
       const stream = await agent?.stream('Stream the weather');
       expect(stream).toBeDefined();
-      
+
       // Verify stream exists (we can't iterate in tests as MockLanguageModelV2 doesn't provide async iterator)
       expect(stream).toBeDefined();
     });
 
     it('should handle multiple tool calls in a single step', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'multi-tool-agent',
@@ -1487,7 +1490,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Activate version
       const versions = await agentsStore?.listVersions({ agentId: 'multi-tool-agent' });
       if (versions?.versions[0]) {
-        await agentsStore?.updateAgent({ 
+        await agentsStore?.updateAgent({
           id: 'multi-tool-agent',
           activeVersionId: versions.versions[0].id,
         });
@@ -1495,17 +1498,17 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       const agent = await editor.getStoredAgentById('multi-tool-agent');
       mastra.addAgent(agent!, 'multi-tool-agent');
-      
+
       const result = await agent?.generate('Get weather for all our users', {
         maxSteps: 3,
       });
-      
+
       expect(result).toBeDefined();
     });
 
     it('should work with agents that have metadata', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       await agentsStore?.createAgent({
         agent: {
           id: 'metadata-agent',
@@ -1524,7 +1527,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       const rawAgent = await editor.getStoredAgentById('metadata-agent', { returnRaw: true });
-      
+
       expect(rawAgent?.metadata).toEqual({
         version: '2.0',
         tags: ['production', 'critical'],
@@ -1537,7 +1540,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should create agent with vector memory configuration', async () => {
       const agentsStore = await storage.getStore('agents');
-      
+
       // Create an agent with vector memory
       await agentsStore?.createAgent({
         agent: {
@@ -1564,7 +1567,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       const rawAgent = await editor.getStoredAgentById('vector-memory-agent', { returnRaw: true });
-      
+
       expect(rawAgent?.memory).toEqual({
         vector: 'chroma-vector-db',
         options: {
