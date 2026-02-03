@@ -24,7 +24,137 @@
  * ```
  */
 
+import { createHash } from 'node:crypto';
+
+import { MastraBase } from '../../base';
+import { RegisteredLogger } from '../../logger';
+import type { WorkspaceFilesystem } from '../filesystem/filesystem';
+import type { FilesystemMountConfig, MountResult } from '../filesystem/mount';
 import type { Lifecycle, ProviderStatus } from '../lifecycle';
+
+// =============================================================================
+// Mount State Types
+// =============================================================================
+
+/**
+ * State of a mount in the sandbox.
+ */
+export type MountState = 'pending' | 'mounting' | 'mounted' | 'error' | 'unsupported';
+
+/**
+ * Entry representing a mount in the sandbox.
+ */
+export interface MountEntry {
+  /** The filesystem to mount */
+  filesystem: WorkspaceFilesystem;
+  /** Current state of the mount */
+  state: MountState;
+  /** Error message if state is 'error' */
+  error?: string;
+  /** Whether to mount into sandbox (false = workspace API only) */
+  sandboxMount: boolean;
+  /** Resolved mount config from filesystem.getMountConfig() */
+  config?: FilesystemMountConfig;
+  /** Hash of config for quick comparison */
+  configHash?: string;
+}
+
+export abstract class BaseSandbox extends MastraBase implements WorkspaceSandbox {
+  /** Unique identifier for this sandbox instance */
+  abstract readonly id: string;
+  /** Human-readable name (e.g., 'E2B Sandbox', 'Docker') */
+  abstract override readonly name: string;
+  /** Provider type identifier */
+  abstract readonly provider: string;
+  abstract status: ProviderStatus;
+
+  /** Track mounts with their state */
+  protected _mounts: Map<string, MountEntry> = new Map();
+
+  constructor(options: { name: string }) {
+    super({ name: options.name, component: RegisteredLogger.WORKSPACE });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mount Management
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Set mounts that should be mounted into the sandbox.
+   * Called by Workspace to inform sandbox of pending mounts.
+   * Mounts will be processed when start() is called.
+   */
+  setMounts(mounts: Record<string, { filesystem: WorkspaceFilesystem; sandboxMount: boolean }>): void {
+    for (const [path, { filesystem, sandboxMount }] of Object.entries(mounts)) {
+      this._mounts.set(path, {
+        filesystem,
+        sandboxMount,
+        state: 'pending',
+      });
+    }
+  }
+
+  /**
+   * Get all mount entries with their current state.
+   */
+  getMountEntries(): ReadonlyMap<string, MountEntry> {
+    return this._mounts;
+  }
+
+  /**
+   * Hash a mount config for comparison.
+   * Used to detect if config has changed (credentials, bucket, etc.).
+   */
+  protected hashConfig(config: FilesystemMountConfig): string {
+    // Create a stable JSON string and hash it
+    const normalized = JSON.stringify(config, Object.keys(config).sort());
+    return createHash('sha256').update(normalized).digest('hex').slice(0, 16);
+  }
+
+  /**
+   * Mount all pending filesystems.
+   * Called by subclasses after sandbox is ready (in start()).
+   */
+  protected async mountPending(): Promise<void> {
+    for (const [path, mount] of this._mounts) {
+      if (mount.state !== 'pending' || !mount.sandboxMount) {
+        continue;
+      }
+
+      // Check if filesystem supports mounting
+      if (!mount.filesystem.getMountConfig) {
+        mount.state = 'unsupported';
+        mount.error = 'Filesystem does not support mounting';
+        continue;
+      }
+
+      // Get and store the mount config
+      mount.config = mount.filesystem.getMountConfig();
+      mount.configHash = this.hashConfig(mount.config);
+
+      mount.state = 'mounting';
+
+      try {
+        const result = await this.mount?.(mount.filesystem, path);
+        if (result?.success) {
+          mount.state = 'mounted';
+        } else {
+          mount.state = 'error';
+          mount.error = result?.error ?? 'Mount failed';
+        }
+      } catch (err) {
+        mount.state = 'error';
+        mount.error = String(err);
+      }
+    }
+  }
+
+  /**
+   * Abstract mount method - implemented by subclasses.
+   * BaseSandbox.mountPending() calls this for each pending mount.
+   */
+  abstract mount?(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult>;
+}
 
 // =============================================================================
 // Core Types
@@ -127,6 +257,46 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
    * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
+
+  // ---------------------------------------------------------------------------
+  // Mounting Support (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Set mounts that should be mounted into the sandbox.
+   * Called by Workspace to inform sandbox of pending mounts.
+   * Mounts will be processed when start() is called.
+   *
+   * @param mounts - Record of mount path to filesystem and options
+   */
+  setMounts?(mounts: Record<string, { filesystem: WorkspaceFilesystem; sandboxMount: boolean }>): void;
+
+  /**
+   * Mount a filesystem at a path in the sandbox.
+   * Uses FUSE tools (s3fs, gcsfuse) to mount cloud storage.
+   *
+   * @param filesystem - The filesystem to mount
+   * @param mountPath - Path in the sandbox where filesystem should be mounted
+   * @returns Mount result with success status and mount path
+   * @throws {MountError} if mount fails
+   * @throws {MountNotSupportedError} if sandbox doesn't support mounting
+   * @throws {FilesystemNotMountableError} if filesystem cannot be mounted
+   */
+  mount?(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult>;
+
+  /**
+   * Unmount a filesystem from a path in the sandbox.
+   *
+   * @param mountPath - Path to unmount
+   */
+  unmount?(mountPath: string): Promise<void>;
+
+  /**
+   * Get list of current mounts in the sandbox.
+   *
+   * @returns Array of mount information
+   */
+  getMounts?(): Promise<Array<{ path: string; filesystem: string }>>;
 }
 
 // =============================================================================
@@ -144,6 +314,8 @@ export interface SandboxInfo {
   lastUsedAt?: Date;
   /** Time until auto-shutdown (if applicable) */
   timeoutAt?: Date;
+  /** Current mounts in the sandbox */
+  mounts?: Array<{ path: string; filesystem: string }>;
   /** Resource info (if available) */
   resources?: {
     memoryMB?: number;
@@ -211,5 +383,48 @@ export class IsolationUnavailableError extends SandboxError {
   ) {
     super(`Isolation backend '${backend}' is not available: ${reason}`, 'ISOLATION_UNAVAILABLE', { backend, reason });
     this.name = 'IsolationUnavailableError';
+  }
+}
+
+// =============================================================================
+// Mount Errors
+// =============================================================================
+
+/**
+ * Base error for mount operations.
+ */
+export class MountError extends SandboxError {
+  constructor(
+    message: string,
+    public readonly mountPath: string,
+    details?: Record<string, unknown>,
+  ) {
+    super(message, 'MOUNT_ERROR', { mountPath, ...details });
+    this.name = 'MountError';
+  }
+}
+
+/**
+ * Error thrown when sandbox doesn't support mounting.
+ */
+export class MountNotSupportedError extends SandboxError {
+  constructor(sandboxProvider: string) {
+    super(`Sandbox provider '${sandboxProvider}' does not support mounting`, 'MOUNT_NOT_SUPPORTED', {
+      sandboxProvider,
+    });
+    this.name = 'MountNotSupportedError';
+  }
+}
+
+/**
+ * Error thrown when a filesystem cannot be mounted.
+ */
+export class FilesystemNotMountableError extends SandboxError {
+  constructor(filesystemProvider: string, reason?: string) {
+    const message = reason
+      ? `Filesystem '${filesystemProvider}' cannot be mounted: ${reason}`
+      : `Filesystem '${filesystemProvider}' does not support mounting`;
+    super(message, 'FILESYSTEM_NOT_MOUNTABLE', { filesystemProvider, reason });
+    this.name = 'FilesystemNotMountableError';
   }
 }
