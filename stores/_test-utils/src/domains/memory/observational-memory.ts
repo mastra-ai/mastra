@@ -37,6 +37,26 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
   });
 
   describe('Observational Memory', () => {
+    beforeAll(() => {
+      if (!memoryStorage.supportsObservationalMemory) {
+        console.log(`Skipping Observational Memory tests - storage adapter does not support OM`);
+      }
+    });
+
+    it('should create a new observational memory record', async () => {
+      if (!memoryStorage.supportsObservationalMemory) {
+        return;
+      }
+      const input = createSampleOMInput();
+
+      const record = await memoryStorage.initializeObservationalMemory(input);
+
+      expect(record).toBeDefined();
+      expect(record.id).toBeDefined();
+      expect(record.resourceId).toBe(input.resourceId);
+      expect(record.threadId).toBeNull();
+      expect(record.scope).toBe('resource');
+    });
     describe('initializeObservationalMemory', () => {
       it('should create a new observational memory record', async () => {
         const input = createSampleOMInput();
