@@ -36,7 +36,7 @@ export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
           name="instructions"
           control={control}
           render={({ field }) => (
-            <div className={readOnly ? 'pointer-events-none' : ''}>
+            <div className={cn('flex-1 flex flex-col', readOnly && 'pointer-events-none')}>
               <CodeEditor
                 value={field.value}
                 onChange={readOnly ? undefined : field.onChange}
