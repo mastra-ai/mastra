@@ -739,7 +739,7 @@ export class InMemoryMemory extends MemoryStorage {
   ): Promise<ObservationalMemoryRecord[]> {
     const key = this.getObservationalMemoryKey(threadId, resourceId);
     const records = this.db.observationalMemory.get(key) ?? [];
-    return limit ? records.slice(0, limit) : records;
+    return limit != null ? records.slice(0, limit) : records;
   }
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {

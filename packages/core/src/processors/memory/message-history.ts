@@ -231,10 +231,7 @@ export class MessageHistory implements Processor {
       return;
     }
 
-    // Persist messages directly to storage
-    await this.storage.saveMessages({ messages: filtered });
-
-    // Ensure thread exists (create if needed) and update its timestamp
+    // Ensure thread exists (create if needed) before saving messages
     const thread = await this.storage.getThreadById({ threadId });
     if (thread) {
       await this.storage.updateThread({
@@ -255,5 +252,8 @@ export class MessageHistory implements Processor {
         },
       });
     }
+
+    // Persist messages after thread is guaranteed to exist
+    await this.storage.saveMessages({ messages: filtered });
   }
 }

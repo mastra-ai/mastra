@@ -908,11 +908,15 @@ export function hasCurrentTaskSection(observations: string): boolean {
  * Extract the Current Task content from observations.
  */
 export function extractCurrentTask(observations: string): string | null {
-  const xmlMatch = observations.match(/<current-task>([\s\S]*?)<\/current-task>/i);
-  if (xmlMatch?.[1]) {
-    return xmlMatch[1].trim();
-  }
-  return null;
+  const openTag = '<current-task>';
+  const closeTag = '</current-task>';
+  const startIdx = observations.toLowerCase().indexOf(openTag);
+  if (startIdx === -1) return null;
+  const contentStart = startIdx + openTag.length;
+  const endIdx = observations.toLowerCase().indexOf(closeTag, contentStart);
+  if (endIdx === -1) return null;
+  const content = observations.slice(contentStart, endIdx).trim();
+  return content || null;
 }
 
 /**

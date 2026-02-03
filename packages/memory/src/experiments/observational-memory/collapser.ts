@@ -95,9 +95,12 @@ const tokenCounter = new TokenCounter();
  * Generate a deterministic ID for a collapsed section based on content hash.
  * Uses a simple hash function to create a 4-character hex ID.
  */
-export function generateSectionId(parentContent: string): string {
+export function generateSectionId(parentContent: string, sectionIndex = 0): string {
   // Simple hash function (FNV-1a variant)
+  // Incorporates sectionIndex to avoid collisions when parent lines are identical
   let hash = 2166136261;
+  hash ^= sectionIndex;
+  hash = (hash * 16777619) >>> 0;
   for (let i = 0; i < parentContent.length; i++) {
     hash ^= parentContent.charCodeAt(i);
     hash = (hash * 16777619) >>> 0; // Force unsigned 32-bit
@@ -163,6 +166,10 @@ export function parseObservationSections(content: string): ObservationSection[] 
           false,
         ),
       );
+      // Reset so the isParentItem block below doesn't double-push the same section
+      currentParentLine = '';
+      currentChildren = [];
+      currentContent = [];
     }
 
     if (isParentItem) {
@@ -287,7 +294,8 @@ export function collapseObservations(observations: string, options: CollapseOpti
   };
 
   // Process sections (oldest first)
-  for (const section of sortedSections) {
+  for (let i = 0; i < sortedSections.length; i++) {
+    const section = sortedSections[i]!;
     if (
       // Skip if section is recent
       recentSections.has(section) ||
@@ -296,14 +304,14 @@ export function collapseObservations(observations: string, options: CollapseOpti
       // Skip if section is not collapsible
       section.collapsible === false ||
       // Skip if not enough children
-      section.children.length <= minChildrenToCollapse
+      section.children.length < minChildrenToCollapse
     ) {
       remainingSections.push(section);
       continue;
     }
 
     // Collapse this section
-    const id = generateSectionId(section.parentLine);
+    const id = generateSectionId(section.parentLine, i);
     const collapsed = buildCollapsedRepresentation(section, id, keepLastChildren);
 
     collapsedSections.push({

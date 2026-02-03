@@ -228,8 +228,8 @@ export abstract class MemoryStorage extends StorageDomain {
    * Create a new generation from a reflection.
    * Creates a new record with:
    * - originType: 'reflection'
-   * - previousGenerationId pointing to current record
    * - activeObservations containing the reflection
+   * - generationCount incremented from the current record
    */
   async createReflectionGeneration(_input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);

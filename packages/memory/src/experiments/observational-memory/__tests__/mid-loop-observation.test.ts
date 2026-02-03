@@ -262,7 +262,7 @@ describe('Mid-Loop Observation', () => {
       });
 
       // Check record was created but no observations yet
-      const record = await storage.getObservationalMemory(threadId, null);
+      const record = await storage.getObservationalMemory(threadId, resourceId);
       console.log('Record after step 0:', {
         id: record?.id,
         lastObservedAt: record?.lastObservedAt,

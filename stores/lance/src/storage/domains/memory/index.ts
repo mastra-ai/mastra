@@ -483,12 +483,8 @@ export class StoreMemoryLance extends MemoryStorage {
         return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
 
-      // Calculate hasMore based on pagination window
-      // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
-      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const fetchedAll = perPageInput === false || allThreadMessagesReturned;
+      // Calculate hasMore based on pagination against total matching records
+      const fetchedAll = perPageInput === false || finalMessages.length >= total;
       const hasMore = !fetchedAll && offset + perPage < total;
 
       return {

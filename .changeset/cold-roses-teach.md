@@ -8,30 +8,37 @@
 '@mastra/pg': minor
 ---
 
-Added Observational Memory, a new SOTA memory system for high token efficiency, even with very long context conversations.
+Added Observational Memory — a new memory system that keeps your agent's context window small while preserving long-term memory across conversations.
 
-Core changes:
-- New `observationalMemory` feature flag in `coreFeatures`
-- New OM storage types and interfaces (optional, additive)
-- New `MemoryStorage` methods for OM with default "not implemented" fallbacks
-- `processorStates` support for persisting processor state across loop iterations
+**Why:** Long conversations cause context rot and waste tokens. Observational Memory compresses conversation history into observations (5–40x compression) and periodically condenses those into reflections. Your agent stays fast and focused, even after thousands of messages.
+
+**Usage:**
+
+```ts
+import { Memory } from '@mastra/memory';
+import { PostgresStore } from '@mastra/pg';
+
+const memory = new Memory({
+  storage: new PostgresStore({ connectionString: process.env.DATABASE_URL }),
+  options: {
+    observationalMemory: true,
+  },
+});
+
+const agent = new Agent({
+  name: 'my-agent',
+  model: openai('gpt-4o'),
+  memory,
+});
+```
+
+**What's new:**
+
+- `observationalMemory: true` enables the three-tier memory system (recent messages → observations → reflections)
+- Thread-scoped (per-conversation) and resource-scoped (shared across all threads for a user) modes
+- Manual `observe()` API for triggering observation outside the normal agent loop
+- New OM storage methods for pg, libsql, and mongodb adapters (conditionally enabled)
+- `Agent.findProcessor()` method for looking up processors by ID
+- `processorStates` for persisting processor state across loop iterations
 - Abort signal propagation to processors
 - `ProcessorStreamWriter` for custom stream events from processors
-- `MessageHistory.persistMessages` extracted as a public method
-- `Agent.findProcessor` method for looking up processors by ID
-
-Storage adapters (pg, libsql, mongodb):
-- New OM table/collection with conditional creation guarded by `TABLE_OBSERVATIONAL_MEMORY`
-- `supportsObservationalMemory` flag set conditionally based on core version
-
-Memory:
-- Observational Memory implementation with Observer and Reflector agents
-- Thread and resource scoped observation modes
-- Manual `observe()` API with locking and scope support
-
-Server:
-- New OM status and configuration endpoints
-- Runtime guard for `findProcessor` compatibility with older core versions
-
-Client:
-- `getMemoryStatus` now accepts optional OM parameters (backward compatible)
