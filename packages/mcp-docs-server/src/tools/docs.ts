@@ -4,9 +4,9 @@ import { z } from 'zod';
 import { logger } from '../logger';
 import { fromPackageRoot, getMatchingPaths } from '../utils';
 
-const docsBaseDir = fromPackageRoot('.docs/raw/');
+const docsBaseDir = fromPackageRoot('.docs/');
 
-type ReadMdxResult =
+type ReadDocsResult =
   | { found: true; content: string; isSecurityViolation: boolean }
   | { found: false; isSecurityViolation: boolean };
 
@@ -21,7 +21,7 @@ async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files
     for (const entry of entries) {
       if (entry.isDirectory()) {
         dirs.push(entry.name + '/');
-      } else if (entry.isFile() && entry.name.endsWith('.mdx')) {
+      } else if (entry.isFile() && entry.name === 'index.md') {
         files.push(entry.name);
       }
     }
@@ -36,57 +36,53 @@ async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files
   }
 }
 
-// Helper function to read MDX files from a path
-async function readMdxContent(docPath: string, queryKeywords: string[]): Promise<ReadMdxResult> {
+// Helper function to read documentation content from a path
+async function readDocsContent(docPath: string, queryKeywords: string[]): Promise<ReadDocsResult> {
   const fullPath = path.resolve(path.join(docsBaseDir, docPath));
   if (!fullPath.startsWith(path.resolve(docsBaseDir))) {
     void logger.error(`Path traversal attempt detected`);
     return { found: false, isSecurityViolation: true };
   }
-  void logger.debug(`Reading MDX content from: ${fullPath}`);
+  void logger.debug(`Reading docs content from: ${fullPath}`);
 
   // Check if path exists
   try {
     const stats = await fs.stat(fullPath);
 
     if (stats.isDirectory()) {
-      const { dirs, files } = await listDirContents(fullPath);
+      // Check if there's an index.md file in this directory
+      const indexMdPath = path.join(fullPath, 'index.md');
+      try {
+        const content = await fs.readFile(indexMdPath, 'utf-8');
+        // Found index.md in this directory, return its content
+        return { found: true, content, isSecurityViolation: false };
+      } catch {
+        // No index.md file, show directory listing
+      }
+
+      // List subdirectories for navigation
+      const { dirs } = await listDirContents(fullPath);
       const dirListing = [
         `Directory contents of ${docPath}:`,
         '',
-        dirs.length > 0 ? 'Subdirectories:' : 'No subdirectories.',
-        ...dirs.map(d => `- ${d}`),
-        '',
-        files.length > 0 ? 'Files in this directory:' : 'No files in this directory.',
-        ...files.map(f => `- ${f}`),
-        '',
-        '---',
-        '',
-        'Contents of all files in this directory:',
+        dirs.length > 0 ? 'Available documentation paths:' : 'No documentation available in this directory.',
+        ...dirs.map(d => `- ${docPath}/${d.replace(/\/$/, '')}`),
         '',
       ].join('\n');
 
-      // Append all file contents
-      let fileContents = '';
-      for (const file of files) {
-        const filePath = path.join(fullPath, file);
-        const content = await fs.readFile(filePath, 'utf-8');
-        fileContents += `\n\n# ${file}\n\n${content}`;
-      }
-
-      // Add content-based suggestions when query keywords are provided and path is a directory
+      // Add content-based suggestions when query keywords are provided
       const contentBasedSuggestions = await getMatchingPaths(docPath, queryKeywords, docsBaseDir);
 
-      const suggestions = ['---', '', contentBasedSuggestions, ''].join('\n');
+      const suggestions = contentBasedSuggestions ? ['---', '', contentBasedSuggestions, ''].join('\n') : '';
 
-      return { found: true, content: dirListing + fileContents + suggestions, isSecurityViolation: false };
+      return { found: true, content: dirListing + suggestions, isSecurityViolation: false };
     }
 
     // If it's a file, just read it
     const content = await fs.readFile(fullPath, 'utf-8');
     return { found: true, content, isSecurityViolation: false };
   } catch (error: any) {
-    void logger.error(`Failed to read MDX content: ${fullPath}`, error);
+    void logger.error(`Failed to read docs content: ${fullPath}`, error);
     if (error.code === 'ENOENT') {
       // Only fallback for not found
       return { found: false, isSecurityViolation: false };
@@ -202,7 +198,7 @@ export const docsTool = {
       const results = await Promise.all(
         args.paths.map(async (path: string) => {
           try {
-            const result = await readMdxContent(path, queryKeywords);
+            const result = await readDocsContent(path, queryKeywords);
             if (result.found) {
               return {
                 path,

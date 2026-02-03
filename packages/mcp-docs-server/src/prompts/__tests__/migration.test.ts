@@ -1,7 +1,7 @@
 import type { MCPRequestHandlerExtra } from '@mastra/mcp';
 import { describe, it, expect, beforeAll } from 'vitest';
 
-import { prepare } from '../../prepare-docs/prepare';
+import { prepare } from '../../../scripts/prepare-docs';
 import { migrationPromptMessages } from '../migration';
 
 // Prepare docs once before all tests

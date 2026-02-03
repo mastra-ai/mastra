@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const mdxFileCache = new Map<string, string[]>();
+const mdFileCache = new Map<string, string[]>();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -16,9 +16,9 @@ export function fromPackageRoot(relative: string) {
 // can't use console.log() because it writes to stdout which will interfere with the MCP Stdio protocol
 export const log = console.error;
 
-async function* walkMdxFiles(dir: string): AsyncGenerator<string> {
-  if (mdxFileCache.has(dir)) {
-    for (const file of mdxFileCache.get(dir)!) yield file;
+async function* walkMdFiles(dir: string): AsyncGenerator<string> {
+  if (mdFileCache.has(dir)) {
+    for (const file of mdFileCache.get(dir)!) yield file;
     return;
   }
   const filesInDir: string[] = [];
@@ -27,17 +27,17 @@ async function* walkMdxFiles(dir: string): AsyncGenerator<string> {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       // For directories, recurse and collect all files
-      for await (const file of walkMdxFiles(fullPath)) {
+      for await (const file of walkMdFiles(fullPath)) {
         filesInDir.push(file);
         yield file;
       }
-    } else if (entry.isFile() && entry.name.endsWith('.mdx')) {
-      // For MDX files, add to collection and yield
+    } else if (entry.isFile() && entry.name === 'index.md') {
+      // For index.md files, add to collection and yield
       filesInDir.push(fullPath);
       yield fullPath;
     }
   }
-  mdxFileCache.set(dir, filesInDir);
+  mdFileCache.set(dir, filesInDir);
 }
 
 async function searchDocumentContent(keywords: string[], baseDir: string): Promise<string[]> {
@@ -45,7 +45,7 @@ async function searchDocumentContent(keywords: string[], baseDir: string): Promi
 
   const fileScores = new Map<string, FileScore>();
 
-  for await (const filePath of walkMdxFiles(baseDir)) {
+  for await (const filePath of walkMdFiles(baseDir)) {
     let content: string;
     try {
       content = await fs.readFile(filePath, 'utf-8');
@@ -126,18 +126,15 @@ function calculateFinalScore(score: FileScore, totalKeywords: number): number {
   );
 }
 
-function extractKeywordsFromPath(path: string): string[] {
-  // Get only the filename (last part of the path)
-  const filename =
-    path
-      .split('/')
-      .pop() // Get last segment
-      ?.replace(/\.(mdx|md)$/, '') || ''; // Remove file extension
+function extractKeywordsFromPath(docPath: string): string[] {
+  // Get the folder name (last meaningful part of the path, excluding index.md)
+  const cleanPath = docPath.replace(/\/index\.md$/, '');
+  const folderName = cleanPath.split('/').pop() || '';
 
   const keywords = new Set<string>();
 
   // Split on hyphens, underscores, camelCase
-  const splitParts = filename.split(/[-_]|(?=[A-Z])/);
+  const splitParts = folderName.split(/[-_]|(?=[A-Z])/);
   splitParts.forEach(keyword => {
     if (keyword.length > 2) {
       keywords.add(keyword.toLowerCase());

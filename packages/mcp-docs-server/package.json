@@ -22,7 +22,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "prepare-docs": "tsx ./scripts/prepare-docs/prepare.ts",
+    "prepare-docs": "tsx ./scripts/prepare-docs.ts",
     "build:cli": "tsup --silent --config tsup.config.ts",
     "pretest": "pnpm turbo build --filter @mastra/mcp-docs-server",
     "test": "vitest run",

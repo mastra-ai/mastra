@@ -28,7 +28,7 @@ type CourseState = {
   }>;
 };
 
-const courseDir = fromPackageRoot('.docs/raw/course');
+const courseDir = fromPackageRoot('.docs/course');
 
 // Define the introduction prompt shown only when a user registers for the course
 const introductionPrompt = `
