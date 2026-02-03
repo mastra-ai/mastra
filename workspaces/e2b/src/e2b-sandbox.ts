@@ -21,70 +21,10 @@ import { BaseSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
 
+import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, E2BR2MountConfig, MountContext } from './mounts';
+import { mountS3, mountGCS, mountR2, LOG_PREFIX } from './mounts';
 import { createDefaultMountableTemplate } from './utils/template';
 import type { TemplateSpec } from './utils/template';
-
-// =============================================================================
-// Mount Configuration Types
-// =============================================================================
-// E2B defines the mount configs it supports for FUSE mounting via s3fs/gcsfuse.
-
-/**
- * S3 mount config for E2B (mounted via s3fs-fuse).
- * Works with AWS S3 and S3-compatible stores (MinIO, etc.).
- *
- * If credentials are not provided, the bucket will be mounted as read-only
- * using the public_bucket=1 option (for public buckets only).
- */
-export interface E2BS3MountConfig extends FilesystemMountConfig {
-  type: 's3';
-  /** S3 bucket name */
-  bucket: string;
-  /** AWS region */
-  region: string;
-  /** S3 endpoint for S3-compatible storage (MinIO, etc.) */
-  endpoint?: string;
-  /** AWS access key ID (optional - omit for public buckets) */
-  accessKeyId?: string;
-  /** AWS secret access key (optional - omit for public buckets) */
-  secretAccessKey?: string;
-}
-
-/**
- * GCS mount config for E2B (mounted via gcsfuse).
- *
- * If credentials are not provided, the bucket will be mounted as read-only
- * using anonymous access (for public buckets only).
- */
-export interface E2BGCSMountConfig extends FilesystemMountConfig {
-  type: 'gcs';
-  /** GCS bucket name */
-  bucket: string;
-  /** Service account key JSON (optional - omit for public buckets) */
-  serviceAccountKey?: string;
-}
-
-/**
- * Cloudflare R2 mount config for E2B (mounted via s3fs-fuse).
- * R2 is S3-compatible with a specific endpoint format.
- */
-export interface E2BR2MountConfig extends FilesystemMountConfig {
-  type: 'r2';
-  /** R2 account ID */
-  accountId: string;
-  /** R2 bucket name */
-  bucket: string;
-  /** R2 access key ID */
-  accessKeyId: string;
-  /** R2 secret access key */
-  secretAccessKey: string;
-}
-
-/**
- * Union of mount configs supported by E2B sandbox.
- */
-export type E2BMountConfig = E2BS3MountConfig | E2BGCSMountConfig | E2BR2MountConfig;
-
 
 // =============================================================================
 // E2B Sandbox Options
@@ -94,27 +34,6 @@ export type E2BMountConfig = E2BS3MountConfig | E2BGCSMountConfig | E2BR2MountCo
  * Runtime types supported by E2B.
  */
 export type SandboxRuntime = 'node' | 'python' | 'bash' | 'ruby' | 'go' | 'rust' | 'java' | 'cpp' | 'r';
-
-/**
- * Context passed to mount hooks.
- */
-export interface MountHookContext {
-  /** The E2B sandbox instance */
-  sandbox: E2BSandbox;
-  /** The mount path in the sandbox */
-  mountPath: string;
-}
-
-/**
- * Mount hook function type.
- * Return true to indicate the hook handled mounting (skip default behavior).
- * Return false or undefined to proceed with default mounting.
- */
-export type MountHook = (
-  filesystem: WorkspaceFilesystem,
-  config: E2BMountConfig,
-  ctx: MountHookContext,
-) => Promise<boolean | void> | boolean | void;
 
 /**
  * E2B sandbox provider configuration.
@@ -146,47 +65,6 @@ export interface E2BSandboxOptions {
   metadata?: Record<string, unknown>;
   /** Supported runtimes (default: ['node', 'python', 'bash']) */
   runtimes?: SandboxRuntime[];
-  /**
-   * Custom mount hook for handling filesystem mounts.
-   *
-   * This hook is called before the default mount behavior.
-   * Return true to skip default mounting (hook handled it).
-   * Return false/undefined to proceed with default mounting.
-   *
-   * @example Custom S3 mount
-   * ```typescript
-   * const sandbox = new E2BSandbox({
-   *   onMount: async (filesystem, config, ctx) => {
-   *     if (config.type === 's3') {
-   *       // Custom S3 mounting logic
-   *       await ctx.executeCommand('my-custom-mount-script', [config.bucket, ctx.mountPath]);
-   *       return true; // Skip default mount
-   *     }
-   *     return false; // Use default mount for other types
-   *   },
-   * });
-   * ```
-   *
-   * @example Sync local filesystem to sandbox
-   * ```typescript
-   * const sandbox = new E2BSandbox({
-   *   onMount: async (filesystem, config, ctx) => {
-   *     if (filesystem.provider === 'local') {
-   *       // Upload local files to sandbox
-   *       const files = await filesystem.readdir('/', { recursive: true });
-   *       for (const file of files) {
-   *         if (file.type === 'file') {
-   *           const content = await filesystem.readFile(`/${file.name}`);
-   *           await ctx.writeFile(`${ctx.mountPath}/${file.name}`, content);
-   *         }
-   *       }
-   *       return true; // Skip FUSE mount (we synced files instead)
-   *     }
-   *   },
-   * });
-   * ```
-   */
-  onMount?: MountHook;
   /** Optional logger instance */
   logger?: IMastraLogger;
 }
@@ -213,7 +91,6 @@ export interface E2BSandboxOptions {
  * });
  *
  * const workspace = new Workspace({ sandbox });
- * await workspace.init();
  * const result = await workspace.executeCode('console.log("Hello!")');
  * ```
  *
@@ -224,15 +101,15 @@ export interface E2BSandboxOptions {
  * import { S3Filesystem } from '@mastra/s3';
  *
  * const workspace = new Workspace({
- *   filesystem: new S3Filesystem({
- *     bucket: 'my-bucket',
- *     region: 'us-east-1',
- *   }),
+ *   mounts: {
+ *     '/bucket': new S3Filesystem({
+ *       bucket: 'my-bucket',
+ *       region: 'us-east-1',
+ *     }),
+ *   },
  *   sandbox: new E2BSandbox({ timeout: 60000 }),
  * });
  *
- * await workspace.init();
- * // Files written to workspace are accessible in sandbox at /workspace
  * ```
  */
 export class E2BSandbox extends BaseSandbox {
@@ -249,7 +126,6 @@ export class E2BSandbox extends BaseSandbox {
   private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
   private readonly configuredRuntimes: SandboxRuntime[];
-  private readonly onMountHook?: MountHook;
 
   /** Resolved template ID after building (if needed) */
   private _resolvedTemplateId?: string;
@@ -269,12 +145,11 @@ export class E2BSandbox extends BaseSandbox {
     this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
     this.configuredRuntimes = options.runtimes ?? ['node', 'python', 'bash'];
-    this.onMountHook = options.onMount;
 
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
     this._templatePreparePromise = this.resolveTemplate().catch(err => {
-      this.logger.debug(`[E2BSandbox] Template preparation error (will retry on start):`, err);
+      this.logger.debug(`${LOG_PREFIX} Template preparation error (will retry on start):`, err);
       return ''; // Return empty string, will be retried in start()
     });
   }
@@ -329,93 +204,45 @@ export class E2BSandbox extends BaseSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Update or create a mount entry in the inherited _mounts map.
-   */
-  private updateMountEntry(
-    mountPath: string,
-    filesystem: WorkspaceFilesystem,
-    state: 'pending' | 'mounting' | 'mounted' | 'error' | 'unsupported',
-    config?: E2BMountConfig,
-    error?: string,
-  ): void {
-    const existing = this._mounts.get(mountPath);
-    if (existing) {
-      existing.state = state;
-      if (config) {
-        existing.config = config;
-        existing.configHash = this.hashConfig(config);
-      }
-      if (error !== undefined) existing.error = error;
-    } else {
-      // Create new entry (for direct mount() calls without setMounts)
-      this._mounts.set(mountPath, {
-        filesystem,
-        state,
-        sandboxMount: true,
-        config,
-        configHash: config ? this.hashConfig(config) : undefined,
-        error,
-      });
-    }
-  }
-
-  /**
    * Mount a filesystem at a path in the sandbox.
    * Uses FUSE tools (s3fs, gcsfuse) to mount cloud storage.
-   *
-   * If an `onMount` hook is configured, it will be called first.
-   * The hook can return true to skip the default mount behavior.
    */
   async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
-    this.logger.debug(`[E2B Mount] Starting mount for ${mountPath}`);
-
     if (!this._sandbox) {
       throw new SandboxNotReadyError(this.id);
     }
 
-    if (!filesystem.getMountConfig) {
-      this.updateMountEntry(mountPath, filesystem, 'unsupported', undefined, 'Filesystem does not support mounting');
+    this.logger.debug(`${LOG_PREFIX} Mounting "${mountPath}"...`);
+
+    // Get config if available (may be undefined for filesystems that don't support getMountConfig)
+    const config = filesystem.getMountConfig?.() as E2BMountConfig | undefined;
+
+    // Check if filesystem supports native mounting
+    if (!config) {
+      this.mounts.set(mountPath, { filesystem, state: 'unsupported', error: 'Filesystem does not support mounting' });
+      this.logger.debug(
+        `${LOG_PREFIX} Filesystem ${filesystem.provider} (${filesystem.id}) at "${mountPath}" does not support mounting`,
+      );
       return { success: false, mountPath, error: 'Filesystem does not support mounting' };
     }
 
-    const config = filesystem.getMountConfig() as E2BMountConfig;
-
-    // Call the onMount hook if configured
-    if (this.onMountHook) {
-      const hookContext: MountHookContext = {
-        sandbox: this,
-        mountPath,
-      };
-
-      try {
-        const hookHandled = await this.onMountHook(filesystem, config, hookContext);
-        if (hookHandled === true) {
-          this.logger.debug(`[E2B Mount] Mount handled by onMount hook for ${mountPath}`);
-          this.updateMountEntry(mountPath, filesystem, 'mounted', config);
-          return { success: true, mountPath };
-        }
-      } catch (hookError) {
-        this.logger.debug(`[E2B Mount] onMount hook error:`, hookError);
-        this.updateMountEntry(mountPath, filesystem, 'error', config, `Mount hook failed: ${String(hookError)}`);
-        return { success: false, mountPath, error: `Mount hook failed: ${String(hookError)}` };
-      }
-    }
-
     // Check if already mounted with matching config (e.g., when reconnecting to existing sandbox)
-    const existingMount = await this.checkExistingMount(mountPath, config);
+    const existingMount = await this.checkExistingMount(mountPath);
     if (existingMount === 'matching') {
-      this.logger.debug(`[E2B Mount] ${mountPath} is already mounted with correct config, skipping`);
-      this.updateMountEntry(mountPath, filesystem, 'mounted', config);
+      this.logger.debug(
+        `${LOG_PREFIX} Detected existing mount for ${filesystem.provider} ("${filesystem.id}") at "${mountPath}" with correct config, skipping`,
+      );
+      this.mounts.set(mountPath, { state: 'mounted', config });
       return { success: true, mountPath };
     } else if (existingMount === 'mismatched') {
       // Different config - unmount and re-mount
-      this.logger.debug(`[E2B Mount] Config mismatch, unmounting to re-mount with new config...`);
+      this.logger.debug(`${LOG_PREFIX} Config mismatch, unmounting to re-mount with new config...`);
       await this.unmount(mountPath);
     }
-    this.logger.debug(`[E2B Mount] Config type: ${config.type}`);
+    this.logger.debug(`${LOG_PREFIX} Config type: ${config.type}`);
 
     // Mark as mounting
-    this.updateMountEntry(mountPath, filesystem, 'mounting', config);
+    this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
 
     // Check if directory exists and is non-empty (would shadow existing files)
     try {
@@ -424,8 +251,8 @@ export class E2BSandbox extends BaseSandbox {
       );
       if (checkResult.stdout.trim() === 'non-empty') {
         const error = `Cannot mount at ${mountPath}: directory exists and is not empty. Mounting would hide existing files. Use a different path or empty the directory first.`;
-        this.logger.error(`[E2B Mount] ${error}`);
-        this.updateMountEntry(mountPath, filesystem, 'error', config, error);
+        this.logger.error(`${LOG_PREFIX} ${error}`);
+        this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
       }
     } catch {
@@ -435,41 +262,49 @@ export class E2BSandbox extends BaseSandbox {
     // Create mount directory with sudo (for paths outside home dir like /data)
     // Then chown to current user so mount works without issues
     try {
-      const mkdirResult = await this._sandbox.commands.run(
-        `sudo mkdir -p "${mountPath}" && sudo chown $(id -u):$(id -g) "${mountPath}"`,
-      );
-      this.logger.debug(`[E2B Mount] mkdir result:`, mkdirResult);
+      this.logger.debug(`${LOG_PREFIX} Creating mount directory for ${mountPath}...`);
+      const mkdirCommand = `sudo mkdir -p "${mountPath}" && sudo chown $(id -u):$(id -g) "${mountPath}"`;
+
+      this.logger.debug(`${LOG_PREFIX} Running command: ${mkdirCommand}`);
+      const mkdirResult = await this._sandbox.commands.run(mkdirCommand);
+
+      this.logger.debug(`${LOG_PREFIX} Created mount directory for mount path "${mountPath}":`, mkdirResult);
     } catch (mkdirError) {
-      this.logger.debug(`[E2B Mount] mkdir error:`, mkdirError);
-      this.updateMountEntry(mountPath, filesystem, 'error', config, String(mkdirError));
+      this.logger.debug(`${LOG_PREFIX} mkdir error for "${mountPath}":`, mkdirError);
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(mkdirError) });
       return { success: false, mountPath, error: String(mkdirError) };
     }
+
+    // Create mount context for mount operations
+    const mountCtx: MountContext = {
+      sandbox: this._sandbox,
+      logger: this.logger,
+    };
 
     try {
       switch (config.type) {
         case 's3':
-          this.logger.debug(`[E2B Mount] Calling mountS3 for ${mountPath}...`);
-          await this.mountS3(mountPath, config as E2BS3MountConfig);
-          this.logger.debug(`[E2B Mount] mountS3 completed for ${mountPath}`);
+          this.logger.debug(`${LOG_PREFIX} Mounting S3 bucket at ${mountPath}...`);
+          await mountS3(mountPath, config as E2BS3MountConfig, mountCtx);
+          this.logger.debug(`${LOG_PREFIX} Mounted S3 bucket at ${mountPath}`);
           break;
         case 'gcs':
-          this.logger.debug(`[E2B Mount] Calling mountGCS for ${mountPath}...`);
-          await this.mountGCS(mountPath, config as E2BGCSMountConfig);
-          this.logger.debug(`[E2B Mount] mountGCS completed for ${mountPath}`);
+          this.logger.debug(`${LOG_PREFIX} Mounting GCS bucket at ${mountPath}...`);
+          await mountGCS(mountPath, config as E2BGCSMountConfig, mountCtx);
+          this.logger.debug(`${LOG_PREFIX} Mounted GCS bucket at ${mountPath}`);
           break;
         case 'r2':
-          this.logger.debug(`[E2B Mount] Calling mountR2 for ${mountPath}...`);
-          await this.mountR2(mountPath, config as E2BR2MountConfig);
-          this.logger.debug(`[E2B Mount] mountR2 completed for ${mountPath}`);
+          this.logger.debug(`${LOG_PREFIX} Mounting R2 bucket at ${mountPath}...`);
+          await mountR2(mountPath, config as E2BR2MountConfig, mountCtx);
+          this.logger.debug(`${LOG_PREFIX} Mounted R2 bucket at ${mountPath}`);
           break;
         default:
-          this.updateMountEntry(
-            mountPath,
+          this.mounts.set(mountPath, {
             filesystem,
-            'unsupported',
+            state: 'unsupported',
             config,
-            `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
-          );
+            error: `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
+          });
           return {
             success: false,
             mountPath,
@@ -477,13 +312,16 @@ export class E2BSandbox extends BaseSandbox {
           };
       }
     } catch (error) {
-      this.logger.error(`[E2B Mount] Mount error for ${mountPath}:`, error);
-      this.updateMountEntry(mountPath, filesystem, 'error', config, String(error));
+      this.logger.error(
+        `${LOG_PREFIX} Error mounting "${filesystem.provider}" (${filesystem.id}) at "${mountPath}":`,
+        error,
+      );
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(error) });
 
       // Clean up the directory we created since mount failed
       try {
         await this._sandbox!.commands.run(`sudo rmdir "${mountPath}" 2>/dev/null || true`);
-        this.logger.debug(`[E2B Mount] Cleaned up directory after failed mount: ${mountPath}`);
+        this.logger.debug(`${LOG_PREFIX} Cleaned up directory after failed mount: ${mountPath}`);
       } catch {
         // Ignore cleanup errors
       }
@@ -492,12 +330,12 @@ export class E2BSandbox extends BaseSandbox {
     }
 
     // Mark as mounted
-    this.updateMountEntry(mountPath, filesystem, 'mounted', config);
+    this.mounts.set(mountPath, { state: 'mounted', config });
 
     // Write marker file so we can detect config changes on reconnect
-    await this.writeMarkerFile(mountPath, config);
+    await this.writeMarkerFile(mountPath);
 
-    this.logger.debug(`[E2B Mount] Successfully mounted ${mountPath}`);
+    this.logger.debug(`${LOG_PREFIX} Mounted ${mountPath}`);
     return { success: true, mountPath };
   }
 
@@ -510,7 +348,7 @@ export class E2BSandbox extends BaseSandbox {
     let hash = 0;
     for (let i = 0; i < mountPath.length; i++) {
       const char = mountPath.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32bit integer
     }
     return `mount-${Math.abs(hash).toString(36)}`;
@@ -521,18 +359,21 @@ export class E2BSandbox extends BaseSandbox {
    * Stores both the mount path and config hash in the file.
    * Format: path|configHash
    */
-  private async writeMarkerFile(mountPath: string, config: E2BMountConfig): Promise<void> {
+  private async writeMarkerFile(mountPath: string): Promise<void> {
     if (!this._sandbox) return;
+
+    const entry = this.mounts.get(mountPath);
+    if (!entry?.configHash) return;
 
     const filename = this.markerFilename(mountPath);
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
-    const markerContent = `${mountPath}|${this.hashConfig(config)}`;
+    const markerContent = `${mountPath}|${entry.configHash}`;
     try {
       await this._sandbox.commands.run('mkdir -p /tmp/.mastra-mounts');
       await this._sandbox.files.write(markerPath, markerContent);
     } catch {
       // Non-fatal - marker is just for optimization
-      this.logger.debug(`[E2B Mount] Warning: Could not write marker file at ${markerPath}`);
+      this.logger.debug(`${LOG_PREFIX} Warning: Could not write marker file at ${markerPath}`);
     }
   }
 
@@ -544,7 +385,7 @@ export class E2BSandbox extends BaseSandbox {
       throw new SandboxNotReadyError(this.id);
     }
 
-    this.logger.debug(`[E2B Mount] Unmounting ${mountPath}...`);
+    this.logger.debug(`${LOG_PREFIX} Unmounting ${mountPath}...`);
 
     try {
       // Use fusermount for FUSE mounts, fall back to umount
@@ -552,15 +393,15 @@ export class E2BSandbox extends BaseSandbox {
         `sudo fusermount -u "${mountPath}" 2>/dev/null || sudo umount "${mountPath}"`,
       );
       if (result.exitCode !== 0) {
-        this.logger.debug(`[E2B Mount] Unmount warning: ${result.stderr || result.stdout}`);
+        this.logger.debug(`${LOG_PREFIX} Unmount warning: ${result.stderr || result.stdout}`);
       }
     } catch (error) {
-      this.logger.debug(`[E2B Mount] Unmount error:`, error);
+      this.logger.debug(`${LOG_PREFIX} Unmount error:`, error);
       // Try lazy unmount as last resort
       await this._sandbox.commands.run(`sudo umount -l "${mountPath}" 2>/dev/null || true`);
     }
 
-    this._mounts.delete(mountPath);
+    this.mounts.delete(mountPath);
 
     // Clean up marker file
     const filename = this.markerFilename(mountPath);
@@ -571,10 +412,10 @@ export class E2BSandbox extends BaseSandbox {
     // Use sudo since mount directories outside home (like /data) were created with sudo
     const rmdirResult = await this._sandbox.commands.run(`sudo rmdir "${mountPath}" 2>&1`);
     if (rmdirResult.exitCode === 0) {
-      this.logger.debug(`[E2B Mount] Unmounted and removed ${mountPath}`);
+      this.logger.debug(`${LOG_PREFIX} Unmounted and removed ${mountPath}`);
     } else {
       this.logger.debug(
-        `[E2B Mount] Unmounted ${mountPath} (directory not removed: ${rmdirResult.stderr?.trim() || 'not empty'})`,
+        `${LOG_PREFIX} Unmounted ${mountPath} (directory not removed: ${rmdirResult.stderr?.trim() || 'not empty'})`,
       );
     }
   }
@@ -583,7 +424,7 @@ export class E2BSandbox extends BaseSandbox {
    * Get list of current mounts in the sandbox.
    */
   async getMounts(): Promise<Array<{ path: string; filesystem: string }>> {
-    return Array.from(this._mounts.entries()).map(([path, { filesystem }]) => ({
+    return Array.from(this.mounts.entries).map(([path, { filesystem }]) => ({
       path,
       filesystem: filesystem.provider,
     }));
@@ -599,7 +440,7 @@ export class E2BSandbox extends BaseSandbox {
       throw new SandboxNotReadyError(this.id);
     }
 
-    this.logger.debug(`[E2B Mount] Reconciling mounts. Expected paths:`, expectedMountPaths);
+    this.logger.debug(`${LOG_PREFIX} Reconciling mounts. Expected paths:`, expectedMountPaths);
 
     // Get current FUSE mounts in the sandbox
     const mountsResult = await this._sandbox.commands.run(
@@ -610,31 +451,27 @@ export class E2BSandbox extends BaseSandbox {
       .split('\n')
       .filter(p => p.length > 0);
 
-    this.logger.debug(`[E2B Mount] Current FUSE mounts in sandbox:`, currentMounts);
+    this.logger.debug(`${LOG_PREFIX} Current FUSE mounts in sandbox:`, currentMounts);
 
     // Find mounts that exist but shouldn't
     const staleMounts = currentMounts.filter(path => !expectedMountPaths.includes(path));
 
     for (const stalePath of staleMounts) {
-      this.logger.debug(`[E2B Mount] Found stale FUSE mount at ${stalePath}, unmounting...`);
+      this.logger.debug(`${LOG_PREFIX} Found stale FUSE mount at ${stalePath}, unmounting...`);
       await this.unmount(stalePath);
     }
 
     // Also clean up orphaned marker files and empty directories from failed mounts
     // Marker files store: path|configHash
     try {
-      const markersResult = await this._sandbox.commands.run(
-        `ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""`,
-      );
+      const markersResult = await this._sandbox.commands.run(`ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""`);
       const markerFiles = markersResult.stdout
         .trim()
         .split('\n')
         .filter(f => f.length > 0 && f.startsWith('mount-'));
 
       // Get the expected marker filenames for comparison
-      const expectedMarkerFiles = new Set(
-        expectedMountPaths.map(p => this.markerFilename(p)),
-      );
+      const expectedMarkerFiles = new Set(expectedMountPaths.map(p => this.markerFilename(p)));
 
       for (const markerFile of markerFiles) {
         // If this marker file doesn't correspond to an expected mount path, clean it up
@@ -649,7 +486,7 @@ export class E2BSandbox extends BaseSandbox {
           if (mountPath) {
             // Only clean up if not currently FUSE mounted
             if (!currentMounts.includes(mountPath)) {
-              this.logger.debug(`[E2B Mount] Cleaning up orphaned marker and directory for ${mountPath}`);
+              this.logger.debug(`${LOG_PREFIX} Cleaning up orphaned marker and directory for ${mountPath}`);
 
               // Remove marker file
               await this._sandbox.commands.run(`rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`);
@@ -659,14 +496,14 @@ export class E2BSandbox extends BaseSandbox {
             }
           } else {
             // Malformed marker file - just delete it
-            this.logger.debug(`[E2B Mount] Removing malformed marker file: ${markerFile}`);
+            this.logger.debug(`${LOG_PREFIX} Removing malformed marker file: ${markerFile}`);
             await this._sandbox.commands.run(`rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`);
           }
         }
       }
     } catch {
       // Ignore errors during orphan cleanup
-      this.logger.debug(`[E2B Mount] Error during orphan cleanup (non-fatal)`);
+      this.logger.debug(`${LOG_PREFIX} Error during orphan cleanup (non-fatal)`);
     }
   }
 
@@ -675,10 +512,7 @@ export class E2BSandbox extends BaseSandbox {
    *
    * @returns 'not_mounted' | 'matching' | 'mismatched'
    */
-  private async checkExistingMount(
-    mountPath: string,
-    config: E2BMountConfig,
-  ): Promise<'not_mounted' | 'matching' | 'mismatched'> {
+  private async checkExistingMount(mountPath: string): Promise<'not_mounted' | 'matching' | 'mismatched'> {
     if (!this._sandbox) throw new SandboxNotReadyError(this.id);
 
     // Check if path is a mount point
@@ -691,9 +525,14 @@ export class E2BSandbox extends BaseSandbox {
     }
 
     // Path is mounted - check if config matches via marker file
+    const entry = this.mounts.get(mountPath);
+    const expectedHash = entry?.configHash;
+    if (!expectedHash) {
+      return 'mismatched'; // No hash to compare against
+    }
+
     const filename = this.markerFilename(mountPath);
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
-    const expectedHash = this.hashConfig(config);
 
     try {
       const markerResult = await this._sandbox.commands.run(`cat "${markerPath}" 2>/dev/null || echo ""`);
@@ -703,7 +542,7 @@ export class E2BSandbox extends BaseSandbox {
       const [storedPath, storedHash] = markerContent.split('|');
 
       this.logger.debug(
-        `[E2B Mount] Marker check - stored: "${storedPath}|${storedHash}", expected: "${mountPath}|${expectedHash}"`,
+        `${LOG_PREFIX} Marker check - stored: "${storedPath}|${storedHash}", expected: "${mountPath}|${expectedHash}"`,
       );
 
       if (storedPath === mountPath && storedHash === expectedHash) {
@@ -714,183 +553,6 @@ export class E2BSandbox extends BaseSandbox {
     }
 
     return 'mismatched';
-  }
-
-  private async mountS3(mountPath: string, config: E2BS3MountConfig): Promise<void> {
-    if (!this._sandbox) throw new SandboxNotReadyError(this.id);
-
-    // Check if s3fs is installed
-    const checkResult = await this._sandbox.commands.run('which s3fs || echo "not found"');
-    if (checkResult.stdout.includes('not found')) {
-      // If using a custom template without mount deps, try to install at runtime
-      this.logger.warn('[E2B Mount] s3fs not found, attempting runtime installation...');
-      this.logger.info('[E2B Mount] Tip: For faster startup, use createMountableTemplate() to pre-install s3fs');
-
-      await this._sandbox.commands.run('sudo apt-get update 2>&1', { timeoutMs: 60000 });
-
-      const installResult = await this._sandbox.commands.run(
-        'sudo apt-get install -y s3fs fuse 2>&1 || sudo apt-get install -y s3fs-fuse fuse 2>&1',
-        { timeoutMs: 120000 },
-      );
-
-      if (installResult.exitCode !== 0) {
-        throw new Error(
-          `Failed to install s3fs. ` +
-            `For S3 mounting, your template needs s3fs and fuse packages.\n\n` +
-            `Option 1: Use createMountableTemplate() helper:\n` +
-            `  import { E2BSandbox, createMountableTemplate } from '@mastra/e2b';\n` +
-            `  const sandbox = new E2BSandbox({ template: createMountableTemplate() });\n\n` +
-            `Option 2: Customize the base template:\n` +
-            `  new E2BSandbox({ template: base => base.aptInstall(['your-packages']) })\n\n` +
-            `Error details: ${installResult.stderr || installResult.stdout}`,
-        );
-      }
-    }
-
-    // Get user's uid/gid for proper file ownership
-    const idResult = await this._sandbox.commands.run('id -u && id -g');
-    const [uid, gid] = idResult.stdout.trim().split('\n');
-
-    // Determine if we have credentials or using public bucket mode
-    const hasCredentials = config.accessKeyId && config.secretAccessKey;
-    const credentialsPath = '/tmp/.passwd-s3fs';
-
-    // S3-compatible services (R2, MinIO, etc.) require credentials
-    // public_bucket=1 only works for truly public AWS S3 buckets
-    if (!hasCredentials && config.endpoint) {
-      throw new Error(
-        `S3-compatible storage (detected endpoint: ${config.endpoint}) requires credentials. ` +
-          `The public_bucket option only works for AWS S3 public buckets, not R2, MinIO, etc.`,
-      );
-    }
-
-    if (hasCredentials) {
-      // Write credentials file (remove old one first to avoid permission issues)
-      const credentialsContent = `${config.accessKeyId}:${config.secretAccessKey}`;
-      await this._sandbox.commands.run(`sudo rm -f ${credentialsPath}`);
-      await this._sandbox.files.write(credentialsPath, credentialsContent);
-      await this._sandbox.commands.run(`chmod 600 ${credentialsPath}`);
-    }
-
-    // Build mount options
-    const mountOptions: string[] = [];
-
-    if (hasCredentials) {
-      mountOptions.push(`passwd_file=${credentialsPath}`);
-    } else {
-      // Public bucket mode - read-only access without credentials
-      mountOptions.push('public_bucket=1');
-      this.logger.debug('[E2B Mount] No credentials provided, mounting as public bucket (read-only)');
-    }
-
-    mountOptions.push('allow_other'); // Allow non-root users to access the mount
-
-    // Set uid/gid so mounted files are owned by user, not root
-    if (uid && gid) {
-      mountOptions.push(`uid=${uid}`, `gid=${gid}`);
-    }
-
-    if (config.endpoint) {
-      // For S3-compatible storage (MinIO, R2, etc.)
-      const endpoint = config.endpoint.replace(/\/$/, '');
-      mountOptions.push(`url=${endpoint}`, 'use_path_request_style', 'sigv4', 'nomultipart');
-    }
-
-    // Mount with sudo (required for /dev/fuse access)
-    const mountCmd = `sudo s3fs ${config.bucket} ${mountPath} -o ${mountOptions.join(' -o ')}`;
-    this.logger.debug('[E2B Mount] Mounting S3:', hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
-
-    try {
-      const result = await this._sandbox.commands.run(mountCmd);
-      this.logger.debug(`[E2B Mount] s3fs result:`, {
-        exitCode: result.exitCode,
-        stdout: result.stdout,
-        stderr: result.stderr,
-      });
-      if (result.exitCode !== 0) {
-        throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
-      }
-    } catch (error: unknown) {
-      const errorObj = error as { result?: { exitCode: number; stdout: string; stderr: string } };
-      const stderr = errorObj.result?.stderr || '';
-      const stdout = errorObj.result?.stdout || '';
-      this.logger.error(`[E2B Mount] s3fs error:`, { stderr, stdout, error: String(error) });
-      throw new Error(`Failed to mount S3 bucket: ${stderr || stdout || error}`);
-    }
-  }
-
-  private async mountGCS(mountPath: string, config: E2BGCSMountConfig): Promise<void> {
-    if (!this._sandbox) throw new SandboxNotReadyError(this.id);
-
-    // Install gcsfuse if not present
-    const checkResult = await this._sandbox.commands.run('which gcsfuse || echo "not found"');
-    if (checkResult.stdout.includes('not found')) {
-      await this._sandbox.commands.run(
-        'echo "deb https://packages.cloud.google.com/apt gcsfuse-jammy main" | tee /etc/apt/sources.list.d/gcsfuse.list && ' +
-          'curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - && ' +
-          'apt-get update && apt-get install -y gcsfuse',
-      );
-    }
-
-    // Get user's uid/gid for proper file ownership
-    const idResult = await this._sandbox.commands.run('id -u && id -g');
-    const [uid, gid] = idResult.stdout.trim().split('\n');
-
-    // Build mount options
-    const mountOptions: string[] = [];
-
-    // Set uid/gid so mounted files are owned by user, not root
-    if (uid && gid) {
-      mountOptions.push(`uid=${uid}`, `gid=${gid}`);
-    }
-
-    const hasCredentials = !!config.serviceAccountKey;
-    let mountCmd: string;
-
-    if (hasCredentials) {
-      // Write service account key
-      const keyPath = '/tmp/gcs-key.json';
-      await this._sandbox.commands.run(`sudo rm -f ${keyPath}`);
-      await this._sandbox.files.write(keyPath, config.serviceAccountKey!);
-      await this._sandbox.commands.run(`chmod 600 ${keyPath}`);
-
-      // Mount with credentials
-      const optionsStr = mountOptions.length > 0 ? `-o ${mountOptions.join(' -o ')}` : '';
-      mountCmd = `GOOGLE_APPLICATION_CREDENTIALS=${keyPath} gcsfuse ${optionsStr} ${config.bucket} ${mountPath}`;
-    } else {
-      // Public bucket mode - read-only access without credentials
-      mountOptions.push('anonymous_access');
-      this.logger.debug('[E2B Mount] No credentials provided, mounting GCS as public bucket (read-only)');
-
-      const optionsStr = mountOptions.length > 0 ? `-o ${mountOptions.join(' -o ')}` : '';
-      mountCmd = `gcsfuse ${optionsStr} ${config.bucket} ${mountPath}`;
-    }
-
-    this.logger.debug('[E2B Mount] Mounting GCS:', mountCmd);
-
-    const result = await this._sandbox.commands.run(mountCmd);
-    this.logger.debug(`[E2B Mount] gcsfuse result:`, {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to mount GCS bucket: ${result.stderr || result.stdout}`);
-    }
-  }
-
-  private async mountR2(mountPath: string, config: E2BR2MountConfig): Promise<void> {
-    // R2 is S3-compatible, use s3fs with R2 endpoint
-    const s3Config: E2BS3MountConfig = {
-      type: 's3',
-      bucket: config.bucket,
-      region: 'auto',
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-      endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
-    };
-
-    await this.mountS3(mountPath, s3Config);
   }
 
   // ---------------------------------------------------------------------------
@@ -916,29 +578,27 @@ export class E2BSandbox extends BaseSandbox {
         this._sandbox = existingSandbox;
         this._createdAt = new Date();
         this._status = 'running';
-        this.logger.debug(`[E2BSandbox] Reconnected to existing sandbox for: ${this.id}`);
+        this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
 
         // Clean up stale mounts from previous config, then mount pending
-        const expectedPaths = Array.from(this._mounts.keys()).filter(
-          path => this._mounts.get(path)?.sandboxMount !== false,
-        );
-        this.logger.debug(`[E2BSandbox] Running mount reconciliation...`);
+        const expectedPaths = Array.from(this.mounts.entries.keys());
+        this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
         await this.reconcileMounts(expectedPaths);
-        this.logger.debug(`[E2BSandbox] Mount reconciliation complete, mounting pending filesystems...`);
-        await this.mountPending();
+        this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete, mounting pending filesystems...`);
+        await this.mounts.processPending((fs, path) => this.mount(fs, path));
         return;
       }
 
       // If template preparation failed earlier, retry now
       let resolvedTemplateId = templateId;
       if (!resolvedTemplateId) {
-        this.logger.debug(`[E2BSandbox] Template preparation failed earlier, retrying...`);
+        this.logger.debug(`${LOG_PREFIX} Template preparation failed earlier, retrying...`);
         resolvedTemplateId = await this.resolveTemplate();
       }
 
       // Create a new sandbox with our logical ID in metadata
       // Using betaCreate with autoPause so sandbox pauses on timeout instead of being destroyed
-      this.logger.debug(`[E2BSandbox] Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
+      this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
 
       try {
         this._sandbox = await Sandbox.betaCreate(resolvedTemplateId, {
@@ -954,11 +614,11 @@ export class E2BSandbox extends BaseSandbox {
         // If template not found (404), rebuild it and retry
         const errorStr = String(createError);
         if (errorStr.includes('404') && errorStr.includes('not found') && !this.templateSpec) {
-          this.logger.debug(`[E2BSandbox] Template not found, rebuilding: ${templateId}`);
+          this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${templateId}`);
           this._resolvedTemplateId = undefined; // Clear cached ID to force rebuild
           const rebuiltTemplateId = await this.buildDefaultTemplate();
 
-          this.logger.debug(`[E2BSandbox] Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
+          this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
           this._sandbox = await Sandbox.betaCreate(rebuiltTemplateId, {
             autoPause: true,
             metadata: {
@@ -973,12 +633,12 @@ export class E2BSandbox extends BaseSandbox {
         }
       }
 
-      this.logger.debug(`[E2BSandbox] Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
+      this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
       this._createdAt = new Date();
       this._status = 'running';
 
       // Mount any pending filesystems
-      await this.mountPending();
+      await this.mounts.processPending((fs, path) => this.mount(fs, path));
     } catch (error) {
       this._status = 'error';
       throw error;
@@ -990,10 +650,10 @@ export class E2BSandbox extends BaseSandbox {
    */
   private async buildDefaultTemplate(): Promise<string> {
     const { template, id } = createDefaultMountableTemplate();
-    this.logger.debug(`[E2BSandbox] Building default mountable template: ${id}...`);
+    this.logger.debug(`${LOG_PREFIX} Building default mountable template: ${id}...`);
     const buildResult = await Template.build(template as TemplateClass, id);
     this._resolvedTemplateId = buildResult.templateId;
-    this.logger.debug(`[E2BSandbox] Template built: ${buildResult.templateId}`);
+    this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
     return buildResult.templateId;
   }
 
@@ -1018,16 +678,16 @@ export class E2BSandbox extends BaseSandbox {
       // Check if template already exists (cached from previous runs)
       const exists = await Template.exists(id);
       if (exists) {
-        this.logger.debug(`[E2BSandbox] Using cached mountable template: ${id}`);
+        this.logger.debug(`${LOG_PREFIX} Using cached mountable template: ${id}`);
         this._resolvedTemplateId = id;
         return id;
       }
 
       // Build the template (first time only)
-      this.logger.debug(`[E2BSandbox] Building default mountable template: ${id}...`);
+      this.logger.debug(`${LOG_PREFIX} Building default mountable template: ${id}...`);
       const buildResult = await Template.build(template as TemplateClass, id);
       this._resolvedTemplateId = buildResult.templateId;
-      this.logger.debug(`[E2BSandbox] Template built and cached: ${buildResult.templateId}`);
+      this.logger.debug(`${LOG_PREFIX} Template built and cached: ${buildResult.templateId}`);
       return buildResult.templateId;
     }
 
@@ -1054,10 +714,10 @@ export class E2BSandbox extends BaseSandbox {
     }
 
     // Build the template
-    this.logger.debug(`[E2BSandbox] Building custom template: ${templateName}...`);
+    this.logger.debug(`${LOG_PREFIX} Building custom template: ${templateName}...`);
     const buildResult = await Template.build(template as TemplateClass, templateName);
     this._resolvedTemplateId = buildResult.templateId;
-    this.logger.debug(`[E2BSandbox] Template built: ${buildResult.templateId}`);
+    this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
 
     return buildResult.templateId;
   }
@@ -1078,18 +738,18 @@ export class E2BSandbox extends BaseSandbox {
 
       const sandboxes = await paginator.nextItems();
 
-      this.logger.debug('[findExistingSandbox] sandboxes:', sandboxes);
+      this.logger.debug(`${LOG_PREFIX} sandboxes:`, sandboxes);
 
       // Sandbox.list only returns running/paused sandboxes, so no need to filter
       if (sandboxes.length > 0) {
         const existingSandbox = sandboxes[0]!;
         this.logger.debug(
-          `[E2BSandbox] Found existing sandbox for ${this.id}: ${existingSandbox.sandboxId} (state: ${existingSandbox.state})`,
+          `${LOG_PREFIX} Found existing sandbox for ${this.id}: ${existingSandbox.sandboxId} (state: ${existingSandbox.state})`,
         );
         return await Sandbox.connect(existingSandbox.sandboxId);
       }
     } catch (e) {
-      this.logger.debug(`[E2BSandbox] Error querying for existing sandbox:`, e);
+      this.logger.debug(`${LOG_PREFIX} Error querying for existing sandbox:`, e);
       // Continue to create new sandbox
     }
 
@@ -1098,7 +758,7 @@ export class E2BSandbox extends BaseSandbox {
 
   async stop(): Promise<void> {
     // Unmount all filesystems before stopping
-    for (const mountPath of this._mounts.keys()) {
+    for (const mountPath of this.mounts.entries.keys()) {
       await this.unmount(mountPath);
     }
 
@@ -1108,7 +768,7 @@ export class E2BSandbox extends BaseSandbox {
 
   async destroy(): Promise<void> {
     // Unmount all filesystems
-    for (const mountPath of this._mounts.keys()) {
+    for (const mountPath of this.mounts.entries.keys()) {
       try {
         await this.unmount(mountPath);
       } catch {
@@ -1125,7 +785,7 @@ export class E2BSandbox extends BaseSandbox {
     }
 
     this._sandbox = null;
-    this._mounts.clear();
+    this.mounts.clear();
     this._status = 'destroyed';
   }
 
@@ -1140,7 +800,7 @@ export class E2BSandbox extends BaseSandbox {
       provider: this.provider,
       status: this._status,
       createdAt: this._createdAt ?? new Date(),
-      mounts: Array.from(this._mounts.entries()).map(([path, { filesystem }]) => ({
+      mounts: Array.from(this.mounts.entries).map(([path, { filesystem }]) => ({
         path,
         filesystem: filesystem.provider,
       })),
@@ -1194,13 +854,13 @@ export class E2BSandbox extends BaseSandbox {
     args: string[] = [],
     options: ExecuteCommandOptions & { _isRetry?: boolean } = {},
   ): Promise<CommandResult> {
-    this.logger.debug(`[E2B] Executing: ${command} ${args.join(' ')}`, options);
+    this.logger.debug(`${LOG_PREFIX} Executing: ${command} ${args.join(' ')}`, options);
     const sandbox = await this.ensureSandbox();
 
     const startTime = Date.now();
     const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
 
-    this.logger.debug(`[E2B] Executing: ${fullCommand}`);
+    this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`);
 
     try {
       // Convert ProcessEnv to Record<string, string> by filtering out undefined values
@@ -1220,9 +880,9 @@ export class E2BSandbox extends BaseSandbox {
 
       const executionTimeMs = Date.now() - startTime;
 
-      this.logger.debug(`[E2B] Exit code: ${result.exitCode} (${executionTimeMs}ms)`);
-      if (result.stdout) this.logger.debug(`[E2B] stdout:\n${result.stdout}`);
-      if (result.stderr) this.logger.debug(`[E2B] stderr:\n${result.stderr}`);
+      this.logger.debug(`${LOG_PREFIX} Exit code: ${result.exitCode} (${executionTimeMs}ms)`);
+      if (result.stdout) this.logger.debug(`${LOG_PREFIX} stdout:\n${result.stdout}`);
+      if (result.stderr) this.logger.debug(`${LOG_PREFIX} stderr:\n${result.stderr}`);
 
       return {
         success: result.exitCode === 0,
@@ -1248,9 +908,9 @@ export class E2BSandbox extends BaseSandbox {
       const stderr = errorObj.result?.stderr || (error instanceof Error ? error.message : String(error));
       const exitCode = errorObj.result?.exitCode ?? 1;
 
-      this.logger.debug(`[E2B] Exit code: ${exitCode} (${executionTimeMs}ms) [error]`);
-      if (stdout) this.logger.debug(`[E2B] stdout:\n${stdout}`);
-      if (stderr) this.logger.debug(`[E2B] stderr:\n${stderr}`);
+      this.logger.debug(`${LOG_PREFIX} Exit code: ${exitCode} (${executionTimeMs}ms) [error]`);
+      if (stdout) this.logger.debug(`${LOG_PREFIX} stdout:\n${stdout}`);
+      if (stderr) this.logger.debug(`${LOG_PREFIX} stderr:\n${stderr}`);
 
       return {
         success: false,

@@ -15,12 +15,12 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-
 import type { ProviderStatus } from '../lifecycle';
+import { IsolationUnavailableError } from './errors';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
-import type { WorkspaceSandbox, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
-import { IsolationUnavailableError } from './sandbox';
+import type { WorkspaceSandbox } from './sandbox';
+import type { SandboxInfo, ExecuteCommandOptions, CommandResult } from './types';
 
 interface ExecStreamingOptions extends Omit<SpawnOptions, 'timeout' | 'stdio'> {
   /** Timeout in ms - handled manually for custom exit code 124 */

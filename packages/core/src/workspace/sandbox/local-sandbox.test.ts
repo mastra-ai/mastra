@@ -4,9 +4,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { IsolationUnavailableError } from './errors';
 import { LocalSandbox } from './local-sandbox';
 import { detectIsolation, isIsolationAvailable, isSeatbeltAvailable, isBwrapAvailable } from './native-sandbox';
-import { IsolationUnavailableError } from './sandbox';
 
 describe('LocalSandbox', () => {
   let tempDir: string;

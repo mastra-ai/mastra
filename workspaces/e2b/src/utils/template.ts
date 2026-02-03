@@ -3,7 +3,7 @@
  *
  * Helper functions for creating and managing E2B sandbox templates.
  */
-
+import { createHash } from 'node:crypto';
 import { Template } from 'e2b';
 import type { TemplateBuilder } from 'e2b';
 
@@ -55,6 +55,8 @@ export interface MountableTemplateResult {
   template: TemplateBuilder;
   /** Deterministic template ID for caching */
   id: string;
+  /** List of apt packages installed in the template */
+  aptPackages: string[];
 }
 
 /**
@@ -62,12 +64,6 @@ export interface MountableTemplateResult {
  * Increment this when changing the default template dependencies.
  */
 export const MOUNTABLE_TEMPLATE_VERSION = 'v1';
-
-/**
- * Default template ID for mountable templates.
- * This ID is deterministic so templates can be cached and reused.
- */
-export const DEFAULT_MOUNTABLE_TEMPLATE_ID = `mastra-mountable-${MOUNTABLE_TEMPLATE_VERSION}`;
 
 /**
  * Create a base template with FUSE mounting dependencies pre-installed.
@@ -100,18 +96,22 @@ export const DEFAULT_MOUNTABLE_TEMPLATE_ID = `mastra-mountable-${MOUNTABLE_TEMPL
  * @returns Object with template builder and deterministic ID
  */
 export function createDefaultMountableTemplate(): MountableTemplateResult {
-  // Include all FUSE mount dependencies for S3, GCS, and R2
-  // This covers all current cloud filesystem providers
-  // TODO: Revisit when more FS providers are added - may want hash-based template IDs
-  const template = Template()
-    .fromTemplate('base')
-    // Install s3fs and fuse for S3/R2 mounting
-    .aptInstall(['s3fs', 'fuse', 'curl']);
+  const aptPackages = ['s3fs', 'fuse'];
+  const config = { aptPackages };
+
+  const hash = createHash('sha256')
+    .update(JSON.stringify(config, Object.keys(config).sort()))
+    .digest('hex')
+    .slice(0, 16);
+
+  const template = Template().fromTemplate('base').aptInstall(aptPackages);
+
   // Note: gcsfuse requires adding Google's apt repo which can be flaky
   // For now, we'll install it at mount time if needed
 
   return {
     template,
-    id: DEFAULT_MOUNTABLE_TEMPLATE_ID,
+    id: `mastra-${hash}`,
+    aptPackages,
   };
 }

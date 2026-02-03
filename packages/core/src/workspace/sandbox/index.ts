@@ -1,4 +1,6 @@
+export * from './types';
+export * from './errors';
+export * from './mount-manager';
 export * from './sandbox';
-export { BaseSandbox } from './sandbox';
 export * from './local-sandbox';
 export * from './native-sandbox';
