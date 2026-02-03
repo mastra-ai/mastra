@@ -65,11 +65,11 @@ export async function generateManifest(routes: RouteInfo[], siteDir: string, out
     try {
       const content = await fs.readFile(sourceFile, 'utf-8')
       const frontmatter = extractFrontMatter(content)
-      const packages = getPackageNames(frontmatter)
+      let packages = getPackageNames(frontmatter)
 
+      // If no packages field, assign to "general" category for docs like migrations
       if (packages.length === 0) {
-        // Skip pages without packages field
-        continue
+        packages = ['general']
       }
 
       const category = getCategoryFromRoute(route)

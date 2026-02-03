@@ -86,13 +86,20 @@ async function copyLlmsTxtFiles() {
 
   // Load manifest
   const manifest = await loadManifest();
-  const allEntries = Object.values(manifest.packages).flat();
+
+  // Collect unique entries (since same entry can appear in multiple packages)
+  const uniqueEntries = new Map<string, ManifestEntry>();
+  for (const entries of Object.values(manifest.packages)) {
+    for (const entry of entries) {
+      uniqueEntries.set(entry.path, entry);
+    }
+  }
 
   let copiedCount = 0;
   const errors: string[] = [];
 
-  // Copy all files listed in the manifest
-  for (const entry of allEntries) {
+  // Copy all unique files from the manifest
+  for (const entry of uniqueEntries.values()) {
     const sourcePath = path.join(BUILD_DIR, entry.path);
     const destRelativePath = getDestinationPath(entry.path);
     const destPath = path.join(DOCS_DEST, destRelativePath);
