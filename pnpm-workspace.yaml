@@ -6,6 +6,7 @@ packages:
   - stores/*
   - voice/*
   - workflows/*
+  - workspaces/*
   - server-adapters/*
   - pubsub/*
   - client-sdks/*
