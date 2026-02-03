@@ -373,14 +373,6 @@ export class Mastra<
   }
 
   /**
-   * Gets the gateways
-   * @internal
-   */
-  public getGateways() {
-    return this.#gateways || {};
-  }
-
-  /**
    * Gets the stored agents cache
    * @internal
    */
