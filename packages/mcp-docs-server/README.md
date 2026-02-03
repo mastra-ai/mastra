@@ -1,61 +1,75 @@
 # @mastra/mcp-docs-server
 
-The `@mastra/mcp-docs-server` package provides direct access to Mastra’s full knowledge base via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex or any tool that supports MCP.
-
-These tools are designed to help agents retrieve precise, task-specific information — whether you're adding a feature to an agent, scaffolding a new project, or exploring how something works.
+Access Mastra's documentation via [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). Works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex, or any MCP-compatible tool.
 
 ## Usage
 
-Follow the [official installation](https://mastra.ai/docs/getting-started/mcp-docs-server) instructions to add the MCP server to your agent.
+Follow the [official installation](https://mastra.ai/docs/getting-started/mcp-docs-server) instructions.
 
 ## Tools
 
-### Documentation Tool (`mastraDocs`)
+### `mastraDocs`
 
-- Get Mastra.ai documentation by requesting specific paths
-- Explore both general guides and API reference documentation
-- Automatically lists available paths when a requested path isn't found
+Fetch documentation from mastra.ai by path. Supports guides and API references.
 
-### Migration Tool (`mastraMigration`)
+### `mastraMigration`
 
-- Get migration guidance for Mastra version upgrades and breaking changes
-- Explore all available migration guides (e.g., upgrade-to-v1/, agentnetwork)
-- List section headers to see what breaking changes are covered
-- Fetch specific sections or entire migration guides
-- Search across all migration guides by keywords
+Navigate migration guides for version upgrades. Supports directory browsing, section listing, and keyword search.
 
-### Embedded Documentation Tools
+Read docs from installed `@mastra/*` packages in `node_modules`. All tools require `projectPath` parameter.
 
-Read documentation directly from installed `@mastra/*` packages in your `node_modules`:
+### `getMastraHelp`
 
-> **Important**: All embedded docs tools require a `projectPath` parameter - the absolute path to your project directory (e.g., `"/Users/you/my-project"`). This ensures the tools can locate your `node_modules` directory.
+Entry point showing all available documentation tools and recommended workflows.
 
-#### `listInstalledMastraPackages`
+### `listMastraPackages`
 
-- Lists all installed `@mastra/*` packages that have embedded documentation
-- Use this to discover which packages are available in your project
-- **Required parameter**: `projectPath` - absolute path to your project directory
+List installed `@mastra/*` packages with embedded documentation.
 
-#### `readMastraSourceMap`
+### `getMastraExports`
 
-- Reads the SOURCE_MAP.json for a package to discover all exported symbols
-- Shows each export with its type definition and implementation file
-- Supports filtering exports by name
+Explore package API surface - all classes, functions, types, and constants.
 
-#### `findMastraExport`
+### `getMastraExportDetails`
 
-- Finds detailed information about a specific export (function, class, type, etc.)
-- Returns the type definition file location and implementation code location
-- Useful for finding exactly where something is defined
+Get TypeScript type definitions and optionally implementation source code for a specific export.
 
-#### `readMastraEmbeddedDocs`
+### `readMastraDocs`
 
-- Reads embedded documentation markdown files from a package
-- Browse by topic (e.g., "agents", "workflows", "tools")
-- Lists available topics if no specific topic is provided
+Read topic-based guides and examples (agents, tools, workflows, memory, etc.).
 
-#### `searchMastraEmbeddedDocs`
+### `searchMastraDocs`
 
-- Full-text search across all embedded documentation in installed packages
-- Returns matching content with package and file context
-- Useful for finding information across multiple packages
+Full-text search across all embedded documentation.
+
+## Interactive Course
+
+### `startMastraCourse`
+
+Start or resume the interactive Mastra course. Requires email registration.
+
+### `getMastraCourseStatus`
+
+View course progress including completed lessons and steps.
+
+### `startMastraCourseLesson`
+
+Jump to a specific lesson by name.
+
+### `nextMastraCourseStep`
+
+Advance to the next step in the current lesson.
+
+### `clearMastraCourseHistory`
+
+Reset all course progress.
+
+## Prompts
+
+### `upgrade-to-v1`
+
+Guided migration workflow from Mastra v0.x to v1.0. Optionally focus on a specific area (agent, tools, workflows, etc.).
+
+### `migration-checklist`
+
+Comprehensive checklist of all breaking changes for v1.0 migration.
