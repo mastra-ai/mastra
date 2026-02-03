@@ -26,15 +26,21 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
-  TABLE_OBSERVATIONAL_MEMORY,
 } from '@mastra/core/storage';
+
+/**
+ * Local constant for the observational memory table name.
+ * Defined locally to avoid a static import that crashes on older @mastra/core
+ * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
+ */
+const OM_TABLE = 'mastra_observational_memory' as const;
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
 
 export class MemoryLibSQL extends MemoryStorage {
-  readonly supportsObservationalMemory = !!TABLE_OBSERVATIONAL_MEMORY;
+  readonly supportsObservationalMemory = true;
 
   #client: Client;
   #db: LibSQLDB;
@@ -50,10 +56,11 @@ export class MemoryLibSQL extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
-    if (TABLE_OBSERVATIONAL_MEMORY) {
+    const omSchema = (TABLE_SCHEMAS as Record<string, any>)[OM_TABLE];
+    if (omSchema) {
       await this.#db.createTable({
-        tableName: TABLE_OBSERVATIONAL_MEMORY,
-        schema: TABLE_SCHEMAS[TABLE_OBSERVATIONAL_MEMORY],
+        tableName: OM_TABLE,
+        schema: omSchema,
       });
     }
     // Add resourceId column for backwards compatibility
@@ -62,10 +69,10 @@ export class MemoryLibSQL extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
-    if (TABLE_OBSERVATIONAL_MEMORY) {
+    if (omSchema) {
       // Create index on lookupKey for efficient OM queries
       await this.#client.execute({
-        sql: `CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON "${TABLE_OBSERVATIONAL_MEMORY}" ("lookupKey")`,
+        sql: `CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON "${OM_TABLE}" ("lookupKey")`,
         args: [],
       });
     }
@@ -75,8 +82,8 @@ export class MemoryLibSQL extends MemoryStorage {
     await this.#db.deleteData({ tableName: TABLE_MESSAGES });
     await this.#db.deleteData({ tableName: TABLE_THREADS });
     await this.#db.deleteData({ tableName: TABLE_RESOURCES });
-    if (TABLE_OBSERVATIONAL_MEMORY) {
-      await this.#db.deleteData({ tableName: TABLE_OBSERVATIONAL_MEMORY });
+    if (OM_TABLE) {
+      await this.#db.deleteData({ tableName: OM_TABLE });
     }
   }
 
@@ -1231,7 +1238,7 @@ export class MemoryLibSQL extends MemoryStorage {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const result = await this.#client.execute({
         // Use generationCount DESC for reliable ordering (incremented for each new record)
-        sql: `SELECT * FROM "${TABLE_OBSERVATIONAL_MEMORY}" WHERE "lookupKey" = ? ORDER BY "generationCount" DESC LIMIT 1`,
+        sql: `SELECT * FROM "${OM_TABLE}" WHERE "lookupKey" = ? ORDER BY "generationCount" DESC LIMIT 1`,
         args: [lookupKey],
       });
       if (!result.rows || result.rows.length === 0) return null;
@@ -1258,7 +1265,7 @@ export class MemoryLibSQL extends MemoryStorage {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const result = await this.#client.execute({
         // Use generationCount DESC for reliable ordering (incremented for each new record)
-        sql: `SELECT * FROM "${TABLE_OBSERVATIONAL_MEMORY}" WHERE "lookupKey" = ? ORDER BY "generationCount" DESC LIMIT ?`,
+        sql: `SELECT * FROM "${OM_TABLE}" WHERE "lookupKey" = ? ORDER BY "generationCount" DESC LIMIT ?`,
         args: [lookupKey, limit],
       });
       if (!result.rows) return [];
@@ -1302,7 +1309,7 @@ export class MemoryLibSQL extends MemoryStorage {
       };
 
       await this.#client.execute({
-        sql: `INSERT INTO "${TABLE_OBSERVATIONAL_MEMORY}" (
+        sql: `INSERT INTO "${OM_TABLE}" (
           id, "lookupKey", scope, "resourceId", "threadId",
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
@@ -1351,7 +1358,7 @@ export class MemoryLibSQL extends MemoryStorage {
       const now = new Date();
 
       const result = await this.#client.execute({
-        sql: `UPDATE "${TABLE_OBSERVATIONAL_MEMORY}" SET
+        sql: `UPDATE "${OM_TABLE}" SET
           "activeObservations" = ?,
           "lastObservedAt" = ?,
           "pendingMessageTokens" = 0,
@@ -1421,7 +1428,7 @@ export class MemoryLibSQL extends MemoryStorage {
       };
 
       await this.#client.execute({
-        sql: `INSERT INTO "${TABLE_OBSERVATIONAL_MEMORY}" (
+        sql: `INSERT INTO "${OM_TABLE}" (
           id, "lookupKey", scope, "resourceId", "threadId",
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
@@ -1468,7 +1475,7 @@ export class MemoryLibSQL extends MemoryStorage {
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
     try {
       const result = await this.#client.execute({
-        sql: `UPDATE "${TABLE_OBSERVATIONAL_MEMORY}" SET "isReflecting" = ?, "updatedAt" = ? WHERE id = ?`,
+        sql: `UPDATE "${OM_TABLE}" SET "isReflecting" = ?, "updatedAt" = ? WHERE id = ?`,
         args: [isReflecting, new Date().toISOString(), id],
       });
 
@@ -1500,7 +1507,7 @@ export class MemoryLibSQL extends MemoryStorage {
   async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
     try {
       const result = await this.#client.execute({
-        sql: `UPDATE "${TABLE_OBSERVATIONAL_MEMORY}" SET "isObserving" = ?, "updatedAt" = ? WHERE id = ?`,
+        sql: `UPDATE "${OM_TABLE}" SET "isObserving" = ?, "updatedAt" = ? WHERE id = ?`,
         args: [isObserving, new Date().toISOString(), id],
       });
 
@@ -1533,7 +1540,7 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       await this.#client.execute({
-        sql: `DELETE FROM "${TABLE_OBSERVATIONAL_MEMORY}" WHERE "lookupKey" = ?`,
+        sql: `DELETE FROM "${OM_TABLE}" WHERE "lookupKey" = ?`,
         args: [lookupKey],
       });
     } catch (error) {
@@ -1552,7 +1559,7 @@ export class MemoryLibSQL extends MemoryStorage {
   async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
     try {
       const result = await this.#client.execute({
-        sql: `UPDATE "${TABLE_OBSERVATIONAL_MEMORY}" SET 
+        sql: `UPDATE "${OM_TABLE}" SET 
           "pendingMessageTokens" = "pendingMessageTokens" + ?, 
           "updatedAt" = ? 
         WHERE id = ?`,

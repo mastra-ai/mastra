@@ -11,8 +11,14 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
-  TABLE_OBSERVATIONAL_MEMORY,
 } from '@mastra/core/storage';
+
+/**
+ * Local constant for the observational memory table name.
+ * Defined locally to avoid a static import that crashes on older @mastra/core
+ * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
+ */
+const OM_TABLE = 'mastra_observational_memory' as const;
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -30,7 +36,7 @@ import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { formatDateForMongoDB } from '../utils';
 
 export class MemoryStorageMongoDB extends MemoryStorage {
-  readonly supportsObservationalMemory = !!TABLE_OBSERVATIONAL_MEMORY;
+  readonly supportsObservationalMemory = true;
 
   #connector: MongoDBConnector;
   #skipDefaultIndexes?: boolean;
@@ -41,7 +47,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     TABLE_THREADS,
     TABLE_MESSAGES,
     TABLE_RESOURCES,
-    ...(TABLE_OBSERVATIONAL_MEMORY ? [TABLE_OBSERVATIONAL_MEMORY] : []),
+    OM_TABLE,
   ] as const;
 
   constructor(config: MongoDBDomainConfig) {
@@ -84,13 +90,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       { collection: TABLE_RESOURCES, keys: { createdAt: -1 } },
       { collection: TABLE_RESOURCES, keys: { updatedAt: -1 } },
       // Observational Memory collection indexes
-      ...(TABLE_OBSERVATIONAL_MEMORY
-        ? [
-            { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { id: 1 }, options: { unique: true } },
-            { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { lookupKey: 1 } },
-            { collection: TABLE_OBSERVATIONAL_MEMORY, keys: { lookupKey: 1, generationCount: -1 } },
-          ]
-        : []),
+      { collection: OM_TABLE, keys: { id: 1 }, options: { unique: true } },
+      { collection: OM_TABLE, keys: { lookupKey: 1 } },
+      { collection: OM_TABLE, keys: { lookupKey: 1, generationCount: -1 } },
     ];
   }
 
@@ -1007,7 +1009,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
-      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const collection = await this.getCollection(OM_TABLE);
       const doc = await collection.findOne({ lookupKey }, { sort: { generationCount: -1 } });
       if (!doc) return null;
       return this.parseOMDocument(doc);
@@ -1031,7 +1033,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   ): Promise<ObservationalMemoryRecord[]> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
-      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const collection = await this.getCollection(OM_TABLE);
       const docs = await collection.find({ lookupKey }).sort({ generationCount: -1 }).limit(limit).toArray();
       return docs.map((doc: any) => this.parseOMDocument(doc));
     } catch (error) {
@@ -1072,7 +1074,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         config: input.config,
       };
 
-      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const collection = await this.getCollection(OM_TABLE);
       await collection.insertOne({
         id,
         lookupKey,
@@ -1112,7 +1114,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
     try {
       const now = new Date();
-      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const collection = await this.getCollection(OM_TABLE);
       const safeTokenCount = Number.isFinite(input.tokenCount) && input.tokenCount >= 0 ? input.tokenCount : 0;
 
       const updateDoc: any = {
@@ -1182,7 +1184,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         metadata: input.currentRecord.metadata,
       };
 
-      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const collection = await this.getCollection(OM_TABLE);
       await collection.insertOne({
         id,
         lookupKey,
@@ -1222,7 +1224,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
     try {
-      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const collection = await this.getCollection(OM_TABLE);
       const result = await collection.updateOne({ id }, { $set: { isReflecting, updatedAt: new Date() } });
 
       if (result.matchedCount === 0) {
@@ -1252,7 +1254,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
     try {
-      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const collection = await this.getCollection(OM_TABLE);
       const result = await collection.updateOne({ id }, { $set: { isObserving, updatedAt: new Date() } });
 
       if (result.matchedCount === 0) {
@@ -1283,7 +1285,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
-      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const collection = await this.getCollection(OM_TABLE);
       await collection.deleteMany({ lookupKey });
     } catch (error) {
       throw new MastraError(
@@ -1300,7 +1302,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
     try {
-      const collection = await this.getCollection(TABLE_OBSERVATIONAL_MEMORY);
+      const collection = await this.getCollection(OM_TABLE);
       const result = await collection.updateOne(
         { id },
         {
