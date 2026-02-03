@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug } from 'lucide-react';
 import { ObservationRenderer } from './observation-renderer';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
@@ -78,6 +78,13 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
 
   // Failed reflections should be expanded by default to draw attention to the error
   const [isExpanded, setIsExpanded] = useState(isFailed && isReflection);
+
+  // Auto-expand when a reflection fails (handles case where component was mounted during loading)
+  useEffect(() => {
+    if (isFailed && isReflection) {
+      setIsExpanded(true);
+    }
+  }, [isFailed, isReflection]);
   const [isObservationsExpanded, setIsObservationsExpanded] = useState(true);
   const [isTaskExpanded, setIsTaskExpanded] = useState(false);
   const [isResponseExpanded, setIsResponseExpanded] = useState(false);

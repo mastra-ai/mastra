@@ -1,5 +1,5 @@
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 
 /**
@@ -37,16 +37,14 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
   });
 
   describe('Observational Memory', () => {
-    beforeAll(() => {
+    // Skip all OM tests for adapters that don't support it
+    beforeEach(ctx => {
       if (!memoryStorage.supportsObservationalMemory) {
-        console.log(`Skipping Observational Memory tests - storage adapter does not support OM`);
+        ctx.skip();
       }
     });
 
     it('should create a new observational memory record', async () => {
-      if (!memoryStorage.supportsObservationalMemory) {
-        return;
-      }
       const input = createSampleOMInput();
 
       const record = await memoryStorage.initializeObservationalMemory(input);
