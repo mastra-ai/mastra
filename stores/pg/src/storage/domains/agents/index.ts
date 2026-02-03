@@ -454,18 +454,20 @@ export class AgentsPG extends AgentsStorage {
             configFields[field as keyof typeof configFields] !== latestConfig[field as keyof typeof latestConfig],
         );
 
-        // Create new version
-        const newVersionId = crypto.randomUUID();
-        const newVersionNumber = latestVersion.versionNumber + 1;
+        // Create new version only if fields changed
+        if (changedFields.length > 0) {
+          const newVersionId = crypto.randomUUID();
+          const newVersionNumber = latestVersion.versionNumber + 1;
 
-        await this.createVersion({
-          id: newVersionId,
-          agentId: id,
-          versionNumber: newVersionNumber,
-          ...newConfig,
-          changedFields,
-          changeMessage: `Updated ${changedFields.join(', ')}`,
-        });
+          await this.createVersion({
+            id: newVersionId,
+            agentId: id,
+            versionNumber: newVersionNumber,
+            ...newConfig,
+            changedFields,
+            changeMessage: `Updated ${changedFields.join(', ')}`,
+          });
+        }
       }
 
       // Update metadata fields on the agent record
