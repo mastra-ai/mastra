@@ -354,6 +354,17 @@ export class AgentsPG extends AgentsStorage {
         updatedAt: now,
       };
     } catch (error) {
+      // Best-effort cleanup to prevent orphaned draft records
+      try {
+        const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+        await this.#db.client.none(
+          `DELETE FROM ${agentsTable} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+          [agent.id],
+        );
+      } catch {
+        // Ignore cleanup errors
+      }
+
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_AGENT', 'FAILED'),
