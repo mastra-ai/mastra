@@ -5,7 +5,4 @@
  * Works with AWS S3, Cloudflare R2, MinIO, DigitalOcean Spaces, etc.
  */
 
-export { S3Filesystem, type S3FilesystemOptions } from './s3-filesystem';
-
-// Re-export S3MountConfig from core for convenience
-export type { S3MountConfig } from '@mastra/core/workspace';
+export { S3Filesystem, type S3FilesystemOptions, type S3MountConfig } from './s3-filesystem';

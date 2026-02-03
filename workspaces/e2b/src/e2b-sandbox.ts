@@ -13,9 +13,6 @@ import type {
   ExecuteCommandOptions,
   CommandResult,
   WorkspaceFilesystem,
-  S3MountConfig,
-  GCSMountConfig,
-  R2MountConfig,
   MountResult,
   FilesystemMountConfig,
   ProviderStatus,
@@ -30,27 +27,57 @@ import type { IMastraLogger } from '@mastra/core/logger';
 // =============================================================================
 // Mount Configuration Types
 // =============================================================================
+// E2B defines the mount configs it supports for FUSE mounting via s3fs/gcsfuse.
 
 /**
- * Extended S3 mount config with required credentials for E2B.
+ * S3 mount config for E2B (mounted via s3fs-fuse).
+ * Works with AWS S3 and S3-compatible stores (MinIO, etc.).
  */
-export interface E2BS3MountConfig extends S3MountConfig {
-  accessKeyId: string;
-  secretAccessKey: string;
+export interface E2BS3MountConfig extends FilesystemMountConfig {
+  type: 's3';
+  /** S3 bucket name */
+  bucket: string;
+  /** AWS region */
   region: string;
+  /** S3 endpoint for S3-compatible storage (MinIO, etc.) */
+  endpoint?: string;
+  /** AWS access key ID (required for mounting) */
+  accessKeyId: string;
+  /** AWS secret access key (required for mounting) */
+  secretAccessKey: string;
 }
 
 /**
- * Extended GCS mount config with required service account for E2B.
+ * GCS mount config for E2B (mounted via gcsfuse).
  */
-export interface E2BGCSMountConfig extends GCSMountConfig {
+export interface E2BGCSMountConfig extends FilesystemMountConfig {
+  type: 'gcs';
+  /** GCS bucket name */
+  bucket: string;
+  /** Service account key JSON (required for mounting) */
   serviceAccountKey: string;
 }
 
 /**
- * Supported mount config types for E2B sandbox.
+ * Cloudflare R2 mount config for E2B (mounted via s3fs-fuse).
+ * R2 is S3-compatible with a specific endpoint format.
  */
-export type E2BMountConfig = E2BS3MountConfig | E2BGCSMountConfig | R2MountConfig;
+export interface E2BR2MountConfig extends FilesystemMountConfig {
+  type: 'r2';
+  /** R2 account ID */
+  accountId: string;
+  /** R2 bucket name */
+  bucket: string;
+  /** R2 access key ID */
+  accessKeyId: string;
+  /** R2 secret access key */
+  secretAccessKey: string;
+}
+
+/**
+ * Union of mount configs supported by E2B sandbox.
+ */
+export type E2BMountConfig = E2BS3MountConfig | E2BGCSMountConfig | E2BR2MountConfig;
 
 
 // =============================================================================
@@ -406,7 +433,7 @@ export class E2BSandbox extends BaseSandbox {
           await this.mountGCS(mountPath, config as E2BGCSMountConfig);
           break;
         case 'r2':
-          await this.mountR2(mountPath, config as R2MountConfig);
+          await this.mountR2(mountPath, config as E2BR2MountConfig);
           break;
         default:
           this.updateMountEntry(
@@ -677,7 +704,7 @@ export class E2BSandbox extends BaseSandbox {
     }
   }
 
-  private async mountR2(mountPath: string, config: R2MountConfig): Promise<void> {
+  private async mountR2(mountPath: string, config: E2BR2MountConfig): Promise<void> {
     // R2 is S3-compatible, use s3fs with R2 endpoint
     const s3Config: E2BS3MountConfig = {
       type: 's3',

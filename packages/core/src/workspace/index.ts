@@ -46,16 +46,8 @@ export type {
   CopyOptions,
 } from './filesystem';
 
-// Mount types
-export type {
-  FilesystemMountConfig,
-  S3MountConfig,
-  GCSMountConfig,
-  R2MountConfig,
-  MountConfig,
-  MountResult,
-  FilesystemIcon,
-} from './filesystem';
+// Mount types (provider-specific configs are in their respective packages)
+export type { FilesystemMountConfig, MountResult, FilesystemIcon } from './filesystem';
 
 // Sandbox
 export { BaseSandbox } from './sandbox';

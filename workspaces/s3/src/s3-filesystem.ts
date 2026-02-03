@@ -17,10 +17,28 @@ import type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
-  S3MountConfig,
+  FilesystemMountConfig,
   FilesystemIcon,
   ProviderStatus,
 } from '@mastra/core/workspace';
+
+/**
+ * S3 mount configuration.
+ * Returned by S3Filesystem.getMountConfig() for FUSE mounting in sandboxes.
+ */
+export interface S3MountConfig extends FilesystemMountConfig {
+  type: 's3';
+  /** S3 bucket name */
+  bucket: string;
+  /** AWS region (use 'auto' for R2) */
+  region?: string;
+  /** Optional endpoint for S3-compatible storage (MinIO, R2, etc.) */
+  endpoint?: string;
+  /** AWS access key ID */
+  accessKeyId?: string;
+  /** AWS secret access key */
+  secretAccessKey?: string;
+}
 import { FileNotFoundError } from '@mastra/core/workspace';
 
 /**

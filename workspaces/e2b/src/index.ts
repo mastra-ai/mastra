@@ -9,6 +9,7 @@ export {
   type E2BSandboxOptions,
   type E2BS3MountConfig,
   type E2BGCSMountConfig,
+  type E2BR2MountConfig,
   type E2BMountConfig,
   type SandboxRuntime,
   type MountHookContext,
@@ -24,5 +25,5 @@ export {
 
 // export { E2BFilesystem, type E2BFilesystemOptions } from './e2b-filesystem';
 
-// Re-export core mount types for convenience
-export type { S3MountConfig, GCSMountConfig, R2MountConfig, MountResult } from '@mastra/core/workspace';
+// Re-export core types for convenience
+export type { MountResult, FilesystemMountConfig } from '@mastra/core/workspace';
