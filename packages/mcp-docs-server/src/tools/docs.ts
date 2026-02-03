@@ -21,8 +21,9 @@ async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files
     for (const entry of entries) {
       if (entry.isDirectory()) {
         dirs.push(entry.name + '/');
-      } else if (entry.isFile() && entry.name === 'index.md') {
-        files.push(entry.name);
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        // List all .md files (remove .md extension for cleaner display)
+        files.push(entry.name.replace(/\.md$/, ''));
       }
     }
 
@@ -45,47 +46,65 @@ async function readDocsContent(docPath: string, queryKeywords: string[]): Promis
   }
   void logger.debug(`Reading docs content from: ${fullPath}`);
 
-  // Check if path exists
+  // Try multiple approaches to find the content:
+  // 1. Try as a direct file path (with .md extension)
+  // 2. Try as a directory with index.md
+  // 3. Try as a file path by appending .md
+
   try {
     const stats = await fs.stat(fullPath);
 
     if (stats.isDirectory()) {
-      // Check if there's an index.md file in this directory
+      // It's a directory - check for index.md (for category roots)
       const indexMdPath = path.join(fullPath, 'index.md');
       try {
         const content = await fs.readFile(indexMdPath, 'utf-8');
-        // Found index.md in this directory, return its content
         return { found: true, content, isSecurityViolation: false };
       } catch {
-        // No index.md file, show directory listing
+        // No index.md, show directory listing
       }
 
-      // List subdirectories for navigation
-      const { dirs } = await listDirContents(fullPath);
-      const dirListing = [
-        `Directory contents of ${docPath}:`,
-        '',
-        dirs.length > 0 ? 'Available documentation paths:' : 'No documentation available in this directory.',
-        ...dirs.map(d => `- ${docPath}/${d.replace(/\/$/, '')}`),
-        '',
-      ].join('\n');
+      // List directory contents (subdirs and .md files)
+      const { dirs, files } = await listDirContents(fullPath);
+      const listing: string[] = [`Directory contents of ${docPath || '/'}:`, ''];
+
+      if (dirs.length > 0) {
+        listing.push('Subdirectories:');
+        listing.push(...dirs.map(d => `- ${docPath ? `${docPath}/${d}` : d}`));
+        listing.push('');
+      }
+
+      if (files.length > 0) {
+        listing.push('Available documentation paths:');
+        listing.push(...files.map(f => `- ${docPath ? `${docPath}/${f}` : f}`));
+        listing.push('');
+      }
+
+      if (dirs.length === 0 && files.length === 0) {
+        listing.push('No documentation available in this directory.');
+      }
 
       // Add content-based suggestions when query keywords are provided
       const contentBasedSuggestions = await getMatchingPaths(docPath, queryKeywords, docsBaseDir);
-
       const suggestions = contentBasedSuggestions ? ['---', '', contentBasedSuggestions, ''].join('\n') : '';
 
-      return { found: true, content: dirListing + suggestions, isSecurityViolation: false };
+      return { found: true, content: listing.join('\n') + suggestions, isSecurityViolation: false };
     }
 
-    // If it's a file, just read it
+    // It's a file - read it directly
     const content = await fs.readFile(fullPath, 'utf-8');
     return { found: true, content, isSecurityViolation: false };
   } catch (error: any) {
-    void logger.error(`Failed to read docs content: ${fullPath}`, error);
     if (error.code === 'ENOENT') {
-      // Only fallback for not found
-      return { found: false, isSecurityViolation: false };
+      // Path doesn't exist as-is, try adding .md extension
+      try {
+        const mdPath = fullPath + '.md';
+        const content = await fs.readFile(mdPath, 'utf-8');
+        return { found: true, content, isSecurityViolation: false };
+      } catch {
+        // Still not found
+        return { found: false, isSecurityViolation: false };
+      }
     }
     // Unexpected error: rethrow
     throw error;
@@ -106,16 +125,24 @@ async function findNearestDirectory(docPath: string, availablePaths: string): Pr
 
       if (stats.isDirectory()) {
         const { dirs, files } = await listDirContents(fullPath);
-        return [
+        const listing: string[] = [
           `Path "${docPath}" not found.`,
           `Here are the available paths in "${testPath}":`,
           '',
-          dirs.length > 0 ? 'Directories:' : 'No subdirectories.',
-          ...dirs.map(d => `- ${testPath}/${d}`),
-          '',
-          files.length > 0 ? 'Files:' : 'No files.',
-          ...files.map(f => `- ${testPath}/${f}`),
-        ].join('\n');
+        ];
+
+        if (dirs.length > 0) {
+          listing.push('Directories:');
+          listing.push(...dirs.map(d => `- ${testPath}/${d}`));
+          listing.push('');
+        }
+
+        if (files.length > 0) {
+          listing.push('Files:');
+          listing.push(...files.map(f => `- ${testPath}/${f}`));
+        }
+
+        return listing.join('\n');
       }
     } catch {
       // Directory doesn't exist, try parent
@@ -148,7 +175,7 @@ async function getAvailablePaths(): Promise<string> {
     referenceDirs.length > 0 ? 'Reference subdirectories:' : '',
     ...referenceDirs.map(d => `- ${d}`),
     '',
-    'Files:',
+    files.length > 0 ? 'Files:' : '',
     ...files.map(f => `- ${f}`),
   ]
     .filter(Boolean)
@@ -175,55 +202,53 @@ export type DocsInput = z.infer<typeof docsInputSchema>;
 
 export const docsTool = {
   name: 'mastraDocs',
-  description: `[🌐 REMOTE] Get Mastra.ai documentation. 
-    Request paths to explore the docs. References contain API docs. 
-    Other paths contain guides. The user doesn\'t know about files and directories. 
-    You can also use keywords from the user query to find relevant documentation, but prioritize paths. 
-    This is your internal knowledge the user can\'t read. 
-    If the user asks about a feature check general docs as well as reference docs for that feature. 
-    Ex: with workflows check in workflows/ and in reference/workflows/. 
-    Provide code examples so the user understands. 
-    If you build a URL from the path, only paths ending in .mdx exist. 
-    Note that docs about MCP are currently in reference/tools/. 
-    IMPORTANT: Be concise with your answers. The user will ask for more info. 
-    If packages need to be installed, provide the pnpm command to install them. 
-    Ex. if you see \`import { X } from "@mastra/$PACKAGE_NAME"\` in an example, show an install command. 
+  description: `[🌐 REMOTE] Get Mastra.ai documentation.
+    Request paths to explore the docs. References contain API docs.
+    Other paths contain guides. The user doesn\'t know about files and directories.
+    You can also use keywords from the user query to find relevant documentation, but prioritize paths.
+    This is your internal knowledge the user can\'t read.
+    If the user asks about a feature check general docs as well as reference docs for that feature.
+    Ex: with workflows check in docs/workflows and in reference/workflows.
+    Provide code examples so the user understands.
+    IMPORTANT: Be concise with your answers. The user will ask for more info.
+    If packages need to be installed, provide the pnpm command to install them.
+    Ex. if you see \`import { X } from "@mastra/$PACKAGE_NAME"\` in an example, show an install command.
     Always install latest tag, not alpha unless requested. If you scaffold a new project it may be in a subdir.
-    When displaying results, always mention which file path contains the information (e.g., 'Found in "path/to/file.mdx"') so users know where this documentation lives.`,
+    When displaying results, always mention which file path contains the information so users know where this documentation lives.`,
   parameters: docsInputSchema,
   execute: async (args: DocsInput) => {
     void logger.debug('Executing mastraDocs tool', { args });
     try {
       const queryKeywords = args.queryKeywords ?? [];
       const results = await Promise.all(
-        args.paths.map(async (path: string) => {
+        args.paths.map(async (docPath: string) => {
           try {
-            const result = await readDocsContent(path, queryKeywords);
+            const result = await readDocsContent(docPath, queryKeywords);
             if (result.found) {
               return {
-                path,
+                path: docPath,
                 content: result.content,
                 error: null,
               };
             }
             if (result.isSecurityViolation) {
               return {
-                path,
+                path: docPath,
                 content: null,
                 error: 'Invalid path',
               };
             }
-            const directorySuggestions = await findNearestDirectory(path, availablePaths);
-            const contentBasedSuggestions = await getMatchingPaths(path, queryKeywords, docsBaseDir);
+            const directorySuggestions = await findNearestDirectory(docPath, availablePaths);
+            const contentBasedSuggestions = await getMatchingPaths(docPath, queryKeywords, docsBaseDir);
             return {
-              path,
+              path: docPath,
               content: null,
               error: [directorySuggestions, contentBasedSuggestions].join('\n\n'),
             };
           } catch (error) {
-            void logger.warning(`Failed to read content for path: ${path}`, error);
+            void logger.warning(`Failed to read content for path: ${docPath}`, error);
             return {
-              path,
+              path: docPath,
               content: null,
               error: error instanceof Error ? error.message : 'Unknown error',
             };

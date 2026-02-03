@@ -94,10 +94,11 @@ async function discoverMigrations(
         // Recursively explore subdirectories
         const subMigrations = await discoverMigrations(baseDir, entryRelativePath);
         migrations.push(...subMigrations);
-      } else if (entry.isFile() && entry.name === 'index.md') {
-        // Add file (use directory name for cleaner display)
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        // Add file (remove .md extension for cleaner display)
+        const cleanName = entry.name.replace(/\.md$/, '');
         migrations.push({
-          path: relativePath || 'index',
+          path: relativePath ? path.join(relativePath, cleanName) : cleanName,
           type: 'file',
         });
       }
@@ -127,15 +128,10 @@ async function listDirectoryContents(dirPath: string = ''): Promise<string> {
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        // Check if directory contains an index.md file (meaning it's a migration guide)
-        try {
-          await fs.access(path.join(fullPath, entry.name, 'index.md'));
-          files.push(entry.name); // This directory contains a migration guide
-        } catch {
-          directories.push(entry.name); // This is a parent directory
-        }
-      } else if (entry.isFile() && entry.name === 'index.md') {
-        // The current directory has an index.md, it's already handled at directory level
+        directories.push(entry.name);
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        // Add file without .md extension
+        files.push(entry.name.replace(/\.md$/, ''));
       }
     }
 
@@ -186,10 +182,10 @@ async function listDirectoryContents(dirPath: string = ''): Promise<string> {
 // Helper function to read migration content
 async function readMigrationContent(migrationPath: string): Promise<string | null> {
   try {
-    // Strip any trailing .mdx extension if provided (for backwards compatibility)
-    const cleanPath = migrationPath.replace(/\.mdx$/, '');
-    // The migration content is in an index.md file inside the folder
-    const filePath = path.join(migrationsBaseDir, cleanPath, 'index.md');
+    // Strip any trailing .mdx or .md extension if provided
+    const cleanPath = migrationPath.replace(/\.(mdx|md)$/, '');
+    // Try to read the file with .md extension
+    const filePath = path.join(migrationsBaseDir, cleanPath + '.md');
 
     // Security check: ensure path doesn't escape base directory
     const resolvedPath = path.resolve(filePath);

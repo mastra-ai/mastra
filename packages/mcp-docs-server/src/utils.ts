@@ -31,8 +31,8 @@ async function* walkMdFiles(dir: string): AsyncGenerator<string> {
         filesInDir.push(file);
         yield file;
       }
-    } else if (entry.isFile() && entry.name === 'index.md') {
-      // For index.md files, add to collection and yield
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      // For all .md files, add to collection and yield
       filesInDir.push(fullPath);
       yield fullPath;
     }
@@ -127,14 +127,14 @@ function calculateFinalScore(score: FileScore, totalKeywords: number): number {
 }
 
 function extractKeywordsFromPath(docPath: string): string[] {
-  // Get the folder name (last meaningful part of the path, excluding index.md)
-  const cleanPath = docPath.replace(/\/index\.md$/, '');
-  const folderName = cleanPath.split('/').pop() || '';
+  // Get the file/folder name (last meaningful part of the path, excluding .md extension)
+  const cleanPath = docPath.replace(/\.md$/, '');
+  const fileName = cleanPath.split('/').pop() || '';
 
   const keywords = new Set<string>();
 
   // Split on hyphens, underscores, camelCase
-  const splitParts = folderName.split(/[-_]|(?=[A-Z])/);
+  const splitParts = fileName.split(/[-_]|(?=[A-Z])/);
   splitParts.forEach(keyword => {
     if (keyword.length > 2) {
       keywords.add(keyword.toLowerCase());

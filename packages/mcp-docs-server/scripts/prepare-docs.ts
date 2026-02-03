@@ -7,6 +7,9 @@ const COURSE_SOURCE = fromRepoRoot('docs/src/course');
 const DOCS_DEST = fromPackageRoot('.docs');
 const COURSE_DEST = path.join(DOCS_DEST, 'course');
 
+// Top-level categories that should keep their index.md files
+const TOP_LEVEL_CATEGORIES = ['docs', 'guides', 'models', 'reference'];
+
 // Walk directory and find all llms.txt files
 async function* walkLlmsTxtFiles(dir: string): AsyncGenerator<string> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -37,6 +40,30 @@ async function copyDir(src: string, dest: string) {
   }
 }
 
+/**
+ * Converts a source path like "docs/agents/adding-voice/llms.txt" to the destination path.
+ *
+ * Rules:
+ * - Top-level category index files stay as index.md (e.g., docs/llms.txt -> docs/index.md)
+ * - Other files become folder-name.md (e.g., docs/agents/adding-voice/llms.txt -> docs/agents/adding-voice.md)
+ */
+function getDestinationPath(relativePath: string): string {
+  // Remove llms.txt from the path to get the folder path
+  const folderPath = path.dirname(relativePath);
+  const parts = folderPath.split(path.sep);
+
+  // If this is a top-level category (e.g., "docs" or "reference"), keep as index.md
+  if (parts.length === 1 && TOP_LEVEL_CATEGORIES.includes(parts[0]!)) {
+    return path.join(folderPath, 'index.md');
+  }
+
+  // Otherwise, convert folder/index.md to folder.md
+  // e.g., docs/agents/adding-voice -> docs/agents/adding-voice.md
+  const parentDir = path.dirname(folderPath);
+  const folderName = path.basename(folderPath);
+  return path.join(parentDir, `${folderName}.md`);
+}
+
 async function copyLlmsTxtFiles() {
   log('Scanning build directory for llms.txt files...');
 
@@ -59,15 +86,15 @@ async function copyLlmsTxtFiles() {
     // Get relative path from build dir (e.g., docs/agents/overview/llms.txt)
     const relativePath = path.relative(BUILD_DIR, sourcePath);
 
-    // Convert to destination path: replace llms.txt with index.md
-    const destRelativePath = relativePath.replace(/llms\.txt$/, 'index.md');
+    // Convert to destination path based on the rules
+    const destRelativePath = getDestinationPath(relativePath);
     const destPath = path.join(DOCS_DEST, destRelativePath);
 
     try {
       // Create destination directory
       await fs.mkdir(path.dirname(destPath), { recursive: true });
 
-      // Copy the llms.txt file as index.md
+      // Copy the llms.txt file as .md
       await fs.copyFile(sourcePath, destPath);
       copiedCount++;
     } catch (error) {
