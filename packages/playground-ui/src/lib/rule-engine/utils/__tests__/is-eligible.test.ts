@@ -403,4 +403,230 @@ describe("isEligible", () => {
       expect(isEligible(rules, context)).toBe(false);
     });
   });
+
+  describe("nested path access (dot notation)", () => {
+    it("accesses nested object values with dot notation", () => {
+      const rules: Rule[] = [
+        { field: "user.email", operator: "contains", value: "@gmail" },
+      ];
+
+      const context: RuleContext = {
+        user: { email: "marvin.frachet@gmail.com" },
+      };
+
+      expect(isEligible(rules, context)).toBe(true);
+    });
+
+    it("accesses deeply nested values", () => {
+      const rules: Rule[] = [
+        { field: "user.address.city", operator: "equals", value: "Paris" },
+      ];
+
+      const context: RuleContext = {
+        user: {
+          address: {
+            city: "Paris",
+            country: "France",
+          },
+        },
+      };
+
+      expect(isEligible(rules, context)).toBe(true);
+    });
+
+    it("returns undefined for missing intermediate path", () => {
+      const rules: Rule[] = [
+        { field: "user.profile.name", operator: "equals", value: undefined },
+      ];
+
+      const context: RuleContext = {
+        user: { email: "test@example.com" },
+      };
+
+      expect(isEligible(rules, context)).toBe(true);
+    });
+
+    it("returns undefined when path traverses through null", () => {
+      const rules: Rule[] = [
+        { field: "user.profile.name", operator: "equals", value: undefined },
+      ];
+
+      const context: RuleContext = {
+        user: { profile: null },
+      };
+
+      expect(isEligible(rules, context)).toBe(true);
+    });
+
+    it("returns undefined when path traverses through primitive", () => {
+      const rules: Rule[] = [
+        { field: "user.length", operator: "equals", value: undefined },
+      ];
+
+      const context: RuleContext = {
+        user: "string-value",
+      };
+
+      // "string-value".length would be 12, but we treat primitives as non-traversable
+      expect(isEligible(rules, context)).toBe(true);
+    });
+
+    it("works with all operators on nested paths", () => {
+      const context: RuleContext = {
+        user: {
+          name: "John Doe",
+          age: 25,
+          role: "admin",
+          tags: ["developer", "manager"],
+        },
+      };
+
+      // equals
+      expect(
+        isEligible(
+          [{ field: "user.name", operator: "equals", value: "John Doe" }],
+          context
+        )
+      ).toBe(true);
+
+      // not_equals
+      expect(
+        isEligible(
+          [{ field: "user.name", operator: "not_equals", value: "Jane" }],
+          context
+        )
+      ).toBe(true);
+
+      // contains
+      expect(
+        isEligible(
+          [{ field: "user.name", operator: "contains", value: "John" }],
+          context
+        )
+      ).toBe(true);
+
+      // not_contains
+      expect(
+        isEligible(
+          [{ field: "user.name", operator: "not_contains", value: "Jane" }],
+          context
+        )
+      ).toBe(true);
+
+      // greater_than
+      expect(
+        isEligible(
+          [{ field: "user.age", operator: "greater_than", value: 18 }],
+          context
+        )
+      ).toBe(true);
+
+      // less_than
+      expect(
+        isEligible(
+          [{ field: "user.age", operator: "less_than", value: 30 }],
+          context
+        )
+      ).toBe(true);
+
+      // in
+      expect(
+        isEligible(
+          [{ field: "user.role", operator: "in", value: ["admin", "user"] }],
+          context
+        )
+      ).toBe(true);
+
+      // not_in
+      expect(
+        isEligible(
+          [{ field: "user.role", operator: "not_in", value: ["guest", "viewer"] }],
+          context
+        )
+      ).toBe(true);
+    });
+
+    it("still works with flat field access", () => {
+      const rules: Rule[] = [
+        { field: "country", operator: "equals", value: "US" },
+      ];
+
+      const context: RuleContext = {
+        country: "US",
+      };
+
+      expect(isEligible(rules, context)).toBe(true);
+    });
+
+    it("handles array index access in path", () => {
+      const rules: Rule[] = [
+        { field: "users.0.name", operator: "equals", value: "Alice" },
+      ];
+
+      const context: RuleContext = {
+        users: [{ name: "Alice" }, { name: "Bob" }],
+      };
+
+      expect(isEligible(rules, context)).toBe(true);
+    });
+
+    it("returns false for nested contains when field is missing", () => {
+      const rules: Rule[] = [
+        { field: "user.email", operator: "contains", value: "@gmail" },
+      ];
+
+      const context: RuleContext = {
+        user: { name: "John" },
+      };
+
+      expect(isEligible(rules, context)).toBe(false);
+    });
+
+    it("handles empty path segments gracefully", () => {
+      const rules: Rule[] = [
+        { field: "user..name", operator: "equals", value: undefined },
+      ];
+
+      const context: RuleContext = {
+        user: { name: "John" },
+      };
+
+      // Empty key "" doesn't exist on user object
+      expect(isEligible(rules, context)).toBe(true);
+    });
+
+    it("combines nested and flat rules", () => {
+      const rules: Rule[] = [
+        { field: "user.email", operator: "contains", value: "@gmail" },
+        { field: "country", operator: "equals", value: "US" },
+        { field: "user.verified", operator: "equals", value: true },
+      ];
+
+      const context: RuleContext = {
+        user: {
+          email: "john@gmail.com",
+          verified: true,
+        },
+        country: "US",
+      };
+
+      expect(isEligible(rules, context)).toBe(true);
+    });
+
+    it("fails when any nested rule fails", () => {
+      const rules: Rule[] = [
+        { field: "user.email", operator: "contains", value: "@gmail" },
+        { field: "user.verified", operator: "equals", value: true },
+      ];
+
+      const context: RuleContext = {
+        user: {
+          email: "john@gmail.com",
+          verified: false,
+        },
+      };
+
+      expect(isEligible(rules, context)).toBe(false);
+    });
+  });
 });

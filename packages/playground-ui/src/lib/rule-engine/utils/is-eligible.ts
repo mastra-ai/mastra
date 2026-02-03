@@ -9,6 +9,34 @@ const isNullish = (value: unknown): value is null | undefined =>
   typeof value === "undefined" || value === null;
 
 /**
+ * Gets a nested value from an object using dot notation.
+ * Supports paths like "user.email" or "user.address.city".
+ *
+ * @param obj - The object to get the value from
+ * @param path - The dot-notation path (e.g., "user.email")
+ * @returns The value at the path, or undefined if not found
+ */
+const getNestedValue = (obj: RuleContext, path: string): unknown => {
+  const keys = path.split(".");
+
+  let current: unknown = obj;
+
+  for (const key of keys) {
+    if (current === null || current === undefined) {
+      return undefined;
+    }
+
+    if (typeof current !== "object") {
+      return undefined;
+    }
+
+    current = (current as Record<string, unknown>)[key];
+  }
+
+  return current;
+};
+
+/**
  * Evaluates whether a context matches all rules.
  *
  * @param rules - Array of rules to evaluate
@@ -21,13 +49,13 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
   return rules.every((rule) => {
     switch (rule.operator) {
       case "equals":
-        return context[rule.field] === rule.value;
+        return getNestedValue(context, rule.field) === rule.value;
 
       case "not_equals":
-        return context[rule.field] !== rule.value;
+        return getNestedValue(context, rule.field) !== rule.value;
 
       case "greater_than": {
-        const fieldValue = context[rule.field];
+        const fieldValue = getNestedValue(context, rule.field);
 
         if (isNullish(fieldValue) || isNullish(rule.value)) return false;
 
@@ -35,7 +63,7 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
       }
 
       case "less_than": {
-        const fieldValue = context[rule.field];
+        const fieldValue = getNestedValue(context, rule.field);
 
         if (isNullish(fieldValue) || isNullish(rule.value)) return false;
 
@@ -43,7 +71,7 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
       }
 
       case "contains": {
-        const fieldValue = context[rule.field];
+        const fieldValue = getNestedValue(context, rule.field);
 
         return (
           isString(fieldValue) &&
@@ -53,7 +81,7 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
       }
 
       case "not_contains": {
-        const fieldValue = context[rule.field];
+        const fieldValue = getNestedValue(context, rule.field);
 
         return (
           isString(fieldValue) &&
@@ -63,7 +91,7 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
       }
 
       case "in": {
-        const fieldValue = context[rule.field];
+        const fieldValue = getNestedValue(context, rule.field);
 
         return (
           Array.isArray(rule.value) && rule.value.indexOf(fieldValue) !== -1
@@ -71,7 +99,7 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
       }
 
       case "not_in": {
-        const fieldValue = context[rule.field];
+        const fieldValue = getNestedValue(context, rule.field);
 
         return (
           Array.isArray(rule.value) && rule.value.indexOf(fieldValue) === -1
