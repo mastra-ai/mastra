@@ -130,11 +130,7 @@ export function updateFieldAtPath(
   });
 }
 
-export function addFieldAtPath(
-  fields: SchemaField[],
-  path: string[],
-  newField: SchemaField,
-): SchemaField[] {
+export function addFieldAtPath(fields: SchemaField[], path: string[], newField: SchemaField): SchemaField[] {
   if (path.length === 0) {
     return [...fields, newField];
   }
@@ -167,11 +163,7 @@ export function addFieldAtPath(
   });
 }
 
-export function removeFieldAtPath(
-  fields: SchemaField[],
-  path: string[],
-  fieldId: string,
-): SchemaField[] {
+export function removeFieldAtPath(fields: SchemaField[], path: string[], fieldId: string): SchemaField[] {
   if (path.length === 0) {
     return fields.filter(f => f.id !== fieldId);
   }

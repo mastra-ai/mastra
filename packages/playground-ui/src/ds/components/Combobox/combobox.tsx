@@ -104,7 +104,9 @@ export function Combobox({
                       {option.start}
                       <span className={comboboxStyles.optionText}>
                         <span>{option.label}</span>
-                        {option.description && <span className={comboboxStyles.optionDescription}>{option.description}</span>}
+                        {option.description && (
+                          <span className={comboboxStyles.optionDescription}>{option.description}</span>
+                        )}
                       </span>
                       {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
                     </span>

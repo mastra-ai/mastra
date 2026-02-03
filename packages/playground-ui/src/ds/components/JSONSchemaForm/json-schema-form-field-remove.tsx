@@ -8,11 +8,7 @@ export type JSONSchemaFormFieldRemoveProps = Omit<IconButtonProps, 'onClick' | '
   children?: React.ReactNode;
 };
 
-export function FieldRemove({
-  children,
-  tooltip = 'Remove field',
-  ...props
-}: JSONSchemaFormFieldRemoveProps) {
+export function FieldRemove({ children, tooltip = 'Remove field', ...props }: JSONSchemaFormFieldRemoveProps) {
   const { remove } = useJSONSchemaFormField();
 
   return (

@@ -14,12 +14,5 @@ export function FieldName(props: JSONSchemaFormFieldNameProps) {
     [update],
   );
 
-  return (
-    <InputField
-      {...props}
-      name={`field-name-${field.id}`}
-      value={field.name}
-      onChange={handleChange}
-    />
-  );
+  return <InputField {...props} name={`field-name-${field.id}`} value={field.name} onChange={handleChange} />;
 }

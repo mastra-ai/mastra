@@ -16,11 +16,7 @@ export function JSONSchemaFormNestedProvider({
   children: React.ReactNode;
   value: JSONSchemaFormNestedContextValue;
 }) {
-  return (
-    <JSONSchemaFormNestedContext.Provider value={value}>
-      {children}
-    </JSONSchemaFormNestedContext.Provider>
-  );
+  return <JSONSchemaFormNestedContext.Provider value={value}>{children}</JSONSchemaFormNestedContext.Provider>;
 }
 
 export function useJSONSchemaFormNestedContext(): JSONSchemaFormNestedContextValue | null {

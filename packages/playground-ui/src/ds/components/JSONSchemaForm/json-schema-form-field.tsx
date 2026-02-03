@@ -12,13 +12,7 @@ export interface JSONSchemaFormFieldProps {
   children: React.ReactNode;
 }
 
-export function Field({
-  field,
-  parentPath = [],
-  depth = 0,
-  className,
-  children,
-}: JSONSchemaFormFieldProps) {
+export function Field({ field, parentPath = [], depth = 0, className, children }: JSONSchemaFormFieldProps) {
   const { updateField, removeField } = useJSONSchemaForm();
 
   const update = React.useCallback(

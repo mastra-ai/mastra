@@ -13,10 +13,7 @@ const TYPE_OPTIONS = [
   { value: 'array', label: 'Array' },
 ];
 
-export type JSONSchemaFormFieldTypeProps = Omit<
-  SelectFieldProps,
-  'value' | 'onValueChange' | 'options' | 'name'
->;
+export type JSONSchemaFormFieldTypeProps = Omit<SelectFieldProps, 'value' | 'onValueChange' | 'options' | 'name'>;
 
 export function FieldType({ className, ...props }: JSONSchemaFormFieldTypeProps) {
   const { field, update } = useJSONSchemaFormField();

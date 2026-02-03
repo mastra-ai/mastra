@@ -3,10 +3,7 @@ export { Field, type JSONSchemaFormFieldProps } from './json-schema-form-field';
 export { FieldList, type JSONSchemaFormFieldListProps } from './json-schema-form-field-list';
 export { FieldName, type JSONSchemaFormFieldNameProps } from './json-schema-form-field-name';
 export { FieldType, type JSONSchemaFormFieldTypeProps } from './json-schema-form-field-type';
-export {
-  FieldDescription,
-  type JSONSchemaFormFieldDescriptionProps,
-} from './json-schema-form-field-description';
+export { FieldDescription, type JSONSchemaFormFieldDescriptionProps } from './json-schema-form-field-description';
 export { FieldOptional, type JSONSchemaFormFieldOptionalProps } from './json-schema-form-field-optional';
 export { FieldNullable, type JSONSchemaFormFieldNullableProps } from './json-schema-form-field-nullable';
 export { FieldRemove, type JSONSchemaFormFieldRemoveProps } from './json-schema-form-field-remove';

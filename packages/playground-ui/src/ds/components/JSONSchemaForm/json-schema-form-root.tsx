@@ -49,12 +49,9 @@ export function Root({
     setFields(prev => removeFieldAtPath(prev, parentPath, fieldId));
   }, []);
 
-  const updateField = React.useCallback(
-    (parentPath: string[], fieldId: string, updates: Partial<SchemaField>) => {
-      setFields(prev => updateFieldAtPath(prev, parentPath, fieldId, updates));
-    },
-    [],
-  );
+  const updateField = React.useCallback((parentPath: string[], fieldId: string, updates: Partial<SchemaField>) => {
+    setFields(prev => updateFieldAtPath(prev, parentPath, fieldId, updates));
+  }, []);
 
   const contextValue = React.useMemo(
     () => ({

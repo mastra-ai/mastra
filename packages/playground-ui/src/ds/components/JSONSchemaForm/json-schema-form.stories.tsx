@@ -47,13 +47,7 @@ function RecursiveFieldRenderer({
   return (
     <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
       <div className="flex gap-2 items-start mb-2">
-        <JSONSchemaForm.FieldName
-          label="Name"
-          labelIsHidden
-          placeholder="Property name"
-          size="md"
-          className="flex-1"
-        />
+        <JSONSchemaForm.FieldName label="Name" labelIsHidden placeholder="Property name" size="md" className="flex-1" />
         <JSONSchemaForm.FieldType label="Type" placeholder="Type" size="md" className="w-32" />
         <JSONSchemaForm.FieldRemove variant="ghost" size="md" />
       </div>
@@ -97,12 +91,7 @@ export const Default: Story = {
         <JSONSchemaForm.Root onChange={setSchema}>
           <JSONSchemaForm.FieldList>
             {(field, _index, { parentPath, depth }) => (
-              <RecursiveFieldRenderer
-                key={field.id}
-                field={field}
-                parentPath={parentPath}
-                depth={depth}
-              />
+              <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField variant="ghost" size="md" className="mt-4">
@@ -140,12 +129,7 @@ export const WithDefaultValues: Story = {
                     size="md"
                     className="flex-1"
                   />
-                  <JSONSchemaForm.FieldType
-                    label="Type"
-                    placeholder="Type"
-                    size="md"
-                    className="w-32"
-                  />
+                  <JSONSchemaForm.FieldType label="Type" placeholder="Type" size="md" className="w-32" />
                   <JSONSchemaForm.FieldRemove variant="ghost" size="md" />
                 </div>
                 <JSONSchemaForm.FieldDescription
@@ -182,20 +166,15 @@ export const CompactLayout: Story = {
         <JSONSchemaForm.Root onChange={setSchema}>
           <JSONSchemaForm.FieldList>
             {(field, _index, { parentPath, depth }) => (
-              <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth} className="flex gap-2 items-center mb-2">
-                <JSONSchemaForm.FieldName
-                  label="Name"
-                  labelIsHidden
-                  placeholder="Name"
-                  size="sm"
-                  className="flex-1"
-                />
-                <JSONSchemaForm.FieldType
-                  label="Type"
-                  placeholder="Type"
-                  size="sm"
-                  className="w-24"
-                />
+              <JSONSchemaForm.Field
+                key={field.id}
+                field={field}
+                parentPath={parentPath}
+                depth={depth}
+                className="flex gap-2 items-center mb-2"
+              >
+                <JSONSchemaForm.FieldName label="Name" labelIsHidden placeholder="Name" size="sm" className="flex-1" />
+                <JSONSchemaForm.FieldType label="Type" placeholder="Type" size="sm" className="w-24" />
                 <JSONSchemaForm.FieldOptional label="" className="shrink-0" />
                 <JSONSchemaForm.FieldRemove variant="ghost" size="sm" />
               </JSONSchemaForm.Field>
@@ -235,12 +214,7 @@ export const NestedObjects: Story = {
         <JSONSchemaForm.Root onChange={setSchema} defaultValue={defaultFields} maxDepth={5}>
           <JSONSchemaForm.FieldList>
             {(field, _index, { parentPath, depth }) => (
-              <RecursiveFieldRenderer
-                key={field.id}
-                field={field}
-                parentPath={parentPath}
-                depth={depth}
-              />
+              <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField variant="ghost" size="md" className="mt-4">
@@ -271,16 +245,8 @@ export const CustomStyling: Story = {
                 className="p-4 border border-border1 rounded-lg bg-surface1"
               >
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  <JSONSchemaForm.FieldName
-                    label="Property Name"
-                    placeholder="Enter name"
-                    size="lg"
-                  />
-                  <JSONSchemaForm.FieldType
-                    label="Data Type"
-                    placeholder="Select type"
-                    size="lg"
-                  />
+                  <JSONSchemaForm.FieldName label="Property Name" placeholder="Enter name" size="lg" />
+                  <JSONSchemaForm.FieldType label="Data Type" placeholder="Select type" size="lg" />
                 </div>
                 <JSONSchemaForm.FieldDescription
                   label="Description"
@@ -290,20 +256,10 @@ export const CustomStyling: Story = {
                 />
                 <div className="flex justify-between items-center">
                   <div className="flex gap-6">
-                    <JSONSchemaForm.FieldOptional
-                      label="Optional field"
-                      labelClassName="text-neutral4"
-                    />
-                    <JSONSchemaForm.FieldNullable
-                      label="Allow null"
-                      labelClassName="text-neutral4"
-                    />
+                    <JSONSchemaForm.FieldOptional label="Optional field" labelClassName="text-neutral4" />
+                    <JSONSchemaForm.FieldNullable label="Allow null" labelClassName="text-neutral4" />
                   </div>
-                  <JSONSchemaForm.FieldRemove
-                    variant="outline"
-                    size="md"
-                    tooltip="Remove this field"
-                  />
+                  <JSONSchemaForm.FieldRemove variant="outline" size="md" tooltip="Remove this field" />
                 </div>
               </JSONSchemaForm.Field>
             )}
