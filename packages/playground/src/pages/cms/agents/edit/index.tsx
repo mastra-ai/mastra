@@ -14,11 +14,12 @@ import {
   useAgentEditForm,
   Header,
   HeaderTitle,
+  HeaderAction,
   Icon,
   AgentIcon,
   Spinner,
   useAgentVersion,
-  VersionPreviewBanner,
+  VersionIndicator,
 } from '@mastra/playground-ui';
 
 // Type for the agent data (inferred from useStoredAgent)
@@ -149,6 +150,11 @@ function CmsAgentsEditForm({
             </Icon>
             Edit agent: {agent.name}
           </HeaderTitle>
+          {isViewingVersion && versionData && (
+            <HeaderAction>
+              <VersionIndicator versionNumber={versionData.versionNumber} onClose={onClearVersion} />
+            </HeaderAction>
+          )}
         </Header>
       }
       leftSlot={
@@ -170,9 +176,6 @@ function CmsAgentsEditForm({
         />
       }
     >
-      {isViewingVersion && versionData && (
-        <VersionPreviewBanner versionNumber={versionData.versionNumber} onClose={onClearVersion} />
-      )}
       <form ref={formRef} className="h-full">
         <AgentEditMain form={form} readOnly={isViewingVersion} />
       </form>
@@ -260,6 +263,7 @@ function CmsAgentsEditPage() {
   // Render form only when agent data is available
   return (
     <CmsAgentsEditForm
+      key={selectedVersionId ?? ''}
       agent={agent}
       agentId={agentId}
       selectedVersionId={selectedVersionId}
