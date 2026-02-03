@@ -623,6 +623,8 @@ export type ProviderModelsMap = {
     'deepseek-v3',
     'deepseek-v3-1',
     'deepseek-v3-2-exp',
+    'kimi-k2-thinking',
+    'kimi-k2.5',
     'moonshot-kimi-k2-instruct',
     'qvq-max',
     'qwen-deep-research',
