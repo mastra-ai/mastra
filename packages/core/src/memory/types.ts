@@ -440,6 +440,21 @@ export interface ObservationalMemoryObservationConfig {
   modelSettings?: ObservationalMemoryModelSettings;
 
   /**
+   * Provider-specific options passed to the Observer model.
+   * Use this for provider features like thinking budgets, safety settings, etc.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   google: { thinkingConfig: { thinkingBudget: 215 } }
+   * }
+   * ```
+   *
+   * @default { google: { thinkingConfig: { thinkingBudget: 215 } } }
+   */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+
+  /**
    * Maximum tokens per batch when observing multiple threads.
    * Threads are chunked into batches of this size and processed in parallel.
    * Lower values = more parallelism but more API calls.
@@ -479,6 +494,21 @@ export interface ObservationalMemoryReflectionConfig {
    * @default { temperature: 0, maxOutputTokens: 100_000 }
    */
   modelSettings?: ObservationalMemoryModelSettings;
+
+  /**
+   * Provider-specific options passed to the Reflector model.
+   * Use this for provider features like thinking budgets, safety settings, etc.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   google: { thinkingConfig: { thinkingBudget: 1024 } }
+   * }
+   * ```
+   *
+   * @default { google: { thinkingConfig: { thinkingBudget: 1024 } } }
+   */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
 }
 
 /**
