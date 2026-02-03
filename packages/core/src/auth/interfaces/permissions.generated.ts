@@ -55,64 +55,123 @@ export type Action = (typeof ACTIONS)[number];
  * Use `keyof typeof PERMISSION_PATTERNS` or the `PermissionPattern` type.
  */
 export const PERMISSION_PATTERNS = {
+  /** Full access to all resources and actions */
   '*': '*',
+  /** Delete all resources */
   '*:delete': '*:delete',
+  /** Execute all resources */
   '*:execute': '*:execute',
+  /** View all resources */
   '*:read': '*:read',
+  /** Create and modify all resources */
   '*:write': '*:write',
+  /** Full access to agent-to-agent communication */
   'a2a:*': 'a2a:*',
+  /** Full access to agent builder */
   'agent-builder:*': 'agent-builder:*',
+  /** Full access to agents */
   'agents:*': 'agents:*',
+  /** Full access to logs */
   'logs:*': 'logs:*',
+  /** Full access to MCP servers */
   'mcp:*': 'mcp:*',
+  /** Full access to memory and threads */
   'memory:*': 'memory:*',
+  /** Full access to traces and spans */
   'observability:*': 'observability:*',
+  /** Full access to processors */
   'processors:*': 'processors:*',
+  /** Full access to evaluation scores */
   'scores:*': 'scores:*',
+  /** Full access to stored agents */
   'stored-agents:*': 'stored-agents:*',
+  /** Full access to system info */
   'system:*': 'system:*',
+  /** Full access to tools */
   'tools:*': 'tools:*',
+  /** Full access to vector stores */
   'vector:*': 'vector:*',
+  /** Full access to workflows */
   'workflows:*': 'workflows:*',
+  /** Full access to workspaces */
   'workspaces:*': 'workspaces:*',
+  /** View agent-to-agent communication */
   'a2a:read': 'a2a:read',
+  /** Create and modify agent-to-agent communication */
   'a2a:write': 'a2a:write',
+  /** Execute agent builder */
   'agent-builder:execute': 'agent-builder:execute',
+  /** View agent builder */
   'agent-builder:read': 'agent-builder:read',
+  /** Create and modify agent builder */
   'agent-builder:write': 'agent-builder:write',
+  /** Execute agents */
   'agents:execute': 'agents:execute',
+  /** View agents */
   'agents:read': 'agents:read',
+  /** Create and modify agents */
   'agents:write': 'agents:write',
+  /** View logs */
   'logs:read': 'logs:read',
+  /** Execute MCP servers */
   'mcp:execute': 'mcp:execute',
+  /** View MCP servers */
   'mcp:read': 'mcp:read',
+  /** Create and modify MCP servers */
   'mcp:write': 'mcp:write',
+  /** Delete memory and threads */
   'memory:delete': 'memory:delete',
+  /** Execute memory and threads */
   'memory:execute': 'memory:execute',
+  /** View memory and threads */
   'memory:read': 'memory:read',
+  /** Create and modify memory and threads */
   'memory:write': 'memory:write',
+  /** View traces and spans */
   'observability:read': 'observability:read',
+  /** Create and modify traces and spans */
   'observability:write': 'observability:write',
+  /** Execute processors */
   'processors:execute': 'processors:execute',
+  /** View processors */
   'processors:read': 'processors:read',
+  /** View evaluation scores */
   'scores:read': 'scores:read',
+  /** Create and modify evaluation scores */
   'scores:write': 'scores:write',
+  /** Delete stored agents */
   'stored-agents:delete': 'stored-agents:delete',
+  /** View stored agents */
   'stored-agents:read': 'stored-agents:read',
+  /** Create and modify stored agents */
   'stored-agents:write': 'stored-agents:write',
+  /** View system info */
   'system:read': 'system:read',
+  /** Execute tools */
   'tools:execute': 'tools:execute',
+  /** View tools */
   'tools:read': 'tools:read',
+  /** Delete vector stores */
   'vector:delete': 'vector:delete',
+  /** Execute vector stores */
   'vector:execute': 'vector:execute',
+  /** View vector stores */
   'vector:read': 'vector:read',
+  /** Create and modify vector stores */
   'vector:write': 'vector:write',
+  /** Delete workflows */
   'workflows:delete': 'workflows:delete',
+  /** Execute workflows */
   'workflows:execute': 'workflows:execute',
+  /** View workflows */
   'workflows:read': 'workflows:read',
+  /** Create and modify workflows */
   'workflows:write': 'workflows:write',
+  /** Delete workspaces */
   'workspaces:delete': 'workspaces:delete',
+  /** View workspaces */
   'workspaces:read': 'workspaces:read',
+  /** Create and modify workspaces */
   'workspaces:write': 'workspaces:write',
 } as const;
 

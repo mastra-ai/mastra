@@ -19,6 +19,59 @@ const __dirname = path.dirname(__filename);
 /** Path to the generated permissions file in @mastra/core */
 export const OUTPUT_PATH = path.join(__dirname, '../../core/src/auth/interfaces/permissions.generated.ts');
 
+/** Descriptions for actions (used for TSDoc comments in autocomplete) */
+const ACTION_DESCRIPTIONS: Record<string, string> = {
+  delete: 'Delete',
+  execute: 'Execute',
+  read: 'View',
+  write: 'Create and modify',
+};
+
+/** Descriptions for resources (used for TSDoc comments in autocomplete) */
+const RESOURCE_DESCRIPTIONS: Record<string, string> = {
+  a2a: 'agent-to-agent communication',
+  'agent-builder': 'agent builder',
+  agents: 'agents',
+  logs: 'logs',
+  mcp: 'MCP servers',
+  memory: 'memory and threads',
+  observability: 'traces and spans',
+  processors: 'processors',
+  scores: 'evaluation scores',
+  'stored-agents': 'stored agents',
+  system: 'system info',
+  tools: 'tools',
+  vector: 'vector stores',
+  workflows: 'workflows',
+  workspaces: 'workspaces',
+};
+
+/**
+ * Generates a human-readable description for a permission pattern.
+ */
+function getPermissionDescription(pattern: string): string {
+  if (pattern === '*') {
+    return 'Full access to all resources and actions';
+  }
+
+  if (pattern.startsWith('*:')) {
+    const action = pattern.slice(2);
+    const actionDesc = ACTION_DESCRIPTIONS[action] || action;
+    return `${actionDesc} all resources`;
+  }
+
+  if (pattern.endsWith(':*')) {
+    const resource = pattern.slice(0, -2);
+    const resourceDesc = RESOURCE_DESCRIPTIONS[resource] || resource;
+    return `Full access to ${resourceDesc}`;
+  }
+
+  const [resource, action] = pattern.split(':');
+  const resourceDesc = RESOURCE_DESCRIPTIONS[resource] || resource;
+  const actionDesc = ACTION_DESCRIPTIONS[action] || action;
+  return `${actionDesc} ${resourceDesc}`;
+}
+
 export interface PermissionData {
   resources: string[];
   actions: string[];
@@ -67,8 +120,13 @@ export function generatePermissionFileContent(data: PermissionData): string {
     ...permissions, // Specific permissions
   ];
 
-  // Generate the PERMISSION_PATTERNS object entries
-  const patternEntries = allPatterns.map(pattern => `  '${pattern}': '${pattern}'`).join(',\n');
+  // Generate the PERMISSION_PATTERNS object entries with TSDoc comments
+  const patternEntries = allPatterns
+    .map(pattern => {
+      const desc = getPermissionDescription(pattern);
+      return `  /** ${desc} */\n  '${pattern}': '${pattern}'`;
+    })
+    .join(',\n');
 
   return `/**
  * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
