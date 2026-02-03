@@ -412,8 +412,8 @@ describe('Workspace Logger Integration', () => {
 
     it('should log errors on init failure', async () => {
       const mockLogger = createMockLogger();
-      // Use a path that will fail (nested under a non-existent read-only path)
-      const filesystem = new LocalFilesystem({ basePath: '/root/nonexistent/path' });
+      // Use a path with null byte - universally invalid on all platforms
+      const filesystem = new LocalFilesystem({ basePath: '/invalid\x00path' });
       filesystem.__setLogger(mockLogger);
 
       await expect(filesystem.init()).rejects.toThrow();

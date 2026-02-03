@@ -592,7 +592,6 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   async destroy(): Promise<void> {
-    this.logger.debug('Destroying filesystem', { basePath: this._basePath });
     // LocalFilesystem doesn't clean up on destroy by default
   }
 
