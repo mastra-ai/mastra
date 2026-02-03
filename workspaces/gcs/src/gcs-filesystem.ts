@@ -4,7 +4,7 @@
  * A filesystem implementation backed by Google Cloud Storage.
  */
 
-import type { Storage, Bucket } from '@google-cloud/storage';
+import { Storage, Bucket } from '@google-cloud/storage';
 
 import type {
   WorkspaceFilesystem,
@@ -209,10 +209,8 @@ export class GCSFilesystem implements WorkspaceFilesystem {
     return config;
   }
 
-  private async getStorage(): Promise<Storage> {
+  private getStorage(): Storage {
     if (this._storage) return this._storage;
-
-    const { Storage: StorageClass } = await import('@google-cloud/storage');
 
     const options: { projectId?: string; credentials?: object; keyFilename?: string } = {};
 
@@ -230,14 +228,14 @@ export class GCSFilesystem implements WorkspaceFilesystem {
       }
     }
 
-    this._storage = new StorageClass(options);
+    this._storage = new Storage(options);
     return this._storage;
   }
 
-  private async getBucket(): Promise<Bucket> {
+  private getBucket(): Bucket {
     if (this._bucket) return this._bucket;
 
-    const storage = await this.getStorage();
+    const storage = this.getStorage();
     this._bucket = storage.bucket(this.bucketName);
     return this._bucket;
   }
@@ -253,7 +251,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   // ---------------------------------------------------------------------------
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
-    const bucket = await this.getBucket();
+    const bucket = this.getBucket();
     const file = bucket.file(this.toKey(path));
 
     try {
@@ -272,7 +270,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   }
 
   async writeFile(path: string, content: FileContent, _options?: WriteOptions): Promise<void> {
-    const bucket = await this.getBucket();
+    const bucket = this.getBucket();
     const file = bucket.file(this.toKey(path));
 
     const body = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
@@ -305,7 +303,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
       return;
     }
 
-    const bucket = await this.getBucket();
+    const bucket = this.getBucket();
     const file = bucket.file(this.toKey(path));
 
     try {
@@ -321,7 +319,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   }
 
   async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
-    const bucket = await this.getBucket();
+    const bucket = this.getBucket();
     const srcFile = bucket.file(this.toKey(src));
     const destFile = bucket.file(this.toKey(dest));
 
@@ -360,14 +358,14 @@ export class GCSFilesystem implements WorkspaceFilesystem {
     }
 
     // Delete all objects with this prefix
-    const bucket = await this.getBucket();
+    const bucket = this.getBucket();
     const prefix = this.toKey(path).replace(/\/$/, '') + '/';
 
     await bucket.deleteFiles({ prefix });
   }
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
-    const bucket = await this.getBucket();
+    const bucket = this.getBucket();
 
     const prefix = this.toKey(path).replace(/\/$/, '');
     const searchPrefix = prefix ? prefix + '/' : '';
@@ -437,7 +435,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   // ---------------------------------------------------------------------------
 
   async exists(path: string): Promise<boolean> {
-    const bucket = await this.getBucket();
+    const bucket = this.getBucket();
     const file = bucket.file(this.toKey(path));
 
     // Check if it's a file
@@ -454,7 +452,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   }
 
   async stat(path: string): Promise<FileStat> {
-    const bucket = await this.getBucket();
+    const bucket = this.getBucket();
     const file = bucket.file(this.toKey(path));
 
     const [exists] = await file.exists();
@@ -490,7 +488,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   }
 
   async isFile(path: string): Promise<boolean> {
-    const bucket = await this.getBucket();
+    const bucket = this.getBucket();
     const file = bucket.file(this.toKey(path));
 
     const [exists] = await file.exists();
@@ -498,7 +496,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   }
 
   async isDirectory(path: string): Promise<boolean> {
-    const bucket = await this.getBucket();
+    const bucket = this.getBucket();
 
     const [files] = await bucket.getFiles({
       prefix: this.toKey(path).replace(/\/$/, '') + '/',
@@ -514,7 +512,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
 
   async init(): Promise<void> {
     // Verify we can access the bucket
-    await this.getBucket();
+    this.getBucket();
   }
 
   async destroy(): Promise<void> {
