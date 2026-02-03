@@ -121,9 +121,7 @@ export const FileTreeBadge = ({
         {/* Filesystem badge - outside button to prevent overlap */}
         {fsMeta?.filesystem?.name && (
           <Link
-            href={`/workspace?${new URLSearchParams({
-              ...(fsMeta.workspace?.id && { workspaceId: fsMeta.workspace.id }),
-            }).toString()}`}
+            href={fsMeta.workspace?.id ? `/workspaces/${fsMeta.workspace.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
             className="flex items-center gap-1.5 text-xs text-icon6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
           >
             <HardDrive className="size-3" />
