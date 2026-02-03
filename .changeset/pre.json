@@ -100,7 +100,35 @@
     "@mastra/voice-playai": "0.12.0",
     "@mastra/voice-sarvam": "0.12.0",
     "@mastra/voice-speechify": "0.12.0",
-    "@mastra/inngest": "1.0.1"
+    "@mastra/inngest": "1.0.1",
+    "mastra-docs": "0.0.0"
   },
-  "changesets": []
+  "changesets": [
+    "afraid-dodos-hunt",
+    "afraid-doors-tap",
+    "automated-provider-registry-20260131-004308",
+    "brown-mails-care",
+    "busy-mammals-stand",
+    "chubby-ads-prove",
+    "cold-moles-sip",
+    "every-cars-hope",
+    "fast-pandas-nail",
+    "fast-ravens-begin",
+    "fix-kimi-k2-5-reasoning",
+    "fruity-clubs-joke",
+    "fuzzy-moose-occur",
+    "heavy-ads-allow",
+    "hot-cities-tan",
+    "kind-rivers-jam",
+    "metal-chairs-shake",
+    "polite-masks-listen",
+    "puny-views-change",
+    "ripe-lions-rhyme",
+    "shaky-coats-play",
+    "smooth-swans-hammer",
+    "swift-bags-joke",
+    "two-shrimps-smoke",
+    "whole-candies-report",
+    "yummy-nights-return"
+  ]
 }

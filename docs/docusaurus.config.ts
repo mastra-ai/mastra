@@ -41,6 +41,7 @@ const config: Config = {
     kapaGroupId: process.env.KAPA_GROUP_ID,
   },
   plugins: [
+    [require.resolve('./src/plugins/tailwind/tailwind-plugin'), {}],
     [
       '@docusaurus/plugin-vercel-analytics',
       {
@@ -107,7 +108,7 @@ const config: Config = {
         },
         blog: false,
         theme: {
-          customCss: './src/css/custom.css',
+          customCss: './custom.css',
         },
         sitemap: {
           lastmod: 'date',

@@ -58,7 +58,6 @@ const workspace = new Workspace({
 
 const mastra = new Mastra({
   workspace,
-  agents: { myAgent },
 });
 ```
 
@@ -83,7 +82,7 @@ export const myAgent = new Agent({
 
 ## Initialization
 
-Mastra automatically initializes workspaces when needed. Call `init()` manually when using a workspace outside of Mastra (standalone scripts, tests) or when you need to pre-provision resources before the first agent interaction.
+Calling `init()` is optional in most cases—some providers initialize on first operation. Call `init()` manually when using a workspace outside of Mastra (standalone scripts, tests) or when you need to pre-provision resources before the first agent interaction.
 
 ```typescript title="src/mastra/workspaces.ts"
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
@@ -93,6 +92,7 @@ const workspace = new Workspace({
   sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
 });
 
+// Optional: pre-create directories and sandbox before first use
 await workspace.init();
 ```
 

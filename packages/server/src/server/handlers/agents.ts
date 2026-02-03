@@ -58,13 +58,33 @@ import {
 /**
  * Checks if a provider has its required API key environment variable(s) configured.
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
- * @param providerId - The provider identifier (may include a suffix like ".chat")
+ * Also handles custom gateway providers that are stored with gateway prefix (e.g., "acme/acme-openai").
+ * @param providerId - The provider identifier (may include a suffix like ".chat" or be from a custom gateway)
  * @returns true if all required environment variables are set, false otherwise
  */
-function isProviderConnected(providerId: string): boolean {
+export function isProviderConnected(providerId: string): boolean {
   // Clean provider ID (e.g., "openai.chat" -> "openai")
   const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
-  const provider = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
+
+  // First, try direct lookup
+  let provider = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
+
+  // If not found and doesn't contain a slash, check if it exists with a gateway prefix
+  // This handles custom gateway providers stored as "gateway/provider" in the registry
+  if (!provider && !cleanId.includes('/')) {
+    // Search for a provider ID that matches the pattern "*/cleanId"
+    const registryKeys = Object.keys(PROVIDER_REGISTRY);
+    const matchingKey = registryKeys.find(key => {
+      // Check if the key matches the pattern "gateway/providerId"
+      const parts = key.split('/');
+      return parts.length === 2 && parts[1] === cleanId;
+    });
+
+    if (matchingKey) {
+      provider = PROVIDER_REGISTRY[matchingKey as keyof typeof PROVIDER_REGISTRY];
+    }
+  }
+
   if (!provider) return false;
 
   const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
@@ -1549,11 +1569,9 @@ Ensure the prompt is:
 - Ethically sound
 
 4. OUTPUT FORMAT
-Return a structured response with:
-- Enhanced system prompt
-- Analysis of key components
-- Identified goals and constraints
-- Core domain concepts
+Return your response as JSON with exactly these two fields:
+- explanation: A brief explanation of the changes you made and why
+- new_prompt: The complete enhanced system prompt as a single string
 
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
 

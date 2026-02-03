@@ -6,6 +6,7 @@ import { DepsService } from '../../services/service.deps';
 import { gitInit } from '../utils';
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
+import { installMastraSkills } from './skills-install';
 import { createComponentsDir, createMastraDir, getAPIKey, writeAPIKey, writeCodeSample, writeIndexFile } from './utils';
 import type { Component, LLMProvider } from './utils';
 
@@ -17,7 +18,8 @@ export const init = async ({
   llmProvider = 'openai',
   llmApiKey,
   addExample = false,
-  configureEditorWithDocsMCP,
+  skills,
+  mcpServer,
   versionTag,
   initGit = false,
 }: {
@@ -26,7 +28,8 @@ export const init = async ({
   llmProvider?: LLMProvider;
   llmApiKey?: string;
   addExample?: boolean;
-  configureEditorWithDocsMCP?: Editor;
+  skills?: string[];
+  mcpServer?: Editor;
   versionTag?: string;
   initGit?: boolean;
 }) => {
@@ -93,20 +96,50 @@ export const init = async ({
 
     const key = await getAPIKey(llmProvider || 'openai');
 
-    if (configureEditorWithDocsMCP) {
+    s.stop('Mastra initialized');
+
+    // Install skills if selected
+    if (skills && skills.length > 0) {
+      try {
+        s.start('Installing Mastra agent skills');
+        const skillsResult = await installMastraSkills({
+          directory: process.cwd(),
+          agents: skills,
+        });
+        if (skillsResult.success) {
+          // Format agent names nicely
+          const agentNames = skillsResult.agents
+            .map(agent => {
+              // Convert kebab-case to Title Case
+              return agent
+                .split('-')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ');
+            })
+            .join(', ');
+          s.stop(`Mastra agent skills installed (in ${agentNames})`);
+        } else {
+          s.stop('Skills installation failed');
+          console.warn(color.yellow(`\nWarning: ${skillsResult.error}`));
+        }
+      } catch (error) {
+        s.stop('Skills installation failed');
+        console.warn(color.yellow(`\nWarning: ${error instanceof Error ? error.message : 'Unknown error'}`));
+      }
+    }
+
+    // Install MCP if an editor was selected
+    if (mcpServer) {
       await installMastraDocsMCPServer({
-        editor: configureEditorWithDocsMCP,
+        editor: mcpServer,
         directory: process.cwd(),
         versionTag,
       });
     }
 
-    s.stop();
-
     if (initGit) {
-      const s = p.spinner();
+      s.start('Initializing git repository');
       try {
-        s.start('Initializing git repository');
         await gitInit({ cwd: process.cwd() });
         s.stop('Git repository initialized');
       } catch {

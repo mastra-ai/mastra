@@ -161,7 +161,8 @@ export class LocalSandbox implements WorkspaceSandbox {
   readonly name = 'LocalSandbox';
   readonly provider = 'local';
 
-  private _status: ProviderStatus = 'stopped';
+  status: ProviderStatus = 'stopped';
+
   private readonly _workingDirectory: string;
   private readonly env: NodeJS.ProcessEnv;
   private readonly timeout?: number;
@@ -238,12 +239,8 @@ export class LocalSandbox implements WorkspaceSandbox {
     };
   }
 
-  get status(): ProviderStatus {
-    return this._status;
-  }
-
   async start(): Promise<void> {
-    this._status = 'starting';
+    this.status = 'starting';
 
     try {
       await fs.mkdir(this.workingDirectory, { recursive: true });
@@ -289,15 +286,15 @@ export class LocalSandbox implements WorkspaceSandbox {
         }
       }
 
-      this._status = 'running';
+      this.status = 'running';
     } catch (error) {
-      this._status = 'error';
+      this.status = 'error';
       throw error;
     }
   }
 
   async stop(): Promise<void> {
-    this._status = 'stopped';
+    this.status = 'stopped';
   }
 
   async destroy(): Promise<void> {
@@ -327,7 +324,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   }
 
   async isReady(): Promise<boolean> {
-    return this._status === 'running';
+    return this.status === 'running';
   }
 
   async getInfo(): Promise<SandboxInfo> {
@@ -335,7 +332,7 @@ export class LocalSandbox implements WorkspaceSandbox {
       id: this.id,
       name: this.name,
       provider: this.provider,
-      status: this._status,
+      status: this.status,
       createdAt: this._createdAt,
       resources: {
         memoryMB: Math.round(os.totalmem() / 1024 / 1024),
@@ -387,7 +384,7 @@ export class LocalSandbox implements WorkspaceSandbox {
     options: ExecuteCommandOptions = {},
   ): Promise<CommandResult> {
     // Auto-start if not running (lazy initialization)
-    if (this._status !== 'running') {
+    if (this.status !== 'running') {
       await this.start();
     }
 

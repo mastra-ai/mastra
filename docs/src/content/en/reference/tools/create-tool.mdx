@@ -131,6 +131,13 @@ export const weatherTool = createTool({
       isOptional: true,
     },
     {
+      name: "requestContextSchema",
+      type: "Zod schema",
+      description:
+        "A Zod schema for validating request context values. When provided, the context is validated before execute() runs, returning an error object if validation fails.",
+      isOptional: true,
+    },
+    {
       name: "execute",
       type: "function",
       description:

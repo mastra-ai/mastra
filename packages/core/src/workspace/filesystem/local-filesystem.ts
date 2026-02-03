@@ -18,6 +18,7 @@ import {
   PermissionError,
   WorkspaceReadOnlyError,
 } from '../errors';
+import type { ProviderStatus } from '../lifecycle';
 import type {
   WorkspaceFilesystem,
   FilesystemInfo,
@@ -77,6 +78,8 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   readonly name = 'LocalFilesystem';
   readonly provider = 'local';
   readonly readOnly?: boolean;
+
+  status: ProviderStatus = 'stopped';
 
   private readonly _basePath: string;
   private readonly _contained: boolean;
@@ -138,7 +141,16 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   private async assertPathContained(absolutePath: string): Promise<void> {
     if (!this._contained) return;
 
-    const baseReal = await fs.realpath(this._basePath);
+    let baseReal: string;
+    try {
+      baseReal = await fs.realpath(this._basePath);
+    } catch (error: unknown) {
+      if (isEnoentError(error)) {
+        throw new DirectoryNotFoundError(this._basePath);
+      }
+      throw error;
+    }
+
     let targetReal: string;
     try {
       targetReal = await fs.realpath(absolutePath);
@@ -150,7 +162,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
           const nextParent = nodePath.dirname(parentPath);
           if (nextParent === parentPath) {
             // Reached filesystem root without finding existing directory
-            throw error;
+            throw new DirectoryNotFoundError(absolutePath);
           }
           parentPath = nextParent;
           try {
@@ -173,7 +185,14 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     }
   }
 
+  async ensureInitialized(): Promise<void> {
+    if (this.status !== 'running') {
+      await this.init();
+    }
+  }
+
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
+    await this.ensureInitialized();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
 
@@ -197,6 +216,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
+    await this.ensureInitialized();
     this.assertWritable('writeFile');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -237,6 +257,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async appendFile(inputPath: string, content: FileContent): Promise<void> {
+    await this.ensureInitialized();
     this.assertWritable('appendFile');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -246,6 +267,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
+    await this.ensureInitialized();
     this.assertWritable('deleteFile');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -269,6 +291,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    await this.ensureInitialized();
     this.assertWritable('copyFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
@@ -305,6 +328,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   private async copyDirectory(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    await this.ensureInitialized();
     await fs.mkdir(dest, { recursive: true });
     const entries = await fs.readdir(src, { withFileTypes: true });
 
@@ -335,6 +359,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    await this.ensureInitialized();
     this.assertWritable('moveFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
@@ -373,6 +398,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
+    await this.ensureInitialized();
     this.assertWritable('mkdir');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -385,6 +411,10 @@ export class LocalFilesystem implements WorkspaceFilesystem {
         if (!stats.isDirectory()) {
           throw new FileExistsError(inputPath);
         }
+      } else if (isEnoentError(error)) {
+        // Parent directory doesn't exist (only happens when recursive: false)
+        const parentPath = nodePath.dirname(inputPath);
+        throw new DirectoryNotFoundError(parentPath);
       } else {
         throw error;
       }
@@ -392,6 +422,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
+    await this.ensureInitialized();
     this.assertWritable('rmdir');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -426,6 +457,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async readdir(inputPath: string, options?: ListOptions): Promise<FileEntry[]> {
+    await this.ensureInitialized();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
 
@@ -516,12 +548,14 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async exists(inputPath: string): Promise<boolean> {
+    await this.ensureInitialized();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
     return fsExists(absolutePath);
   }
 
   async stat(inputPath: string): Promise<FileStat> {
+    await this.ensureInitialized();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
     const result = await fsStat(absolutePath, inputPath);
@@ -532,7 +566,14 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   }
 
   async init(): Promise<void> {
-    await fs.mkdir(this._basePath, { recursive: true });
+    this.status = 'starting';
+    try {
+      await fs.mkdir(this._basePath, { recursive: true });
+      this.status = 'running';
+    } catch (error) {
+      this.status = 'error';
+      throw error;
+    }
   }
 
   async destroy(): Promise<void> {
@@ -546,6 +587,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       provider: this.provider,
       readOnly: this.readOnly,
       basePath: this.basePath,
+      status: this.status,
     };
   }
 
