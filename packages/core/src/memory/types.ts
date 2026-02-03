@@ -12,7 +12,10 @@ import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
 
-// Dynamic model types for Observational Memory (identical to Agent's model types)
+// Dynamic model types for Observational Memory (identical to Agent's model types in agent/types.ts)
+// TODO(v2): Export DynamicModel and ModelWithRetries from agent/types.ts and reuse here.
+// Currently duplicated for backward compatibility - importing from agent/types would break
+// users with new @mastra/memory but old @mastra/core that doesn't export those types.
 type ObservationalMemoryDynamicModel = ({
   requestContext,
   mastra,
