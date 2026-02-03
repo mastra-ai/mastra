@@ -417,6 +417,7 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
         },
       },
     },
+    maxTokensPerBatch: 10_000,
   },
   reflection: {
     model: 'google/gemini-2.5-flash',
@@ -606,7 +607,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens,
       },
       providerOptions: config.observation?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.providerOptions,
-      maxTokensPerBatch: config.observation?.maxTokensPerBatch ?? 5000,
+      maxTokensPerBatch:
+        config.observation?.maxTokensPerBatch ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.maxTokensPerBatch,
     };
 
     // Resolve reflection config with defaults
@@ -2723,7 +2725,8 @@ ${formattedMessages}
       // PARALLEL BATCHING: Chunk threads into batches and process in parallel
       // This combines batching efficiency with parallel execution
       // ════��═══════════════════════════════════════════════════════
-      const maxTokensPerBatch = this.observationConfig.maxTokensPerBatch ?? 5000;
+      const maxTokensPerBatch =
+        this.observationConfig.maxTokensPerBatch ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.maxTokensPerBatch;
       const orderedThreadIds = threadOrder.filter(tid => threadsWithMessages.has(tid));
 
       // Chunk threads into batches based on token count
