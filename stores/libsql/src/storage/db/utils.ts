@@ -12,10 +12,10 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
  * by JSON.stringify's native behavior.
  *
  * @param value - The value to serialize
- * @returns JSON string representation, with non-serializable values removed
+ * @returns JSON string representation, with non-serializable values normalized to 'null'
  */
 export const safeStringify = (value: unknown): string => {
-  return JSON.stringify(value, (_key, val) => {
+  const result = JSON.stringify(value, (_key, val) => {
     if (val === null || val === undefined) return val;
     if (typeof val === 'function') return undefined;
     if (typeof val === 'symbol') return undefined;
@@ -34,6 +34,8 @@ export const safeStringify = (value: unknown): string => {
 
     return val;
   });
+  // JSON.stringify returns undefined for root-level non-serializable values
+  return result ?? 'null';
 };
 
 /**
