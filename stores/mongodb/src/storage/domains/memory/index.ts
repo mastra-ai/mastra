@@ -376,7 +376,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
+            resourceId: resourceId ?? '',
           },
         },
         error,
