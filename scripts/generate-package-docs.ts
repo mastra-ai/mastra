@@ -18,27 +18,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const MONOREPO_ROOT = path.join(__dirname, '..');
 
-interface ExportInfo {
-  types: string;
-  implementation: string;
-  line?: number;
-}
-
-interface ModuleInfo {
-  index: string;
-  chunks: string[];
-}
-
-interface SourceMap {
-  version: string;
-  package: string;
-  exports: Record<string, ExportInfo>;
-  modules: Record<string, ModuleInfo>;
-}
-
 interface ManifestEntry {
   path: string; // e.g., "docs/agents/adding-voice/llms.txt"
   title: string;
+  description?: string;
   category: string; // "docs", "reference", "guides", "models"
   folderPath: string; // e.g., "agents/adding-voice"
 }
@@ -70,156 +53,6 @@ function generateFlatFileName(entry: ManifestEntry): string {
   return `${entry.category}-${pathPart}.md`;
 }
 
-function parseIndexExports(indexPath: string): Map<string, { chunk: string; exportName: string }> {
-  const exports = new Map<string, { chunk: string; exportName: string }>();
-
-  if (!fs.existsSync(indexPath)) {
-    return exports;
-  }
-
-  const content = fs.readFileSync(indexPath, 'utf-8');
-
-  // Parse: export { Agent, TripWire } from '../chunk-IDD63DWQ.js';
-  const regex = /export\s*\{\s*([^}]+)\s*\}\s*from\s*['"]([^'"]+)['"]/g;
-  let match;
-
-  while ((match = regex.exec(content)) !== null) {
-    const names = match[1].split(',').map(n => n.trim().split(' as ')[0].trim());
-    const chunkPath = match[2];
-    const chunk = path.basename(chunkPath);
-
-    for (const name of names) {
-      if (name) {
-        exports.set(name, { chunk, exportName: name });
-      }
-    }
-  }
-
-  return exports;
-}
-
-function findExportLine(chunkPath: string, exportName: string): number | undefined {
-  if (!fs.existsSync(chunkPath)) {
-    return undefined;
-  }
-
-  // Make sure it's a file, not a directory
-  const stat = fs.statSync(chunkPath);
-  if (!stat.isFile()) {
-    return undefined;
-  }
-
-  const content = fs.readFileSync(chunkPath, 'utf-8');
-  const lines = content.split('\n');
-
-  // Look for class or function definition
-  const patterns = [
-    new RegExp(`^var ${exportName} = class`),
-    new RegExp(`^function ${exportName}\\s*\\(`),
-    new RegExp(`^var ${exportName} = function`),
-    new RegExp(`^var ${exportName} = \\(`), // Arrow function
-    new RegExp(`^const ${exportName} = `),
-    new RegExp(`^let ${exportName} = `),
-  ];
-
-  for (let i = 0; i < lines.length; i++) {
-    for (const pattern of patterns) {
-      if (pattern.test(lines[i])) {
-        return i + 1; // 1-indexed
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function generateSourceMap(packageRoot: string): SourceMap {
-  const distDir = path.join(packageRoot, 'dist');
-  const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf-8'));
-
-  const sourceMap: SourceMap = {
-    version: packageJson.version,
-    package: packageJson.name,
-    exports: {},
-    modules: {},
-  };
-
-  // Default modules to analyze
-  const modules = [
-    'agent',
-    'tools',
-    'workflows',
-    'memory',
-    'stream',
-    'llm',
-    'mastra',
-    'mcp',
-    'evals',
-    'processors',
-    'storage',
-    'vector',
-    'voice',
-  ];
-
-  for (const mod of modules) {
-    const indexPath = path.join(distDir, mod, 'index.js');
-
-    if (!fs.existsSync(indexPath)) {
-      continue;
-    }
-
-    const exports = parseIndexExports(indexPath);
-    const chunks = new Set<string>();
-
-    for (const [name, info] of exports) {
-      chunks.add(info.chunk);
-
-      const chunkPath = path.join(distDir, info.chunk);
-      const line = findExportLine(chunkPath, name);
-
-      // Determine the types file
-      let typesFile = `dist/${mod}/index.d.ts`;
-
-      // Check if there's a more specific types file
-      const specificTypesPath = path.join(distDir, mod, `${name.toLowerCase()}.d.ts`);
-      if (fs.existsSync(specificTypesPath)) {
-        typesFile = `dist/${mod}/${name.toLowerCase()}.d.ts`;
-      }
-
-      sourceMap.exports[name] = {
-        types: typesFile,
-        implementation: `dist/${info.chunk}`,
-        line,
-      };
-    }
-
-    sourceMap.modules[mod] = {
-      index: `dist/${mod}/index.js`,
-      chunks: [...chunks],
-    };
-  }
-
-  // Also check root index.js for additional exports
-  const rootIndexPath = path.join(distDir, 'index.js');
-  if (fs.existsSync(rootIndexPath)) {
-    const rootExports = parseIndexExports(rootIndexPath);
-    for (const [name, info] of rootExports) {
-      if (!sourceMap.exports[name]) {
-        const chunkPath = path.join(distDir, info.chunk);
-        const line = findExportLine(chunkPath, name);
-
-        sourceMap.exports[name] = {
-          types: 'dist/index.d.ts',
-          implementation: `dist/${info.chunk}`,
-          line,
-        };
-      }
-    }
-  }
-
-  return sourceMap;
-}
-
 function generateSkillMd(packageName: string, version: string, entries: ManifestEntry[]): string {
   // Generate compliant name: lowercase, hyphens, max 64 chars
   // "@mastra/core" -> "mastra-core"
@@ -242,7 +75,7 @@ function generateSkillMd(packageName: string, version: string, entries: Manifest
     docList += `\n### ${category.charAt(0).toUpperCase() + category.slice(1)}\n\n`;
     for (const entry of catEntries) {
       const fileName = generateFlatFileName(entry);
-      docList += `- [${entry.title}](references/${fileName})\n`;
+      docList += `- [${entry.title}](references/${fileName})${entry.description ? ` - ${entry.description}` : ''}\n`;
     }
   }
 
@@ -254,19 +87,14 @@ metadata:
   version: "${version}"
 ---
 
-# ${packageName} Documentation
+## When to use
 
-## Quick Reference
+Use this skill whenever you are working with ${packageName} to obtain the domain-specific knowledge.
 
-Use \`assets/SOURCE_MAP.json\` to find code exports and their source locations.
+## How to use
 
-## Available Documentation
+Read the individual reference documents for detailed explanations and code examples.
 ${docList}
-
-## Directory Structure
-
-- \`references/\` - Documentation files
-- \`assets/SOURCE_MAP.json\` - Maps exports to source files
 `;
 }
 
@@ -362,8 +190,7 @@ async function generateDocsForPackage(
 
   // Step 1: Generate SOURCE_MAP.json in assets/
   console.info('1. Generating assets/SOURCE_MAP.json...');
-  const sourceMap = generateSourceMap(packageRoot);
-  fs.writeFileSync(path.join(docsOutputDir, 'assets', 'SOURCE_MAP.json'), JSON.stringify(sourceMap, null, 2), 'utf-8');
+  // TODO: Implement SOURCE_MAP.json generation
 
   // Step 2: Copy documentation files
   console.info('2. Copying documentation files...');

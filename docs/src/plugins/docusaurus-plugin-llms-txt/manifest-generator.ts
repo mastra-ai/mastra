@@ -10,6 +10,7 @@ import { resolveSourceFile, getCategoryFromRoute, getFolderPathFromRoute, isDocu
 export interface ManifestEntry {
   path: string
   title: string
+  description?: string
   category: string
   folderPath: string
 }
@@ -81,6 +82,7 @@ export async function generateManifest(routes: RouteInfo[], siteDir: string, out
         title: cleanTitle(title) || cleanTitle(frontmatter?.title) || 'Untitled',
         category,
         folderPath,
+        description: frontmatter?.description,
       }
 
       // Add to each package's entry list
