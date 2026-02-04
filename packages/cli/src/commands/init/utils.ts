@@ -959,7 +959,7 @@ export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[
 
   let content = `# AGENTS.md
 
-This guide helps AI agents work efficiently with this Mastra project.
+This document provides guidance for AI coding agents working in this repository.
 
 ## Quick Start
 
