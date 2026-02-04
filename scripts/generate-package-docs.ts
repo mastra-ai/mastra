@@ -331,11 +331,7 @@ function getPackageJson(packageRoot: string): { name: string; version: string } 
   return result;
 }
 
-function generateDocsForPackage(
-  packageName: string,
-  packageRoot: string,
-  manifest: LlmsManifest,
-): void {
+function generateDocsForPackage(packageName: string, packageRoot: string, manifest: LlmsManifest): void {
   const packageJson = getPackageJson(packageRoot);
   const docsOutputDir = path.join(packageRoot, 'dist', 'docs');
   const entries = manifest.packages[packageName];
