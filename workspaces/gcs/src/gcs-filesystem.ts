@@ -20,7 +20,7 @@ import type {
   FilesystemIcon,
   ProviderStatus,
 } from '@mastra/core/workspace';
-import { MastraFilesystem } from '@mastra/core/workspace';
+import { MastraFilesystem, FileNotFoundError } from '@mastra/core/workspace';
 
 /**
  * GCS mount configuration.
@@ -33,7 +33,6 @@ export interface GCSMountConfig extends FilesystemMountConfig {
   /** Service account key JSON (optional - omit for public buckets or ADC) */
   serviceAccountKey?: string;
 }
-import { FileNotFoundError } from '@mastra/core/workspace';
 
 /**
  * Common MIME types by file extension.
