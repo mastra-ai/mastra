@@ -214,7 +214,8 @@ export class S3Filesystem extends MastraFilesystem {
     this.secretAccessKey = options.secretAccessKey;
     this.endpoint = options.endpoint;
     this.forcePathStyle = options.forcePathStyle ?? !!options.endpoint; // Default true for custom endpoints
-    this.prefix = options.prefix ? options.prefix.replace(/^\/+|\/+$/g, '') + '/' : '';
+    // Trim leading/trailing slashes from prefix (split to avoid polynomial regex)
+    this.prefix = options.prefix ? options.prefix.replace(/^\/+/, '').replace(/\/+$/, '') + '/' : '';
 
     // Display metadata - detect icon first, then derive displayName from it
     this.icon = options.icon ?? this.detectIconFromEndpoint(options.endpoint);
@@ -275,17 +276,26 @@ export class S3Filesystem extends MastraFilesystem {
       return 'aws-s3';
     }
 
-    const ep = endpoint.toLowerCase();
+    // Parse hostname from endpoint URL for secure matching
+    let hostname: string;
+    try {
+      const url = new URL(endpoint);
+      hostname = url.hostname.toLowerCase();
+    } catch {
+      // If URL parsing fails, use the endpoint as-is (lowercased)
+      hostname = endpoint.toLowerCase();
+    }
 
-    if (ep.includes('r2.cloudflarestorage.com') || ep.includes('cloudflare')) {
+    // Check hostname suffix for known providers
+    if (hostname.endsWith('r2.cloudflarestorage.com') || hostname.endsWith('.cloudflare.com')) {
       return 'r2';
     }
 
-    if (ep.includes('storage.googleapis.com') || ep.includes('google')) {
+    if (hostname.endsWith('storage.googleapis.com') || hostname.endsWith('.googleapis.com')) {
       return 'gcs';
     }
 
-    if (ep.includes('blob.core.windows.net') || ep.includes('azure')) {
+    if (hostname.endsWith('blob.core.windows.net') || hostname.endsWith('.azure.com')) {
       return 'azure';
     }
 

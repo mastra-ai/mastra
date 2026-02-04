@@ -184,7 +184,8 @@ export class GCSFilesystem implements WorkspaceFilesystem {
     this.bucketName = options.bucket;
     this.projectId = options.projectId;
     this.credentials = options.credentials;
-    this.prefix = options.prefix ? options.prefix.replace(/^\/+|\/+$/g, '') + '/' : '';
+    // Trim leading/trailing slashes from prefix (split to avoid polynomial regex)
+    this.prefix = options.prefix ? options.prefix.replace(/^\/+/, '').replace(/\/+$/, '') + '/' : '';
 
     // Display metadata
     this.displayName = options.displayName ?? 'Google Cloud Storage';
