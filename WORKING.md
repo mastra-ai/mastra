@@ -20,7 +20,7 @@ This document tracks implementation progress for review.
 | 9b  | Add lifecycle management to MastraFilesystem base class                         | COR-380, COR-484          | **Done** | `mastra-filesystem.ts`, `s3-filesystem.ts`, `gcs-filesystem.ts` |
 | 9c  | Update LocalFilesystem and LocalSandbox to use base class lifecycle             | COR-380                   | **Done** | `local-filesystem.ts`, `local-sandbox.ts`, `errors.ts` |
 | 10  | Implement pathContext with mounts (agent instructions, mount awareness)         | COR-385, COR-491          | **Done** | `composite-filesystem.ts`, `s3-filesystem.ts`, `gcs-filesystem.ts`, `e2b-sandbox.ts` |
-| 11  | General cleanup checklist (imports, error handling, hardcoded values, logging)  | COR-380                   | Pending  | Multiple files                            |
+| 11  | General cleanup checklist (imports, error handling, hardcoded values, logging)  | COR-380                   | **Done** | `gcs-filesystem.ts` (import fix)          |
 | 12  | Create shared test suite with factory patterns                                  | COR-385                   | Pending  | (see stores/server-adapters pattern)      |
 | 13  | Manual testing (E2B + S3/GCS mounts, readOnly, reconnection, GCS compatibility) | COR-380, COR-385, COR-484 | Pending  |                                           |
 
@@ -489,20 +489,25 @@ getInstructions(): string {
 
 ## Task 11: General Cleanup Checklist
 
-### Items to Check
+### Items Checked
 
-- [ ] Unused imports in modified files
-- [ ] Error handling consistency across files
-- [ ] Hardcoded values that should be configurable
-- [ ] Logging consistency (all use appropriate LOG_PREFIX)
-- [ ] JSDoc completeness on public methods
+- [x] Unused imports in modified files - Fixed duplicate import in `gcs-filesystem.ts`
+- [x] Error handling consistency across files - Reviewed, consistent
+- [x] Hardcoded values that should be configurable - `timeout` is configurable via options
+- [x] Logging consistency (all use appropriate LOG_PREFIX) - All E2B files use shared LOG_PREFIX from `mounts/types.ts`
+- [x] JSDoc completeness on public methods - MastraSandbox has full JSDoc coverage
 
-### Files to Review
+### Files Reviewed
 
-- `packages/core/src/workspace/sandbox/mastra-sandbox.ts`
-- `packages/core/src/workspace/filesystem/composite-filesystem.ts`
-- `workspaces/e2b/src/e2b-sandbox.ts`
-- `workspaces/s3/src/s3-filesystem.ts`
+- `packages/core/src/workspace/sandbox/mastra-sandbox.ts` - Good JSDoc
+- `packages/core/src/workspace/filesystem/composite-filesystem.ts` - Good
+- `workspaces/e2b/src/e2b-sandbox.ts` - Good logging, JSDoc
+- `workspaces/s3/src/s3-filesystem.ts` - Good
+- `workspaces/gcs/src/gcs-filesystem.ts` - Fixed duplicate import
+
+### Changes Made
+
+- Consolidated duplicate `@mastra/core/workspace` imports in `gcs-filesystem.ts`
 
 ---
 
@@ -620,6 +625,6 @@ GCS_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
 - [x] Task 9b: MastraFilesystem lifecycle management
 - [x] Task 9c: LocalFilesystem/LocalSandbox lifecycle update
 - [x] Task 10: pathContext implementation (getInstructions() on providers)
-- [ ] Task 11: General cleanup
+- [x] Task 11: General cleanup
 - [ ] Task 12: Shared test suite
 - [ ] Task 13: Manual testing (incl. GCS compatibility)
