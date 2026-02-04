@@ -255,7 +255,11 @@ The `logger` property at the Mastra config level is deprecated.
 
 ## Sampling Strategies
 
-Control which traces and logs are collected:
+Control which traces and logs are collected.
+
+**Note:** Traces and logs are sampled together — when a trace is sampled in, all associated logs are included, and vice versa. This ensures complete observability for sampled executions. Separate trace/log sampling may be added in the future.
+
+**Metrics are not sampled** — they capture aggregate data (counters, histograms) and should always be collected to ensure accurate measurements.
 
 | Strategy | Config | Description |
 |----------|--------|-------------|
