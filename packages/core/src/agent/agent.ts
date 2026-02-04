@@ -417,10 +417,9 @@ export class Agent<
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
   }): Promise<ProcessorRunner> {
-    // Resolve input processors - overrides replace user-configured but auto-derived (memory, skills) are kept
+    // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
     const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
-
-    const outputProcessors = outputProcessorOverrides ?? (await this.listResolvedOutputProcessors(requestContext));
+    const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
 
     return new ProcessorRunner({
       inputProcessors,
@@ -519,13 +518,19 @@ export class Agent<
    * All processors are combined into a single workflow for consistency.
    * @internal
    */
-  private async listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
-    // Get configured output processors
-    const configuredProcessors = this.#outputProcessors
-      ? typeof this.#outputProcessors === 'function'
-        ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
-        : this.#outputProcessors
-      : [];
+  private async listResolvedOutputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: OutputProcessorOrWorkflow[],
+  ): Promise<OutputProcessorOrWorkflow[]> {
+    // Get configured output processors - use overrides if provided (from generate/stream options),
+    // otherwise use agent constructor processors
+    const configuredProcessors = configuredProcessorOverrides
+      ? configuredProcessorOverrides
+      : this.#outputProcessors
+        ? typeof this.#outputProcessors === 'function'
+          ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
+          : this.#outputProcessors
+        : [];
 
     // Get memory output processors (with deduplication)
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
@@ -3204,8 +3209,13 @@ export class Agent<
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
       }) => this.listResolvedInputProcessors(requestContext, overrides),
-      outputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
-        this.listResolvedOutputProcessors(requestContext),
+      outputProcessors: async ({
+        requestContext,
+        overrides,
+      }: {
+        requestContext: RequestContext;
+        overrides?: OutputProcessorOrWorkflow[];
+      }) => this.listResolvedOutputProcessors(requestContext, overrides),
       llm,
     };
 

@@ -120,15 +120,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
       return bail(modelOutput);
     }
 
-    let effectiveOutputProcessors =
-      options.outputProcessors ||
-      (capabilities.outputProcessors
-        ? typeof capabilities.outputProcessors === 'function'
-          ? await capabilities.outputProcessors({
-              requestContext: result.requestContext!,
-            })
-          : capabilities.outputProcessors
-        : []);
+    // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
+    let effectiveOutputProcessors = capabilities.outputProcessors
+      ? typeof capabilities.outputProcessors === 'function'
+        ? await capabilities.outputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.outputProcessors,
+          })
+        : options.outputProcessors || capabilities.outputProcessors
+      : options.outputProcessors || [];
 
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     // Only create the processor if a model is explicitly provided
