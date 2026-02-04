@@ -167,6 +167,7 @@ export class MastraLLMVNext extends MastraBase {
     includeRawChunks,
     autoResumeSuspendedTools,
     maxProcessorRetries,
+    processorStates,
     activeTools,
     workspace,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
@@ -240,6 +241,7 @@ export class MastraLLMVNext extends MastraBase {
         includeRawChunks,
         autoResumeSuspendedTools,
         maxProcessorRetries,
+        processorStates,
         activeTools,
         workspace,
         options: {

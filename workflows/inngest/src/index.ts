@@ -665,6 +665,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
+                state: {},
               });
 
               if (result instanceof MessageList) {
@@ -744,6 +745,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 modelSettings,
                 structuredOutput,
                 steps: steps ?? [],
+                state: {},
               });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
@@ -866,6 +868,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
+                state: {},
               });
 
               if (result instanceof MessageList) {
@@ -940,6 +943,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 text,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],
+                state: {},
               });
 
               if (result instanceof MessageList) {

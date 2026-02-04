@@ -6,6 +6,8 @@ import type { Rule } from '../types';
 
 import { RuleRow } from './rule-row';
 import type { RuleBuilderProps } from './types';
+import { Icon } from '@/ds/icons';
+import { Button } from '@/ds/components/Button';
 
 /**
  * Creates a default empty rule
@@ -43,37 +45,27 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({ schema, rules, onChang
   );
 
   return (
-    <div className={cn('flex flex-col gap-2', className)}>
-      {rules.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {rules.map((rule, index) => (
-            <RuleRow
-              key={index}
-              schema={schema}
-              rule={rule}
-              onChange={updatedRule => handleRuleChange(index, updatedRule)}
-              onRemove={() => handleRemoveRule(index)}
-            />
-          ))}
+    <div className={cn('border-t border-border1 bg-surface3 overflow-hidden', className)}>
+      {rules.map((rule, index) => (
+        <div key={index} className="border-b border-border1 border-l-4 p-4">
+          <RuleRow
+            key={index}
+            schema={schema}
+            rule={rule}
+            onChange={updatedRule => handleRuleChange(index, updatedRule)}
+            onRemove={() => handleRemoveRule(index)}
+          />
         </div>
-      )}
+      ))}
 
-      <button
-        type="button"
-        onClick={handleAddRule}
-        className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 text-sm',
-          'text-neutral4 hover:text-neutral5',
-          'border border-dashed border-border1 hover:border-border2',
-          'rounded-md bg-transparent hover:bg-surface2',
-          'transition-all duration-normal',
-        )}
-      >
-        <Plus className="h-4 w-4" />
-        Add rule
-      </button>
-
-      {rules.length > 1 && <p className="text-xs text-neutral3 mt-1">All rules must match (AND logic)</p>}
+      <div className="p-2">
+        <Button type="button" onClick={handleAddRule} variant="ghost" size="sm">
+          <Icon>
+            <Plus />
+          </Icon>
+          Add conditional rule
+        </Button>
+      </div>
     </div>
   );
 };
