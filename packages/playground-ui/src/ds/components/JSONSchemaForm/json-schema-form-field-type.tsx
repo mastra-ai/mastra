@@ -1,16 +1,18 @@
 import * as React from 'react';
+import { Type, Hash, ToggleLeft, AlignLeft, Braces, List } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SelectField, type SelectFieldProps } from '@/ds/components/FormFields/select-field';
+import { Icon } from '@/ds/icons';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
 import type { FieldType } from './types';
 
 const TYPE_OPTIONS = [
-  { value: 'string', label: 'String' },
-  { value: 'number', label: 'Number' },
-  { value: 'boolean', label: 'Boolean' },
-  { value: 'text', label: 'Text' },
-  { value: 'object', label: 'Object' },
-  { value: 'array', label: 'Array' },
+  { value: 'string', label: 'String', icon: <Icon size="sm"><Type /></Icon> },
+  { value: 'number', label: 'Number', icon: <Icon size="sm"><Hash /></Icon> },
+  { value: 'boolean', label: 'Boolean', icon: <Icon size="sm"><ToggleLeft /></Icon> },
+  { value: 'text', label: 'Text', icon: <Icon size="sm"><AlignLeft /></Icon> },
+  { value: 'object', label: 'Object', icon: <Icon size="sm"><Braces /></Icon> },
+  { value: 'array', label: 'Array', icon: <Icon size="sm"><List /></Icon> },
 ];
 
 export type JSONSchemaFormFieldTypeProps = Omit<SelectFieldProps, 'value' | 'onValueChange' | 'options' | 'name'>;
