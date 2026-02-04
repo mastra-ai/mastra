@@ -96,7 +96,7 @@
     "pnpm": ">=10.18.0"
   },
   "resolutions": {
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "@types/node": "22.19.7",
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
