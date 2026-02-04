@@ -48,6 +48,7 @@ export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
                 placeholder="Enter agent instructions..."
                 wordWrap
                 schema={variables}
+                highlightVariables
                 className={cn('flex-1 min-h-[200px]', errors.instructions && 'border border-accent2')}
               />
             </div>
