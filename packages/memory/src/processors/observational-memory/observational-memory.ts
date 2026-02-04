@@ -41,6 +41,10 @@ import type {
   DataOmObservationFailedPart,
   DataOmProgressPart,
   ObservationMarkerConfig,
+  DataOmBufferingStartPart,
+  DataOmBufferingEndPart,
+  DataOmBufferingFailedPart,
+  OmOperationType,
 } from './types';
 
 /**
@@ -1116,6 +1120,92 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     return {
       type: 'data-om-observation-failed',
+      data: {
+        cycleId: params.cycleId,
+        operationType: params.operationType,
+        failedAt,
+        durationMs,
+        tokensAttempted: params.tokensAttempted,
+        error: params.error,
+        recordId: params.recordId,
+        threadId: params.threadId,
+      },
+    };
+  }
+
+  /**
+   * Create a start marker for when async buffering begins.
+   */
+  private createBufferingStartMarker(params: {
+    cycleId: string;
+    operationType: OmOperationType;
+    tokensToBuffer: number;
+    recordId: string;
+    threadId: string;
+    threadIds: string[];
+  }): DataOmBufferingStartPart {
+    return {
+      type: 'data-om-buffering-start',
+      data: {
+        cycleId: params.cycleId,
+        operationType: params.operationType,
+        startedAt: new Date().toISOString(),
+        tokensToBuffer: params.tokensToBuffer,
+        recordId: params.recordId,
+        threadId: params.threadId,
+        threadIds: params.threadIds,
+        config: this.getObservationMarkerConfig(),
+      },
+    };
+  }
+
+  /**
+   * Create an end marker for when async buffering completes successfully.
+   */
+  private createBufferingEndMarker(params: {
+    cycleId: string;
+    operationType: OmOperationType;
+    startedAt: string;
+    tokensBuffered: number;
+    bufferedTokens: number;
+    recordId: string;
+    threadId: string;
+  }): DataOmBufferingEndPart {
+    const completedAt = new Date().toISOString();
+    const durationMs = new Date(completedAt).getTime() - new Date(params.startedAt).getTime();
+
+    return {
+      type: 'data-om-buffering-end',
+      data: {
+        cycleId: params.cycleId,
+        operationType: params.operationType,
+        completedAt,
+        durationMs,
+        tokensBuffered: params.tokensBuffered,
+        bufferedTokens: params.bufferedTokens,
+        recordId: params.recordId,
+        threadId: params.threadId,
+      },
+    };
+  }
+
+  /**
+   * Create a failed marker for when async buffering fails.
+   */
+  private createBufferingFailedMarker(params: {
+    cycleId: string;
+    operationType: OmOperationType;
+    startedAt: string;
+    tokensAttempted: number;
+    error: string;
+    recordId: string;
+    threadId: string;
+  }): DataOmBufferingFailedPart {
+    const failedAt = new Date().toISOString();
+    const durationMs = new Date(failedAt).getTime() - new Date(params.startedAt).getTime();
+
+    return {
+      type: 'data-om-buffering-failed',
       data: {
         cycleId: params.cycleId,
         operationType: params.operationType,
@@ -2214,7 +2304,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
       // ════════════════════════════════════════════════════════════════════════
       if (stepNumber > 0 && this.isAsyncObservationEnabled() && totalPendingTokens < threshold) {
         if (this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey)) {
-          this.startAsyncBufferedObservation(record, threadId, unobservedMessages, lockKey);
+          this.startAsyncBufferedObservation(record, threadId, unobservedMessages, lockKey, writer);
         }
       }
 
@@ -2815,62 +2905,141 @@ ${formattedMessages}
    * This is a fire-and-forget operation that runs in the background.
    * The results will be swapped to active when the main threshold is reached.
    *
+   * If another buffering operation is already in progress for this scope, this will
+   * wait for it to complete before starting a new one (mutex behavior).
+   *
    * @param record - Current OM record
    * @param threadId - Thread ID
-   * @param unobservedMessages - Messages to observe
+   * @param unobservedMessages - All unobserved messages (will be filtered for already-buffered)
    * @param lockKey - Lock key for this scope
+   * @param writer - Optional stream writer for emitting buffering markers
    */
   private startAsyncBufferedObservation(
     record: ObservationalMemoryRecord,
     threadId: string,
     unobservedMessages: MastraDBMessage[],
     lockKey: string,
+    writer?: ProcessorStreamWriter,
   ): void {
     const bufferKey = this.getObservationBufferKey(lockKey);
-
-    // Don't start if already in progress
-    if (this.isAsyncBufferingInProgress(bufferKey)) {
-      return;
-    }
 
     // Update the last buffered boundary
     const currentTokens = this.tokenCounter.countMessages(unobservedMessages) + (record.pendingMessageTokens ?? 0);
     this.lastBufferedBoundary.set(bufferKey, currentTokens);
 
-    // Start the async operation
-    const asyncOp = this.doAsyncBufferedObservation(record, threadId, unobservedMessages)
-      .catch(error => {
-        // Log but don't crash - async buffering failure is recoverable
-        console.error(
-          `[OM] Async buffered observation failed:`,
-          error instanceof Error ? error.message : String(error),
-        );
-      })
-      .finally(() => {
+    // Start the async operation - waits for any existing op to complete first
+    const asyncOp = this.runAsyncBufferedObservation(record, threadId, unobservedMessages, bufferKey, writer).finally(
+      () => {
         // Clean up the operation tracking
         this.asyncBufferingOps.delete(bufferKey);
-      });
+      },
+    );
 
     this.asyncBufferingOps.set(bufferKey, asyncOp);
   }
 
   /**
+   * Internal method that waits for existing buffering operation and then runs new buffering.
+   * This implements the mutex-wait behavior.
+   */
+  private async runAsyncBufferedObservation(
+    record: ObservationalMemoryRecord,
+    threadId: string,
+    unobservedMessages: MastraDBMessage[],
+    bufferKey: string,
+    writer?: ProcessorStreamWriter,
+  ): Promise<void> {
+    // Wait for any existing buffering operation to complete first (mutex behavior)
+    const existingOp = this.asyncBufferingOps.get(bufferKey);
+    if (existingOp) {
+      try {
+        await existingOp;
+      } catch {
+        // Previous op failed, continue with new one
+      }
+    }
+
+    // Re-fetch record to get latest state after waiting
+    const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    if (!freshRecord) {
+      return;
+    }
+
+    // Filter out messages that have already been buffered
+    const alreadyBufferedIds = new Set(freshRecord.bufferedMessageIds ?? []);
+    const messagesToBuffer = unobservedMessages.filter(m => !alreadyBufferedIds.has(m.id));
+
+    if (messagesToBuffer.length === 0) {
+      return; // Nothing new to buffer
+    }
+
+    // Generate cycle ID and capture start time
+    const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    const startedAt = new Date().toISOString();
+    const tokensToBuffer = this.tokenCounter.countMessages(messagesToBuffer);
+
+    // Emit buffering start marker
+    if (writer) {
+      const startMarker = this.createBufferingStartMarker({
+        cycleId,
+        operationType: 'observation',
+        tokensToBuffer,
+        recordId: freshRecord.id,
+        threadId,
+        threadIds: [threadId],
+      });
+      void writer.custom(startMarker);
+    }
+
+    try {
+      await this.doAsyncBufferedObservation(freshRecord, threadId, messagesToBuffer, cycleId, startedAt, writer);
+    } catch (error) {
+      // Emit buffering failed marker
+      if (writer) {
+        const failedMarker = this.createBufferingFailedMarker({
+          cycleId,
+          operationType: 'observation',
+          startedAt,
+          tokensAttempted: tokensToBuffer,
+          error: error instanceof Error ? error.message : String(error),
+          recordId: freshRecord.id,
+          threadId,
+        });
+        void writer.custom(failedMarker);
+      }
+      console.error(`[OM] Async buffered observation failed:`, error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
    * Perform async buffered observation - observes messages and stores to bufferedObservations.
    * Does NOT update activeObservations or trigger reflection.
+   *
+   * The observer sees: active observations + existing buffered observations + message history
+   * (excluding already-buffered messages).
    */
   private async doAsyncBufferedObservation(
     record: ObservationalMemoryRecord,
     threadId: string,
-    unobservedMessages: MastraDBMessage[],
+    messagesToBuffer: MastraDBMessage[],
+    cycleId: string,
+    startedAt: string,
+    writer?: ProcessorStreamWriter,
   ): Promise<void> {
-    // Call observer
-    const result = await this.callObserver(
+    // Build combined context for the observer: active + buffered observations
+    const combinedObservations = this.combineObservationsForBuffering(
       record.activeObservations,
-      unobservedMessages,
+      record.bufferedObservations,
+    );
+
+    // Call observer with combined context
+    const result = await this.callObserver(
+      combinedObservations,
+      messagesToBuffer,
       undefined, // No abort signal for background ops
     );
 
-    // Build buffered observations
+    // Build new buffered observations (append to existing buffered)
     let bufferedObservations: string;
     if (this.scope === 'resource') {
       const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
@@ -2884,15 +3053,54 @@ ${formattedMessages}
     }
 
     const bufferedTokenCount = this.tokenCounter.countObservations(bufferedObservations);
-    const bufferedMessageIds = unobservedMessages.map(m => m.id);
+
+    // Merge new message IDs with existing buffered message IDs
+    const existingBufferedIds = record.bufferedMessageIds ?? [];
+    const newBufferedMessageIds = [...existingBufferedIds, ...messagesToBuffer.map(m => m.id)];
 
     // Store to bufferedObservations
     await this.storage.updateBufferedObservations({
       id: record.id,
       observations: bufferedObservations,
       tokenCount: bufferedTokenCount,
-      bufferedMessageIds,
+      bufferedMessageIds: newBufferedMessageIds,
     });
+
+    // Emit buffering end marker
+    if (writer) {
+      const tokensBuffered = this.tokenCounter.countMessages(messagesToBuffer);
+      const endMarker = this.createBufferingEndMarker({
+        cycleId,
+        operationType: 'observation',
+        startedAt,
+        tokensBuffered,
+        bufferedTokens: bufferedTokenCount,
+        recordId: record.id,
+        threadId,
+      });
+      void writer.custom(endMarker);
+    }
+  }
+
+  /**
+   * Combine active and buffered observations for the buffering observer context.
+   * The buffering observer needs to see both so it doesn't duplicate content.
+   */
+  private combineObservationsForBuffering(
+    activeObservations: string | undefined,
+    bufferedObservations: string | undefined,
+  ): string | undefined {
+    if (!activeObservations && !bufferedObservations) {
+      return undefined;
+    }
+    if (!activeObservations) {
+      return bufferedObservations;
+    }
+    if (!bufferedObservations) {
+      return activeObservations;
+    }
+    // Both exist - combine them with a clear separator
+    return `${activeObservations}\n\n--- BUFFERED (pending activation) ---\n\n${bufferedObservations}`;
   }
 
   /**

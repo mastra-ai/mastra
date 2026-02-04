@@ -99,9 +99,14 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
   }
 
   // First pass: collect all OM parts grouped by cycleId
-  const omPartsByCycleId = new Map<string, { start?: any; end?: any; failed?: any }>();
+  // Supports both blocking observation/reflection parts and async buffering parts
+  const omPartsByCycleId = new Map<
+    string,
+    { start?: any; end?: any; failed?: any; bufferingStart?: any; bufferingEnd?: any; bufferingFailed?: any }
+  >();
 
   for (const part of message.parts) {
+    // Blocking observation/reflection markers
     if (part.type === 'data-om-observation-start') {
       const cycleId = part.data?.cycleId;
       if (cycleId) {
@@ -124,6 +129,29 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
         omPartsByCycleId.set(cycleId, existing);
       }
     }
+    // Async buffering markers
+    else if (part.type === 'data-om-buffering-start') {
+      const cycleId = part.data?.cycleId;
+      if (cycleId) {
+        const existing = omPartsByCycleId.get(cycleId) || {};
+        existing.bufferingStart = part;
+        omPartsByCycleId.set(cycleId, existing);
+      }
+    } else if (part.type === 'data-om-buffering-end') {
+      const cycleId = part.data?.cycleId;
+      if (cycleId) {
+        const existing = omPartsByCycleId.get(cycleId) || {};
+        existing.bufferingEnd = part;
+        omPartsByCycleId.set(cycleId, existing);
+      }
+    } else if (part.type === 'data-om-buffering-failed') {
+      const cycleId = part.data?.cycleId;
+      if (cycleId) {
+        const existing = omPartsByCycleId.get(cycleId) || {};
+        existing.bufferingFailed = part;
+        omPartsByCycleId.set(cycleId, existing);
+      }
+    }
   }
 
   // Second pass: build new parts array, replacing start markers with merged tool calls
@@ -134,6 +162,7 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
   for (const part of message.parts) {
     const cycleId = (part as any).data?.cycleId;
 
+    // Handle blocking observation/reflection markers
     if (part.type === 'data-om-observation-start' && cycleId && !processedCycleIds.has(cycleId)) {
       // Replace start marker with merged tool call
       const parts = omPartsByCycleId.get(cycleId)!;
@@ -162,6 +191,41 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
           ? undefined
           : {
               status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
+              omData: mergedData,
+            },
+        state: isLoading ? 'input-available' : 'output-available',
+      });
+
+      processedCycleIds.add(cycleId);
+    }
+    // Handle async buffering markers
+    else if (part.type === 'data-om-buffering-start' && cycleId && !processedCycleIds.has(cycleId)) {
+      // Replace buffering start marker with merged tool call
+      const parts = omPartsByCycleId.get(cycleId)!;
+      const startData = parts.bufferingStart?.data || {};
+      const endData = parts.bufferingEnd?.data || {};
+      const failedData = parts.bufferingFailed?.data || {};
+
+      const isFailed = !!parts.bufferingFailed;
+      const isComplete = !!parts.bufferingEnd;
+      const isLoading = !isFailed && !isComplete;
+
+      const mergedData = {
+        ...startData,
+        ...(isComplete ? endData : {}),
+        ...(isFailed ? failedData : {}),
+        _state: isFailed ? 'buffering-failed' : isComplete ? 'buffering-complete' : 'buffering',
+      };
+
+      convertedParts.push({
+        type: 'dynamic-tool',
+        toolCallId: `om-buffering-${cycleId}`,
+        toolName: OM_TOOL_NAME,
+        input: mergedData,
+        output: isLoading
+          ? undefined
+          : {
+              status: isFailed ? 'buffering-failed' : 'buffering-complete',
               omData: mergedData,
             },
         state: isLoading ? 'input-available' : 'output-available',
@@ -202,6 +266,38 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
         processedCycleIds.add(cycleId);
       }
       // Skip if already processed or has a start marker (will be merged there)
+      continue;
+    } else if (
+      (part.type === 'data-om-buffering-end' || part.type === 'data-om-buffering-failed') &&
+      cycleId &&
+      !processedCycleIds.has(cycleId)
+    ) {
+      // Handle buffering end/failed markers without corresponding start
+      const parts = omPartsByCycleId.get(cycleId);
+      if (parts && !parts.bufferingStart) {
+        const endData = parts.bufferingEnd?.data || {};
+        const failedData = parts.bufferingFailed?.data || {};
+        const isFailed = !!parts.bufferingFailed;
+
+        const mergedData = {
+          ...(parts.bufferingEnd ? endData : failedData),
+          _state: isFailed ? 'buffering-failed' : 'buffering-complete',
+        };
+
+        convertedParts.push({
+          type: 'dynamic-tool',
+          toolCallId: `om-buffering-${cycleId}`,
+          toolName: OM_TOOL_NAME,
+          input: mergedData,
+          output: {
+            status: isFailed ? 'buffering-failed' : 'buffering-complete',
+            omData: mergedData,
+          },
+          state: 'output-available',
+        });
+
+        processedCycleIds.add(cycleId);
+      }
       continue;
     } else {
       // Keep non-OM parts as-is

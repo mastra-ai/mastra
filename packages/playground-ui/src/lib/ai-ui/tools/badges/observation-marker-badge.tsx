@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug } from 'lucide-react';
+import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug, CloudCog } from 'lucide-react';
 import { ObservationRenderer } from './observation-renderer';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
@@ -21,7 +21,7 @@ export interface OmMarkerData {
   threadId?: string;
   threadIds?: string[];
   operationType?: 'observation' | 'reflection';
-  _state?: 'loading' | 'complete' | 'failed';
+  _state?: 'loading' | 'complete' | 'failed' | 'buffering' | 'buffering-complete' | 'buffering-failed';
   config?: {
     scope?: string;
     messageTokens?: number;
@@ -74,6 +74,9 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const isEnd = state === 'complete';
   const isFailed = state === 'failed';
   const isDisconnected = state === 'disconnected';
+  const isBuffering = state === 'buffering';
+  const isBufferingComplete = state === 'buffering-complete';
+  const isBufferingFailed = state === 'buffering-failed';
   const isReflection = omData.operationType === 'reflection';
 
   // Failed reflections should be expanded by default to draw attention to the error
@@ -289,6 +292,93 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-500/10 text-red-600 text-xs font-medium hover:bg-red-500/20 transition-colors cursor-pointer"
+          >
+            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            <XCircle className="w-3 h-3" />
+            <span>{failedLabel}</span>
+          </button>
+
+          {isExpanded && error && (
+            <div className="mt-1 ml-4 p-2 rounded-md bg-red-500/5 text-red-700 text-xs border border-red-500/10">
+              <span className="font-medium">Error:</span> {error}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Async buffering states - non-blocking background observation/reflection
+  if (isBuffering) {
+    const tokensToObserve = omData.tokensToObserve;
+    const bufferingLabel = isReflection ? 'Buffering reflection' : 'Buffering observations';
+    return (
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+      >
+        <div
+          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-500/10 text-purple-600 text-xs font-medium my-1 border border-dashed border-purple-400/40"
+        >
+          <Loader2 className="w-3 h-3 animate-spin" />
+          <CloudCog className="w-3 h-3" />
+          <span>
+            {bufferingLabel}
+            {tokensToObserve ? ` ~${formatTokens(tokensToObserve)} tokens` : '...'}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (isBufferingComplete) {
+    const tokensObserved = omData.tokensObserved;
+    const observationTokens = omData.observationTokens;
+    const bufferedLabel = isReflection ? 'Buffered reflection' : 'Buffered observations';
+    const compressionRatio =
+      tokensObserved && observationTokens && observationTokens > 0
+        ? Math.round(tokensObserved / observationTokens)
+        : null;
+
+    return (
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+      >
+        <div className="my-1">
+          <div
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-500/10 text-purple-600 text-xs font-medium border border-dashed border-purple-400/40"
+          >
+            <CloudCog className="w-3 h-3" />
+            <span>
+              {bufferedLabel} {tokensObserved ? formatTokens(tokensObserved) : '?'}→
+              {observationTokens ? formatTokens(observationTokens) : '?'} tokens
+              {compressionRatio ? ` (-${compressionRatio}x)` : ''}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isBufferingFailed) {
+    const error = omData.error;
+    const failedLabel = isReflection ? 'Buffered reflection failed' : 'Buffered observation failed';
+    return (
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+      >
+        <div className="my-1">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-500/10 text-red-600 text-xs font-medium hover:bg-red-500/20 transition-colors cursor-pointer border border-dashed border-red-400/40"
           >
             {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             <XCircle className="w-3 h-3" />

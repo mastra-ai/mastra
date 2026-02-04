@@ -354,6 +354,110 @@ export interface DataOmProgressPart {
 }
 
 /**
+ * Start marker inserted when async buffering begins.
+ * Buffering runs in the background to pre-compute observations before the main threshold.
+ */
+export interface DataOmBufferingStartPart {
+  type: 'data-om-buffering-start';
+  data: {
+    /** Unique ID for this buffering cycle - shared between start/end/failed markers */
+    cycleId: string;
+
+    /** Type of operation being buffered: 'observation' or 'reflection' */
+    operationType: OmOperationType;
+
+    /** When buffering started */
+    startedAt: string;
+
+    /** Tokens being buffered in this cycle */
+    tokensToBuffer: number;
+
+    /** The OM record ID this buffering belongs to */
+    recordId: string;
+
+    /** This thread's ID */
+    threadId: string;
+
+    /** All thread IDs being buffered (for resource-scoped) */
+    threadIds: string[];
+
+    /** Snapshot of config at buffering time */
+    config: ObservationMarkerConfig;
+  };
+}
+
+/**
+ * End marker inserted when async buffering completes successfully.
+ * The buffered content is stored but not yet activated (visible to the main context).
+ */
+export interface DataOmBufferingEndPart {
+  type: 'data-om-buffering-end';
+  data: {
+    /** Unique ID for this buffering cycle - shared between start/end/failed markers */
+    cycleId: string;
+
+    /** Type of operation that was buffered: 'observation' or 'reflection' */
+    operationType: OmOperationType;
+
+    /** When buffering completed */
+    completedAt: string;
+
+    /** Duration in milliseconds */
+    durationMs: number;
+
+    /** Total tokens that were buffered */
+    tokensBuffered: number;
+
+    /** Resulting observation/reflection tokens after compression */
+    bufferedTokens: number;
+
+    /** The OM record ID */
+    recordId: string;
+
+    /** This thread's ID */
+    threadId: string;
+  };
+}
+
+/**
+ * Failed marker inserted when async buffering fails.
+ * The system will fall back to synchronous processing at threshold.
+ */
+export interface DataOmBufferingFailedPart {
+  type: 'data-om-buffering-failed';
+  data: {
+    /** Unique ID for this buffering cycle - shared between start/end/failed markers */
+    cycleId: string;
+
+    /** Type of operation that failed: 'observation' or 'reflection' */
+    operationType: OmOperationType;
+
+    /** When buffering failed */
+    failedAt: string;
+
+    /** Duration until failure in milliseconds */
+    durationMs: number;
+
+    /** Tokens that were attempted to buffer */
+    tokensAttempted: number;
+
+    /** Error message */
+    error: string;
+
+    /** The OM record ID */
+    recordId: string;
+
+    /** This thread's ID */
+    threadId: string;
+  };
+}
+
+/**
+ * Union of all buffering marker types.
+ */
+export type DataOmBufferingPart = DataOmBufferingStartPart | DataOmBufferingEndPart | DataOmBufferingFailedPart;
+
+/**
  * Union of all observation marker types.
  */
 export type DataOmObservationPart =
@@ -361,6 +465,11 @@ export type DataOmObservationPart =
   | DataOmObservationEndPart
   | DataOmObservationFailedPart
   | DataOmProgressPart;
+
+/**
+ * Union of all OM data parts (observation, buffering, progress).
+ */
+export type DataOmPart = DataOmObservationPart | DataOmBufferingPart;
 
 /**
  * @deprecated Use DataOmObservationStartPart and DataOmObservationEndPart instead.
