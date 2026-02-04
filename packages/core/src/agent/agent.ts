@@ -27,6 +27,7 @@ import type {
   MastraLegacyLanguageModel,
   MastraModelConfig,
 } from '../llm/model/shared.types';
+import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
@@ -1449,6 +1450,19 @@ export class Agent<
     this.#primitives = p;
 
     this.logger.debug(`[Agents:${this.name}] initialized.`, { model: this.model, name: this.name });
+  }
+
+  /**
+   * Override to propagate logger to workspace if configured.
+   * @internal
+   */
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+
+    // Propagate to workspace if it's a direct instance (not a factory function)
+    if (this.#workspace && typeof this.#workspace !== 'function') {
+      this.#workspace.__setLogger(logger);
+    }
   }
 
   /**
