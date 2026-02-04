@@ -101,7 +101,6 @@ const config = {
   bundler: {
     sourcemap: true,
   },
-  editor: new MastraEditor(),
   server: {
     build: {
       swaggerUI: true,
