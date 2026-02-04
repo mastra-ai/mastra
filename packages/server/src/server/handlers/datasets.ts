@@ -837,16 +837,17 @@ export const LIST_ITEM_VERSIONS_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
 
-      // Check if item exists and belongs to dataset
-      const item = await datasetsStore.getItemById({ id: itemId });
-      if (!item || item.datasetId !== datasetId) {
-        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
-      }
-
+      // Get versions directly - don't require item to exist (may be deleted)
+      // Versions include tombstone records for deleted items
       const result = await datasetsStore.listItemVersions({
         itemId,
         pagination,
       });
+
+      // Check versions belong to this dataset (first version check)
+      if (result.versions.length > 0 && result.versions[0]?.datasetId !== datasetId) {
+        throw new HTTPException(404, { message: `Item not found in dataset: ${itemId}` });
+      }
 
       return {
         versions: result.versions,
@@ -881,15 +882,15 @@ export const GET_ITEM_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
 
-      // Check if item exists and belongs to dataset
-      const item = await datasetsStore.getItemById({ id: itemId });
-      if (!item || item.datasetId !== datasetId) {
-        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
-      }
-
+      // Get version directly - don't require item to exist (may be deleted)
       const version = await datasetsStore.getItemVersion(itemId, versionNumber);
       if (!version) {
         throw new HTTPException(404, { message: `Version ${versionNumber} not found for item: ${itemId}` });
+      }
+
+      // Check version belongs to this dataset
+      if (version.datasetId !== datasetId) {
+        throw new HTTPException(404, { message: `Item not found in dataset: ${itemId}` });
       }
 
       return version;

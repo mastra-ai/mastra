@@ -5,7 +5,7 @@ import { ArrowRightToLineIcon, Edit2Icon, FileCodeIcon, Trash2Icon } from 'lucid
 import {
   MainContentLayout,
   MainContentContent,
-  useDatasetItem,
+  useDatasetItemVersions,
   useDatasetMutations,
   useLinkComponent,
   DatasetItemContent,
@@ -30,8 +30,13 @@ function DatasetItemPage() {
   const { Link } = useLinkComponent();
   const navigate = useNavigate();
 
-  const { data: item, isLoading: isDatasetItemLoading } = useDatasetItem(datasetId ?? '', itemId ?? '');
+  // Use versions as single source of truth - works for both active and deleted items
+  const { data: versions, isLoading: isVersionsLoading } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
   const { updateItem, deleteItem } = useDatasetMutations();
+
+  // Derive item state from versions
+  const latestVersion = versions?.[0] ?? null;
+  const isDeleted = latestVersion?.isDeleted ?? false;
 
   // Version viewing state - store full version object to use its snapshot
   const [selectedVersion, setSelectedVersion] = useState<DatasetItemVersion | null>(null);
@@ -45,17 +50,25 @@ function DatasetItemPage() {
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  // Sync form values when item changes
+  // Sync form values when latest version changes (for non-deleted items)
   useEffect(() => {
-    if (item) {
-      setInputValue(JSON.stringify(item.input, null, 2));
-      setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
-      setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+    if (latestVersion && !isDeleted) {
+      setInputValue(JSON.stringify(latestVersion.snapshot.input, null, 2));
+      setExpectedOutputValue(
+        latestVersion.snapshot.expectedOutput ? JSON.stringify(latestVersion.snapshot.expectedOutput, null, 2) : '',
+      );
+      setMetadataValue(latestVersion.snapshot.context ? JSON.stringify(latestVersion.snapshot.context, null, 2) : '');
     }
-  }, [item?.id, item?.input, item?.expectedOutput, item?.metadata]);
+  }, [latestVersion?.versionNumber, isDeleted]);
 
   const handleVersionSelect = (version: DatasetItemVersion) => {
-    setSelectedVersion(version.isLatest ? null : version);
+    // For deleted items, always keep a version selected
+    // For active items, selecting latest clears selection (shows current)
+    if (isDeleted) {
+      setSelectedVersion(version);
+    } else {
+      setSelectedVersion(version.isLatest ? null : version);
+    }
   };
 
   const handleReturnToLatest = () => {
@@ -63,7 +76,7 @@ function DatasetItemPage() {
   };
 
   // Check if viewing an old version
-  const isViewingOldVersion = selectedVersion != null;
+  const isViewingOldVersion = !isDeleted && selectedVersion != null;
 
   const handleEditClick = () => {
     if (!isViewingOldVersion) {
@@ -127,11 +140,13 @@ function DatasetItemPage() {
   };
 
   const handleCancel = () => {
-    // Reset form values to current item
-    if (item) {
-      setInputValue(JSON.stringify(item.input, null, 2));
-      setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
-      setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+    // Reset form values to latest version
+    if (latestVersion) {
+      setInputValue(JSON.stringify(latestVersion.snapshot.input, null, 2));
+      setExpectedOutputValue(
+        latestVersion.snapshot.expectedOutput ? JSON.stringify(latestVersion.snapshot.expectedOutput, null, 2) : '',
+      );
+      setMetadataValue(latestVersion.snapshot.context ? JSON.stringify(latestVersion.snapshot.context, null, 2) : '');
     }
     setIsEditing(false);
   };
@@ -148,24 +163,29 @@ function DatasetItemPage() {
     }
   };
 
-  // Determine which item data to display - use version snapshot when viewing old version
-  const displayItem = selectedVersion
-    ? {
-        id: item?.id ?? '',
-        datasetId: datasetId ?? '',
-        input: selectedVersion.snapshot.input,
-        expectedOutput: selectedVersion.snapshot.expectedOutput,
-        metadata: selectedVersion.snapshot.context,
-        createdAt: item?.createdAt ?? new Date(),
-        version: selectedVersion.datasetVersion,
-      }
-    : item;
+  // Determine which version to display
+  const versionToDisplay = selectedVersion ?? latestVersion;
 
-  if (isDatasetItemLoading) {
+  // Build display item from version snapshot
+  const displayItem = versionToDisplay
+    ? {
+        id: itemId ?? '',
+        datasetId: datasetId ?? '',
+        input: versionToDisplay.snapshot.input,
+        expectedOutput: versionToDisplay.snapshot.expectedOutput,
+        metadata: versionToDisplay.snapshot.context,
+        createdAt: versionToDisplay.createdAt,
+        version: versionToDisplay.datasetVersion,
+      }
+    : null;
+
+  // Wait for versions to load
+  if (isVersionsLoading) {
     return null;
   }
 
-  if (!datasetId || !itemId) {
+  // No versions = item never existed
+  if (!datasetId || !itemId || !versions || versions.length === 0) {
     return (
       <MainContentLayout>
         <MainContentContent>
@@ -190,7 +210,7 @@ function DatasetItemPage() {
           <div className="grid gap-6 max-w-[60rem] mx-auto grid-rows-[auto_1fr] h-full">
             <div className="grid grid-cols-[1fr_auto] gap-6 items-center">
               <PageHeader title="Dataset Item" icon={<FileCodeIcon />} />
-              {!isEditing && (
+              {!isEditing && !isDeleted && (
                 <ButtonsGroup>
                   <Button
                     variant="standard"
@@ -217,10 +237,18 @@ function DatasetItemPage() {
             <div className="grid grid-cols-[1fr_1px_auto] gap-12 overflow-y-auto">
               <div
                 className={cn('overflow-y-auto grid gap-6 content-start', {
-                  'grid-rows-[auto_1fr]': isViewingOldVersion,
+                  'grid-rows-[auto_1fr]': isViewingOldVersion || isDeleted,
                 })}
               >
-                {isViewingOldVersion && selectedVersion && (
+                {isDeleted && latestVersion && (
+                  <Alert variant="destructive">
+                    <AlertTitle>
+                      This item was deleted on{' '}
+                      {format(new Date(latestVersion.datasetVersion), "MMM d, yyyy 'at' h:mm a")}
+                    </AlertTitle>
+                  </Alert>
+                )}
+                {!isDeleted && isViewingOldVersion && selectedVersion && (
                   <Alert variant="warning">
                     <AlertTitle>
                       Viewing version from {format(new Date(selectedVersion.datasetVersion), "MMM d, yyyy 'at' h:mm a")}

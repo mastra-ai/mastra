@@ -12,6 +12,7 @@ export const useDatasetItem = (datasetId: string, itemId: string) => {
     queryKey: ['dataset-item', datasetId, itemId],
     queryFn: () => client.getDatasetItem(datasetId, itemId),
     enabled: Boolean(datasetId) && Boolean(itemId),
+    retry: false, // Don't retry 404s for deleted items
   });
 };
 

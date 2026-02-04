@@ -75,7 +75,12 @@ export function DatasetItemVersionsPanel({
                     >
                       <ItemList.ItemText>
                         <div className="flex gap-2 items-center justify-between w-full text-ui-sm">
-                          {entry.version} {item.isLatest && <Badge>latest</Badge>}
+                          {entry.version}
+                          {item.isDeleted ? (
+                            <Badge variant="error">deleted</Badge>
+                          ) : (
+                            item.isLatest && <Badge>latest</Badge>
+                          )}
                         </div>
                       </ItemList.ItemText>
                     </ItemList.RowButton>
