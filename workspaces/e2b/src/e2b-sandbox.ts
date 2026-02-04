@@ -803,17 +803,12 @@ export class E2BSandbox extends MastraSandbox {
 
   /**
    * Ensure the sandbox is started and return the E2B Sandbox instance.
-   * Starts the sandbox if not already running.
+   * Uses base class ensureRunning() for status management and error handling.
    * @throws {SandboxNotReadyError} if sandbox fails to start
    */
   private async ensureSandbox(): Promise<Sandbox> {
-    if (!this._sandbox) {
-      await this.start();
-    }
-    if (!this._sandbox) {
-      throw new SandboxNotReadyError(this.id);
-    }
-    return this._sandbox;
+    await this.ensureRunning();
+    return this._sandbox!;
   }
 
   /**

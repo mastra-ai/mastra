@@ -15,7 +15,7 @@ This document tracks implementation progress for review.
 | 5 | Update S3Filesystem status on lifecycle methods | COR-484 | **Done** | `s3-filesystem.ts` |
 | 6 | Clean up E2B sandbox comments | COR-380 | **Done** | `e2b-sandbox.ts` |
 | 7 | S3Filesystem lazy init pattern (`ensureReady()`) | COR-484 | **Done** | `s3-filesystem.ts` |
-| 8 | Extract ensureSandbox/lazy init to MastraSandbox base class | COR-380 | Pending | `mastra-sandbox.ts` |
+| 8 | Extract ensureSandbox/lazy init to MastraSandbox base class | COR-380 | **Done** | `mastra-sandbox.ts`, `e2b-sandbox.ts` |
 | 9 | Mount Manager extraction (marker files, reconcileMounts, checkExistingMount) | COR-380, COR-385 | Pending | `mount-manager.ts` |
 | 10 | Implement pathContext with mounts (agent instructions, mount awareness) | COR-385, COR-491 | Pending | `workspace.ts`, `composite-filesystem.ts` |
 | 11 | General cleanup checklist (imports, error handling, hardcoded values, logging) | COR-380 | Pending | Multiple files |
@@ -207,23 +207,41 @@ Now if someone uses the filesystem without calling `init()`, the first operation
 ### Problem
 E2BSandbox has `ensureSandbox()` pattern that lazily starts the sandbox. Other sandbox providers would benefit from this.
 
-### Current E2B Implementation
+### Solution
+Add to MastraSandbox base class:
+- `protected async ensureRunning(): Promise<void>` that calls `start()` if not running
+- Throws `SandboxNotReadyError` if status isn't 'running' after start()
+- Subclasses can use this in their typed instance getters
+
+### Changes Made
+
+#### `packages/core/src/workspace/sandbox/mastra-sandbox.ts`
+- Added import for `SandboxNotReadyError`
+- Added `ensureRunning()` protected method:
 ```typescript
-private async ensureSandbox(): Promise<Sandbox> {
-  if (!this._sandbox) {
+/**
+ * Ensure the sandbox is running.
+ * Calls `start()` if status is not 'running'.
+ * @throws {SandboxNotReadyError} if the sandbox fails to reach 'running' status
+ */
+protected async ensureRunning(): Promise<void> {
+  if (this.status !== 'running') {
     await this.start();
   }
-  if (!this._sandbox) {
+  if (this.status !== 'running') {
     throw new SandboxNotReadyError(this.id);
   }
-  return this._sandbox;
 }
 ```
 
-### Solution
-Add to MastraSandbox base class:
-- `protected async ensureReady(): Promise<void>` that calls `start()` if not running
-- Subclasses can have typed `get instance()` that throws if not ready
+#### `workspaces/e2b/src/e2b-sandbox.ts`
+- Simplified `ensureSandbox()` to use base class method:
+```typescript
+private async ensureSandbox(): Promise<Sandbox> {
+  await this.ensureRunning();
+  return this._sandbox!;
+}
+```
 
 ---
 
@@ -418,7 +436,7 @@ GCS_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
 - [x] Task 5: S3Filesystem status
 - [x] Task 6: E2B comments cleanup
 - [x] Task 7: S3Filesystem lazy init
-- [ ] Task 8: ensureSandbox extraction
+- [x] Task 8: ensureSandbox extraction
 - [ ] Task 9: Mount Manager extraction
 - [ ] Task 10: pathContext implementation
 - [ ] Task 11: General cleanup

@@ -27,6 +27,7 @@ import { RegisteredLogger } from '../../logger/constants';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
 import type { ProviderStatus } from '../lifecycle';
+import { SandboxNotReadyError } from './errors';
 import { MountManager } from './mount-manager';
 import type { WorkspaceSandbox } from './sandbox';
 
@@ -174,6 +175,31 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    */
   protected async _doStart(): Promise<void> {
     // Default no-op - subclasses override
+  }
+
+  /**
+   * Ensure the sandbox is running.
+   *
+   * Calls `start()` if status is not 'running'. Useful for lazy initialization
+   * where operations should automatically start the sandbox if needed.
+   *
+   * @throws {SandboxNotReadyError} if the sandbox fails to reach 'running' status
+   *
+   * @example
+   * ```typescript
+   * async executeCommand(command: string): Promise<CommandResult> {
+   *   await this.ensureRunning();
+   *   // Now safe to use the sandbox
+   * }
+   * ```
+   */
+  protected async ensureRunning(): Promise<void> {
+    if (this.status !== 'running') {
+      await this.start();
+    }
+    if (this.status !== 'running') {
+      throw new SandboxNotReadyError(this.id);
+    }
   }
 
   /**
