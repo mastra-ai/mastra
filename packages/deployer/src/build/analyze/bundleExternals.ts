@@ -1,28 +1,29 @@
+import { readFile } from 'node:fs/promises';
+import * as path from 'node:path';
+import { basename } from 'node:path/posix';
+import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
+import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import virtual from '@rollup/plugin-virtual';
-import { esmShim } from '../plugins/esm-shim';
-import { basename } from 'node:path/posix';
-import * as path from 'node:path';
-import { rollup, type OutputChunk, type OutputAsset, type Plugin } from 'rollup';
-import { esbuild } from '../plugins/esbuild';
-import { aliasHono } from '../plugins/hono-alias';
-import { getCompiledDepCachePath, isDependencyPartOfPackage, rollupSafeName, slash } from '../utils';
-import { getPackageRootPath } from '../package-info';
-import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import type { DependencyMetadata } from '../types';
-import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
-import * as resolve from 'resolve.exports';
-import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import { readFile } from 'node:fs/promises';
 import { getPackageInfo } from 'local-pkg';
-import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
+import * as resolve from 'resolve.exports';
+import { rollup } from 'rollup';
+import type { OutputChunk, OutputAsset, Plugin } from 'rollup';
+import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
+import { getPackageRootPath } from '../package-info';
+import { esbuild } from '../plugins/esbuild';
+import { esmShim } from '../plugins/esm-shim';
+import { aliasHono } from '../plugins/hono-alias';
+import { moduleResolveMap } from '../plugins/module-resolve-map';
 import { nodeGypDetector } from '../plugins/node-gyp-detector';
 import { subpathExternalsResolver } from '../plugins/subpath-externals-resolver';
-import { moduleResolveMap } from '../plugins/module-resolve-map';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
+import type { DependencyMetadata } from '../types';
+import { getCompiledDepCachePath, isDependencyPartOfPackage, rollupSafeName, slash } from '../utils';
+import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
 
 type VirtualDependency = {
   name: string;
@@ -249,9 +250,9 @@ async function getInputPlugins(
               packageName,
             },
             text: `We found a possible binary dependency in your bundle. ${id} was not found when imported at ${importer}.
-            
+
 Please consider adding \`${packageName}\` to your externals, or updating this import to not end with ".node".
-  
+
 export const mastra = new Mastra({
   bundler: {
     externals: ["${packageName}"],

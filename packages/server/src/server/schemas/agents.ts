@@ -1,5 +1,6 @@
 import z from 'zod';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
+import { defaultOptionsSchema } from './default-options';
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
@@ -12,6 +13,10 @@ export const toolIdPathParams = z.object({
 
 export const agentToolPathParams = agentIdPathParams.extend({
   toolId: z.string().describe('Unique identifier for the tool'),
+});
+
+export const agentSkillPathParams = agentIdPathParams.extend({
+  skillName: z.string().describe('Name of the skill'),
 });
 
 export const modelConfigIdPathParams = agentIdPathParams.extend({
@@ -101,7 +106,7 @@ export const serializedAgentSchema = z.object({
   modelId: z.string().optional(),
   modelVersion: z.string().optional(),
   modelList: z.array(modelConfigSchema).optional(),
-  defaultOptions: z.record(z.string(), z.any()).optional(),
+  defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
 });

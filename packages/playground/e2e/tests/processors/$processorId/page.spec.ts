@@ -14,11 +14,12 @@ test('has breadcrumb navigation', async ({ page }) => {
   await expect(breadcrumb).toHaveAttribute('href', '/processors');
 });
 
-test('displays processor ID in header', async ({ page }) => {
+test('has processor combobox for navigation', async ({ page }) => {
   await page.goto('/processors/logging-processor');
 
-  // The processor ID should be displayed in the header group
-  await expect(page.locator('header').getByText('logging-processor')).toBeVisible();
+  // The processor combobox should allow navigation between processors
+  const combobox = page.getByRole('combobox').filter({ hasText: 'Logging Processor' });
+  await expect(combobox).toBeVisible();
 });
 
 test('has documentation link', async ({ page }) => {

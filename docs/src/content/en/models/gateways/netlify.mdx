@@ -10,13 +10,13 @@ import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
 
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
 
-Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 53 models through Mastra's model router.
+Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 51 models through Mastra's model router.
 
 Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/).
 
 ## Usage
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
@@ -66,10 +66,8 @@ ANTHROPIC_API_KEY=ant-...
 | `gemini/gemini-2.0-flash-lite` |
 | `gemini/gemini-2.5-flash` |
 | `gemini/gemini-2.5-flash-image` |
-| `gemini/gemini-2.5-flash-image-preview` |
 | `gemini/gemini-2.5-flash-lite` |
 | `gemini/gemini-2.5-flash-lite-preview-09-2025` |
-| `gemini/gemini-2.5-flash-preview-09-2025` |
 | `gemini/gemini-2.5-pro` |
 | `gemini/gemini-3-flash-preview` |
 | `gemini/gemini-3-pro-image-preview` |

@@ -40,10 +40,10 @@ The safest approach is to use UUIDs to avoid accidentally reusing thread IDs:
 
 ```typescript
 // Using UUIDs (recommended)
-const threadId = crypto.randomUUID(); // "550e8400-e29b-41d4-a716-446655440000"
+const threadId = crypto.randomUUID() // "550e8400-e29b-41d4-a716-446655440000"
 
 // Or combine resource ID with a unique suffix
-const threadId = `${resourceId}_${Date.now()}`; // "user_alice_1737907200000"
+const threadId = `${resourceId}_${Date.now()}` // "user_alice_1737907200000"
 ```
 
 Avoid reusing simple identifiers like `"conversation_1"` for threads owned by different users, as this creates confusion about thread ownership.

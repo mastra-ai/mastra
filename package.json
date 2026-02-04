@@ -15,6 +15,7 @@
     "npm-run-all2": "^8.0.4",
     "path-to-regexp": "^8.3.0",
     "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.7.2",
     "semver": "^7.7.2",
     "tsc-files": "^1.1.4",
     "turbo": "^2.5.8",
@@ -69,6 +70,7 @@
     "test:tool-builder": "pnpm test packages/core/src/tools/tool-builder/**",
     "test:schema-compat": "pnpm --filter ./packages/schema-compat test",
     "test:docs-mcp": "pnpm --filter ./packages/mcp-docs-server test",
+    "test:editor": "pnpm --filter ./packages/editor test",
     "test:evals": "pnpm --filter ./packages/evals test",
     "test:agent-builder": "pnpm --filter ./packages/agent-builder test",
     "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
@@ -106,11 +108,12 @@
     "overrides": {
       "client-js-e2e-tests-zod-v3>zod": "^3.24.0",
       "client-js-e2e-tests-zod-v4>zod": "^4.3.5",
-      "better-auth": "^1.4.5"
+      "better-auth": "^1.4.5",
+      "js-yaml": "^3.14.2"
     }
   },
   "license": "Apache-2.0",
-  "packageManager": "pnpm@10.18.2",
+  "packageManager": "pnpm@10.27.0",
   "dependencies": {
     "globby": "^14.1.0",
     "node-forge": "1.3.2",

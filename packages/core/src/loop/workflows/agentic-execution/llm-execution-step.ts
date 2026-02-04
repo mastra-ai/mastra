@@ -12,6 +12,7 @@ import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/mo
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
+import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
@@ -521,6 +522,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   modelSpanTracker,
   autoResumeSuspendedTools,
   maxProcessorRetries,
+  outputWriter,
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
 
@@ -589,11 +591,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            processorStates,
           });
 
           try {
             // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
             const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+
+            // Create a ProcessorStreamWriter from outputWriter if available
+            const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
+              ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+              : undefined;
+
             const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
@@ -608,6 +617,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               modelSettings,
               structuredOutput,
               retryCount: inputData.processorRetryCount || 0,
+              writer: inputStepWriter,
+              abortSignal: options?.abortSignal,
             });
             Object.assign(currentStep, processInputStepResult);
           } catch (error) {
@@ -665,10 +676,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           _internal: _internal!,
           model: currentStep.model,
         });
+
+        // Resolve supportedUrls - it may be a Promise (e.g., from ModelRouterLanguageModel)
+        // This allows providers like Mistral to expose their native URL support for PDFs
+        // See: https://github.com/mastra-ai/mastra/issues/12152
+        let resolvedSupportedUrls: Record<string, RegExp[]> | undefined;
+        const modelSupportedUrls = currentStep.model?.supportedUrls;
+        if (modelSupportedUrls) {
+          if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
+            resolvedSupportedUrls = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
+          } else {
+            resolvedSupportedUrls = modelSupportedUrls as Record<string, RegExp[]>;
+          }
+        }
+
         const messageListPromptArgs = {
           downloadRetries,
           downloadConcurrency,
-          supportedUrls: currentStep.model?.supportedUrls as Record<string, RegExp[]>,
+          supportedUrls: resolvedSupportedUrls,
         };
         let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
@@ -981,6 +1006,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          processorStates,
         });
 
         try {
@@ -1000,6 +1026,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
           const outputStepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+
+          // Create a ProcessorStreamWriter from outputWriter if available
+          const processorWriter: ProcessorStreamWriter | undefined = outputWriter
+            ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+            : undefined;
+
           await processorRunner.runProcessOutputStep({
             steps: inputData.output?.steps ?? [],
             messages: messageList.get.all.db(),
@@ -1011,6 +1043,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tracingContext: outputStepTracingContext,
             requestContext,
             retryCount: currentRetryCount,
+            writer: processorWriter,
           });
         } catch (error) {
           if (error instanceof TripWire) {

@@ -16,6 +16,7 @@ import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { WorkflowStepDetailContent } from './workflow-step-detail';
+import { RequestContextSchemaForm } from '@/domains/request-context';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -122,6 +123,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         <Tabs defaultTab="current-run" value={tab} onValueChange={handleTabChange} className="h-full">
           <TabList>
             <Tab value="current-run">Current Run</Tab>
+            {workflow?.requestContextSchema && <Tab value="request-context">Request Context</Tab>}
             <Tab value="run-options">Run Options</Tab>
             {stepDetail && nodeDetailTabName && (
               <Tab
@@ -171,6 +173,15 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
               )
             ) : null}
           </TabContent>
+
+          {workflow?.requestContextSchema && (
+            <TabContent value="request-context">
+              <div className="p-5">
+                <RequestContextSchemaForm requestContextSchema={workflow.requestContextSchema} />
+              </div>
+            </TabContent>
+          )}
+
           <TabContent value="run-options">
             <TracingRunOptions />
           </TabContent>

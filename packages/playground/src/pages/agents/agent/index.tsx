@@ -10,6 +10,9 @@ import {
   AgentInformation,
   AgentPromptExperimentProvider,
   TracingSettingsProvider,
+  ObservationalMemoryProvider,
+  ActivatedSkillsProvider,
+  SchemaRequestContextProvider,
   type AgentSettingsType,
 } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
@@ -37,7 +40,7 @@ function Agent() {
       // using crypto.randomUUID() on a domain without https (ex a local domain like local.lan:4111) will cause a TypeError
       navigate(`/agents/${agentId}/chat/${uuid()}?new=true`);
     }
-  }, [memory?.result, threadId]);
+  }, [memory?.result, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
 
@@ -78,8 +81,10 @@ function Agent() {
   }
 
   const handleRefreshThreadList = () => {
-    searchParams.delete('new');
-    setSearchParams(searchParams);
+    // Create a new URLSearchParams to avoid mutation issues
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('new');
+    setSearchParams(newParams, { replace: true });
     refreshThreads();
   };
 
@@ -87,37 +92,43 @@ function Agent() {
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentPromptExperimentProvider initialPrompt={agent!.instructions} agentId={agentId!}>
         <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-          <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
-            <ThreadInputProvider>
-              <AgentLayout
-                agentId={agentId!}
-                leftSlot={
-                  Boolean(memory?.result) && (
-                    <AgentSidebar
+          <SchemaRequestContextProvider>
+            <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
+              <ThreadInputProvider>
+                <ObservationalMemoryProvider>
+                  <ActivatedSkillsProvider>
+                    <AgentLayout
                       agentId={agentId!}
-                      threadId={threadId!}
-                      threads={threads || []}
-                      isLoading={isThreadsLoading}
-                    />
-                  )
-                }
-                rightSlot={<AgentInformation agentId={agentId!} threadId={threadId!} />}
-              >
-                <AgentChat
-                  key={threadId}
-                  agentId={agentId!}
-                  agentName={agent?.name}
-                  modelVersion={agent?.modelVersion}
-                  threadId={threadId}
-                  memory={memory?.result}
-                  refreshThreadList={handleRefreshThreadList}
-                  modelList={agent?.modelList}
-                  messageId={messageId}
-                  isNewThread={isNewThread}
-                />
-              </AgentLayout>
-            </ThreadInputProvider>
-          </WorkingMemoryProvider>
+                      leftSlot={
+                        Boolean(memory?.result) && (
+                          <AgentSidebar
+                            agentId={agentId!}
+                            threadId={threadId!}
+                            threads={threads || []}
+                            isLoading={isThreadsLoading}
+                          />
+                        )
+                      }
+                      rightSlot={<AgentInformation agentId={agentId!} threadId={threadId!} />}
+                    >
+                      <AgentChat
+                        key={threadId}
+                        agentId={agentId!}
+                        agentName={agent?.name}
+                        modelVersion={agent?.modelVersion}
+                        threadId={threadId}
+                        memory={memory?.result}
+                        refreshThreadList={handleRefreshThreadList}
+                        modelList={agent?.modelList}
+                        messageId={messageId}
+                        isNewThread={isNewThread}
+                      />
+                    </AgentLayout>
+                  </ActivatedSkillsProvider>
+                </ObservationalMemoryProvider>
+              </ThreadInputProvider>
+            </WorkingMemoryProvider>
+          </SchemaRequestContextProvider>
         </AgentSettingsProvider>
       </AgentPromptExperimentProvider>
     </TracingSettingsProvider>

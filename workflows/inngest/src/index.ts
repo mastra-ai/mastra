@@ -140,10 +140,11 @@ export function createStep<
   TSuspend,
   TResume,
   TSchemaOut,
-  TContext extends ToolExecutionContext<TSuspend, TResume>,
-  TId extends string,
+  TContext extends ToolExecutionContext<TSuspend, TResume, any> = ToolExecutionContext<TSuspend, TResume>,
+  TId extends string = string,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId>,
+  tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
   toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
 ): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, InngestEngineType>;
 
@@ -664,6 +665,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
+                state: {},
               });
 
               if (result instanceof MessageList) {
@@ -743,6 +745,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 modelSettings,
                 structuredOutput,
                 steps: steps ?? [],
+                state: {},
               });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
@@ -865,6 +868,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
+                state: {},
               });
 
               if (result instanceof MessageList) {
@@ -939,6 +943,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 text,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],
+                state: {},
               });
 
               if (result instanceof MessageList) {

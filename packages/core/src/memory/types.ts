@@ -2,8 +2,11 @@ import type { AssistantContent, CoreMessage, ToolContent, UserContent } from '@i
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodObject } from 'zod';
 
+import type { AgentExecutionOptions } from '../agent/agent.types';
+import type { AgentConfig } from '../agent/types';
 export type { MastraDBMessage } from '../agent';
 import type { EmbeddingModelId } from '../llm/model/index.js';
+import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage';
@@ -41,6 +44,72 @@ export type StorageThreadType = {
   updatedAt: Date;
   metadata?: Record<string, unknown>;
 };
+
+/**
+ * Thread-specific Observational Memory metadata.
+ * Stored on thread.metadata.mastra.om to keep thread-specific data
+ * separate from the shared resource-level OM record.
+ */
+export type ThreadOMMetadata = {
+  /** The current task being worked on in this thread */
+  currentTask?: string;
+  /** Suggested response for continuing this thread's conversation */
+  suggestedResponse?: string;
+  /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
+  lastObservedAt?: string;
+  // Note: Patterns are stored on the ObservationalMemoryRecord (resource-level), not thread metadata
+};
+
+/**
+ * Structure for Mastra-specific thread metadata.
+ * Stored on thread.metadata.mastra
+ */
+export type ThreadMastraMetadata = {
+  om?: ThreadOMMetadata;
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Helper to get OM metadata from a thread's metadata object.
+ * Returns undefined if not present or if the structure is invalid.
+ */
+export function getThreadOMMetadata(threadMetadata?: Record<string, unknown>): ThreadOMMetadata | undefined {
+  if (!threadMetadata) return undefined;
+  const mastra = threadMetadata.mastra;
+  if (!isPlainObject(mastra)) return undefined;
+  const om = mastra.om;
+  if (!isPlainObject(om)) return undefined;
+  return om as ThreadOMMetadata;
+}
+
+/**
+ * Helper to set OM metadata on a thread's metadata object.
+ * Creates the nested structure if it doesn't exist.
+ * Returns a new metadata object (does not mutate the original).
+ * Safely handles cases where existing mastra/om values are not objects.
+ */
+export function setThreadOMMetadata(
+  threadMetadata: Record<string, unknown> | undefined,
+  omMetadata: ThreadOMMetadata,
+): Record<string, unknown> {
+  const existing = threadMetadata ?? {};
+  const existingMastra = isPlainObject(existing.mastra) ? existing.mastra : {};
+  const existingOM = isPlainObject(existingMastra.om) ? existingMastra.om : {};
+
+  return {
+    ...existing,
+    mastra: {
+      ...existingMastra,
+      om: {
+        ...existingOM,
+        ...omMetadata,
+      },
+    },
+  };
+}
 
 /**
  * Memory-specific context passed via RequestContext under the 'MastraMemory' key
@@ -304,6 +373,209 @@ export type SemanticRecall = {
 };
 
 /**
+ * Model settings for Observer/Reflector agents in Observational Memory.
+ * Uses the same settings as Agent.generate() modelSettings (temperature, maxOutputTokens, topP, etc.).
+ */
+export type ObservationalMemoryModelSettings = AgentExecutionOptions['modelSettings'];
+
+/**
+ * Configuration for the observation step in Observational Memory.
+ */
+export interface ObservationalMemoryObservationConfig {
+  /**
+   * Model for the Observer agent.
+   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
+   * a function that returns either (for dynamic model selection),
+   * or an array of ModelWithRetries for fallback support.
+   *
+   * Cannot be set if a top-level `model` is also provided.
+   *
+   * @default 'google/gemini-2.5-flash'
+   */
+  model?: AgentConfig['model'];
+
+  /**
+   * Token count of unobserved messages that triggers observation.
+   * When unobserved message tokens exceed this, the Observer is called.
+   *
+   * @default 30000
+   */
+  messageTokens?: number;
+
+  /**
+   * Model settings for the Observer agent.
+   * @default { temperature: 0.3, maxOutputTokens: 100_000 }
+   */
+  modelSettings?: ObservationalMemoryModelSettings;
+
+  /**
+   * Provider-specific options passed to the Observer model.
+   * Use this for provider features like thinking budgets, safety settings, etc.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   google: { thinkingConfig: { thinkingBudget: 215 } }
+   * }
+   * ```
+   *
+   * @default { google: { thinkingConfig: { thinkingBudget: 215 } } }
+   */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+
+  /**
+   * Maximum tokens per batch when observing multiple threads.
+   * Threads are chunked into batches of this size and processed in parallel.
+   * Lower values = more parallelism but more API calls.
+   * Higher values = fewer API calls but less parallelism.
+   *
+   * @default 10000
+   */
+  maxTokensPerBatch?: number;
+}
+
+/**
+ * Configuration for the reflection step in Observational Memory.
+ */
+export interface ObservationalMemoryReflectionConfig {
+  /**
+   * Model for the Reflector agent.
+   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
+   * a function that returns either (for dynamic model selection),
+   * or an array of ModelWithRetries for fallback support.
+   *
+   * Cannot be set if a top-level `model` is also provided.
+   *
+   * @default 'google/gemini-2.5-flash'
+   */
+  model?: AgentConfig['model'];
+
+  /**
+   * Token count of observations that triggers reflection.
+   * When observation tokens exceed this, the Reflector is called to condense them.
+   *
+   * @default 40000
+   */
+  observationTokens?: number;
+
+  /**
+   * Model settings for the Reflector agent.
+   * @default { temperature: 0, maxOutputTokens: 100_000 }
+   */
+  modelSettings?: ObservationalMemoryModelSettings;
+
+  /**
+   * Provider-specific options passed to the Reflector model.
+   * Use this for provider features like thinking budgets, safety settings, etc.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   google: { thinkingConfig: { thinkingBudget: 1024 } }
+   * }
+   * ```
+   *
+   * @default { google: { thinkingConfig: { thinkingBudget: 1024 } } }
+   */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+}
+
+/**
+ * Configuration for Observational Memory.
+ *
+ * Observational Memory is a three-tier memory system that uses an Observer agent
+ * to extract observations from conversations and a Reflector agent to compress them.
+ * This enables efficient long-term memory with minimal context usage.
+ *
+ * Can be set to `true` to enable with defaults, or an object to customize.
+ *
+ * @example
+ * ```typescript
+ * // Enable with defaults
+ * observationalMemory: true
+ *
+ * // Custom configuration
+ * observationalMemory: {
+ *   scope: 'resource',
+ *   model: 'google/gemini-2.5-flash',
+ *   observation: {
+ *     messageTokens: 20_000,
+ *   },
+ *   reflection: {
+ *     observationTokens: 90_000,
+ *   },
+ * }
+ * ```
+ */
+export interface ObservationalMemoryOptions {
+  /**
+   * Enable or disable Observational Memory.
+   * When omitted, defaults to `true` (enabled).
+   * Only `enabled: false` explicitly disables it.
+   *
+   * @default true
+   */
+  enabled?: boolean;
+
+  /**
+   * Model for both Observer and Reflector agents.
+   * Sets the model for both agents at once. Cannot be used together with
+   * `observation.model` or `reflection.model` — an error will be thrown.
+   *
+   * @default 'google/gemini-2.5-flash'
+   */
+  model?: AgentConfig['model'];
+
+  /**
+   * Observation step configuration for extracting observations from conversations.
+   */
+  observation?: ObservationalMemoryObservationConfig;
+
+  /**
+   * Reflection step configuration for compressing observations.
+   */
+  reflection?: ObservationalMemoryReflectionConfig;
+
+  /**
+   * Memory scope for observations.
+   * - 'resource': Observations span all threads for a resource (cross-thread memory)
+   * - 'thread': Observations are per-thread (default)
+   *
+   * @default 'thread'
+   */
+  scope?: 'resource' | 'thread';
+
+  /**
+   * Share the token budget between messages and observations.
+   * When true, the total budget = observation.messageTokens + reflection.observationTokens.
+   * - Messages can use more space when observations are small
+   * - Observations can use more space when messages are small
+   *
+   * This helps maximize context usage by allowing flexible allocation.
+   *
+   * @default false
+   */
+  shareTokenBudget?: boolean;
+}
+
+/**
+ * Check if observational memory is enabled from a `boolean | ObservationalMemoryOptions` value.
+ *
+ * - `true` → enabled
+ * - `false` → disabled
+ * - `{ enabled: false }` → disabled
+ * - `{ ... }` (without `enabled: false`) → enabled
+ * - `undefined` → disabled
+ */
+export function isObservationalMemoryEnabled(
+  config: boolean | ObservationalMemoryOptions | undefined,
+): config is true | ObservationalMemoryOptions {
+  if (config === true) return true;
+  if (config === false || config === undefined) return false;
+  return config.enabled !== false;
+}
+
+/**
  * Configuration for memory behaviors and retrieval strategies.
  *
  * Controls three types of memory: conversation history (recent messages), semantic recall
@@ -380,6 +652,35 @@ export type MemoryConfig = {
    * ```
    */
   workingMemory?: WorkingMemory;
+
+  /**
+   * Observational Memory configuration for long-term memory with automatic observation and reflection.
+   *
+   * Uses an Observer agent to extract observations from conversations and a Reflector agent
+   * to compress them when they grow too large. This enables efficient long-term memory
+   * that maintains context across many conversations.
+   *
+   * Set to `true` to enable with defaults, `false` to disable, or an object to customize.
+   *
+   * @example
+   * ```typescript
+   * // Enable with defaults
+   * observationalMemory: true
+   *
+   * // Custom configuration
+   * observationalMemory: {
+   *   scope: 'resource',
+   *   model: 'google/gemini-2.5-flash',
+   *   observation: {
+   *     messageTokens: 20_000,
+   *   },
+   *   reflection: {
+   *     observationTokens: 90_000,
+   *   },
+   * }
+   * ```
+   */
+  observationalMemory?: boolean | ObservationalMemoryOptions;
 
   /**
    * Automatically generate descriptive thread titles based on the first user message.
@@ -539,3 +840,51 @@ export type WorkingMemoryTemplate = {
 
 // Type for flexible message deletion input
 export type MessageDeleteInput = string[] | { id: string }[];
+
+/**
+ * Serialized memory configuration that can be stored in the database
+ * This is a subset of SharedMemoryConfig with serializable types only
+ */
+export type SerializedMemoryConfig = {
+  /**
+   * Vector database identifier. The vector instance should be registered
+   * with the Mastra instance to resolve from this ID.
+   * Set to false to disable vector search entirely.
+   */
+  vector?: string | false;
+
+  /**
+   * Configuration for memory behaviors, omitting WorkingMemory and threads
+   */
+  options?: {
+    /** Treat memory as read-only (no new messages stored) */
+    readOnly?: boolean;
+
+    /** Number of recent messages to include, or false to disable */
+    lastMessages?: number | false;
+
+    /** Semantic recall configuration */
+    semanticRecall?: boolean | SemanticRecall;
+
+    /** Title generation configuration (serialized form) */
+    generateTitle?:
+      | boolean
+      | {
+          /** Model ID in format provider/model-name */
+          model: ModelRouterModelId;
+          /** Custom instructions for title generation */
+          instructions?: string;
+        };
+  };
+
+  /**
+   * Embedding model ID in the format "provider/model"
+   * (e.g., "openai/text-embedding-3-small")
+   */
+  embedder?: EmbeddingModelId;
+
+  /**
+   * Options to pass to the embedder, omitting telemetry
+   */
+  embedderOptions?: Omit<MastraEmbeddingOptions, 'telemetry'>;
+};

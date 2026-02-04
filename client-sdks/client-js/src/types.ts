@@ -23,7 +23,12 @@ import type {
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { PaginationInfo, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  WorkflowRuns,
+  StorageListMessagesInput,
+  ObservationalMemoryRecord,
+} from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
 import type {
@@ -40,6 +45,8 @@ import type { ZodSchema } from 'zod';
 export interface ClientOptions {
   /** Base URL for API requests */
   baseUrl: string;
+  /** API route prefix. Defaults to '/api'. Set this to match your server's apiPrefix configuration. */
+  apiPrefix?: string;
   /** Number of retry attempts for failed requests */
   retries?: number;
   /** Initial backoff time in milliseconds between retries */
@@ -88,6 +95,10 @@ export interface GetAgentResponse {
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
   agents: Record<string, { id: string; name: string }>;
+  skills?: SkillMetadata[];
+  workspaceTools?: string[];
+  /** ID of the agent's workspace (if configured) */
+  workspaceId?: string;
   provider: string;
   modelId: string;
   modelVersion: string;
@@ -108,6 +119,8 @@ export interface GetAgentResponse {
   defaultOptions: WithoutMethods<AgentExecutionOptions>;
   defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
   defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
+  /** Serialized JSON schema for request context validation */
+  requestContextSchema?: string;
   source?: 'code' | 'stored';
   activeVersionId?: string;
 }
@@ -170,6 +183,7 @@ export interface GetToolResponse {
   description: string;
   inputSchema: string;
   outputSchema: string;
+  requestContextSchema?: string;
 }
 
 export interface ListWorkflowRunsParams {
@@ -219,6 +233,8 @@ export interface GetWorkflowResponse {
   inputSchema: string;
   outputSchema: string;
   stateSchema: string;
+  /** Serialized JSON schema for request context validation */
+  requestContextSchema?: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
 }
@@ -310,7 +326,19 @@ export interface GetMemoryConfigParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type GetMemoryConfigResponse = { config: MemoryConfig };
+export type GetMemoryConfigResponse = {
+  config: MemoryConfig & {
+    observationalMemory?: {
+      enabled: boolean;
+      scope?: 'thread' | 'resource';
+      shareTokenBudget?: boolean;
+      messageTokens?: number | { min: number; max: number };
+      observationTokens?: number | { min: number; max: number };
+      observationModel?: string;
+      reflectionModel?: string;
+    };
+  };
+};
 
 export interface UpdateMemoryThreadParams {
   title: string;
@@ -599,6 +627,9 @@ export interface StoredAgentScorerConfig {
  */
 export interface StoredAgentResponse {
   id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
   name: string;
   description?: string;
   instructions: string;
@@ -610,7 +641,7 @@ export interface StoredAgentResponse {
   agents?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: Record<string, unknown>;
   scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -641,10 +672,13 @@ export interface ListStoredAgentsResponse {
 }
 
 /**
- * Parameters for creating a stored agent
+ * Parameters for creating a stored agent.
+ * Flat union of agent-record fields and config fields.
  */
 export interface CreateStoredAgentParams {
   id: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
   name: string;
   description?: string;
   instructions: string;
@@ -656,16 +690,16 @@ export interface CreateStoredAgentParams {
   integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: Record<string, unknown>;
   scorers?: Record<string, StoredAgentScorerConfig>;
-  metadata?: Record<string, unknown>;
-  ownerId?: string;
 }
 
 /**
  * Parameters for updating a stored agent
  */
 export interface UpdateStoredAgentParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
   instructions?: string;
@@ -677,10 +711,8 @@ export interface UpdateStoredAgentParams {
   integrationTools?: string[];
   inputProcessors?: Record<string, unknown>[];
   outputProcessors?: Record<string, unknown>[];
-  memory?: string;
+  memory?: Record<string, unknown>;
   scorers?: Record<string, StoredAgentScorerConfig>;
-  metadata?: Record<string, unknown>;
-  ownerId?: string;
 }
 
 /**
@@ -699,8 +731,19 @@ export interface AgentVersionResponse {
   id: string;
   agentId: string;
   versionNumber: number;
-  name?: string;
-  snapshot: Record<string, any>;
+  name: string;
+  description?: string;
+  instructions: string;
+  model: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  integrationTools?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: Record<string, unknown>;
+  scorers?: Record<string, StoredAgentScorerConfig>;
   changedFields?: string[];
   changeMessage?: string;
   createdAt: string;
@@ -722,7 +765,6 @@ export interface ListAgentVersionsResponse {
 }
 
 export interface CreateAgentVersionParams {
-  name?: string;
   changeMessage?: string;
 }
 
@@ -786,6 +828,277 @@ export interface MastraPackage {
 
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
+}
+
+// ============================================================================
+// Workspace Types
+// ============================================================================
+
+/**
+ * Workspace capabilities
+ */
+export interface WorkspaceCapabilities {
+  hasFilesystem: boolean;
+  hasSandbox: boolean;
+  canBM25: boolean;
+  canVector: boolean;
+  canHybrid: boolean;
+  hasSkills: boolean;
+}
+
+/**
+ * Workspace safety configuration
+ */
+export interface WorkspaceSafety {
+  readOnly: boolean;
+}
+
+/**
+ * Response for getting workspace info
+ */
+export interface WorkspaceInfoResponse {
+  isWorkspaceConfigured: boolean;
+  id?: string;
+  name?: string;
+  status?: string;
+  capabilities?: WorkspaceCapabilities;
+  safety?: WorkspaceSafety;
+}
+
+/**
+ * Workspace item in list response
+ */
+export interface WorkspaceItem {
+  id: string;
+  name: string;
+  status: string;
+  source: 'mastra' | 'agent';
+  agentId?: string;
+  agentName?: string;
+  capabilities: WorkspaceCapabilities;
+  safety: WorkspaceSafety;
+}
+
+/**
+ * Response for listing all workspaces
+ */
+export interface ListWorkspacesResponse {
+  workspaces: WorkspaceItem[];
+}
+
+/**
+ * File entry in directory listing
+ */
+export interface WorkspaceFileEntry {
+  name: string;
+  type: 'file' | 'directory';
+  size?: number;
+}
+
+/**
+ * Response for reading a file
+ */
+export interface WorkspaceFsReadResponse {
+  path: string;
+  content: string;
+  type: 'file' | 'directory';
+  size?: number;
+  mimeType?: string;
+}
+
+/**
+ * Response for writing a file
+ */
+export interface WorkspaceFsWriteResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for listing files
+ */
+export interface WorkspaceFsListResponse {
+  path: string;
+  entries: WorkspaceFileEntry[];
+}
+
+/**
+ * Response for deleting a file
+ */
+export interface WorkspaceFsDeleteResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for creating a directory
+ */
+export interface WorkspaceFsMkdirResponse {
+  success: boolean;
+  path: string;
+}
+
+/**
+ * Response for getting file stats
+ */
+export interface WorkspaceFsStatResponse {
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  createdAt?: string;
+  modifiedAt?: string;
+  mimeType?: string;
+}
+
+/**
+ * Workspace search result
+ */
+export interface WorkspaceSearchResult {
+  /** Document identifier (typically the indexed file path) */
+  id: string;
+  content: string;
+  score: number;
+  lineRange?: {
+    start: number;
+    end: number;
+  };
+  scoreDetails?: {
+    vector?: number;
+    bm25?: number;
+  };
+}
+
+/**
+ * Parameters for searching workspace content
+ */
+export interface WorkspaceSearchParams {
+  query: string;
+  topK?: number;
+  mode?: 'bm25' | 'vector' | 'hybrid';
+  minScore?: number;
+}
+
+/**
+ * Response for searching workspace
+ */
+export interface WorkspaceSearchResponse {
+  results: WorkspaceSearchResult[];
+  query: string;
+  mode: 'bm25' | 'vector' | 'hybrid';
+}
+
+/**
+ * Parameters for indexing content
+ */
+export interface WorkspaceIndexParams {
+  path: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for indexing content
+ */
+export interface WorkspaceIndexResponse {
+  success: boolean;
+  path: string;
+}
+
+// ============================================================================
+// Skills Types
+// ============================================================================
+
+/**
+ * Skill source type indicating where the skill comes from
+ */
+export type SkillSource =
+  | { type: 'external'; packagePath: string }
+  | { type: 'local'; projectPath: string }
+  | { type: 'managed'; mastraPath: string };
+
+/**
+ * Skill metadata (without instructions content)
+ */
+export interface SkillMetadata {
+  name: string;
+  description: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Full skill data including instructions and file paths
+ */
+export interface Skill extends SkillMetadata {
+  path: string;
+  instructions: string;
+  source: SkillSource;
+  references: string[];
+  scripts: string[];
+  assets: string[];
+}
+
+/**
+ * Response for listing skills
+ */
+export interface ListSkillsResponse {
+  skills: SkillMetadata[];
+  isSkillsConfigured: boolean;
+}
+
+/**
+ * Skill search result
+ */
+export interface SkillSearchResult {
+  skillName: string;
+  source: string;
+  content: string;
+  score: number;
+  lineRange?: {
+    start: number;
+    end: number;
+  };
+  scoreDetails?: {
+    vector?: number;
+    bm25?: number;
+  };
+}
+
+/**
+ * Parameters for searching skills
+ */
+export interface SearchSkillsParams {
+  query: string;
+  topK?: number;
+  minScore?: number;
+  skillNames?: string[];
+  includeReferences?: boolean;
+}
+
+/**
+ * Response for searching skills
+ */
+export interface SearchSkillsResponse {
+  results: SkillSearchResult[];
+  query: string;
+}
+
+/**
+ * Response for listing skill references
+ */
+export interface ListSkillReferencesResponse {
+  skillName: string;
+  references: string[];
+}
+
+/**
+ * Response for getting skill reference content
+ */
+export interface GetSkillReferenceResponse {
+  skillName: string;
+  referencePath: string;
+  content: string;
 }
 
 // ============================================================================
@@ -861,4 +1174,100 @@ export interface ExecuteProcessorResponse {
   };
   tripwire?: ProcessorTripwireResult;
   error?: string;
+}
+
+// ============================================================================
+// Observational Memory Types
+// ============================================================================
+
+/**
+ * Parameters for getting observational memory
+ */
+export interface GetObservationalMemoryParams {
+  agentId: string;
+  resourceId?: string;
+  threadId?: string;
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+/**
+ * Response for observational memory endpoint
+ */
+export interface GetObservationalMemoryResponse {
+  record: ObservationalMemoryRecord | null;
+  history?: ObservationalMemoryRecord[];
+}
+
+/**
+ * Extended memory status response with OM info
+ */
+export interface GetMemoryStatusResponse {
+  result: boolean;
+  observationalMemory?: {
+    enabled: boolean;
+    hasRecord?: boolean;
+    originType?: string;
+    lastObservedAt?: Date | null;
+    tokenCount?: number;
+    observationTokenCount?: number;
+    isObserving?: boolean;
+    isReflecting?: boolean;
+  };
+}
+
+/**
+ * Extended memory config response with OM config
+ */
+export interface GetMemoryConfigResponseExtended {
+  config: MemoryConfig & {
+    observationalMemory?: {
+      enabled: boolean;
+      scope?: 'thread' | 'resource';
+      messageTokens?: number | { min: number; max: number };
+      observationTokens?: number | { min: number; max: number };
+      observationModel?: string;
+      reflectionModel?: string;
+    };
+  };
+}
+
+// ============================================================================
+// Error Types
+// ============================================================================
+
+/**
+ * HTTP error thrown by the Mastra client.
+ * Extends Error with additional properties for better error handling.
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await client.getWorkspace('my-workspace').listFiles('/invalid-path');
+ * } catch (error) {
+ *   if (error instanceof MastraClientError) {
+ *     if (error.status === 404) {
+ *       console.log('Not found:', error.body);
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export class MastraClientError extends Error {
+  /** HTTP status code */
+  readonly status: number;
+
+  /** HTTP status text (e.g., "Not Found", "Internal Server Error") */
+  readonly statusText: string;
+
+  /** Parsed response body if available */
+  readonly body?: unknown;
+
+  constructor(status: number, statusText: string, message: string, body?: unknown) {
+    // Keep the same message format for backwards compatibility
+    super(message);
+    this.name = 'MastraClientError';
+    this.status = status;
+    this.statusText = statusText;
+    this.body = body;
+  }
 }

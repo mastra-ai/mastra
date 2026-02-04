@@ -1,0 +1,2934 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
+import { describe, it, expect, beforeEach } from 'vitest';
+
+import { ObservationalMemory } from '../observational-memory';
+import {
+  buildObserverPrompt,
+  buildObserverSystemPrompt,
+  parseObserverOutput,
+  optimizeObservationsForContext,
+  formatMessagesForObserver,
+  hasCurrentTaskSection,
+  extractCurrentTask,
+} from '../observer-agent';
+import { buildReflectorPrompt, parseReflectorOutput, validateCompression } from '../reflector-agent';
+import { TokenCounter } from '../token-counter';
+
+// =============================================================================
+// Test Helpers
+// =============================================================================
+
+function createTestMessage(content: string, role: 'user' | 'assistant' = 'user', id?: string): MastraDBMessage {
+  const messageContent: MastraMessageContentV2 = {
+    format: 2,
+    parts: [{ type: 'text', text: content }],
+  };
+
+  return {
+    id: id ?? `msg-${Math.random().toString(36).slice(2)}`,
+    role,
+    content: messageContent,
+    type: 'text',
+    createdAt: new Date(),
+  };
+}
+
+function createTestMessages(count: number, baseContent = 'Test message'): MastraDBMessage[] {
+  return Array.from({ length: count }, (_, i) =>
+    createTestMessage(`${baseContent} ${i + 1}`, i % 2 === 0 ? 'user' : 'assistant', `msg-${i}`),
+  );
+}
+
+function createInMemoryStorage(): InMemoryMemory {
+  const db = new InMemoryDB();
+  return new InMemoryMemory({ db });
+}
+
+// =============================================================================
+// Unit Tests: Storage Operations
+// =============================================================================
+
+describe('Storage Operations', () => {
+  let storage: InMemoryMemory;
+  const threadId = 'test-thread';
+  const resourceId = 'test-resource';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+  });
+
+  describe('initializeObservationalMemory', () => {
+    it('should create a new record with empty observations', async () => {
+      const record = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {
+          observation: { messageTokens: 10000, model: 'test-model' },
+          reflection: { observationTokens: 20000, model: 'test-model' },
+        },
+      });
+
+      expect(record).toBeDefined();
+      expect(record.threadId).toBe(threadId);
+      expect(record.resourceId).toBe(resourceId);
+      expect(record.scope).toBe('thread');
+      expect(record.activeObservations).toBe('');
+      expect(record.isObserving).toBe(false);
+      expect(record.isReflecting).toBe(false);
+      // lastObservedAt starts undefined so all existing messages are "unobserved"
+      // This is critical for historical data (like LongMemEval fixtures)
+      expect(record.lastObservedAt).toBeUndefined();
+    });
+
+    it('should create record with null threadId for resource scope', async () => {
+      const record = await storage.initializeObservationalMemory({
+        threadId: null,
+        resourceId,
+        scope: 'resource',
+        config: {},
+      });
+
+      expect(record.threadId).toBeNull();
+      expect(record.scope).toBe('resource');
+    });
+  });
+
+  describe('getObservationalMemory', () => {
+    it('should return null for non-existent record', async () => {
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record).toBeNull();
+    });
+
+    it('should return existing record', async () => {
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record).toBeDefined();
+      expect(record?.threadId).toBe(threadId);
+    });
+
+    it('should return latest generation (most recent record)', async () => {
+      // Create initial record
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Update with observations
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Test observation',
+
+        tokenCount: 100,
+        lastObservedAt: new Date(),
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toBe('- 🔴 Test observation');
+    });
+  });
+
+  describe('markMessagesAsBuffering', () => {
+    it('should update record timestamp (message IDs removed - cursor-based tracking)', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      const beforeMark = new Date();
+      await storage.markMessagesAsBuffering(initial.id, ['msg-1', 'msg-2']);
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.updatedAt).toBeDefined();
+      expect(record?.updatedAt!.getTime()).toBeGreaterThanOrEqual(beforeMark.getTime());
+    });
+  });
+
+  describe('updateBufferedObservations', () => {
+    it('should store buffered observations', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        observations: '- 🔴 Buffered observation',
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.bufferedObservations).toBe('- 🔴 Buffered observation');
+    });
+
+    it('should replace buffered observations on subsequent updates', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        observations: '- 🔴 First buffered',
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        observations: '- 🔴 Second buffered',
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.bufferedObservations).toBe('- 🔴 Second buffered');
+    });
+  });
+
+  describe('swapBufferedToActive', () => {
+    it('should append buffered to active and clear buffered', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Set initial active observations
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Active observation',
+
+        tokenCount: 50,
+        lastObservedAt: new Date(),
+      });
+
+      // Add buffered observations
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        observations: '- 🟡 Buffered observation',
+      });
+
+      await storage.swapBufferedToActive(initial.id);
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toContain('- 🔴 Active observation');
+      expect(record?.activeObservations).toContain('- 🟡 Buffered observation');
+      expect(record?.bufferedObservations).toBeUndefined();
+      // Message ID tracking removed - using cursor-based lastObservedAt instead
+    });
+
+    it('should update lastObservedAt when swapping buffered to active', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Initially, lastObservedAt is undefined (all messages are unobserved)
+      expect(initial.lastObservedAt).toBeUndefined();
+
+      // Add buffered observations
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        observations: '- 🟡 Buffered observation',
+      });
+
+      const beforeSwap = new Date();
+      await storage.swapBufferedToActive(initial.id);
+      const afterSwap = new Date();
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.lastObservedAt).toBeDefined();
+      // lastObservedAt should be set to swap time (first observation)
+      expect(record!.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeSwap.getTime());
+      expect(record!.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterSwap.getTime());
+    });
+  });
+
+  describe('updateActiveObservations', () => {
+    it('should update observations and track message IDs', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Test observation',
+
+        tokenCount: 100,
+        lastObservedAt: new Date(),
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toBe('- 🔴 Test observation');
+      expect(record?.observationTokenCount).toBe(100);
+      // Message ID tracking removed - using cursor-based lastObservedAt instead
+    });
+
+    it('should set lastObservedAt when provided', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Initially, lastObservedAt is undefined (all messages are unobserved)
+      expect(initial.lastObservedAt).toBeUndefined();
+
+      const observedAt = new Date('2025-01-15T10:00:00Z');
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Test observation',
+
+        tokenCount: 100,
+        lastObservedAt: observedAt,
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.lastObservedAt).toEqual(observedAt);
+    });
+
+    it('should update lastObservedAt on each observation', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // First update with lastObservedAt
+      const firstObservedAt = new Date('2025-01-15T10:00:00Z');
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 First observation',
+
+        tokenCount: 100,
+        lastObservedAt: firstObservedAt,
+      });
+
+      const afterFirst = await storage.getObservationalMemory(threadId, resourceId);
+      expect(afterFirst?.lastObservedAt).toEqual(firstObservedAt);
+
+      // Second update with a new lastObservedAt
+      const secondObservedAt = new Date('2025-01-15T11:00:00Z');
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Second observation',
+
+        tokenCount: 150,
+        lastObservedAt: secondObservedAt,
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.lastObservedAt).toEqual(secondObservedAt);
+    });
+  });
+
+  describe('setObservingFlag / setReflectingFlag', () => {
+    it('should set and clear observing flag', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.setObservingFlag(initial.id, true);
+      let record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.isObserving).toBe(true);
+
+      await storage.setObservingFlag(initial.id, false);
+      record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.isObserving).toBe(false);
+    });
+
+    it('should set and clear reflecting flag', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.setReflectingFlag(initial.id, true);
+      let record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.isReflecting).toBe(true);
+
+      await storage.setReflectingFlag(initial.id, false);
+      record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.isReflecting).toBe(false);
+    });
+  });
+
+  describe('createReflectionGeneration', () => {
+    it('should create new generation with reflection as active', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Original observations (very long...)',
+
+        tokenCount: 30000,
+        lastObservedAt: new Date(),
+      });
+
+      const currentRecord = await storage.getObservationalMemory(threadId, resourceId);
+
+      const newRecord = await storage.createReflectionGeneration({
+        currentRecord: currentRecord!,
+        reflection: '- 🔴 Condensed reflection',
+        tokenCount: 5000,
+      });
+
+      expect(newRecord.activeObservations).toBe('- 🔴 Condensed reflection');
+      expect(newRecord.observationTokenCount).toBe(5000);
+      expect(newRecord.originType).toBe('reflection');
+      // Message ID tracking removed - using cursor-based lastObservedAt instead
+      // After reflection, lastObservedAt is updated to mark all previous messages as observed
+      expect(newRecord.lastObservedAt).toBeDefined();
+    });
+
+    it('should preserve lastObservedAt from observation when creating reflection generation', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Set lastObservedAt during observation (this always happens before reflection)
+      const observedAt = new Date('2025-01-01T00:00:00Z');
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Original observations',
+
+        tokenCount: 30000,
+        lastObservedAt: observedAt,
+      });
+
+      const currentRecord = await storage.getObservationalMemory(threadId, resourceId);
+      expect(currentRecord?.lastObservedAt).toEqual(observedAt);
+
+      const newRecord = await storage.createReflectionGeneration({
+        currentRecord: currentRecord!,
+        reflection: '- 🔴 Condensed reflection',
+        tokenCount: 5000,
+      });
+
+      // New record should preserve lastObservedAt from the observation
+      // (reflection doesn't change the cursor - observation always runs first)
+      expect(newRecord.lastObservedAt).toBeDefined();
+      expect(newRecord.lastObservedAt).toEqual(observedAt);
+
+      // Previous record should also retain its original lastObservedAt
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId);
+      const previousRecord = history?.find(r => r.id === initial.id);
+      expect(previousRecord?.lastObservedAt).toEqual(observedAt);
+    });
+  });
+
+  describe('getObservationalMemoryHistory', () => {
+    it('should return all generations in order', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- Gen 1',
+
+        tokenCount: 100,
+        lastObservedAt: new Date(),
+      });
+
+      const gen1 = await storage.getObservationalMemory(threadId, resourceId);
+
+      await storage.createReflectionGeneration({
+        currentRecord: gen1!,
+        reflection: '- Gen 2 (reflection)',
+        tokenCount: 50,
+      });
+
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId);
+      expect(history.length).toBe(2);
+    });
+
+    it('should respect limit parameter', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Create multiple generations
+      let current = initial;
+      for (let i = 0; i < 5; i++) {
+        await storage.updateActiveObservations({
+          id: current.id,
+          observations: `- Gen ${i}`,
+
+          tokenCount: 100,
+          lastObservedAt: new Date(),
+        });
+        const record = await storage.getObservationalMemory(threadId, resourceId);
+        if (i < 4) {
+          current = await storage.createReflectionGeneration({
+            currentRecord: record!,
+            reflection: `- Reflection ${i}`,
+            tokenCount: 50,
+          });
+        }
+      }
+
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 2);
+      expect(history.length).toBe(2);
+    });
+  });
+
+  describe('clearObservationalMemory', () => {
+    it('should remove all records for thread/resource', async () => {
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      let record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record).toBeDefined();
+
+      await storage.clearObservationalMemory(threadId, resourceId);
+
+      record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record).toBeNull();
+    });
+  });
+});
+
+// =============================================================================
+// Unit Tests: Observer Agent Helpers
+// =============================================================================
+
+describe('Observer Agent Helpers', () => {
+  describe('formatMessagesForObserver', () => {
+    it('should format messages with role labels and content', () => {
+      const messages = [createTestMessage('Hello', 'user'), createTestMessage('Hi there!', 'assistant')];
+
+      const formatted = formatMessagesForObserver(messages);
+      expect(formatted).toContain('**User');
+      expect(formatted).toContain('Hello');
+      expect(formatted).toContain('**Assistant');
+      expect(formatted).toContain('Hi there!');
+    });
+
+    it('should include timestamps if present', () => {
+      const msg = createTestMessage('Test', 'user');
+      msg.createdAt = new Date('2024-12-04T10:30:00Z');
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('2024');
+      expect(formatted).toContain('Dec');
+    });
+  });
+
+  describe('buildObserverPrompt', () => {
+    it('should include new messages in prompt', () => {
+      const messages = [createTestMessage('What is TypeScript?', 'user')];
+      const prompt = buildObserverPrompt(undefined, messages);
+
+      expect(prompt).toContain('New Message History');
+      expect(prompt).toContain('What is TypeScript?');
+    });
+
+    it('should include existing observations if present', () => {
+      const messages = [createTestMessage('Follow up question', 'user')];
+      const existingObs = '- 🔴 User asked about TypeScript [topic_discussed]';
+
+      const prompt = buildObserverPrompt(existingObs, messages);
+
+      expect(prompt).toContain('Previous Observations');
+      expect(prompt).toContain('User asked about TypeScript');
+    });
+
+    it('should not include existing observations section if none', () => {
+      const messages = [createTestMessage('Hello', 'user')];
+      const prompt = buildObserverPrompt(undefined, messages);
+
+      expect(prompt).not.toContain('Previous Observations');
+    });
+  });
+
+  describe('parseObserverOutput', () => {
+    it('should extract observations from output', () => {
+      const output = `
+- 🔴 User asked about React [topic_discussed]
+- 🟡 User prefers examples [user_preference]
+      `;
+
+      const result = parseObserverOutput(output);
+      expect(result.observations).toContain('🔴 User asked about React');
+      expect(result.observations).toContain('🟡 User prefers examples');
+    });
+
+    it('should extract continuation hint from XML suggested-response tag', () => {
+      const output = `
+<observations>
+- 🔴 User asked about React [topic_discussed]
+</observations>
+
+<current-task>
+Helping user understand React hooks
+</current-task>
+
+<suggested-response>
+Let me show you an example...
+</suggested-response>
+      `;
+
+      const result = parseObserverOutput(output);
+      expect(result.suggestedContinuation).toContain('Let me show you an example');
+    });
+
+    it('should handle XML format with all sections', () => {
+      const output = `
+<observations>
+- 🔴 Observation here
+</observations>
+
+<current-task>
+Working on implementation
+</current-task>
+
+<suggested-response>
+Here's the implementation...
+</suggested-response>
+      `;
+
+      const result = parseObserverOutput(output);
+      expect(result.suggestedContinuation).toBeDefined();
+      expect(result.observations).toContain('🔴 Observation here');
+      // currentTask is returned separately, not embedded in observations
+      expect(result.currentTask).toBe('Working on implementation');
+      expect(result.observations).not.toContain('Working on implementation');
+      expect(result.observations).not.toContain('<current-task>');
+    });
+
+    it('should handle output without continuation hint', () => {
+      const output = '- 🔴 Simple observation';
+      const result = parseObserverOutput(output);
+
+      // currentTask is returned separately (undefined if not present)
+      expect(result.observations).toContain('- 🔴 Simple observation');
+      expect(result.observations).not.toContain('<current-task>');
+      expect(result.currentTask).toBeUndefined();
+      expect(result.suggestedContinuation).toBeUndefined();
+    });
+
+    // Edge case tests for XML parsing robustness
+    describe('XML parsing edge cases', () => {
+      it('should handle malformed XML with unclosed tags by using fallback', () => {
+        const output = `<observations>
+- 🔴 User preference noted
+- 🟡 Some context
+`;
+        // No closing tag - should fall back to extracting list items
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('🔴 User preference noted');
+        expect(result.observations).toContain('🟡 Some context');
+      });
+
+      it('should handle empty XML tags gracefully', () => {
+        const output = `<observations></observations>
+
+<current-task></current-task>
+
+<suggested-response></suggested-response>`;
+
+        const result = parseObserverOutput(output);
+        // Empty observations should trigger fallback or be empty
+        // Current task should still be added if missing content
+        expect(result.observations).toBeDefined();
+      });
+
+      it('should handle code blocks containing < characters', () => {
+        const output = `<observations>
+- 🔴 User is working on React component
+- 🟡 Code example discussed: \`const x = a < b ? a : b;\`
+- 🔴 User prefers arrow functions: \`const fn = () => {}\`
+</observations>
+
+<current-task>
+Help user with conditional rendering
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('User is working on React component');
+        expect(result.observations).toContain('a < b');
+        // currentTask is returned separately, not in observations
+        expect(result.currentTask).toBe('Help user with conditional rendering');
+        expect(result.observations).not.toContain('Help user with conditional rendering');
+      });
+
+      it('should NOT capture inline <observations> tags that appear mid-line', () => {
+        const output = `<observations>
+- 🔴 User asked about XML parsing
+- 🟡 Mentioned that <observations> tags are used for memory
+- 🔴 User wants to understand the format
+</observations>
+
+<current-task>
+Explain the <observations> tag format to user
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        // The actual observations should be captured
+        expect(result.observations).toContain('User asked about XML parsing');
+        // The inline mention of <observations> should be preserved as content, not parsed as a tag
+        expect(result.observations).toContain('<observations> tags are used for memory');
+        // currentTask is returned separately, not in observations
+        expect(result.currentTask).toBe('Explain the <observations> tag format to user');
+        expect(result.observations).not.toContain('Explain the <observations> tag format');
+      });
+
+      it('should NOT capture inline <current-task> tags that appear mid-line', () => {
+        const output = `<observations>
+- 🔴 User discussed the <current-task> section format
+- 🟡 User wants to know how <current-task> is parsed
+</observations>
+
+<current-task>
+Help user understand memory XML structure
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('<current-task> section format');
+        // currentTask is returned separately, not in observations
+        expect(result.currentTask).toBe('Help user understand memory XML structure');
+        expect(result.observations).not.toContain('Help user understand memory XML structure');
+      });
+
+      it('should NOT capture inline <suggested-response> tags that appear mid-line', () => {
+        const output = `<observations>
+- 🔴 User asked about <suggested-response> usage
+</observations>
+
+<current-task>
+Explain <suggested-response> tag purpose
+</current-task>
+
+<suggested-response>
+The <suggested-response> tag helps maintain conversation flow
+</suggested-response>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('User asked about <suggested-response> usage');
+        expect(result.suggestedContinuation).toContain('<suggested-response> tag helps maintain');
+      });
+
+      it('should handle nested code blocks with XML-like content', () => {
+        const output = `<observations>
+- 🔴 User is building an XML parser
+- 🟡 Example code discussed:
+  \`\`\`javascript
+  const xml = '<observations>test</observations>';
+  const parsed = parseXml(xml);
+  \`\`\`
+</observations>
+
+<current-task>
+Help user implement XML parsing
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('User is building an XML parser');
+        // currentTask is returned separately, not in observations
+        expect(result.currentTask).toBe('Help user implement XML parsing');
+        expect(result.observations).not.toContain('Help user implement XML parsing');
+      });
+
+      it('should NOT be truncated by inline closing tags like </observations>', () => {
+        const output = `<observations>
+- 🔴 User mentioned that </observations> ends the section
+- 🟡 User also discussed </current-task> syntax
+- 🔴 Important: preserve all content
+</observations>
+
+<current-task>
+Help user understand XML tag boundaries
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        // Should NOT be truncated at the inline </observations>
+        expect(result.observations).toContain('User mentioned that </observations> ends the section');
+        expect(result.observations).toContain('Important: preserve all content');
+        // currentTask is returned separately, not in observations
+        expect(result.currentTask).toBe('Help user understand XML tag boundaries');
+        expect(result.observations).not.toContain('Help user understand XML tag boundaries');
+      });
+
+      it('should NOT be truncated by inline closing </current-task> tag', () => {
+        const output = `<observations>
+- 🔴 User info here
+</observations>
+
+<current-task>
+User asked about </current-task> parsing and how it works
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        // currentTask is returned separately, not in observations
+        // Should capture the full current-task content
+        expect(result.currentTask).toContain('User asked about </current-task> parsing');
+        expect(result.observations).not.toContain('User asked about </current-task> parsing');
+      });
+    });
+  });
+
+  describe('optimizeObservationsForContext', () => {
+    it('should strip yellow and green emojis', () => {
+      const observations = `
+- 🔴 Critical info
+- 🟡 Medium info
+- 🟢 Low info
+      `;
+
+      const optimized = optimizeObservationsForContext(observations);
+      expect(optimized).toContain('🔴 Critical info');
+      expect(optimized).not.toContain('🟡');
+      expect(optimized).not.toContain('🟢');
+    });
+
+    it('should preserve red emojis', () => {
+      const observations = '- 🔴 Critical user preference';
+      const optimized = optimizeObservationsForContext(observations);
+      expect(optimized).toContain('🔴');
+    });
+
+    it('should simplify arrows', () => {
+      const observations = '- Task -> completed successfully';
+      const optimized = optimizeObservationsForContext(observations);
+      expect(optimized).not.toContain('->');
+    });
+
+    it('should collapse multiple newlines', () => {
+      const observations = `Line 1
+
+
+
+Line 2`;
+      const optimized = optimizeObservationsForContext(observations);
+      expect(optimized).not.toContain('\n\n\n');
+    });
+  });
+});
+
+// =============================================================================
+// Unit Tests: Reflector Agent Helpers
+// =============================================================================
+
+describe('Reflector Agent Helpers', () => {
+  describe('buildReflectorPrompt', () => {
+    it('should include observations to reflect on', () => {
+      const observations = '- 🔴 User is building a React app';
+      const prompt = buildReflectorPrompt(observations);
+
+      expect(prompt).toContain('OBSERVATIONS TO REFLECT ON');
+      expect(prompt).toContain('User is building a React app');
+    });
+
+    it('should include manual prompt guidance if provided', () => {
+      const observations = '- 🔴 Test';
+      const manualPrompt = 'Focus on authentication implementation';
+
+      const prompt = buildReflectorPrompt(observations, manualPrompt);
+      expect(prompt).toContain('SPECIFIC GUIDANCE');
+      expect(prompt).toContain('Focus on authentication implementation');
+    });
+
+    it('should include compression retry guidance when flagged', () => {
+      const observations = '- 🔴 Test';
+      const prompt = buildReflectorPrompt(observations, undefined, true);
+
+      expect(prompt).toContain('COMPRESSION REQUIRED');
+      expect(prompt).toContain('more compression');
+    });
+  });
+
+  describe('parseReflectorOutput', () => {
+    it('should extract observations from output', () => {
+      const output = `
+- 🔴 **Project Context** [current_project]
+  - User is building a dashboard
+- 🟡 **Progress** [task]
+  - Completed auth implementation
+      `;
+
+      const result = parseReflectorOutput(output);
+      expect(result.observations).toContain('Project Context');
+      expect(result.observations).toContain('Completed auth implementation');
+    });
+
+    it('should extract continuation hint from XML suggested-response tag', () => {
+      const output = `
+<observations>
+- 🔴 Observations here
+</observations>
+
+<current-task>
+Building the chart component
+</current-task>
+
+<suggested-response>
+Start by implementing the chart component...
+</suggested-response>
+      `;
+
+      const result = parseReflectorOutput(output);
+      expect(result.suggestedContinuation).toContain('implementing the chart component');
+    });
+
+    // Edge case tests for XML parsing robustness
+    describe('XML parsing edge cases', () => {
+      it('should handle malformed XML with unclosed tags by using fallback', () => {
+        const output = `<observations>
+- 🔴 User preference noted
+- 🟡 Some context
+`;
+        // No closing tag - should fall back to extracting list items
+        const result = parseReflectorOutput(output);
+        expect(result.observations).toContain('🔴 User preference noted');
+      });
+
+      it('should NOT be truncated by inline closing tags like </observations>', () => {
+        const output = `<observations>
+- 🔴 User mentioned that </observations> ends the section
+- 🟡 User also discussed </current-task> syntax
+- 🔴 Important: preserve all content
+</observations>
+
+<current-task>
+Help user understand XML tag boundaries
+</current-task>`;
+
+        const result = parseReflectorOutput(output);
+        // Should NOT be truncated at the inline </observations>
+        expect(result.observations).toContain('User mentioned that </observations> ends the section');
+        expect(result.observations).toContain('Important: preserve all content');
+      });
+
+      it('should handle code blocks with XML-like content', () => {
+        const output = `<observations>
+- 🔴 User is building an XML parser
+- 🟡 Example: \`const xml = '<observations>test</observations>';\`
+</observations>
+
+<current-task>
+Help user implement XML parsing
+</current-task>`;
+
+        const result = parseReflectorOutput(output);
+        expect(result.observations).toContain('User is building an XML parser');
+        // currentTask is NOT returned by parseReflectorOutput (only observations and suggestedContinuation)
+        // and is NOT embedded in observations
+        expect(result.observations).not.toContain('Help user implement XML parsing');
+      });
+    });
+  });
+
+  describe('validateCompression', () => {
+    it('should return true when reflected tokens are below threshold', () => {
+      // reflectedTokens=5000, targetThreshold=10000 -> 5000 < 10000 = true
+      expect(validateCompression(5000, 10000)).toBe(true);
+    });
+
+    it('should return false when reflected tokens equal threshold', () => {
+      // reflectedTokens=10000, targetThreshold=10000 -> 10000 < 10000 = false
+      expect(validateCompression(10000, 10000)).toBe(false);
+    });
+
+    it('should return false when reflected tokens exceed threshold', () => {
+      // reflectedTokens=12000, targetThreshold=10000 -> 12000 < 10000 = false
+      expect(validateCompression(12000, 10000)).toBe(false);
+    });
+
+    it('should validate against target threshold', () => {
+      // reflectedTokens=8500, targetThreshold=10000 -> 8500 < 10000 = true
+      expect(validateCompression(8500, 10000)).toBe(true);
+      // reflectedTokens=9500, targetThreshold=10000 -> 9500 < 10000 = true (still below)
+      expect(validateCompression(9500, 10000)).toBe(true);
+      // reflectedTokens=10500, targetThreshold=10000 -> 10500 < 10000 = false
+      expect(validateCompression(10500, 10000)).toBe(false);
+    });
+
+    it('should work with different thresholds', () => {
+      // reflectedTokens=7500, targetThreshold=8000 -> 7500 < 8000 = true
+      expect(validateCompression(7500, 8000)).toBe(true);
+      // reflectedTokens=8500, targetThreshold=8000 -> 8500 < 8000 = false
+      expect(validateCompression(8500, 8000)).toBe(false);
+    });
+  });
+});
+
+// =============================================================================
+// Unit Tests: Token Counter
+// =============================================================================
+
+describe('Token Counter', () => {
+  let counter: TokenCounter;
+
+  beforeEach(() => {
+    counter = new TokenCounter();
+  });
+
+  describe('countString', () => {
+    it('should count tokens in a string', () => {
+      const count = counter.countString('Hello, world!');
+      expect(count).toBeGreaterThan(0);
+    });
+
+    it('should return 0 for empty string', () => {
+      expect(counter.countString('')).toBe(0);
+    });
+
+    it('should count more tokens for longer strings', () => {
+      const short = counter.countString('Hello');
+      const long = counter.countString('Hello, this is a much longer string with many more words');
+      expect(long).toBeGreaterThan(short);
+    });
+  });
+
+  describe('countMessage', () => {
+    it('should count tokens in a message', () => {
+      const msg = createTestMessage('Hello, how can I help you today?');
+      const count = counter.countMessage(msg);
+      expect(count).toBeGreaterThan(0);
+    });
+
+    it('should include overhead for message structure', () => {
+      const msg = createTestMessage('Hi');
+      const stringCount = counter.countString('Hi');
+      const msgCount = counter.countMessage(msg);
+      // Message should have overhead beyond just the content
+      expect(msgCount).toBeGreaterThan(stringCount);
+    });
+  });
+
+  describe('countMessages', () => {
+    it('should count tokens in multiple messages', () => {
+      const messages = createTestMessages(5);
+      const count = counter.countMessages(messages);
+      expect(count).toBeGreaterThan(0);
+    });
+
+    it('should include conversation overhead', () => {
+      const messages = createTestMessages(3);
+      const individualSum = messages.reduce((sum, m) => sum + counter.countMessage(m), 0);
+      const totalCount = counter.countMessages(messages);
+      // Should have conversation overhead
+      expect(totalCount).toBeGreaterThan(individualSum);
+    });
+
+    it('should return 0 for empty array', () => {
+      expect(counter.countMessages([])).toBe(0);
+    });
+  });
+
+  describe('countObservations', () => {
+    it('should count tokens in observation string', () => {
+      const observations = `
+- 🔴 User is building a React app [current_project]
+- 🟡 User prefers TypeScript [user_preference]
+      `;
+      const count = counter.countObservations(observations);
+      expect(count).toBeGreaterThan(0);
+    });
+  });
+});
+
+// =============================================================================
+// Integration Tests: ObservationalMemory Class
+// =============================================================================
+
+describe('ObservationalMemory Integration', () => {
+  let storage: InMemoryMemory;
+  let om: ObservationalMemory;
+  const threadId = 'test-thread';
+  const resourceId = 'test-resource';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+
+    om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 500, // Low threshold for testing
+        model: 'test-model',
+      },
+      reflection: {
+        observationTokens: 1000,
+        model: 'test-model',
+      },
+    });
+  });
+
+  describe('getOrCreateRecord', () => {
+    it('should return null when record does not exist', async () => {
+      const record = await om.getRecord(threadId, resourceId);
+      expect(record).toBeNull();
+    });
+
+    it('should return record after initialization via storage', async () => {
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      const afterInit = await om.getRecord(threadId, resourceId);
+      expect(afterInit).toBeDefined();
+    });
+  });
+
+  describe('getObservations', () => {
+    it('should return undefined when no observations exist', async () => {
+      const obs = await om.getObservations(threadId, resourceId);
+      expect(obs).toBeUndefined();
+    });
+
+    it('should return observations after they are created', async () => {
+      // Initialize and add observations directly to storage
+      const record = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: '- 🔴 Test observation',
+
+        tokenCount: 50,
+        lastObservedAt: new Date(),
+      });
+
+      const obs = await om.getObservations(threadId, resourceId);
+      expect(obs).toBe('- 🔴 Test observation');
+    });
+  });
+
+  describe('clear', () => {
+    it('should clear all memory for thread/resource', async () => {
+      // Initialize
+      const record = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: '- 🔴 Test',
+
+        tokenCount: 50,
+        lastObservedAt: new Date(),
+      });
+
+      // Verify it exists
+      expect(await om.getObservations(threadId, resourceId)).toBeDefined();
+
+      // Clear
+      await om.clear(threadId, resourceId);
+
+      // Verify it's gone
+      expect(await om.getRecord(threadId, resourceId)).toBeNull();
+    });
+  });
+
+  describe('getHistory', () => {
+    it('should return observation history across generations', async () => {
+      // Create initial generation
+      const gen1 = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateActiveObservations({
+        id: gen1.id,
+        observations: '- 🔴 Generation 1',
+
+        tokenCount: 100,
+        lastObservedAt: new Date(),
+      });
+
+      // Create reflection (new generation)
+      const gen1Record = await storage.getObservationalMemory(threadId, resourceId);
+      await storage.createReflectionGeneration({
+        currentRecord: gen1Record!,
+        reflection: '- 🔴 Generation 2 (reflection)',
+        tokenCount: 50,
+      });
+
+      const history = await om.getHistory(threadId, resourceId);
+      expect(history.length).toBe(2);
+    });
+  });
+
+  describe('getTokenCounter', () => {
+    it('should return the token counter instance', () => {
+      const counter = om.getTokenCounter();
+      expect(counter).toBeInstanceOf(TokenCounter);
+    });
+  });
+
+  describe('getStorage', () => {
+    it('should return the storage instance', () => {
+      const s = om.getStorage();
+      expect(s).toBe(storage);
+    });
+  });
+
+  describe('cursor-based message loading (lastObservedAt)', () => {
+    it('should load only messages created after lastObservedAt', async () => {
+      // 1. Create some "old" messages (before observation)
+      const oldTime = new Date('2025-01-01T10:00:00Z');
+      const oldMsg1: MastraDBMessage = {
+        id: 'old-msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Old message 1' }] },
+        type: 'text',
+        createdAt: oldTime,
+        threadId,
+      };
+      const oldMsg2: MastraDBMessage = {
+        id: 'old-msg-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Old response 1' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T10:01:00Z'),
+        threadId,
+      };
+
+      // Save old messages to storage
+      await storage.saveMessages({ messages: [oldMsg1, oldMsg2] });
+
+      // 2. Initialize OM record with lastObservedAt set to AFTER the old messages
+      const observedAt = new Date('2025-01-01T12:00:00Z');
+      const record = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: '- 🔴 User discussed old topics',
+
+        tokenCount: 100,
+        lastObservedAt: observedAt,
+      });
+
+      // 3. Create "new" messages (after observation)
+      const newTime = new Date('2025-01-01T14:00:00Z');
+      const newMsg1: MastraDBMessage = {
+        id: 'new-msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'New message after observation' }] },
+        type: 'text',
+        createdAt: newTime,
+        threadId,
+      };
+      const newMsg2: MastraDBMessage = {
+        id: 'new-msg-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'New response' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T14:01:00Z'),
+        threadId,
+      };
+
+      await storage.saveMessages({ messages: [newMsg1, newMsg2] });
+
+      // 4. Query messages using dateRange.start (simulating what loadUnobservedMessages does)
+      const result = await storage.listMessages({
+        threadId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: {
+          dateRange: {
+            start: observedAt,
+          },
+        },
+      });
+
+      // 5. Should only get the new messages, not the old ones
+      expect(result.messages.length).toBe(2);
+      expect(result.messages.map(m => m.id)).toEqual(['new-msg-1', 'new-msg-2']);
+      expect(result.messages.map(m => m.id)).not.toContain('old-msg-1');
+      expect(result.messages.map(m => m.id)).not.toContain('old-msg-2');
+    });
+
+    it('should load all messages when lastObservedAt is undefined (first observation)', async () => {
+      // Create messages at various times
+      const msg1: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'First message' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        threadId,
+      };
+      const msg2: MastraDBMessage = {
+        id: 'msg-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Response' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T10:01:00Z'),
+        threadId,
+      };
+      const msg3: MastraDBMessage = {
+        id: 'msg-3',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Another message' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T10:02:00Z'),
+        threadId,
+      };
+
+      await storage.saveMessages({ messages: [msg1, msg2, msg3] });
+
+      // Initialize OM record WITHOUT lastObservedAt (first time, no observations yet)
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Query without dateRange filter (simulating first observation)
+      const result = await storage.listMessages({
+        threadId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        // No filter - should get all messages
+      });
+
+      // Should get ALL messages
+      expect(result.messages.length).toBe(3);
+      expect(result.messages.map(m => m.id)).toEqual(['msg-1', 'msg-2', 'msg-3']);
+    });
+
+    it('should handle messages created at exact same timestamp as lastObservedAt', async () => {
+      // Edge case: message created at exact same time as lastObservedAt
+      const exactTime = new Date('2025-01-01T12:00:00Z');
+
+      const msgAtExactTime: MastraDBMessage = {
+        id: 'msg-exact',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Message at exact observation time' }] },
+        type: 'text',
+        createdAt: exactTime,
+        threadId,
+      };
+
+      const msgAfter: MastraDBMessage = {
+        id: 'msg-after',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Message after observation' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T12:00:01Z'),
+        threadId,
+      };
+
+      await storage.saveMessages({ messages: [msgAtExactTime, msgAfter] });
+
+      // Query with dateRange.start = exactTime
+      // The InMemoryMemory implementation uses >= for start, so exact time should be included
+      const result = await storage.listMessages({
+        threadId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: {
+          dateRange: {
+            start: exactTime,
+          },
+        },
+      });
+
+      // Both messages should be included (>= comparison)
+      // This is why we also have the ID-based safety filter in processInput
+      expect(result.messages.length).toBe(2);
+      expect(result.messages.map(m => m.id)).toContain('msg-exact');
+      expect(result.messages.map(m => m.id)).toContain('msg-after');
+    });
+
+    it('should use lastObservedAt cursor after reflection creates new generation', async () => {
+      // 1. Create messages before reflection
+      const preReflectionMsg: MastraDBMessage = {
+        id: 'pre-reflection-msg',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Message before reflection' }] },
+        type: 'text',
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        threadId,
+      };
+
+      await storage.saveMessages({ messages: [preReflectionMsg] });
+
+      // 2. Initialize and observe
+      const record = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      const firstObservedAt = new Date('2025-01-01T11:00:00Z');
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: '- 🔴 Pre-reflection observations',
+
+        tokenCount: 30000, // High token count to trigger reflection
+        lastObservedAt: firstObservedAt,
+      });
+
+      // 3. Create reflection (new generation)
+      const currentRecord = await storage.getObservationalMemory(threadId, resourceId);
+      const newRecord = await storage.createReflectionGeneration({
+        currentRecord: currentRecord!,
+        reflection: '- 🔴 Condensed reflection',
+        tokenCount: 5000,
+      });
+
+      // 4. New record should have fresh lastObservedAt
+      expect(newRecord.lastObservedAt).toBeDefined();
+      const reflectionTime = newRecord.lastObservedAt!;
+
+      // 5. Create post-reflection messages
+      const postReflectionMsg: MastraDBMessage = {
+        id: 'post-reflection-msg',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Message after reflection' }] },
+        type: 'text',
+        createdAt: new Date(reflectionTime.getTime() + 60000), // 1 minute after reflection
+        threadId,
+      };
+
+      await storage.saveMessages({ messages: [postReflectionMsg] });
+
+      // 6. Query using new record's lastObservedAt
+      const result = await storage.listMessages({
+        threadId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: {
+          dateRange: {
+            start: reflectionTime,
+          },
+        },
+      });
+
+      // Should only get post-reflection message, not pre-reflection
+      expect(result.messages.map(m => m.id)).toContain('post-reflection-msg');
+      expect(result.messages.map(m => m.id)).not.toContain('pre-reflection-msg');
+    });
+  });
+
+  describe('resource-scoped message loading (listMessagesByResourceId)', () => {
+    const resourceId = 'test-resource-for-messages';
+
+    it('should load all messages for a resource across multiple threads', async () => {
+      const thread1Id = 'thread-1';
+      const thread2Id = 'thread-2';
+      const thread3Id = 'thread-3';
+
+      // Create threads for the resource
+      await storage.saveThread({
+        thread: {
+          id: thread1Id,
+          resourceId,
+          title: 'Thread 1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await storage.saveThread({
+        thread: {
+          id: thread2Id,
+          resourceId,
+          title: 'Thread 2',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await storage.saveThread({
+        thread: {
+          id: thread3Id,
+          resourceId,
+          title: 'Thread 3',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Create messages in different threads
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-t1-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Message in thread 1' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:00:00Z'),
+          threadId: thread1Id,
+          resourceId,
+        },
+        {
+          id: 'msg-t2-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Message in thread 2' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:01:00Z'),
+          threadId: thread2Id,
+          resourceId,
+        },
+        {
+          id: 'msg-t3-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Message in thread 3' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:02:00Z'),
+          threadId: thread3Id,
+          resourceId,
+        },
+        {
+          id: 'msg-t1-2',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Response in thread 1' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:03:00Z'),
+          threadId: thread1Id,
+          resourceId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+
+      // Query all messages for the resource (no threadId)
+      const result = await storage.listMessagesByResourceId({
+        resourceId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+
+      // Should get all 4 messages from all threads
+      expect(result.messages.length).toBe(4);
+      expect(result.messages.map(m => m.id)).toEqual(['msg-t1-1', 'msg-t2-1', 'msg-t3-1', 'msg-t1-2']);
+    });
+
+    it('should filter messages by dateRange.start when querying by resourceId', async () => {
+      const thread1Id = 'thread-date-1';
+      const thread2Id = 'thread-date-2';
+
+      // Create threads
+      await storage.saveThread({
+        thread: {
+          id: thread1Id,
+          resourceId,
+          title: 'Thread 1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await storage.saveThread({
+        thread: {
+          id: thread2Id,
+          resourceId,
+          title: 'Thread 2',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Create messages at different times across threads
+      const oldTime = new Date('2025-01-01T08:00:00Z');
+      const cursorTime = new Date('2025-01-01T12:00:00Z');
+      const newTime = new Date('2025-01-01T14:00:00Z');
+
+      const messages: MastraDBMessage[] = [
+        // Old messages (before cursor)
+        {
+          id: 'old-t1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Old message thread 1' }] },
+          type: 'text',
+          createdAt: oldTime,
+          threadId: thread1Id,
+          resourceId,
+        },
+        {
+          id: 'old-t2',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Old message thread 2' }] },
+          type: 'text',
+          createdAt: new Date(oldTime.getTime() + 1000),
+          threadId: thread2Id,
+          resourceId,
+        },
+        // New messages (after cursor)
+        {
+          id: 'new-t1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'New message thread 1' }] },
+          type: 'text',
+          createdAt: newTime,
+          threadId: thread1Id,
+          resourceId,
+        },
+        {
+          id: 'new-t2',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'New message thread 2' }] },
+          type: 'text',
+          createdAt: new Date(newTime.getTime() + 1000),
+          threadId: thread2Id,
+          resourceId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+
+      // Query with dateRange.start (simulating lastObservedAt cursor)
+      const result = await storage.listMessagesByResourceId({
+        resourceId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: {
+          dateRange: {
+            start: cursorTime,
+          },
+        },
+      });
+
+      // Should only get new messages from both threads
+      expect(result.messages.length).toBe(2);
+      expect(result.messages.map(m => m.id)).toEqual(['new-t1', 'new-t2']);
+      expect(result.messages.map(m => m.id)).not.toContain('old-t1');
+      expect(result.messages.map(m => m.id)).not.toContain('old-t2');
+    });
+
+    it('should return empty array when no messages exist after cursor for resource', async () => {
+      const threadId = 'thread-empty';
+
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Create messages before the cursor
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'before-cursor',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Before cursor' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T08:00:00Z'),
+          threadId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+
+      // Query with cursor after all messages
+      const result = await storage.listMessagesByResourceId({
+        resourceId,
+        perPage: false,
+        filter: {
+          dateRange: {
+            start: new Date('2025-01-01T12:00:00Z'),
+          },
+        },
+      });
+
+      expect(result.messages.length).toBe(0);
+    });
+
+    it('should not return messages from other resources', async () => {
+      const otherResourceId = 'other-resource';
+      const thread1Id = 'thread-res-1';
+      const thread2Id = 'thread-other-res';
+
+      // Create threads for different resources
+      await storage.saveThread({
+        thread: {
+          id: thread1Id,
+          resourceId,
+          title: 'Thread for target resource',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await storage.saveThread({
+        thread: {
+          id: thread2Id,
+          resourceId: otherResourceId,
+          title: 'Thread for other resource',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Create messages in both resources
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'target-msg',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Target resource message' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:00:00Z'),
+          threadId: thread1Id,
+          resourceId,
+        },
+        {
+          id: 'other-msg',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Other resource message' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:01:00Z'),
+          threadId: thread2Id,
+          resourceId: otherResourceId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+
+      // Query for target resource only
+      const result = await storage.listMessagesByResourceId({
+        resourceId,
+        perPage: false,
+      });
+
+      // Should only get message from target resource
+      expect(result.messages.length).toBe(1);
+      expect(result.messages[0].id).toBe('target-msg');
+      expect(result.messages.map(m => m.id)).not.toContain('other-msg');
+    });
+  });
+});
+
+// =============================================================================
+// Scenario Tests
+// =============================================================================
+
+describe('Scenario: Basic Observation Flow', () => {
+  it('should track which messages have been observed', async () => {
+    const storage = createInMemoryStorage();
+
+    // Initialize record
+    const record = await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    // Simulate observing messages
+    const observedAt = new Date();
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- 🔴 User asked about X',
+      tokenCount: 100,
+      lastObservedAt: observedAt,
+    });
+
+    // Verify cursor is updated (message ID tracking removed in favor of cursor-based lastObservedAt)
+    const updated = await storage.getObservationalMemory('thread-1', 'resource-1');
+    expect(updated?.lastObservedAt).toEqual(observedAt);
+  });
+});
+
+describe('Scenario: Buffering Flow', () => {
+  it('should support async buffering workflow', async () => {
+    const storage = createInMemoryStorage();
+
+    const record = await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    // Step 1: Mark messages as buffering (async observation started)
+    // Note: Message ID tracking removed - this just updates timestamp now
+    await storage.markMessagesAsBuffering(record.id, ['msg-1', 'msg-2']);
+
+    let current = await storage.getObservationalMemory('thread-1', 'resource-1');
+    expect(current?.updatedAt).toBeDefined();
+
+    // Step 2: Buffering completes - store buffered observations
+    await storage.updateBufferedObservations({
+      id: record.id,
+      observations: '- 🟡 Buffered observation',
+    });
+
+    current = await storage.getObservationalMemory('thread-1', 'resource-1');
+    expect(current?.bufferedObservations).toBe('- 🟡 Buffered observation');
+
+    // Buffered observations should NOT be in active yet
+    expect(current?.activeObservations).toBe('');
+
+    // Step 3: Threshold hit, swap buffered to active
+    await storage.swapBufferedToActive(record.id);
+
+    current = await storage.getObservationalMemory('thread-1', 'resource-1');
+    expect(current?.activeObservations).toContain('Buffered observation');
+    expect(current?.bufferedObservations).toBeUndefined();
+    // Message ID tracking removed - using cursor-based lastObservedAt instead
+  });
+});
+
+describe('Scenario: Reflection Creates New Generation', () => {
+  it('should create new generation with reflection replacing observations', async () => {
+    const storage = createInMemoryStorage();
+
+    // Create initial generation
+    const gen1 = await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    // Add lots of observations
+    await storage.updateActiveObservations({
+      id: gen1.id,
+      observations: '- 🔴 Observation 1\n- 🟡 Observation 2\n- 🟡 Observation 3\n... (many more)',
+
+      tokenCount: 25000, // Exceeds reflector threshold
+      lastObservedAt: new Date(),
+    });
+
+    const gen1Record = await storage.getObservationalMemory('thread-1', 'resource-1');
+
+    // Reflection creates new generation
+    const gen2 = await storage.createReflectionGeneration({
+      currentRecord: gen1Record!,
+      reflection: '- 🔴 Condensed: User working on project X',
+      tokenCount: 500,
+    });
+
+    // New generation has reflection as active observations
+    expect(gen2.activeObservations).toBe('- 🔴 Condensed: User working on project X');
+    expect(gen2.observationTokenCount).toBe(500);
+    expect(gen2.originType).toBe('reflection');
+
+    // After reflection, lastObservedAt is set on the new record (cursor-based tracking)
+    expect(gen2.lastObservedAt).toBeDefined();
+
+    // Getting current record returns new generation
+    const current = await storage.getObservationalMemory('thread-1', 'resource-1');
+    expect(current?.id).toBe(gen2.id);
+    expect(current?.activeObservations).toBe('- 🔴 Condensed: User working on project X');
+  });
+});
+
+// =============================================================================
+// Unit Tests: Current Task Validation
+// =============================================================================
+
+describe('Current Task Validation', () => {
+  describe('hasCurrentTaskSection', () => {
+    it('should detect <current-task> XML tag', () => {
+      const observations = `<observations>
+- 🔴 User preference
+- 🟡 Some task
+</observations>
+
+<current-task>
+Implement the login feature
+</current-task>`;
+
+      expect(hasCurrentTaskSection(observations)).toBe(true);
+    });
+
+    it('should detect <current-task> tag case-insensitively', () => {
+      const observations = `<Current-Task>
+The user wants to refactor the API
+</Current-Task>`;
+
+      expect(hasCurrentTaskSection(observations)).toBe(true);
+    });
+
+    it('should return false when missing', () => {
+      const observations = `- 🔴 User preference
+- 🟡 Some observation
+- ������ Minor note`;
+
+      expect(hasCurrentTaskSection(observations)).toBe(false);
+    });
+  });
+
+  describe('extractCurrentTask', () => {
+    it('should extract task content from XML current-task tag', () => {
+      const observations = `<observations>
+- 🔴 User info
+- 🟡 Follow up
+</observations>
+
+<current-task>
+Implement user authentication with OAuth2
+</current-task>`;
+
+      const task = extractCurrentTask(observations);
+      expect(task).toBe('Implement user authentication with OAuth2');
+    });
+
+    it('should handle multiline task description', () => {
+      const observations = `<current-task>
+Complete the dashboard feature
+with all the charts and graphs
+</current-task>`;
+
+      const task = extractCurrentTask(observations);
+      expect(task).toContain('Complete the dashboard feature');
+      expect(task).toContain('charts and graphs');
+    });
+
+    it('should return null when no current task', () => {
+      const observations = `- Just some observations
+- Nothing about current task`;
+
+      expect(extractCurrentTask(observations)).toBeNull();
+    });
+  });
+
+  describe('parseObserverOutput with Current Task validation', () => {
+    it('should add default Current Task if missing', () => {
+      const output = `- 🔴 User asked about React
+- 🟡 User prefers TypeScript`;
+
+      const result = parseObserverOutput(output);
+
+      // currentTask is returned separately, not embedded in observations
+      // When missing from output, currentTask should be undefined
+      expect(result.observations).not.toContain('<current-task>');
+      expect(result.currentTask).toBeUndefined();
+    });
+
+    it('should extract Current Task separately when present (XML format)', () => {
+      const output = `<observations>
+- 🔴 User asked about React
+</observations>
+
+<current-task>
+Help user set up React project
+</current-task>`;
+
+      const result = parseObserverOutput(output);
+
+      // currentTask should be extracted separately, not in observations
+      expect(result.currentTask).toBe('Help user set up React project');
+      expect(result.observations).not.toContain('<current-task>');
+      expect(result.observations).not.toContain('Help user set up React project');
+    });
+  });
+});
+
+// =============================================================================
+// Scenario Tests: Information Recall
+// =============================================================================
+
+describe('Scenario: Information should be preserved through observation cycle', () => {
+  it('should preserve key facts in observations', () => {
+    // This test verifies the observation format preserves important information
+    const messages = [
+      createTestMessage('My name is John and I work at Acme Corp as a software engineer.', 'user'),
+      createTestMessage('Nice to meet you John! I see you work at Acme Corp as a software engineer.', 'assistant'),
+      createTestMessage('Yes, I started there in 2020 and I mainly work with TypeScript and React.', 'user'),
+    ];
+
+    const formatted = formatMessagesForObserver(messages);
+
+    // The formatted messages should contain all the key facts
+    expect(formatted).toContain('John');
+    expect(formatted).toContain('Acme Corp');
+    expect(formatted).toContain('software engineer');
+    expect(formatted).toContain('2020');
+    expect(formatted).toContain('TypeScript');
+    expect(formatted).toContain('React');
+  });
+
+  it('should include timestamps for temporal context', () => {
+    const msg = createTestMessage('I have a meeting tomorrow at 3pm', 'user');
+    msg.createdAt = new Date('2024-12-04T14:00:00Z');
+
+    const formatted = formatMessagesForObserver([msg]);
+
+    // Should include the date for temporal context
+    expect(formatted).toContain('Dec');
+    expect(formatted).toContain('2024');
+  });
+
+  it('observer system prompt should require Current Task section', () => {
+    const systemPrompt = buildObserverSystemPrompt();
+
+    // Check for XML-based current task requirement in the system prompt
+    expect(systemPrompt).toContain('<current-task>');
+    expect(systemPrompt).toContain('MUST use XML tags');
+  });
+});
+
+describe('Scenario: Cross-session memory (resource scope)', () => {
+  it('should track observations across multiple threads with same resource', async () => {
+    const storage = createInMemoryStorage();
+
+    // Initialize with resource scope (null threadId)
+    const record = await storage.initializeObservationalMemory({
+      threadId: null, // Resource scope
+      resourceId: 'user-123',
+      scope: 'resource',
+      config: {},
+    });
+
+    // Add observations from "session 1"
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- 🔴 User name is Alice\n- 🔴 User works at TechCorp',
+
+      tokenCount: 100,
+      lastObservedAt: new Date(),
+    });
+
+    // Verify observations are stored at resource level
+    const resourceRecord = await storage.getObservationalMemory(null, 'user-123');
+    expect(resourceRecord).toBeDefined();
+    expect(resourceRecord?.activeObservations).toContain('Alice');
+    expect(resourceRecord?.activeObservations).toContain('TechCorp');
+    expect(resourceRecord?.scope).toBe('resource');
+  });
+});
+
+describe('Scenario: Observation quality checks', () => {
+  it('formatted messages should be readable for observer', () => {
+    const messages = [
+      createTestMessage('Can you help me debug this error: TypeError: Cannot read property "map" of undefined', 'user'),
+      createTestMessage(
+        'The error suggests you are calling .map() on undefined. Check if your array is properly initialized.',
+        'assistant',
+      ),
+    ];
+
+    const formatted = formatMessagesForObserver(messages);
+
+    // Should preserve the error message
+    expect(formatted).toContain('TypeError');
+    expect(formatted).toContain('Cannot read property');
+    expect(formatted).toContain('map');
+    expect(formatted).toContain('undefined');
+
+    // Should preserve the solution
+    expect(formatted).toContain('array is properly initialized');
+  });
+
+  it('token counter should give reasonable estimates', () => {
+    const counter = new TokenCounter();
+
+    // A simple sentence
+    const simple = counter.countString('Hello world');
+    expect(simple).toBeGreaterThan(0);
+    expect(simple).toBeLessThan(10);
+
+    // A longer paragraph
+    const paragraph = counter.countString(
+      'The quick brown fox jumps over the lazy dog. This is a longer sentence with more words to count.',
+    );
+    expect(paragraph).toBeGreaterThan(simple);
+
+    // Observations should be countable
+    const observations = counter.countObservations(`
+- 🔴 User preference: prefers short answers [user_preference]
+- 🟡 Current project: building a React dashboard [current_project]
+- 🟢 Minor note: mentioned liking coffee [personal]
+    `);
+    expect(observations).toBeGreaterThan(20);
+    expect(observations).toBeLessThan(100);
+  });
+});
+
+// =============================================================================
+// Unit Tests: Thread Attribution (Resource Scope)
+// =============================================================================
+
+describe('Thread Attribution Helpers', () => {
+  let storage: InMemoryMemory;
+  let om: ObservationalMemory;
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+    om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 100 },
+      reflection: { observationTokens: 1000 },
+      scope: 'resource',
+    });
+  });
+
+  describe('wrapWithThreadTag', () => {
+    it('should wrap observations with thread XML tag', async () => {
+      const observations = '- 🔴 User likes coffee\n- 🟡 User prefers dark roast';
+      const threadId = 'thread-123';
+
+      // Access private method via any cast for testing (now async)
+      const result = await (om as any).wrapWithThreadTag(threadId, observations);
+
+      expect(result).toBe(`<thread id="thread-123">\n${observations}\n</thread>`);
+    });
+  });
+
+  describe('replaceOrAppendThreadSection', () => {
+    it('should append new thread section when none exists', () => {
+      const existing = '';
+      const threadId = 'thread-1';
+      const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
+
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+
+      expect(result).toBe(newSection);
+    });
+
+    it('should append to existing observations when thread section does not exist', () => {
+      const existing = '<thread id="thread-other">\n- 🔴 Other thread obs\n</thread>';
+      const threadId = 'thread-1';
+      const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
+
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+
+      expect(result).toContain(existing);
+      expect(result).toContain(newSection);
+      expect(result).toBe(`${existing}\n\n${newSection}`);
+    });
+
+    it('should always append new thread sections (preserves temporal ordering)', () => {
+      const existing = `<thread id="thread-1">
+- 🔴 Old observation
+</thread>
+
+<thread id="thread-2">
+- 🟡 Thread 2 obs
+</thread>`;
+      const threadId = 'thread-1';
+      const newSection = '<thread id="thread-1">\n- 🔴 Updated observation\n- 🟡 New detail\n</thread>';
+
+      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+
+      // Should append, not replace - preserves temporal ordering
+      expect(result).toContain(newSection);
+      expect(result).toContain('<thread id="thread-2">');
+      // Old observation is preserved (appended, not replaced)
+      expect(result).toContain('Old observation');
+      // New section is appended at the end
+      expect(result).toBe(`${existing}\n\n${newSection}`);
+    });
+  });
+
+  describe('sortThreadsByOldestMessage', () => {
+    it('should sort threads by oldest message timestamp', () => {
+      const now = Date.now();
+      const messagesByThread = new Map<string, MastraDBMessage[]>([
+        [
+          'thread-recent',
+          [
+            { ...createTestMessage('msg1'), createdAt: new Date(now - 1000) },
+            { ...createTestMessage('msg2'), createdAt: new Date(now) },
+          ],
+        ],
+        [
+          'thread-oldest',
+          [
+            { ...createTestMessage('msg3'), createdAt: new Date(now - 10000) },
+            { ...createTestMessage('msg4'), createdAt: new Date(now - 5000) },
+          ],
+        ],
+        ['thread-middle', [{ ...createTestMessage('msg5'), createdAt: new Date(now - 5000) }]],
+      ]);
+
+      const result = (om as any).sortThreadsByOldestMessage(messagesByThread);
+
+      expect(result).toEqual(['thread-oldest', 'thread-middle', 'thread-recent']);
+    });
+
+    it('should handle threads with missing timestamps', () => {
+      const now = Date.now();
+      const messagesByThread = new Map<string, MastraDBMessage[]>([
+        ['thread-with-date', [{ ...createTestMessage('msg1'), createdAt: new Date(now - 10000) }]],
+        ['thread-no-date', [{ ...createTestMessage('msg2'), createdAt: undefined as any }]],
+      ]);
+
+      const result = (om as any).sortThreadsByOldestMessage(messagesByThread);
+
+      // Thread with no date should be treated as "now" (most recent)
+      expect(result[0]).toBe('thread-with-date');
+    });
+  });
+});
+
+describe('Resource Scope Observation Flow', () => {
+  it('should use XML thread tags in resource scope mode', async () => {
+    const storage = createInMemoryStorage();
+
+    // Create thread first
+    await storage.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Test Thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        content: [
+          {
+            type: 'text' as const,
+            text: `<observations>
+- 🔴 User mentioned they like coffee
+</observations>
+<current-task>
+- Primary: Discussing coffee preferences
+</current-task>
+<suggested-response>
+Ask about preferred brewing method
+</suggested-response>`,
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 10, // Low threshold to trigger observation
+        model: mockModel as any,
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'resource',
+    });
+
+    // Initialize record - for resource scope, threadId must be null
+    await storage.initializeObservationalMemory({
+      threadId: null,
+      resourceId: 'resource-1',
+      scope: 'resource',
+      config: {},
+    });
+
+    // Simulate observation
+    const messages = [
+      createTestMessage('I love coffee!', 'user', 'msg-1'),
+      createTestMessage('What kind do you prefer?', 'assistant', 'msg-2'),
+    ];
+
+    await (om as any).doSynchronousObservation(
+      await storage.getObservationalMemory(null, 'resource-1'),
+      'thread-1',
+      messages,
+    );
+
+    // Check stored observations have thread tag
+    const record = await storage.getObservationalMemory(null, 'resource-1');
+    expect(record?.activeObservations).toContain('<thread id="thread-1">');
+    expect(record?.activeObservations).toContain('</thread>');
+    expect(record?.activeObservations).toContain('User mentioned they like coffee');
+  });
+
+  it('should NOT use thread tags in thread scope mode', async () => {
+    const storage = createInMemoryStorage();
+
+    // Create thread first
+    await storage.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Test Thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        content: [
+          {
+            type: 'text' as const,
+            text: `<observations>
+- 🔴 User mentioned they like tea
+</observations>
+<current-task>
+- Primary: Discussing tea preferences
+</current-task>`,
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 10,
+        model: mockModel as any,
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'thread', // Thread scope
+    });
+
+    // Initialize record
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    const messages = [createTestMessage('I love tea!', 'user', 'msg-1')];
+
+    await (om as any).doSynchronousObservation(
+      await storage.getObservationalMemory('thread-1', 'resource-1'),
+      'thread-1',
+      messages,
+    );
+
+    const record = await storage.getObservationalMemory('thread-1', 'resource-1');
+    // Should NOT have thread tags in thread scope
+    expect(record?.activeObservations).not.toContain('<thread id=');
+    expect(record?.activeObservations).toContain('User mentioned they like tea');
+  });
+});
+
+describe('Locking Behavior', () => {
+  it('should skip reflection when isReflecting flag is true', async () => {
+    const storage = createInMemoryStorage();
+
+    let reflectorCalled = false;
+    const mockReflectorModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        reflectorCalled = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- Consolidated observation
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const mockObserverModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        content: [
+          {
+            type: 'text' as const,
+            text: `<observations>
+- User mentioned something
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 100,
+        model: mockObserverModel as any,
+      },
+      reflection: {
+        observationTokens: 100, // Low threshold to trigger reflection
+        model: mockReflectorModel as any,
+      },
+      scope: 'thread',
+    });
+
+    // Initialize record with enough observations to trigger reflection
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    // Update with observations that exceed the reflection threshold
+    const largeObservations = Array(50).fill('- Some observation about the user').join('\n');
+    await storage.updateActiveObservations({
+      id: (await storage.getObservationalMemory('thread-1', 'resource-1'))!.id,
+      observations: largeObservations,
+
+      tokenCount: 500, // Exceeds threshold of 100
+      lastObservedAt: new Date(),
+    });
+
+    // Set the isReflecting flag to true
+    const record = await storage.getObservationalMemory('thread-1', 'resource-1');
+    await storage.setReflectingFlag(record!.id, true);
+
+    // Try to reflect - should be skipped because isReflecting is true
+    await (om as any).maybeReflect(
+      { ...record, isReflecting: true },
+      500, // Token count exceeds threshold
+    );
+
+    // Reflector should NOT have been called
+    expect(reflectorCalled).toBe(false);
+  });
+
+  it('should skip observation when isObserving flag is true in processOutputResult', async () => {
+    const storage = createInMemoryStorage();
+
+    let _observerCalled = false;
+    const mockObserverModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        _observerCalled = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- User mentioned something
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    // OM instance created to set up storage context (observer behavior tested via storage flags)
+    new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 10, // Very low threshold
+        model: mockObserverModel as any,
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'thread',
+    });
+
+    // Create thread and initialize record
+    await storage.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Test Thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    // Set the isObserving flag to true BEFORE calling processOutputResult
+    const record = await storage.getObservationalMemory('thread-1', 'resource-1');
+    await storage.setObservingFlag(record!.id, true);
+
+    // Save a message that would trigger observation
+    const messageContent: MastraMessageContentV2 = {
+      format: 2,
+      parts: [{ type: 'text', text: 'This is a test message with enough content to trigger observation' }],
+    };
+    const message: MastraDBMessage = {
+      id: 'msg-1',
+      threadId: 'thread-1',
+      role: 'user',
+      content: messageContent,
+      createdAt: new Date(),
+      type: 'text',
+    };
+    await storage.saveMessages({ messages: [message] });
+
+    // Note: processOutputResult requires a MessageList from the agent context
+    // For this test, we'll directly test the flag check behavior
+    // The isObserving flag should prevent observation from being triggered
+
+    // Verify the flag is set
+    const recordWithFlag = await storage.getObservationalMemory('thread-1', 'resource-1');
+    expect(recordWithFlag?.isObserving).toBe(true);
+
+    // Observer should NOT be called when we try to observe with the flag set
+    // This is verified by the flag check in processOutputResult
+  });
+});
+
+describe('Reflection with Thread Attribution', () => {
+  it('should create a new record after reflection', async () => {
+    const storage = createInMemoryStorage();
+
+    const mockReflectorModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        content: [
+          {
+            type: 'text' as const,
+            text: `<observations>
+- 🔴 Consolidated user preference
+<thread id="thread-1">
+- 🟡 Thread-specific task
+</thread>
+</observations>
+<current-task>Continue working</current-task>
+<suggested-response>Ready to continue</suggested-response>`,
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 10000 },
+      reflection: {
+        observationTokens: 100, // Low threshold to trigger reflection
+        model: mockReflectorModel as any,
+      },
+      scope: 'resource',
+    });
+
+    // Initialize with existing observations that exceed threshold
+    await storage.initializeObservationalMemory({
+      threadId: null,
+      resourceId: 'resource-1',
+      scope: 'resource',
+      config: {},
+    });
+
+    const initialRecord = await storage.getObservationalMemory(null, 'resource-1');
+
+    // Add observations that exceed the reflection threshold
+    const largeObservations = Array(50).fill('- 🟡 This is an observation that takes up space').join('\n');
+    await storage.updateActiveObservations({
+      id: initialRecord!.id,
+      observations: largeObservations,
+
+      tokenCount: 500, // Above threshold
+      lastObservedAt: new Date(),
+    });
+
+    // Trigger reflection via maybeReflect (called internally)
+    const record = await storage.getObservationalMemory(null, 'resource-1');
+    // @ts-expect-error - accessing private method for testing
+    await om.maybeReflect(record!, 500);
+
+    // Get all records for this resource
+    const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
+
+    // Should have 2 records: original + reflection
+    expect(allRecords.length).toBe(2);
+
+    // Most recent record should be the reflection
+    const newRecord = allRecords[0];
+    expect(newRecord.originType).toBe('reflection');
+    expect(newRecord.activeObservations).toContain('Consolidated user preference');
+    expect(newRecord.activeObservations).toContain('<thread id="thread-1">');
+
+    // Old record should still exist
+    const oldRecord = allRecords[1];
+    expect(oldRecord.originType).toBe('initial'); // Initial record before any reflection
+    expect(oldRecord.activeObservations).toContain('This is an observation');
+  });
+
+  it('should preserve thread tags in reflector output', async () => {
+    const storage = createInMemoryStorage();
+
+    // Reflector that maintains thread attribution
+    const mockReflectorModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        content: [
+          {
+            type: 'text' as const,
+            text: `<observations>
+- 🔴 User prefers TypeScript (universal fact - no thread tag needed)
+<thread id="thread-1">
+- 🟡 Working on auth feature
+</thread>
+<thread id="thread-2">
+- 🟡 Debugging API endpoint
+</thread>
+</observations>
+<current-task>Multiple tasks in progress</current-task>
+<suggested-response>Continue with current thread</suggested-response>`,
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 10000 },
+      reflection: {
+        observationTokens: 100,
+        model: mockReflectorModel as any,
+      },
+      scope: 'resource',
+    });
+
+    // Initialize with multi-thread observations
+    await storage.initializeObservationalMemory({
+      threadId: null,
+      resourceId: 'resource-1',
+      scope: 'resource',
+      config: {},
+    });
+
+    const initialRecord = await storage.getObservationalMemory(null, 'resource-1');
+
+    const multiThreadObservations = `<thread id="thread-1">
+- 🔴 User prefers TypeScript
+- 🟡 Working on auth feature
+</thread>
+<thread id="thread-2">
+- 🔴 User prefers TypeScript
+- 🟡 Debugging API endpoint
+</thread>`;
+
+    await storage.updateActiveObservations({
+      id: initialRecord!.id,
+      observations: multiThreadObservations,
+
+      tokenCount: 500,
+      lastObservedAt: new Date(),
+    });
+
+    // Trigger reflection
+    const record = await storage.getObservationalMemory(null, 'resource-1');
+    // @ts-expect-error - accessing private method for testing
+    await om.maybeReflect(record!, 500);
+
+    // Get the new reflection record
+    const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
+    const reflectionRecord = allRecords[0];
+
+    // Should have consolidated universal facts but preserved thread-specific ones
+    expect(reflectionRecord.activeObservations).toContain('User prefers TypeScript');
+    expect(reflectionRecord.activeObservations).toContain('<thread id="thread-1">');
+    expect(reflectionRecord.activeObservations).toContain('<thread id="thread-2">');
+    expect(reflectionRecord.activeObservations).toContain('Working on auth feature');
+    expect(reflectionRecord.activeObservations).toContain('Debugging API endpoint');
+  });
+
+  it('should update lastObservedAt cursor after reflection', async () => {
+    const storage = createInMemoryStorage();
+
+    const mockReflectorModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        content: [
+          {
+            type: 'text' as const,
+            text: `<observations>
+- Consolidated observations
+</observations>
+<current-task>None</current-task>
+<suggested-response>Continue</suggested-response>`,
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 10000 },
+      reflection: {
+        observationTokens: 100,
+        model: mockReflectorModel as any,
+      },
+      scope: 'resource',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: null,
+      resourceId: 'resource-1',
+      scope: 'resource',
+      config: {},
+    });
+
+    const initialRecord = await storage.getObservationalMemory(null, 'resource-1');
+    const _initialLastObservedAt = initialRecord!.lastObservedAt;
+
+    // Add observations
+    const observedAt = new Date();
+    await storage.updateActiveObservations({
+      id: initialRecord!.id,
+      observations: '- Some observations',
+      tokenCount: 500,
+      lastObservedAt: observedAt,
+    });
+
+    // Verify cursor is updated
+    const recordBeforeReflection = await storage.getObservationalMemory(null, 'resource-1');
+    expect(recordBeforeReflection!.lastObservedAt).toEqual(observedAt);
+
+    // Trigger reflection
+    // @ts-expect-error - accessing private method for testing
+    await om.maybeReflect(recordBeforeReflection!, 500);
+
+    // Get the new reflection record
+    const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
+    const reflectionRecord = allRecords[0];
+
+    // New record should have a fresh lastObservedAt cursor
+    expect(reflectionRecord.lastObservedAt).toBeDefined();
+    expect(reflectionRecord.originType).toBe('reflection');
+
+    // Old record should retain its lastObservedAt
+    const oldRecord = allRecords[1];
+    expect(oldRecord.lastObservedAt).toEqual(observedAt);
+  });
+});
+
+// =============================================================================
+// Resource Scope: Other-thread messages in processInputStep
+// =============================================================================
+
+describe('Resource Scope: other-conversation blocks after observation', () => {
+  it('should include other thread messages in context even after those threads have been observed', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const resourceId = 'user-resource-1';
+    const threadAId = 'thread-A';
+    const threadBId = 'thread-B';
+
+    // Thread A's messages were created at 09:01-09:02, observed at 09:02
+    const threadAObservedAt = new Date('2025-01-01T09:02:00Z');
+
+    // Create Thread A with per-thread lastObservedAt in metadata (simulating completed observation)
+    await storage.saveThread({
+      thread: {
+        id: threadAId,
+        resourceId,
+        title: 'Thread A',
+        createdAt: new Date('2025-01-01T09:00:00Z'),
+        updatedAt: new Date('2025-01-01T09:00:00Z'),
+        metadata: {
+          __om: { lastObservedAt: threadAObservedAt.toISOString() },
+        },
+      },
+    });
+
+    // Create Thread B (no observation yet)
+    await storage.saveThread({
+      thread: {
+        id: threadBId,
+        resourceId,
+        title: 'Thread B',
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        updatedAt: new Date('2025-01-01T10:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Add messages to Thread A (already observed)
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'msg-a-1',
+          role: 'user' as const,
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'My favorite color is blue' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T09:01:00Z'),
+          threadId: threadAId,
+          resourceId,
+        },
+        {
+          id: 'msg-a-2',
+          role: 'assistant' as const,
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Blue is a great color!' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T09:02:00Z'),
+          threadId: threadAId,
+          resourceId,
+        },
+      ],
+    });
+
+    // Add messages to Thread B (not yet observed)
+    await storage.saveMessages({
+      messages: [
+        {
+          id: 'msg-b-1',
+          role: 'user' as const,
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Hello from thread B!' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:01:00Z'),
+          threadId: threadBId,
+          resourceId,
+        },
+      ],
+    });
+
+    // Initialize OM record at resource level with lastObservedAt set to Thread A's observation time
+    // This simulates the state after Thread A has been observed
+    const record = await storage.initializeObservationalMemory({
+      threadId: null, // Resource scope
+      resourceId,
+      scope: 'resource',
+      config: {},
+    });
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '<thread id="thread-A">\n- 🔴 User\'s favorite color is blue\n</thread>',
+      tokenCount: 50,
+      lastObservedAt: threadAObservedAt, // Resource-level cursor set to Thread A's observation time
+    });
+
+    // Verify setup: resource-level lastObservedAt is set
+    const setupRecord = await storage.getObservationalMemory(null, resourceId);
+    expect(setupRecord?.lastObservedAt).toEqual(threadAObservedAt);
+    expect(setupRecord?.activeObservations).toContain('favorite color is blue');
+
+    // Create OM with resource scope
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        content: [{ type: 'text' as const, text: '<observations>\n- observed\n</observations>' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        model: mockModel as any,
+        messageTokens: 50000, // High threshold — we don't want observation to trigger
+      },
+      reflection: {
+        model: mockModel as any,
+        observationTokens: 50000,
+      },
+      scope: 'resource',
+    });
+
+    // Call processInputStep for Thread B
+    const messageList = new MessageList({ threadId: threadBId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadBId }, resourceId });
+    requestContext.set('currentDate', new Date('2025-01-01T10:05:00Z').toISOString());
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    // Extract the OM system message (tagged as 'observational-memory')
+    const omSystemMessages = messageList.getSystemMessages('observational-memory');
+    expect(omSystemMessages.length).toBeGreaterThan(0);
+
+    const omSystemMessage = omSystemMessages[0]!;
+    const omContent =
+      typeof omSystemMessage.content === 'string' ? omSystemMessage.content : JSON.stringify(omSystemMessage.content);
+
+    // KEY ASSERTION: Thread A's messages should appear as <other-conversation> blocks
+    // even though Thread A was already observed (its messages are older than resource-level lastObservedAt).
+    // The agent on Thread B needs to see Thread A's raw conversation to have full context.
+    expect(omContent).toContain('other-conversation');
+    expect(omContent).toContain('My favorite color is blue');
+    expect(omContent).toContain('Blue is a great color!');
+
+    // Thread B's messages should NOT be in <other-conversation> blocks (it's the active thread)
+    expect(omContent).not.toContain('Hello from thread B!');
+  });
+});

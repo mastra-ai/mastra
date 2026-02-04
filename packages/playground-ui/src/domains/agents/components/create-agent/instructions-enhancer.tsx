@@ -12,10 +12,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover
 
 import { usePromptEnhancer } from '../../hooks/use-prompt-enhancer';
 import { useAgent } from '../../hooks/use-agent';
-import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers';
-import { cleanProviderId } from '../agent-metadata/utils';
-import { ProviderLogo } from '../agent-metadata/provider-logo';
-import { useAllModels, ModelInfo } from '../model-picker/use-model-picker';
+import { useLLMProviders, useAllModels, findProviderById, ProviderLogo } from '@/domains/llm';
+import type { ModelInfo } from '@/domains/llm';
 import { Provider } from '@mastra/client-js';
 
 interface EnhancerModelSelectorProps {
@@ -234,22 +232,20 @@ export function InstructionsEnhancer({
   // Fetch data - agent data only needed in edit mode, providers always needed
   const { mutateAsync: enhancePrompt, isPending } = usePromptEnhancer({ agentId, context });
   const { data: agent, isLoading: isAgentLoading, isError: isAgentError } = useAgent(agentId);
-  const { data: providersData, isLoading: isProvidersLoading } = useAgentsModelProviders();
+  const { data: providersData, isLoading: isProvidersLoading } = useLLMProviders();
 
   const providers = providersData?.providers || [];
   const allModels = useAllModels(providers);
 
   // Get only models from connected providers
   const connectedModels = allModels.filter((m: ModelInfo) => {
-    const cleanId = cleanProviderId(m.provider);
-    const provider = providers.find((p: Provider) => cleanProviderId(p.id) === cleanId);
+    const provider = findProviderById(providers, m.provider);
     return provider?.connected === true;
   });
 
   // Check if a provider has an API key configured
   const isProviderConnected = (providerId: string) => {
-    const cleanId = cleanProviderId(providerId);
-    const provider = providers.find((p: Provider) => cleanProviderId(p.id) === cleanId);
+    const provider = findProviderById(providers, providerId);
     return provider?.connected === true;
   };
 

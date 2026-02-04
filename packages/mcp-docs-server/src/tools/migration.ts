@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { logger } from '../logger';
 import { fromPackageRoot, getMatchingPaths } from '../utils';
 
-const migrationsBaseDir = fromPackageRoot('.docs/raw/guides/migrations');
+const migrationsBaseDir = fromPackageRoot('.docs/guides/migrations');
 
 interface ParsedSection {
   title: string;
@@ -14,32 +14,34 @@ interface ParsedSection {
   endLine: number;
 }
 
-// Helper function to parse MDX into sections
-function parseMdxSections(content: string): ParsedSection[] {
+// Helper function to parse markdown content into sections
+function parseSections(content: string): ParsedSection[] {
   const lines = content.split('\n');
   const sections: ParsedSection[] = [];
   let currentSection: ParsedSection | null = null;
   let inFrontmatter = false;
-  let frontmatterEnded = false;
+  let contentStarted = false;
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
 
-    // Handle frontmatter
+    // Handle frontmatter (if present)
     if (index === 0 && line === '---') {
       inFrontmatter = true;
       continue;
     }
     if (inFrontmatter && line === '---') {
       inFrontmatter = false;
-      frontmatterEnded = true;
       continue;
     }
     if (inFrontmatter) continue;
 
+    // Content has started (either after frontmatter or immediately if no frontmatter)
+    contentStarted = true;
+
     // Match headings (## or ###)
-    const headingMatch = line.match(/^(#{2,3})\s+(.+)$/);
-    if (headingMatch && frontmatterEnded) {
+    const headingMatch = line?.match(/^(#{2,3})\s+(.+)$/);
+    if (headingMatch && contentStarted) {
       // Save previous section
       if (currentSection) {
         currentSection.endLine = index - 1;
@@ -47,9 +49,9 @@ function parseMdxSections(content: string): ParsedSection[] {
       }
 
       // Start new section
-      const level = headingMatch[1].length;
+      const level = headingMatch[1]?.length ?? 0;
       currentSection = {
-        title: headingMatch[2],
+        title: headingMatch[2] || 'Untitled',
         level,
         content: line + '\n',
         startLine: index,
@@ -92,10 +94,11 @@ async function discoverMigrations(
         // Recursively explore subdirectories
         const subMigrations = await discoverMigrations(baseDir, entryRelativePath);
         migrations.push(...subMigrations);
-      } else if (entry.isFile() && entry.name.endsWith('.mdx') && entry.name !== '_template.mdx') {
-        // Add file (without .mdx extension for cleaner display)
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        // Add file (remove .md extension for cleaner display)
+        const cleanName = entry.name.replace(/\.md$/, '');
         migrations.push({
-          path: path.join(relativePath, entry.name.replace('.mdx', '')),
+          path: relativePath ? path.join(relativePath, cleanName) : cleanName,
           type: 'file',
         });
       }
@@ -126,8 +129,9 @@ async function listDirectoryContents(dirPath: string = ''): Promise<string> {
     for (const entry of entries) {
       if (entry.isDirectory()) {
         directories.push(entry.name);
-      } else if (entry.isFile() && entry.name.endsWith('.mdx') && entry.name !== '_template.mdx') {
-        files.push(entry.name.replace('.mdx', ''));
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        // Add file without .md extension
+        files.push(entry.name.replace(/\.md$/, ''));
       }
     }
 
@@ -178,9 +182,10 @@ async function listDirectoryContents(dirPath: string = ''): Promise<string> {
 // Helper function to read migration content
 async function readMigrationContent(migrationPath: string): Promise<string | null> {
   try {
-    // Handle both with and without .mdx extension
-    let filename = migrationPath.endsWith('.mdx') ? migrationPath : `${migrationPath}.mdx`;
-    let filePath = path.join(migrationsBaseDir, filename);
+    // Strip any trailing .mdx or .md extension if provided
+    const cleanPath = migrationPath.replace(/\.(mdx|md)$/, '');
+    // Try to read the file with .md extension
+    const filePath = path.join(migrationsBaseDir, cleanPath + '.md');
 
     // Security check: ensure path doesn't escape base directory
     const resolvedPath = path.resolve(filePath);
@@ -203,7 +208,7 @@ async function getSectionHeaders(migrationPath: string): Promise<Array<{ title: 
   const content = await readMigrationContent(migrationPath);
   if (!content) return [];
 
-  const sections = parseMdxSections(content);
+  const sections = parseSections(content);
   return sections.map(s => ({ title: s.title, level: s.level }));
 }
 
@@ -222,7 +227,7 @@ async function getSections(migrationPath: string, sectionTitles?: string[]): Pro
   }
 
   // Parse sections and filter by requested titles
-  const sections = parseMdxSections(content);
+  const sections = parseSections(content);
   const requestedSections = sections.filter(s =>
     sectionTitles.some(title => s.title.toLowerCase().includes(title.toLowerCase())),
   );

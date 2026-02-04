@@ -34,8 +34,15 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
 import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
+import type {
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ProcessorWorkflow,
+  Processor,
+} from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
+import { SkillsProcessor } from '../processors/processors/skills';
+import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraAgentNetworkStream } from '../stream';
@@ -43,12 +50,15 @@ import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
-import type { CompositeVoice } from '../voice';
+import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
 import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
+import type { Workspace } from '../workspace';
+import { createWorkspaceTools } from '../workspace';
+import type { SkillFormat } from '../workspace/skills';
 import { zodToJsonSchema } from '../zod-to-json';
 import { AgentLegacyHandler } from './agent-legacy';
 import type {
@@ -72,7 +82,6 @@ import type {
   AgentCreateOptions,
   AgentExecuteOnFinishOptions,
   AgentInstructions,
-  DynamicAgentInstructions,
   AgentMethodType,
   StructuredOutputOptions,
 } from './types';
@@ -121,28 +130,33 @@ export class Agent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 > extends MastraBase {
   public id: TAgentId;
   public name: string;
-  #instructions: DynamicAgentInstructions;
+  public source?: 'code' | 'stored';
+  #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
   #originalModel: DynamicArgument<MastraModelConfig> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
+  #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>>;
   #defaultNetworkOptions: DynamicArgument<NetworkOptions>;
-  #tools: DynamicArgument<TTools>;
+  #tools: DynamicArgument<TTools, TRequestContext>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
-  #voice: CompositeVoice;
+  #voice: MastraVoice;
+  #workspace?: DynamicArgument<Workspace>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
+  #requestContextSchema?: ZodSchema<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
 
@@ -168,11 +182,12 @@ export class Agent<
    * });
    * ```
    */
-  constructor(config: AgentConfig<TAgentId, TTools, TOutput>) {
+  constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
     super({ component: RegisteredLogger.AGENT });
 
     this.name = config.name;
     this.id = config.id ?? config.name;
+    this.source = 'code';
 
     this.#instructions = config.instructions;
     this.#description = config.description;
@@ -248,6 +263,10 @@ export class Agent<
       this.#memory = config.memory;
     }
 
+    if (config.skillsFormat) {
+      this.#skillsFormat = config.skillsFormat;
+    }
+
     if (config.voice) {
       this.#voice = config.voice;
       if (typeof config.tools !== 'function') {
@@ -258,6 +277,10 @@ export class Agent<
       }
     } else {
       this.#voice = new DefaultVoice();
+    }
+
+    if (config.workspace) {
+      this.#workspace = config.workspace;
     }
 
     if (config.inputProcessors) {
@@ -272,12 +295,68 @@ export class Agent<
       this.#maxProcessorRetries = config.maxProcessorRetries;
     }
 
+    if (config.requestContextSchema) {
+      this.#requestContextSchema = config.requestContextSchema;
+    }
+
     // @ts-expect-error Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  /**
+   * Gets the skills processors to add to input processors when workspace has skills.
+   * @internal
+   */
+  private async getSkillsProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[],
+    requestContext?: RequestContext,
+  ): Promise<InputProcessorOrWorkflow[]> {
+    // Check if workspace has skills configured
+    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
+    if (!workspace?.skills) {
+      return [];
+    }
+
+    // Check for existing SkillsProcessor in configured processors to avoid duplicates
+    const hasSkillsProcessor = configuredProcessors.some(
+      p => !isProcessorWorkflow(p) && 'id' in p && p.id === 'skills-processor',
+    );
+    if (hasSkillsProcessor) {
+      return [];
+    }
+
+    // Create new SkillsProcessor using workspace
+    return [new SkillsProcessor({ workspace, format: this.#skillsFormat })];
+  }
+
+  /**
+   * Validates the request context against the agent's requestContextSchema.
+   * Throws an error if validation fails.
+   */
+  async #validateRequestContext(requestContext?: RequestContext) {
+    if (this.#requestContextSchema && isZodType(this.#requestContextSchema)) {
+      const contextValues = requestContext?.all ?? {};
+      const validatedRequestContext = await this.#requestContextSchema.safeParseAsync(contextValues);
+
+      if (!validatedRequestContext.success) {
+        const errors = validatedRequestContext.error.issues;
+        const errorMessages = errors.map((e: any) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+        throw new MastraError({
+          id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `Request context validation failed for agent '${this.id}':\n${errorMessages}`,
+          details: {
+            agentId: this.id,
+            agentName: this.name,
+          },
+        });
+      }
+    }
   }
 
   /**
@@ -331,10 +410,12 @@ export class Agent<
     requestContext,
     inputProcessorOverrides,
     outputProcessorOverrides,
+    processorStates,
   }: {
     requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+    processorStates?: Map<string, ProcessorState>;
   }): Promise<ProcessorRunner> {
     // Use overrides if provided, otherwise resolve from agent config + memory
     const inputProcessors = inputProcessorOverrides ?? (await this.listResolvedInputProcessors(requestContext));
@@ -346,6 +427,7 @@ export class Agent<
       outputProcessors,
       logger: this.logger,
       agentName: this.name,
+      processorStates,
     });
   }
 
@@ -476,9 +558,13 @@ export class Agent<
 
     const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
+    // Get skills processors if skills are configured (with deduplication)
+    const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
+
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
-    const allProcessors = [...memoryProcessors, ...configuredProcessors];
+    // Skills processors run after memory but before user-configured processors
+    const allProcessors = [...memoryProcessors, ...skillsProcessors, ...configuredProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-input-processor`);
   }
 
@@ -494,6 +580,63 @@ export class Agent<
    */
   public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
     return this.listResolvedOutputProcessors(requestContext);
+  }
+
+  /**
+   * Resolves a processor by its ID from both input and output processors.
+   * This method resolves dynamic processor functions and includes memory-derived processors.
+   * Returns the processor if found, null otherwise.
+   *
+   * @example
+   * ```typescript
+   * const omProcessor = await agent.resolveProcessorById('observational-memory');
+   * if (omProcessor) {
+   *   // Observational memory is configured
+   * }
+   * ```
+   */
+  public async resolveProcessorById<TId extends string = string>(
+    processorId: TId,
+    requestContext?: RequestContext,
+  ): Promise<Processor<TId> | null> {
+    const ctx = requestContext || new RequestContext();
+
+    // Get raw input processors (before combining into workflow)
+    const configuredInputProcessors = this.#inputProcessors
+      ? typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ requestContext: ctx })
+        : this.#inputProcessors
+      : [];
+
+    // Get memory input processors
+    const memory = await this.getMemory({ requestContext: ctx });
+    const memoryInputProcessors = memory ? await memory.getInputProcessors(configuredInputProcessors, ctx) : [];
+
+    // Search all input processors
+    for (const p of [...memoryInputProcessors, ...configuredInputProcessors]) {
+      if (!isProcessorWorkflow(p) && isProcessor(p) && p.id === processorId) {
+        return p as Processor<TId>;
+      }
+    }
+
+    // Get raw output processors (before combining into workflow)
+    const configuredOutputProcessors = this.#outputProcessors
+      ? typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ requestContext: ctx })
+        : this.#outputProcessors
+      : [];
+
+    // Get memory output processors
+    const memoryOutputProcessors = memory ? await memory.getOutputProcessors(configuredOutputProcessors, ctx) : [];
+
+    // Search all output processors
+    for (const p of [...memoryOutputProcessors, ...configuredOutputProcessors]) {
+      if (!isProcessorWorkflow(p) && isProcessor(p) && p.id === processorId) {
+        return p as Processor<TId>;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -644,6 +787,69 @@ export class Agent<
     return resolvedMemory;
   }
 
+  /**
+   * Checks if this agent has its own workspace configured.
+   *
+   * @example
+   * ```typescript
+   * if (agent.hasOwnWorkspace()) {
+   *   const workspace = await agent.getWorkspace();
+   * }
+   * ```
+   */
+  public hasOwnWorkspace(): boolean {
+    return Boolean(this.#workspace);
+  }
+
+  /**
+   * Gets the workspace instance for this agent, resolving function-based workspace if necessary.
+   * The workspace provides filesystem and sandbox capabilities for file operations and code execution.
+   *
+   * @example
+   * ```typescript
+   * const workspace = await agent.getWorkspace();
+   * if (workspace) {
+   *   await workspace.writeFile('/data.json', JSON.stringify(data));
+   *   const result = await workspace.executeCode('console.log("Hello")');
+   * }
+   * ```
+   */
+  public async getWorkspace({
+    requestContext = new RequestContext(),
+  }: { requestContext?: RequestContext } = {}): Promise<Workspace | undefined> {
+    // If agent has its own workspace configured, use it
+    if (this.#workspace) {
+      let resolvedWorkspace: Workspace;
+
+      if (typeof this.#workspace !== 'function') {
+        resolvedWorkspace = this.#workspace;
+      } else {
+        const result = this.#workspace({ requestContext, mastra: this.#mastra });
+        resolvedWorkspace = await Promise.resolve(result);
+
+        if (!resolvedWorkspace) {
+          const mastraError = new MastraError({
+            id: 'AGENT_GET_WORKSPACE_FUNCTION_EMPTY_RETURN',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+            },
+            text: `[Agent:${this.name}] - Function-based workspace returned empty value`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
+        }
+      }
+
+      return resolvedWorkspace;
+    }
+
+    // Fall back to Mastra's global workspace
+    return this.#mastra?.getWorkspace();
+  }
+
   get voice() {
     if (typeof this.#instructions === 'function') {
       const mastraError = new MastraError({
@@ -661,6 +867,14 @@ export class Agent<
     }
 
     return this.#voice;
+  }
+
+  /**
+   * Gets the request context schema for this agent.
+   * Returns the Zod schema used to validate request context values, or undefined if not set.
+   */
+  get requestContextSchema() {
+    return this.#requestContextSchema;
   }
 
   /**
@@ -756,7 +970,10 @@ export class Agent<
     | AgentInstructions
     | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
-      const result = this.#instructions({ requestContext, mastra: this.#mastra });
+      const result = this.#instructions({
+        requestContext: requestContext as RequestContext<TRequestContext>,
+        mastra: this.#mastra,
+      });
       return resolveMaybePromise(result, instructions => {
         if (!instructions) {
           const mastraError = new MastraError({
@@ -1033,7 +1250,10 @@ export class Agent<
       return ensureToolProperties(this.#tools) as TTools;
     }
 
-    const result = this.#tools({ requestContext, mastra: this.#mastra });
+    const result = this.#tools({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
+    });
 
     return resolveMaybePromise(result, tools => {
       if (!tools) {
@@ -1569,6 +1789,72 @@ export class Agent<
   }
 
   /**
+   * Lists workspace tools if a workspace is configured.
+   * @internal
+   */
+  private async listWorkspaceTools({
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    tracingContext,
+    mastraProxy,
+    autoResumeSuspendedTools,
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    tracingContext?: TracingContext;
+    mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
+  }) {
+    let convertedWorkspaceTools: Record<string, CoreTool> = {};
+
+    if (this._agentNetworkAppend) {
+      this.logger.debug(`[Agent:${this.name}] - Skipping workspace tools (agent network context)`, { runId });
+      return convertedWorkspaceTools;
+    }
+
+    // Get workspace tools if available
+    const workspace = await this.getWorkspace({ requestContext });
+
+    if (!workspace) {
+      return convertedWorkspaceTools;
+    }
+
+    const workspaceTools = createWorkspaceTools(workspace);
+
+    if (Object.keys(workspaceTools).length > 0) {
+      this.logger.debug(`[Agent:${this.name}] - Adding workspace tools: ${Object.keys(workspaceTools).join(', ')}`, {
+        runId,
+      });
+
+      for (const [toolName, tool] of Object.entries(workspaceTools)) {
+        const toolObj = tool;
+        const options: ToolOptions = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          agentName: this.name,
+          requestContext,
+          tracingContext,
+          model: await this.getModel({ requestContext }),
+          tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (toolObj as any).requireApproval,
+        };
+        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        convertedWorkspaceTools[toolName] = convertedToCoreTool;
+      }
+    }
+
+    return convertedWorkspaceTools;
+  }
+
+  /**
    * Executes input processors on the message list before LLM processing.
    * @internal
    */
@@ -1577,11 +1863,13 @@ export class Agent<
     tracingContext,
     messageList,
     inputProcessorOverrides,
+    processorStates,
   }: {
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
+    processorStates?: Map<string, ProcessorState>;
   }): Promise<{
     messageList: MessageList;
     tripwire?: {
@@ -1597,6 +1885,7 @@ export class Agent<
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
+        processorStates,
       });
       try {
         messageList = await runner.runInputProcessors(messageList, tracingContext, requestContext);
@@ -1749,7 +2038,6 @@ export class Agent<
     const memory = await this.getMemory({ requestContext });
 
     // Mastra tools passed into the Agent
-
     const assignedTools = await this.listTools({ requestContext });
 
     const assignedToolEntries = Object.entries(assignedTools || {});
@@ -2456,6 +2744,16 @@ export class Agent<
       autoResumeSuspendedTools,
     });
 
+    const workspaceTools = await this.listWorkspaceTools({
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      tracingContext,
+      mastraProxy,
+      autoResumeSuspendedTools,
+    });
+
     return this.formatTools({
       ...assignedTools,
       ...memoryTools,
@@ -2463,6 +2761,7 @@ export class Agent<
       ...clientSideTools,
       ...agentTools,
       ...workflowTools,
+      ...workspaceTools,
     });
   }
 
@@ -3187,6 +3486,8 @@ export class Agent<
       autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
       mastra: this.#mastra,
       structuredOutput: mergedOptions?.structuredOutput as OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never,
+      onAbort: mergedOptions?.onAbort,
+      abortSignal: mergedOptions?.abortSignal,
     });
   }
 
@@ -3259,6 +3560,8 @@ export class Agent<
       onIterationComplete: mergedOptions?.onIterationComplete,
       autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
       mastra: this.#mastra,
+      onAbort: mergedOptions?.onAbort,
+      abortSignal: mergedOptions?.abortSignal,
     });
   }
 
@@ -3319,13 +3622,16 @@ export class Agent<
       structuredOutput?: StructuredOutputOptions<any>;
     },
   ): Promise<FullOutput<any>> {
+    // Validate request context if schema is provided
+    await this.#validateRequestContext(options?.requestContext);
+
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
-    const mergedOptions = {
-      ...defaultOptions,
-      ...(options ?? {}),
-    } as unknown as AgentExecutionOptions<any>;
+    const mergedOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      (options ?? {}) as Record<string, unknown>,
+    ) as AgentExecutionOptions<any>;
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -3409,13 +3715,16 @@ export class Agent<
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Validate request context if schema is provided
+    await this.#validateRequestContext(streamOptions?.requestContext);
+
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
-    const mergedOptions = {
-      ...defaultOptions,
-      ...(streamOptions ?? {}),
-    } as unknown as AgentExecutionOptions<OUTPUT>;
+    const mergedOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      (streamOptions ?? {}) as Record<string, unknown>,
+    ) as AgentExecutionOptions<OUTPUT>;
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -3513,10 +3822,10 @@ export class Agent<
       requestContext: streamOptions?.requestContext,
     });
 
-    let mergedStreamOptions = {
-      ...defaultOptions,
-      ...streamOptions,
-    };
+    let mergedStreamOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      (streamOptions ?? {}) as Record<string, unknown>,
+    ) as typeof defaultOptions;
 
     const llm = await this.getLLM({
       requestContext: mergedStreamOptions.requestContext,
@@ -3591,10 +3900,10 @@ export class Agent<
       requestContext: options?.requestContext,
     });
 
-    const mergedOptions = {
-      ...defaultOptions,
-      ...(options ?? {}),
-    };
+    const mergedOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      (options ?? {}) as Record<string, unknown>,
+    ) as typeof defaultOptions;
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,

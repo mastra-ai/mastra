@@ -48,8 +48,8 @@ describe('ModelsDevGateway', () => {
           'llama3.1-8b': { name: 'Llama 3.1 8B' },
         },
         env: ['CEREBRAS_API_KEY'],
-        // No API URL in the mock, should use override
-        npm: '@ai-sdk/openai-compatible',
+        // No API URL - uses native @ai-sdk/cerebras package
+        npm: '@ai-sdk/cerebras',
       },
       'fireworks-ai': {
         id: 'fireworks-ai',
@@ -93,10 +93,10 @@ describe('ModelsDevGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      // cerebras and fireworks-ai use @ai-sdk/openai-compatible
+      // cerebras uses native SDK, fireworks-ai uses @ai-sdk/openai-compatible
       expect(providers.cerebras).toBeDefined();
       expect(providers['fireworks-ai']).toBeDefined(); // Provider IDs keep hyphens
-      expect(providers.cerebras.url).toBe('https://api.cerebras.ai/v1');
+      expect(providers.cerebras.url).toBeUndefined(); // No URL needed - uses native @ai-sdk/cerebras
     });
 
     it('should apply OPENAI_COMPATIBLE_OVERRIDES', async () => {
@@ -289,17 +289,17 @@ describe('ModelsDevGateway', () => {
       expect(url).toBe('https://api.groq.com/openai/v1');
     });
 
-    it('should correctly identify all major OpenAI-compatible providers', async () => {
+    it('should correctly identify all major providers', async () => {
       const majorProviders = {
         openai: { npm: '@ai-sdk/openai', api: 'https://api.openai.com/v1' },
         anthropic: { npm: '@ai-sdk/anthropic', api: 'https://api.anthropic.com/v1' },
         groq: { npm: '@ai-sdk/openai-compatible', api: 'https://api.groq.com/openai/v1' },
-        cerebras: { npm: '@ai-sdk/openai-compatible' },
+        cerebras: { npm: '@ai-sdk/cerebras' },
         xai: { npm: '@ai-sdk/openai-compatible' },
         mistral: { npm: '@ai-sdk/mistral', api: 'https://api.mistral.ai/v1' },
         google: { npm: '@ai-sdk/google' },
-        togetherai: { npm: '@ai-sdk/openai-compatible', api: 'https://api.together.xyz/v1' },
-        deepinfra: { npm: '@ai-sdk/openai-compatible', api: 'https://api.deepinfra.com/v1/openai' },
+        togetherai: { npm: '@ai-sdk/togetherai' },
+        deepinfra: { npm: '@ai-sdk/deepinfra' },
         perplexity: { npm: '@ai-sdk/openai-compatible', api: 'https://api.perplexity.ai' },
       };
 

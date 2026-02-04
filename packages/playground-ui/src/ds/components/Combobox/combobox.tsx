@@ -1,14 +1,17 @@
-import { Button as DSButton } from '@/ds/components/Button/Button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
+import { buttonVariants } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
-import { type FormElementSize, formElementFocus } from '@/ds/primitives/form-element';
-import { transitions } from '@/ds/primitives/transitions';
+import { type FormElementSize } from '@/ds/primitives/form-element';
+import { comboboxStyles } from './combobox-styles';
 
 export type ComboboxOption = {
   label: string;
   value: string;
+  description?: string;
+  start?: React.ReactNode;
+  end?: React.ReactNode;
 };
 
 export type ComboboxProps = {
@@ -22,6 +25,10 @@ export type ComboboxProps = {
   disabled?: boolean;
   variant?: 'default' | 'light' | 'outline' | 'ghost';
   size?: FormElementSize;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
+  error?: string;
 };
 
 export function Combobox({
@@ -35,174 +42,82 @@ export function Combobox({
   disabled = false,
   variant = 'default',
   size = 'md',
+  open,
+  onOpenChange,
+  container,
+  error,
 }: ComboboxProps) {
-  const [open, setOpen] = React.useState(false);
-  const [search, setSearch] = React.useState('');
-  const [highlightedIndex, setHighlightedIndex] = React.useState(0);
-  const triggerRef = React.useRef<HTMLButtonElement>(null);
-  const [triggerWidth, setTriggerWidth] = React.useState<number | undefined>(undefined);
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const listRef = React.useRef<HTMLDivElement>(null);
+  const selectedOption = options.find(option => option.value === value) ?? null;
 
-  const selectedOption = options.find(option => option.value === value);
-
-  const handleSelect = (optionValue: string) => {
-    onValueChange?.(optionValue);
-    setOpen(false);
-    setSearch('');
-    setHighlightedIndex(0);
-  };
-
-  React.useEffect(() => {
-    if (triggerRef.current) {
-      setTriggerWidth(triggerRef.current.offsetWidth);
-    }
-  }, [open]);
-
-  React.useEffect(() => {
-    if (open && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [open]);
-
-  const filteredOptions = React.useMemo(() => {
-    if (!search) return options;
-    return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
-  }, [options, search]);
-
-  React.useEffect(() => {
-    setHighlightedIndex(0);
-  }, [filteredOptions]);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!open) return;
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setHighlightedIndex(prev => (prev < filteredOptions.length - 1 ? prev + 1 : prev));
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setHighlightedIndex(prev => (prev > 0 ? prev - 1 : prev));
-        break;
-      case 'Enter':
-        e.preventDefault();
-        if (filteredOptions[highlightedIndex]) {
-          handleSelect(filteredOptions[highlightedIndex].value);
-        }
-        break;
-      case 'Escape':
-        e.preventDefault();
-        setOpen(false);
-        setSearch('');
-        break;
-      case 'Home':
-        e.preventDefault();
-        setHighlightedIndex(0);
-        break;
-      case 'End':
-        e.preventDefault();
-        setHighlightedIndex(filteredOptions.length - 1);
-        break;
+  const handleSelect = (item: ComboboxOption | null) => {
+    if (item) {
+      onValueChange?.(item.value);
     }
   };
-
-  React.useEffect(() => {
-    if (listRef.current && highlightedIndex >= 0) {
-      const highlightedElement = listRef.current.children[highlightedIndex] as HTMLElement;
-      if (highlightedElement) {
-        highlightedElement.scrollIntoView({ block: 'nearest' });
-      }
-    }
-  }, [highlightedIndex]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <DSButton
-          ref={triggerRef}
-          role="combobox"
-          aria-expanded={open}
-          variant={variant}
-          size={size}
-          className={cn('w-full justify-between', className)}
-          disabled={disabled}
-        >
-          <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </DSButton>
-      </PopoverTrigger>
-      <PopoverContent className="p-0 w-fit" align="start">
-        <div
+    <div className={comboboxStyles.root}>
+      <BaseCombobox.Root
+        items={options}
+        value={selectedOption}
+        onValueChange={handleSelect}
+        disabled={disabled}
+        open={open}
+        onOpenChange={onOpenChange}
+      >
+        <BaseCombobox.Trigger
           className={cn(
-            'flex h-full w-full flex-col overflow-hidden rounded-md bg-surface3 text-neutral5',
-            'shadow-elevated',
-            'animate-in fade-in-0 zoom-in-95 duration-150',
+            buttonVariants({ variant, size }),
+            comboboxStyles.trigger,
+            error && comboboxStyles.triggerError,
+            className,
           )}
         >
-          <div className={cn('flex items-center border-b border-border1 px-3 py-2', transitions.colors)}>
-            <Search className={cn('mr-2 h-4 w-4 shrink-0 text-neutral3', transitions.colors)} />
-            <input
-              ref={inputRef}
-              className={cn(
-                'flex h-8 w-full rounded-md bg-transparent py-1 text-sm',
-                'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
-                'outline-none',
-                transitions.colors,
-              )}
-              placeholder={searchPlaceholder}
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              onKeyDown={handleKeyDown}
-              role="combobox"
-              aria-autocomplete="list"
-              aria-controls="combobox-options"
-              aria-expanded={open}
-            />
-          </div>
-          <div
-            ref={listRef}
-            id="combobox-options"
-            role="listbox"
-            className="max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1"
-          >
-            {filteredOptions.length === 0 ? (
-              <div className="py-6 text-center text-sm text-neutral3">{emptyText}</div>
-            ) : (
-              filteredOptions.map((option, index) => {
-                const isSelected = value === option.value;
-                const isHighlighted = index === highlightedIndex;
-                return (
-                  <div
+          <span className="truncate flex items-center gap-2">
+            {selectedOption?.start}
+            <BaseCombobox.Value placeholder={placeholder} />
+          </span>
+          <ChevronsUpDown className={comboboxStyles.chevron} />
+        </BaseCombobox.Trigger>
+
+        <BaseCombobox.Portal container={container}>
+          <BaseCombobox.Positioner align="start" sideOffset={4} className={comboboxStyles.positioner}>
+            <BaseCombobox.Popup className={comboboxStyles.popup}>
+              <div className={comboboxStyles.searchContainer}>
+                <Search className={comboboxStyles.searchIcon} />
+                <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
+              </div>
+              <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
+              <BaseCombobox.List className={comboboxStyles.list}>
+                {(option: ComboboxOption) => (
+                  <BaseCombobox.Item
                     key={option.value}
-                    role="option"
-                    aria-selected={isSelected}
-                    className={cn(
-                      'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm',
-                      transitions.colors,
-                      'hover:bg-surface5 hover:text-neutral5',
-                      isHighlighted && 'bg-surface5 text-neutral5',
-                      isSelected && !isHighlighted && 'bg-accent1Dark text-accent1',
-                    )}
-                    onClick={() => handleSelect(option.value)}
-                    onMouseEnter={() => setHighlightedIndex(index)}
+                    value={option}
+                    className={cn(comboboxStyles.item, comboboxStyles.itemSelected)}
                   >
-                    <Check
-                      className={cn(
-                        'mr-2 h-4 w-4',
-                        transitions.opacity,
-                        isSelected ? 'opacity-100 text-accent1' : 'opacity-0',
-                      )}
-                    />
-                    {option.label}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
+                    <span className={comboboxStyles.checkContainer}>
+                      <BaseCombobox.ItemIndicator>
+                        <Check className={comboboxStyles.checkIcon} />
+                      </BaseCombobox.ItemIndicator>
+                    </span>
+                    <span className={comboboxStyles.optionContent}>
+                      {option.start}
+                      <span className={comboboxStyles.optionText}>
+                        <span>{option.label}</span>
+                        {option.description && (
+                          <span className={comboboxStyles.optionDescription}>{option.description}</span>
+                        )}
+                      </span>
+                      {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                    </span>
+                  </BaseCombobox.Item>
+                )}
+              </BaseCombobox.List>
+            </BaseCombobox.Popup>
+          </BaseCombobox.Positioner>
+        </BaseCombobox.Portal>
+      </BaseCombobox.Root>
+      {error && <span className={comboboxStyles.error}>{error}</span>}
+    </div>
   );
 }

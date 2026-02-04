@@ -33,6 +33,34 @@ export class MessageHistory implements Processor {
     this.lastMessages = options.lastMessages;
   }
 
+  /**
+   * Get threadId and resourceId from either RequestContext or MessageList's memoryInfo
+   */
+  private getMemoryContext(
+    requestContext: RequestContext | undefined,
+    messageList: MessageList,
+  ): { threadId: string; resourceId?: string } | null {
+    // First try RequestContext (set by Memory class)
+    const memoryContext = parseMemoryRequestContext(requestContext);
+    if (memoryContext?.thread?.id) {
+      return {
+        threadId: memoryContext.thread.id,
+        resourceId: memoryContext.resourceId,
+      };
+    }
+
+    // Fallback to MessageList's memoryInfo (set when MessageList is created with threadId)
+    const serialized = messageList.serialize();
+    if (serialized.memoryInfo?.threadId) {
+      return {
+        threadId: serialized.memoryInfo.threadId,
+        resourceId: serialized.memoryInfo.resourceId,
+      };
+    }
+
+    return null;
+  }
+
   async processInput(args: {
     messages: MastraDBMessage[];
     messageList: MessageList;
@@ -40,16 +68,16 @@ export class MessageHistory implements Processor {
     tracingContext?: TracingContext;
     requestContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList } = args;
+    const { messageList, requestContext } = args;
 
-    // Get memory context from RequestContext
-    const memoryContext = parseMemoryRequestContext(args.requestContext);
-    const threadId = memoryContext?.thread?.id;
-    const resourceId = memoryContext?.resourceId;
+    // Get memory context from RequestContext or MessageList
+    const context = this.getMemoryContext(requestContext, messageList);
 
-    if (!threadId) {
+    if (!context) {
       return messageList;
     }
+
+    const { threadId, resourceId } = context;
 
     // 1. Fetch historical messages from storage (as DB format)
     const result = await this.storage.listMessages({
@@ -155,16 +183,20 @@ export class MessageHistory implements Processor {
     tracingContext?: TracingContext;
     requestContext?: RequestContext;
   }): Promise<MessageList> {
-    const { messageList } = args;
+    const { messageList, requestContext } = args;
 
-    // Get memory context from RequestContext
-    const memoryContext = parseMemoryRequestContext(args.requestContext);
-    const threadId = memoryContext?.thread?.id;
+    // Get memory context from RequestContext or MessageList
+    const context = this.getMemoryContext(requestContext, messageList);
+
+    // Check if readOnly from memoryConfig
+    const memoryContext = parseMemoryRequestContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    if (!threadId || readOnly) {
+    if (!context || readOnly) {
       return messageList;
     }
+
+    const { threadId, resourceId } = context;
 
     const newInput = messageList.get.input.db();
     const newOutput = messageList.get.response.db();
@@ -174,11 +206,32 @@ export class MessageHistory implements Processor {
       return messageList;
     }
 
-    const filtered = this.filterMessagesForPersistence(messagesToSave);
+    await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
 
-    // Persist messages directly to storage
-    await this.storage.saveMessages({ messages: filtered });
+    return messageList;
+  }
 
+  /**
+   * Persist messages to storage, filtering out partial tool calls and working memory tags.
+   * Also ensures the thread exists (creates if needed).
+   *
+   * This method can be called externally by other processors (e.g., ObservationalMemory)
+   * that need to save messages incrementally.
+   */
+  async persistMessages(args: { messages: MastraDBMessage[]; threadId: string; resourceId?: string }): Promise<void> {
+    const { messages, threadId, resourceId } = args;
+
+    if (messages.length === 0) {
+      return;
+    }
+
+    const filtered = this.filterMessagesForPersistence(messages);
+
+    if (filtered.length === 0) {
+      return;
+    }
+
+    // Ensure thread exists (create if needed) before saving messages
     const thread = await this.storage.getThreadById({ threadId });
     if (thread) {
       await this.storage.updateThread({
@@ -186,8 +239,21 @@ export class MessageHistory implements Processor {
         title: thread.title || '',
         metadata: thread.metadata || {},
       });
+    } else {
+      // Auto-create thread if it doesn't exist
+      await this.storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId: resourceId || threadId,
+          title: '',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
     }
 
-    return messageList;
+    // Persist messages after thread is guaranteed to exist
+    await this.storage.saveMessages({ messages: filtered });
   }
 }
