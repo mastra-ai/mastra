@@ -960,11 +960,9 @@ export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[
   let content = `# AGENTS.md
 
 This document provides guidance for AI coding agents working in this repository.
-
 ## Project Overview
 
-This is a **Mastra** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
-
+This is a **Mastra AI agent framework** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
 ## Commands
 
 Use these commands to interact with the project.
@@ -1003,7 +1001,7 @@ Folders organize your agent's resources, like agents, tools, and workflows.
 | \`src/mastra/tools\`     | Create reusable tools that your agents can call                                                                                          |
 | \`src/mastra/mcp\`       | (Optional) Implement custom MCP servers to share your tools with external agents                                                         |
 | \`src/mastra/scorers\`   | (Optional) Define scorers for evaluating agent performance over time                                                                     |
-| \`src/mastra/public\`    | (Optional) Contents are copied into the \`.build/output\` directory during the build process, making them available for serving at runtime |
+| \`src/mastra/public\`    | (Optional) Contents are copied into the \`\.build/output\` directory during the build process, making them available for serving at runtime |
 
 ### Top-level files
 
@@ -1012,7 +1010,7 @@ Top-level files define how your Mastra project is configured, built, and connect
 | File                  | Description                                                                                                       |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | \`src/mastra/index.ts\` | Central entry point where you configure and initialize Mastra.                                                    |
-| \`.env.example\`        | Template for environment variables - copy and rename to \`.env\` to add your secret [model provider](/models) keys. |
+| \`.env.example\`        | Template for environment variables - copy and rename to \`\.env\` to add your secret [model provider](/models) keys. |
 | \`package.json\`        | Defines project metadata, dependencies, and available npm scripts.                                                |
 | \`tsconfig.json\`       | Configures TypeScript options such as path aliases, compiler settings, and build output.                          |
 
@@ -1036,23 +1034,9 @@ ${skills
   )
   .join('\n')}
 
-### Managing Skills
+### Using Skills
 
-\`\`\`bash
-# List all installed skills
-npx skills list
-
-# Find skills by keyword or capability
-npx skills find <keyword>
-
-# Add a specific skill from the Mastra skills repository
-npx skills add mastra-ai/skills --skill <skill-name>
-
-# Add all available skills
-npx skills add mastra-ai/skills --all
-\`\`\`
-
-**Repository**: [https://github.com/mastra-ai/skills](https://github.com/mastra-ai/skills)
+Skills are automatically available to agents in your project once installed. Agents can access and use these skills without additional configuration.
 
 `;
   }
@@ -1085,16 +1069,8 @@ Learn more: [MCP Documentation](https://mastra.ai/docs/mcp)
   // Add resources section
   content += `## Resources
 
-- [Mastra Documentation](https://mastra.ai/docs)
-- [API Reference](https://mastra.ai/reference)
-- [GitHub Repository](https://github.com/mastra-ai/mastra)
-- [Discord Community](https://discord.gg/mastra)
-
-## Development Tips
-
-- Use TypeScript for better type safety and autocomplete
-- Test your agents and workflows before deployment
-- Check the \`.env\` file for required environment variables
+- [Mastra Documentation](https://mastra.ai/llms.txt)
+- [Mastra .well-known skills discovery](https://mastra.ai/.well-known/skills/index.json)
 `;
 
   return content;
