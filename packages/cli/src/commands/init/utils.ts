@@ -957,7 +957,7 @@ export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[
   const hasSkills = skills && skills.length > 0;
   const hasMcp = !!mcpServer;
 
-  let content = `# AI Agents Guide
+  let content = `# AGENTS.md
 
 This guide helps AI agents work efficiently with this Mastra project.
 
