@@ -15,6 +15,15 @@ import type { MastraDBMessage, MastraMessageContentV2 } from '../state/types';
  */
 export class MessageMerger {
   /**
+   * Check if a message is sealed (should not be merged into).
+   * Messages are sealed after observation to preserve observation markers.
+   */
+  static isSealed(message: MastraDBMessage): boolean {
+    const metadata = message.content?.metadata as { mastra?: { sealed?: boolean } } | undefined;
+    return metadata?.mastra?.sealed === true;
+  }
+
+  /**
    * Check if we should merge an incoming message with the latest message
    *
    * @param latestMessage - The most recent message in the list
@@ -23,6 +32,7 @@ export class MessageMerger {
    * @param isLatestFromMemory - Whether the latest message is from memory
    * @param agentNetworkAppend - Whether agent network append mode is enabled
    */
+
   static shouldMerge(
     latestMessage: MastraDBMessage | undefined,
     incomingMessage: MastraDBMessage,
@@ -31,6 +41,9 @@ export class MessageMerger {
     agentNetworkAppend: boolean = false,
   ): boolean {
     if (!latestMessage) return false;
+
+    // Don't merge into sealed messages (e.g., messages that have been observed)
+    if (MessageMerger.isSealed(latestMessage)) return false;
 
     // Basic merge conditions: both messages must be assistant messages from the same thread
     const shouldAppendToLastAssistantMessage =

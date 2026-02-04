@@ -120,12 +120,28 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   }
 
   async stream(route: ServerRoute, reply: FastifyReply, result: { fullStream: ReadableStream }): Promise<void> {
+    // Capture headers set by plugins (e.g., @fastify/cors) BEFORE hijacking
+    // reply.hijack() bypasses Fastify's response handling, so we need to preserve
+    // any headers that were set by hooks/plugins and manually include them
+    const rawHeaders = reply.getHeaders();
+    // Filter out undefined values and conflicting headers (content-length, transfer-encoding)
+    // Having both Content-Length and Transfer-Encoding: chunked violates RFC 7230
+    const existingHeaders: Record<string, string | number | string[]> = {};
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (value === undefined) continue;
+      const lowerKey = key.toLowerCase();
+      if (lowerKey === 'content-length' || lowerKey === 'transfer-encoding') continue;
+      existingHeaders[key] = value;
+    }
+
     // Hijack the reply to take control of the response
     // This is required when writing directly to reply.raw
     reply.hijack();
 
-    // Write headers directly to the raw response
+    // Write headers directly to the raw response, merging existing headers (like CORS)
+    // with our stream-specific headers
     reply.raw.writeHead(200, {
+      ...existingHeaders,
       'Content-Type': 'text/plain',
       'Transfer-Encoding': 'chunked',
     });

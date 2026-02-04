@@ -9,11 +9,11 @@ Here's a quick start to run the docs locally
 - Install dependencies:
 
   ```bash
-  npm install
+  pnpm install
   ```
 
 - Start the development server:
 
   ```bash
-  npm run dev
+  pnpm run dev
   ```

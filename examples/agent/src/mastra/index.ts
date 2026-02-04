@@ -3,7 +3,42 @@ import { LibSQLStore } from '@mastra/libsql';
 
 import { mastraAuth, rbacProvider } from './auth';
 
-import { chefModelV2Agent } from './agents/model-v2-agent';
+import {
+  agentThatHarassesYou,
+  chefAgent,
+  chefAgentResponses,
+  dynamicAgent,
+  evalAgent,
+  dynamicToolsAgent,
+  schemaValidatedAgent,
+} from './agents/index';
+import { myMcpServer, myMcpServerTwo } from './mcp/server';
+import { lessComplexWorkflow, myWorkflow } from './workflows';
+import {
+  chefModelV2Agent,
+  networkAgent,
+  agentWithAdvancedModeration,
+  agentWithBranchingModeration,
+  agentWithSequentialModeration,
+} from './agents/model-v2-agent';
+import { createScorer } from '@mastra/core/evals';
+import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
+import { moderationProcessor } from './agents/model-v2-agent';
+import {
+  moderatedAssistantAgent,
+  agentWithProcessorWorkflow,
+  contentModerationWorkflow,
+  simpleAssistantAgent,
+  agentWithBranchingWorkflow,
+  advancedModerationWorkflow,
+} from './workflows/content-moderation';
+import {
+  piiDetectionProcessor,
+  toxicityCheckProcessor,
+  responseQualityProcessor,
+  sensitiveTopicBlocker,
+  stepLoggerProcessor,
+} from './processors/index';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -12,6 +47,13 @@ const storage = new LibSQLStore({
 
 const config = {
   agents: {
+    chefAgent,
+    chefAgentResponses,
+    dynamicAgent,
+    dynamicToolsAgent, // Dynamic tool search example
+    agentThatHarassesYou,
+    evalAgent,
+    schemaValidatedAgent,
     chefModelV2Agent,
   },
   bundler: {

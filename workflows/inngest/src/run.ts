@@ -140,7 +140,14 @@ export class InngestRun<
 
       // Check completion
       if (runs?.[0]?.status === 'Completed' && runs?.[0]?.event_id === eventId) {
-        return runs[0];
+        // Ensure output is fully populated before returning (Inngest eventual consistency)
+        // The workflow function returns { result, runId }, so check for runId presence
+        if (runs?.[0]?.output?.runId !== undefined) {
+          return runs[0];
+        }
+        // Output not ready yet, continue polling with backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+        continue;
       }
 
       // Check failure

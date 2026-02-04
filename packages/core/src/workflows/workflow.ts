@@ -18,8 +18,8 @@ import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import { EntityType, SpanType, getOrCreateSpan } from '../observability';
-import { ProcessorRunner } from '../processors';
-import type { Processor } from '../processors';
+import { ProcessorRunner, ProcessorState } from '../processors';
+import type { Processor, ProcessorStreamWriter } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepOutput } from '../processors/step-schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
@@ -72,7 +72,7 @@ import type {
   StepParams,
   OutputWriter,
 } from './types';
-import { createTimeTravelExecutionParams, getZodErrors } from './utils';
+import { cleanStepResult, createTimeTravelExecutionParams, getZodErrors } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -623,11 +623,14 @@ function createStepFromProcessor<TProcessorId extends string>(
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: ProcessorStepInputSchema,
     outputSchema: ProcessorStepOutputSchema,
-    execute: async ({ inputData, requestContext, tracingContext }) => {
+    execute: async ({ inputData, requestContext, tracingContext, outputWriter }) => {
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
-      const input = inputData as ProcessorStepOutput;
+      const input = inputData as ProcessorStepOutput & {
+        processorStates?: Map<string, ProcessorState>;
+        abortSignal?: AbortSignal;
+      };
       const {
         phase,
         messages,
@@ -650,6 +653,10 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        // Shared processor states map for accessing persisted state
+        processorStates,
+        // Abort signal for cancelling in-flight processor work (e.g. OM observations)
+        abortSignal,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -698,13 +705,44 @@ function createStepFromProcessor<TProcessorId extends string>(
         ? { currentSpan: processorSpan }
         : tracingContext;
 
+      // Create ProcessorStreamWriter from outputWriter if available
+      // This enables processors to stream data-* parts to the UI in real-time
+      const processorWriter: ProcessorStreamWriter | undefined = outputWriter
+        ? {
+            custom: async <T extends { type: string }>(data: T) => {
+              await outputWriter(data as any);
+            },
+          }
+        : undefined;
+
       // Base context for all processor methods - includes requestContext for memory processors
       // and tracingContext for proper span nesting when processors call internal agents
+      // state is per-processor state that persists across all method calls within this request
+      // writer enables real-time streaming of data-* parts to the UI
+
+      // If processorStates map is provided (from ProcessorRunner), use it to get this processor's state
+      // Otherwise fall back to the state passed in inputData
+      let processorState: Record<string, unknown>;
+      if (processorStates) {
+        // Get or create the ProcessorState for this processor
+        let ps = processorStates.get(processor.id);
+        if (!ps) {
+          ps = new ProcessorState();
+          processorStates.set(processor.id, ps);
+        }
+        processorState = ps.customState;
+      } else {
+        processorState = state ?? {};
+      }
+
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
         tracingContext: processorTracingContext,
+        state: processorState,
+        writer: processorWriter,
+        abortSignal,
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -770,20 +808,23 @@ function createStepFromProcessor<TProcessorId extends string>(
                 });
               }
 
+              // Extract messageList after null check for proper type narrowing
+              const checkedMessageList = passThrough.messageList;
+
               // Create source checker before processing to preserve message sources
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
-              const check = passThrough.messageList.makeMessageSourceChecker();
+              const check = checkedMessageList.makeMessageSourceChecker();
 
               const result = await processor.processInput({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
-                messageList: passThrough.messageList,
+                messageList: checkedMessageList,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
               });
 
               if (result instanceof MessageList) {
                 // Validate same instance
-                if (result !== passThrough.messageList) {
+                if (result !== checkedMessageList) {
                   throw new MastraError({
                     category: ErrorCategory.USER,
                     domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -800,7 +841,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 // Processor returned an array of messages
                 ProcessorRunner.applyMessagesToMessageList(
                   result as MastraDBMessage[],
-                  passThrough.messageList,
+                  checkedMessageList,
                   idsBeforeProcessing,
                   check,
                   'input',
@@ -811,12 +852,12 @@ function createStepFromProcessor<TProcessorId extends string>(
                 const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
                 ProcessorRunner.applyMessagesToMessageList(
                   typedResult.messages,
-                  passThrough.messageList,
+                  checkedMessageList,
                   idsBeforeProcessing,
                   check,
                   'input',
                 );
-                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                checkedMessageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
@@ -839,14 +880,17 @@ function createStepFromProcessor<TProcessorId extends string>(
                 });
               }
 
+              // Extract messageList after null check for proper type narrowing
+              const checkedMessageList = passThrough.messageList;
+
               // Create source checker before processing to preserve message sources
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
-              const check = passThrough.messageList.makeMessageSourceChecker();
+              const check = checkedMessageList.makeMessageSourceChecker();
 
               const result = await processor.processInputStep({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
-                messageList: passThrough.messageList,
+                messageList: checkedMessageList,
                 stepNumber: stepNumber ?? 0,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 // Pass model/tools configuration fields - types match ProcessInputStepArgs
@@ -861,7 +905,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
-                messageList: passThrough.messageList,
+                messageList: checkedMessageList,
                 processor,
                 stepNumber: stepNumber ?? 0,
               });
@@ -869,14 +913,14 @@ function createStepFromProcessor<TProcessorId extends string>(
               if (validatedResult.messages) {
                 ProcessorRunner.applyMessagesToMessageList(
                   validatedResult.messages,
-                  passThrough.messageList,
+                  checkedMessageList,
                   idsBeforeProcessing,
                   check,
                 );
               }
 
               if (validatedResult.systemMessages) {
-                passThrough.messageList!.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
+                checkedMessageList.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
@@ -1040,14 +1084,17 @@ function createStepFromProcessor<TProcessorId extends string>(
                 });
               }
 
+              // Extract messageList after null check for proper type narrowing
+              const checkedMessageList = passThrough.messageList;
+
               // Create source checker before processing to preserve message sources
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
-              const check = passThrough.messageList.makeMessageSourceChecker();
+              const check = checkedMessageList.makeMessageSourceChecker();
 
               const result = await processor.processOutputStep({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
-                messageList: passThrough.messageList,
+                messageList: checkedMessageList,
                 stepNumber: stepNumber ?? 0,
                 finishReason,
                 toolCalls: toolCalls as any,
@@ -1058,7 +1105,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
               if (result instanceof MessageList) {
                 // Validate same instance
-                if (result !== passThrough.messageList) {
+                if (result !== checkedMessageList) {
                   throw new MastraError({
                     category: ErrorCategory.USER,
                     domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -1075,7 +1122,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 // Processor returned an array of messages
                 ProcessorRunner.applyMessagesToMessageList(
                   result as MastraDBMessage[],
-                  passThrough.messageList,
+                  checkedMessageList,
                   idsBeforeProcessing,
                   check,
                   'response',
@@ -1086,12 +1133,12 @@ function createStepFromProcessor<TProcessorId extends string>(
                 const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
                 ProcessorRunner.applyMessagesToMessageList(
                   typedResult.messages,
-                  passThrough.messageList,
+                  checkedMessageList,
                   idsBeforeProcessing,
                   check,
                   'response',
                 );
-                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                checkedMessageList.replaceAllSystemMessages(typedResult.systemMessages);
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
@@ -2311,7 +2358,12 @@ export class Workflow<
       const stepGraph = serializedStepGraph.find(stepGraph => (stepGraph as any)?.step?.id === step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
       if (stepGraph && (stepGraph as any)?.step?.component === 'WORKFLOW') {
-        const nestedSteps = await this.getWorkflowRunSteps({ runId, workflowId: step });
+        // Evented runtime stores nested workflow's runId in metadata.nestedRunId (set by step-executor).
+        // Default runtime uses the parent runId directly to look up nested workflow steps.
+        const stepResult = steps[step] as any;
+        const nestedRunId = stepResult?.metadata?.nestedRunId ?? runId;
+
+        const nestedSteps = await this.getWorkflowRunSteps({ runId: nestedRunId, workflowId: step });
         if (nestedSteps) {
           const updatedNestedSteps = Object.entries(nestedSteps).reduce(
             (acc, [key, value]) => {
@@ -2413,11 +2465,21 @@ export class Workflow<
     // Get steps if needed
     let steps: Record<string, any> = {};
     if (includeAllFields || fieldsSet.has('steps')) {
+      let rawSteps: Record<string, any>;
       if (withNestedWorkflows) {
-        steps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+        rawSteps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
       } else {
         const { input, ...stepsOnly } = snapshotState.context || {};
-        steps = stepsOnly;
+        rawSteps = stepsOnly;
+      }
+      // Strip __state from steps (internal implementation detail for state propagation).
+      // The evented runtime adds __state to step results for cross-step state passing.
+      const { __state: _removedTopLevelState, ...stepsWithoutTopLevelState } = rawSteps;
+      // Clean each step result to remove internal properties (__state, metadata.nestedRunId)
+      // that are implementation details not meant for API consumers.
+      // Handles both object and array step results (e.g., forEach outputs).
+      for (const [stepId, stepResult] of Object.entries(stepsWithoutTopLevelState)) {
+        steps[stepId] = cleanStepResult(stepResult);
       }
     }
 

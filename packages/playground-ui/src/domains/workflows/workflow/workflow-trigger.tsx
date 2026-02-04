@@ -1,6 +1,6 @@
 import { Braces, Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 import { Button } from '@/ds/components/Button';
 import { ScrollArea } from '@/ds/components/ScrollArea';
