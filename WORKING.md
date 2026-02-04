@@ -6,21 +6,21 @@ This document tracks implementation progress for review.
 
 ## Task List
 
-| # | Task | Status | Files Changed |
-|---|------|--------|---------------|
-| 1 | Fix readOnly enforcement in CompositeFilesystem and S3Filesystem | **Done** | `packages/core/src/workspace/filesystem/composite-filesystem.ts` |
-| 2 | Extract startPromise pattern to MastraSandbox base class | **Done** | `packages/core/src/workspace/sandbox/mastra-sandbox.ts` |
-| 3 | Add processPending() call in base class start() | **Done** | `packages/core/src/workspace/sandbox/mastra-sandbox.ts` |
-| 4 | Add status management wrappers to base classes | **Done** | `packages/core/src/workspace/sandbox/mastra-sandbox.ts`, `workspaces/e2b/src/e2b-sandbox.ts` |
-| 5 | Update S3Filesystem status on lifecycle methods | **Done** | `workspaces/s3/src/s3-filesystem.ts` |
-| 6 | Clean up E2B sandbox comments | **Done** | `workspaces/e2b/src/e2b-sandbox.ts` |
-| 7 | Investigate pathContext interaction with mounts | **Done** | (documentation only) |
-| 8 | Test GCS compatibility via S3Filesystem | **Done** | (documentation only) |
-| 9 | Create shared test suite with factory patterns | **Needs Revision** | (see stores/server-adapters pattern) |
-| 10 | S3Filesystem lazy init pattern (`ensureReady()`) | Pending | `workspaces/s3/src/s3-filesystem.ts` |
-| 11 | Extract ensureSandbox/lazy init to MastraSandbox base class | Pending | `packages/core/src/workspace/sandbox/mastra-sandbox.ts` |
-| 12 | Mount Manager extraction (marker files, reconcileMounts, checkExistingMount) | Pending | `packages/core/src/workspace/sandbox/mount-manager.ts` |
-| 13 | General cleanup checklist (imports, error handling, hardcoded values, logging) | Pending | Multiple files |
+| # | Task | Ticket | Status | Files Changed |
+|---|------|--------|--------|---------------|
+| 1 | Fix readOnly enforcement in CompositeFilesystem and S3Filesystem | COR-385, COR-484 | **Done** | `composite-filesystem.ts` |
+| 2 | Extract startPromise pattern to MastraSandbox base class | COR-380 | **Done** | `mastra-sandbox.ts` |
+| 3 | Add processPending() call in base class start() | COR-380 | **Done** | `mastra-sandbox.ts` |
+| 4 | Add status management wrappers to base classes | COR-380 | **Done** | `mastra-sandbox.ts`, `e2b-sandbox.ts` |
+| 5 | Update S3Filesystem status on lifecycle methods | COR-484 | **Done** | `s3-filesystem.ts` |
+| 6 | Clean up E2B sandbox comments | COR-380 | **Done** | `e2b-sandbox.ts` |
+| 7 | S3Filesystem lazy init pattern (`ensureReady()`) | COR-484 | Pending | `s3-filesystem.ts` |
+| 8 | Extract ensureSandbox/lazy init to MastraSandbox base class | COR-380 | Pending | `mastra-sandbox.ts` |
+| 9 | Mount Manager extraction (marker files, reconcileMounts, checkExistingMount) | COR-380, COR-385 | Pending | `mount-manager.ts` |
+| 10 | Implement pathContext with mounts (agent instructions, mount awareness) | COR-385, COR-491 | Pending | `workspace.ts`, `composite-filesystem.ts` |
+| 11 | General cleanup checklist (imports, error handling, hardcoded values, logging) | COR-380 | Pending | Multiple files |
+| 12 | Create shared test suite with factory patterns | COR-385 | Pending | (see stores/server-adapters pattern) |
+| 13 | Manual testing (E2B + S3/GCS mounts, readOnly, reconnection, GCS compatibility) | COR-380, COR-385, COR-484 | Pending | |
 
 ---
 
@@ -173,233 +173,7 @@ Review and update JSDoc, remove outdated TODOs, ensure consistency.
 
 ---
 
-## Task 7: Investigate pathContext with Mounts
-
-### Problem
-Need to understand how agent's current working directory concept interacts with mounted filesystems.
-
-### Current State
-
-**PathContext** (`workspace.ts:308-328`):
-```typescript
-interface PathContext {
-  filesystem?: { provider: string; basePath?: string };
-  sandbox?: { provider: string; workingDirectory?: string };
-  instructions: string;  // Combined from providers' getInstructions()
-}
-```
-
-**Usage** (`tools/tools.ts:621-624`):
-- Used to add instructions to the `workspace_execute_command` tool description
-- Instructions come from `filesystem.getInstructions()` and `sandbox.getInstructions()`
-
-### Findings
-
-#### Q: What happens when agent `cd`s across mount boundaries?
-
-**With FUSE mounts (E2B + S3/GCS):**
-- Mounts appear as real directories in the sandbox filesystem
-- `cd /data` works normally because s3fs mounts the bucket at `/data`
-- The agent sees a unified filesystem view inside the sandbox
-
-**Without FUSE mounts (CompositeFilesystem only):**
-- `cd` in sandbox has no effect on workspace filesystem operations
-- They're separate: sandbox cwd vs. CompositeFilesystem path routing
-- Agent uses absolute paths like `/data/file.txt` in filesystem tools
-
-#### Q: How do relative paths resolve?
-
-**For filesystem operations (workspace tools):**
-- CompositeFilesystem always uses absolute paths (paths start with `/`)
-- Relative paths are normalized by `normalizePath()` which adds leading `/`
-
-**For sandbox operations:**
-- Relative paths resolve from the sandbox's working directory
-- `cwd` option in `executeCommand` can override this
-
-**Cross-mount paths:**
-- CompositeFilesystem's `resolveMount()` finds the longest matching mount prefix
-- Example: `/data/subdir/file.txt` → S3Filesystem at `/data` with path `/subdir/file.txt`
-
-#### Q: Should agents be aware of mount points?
-
-**YES - Recommended improvements for COR-491:**
-
-1. **Add `mounts` to PathContext:**
-```typescript
-interface PathContext {
-  // ... existing fields ...
-  mounts?: Array<{
-    path: string;          // e.g., "/data"
-    provider: string;      // e.g., "s3"
-    icon?: FilesystemIcon;
-    displayName?: string;  // e.g., "AWS S3"
-    description?: string;  // e.g., "Persistent storage for outputs"
-    readOnly?: boolean;
-  }>;
-}
-```
-
-2. **CompositeFilesystem.getInstructions():**
-```typescript
-getInstructions(): string {
-  const mountInfo = Array.from(this._mounts.entries())
-    .map(([path, fs]) => {
-      const ro = fs.readOnly ? ' (read-only)' : '';
-      return `- ${path}: ${fs.displayName || fs.provider}${ro}`;
-    })
-    .join('\n');
-  return `Mounted filesystems:\n${mountInfo}`;
-}
-```
-
-3. **Tool descriptions could include mount info:**
-- Listing available mounts in filesystem tool descriptions
-- Warning about read-only mounts before write operations
-
-### Recommendations for COR-491
-
-The pathContext changes should be implemented in COR-491 with:
-1. Add `mounts` array to `PathContext` interface
-2. Update `getPathContext()` to include mount information from CompositeFilesystem
-3. Implement `getInstructions()` on CompositeFilesystem to describe available mounts
-4. Consider adding mount info to filesystem tool descriptions
-
-**Note**: No code changes made in this task - findings documented for COR-491 implementation.
-
----
-
-## Task 8: Test GCS Compatibility
-
-### Problem
-Need to verify if GCS works through S3Filesystem via S3-compatible API.
-
-### Test Plan
-1. Test S3Filesystem with GCS endpoint + HMAC credentials
-2. Test dedicated GCS mount in `workspaces/e2b/src/mounts/gcs.ts`
-3. Document compatibility/limitations
-
-### Findings
-
-#### Two Approaches for GCS
-
-**1. S3Filesystem with GCS S3-Compatible API**
-
-GCS provides an S3-compatible API at `storage.googleapis.com`. The S3Filesystem can be used with GCS by:
-
-```typescript
-import { S3Filesystem } from '@mastra/s3';
-
-const fs = new S3Filesystem({
-  bucket: 'my-gcs-bucket',
-  region: 'auto',  // GCS uses 'auto' for region
-  endpoint: 'https://storage.googleapis.com',
-  accessKeyId: process.env.GCS_HMAC_ACCESS_KEY!,      // HMAC credentials required
-  secretAccessKey: process.env.GCS_HMAC_SECRET_KEY!,  // (not service account JSON)
-});
-```
-
-**Requirements:**
-- Must use HMAC credentials (not service account JSON)
-- Create HMAC credentials in GCP Console: Storage > Settings > Interoperability > Create Key
-- The S3Filesystem already detects GCS endpoints via `detectIconFromEndpoint()` (line 284 in s3-filesystem.ts)
-
-**Known Compatibility:**
-- Basic operations (read, write, list, delete) should work
-- Some advanced S3 features may not be available (e.g., S3 Select)
-- Path-style URLs recommended (`forcePathStyle: true`)
-
-**2. Native gcsfuse Mount (E2B only)**
-
-For E2B sandboxes, there's a dedicated GCS mount using gcsfuse (`workspaces/e2b/src/mounts/gcs.ts`):
-
-```typescript
-interface E2BGCSMountConfig {
-  type: 'gcs';
-  bucket: string;
-  serviceAccountKey?: string;  // JSON string (optional for public buckets)
-}
-```
-
-**Features:**
-- Uses native GCS API (not S3 compatibility layer)
-- Supports service account JSON authentication
-- Supports public bucket access without credentials (read-only)
-- Automatically installs gcsfuse in E2B sandbox if not present
-
-#### Comparison Table
-
-| Feature | S3Filesystem + GCS | Native gcsfuse |
-|---------|-------------------|----------------|
-| Authentication | HMAC credentials | Service account JSON |
-| Public buckets | Not supported | Supported (read-only) |
-| Use case | Direct API access | E2B FUSE mount only |
-| Operations | Full filesystem interface | FUSE mount in sandbox |
-| Read-only support | Yes (`readOnly` option) | Yes (`anonymous_access`) |
-
-#### Testing Requirements
-
-**Manual Testing Checklist:**
-
-For S3Filesystem + GCS endpoint:
-- [ ] Create HMAC credentials in GCP Console
-- [ ] Test `readFile()` on existing file
-- [ ] Test `writeFile()` with new file
-- [ ] Test `readdir()` on bucket/prefix
-- [ ] Test `deleteFile()`
-- [ ] Test `copyFile()` and `moveFile()`
-
-For native gcsfuse (E2B):
-- [ ] Test with service account credentials
-- [ ] Test public bucket access
-- [ ] Verify mount appears in sandbox at correct path
-- [ ] Test file operations through FUSE mount
-
-**Environment Variables for Testing:**
-
-```bash
-# For S3Filesystem + GCS
-GCS_HMAC_ACCESS_KEY=<your-hmac-access-key>
-GCS_HMAC_SECRET_KEY=<your-hmac-secret-key>
-GCS_TEST_BUCKET=<your-test-bucket>
-
-# For native gcsfuse
-GCS_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'  # JSON string
-GCS_TEST_BUCKET=<your-test-bucket>
-```
-
-#### Recommendations
-
-1. **For direct GCS access without E2B**: Use S3Filesystem with HMAC credentials
-2. **For GCS in E2B sandbox**: Use native gcsfuse mount (better performance, native auth)
-3. **For public GCS buckets in E2B**: Use native gcsfuse with `anonymous_access`
-4. **Consider creating a GCSFilesystem** if more native GCS features needed (COR-XXX)
-
-**Note**: Integration tests require real GCS credentials. Tests should be skipped when credentials are not available (using `describe.skipIf` pattern)
-
----
-
-## Task 9: Shared Test Suite with Factory Patterns
-
-### Problem
-No shared tests ensure consistent behavior across filesystem providers.
-
-### Solution
-Create shared test suite similar to the patterns used in `stores/` or `server-adapters/` directories.
-
-### Status: Needs Revision
-
-Initial implementation was removed - needs to follow the existing monorepo patterns for shared tests.
-
-### TODO
-- [ ] Review `stores/` test patterns (e.g., how storage adapters share tests)
-- [ ] Review `server-adapters/` test patterns
-- [ ] Create filesystem test suite following same conventions
-- [ ] Apply to LocalFilesystem, S3Filesystem, CompositeFilesystem
-
----
-
-## Task 10: S3Filesystem Lazy Init Pattern
+## Task 7: S3Filesystem Lazy Init Pattern
 
 ### Problem
 S3Filesystem's `getClient()` lazily creates the S3Client but doesn't update status. If `init()` is never called, status remains `'pending'` even when the filesystem is being used.
@@ -422,7 +196,7 @@ private async ensureReady(): Promise<S3Client> {
 
 ---
 
-## Task 11: Extract ensureSandbox to Base Class
+## Task 8: Extract ensureSandbox to Base Class
 
 ### Problem
 E2BSandbox has `ensureSandbox()` pattern that lazily starts the sandbox. Other sandbox providers would benefit from this.
@@ -447,7 +221,7 @@ Add to MastraSandbox base class:
 
 ---
 
-## Task 12: Mount Manager Extraction
+## Task 9: Mount Manager Extraction
 
 ### Problem
 E2B's `mount()` has useful patterns that could benefit other sandbox providers:
@@ -469,7 +243,62 @@ Extract reusable patterns to MountManager or base class:
 
 ---
 
-## Task 13: General Cleanup Checklist
+## Task 10: Implement pathContext with Mounts
+
+### Problem
+Agents need to be aware of mounted filesystems for better path handling and understanding what storage is available.
+
+### Current State
+**PathContext** (`workspace.ts`):
+```typescript
+interface PathContext {
+  filesystem?: { provider: string; basePath?: string };
+  sandbox?: { provider: string; workingDirectory?: string };
+  instructions: string;  // Combined from providers' getInstructions()
+}
+```
+
+### Implementation Plan
+
+1. **Add `mounts` to PathContext:**
+```typescript
+interface PathContext {
+  // ... existing fields ...
+  mounts?: Array<{
+    path: string;          // e.g., "/data"
+    provider: string;      // e.g., "s3"
+    icon?: FilesystemIcon;
+    displayName?: string;  // e.g., "AWS S3"
+    description?: string;  // e.g., "Persistent storage for outputs"
+    readOnly?: boolean;
+  }>;
+}
+```
+
+2. **Implement CompositeFilesystem.getInstructions():**
+```typescript
+getInstructions(): string {
+  const mountInfo = Array.from(this._mounts.entries())
+    .map(([path, fs]) => {
+      const ro = fs.readOnly ? ' (read-only)' : '';
+      return `- ${path}: ${fs.displayName || fs.provider}${ro}`;
+    })
+    .join('\n');
+  return `Mounted filesystems:\n${mountInfo}`;
+}
+```
+
+3. **Update `getPathContext()` in workspace.ts** to include mount information
+
+4. **Consider adding mount info to filesystem tool descriptions**
+
+### Changes Planned
+- `packages/core/src/workspace/workspace.ts` - Update PathContext interface, getPathContext()
+- `packages/core/src/workspace/filesystem/composite-filesystem.ts` - Add getInstructions()
+
+---
+
+## Task 11: General Cleanup Checklist
 
 ### Items to Check
 - [ ] Unused imports in modified files
@@ -486,18 +315,106 @@ Extract reusable patterns to MountManager or base class:
 
 ---
 
+## Task 12: Create Shared Test Suite
+
+### Problem
+No shared tests ensure consistent behavior across filesystem providers.
+
+### Solution
+Create shared test suite similar to the patterns used in `stores/` or `server-adapters/` directories.
+
+### TODO
+- [ ] Review `stores/` test patterns
+- [ ] Review `server-adapters/` test patterns
+- [ ] Create filesystem test suite following same conventions
+- [ ] Apply to LocalFilesystem, S3Filesystem, CompositeFilesystem
+
+---
+
+## Task 13: Manual Testing
+
+### Purpose
+Verify end-to-end functionality of the E2B + S3/GCS mount integration before release.
+
+### Test Scenarios
+
+#### E2B + S3 Mount
+- [ ] Create workspace with S3Filesystem mounted at `/data`
+- [ ] Write file via `workspace_write_file('/data/test.txt', 'content')`
+- [ ] Read same file via `workspace_execute_command('cat /data/test.txt')`
+- [ ] Verify file appears in S3 bucket
+- [ ] Test `readdir('/data')` returns S3 bucket contents
+
+#### readOnly Enforcement
+- [ ] Mount S3Filesystem with `readOnly: true`
+- [ ] Verify `workspace_write_file` throws PermissionError
+- [ ] Verify FUSE mount has `-o ro` flag (check via `mount` command in sandbox)
+- [ ] Verify read operations still work
+
+#### Sandbox Reconnection
+- [ ] Create workspace, write files, let sandbox pause
+- [ ] Reconnect to same sandbox (via `mastra-sandbox-id` metadata)
+- [ ] Verify mounts are still accessible
+- [ ] Verify marker file detection works (no remount if config unchanged)
+
+#### Multi-Mount Setup
+- [ ] Mount multiple filesystems at different paths (`/data`, `/models`, etc.)
+- [ ] Verify path routing works correctly
+- [ ] Test cross-mount operations (copy from one mount to another)
+
+#### Error Handling
+- [ ] Test with invalid S3 credentials
+- [ ] Test with non-existent bucket
+- [ ] Test mount failure recovery
+
+#### GCS Compatibility (via S3Filesystem)
+- [ ] Create HMAC credentials in GCP Console
+- [ ] Test S3Filesystem with GCS endpoint (`https://storage.googleapis.com`)
+- [ ] Test `readFile()` on existing GCS file
+- [ ] Test `writeFile()` with new file
+- [ ] Test `readdir()` on bucket/prefix
+- [ ] Test `deleteFile()`
+- [ ] Document any compatibility issues
+
+#### GCS Native Mount (gcsfuse in E2B)
+- [ ] Test with service account credentials
+- [ ] Test public bucket access (read-only)
+- [ ] Verify mount appears in sandbox at correct path
+- [ ] Test file operations through FUSE mount
+
+### Environment Setup
+```bash
+# Required environment variables
+E2B_API_KEY=<your-e2b-api-key>
+
+# For S3
+AWS_ACCESS_KEY_ID=<your-aws-key>
+AWS_SECRET_ACCESS_KEY=<your-aws-secret>
+S3_TEST_BUCKET=<your-test-bucket>
+
+# For GCS (S3-compatible)
+GCS_HMAC_ACCESS_KEY=<your-hmac-access-key>
+GCS_HMAC_SECRET_KEY=<your-hmac-secret-key>
+GCS_TEST_BUCKET=<your-gcs-test-bucket>
+
+# For GCS (native gcsfuse)
+GCS_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
+```
+
+---
+
 ## Review Checklist
 
-- [ ] Task 1: readOnly enforcement
-- [ ] Task 2: startPromise extraction
-- [ ] Task 3: processPending in base
-- [ ] Task 4: Status management
-- [ ] Task 5: S3Filesystem status
-- [ ] Task 6: E2B comments cleanup
-- [ ] Task 7: pathContext investigation
-- [ ] Task 8: GCS compatibility testing
-- [ ] Task 9: Shared test suite
-- [ ] Task 10: S3Filesystem lazy init
-- [ ] Task 11: ensureSandbox extraction
-- [ ] Task 12: Mount Manager extraction
-- [ ] Task 13: General cleanup
+- [x] Task 1: readOnly enforcement
+- [x] Task 2: startPromise extraction
+- [x] Task 3: processPending in base
+- [x] Task 4: Status management
+- [x] Task 5: S3Filesystem status
+- [x] Task 6: E2B comments cleanup
+- [ ] Task 7: S3Filesystem lazy init
+- [ ] Task 8: ensureSandbox extraction
+- [ ] Task 9: Mount Manager extraction
+- [ ] Task 10: pathContext implementation
+- [ ] Task 11: General cleanup
+- [ ] Task 12: Shared test suite
+- [ ] Task 13: Manual testing (incl. GCS compatibility)
