@@ -108,7 +108,7 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Validate: threadId is required
     if (!threadIds?.length) {
-      throw new Error('threadId must be provided for listMessages');
+      throw new Error('Either threadId or resourceId must be provided');
     }
 
     if (threadIds?.length) {
