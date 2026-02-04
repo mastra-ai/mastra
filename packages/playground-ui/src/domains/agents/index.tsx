@@ -8,6 +8,7 @@ export * from './components/agent-metadata';
 export * from './components/agent-entity-header';
 export * from './components/chat-threads';
 export * from './components/agent-combobox';
+export * from './components/agent-source-icon';
 export * from './components/composer-model-switcher';
 export * from './utils/extractPrompt';
 export * from './hooks/use-agents';
