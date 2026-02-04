@@ -147,7 +147,7 @@ export const init = async ({
     }
 
     // Write AGENTS.md and CLAUDE.md if skills or MCP were configured
-    if (skills || mcpServer) {
+    if ((skills && skills.length > 0) || mcpServer) {
       try {
         // Always write AGENTS.md
         await writeAgentsMarkdown({ skills, mcpServer });
