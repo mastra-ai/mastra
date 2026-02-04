@@ -345,6 +345,17 @@ export class S3Filesystem extends MastraFilesystem {
     return this._client;
   }
 
+  /**
+   * Ensure the filesystem is initialized and return the S3 client.
+   * Calls init() if status is still 'pending', ensuring proper status transitions.
+   */
+  private async ensureReady(): Promise<S3Client> {
+    if (this.status === 'pending') {
+      await this.init();
+    }
+    return this.getClient();
+  }
+
   private toKey(path: string): string {
     // Remove leading slash and add prefix
     const cleanPath = path.replace(/^\/+/, '');
@@ -356,7 +367,7 @@ export class S3Filesystem extends MastraFilesystem {
   // ---------------------------------------------------------------------------
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
-    const client = this.getClient();
+    const client = await this.ensureReady();
 
     try {
       const response = await client.send(
@@ -383,7 +394,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async writeFile(path: string, content: FileContent, _options?: WriteOptions): Promise<void> {
-    const client = this.getClient();
+    const client = await this.ensureReady();
 
     const body = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
     const contentType = getMimeType(path);
@@ -419,7 +430,7 @@ export class S3Filesystem extends MastraFilesystem {
       return;
     }
 
-    const client = this.getClient();
+    const client = await this.ensureReady();
 
     try {
       await client.send(
@@ -436,7 +447,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
-    const client = this.getClient();
+    const client = await this.ensureReady();
 
     try {
       await client.send(
@@ -476,7 +487,7 @@ export class S3Filesystem extends MastraFilesystem {
     }
 
     // Delete all objects with this prefix
-    const client = this.getClient();
+    const client = await this.ensureReady();
 
     const prefix = this.toKey(path).replace(/\/$/, '') + '/';
 
@@ -508,7 +519,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
-    const client = this.getClient();
+    const client = await this.ensureReady();
 
     const prefix = this.toKey(path).replace(/\/$/, '');
     const searchPrefix = prefix ? prefix + '/' : '';
@@ -590,7 +601,7 @@ export class S3Filesystem extends MastraFilesystem {
   // ---------------------------------------------------------------------------
 
   async exists(path: string): Promise<boolean> {
-    const client = this.getClient();
+    const client = await this.ensureReady();
 
     // Check if it's a file
     try {
@@ -618,7 +629,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async stat(path: string): Promise<FileStat> {
-    const client = this.getClient();
+    const client = await this.ensureReady();
 
     try {
       const response: { ContentLength?: number; LastModified?: Date } = await client.send(
@@ -656,7 +667,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async isFile(path: string): Promise<boolean> {
-    const client = this.getClient();
+    const client = await this.ensureReady();
 
     try {
       await client.send(
@@ -672,7 +683,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async isDirectory(path: string): Promise<boolean> {
-    const client = this.getClient();
+    const client = await this.ensureReady();
 
     const response: { Contents?: unknown[] } = await client.send(
       new ListObjectsV2Command({

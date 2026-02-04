@@ -14,7 +14,7 @@ This document tracks implementation progress for review.
 | 4 | Add status management wrappers to base classes | COR-380 | **Done** | `mastra-sandbox.ts`, `e2b-sandbox.ts` |
 | 5 | Update S3Filesystem status on lifecycle methods | COR-484 | **Done** | `s3-filesystem.ts` |
 | 6 | Clean up E2B sandbox comments | COR-380 | **Done** | `e2b-sandbox.ts` |
-| 7 | S3Filesystem lazy init pattern (`ensureReady()`) | COR-484 | Pending | `s3-filesystem.ts` |
+| 7 | S3Filesystem lazy init pattern (`ensureReady()`) | COR-484 | **Done** | `s3-filesystem.ts` |
 | 8 | Extract ensureSandbox/lazy init to MastraSandbox base class | COR-380 | Pending | `mastra-sandbox.ts` |
 | 9 | Mount Manager extraction (marker files, reconcileMounts, checkExistingMount) | COR-380, COR-385 | Pending | `mount-manager.ts` |
 | 10 | Implement pathContext with mounts (agent instructions, mount awareness) | COR-385, COR-491 | Pending | `workspace.ts`, `composite-filesystem.ts` |
@@ -179,8 +179,12 @@ Review and update JSDoc, remove outdated TODOs, ensure consistency.
 S3Filesystem's `getClient()` lazily creates the S3Client but doesn't update status. If `init()` is never called, status remains `'pending'` even when the filesystem is being used.
 
 ### Solution
-Add `ensureReady()` method that calls `init()` if status is pending:
+Add `ensureReady()` method that calls `init()` if status is pending.
 
+### Changes Made
+
+#### `workspaces/s3/src/s3-filesystem.ts`
+- Added `ensureReady()` method:
 ```typescript
 private async ensureReady(): Promise<S3Client> {
   if (this.status === 'pending') {
@@ -189,10 +193,12 @@ private async ensureReady(): Promise<S3Client> {
   return this.getClient();
 }
 ```
+- Updated all file operations to use `ensureReady()` instead of `getClient()`:
+  - `readFile`, `writeFile`, `deleteFile`, `copyFile`
+  - `rmdir`, `readdir`
+  - `exists`, `stat`, `isFile`, `isDirectory`
 
-### Changes Planned
-- Add `ensureReady()` method to S3Filesystem
-- Consider calling it in file operations for consistency
+Now if someone uses the filesystem without calling `init()`, the first operation will automatically initialize it with proper status transitions (`pending` → `initializing` → `ready`).
 
 ---
 
@@ -411,7 +417,7 @@ GCS_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
 - [x] Task 4: Status management
 - [x] Task 5: S3Filesystem status
 - [x] Task 6: E2B comments cleanup
-- [ ] Task 7: S3Filesystem lazy init
+- [x] Task 7: S3Filesystem lazy init
 - [ ] Task 8: ensureSandbox extraction
 - [ ] Task 9: Mount Manager extraction
 - [ ] Task 10: pathContext implementation
