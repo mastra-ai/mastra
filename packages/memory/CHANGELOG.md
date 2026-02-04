@@ -1,5 +1,49 @@
 # @mastra/memory
 
+## 1.1.0-alpha.1
+
+### Minor Changes
+
+- Added Observational Memory — a new memory system that keeps your agent's context window small while preserving long-term memory across conversations. ([#12599](https://github.com/mastra-ai/mastra/pull/12599))
+
+  **Why:** Long conversations cause context rot and waste tokens. Observational Memory compresses conversation history into observations (5–40x compression) and periodically condenses those into reflections. Your agent stays fast and focused, even after thousands of messages.
+
+  **Usage:**
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+  import { PostgresStore } from '@mastra/pg';
+
+  const memory = new Memory({
+    storage: new PostgresStore({ connectionString: process.env.DATABASE_URL }),
+    options: {
+      observationalMemory: true,
+    },
+  });
+
+  const agent = new Agent({
+    name: 'my-agent',
+    model: openai('gpt-4o'),
+    memory,
+  });
+  ```
+
+  **What's new:**
+  - `observationalMemory: true` enables the three-tier memory system (recent messages → observations → reflections)
+  - Thread-scoped (per-conversation) and resource-scoped (shared across all threads for a user) modes
+  - Manual `observe()` API for triggering observation outside the normal agent loop
+  - New OM storage methods for pg, libsql, and mongodb adapters (conditionally enabled)
+  - `Agent.findProcessor()` method for looking up processors by ID
+  - `processorStates` for persisting processor state across loop iterations
+  - Abort signal propagation to processors
+  - `ProcessorStreamWriter` for custom stream events from processors
+
+### Patch Changes
+
+- Updated dependencies [[`2770921`](https://github.com/mastra-ai/mastra/commit/2770921eec4d55a36b278d15c3a83f694e462ee5), [`b1695db`](https://github.com/mastra-ai/mastra/commit/b1695db2d7be0c329d499619c7881899649188d0), [`4133d48`](https://github.com/mastra-ai/mastra/commit/4133d48eaa354cdb45920dc6265732ffbc96788d), [`abae238`](https://github.com/mastra-ai/mastra/commit/abae238c755ebaf867bbfa1a3a219ef003a1021a), [`5dd01cc`](https://github.com/mastra-ai/mastra/commit/5dd01cce68d61874aa3ecbd91ee17884cfd5aca2), [`13e0a2a`](https://github.com/mastra-ai/mastra/commit/13e0a2a2bcec01ff4d701274b3727d5e907a6a01), [`c987384`](https://github.com/mastra-ai/mastra/commit/c987384d6c8ca844a9701d7778f09f5a88da7f9f), [`cb8cc12`](https://github.com/mastra-ai/mastra/commit/cb8cc12bfadd526aa95a01125076f1da44e4afa7), [`62f5d50`](https://github.com/mastra-ai/mastra/commit/62f5d5043debbba497dacb7ab008fe86b38b8de3)]:
+  - @mastra/core@1.2.0-alpha.1
+  - @mastra/schema-compat@1.1.0-alpha.0
+
 ## 1.1.0-alpha.0
 
 ### Minor Changes
