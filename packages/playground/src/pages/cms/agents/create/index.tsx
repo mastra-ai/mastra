@@ -73,7 +73,7 @@ function CmsAgentsCreatePage() {
           <Icon>
             <AgentIcon />
           </Icon>
-          Create an agent from UI
+          Create an agent
         </HeaderTitle>
       </Header>
       <AgentEditLayout
@@ -84,6 +84,7 @@ function CmsAgentsCreatePage() {
       >
         <form ref={formRef} className="h-full">
           <AgentEditMain form={form} />
+          {/* <AgentEditMainContentBlocks form={form} /> */}
         </form>
       </AgentEditLayout>
     </MainContentLayout>

@@ -123,8 +123,11 @@ export function AgentEditSidebar({
             </Icon>
             Capabilities
           </Tab>
+
           {/* <Tab value="variables">
-            <Icon size="sm"><VariablesIcon /></Icon>
+            <Icon size="sm">
+              <VariablesIcon />
+            </Icon>
             Variables
           </Tab> */}
         </TabList>
