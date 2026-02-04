@@ -104,6 +104,9 @@ export class MountManager {
    * These will be processed when `processPending()` is called.
    */
   add(mounts: Record<string, WorkspaceFilesystem>): void {
+    const paths = Object.keys(mounts);
+    this.logger.debug(`Adding ${paths.length} pending mount(s)`, { paths });
+
     for (const [path, filesystem] of Object.entries(mounts)) {
       this._entries.set(path, {
         filesystem,
@@ -171,10 +174,19 @@ export class MountManager {
    * Call this after sandbox is ready (in start()).
    */
   async processPending(): Promise<void> {
+    const pendingCount = [...this._entries.values()].filter(e => e.state === 'pending').length;
+    if (pendingCount === 0) {
+      return;
+    }
+
+    this.logger.debug(`Processing ${pendingCount} pending mount(s)`);
+
     for (const [path, entry] of this._entries) {
       if (entry.state !== 'pending') {
         continue;
       }
+
+      const fsProvider = entry.filesystem.provider;
 
       // Get config if available
       const config = entry.filesystem.getMountConfig?.();
@@ -192,6 +204,7 @@ export class MountManager {
           if (hookResult === false) {
             entry.state = 'unsupported';
             entry.error = 'Skipped by onMount hook';
+            this.logger.debug(`Mount skipped by onMount hook`, { path, provider: fsProvider });
             continue;
           }
 
@@ -201,9 +214,11 @@ export class MountManager {
               entry.state = 'mounted';
               entry.config = config;
               entry.configHash = config ? this.hashConfig(config) : undefined;
+              this.logger.info(`Mount handled by onMount hook`, { path, provider: fsProvider });
             } else {
               entry.state = 'error';
               entry.error = hookResult.error ?? 'Mount hook failed';
+              this.logger.error(`Mount hook failed`, { path, provider: fsProvider, error: entry.error });
             }
             continue;
           }
@@ -212,6 +227,7 @@ export class MountManager {
         } catch (err) {
           entry.state = 'error';
           entry.error = `Mount hook error: ${String(err)}`;
+          this.logger.error(`Mount hook threw error`, { path, provider: fsProvider, error: entry.error });
           continue;
         }
       }
@@ -220,6 +236,7 @@ export class MountManager {
       if (!config) {
         entry.state = 'unsupported';
         entry.error = 'Filesystem does not support mounting';
+        this.logger.debug(`Filesystem does not support mounting`, { path, provider: fsProvider });
         continue;
       }
 
@@ -228,18 +245,23 @@ export class MountManager {
       entry.configHash = this.hashConfig(config);
       entry.state = 'mounting';
 
+      this.logger.debug(`Mounting filesystem`, { path, provider: fsProvider, type: config.type });
+
       // Call the sandbox's mount implementation
       try {
         const result = await this._mountFn(entry.filesystem, path);
         if (result.success) {
           entry.state = 'mounted';
+          this.logger.info(`Mount successful`, { path, provider: fsProvider });
         } else {
           entry.state = 'error';
           entry.error = result.error ?? 'Mount failed';
+          this.logger.error(`Mount failed`, { path, provider: fsProvider, error: entry.error });
         }
       } catch (err) {
         entry.state = 'error';
         entry.error = String(err);
+        this.logger.error(`Mount threw error`, { path, provider: fsProvider, error: entry.error });
       }
     }
   }
