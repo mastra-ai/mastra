@@ -53,6 +53,7 @@ const AgentCMSBlockContent = ({ placeholder, dragHandleProps, onDelete, schema }
           className="border-none rounded-none text-neutral6 min-h-[200px]"
           language="markdown"
           highlightVariables
+          schema={schema}
         />
         <AgentCMSBlockRules schema={schema} rules={rules} onChange={setRules} />
       </div>
