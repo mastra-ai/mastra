@@ -15,7 +15,7 @@ import {
 import { Link } from 'react-router';
 
 const MCPs = () => {
-  const { data: mcpServers = [], isLoading } = useMCPServers();
+  const { data: mcpServers = [], isLoading, error } = useMCPServers();
 
   const isEmpty = !isLoading && mcpServers.length === 0;
 
@@ -40,7 +40,7 @@ const MCPs = () => {
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
-        <MCPTable mcpServers={mcpServers} isLoading={isLoading} />
+        <MCPTable mcpServers={mcpServers} isLoading={isLoading} error={error} />
       </MainContentContent>
     </MainContentLayout>
   );

@@ -55,6 +55,8 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
+import { Login } from './pages/login';
+import { SignUp } from './pages/signup';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -104,6 +106,9 @@ const RootLayout = () => {
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 
 const routes = [
+  // Auth pages - no layout
+  { path: '/login', element: <Login /> },
+  { path: '/signup', element: <SignUp /> },
   {
     element: <RootLayout />,
     children: [

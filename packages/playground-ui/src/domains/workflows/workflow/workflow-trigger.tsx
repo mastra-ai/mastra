@@ -18,6 +18,7 @@ import {
   DialogBody,
 } from '@/ds/components/Dialog';
 import { isObjectEmpty } from '@/lib/object';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
@@ -93,6 +94,10 @@ export function WorkflowTrigger({
   const requestContext = useMergedRequestContext();
 
   const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
+  const { canExecute } = usePermissions();
+
+  // Check if user can execute workflows
+  const canExecuteWorkflow = canExecute('workflows');
 
   const [innerRunId, setInnerRunId] = useState<string>('');
   const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
@@ -188,7 +193,7 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {!isSuspendedSteps && (
+        {!isSuspendedSteps && canExecuteWorkflow && (
           <WorkflowTriggerForm
             zodSchema={zodSchemaToUse}
             defaultValues={payload}
@@ -200,6 +205,12 @@ export function WorkflowTrigger({
             isViewingRun={!!paramsRunId}
             isProcessorWorkflow={workflow?.isProcessorWorkflow}
           />
+        )}
+
+        {!isSuspendedSteps && !canExecuteWorkflow && (
+          <Txt variant="ui-sm" className="text-neutral3 py-2">
+            You don't have permission to execute workflows.
+          </Txt>
         )}
 
         <WorkflowSuspendedSteps

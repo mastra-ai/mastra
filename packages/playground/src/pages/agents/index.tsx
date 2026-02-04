@@ -20,7 +20,7 @@ import {
 function Agents() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { Link, navigate, paths } = useLinkComponent();
-  const { data: agents = {}, isLoading } = useAgents();
+  const { data: agents = {}, isLoading, error } = useAgents();
   const { experimentalFeaturesEnabled } = useExperimentalFeatures();
 
   const handleAgentCreated = (agentId: string) => {
@@ -60,6 +60,7 @@ function Agents() {
         <AgentsTable
           agents={agents}
           isLoading={isLoading}
+          error={error}
           onCreateClick={experimentalFeaturesEnabled ? () => setIsCreateDialogOpen(true) : undefined}
         />
       </MainContentContent>

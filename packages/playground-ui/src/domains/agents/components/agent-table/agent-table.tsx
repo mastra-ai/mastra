@@ -1,7 +1,9 @@
 import { GetAgentResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { is403ForbiddenError } from '@/lib/query-utils';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
@@ -21,10 +23,11 @@ import { useExperimentalFeatures } from '@/lib/experimental-features/hooks/use-e
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
+  error?: Error | null;
   onCreateClick?: () => void;
 }
 
-export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTableProps) {
+export function AgentsTable({ agents, isLoading, error, onCreateClick }: AgentsTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
   const { experimentalFeaturesEnabled } = useExperimentalFeatures();
@@ -54,6 +57,15 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
 
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows;
+
+  // 403 check BEFORE empty state - permission denied takes precedence
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="agents" />
+      </div>
+    );
+  }
 
   if (projectData.length === 0 && !isLoading) {
     return <EmptyAgentsTable onCreateClick={onCreateClick} />;
