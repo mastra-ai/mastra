@@ -1,13 +1,19 @@
 import { useState } from 'react';
+import { useDebounce } from 'use-debounce';
 import { DatasetItem } from '@mastra/client-js';
-import { useDataset, useDatasetItems } from '../../hooks/use-datasets';
+import { useDataset } from '../../hooks/use-datasets';
+import { useDatasetItems } from '../../hooks/use-dataset-items';
 import { useDatasetRuns } from '../../hooks/use-dataset-runs';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
+import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { ItemsMasterDetail } from './items-master-detail';
 import { RunHistory } from './run-history';
 import { DatasetHeader } from './dataset-header';
 import { CSVImportDialog } from '../csv-import';
+import { JSONImportDialog } from '../json-import';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
+import { AddItemsToDatasetDialog } from '../add-items-to-dataset-dialog';
+import { DuplicateDatasetDialog } from '../duplicate-dataset-dialog';
 import { Tabs, Tab, TabList, TabContent } from '@/ds/components/Tabs';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { transitions } from '@/ds/primitives/transitions';
@@ -37,19 +43,31 @@ export function DatasetDetail({
 }: DatasetDetailProps) {
   const [activeTab, setActiveTab] = useState<TabValue>('items');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importJsonDialogOpen, setImportJsonDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [itemsForCreate, setItemsForCreate] = useState<DatasetItem[]>([]);
+  const [addToDatasetDialogOpen, setAddToDatasetDialogOpen] = useState(false);
+  const [itemsForAddToDataset, setItemsForAddToDataset] = useState<DatasetItem[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemIdsToDelete, setItemIdsToDelete] = useState<string[]>([]);
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [featuredItemId, setSelectedItemId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch] = useDebounce(searchQuery, 300);
+  const [activeDatasetVersion, setActiveDatasetVersion] = useState<Date | string | null>(null);
 
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
-  const { data: itemsData, isLoading: isItemsLoading } = useDatasetItems(datasetId);
+  const {
+    data: items = [],
+    isLoading: isItemsLoading,
+    setEndOfListElement,
+    isFetchingNextPage,
+    hasNextPage,
+  } = useDatasetItems(datasetId, debouncedSearch || undefined);
   const { data: runsData, isLoading: isRunsLoading } = useDatasetRuns(datasetId);
   const { deleteItems } = useDatasetMutations();
 
-  const items = itemsData?.items ?? [];
   const runs = runsData?.runs ?? [];
 
   // Item selection handlers
@@ -61,10 +79,35 @@ export function DatasetDetail({
     setSelectedItemId(null);
   };
 
+  // Version selection handler
+  const handleVersionSelect = (version: DatasetVersion) => {
+    // If selecting current version, clear the active version state
+    if (version.isCurrent) {
+      setActiveDatasetVersion(null);
+    } else {
+      setActiveDatasetVersion(version.version);
+    }
+  };
+
   // Handler for Create Dataset action from selection
   const handleCreateDatasetClick = (selectedItems: DatasetItem[]) => {
     setItemsForCreate(selectedItems);
     setCreateDialogOpen(true);
+  };
+
+  // Handler for Add to Dataset action from selection
+  const handleAddToDatasetClick = (selectedItems: DatasetItem[]) => {
+    setItemsForAddToDataset(selectedItems);
+    setAddToDatasetDialogOpen(true);
+  };
+
+  // Clear selection when add to dataset dialog closes
+  const handleAddToDatasetDialogOpenChange = (open: boolean) => {
+    setAddToDatasetDialogOpen(open);
+    if (!open) {
+      setItemsForAddToDataset([]);
+      setClearSelectionTrigger(prev => prev + 1);
+    }
   };
 
   // Handler for bulk delete action from selection
@@ -100,12 +143,12 @@ export function DatasetDetail({
   };
 
   return (
-    <div className="h-full overflow-hidden px-6 pb-4" style={{ border: 'px solid blue' }}>
+    <div className="h-full overflow-hidden px-6 pb-4">
       <div className={cn('h-full w-full', transitions.allSlow)}>
         <div
           className={cn(
             'grid grid-rows-[auto_1fr] mx-auto h-full w-full m-auto',
-            selectedItemId ? 'max-w-[100rem]' : 'max-w-[60rem]',
+            featuredItemId ? 'max-w-[100rem]' : 'max-w-[60rem]',
           )}
         >
           {/* Header */}
@@ -115,6 +158,7 @@ export function DatasetDetail({
             version={dataset?.version}
             isLoading={isDatasetLoading}
             onEditClick={onEditClick}
+            onDuplicateClick={() => setDuplicateDialogOpen(true)}
             onDeleteClick={onDeleteClick}
             runTriggerSlot={runTriggerSlot}
             onRunClick={onRunClick}
@@ -138,15 +182,25 @@ export function DatasetDetail({
                   datasetId={datasetId}
                   items={items}
                   isLoading={isItemsLoading}
-                  selectedItemId={selectedItemId}
+                  featuredItemId={featuredItemId}
                   onItemSelect={handleItemSelect}
                   onItemClose={handleItemClose}
                   onAddClick={onAddItemClick ?? (() => {})}
                   onImportClick={() => setImportDialogOpen(true)}
+                  onImportJsonClick={() => setImportJsonDialogOpen(true)}
                   onBulkDeleteClick={handleBulkDeleteClick}
                   onCreateDatasetClick={handleCreateDatasetClick}
+                  onAddToDatasetClick={handleAddToDatasetClick}
                   datasetName={dataset?.name}
                   clearSelectionTrigger={clearSelectionTrigger}
+                  setEndOfListElement={setEndOfListElement}
+                  isFetchingNextPage={isFetchingNextPage}
+                  hasNextPage={hasNextPage}
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
+                  activeDatasetVersion={activeDatasetVersion}
+                  currentDatasetVersion={dataset?.version}
+                  onVersionSelect={handleVersionSelect}
                 />
               </TabContent>
 
@@ -161,12 +215,33 @@ export function DatasetDetail({
       {/* CSV Import Dialog */}
       <CSVImportDialog datasetId={datasetId} open={importDialogOpen} onOpenChange={setImportDialogOpen} />
 
+      {/* JSON Import Dialog */}
+      <JSONImportDialog datasetId={datasetId} open={importJsonDialogOpen} onOpenChange={setImportJsonDialogOpen} />
+
       {/* Create Dataset From Items Dialog */}
       <CreateDatasetFromItemsDialog
         open={createDialogOpen}
         onOpenChange={handleCreateDialogOpenChange}
         items={itemsForCreate}
         onSuccess={handleCreateSuccess}
+      />
+
+      {/* Add Items to Dataset Dialog */}
+      <AddItemsToDatasetDialog
+        open={addToDatasetDialogOpen}
+        onOpenChange={handleAddToDatasetDialogOpenChange}
+        items={itemsForAddToDataset}
+        currentDatasetId={datasetId}
+      />
+
+      {/* Duplicate Dataset Dialog */}
+      <DuplicateDatasetDialog
+        open={duplicateDialogOpen}
+        onOpenChange={setDuplicateDialogOpen}
+        sourceDatasetId={datasetId}
+        sourceDatasetName={dataset?.name || ''}
+        sourceDatasetDescription={(dataset as { description?: string } | undefined)?.description}
+        onSuccess={onNavigateToDataset}
       />
 
       {/* Bulk Delete Confirmation Dialog */}

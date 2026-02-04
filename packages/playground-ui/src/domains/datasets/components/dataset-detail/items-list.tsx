@@ -2,17 +2,18 @@ import { useState, useEffect } from 'react';
 import { DatasetItem } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { EntryList } from '@/ds/components/EntryList';
+import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Icon } from '@/ds/icons/Icon';
-import { Plus, Upload } from 'lucide-react';
+import { Plus, Upload, FileJson } from 'lucide-react';
 import { useItemSelection } from '../../hooks/use-item-selection';
 import { exportItemsToCSV } from '../../utils/csv-export';
+import { exportItemsToJSON } from '../../utils/json-export';
 import { ItemsToolbar } from './items-toolbar';
 import { toast } from '@/lib/toast';
 import { format, isToday } from 'date-fns';
 
-type SelectionMode = 'idle' | 'export' | 'create-dataset' | 'delete';
+type SelectionMode = 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete';
 
 const itemsListColumns = [
   { name: 'input', label: 'Input', size: '1fr' },
@@ -21,19 +22,31 @@ const itemsListColumns = [
   { name: 'date', label: 'Created', size: '5rem' },
 ];
 
-const itemsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '2.5rem' }, ...itemsListColumns];
+const itemsListColumnsWithCheckbox = [{ name: 'checkbox', label: 'c', size: '2.5rem' }, ...itemsListColumns];
 
-export interface ItemsListProps {
+export interface DatasetItemListProps {
   items: DatasetItem[];
   isLoading: boolean;
   onAddClick: () => void;
   onImportClick?: () => void;
+  onImportJsonClick?: () => void;
   onBulkDeleteClick?: (itemIds: string[]) => void;
   onCreateDatasetClick?: (items: DatasetItem[]) => void;
+  onAddToDatasetClick?: (items: DatasetItem[]) => void;
   datasetName?: string;
   clearSelectionTrigger?: number;
   onItemClick?: (itemId: string) => void;
-  selectedItemId?: string | null;
+  featuredItemId?: string | null;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
+  // Search props
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+  // Versions panel props
+  onVersionsClick?: () => void;
+  isVersionsPanelOpen?: boolean;
+  hideVersionsButton?: boolean;
 }
 
 /**
@@ -45,18 +58,28 @@ function truncateValue(value: unknown, maxLength = 100): string {
   return str.slice(0, maxLength) + '...';
 }
 
-export function ItemsList({
+export function DatasetItemList({
   items,
   isLoading,
   onAddClick,
   onImportClick,
+  onImportJsonClick,
   onBulkDeleteClick,
   onCreateDatasetClick,
+  onAddToDatasetClick,
   datasetName,
   clearSelectionTrigger,
   onItemClick,
-  selectedItemId,
-}: ItemsListProps) {
+  featuredItemId,
+  setEndOfListElement,
+  isFetchingNextPage,
+  hasNextPage,
+  searchQuery,
+  onSearchChange,
+  onVersionsClick,
+  isVersionsPanelOpen,
+  hideVersionsButton,
+}: DatasetItemListProps) {
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
   const selection = useItemSelection();
 
@@ -89,8 +112,20 @@ export function ItemsList({
         console.error('CSV export error:', error);
       }
       handleCancelSelection(); // Clear immediately for export
+    } else if (selectionMode === 'export-json') {
+      try {
+        exportItemsToJSON(selectedItems, `${datasetName || 'dataset'}-items.json`);
+        toast.success(`Exported ${selection.selectedCount} items to JSON`);
+      } catch (error) {
+        toast.error('Failed to export items to JSON');
+        console.error('JSON export error:', error);
+      }
+      handleCancelSelection(); // Clear immediately for export
     } else if (selectionMode === 'create-dataset') {
       onCreateDatasetClick?.(selectedItems);
+      // Don't clear yet - parent increments clearSelectionTrigger after dialog closes
+    } else if (selectionMode === 'add-to-dataset') {
+      onAddToDatasetClick?.(selectedItems);
       // Don't clear yet - parent increments clearSelectionTrigger after dialog closes
     } else if (selectionMode === 'delete') {
       onBulkDeleteClick?.(Array.from(selection.selectedIds));
@@ -98,12 +133,16 @@ export function ItemsList({
     }
   };
 
-  if (isLoading) {
-    return <ItemsListSkeleton />;
-  }
-
-  if (items.length === 0) {
-    return <EmptyItemsList onAddClick={onAddClick} onImportClick={onImportClick} />;
+  // Only show empty state if there are no items AND no search is active AND not loading
+  // If search is active with no results, we show the list with "no results" message
+  if (items.length === 0 && !searchQuery && !isLoading) {
+    return (
+      <EmptyDatasetItemList
+        onAddClick={onAddClick}
+        onImportClick={onImportClick}
+        onImportJsonClick={onImportJsonClick}
+      />
+    );
   }
 
   const isSelectionActive = selectionMode !== 'idle';
@@ -128,120 +167,143 @@ export function ItemsList({
 
   return (
     <div className="grid grid-rows-[auto_1fr] gap-8 h-full">
+      {/* Toolbar with search */}
       <ItemsToolbar
         onAddClick={onAddClick}
         onImportClick={onImportClick ?? (() => {})}
+        onImportJsonClick={onImportJsonClick ?? (() => {})}
         onExportClick={() => setSelectionMode('export')}
+        onExportJsonClick={() => setSelectionMode('export-json')}
         onCreateDatasetClick={() => setSelectionMode('create-dataset')}
+        onAddToDatasetClick={() => setSelectionMode('add-to-dataset')}
         onDeleteClick={() => setSelectionMode('delete')}
         hasItems={items.length > 0}
+        searchQuery={searchQuery}
+        onSearchChange={onSearchChange}
         isSelectionActive={isSelectionActive}
         selectedCount={selection.selectedCount}
         onExecuteAction={handleExecuteAction}
         onCancelSelection={handleCancelSelection}
         selectionMode={selectionMode}
+        onVersionsClick={onVersionsClick ?? (() => {})}
+        isVersionsPanelOpen={isVersionsPanelOpen}
+        hideVersionsButton={hideVersionsButton}
       />
 
-      <EntryList>
-        <EntryList.Trim>
-          {isSelectionActive ? (
-            <div className="sticky top-0 bg-surface4 z-10 rounded-t-lg px-6">
-              <div
-                className="grid gap-6 text-left uppercase py-3 text-neutral3 text-ui-sm"
-                style={{
-                  gridTemplateColumns: columns.map(c => c.size).join(' '),
-                }}
-              >
-                <div className="flex items-center justify-center">
-                  <Checkbox
-                    checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-                    onCheckedChange={handleSelectAllToggle}
-                    aria-label="Select all items"
-                  />
-                </div>
-                {itemsListColumns.map(col => (
-                  <span key={col.name}>{col.label}</span>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <EntryList.Header columns={columns} />
-          )}
-          <EntryList.Entries>
-            {items.map(item => {
-              const createdAtDate = new Date(item.createdAt);
-              const isTodayDate = isToday(createdAtDate);
+      {/* Show skeleton during loading, otherwise show the item list */}
+      {isLoading ? (
+        <DatasetItemListSkeleton />
+      ) : (
+        <ItemList>
+          <ItemList.Header columns={columns}>
+            {columns?.map(col => (
+              <>
+                {col.name === 'checkbox' ? (
+                  <ItemList.HeaderCol key={col.name} className="flex items-center justify-center">
+                    <Checkbox
+                      checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                      onCheckedChange={handleSelectAllToggle}
+                      aria-label="Select all items"
+                    />
+                  </ItemList.HeaderCol>
+                ) : (
+                  <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
+                )}
+              </>
+            ))}
+          </ItemList.Header>
 
-              const entry = {
-                id: item.id,
-                input: truncateValue(item.input, 60),
-                expectedOutput: item.expectedOutput ? truncateValue(item.expectedOutput, 40) : '-',
-                metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
-                date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
-              };
+          <ItemList.Scroller>
+            <ItemList.Items>
+              {items.length === 0 && searchQuery ? (
+                <div className="flex items-center justify-center py-12 text-neutral4">No items match your search</div>
+              ) : (
+                items.map(item => {
+                  const createdAtDate = new Date(item.createdAt);
+                  const isTodayDate = isToday(createdAtDate);
 
-              return (
-                <EntryList.Entry
-                  key={item.id}
-                  entry={entry}
-                  isSelected={selectedItemId === item.id}
-                  columns={columns}
-                  onClick={handleEntryClick}
-                >
-                  {isSelectionActive && (
-                    <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                      <Checkbox
-                        checked={selection.selectedIds.has(item.id)}
-                        onCheckedChange={() => {}}
-                        onClick={e => {
-                          e.stopPropagation();
-                          selection.toggle(item.id, e.shiftKey, allIds);
-                        }}
-                        aria-label={`Select item ${item.id}`}
-                      />
-                    </div>
-                  )}
-                  <EntryList.EntryText>{entry.input}</EntryList.EntryText>
-                  <EntryList.EntryText>{entry.expectedOutput}</EntryList.EntryText>
-                  <EntryList.EntryText>{entry.metadata}</EntryList.EntryText>
-                  <EntryList.EntryText>{entry.date}</EntryList.EntryText>
-                </EntryList.Entry>
-              );
-            })}
-          </EntryList.Entries>
-        </EntryList.Trim>
-      </EntryList>
+                  const entry = {
+                    id: item.id,
+                    input: truncateValue(item.input, 60),
+                    expectedOutput: item.expectedOutput ? truncateValue(item.expectedOutput, 40) : '-',
+                    metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
+                    date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
+                  };
+
+                  return (
+                    <ItemList.Row key={item.id} isSelected={featuredItemId === item.id}>
+                      <ItemList.RowButton
+                        entry={entry}
+                        isSelected={featuredItemId === item.id}
+                        columns={columns}
+                        onClick={handleEntryClick}
+                      >
+                        {isSelectionActive && (
+                          <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selection.selectedIds.has(item.id)}
+                              onCheckedChange={() => {}}
+                              onClick={e => {
+                                e.stopPropagation();
+                                selection.toggle(item.id, e.shiftKey, allIds);
+                              }}
+                              aria-label={`Select item ${item.id}`}
+                            />
+                          </div>
+                        )}
+                        <ItemList.ItemText>{entry.input}</ItemList.ItemText>
+                        <ItemList.ItemText>{entry.expectedOutput}</ItemList.ItemText>
+                        <ItemList.ItemText>{entry.metadata}</ItemList.ItemText>
+                        <ItemList.ItemText>{entry.date}</ItemList.ItemText>
+                      </ItemList.RowButton>
+                    </ItemList.Row>
+                  );
+                })
+              )}
+            </ItemList.Items>
+
+            <ItemList.NextPageLoading
+              setEndOfListElement={setEndOfListElement}
+              loadingText="Loading more items..."
+              noMoreDataText="All items loaded"
+              isLoading={isFetchingNextPage}
+              hasMore={hasNextPage}
+            />
+          </ItemList.Scroller>
+        </ItemList>
+      )}
     </div>
   );
 }
 
-function ItemsListSkeleton() {
+function DatasetItemListSkeleton() {
   return (
-    <EntryList>
-      <EntryList.Trim>
-        <EntryList.Header columns={itemsListColumns} />
-        <EntryList.Entries>
-          {Array.from({ length: 5 }).map((_, index) => (
-            <EntryList.Entry key={index} columns={itemsListColumns} isLoading>
+    <ItemList>
+      <ItemList.Header columns={itemsListColumns} />
+      <ItemList.Items>
+        {Array.from({ length: 5 }).map((_, index) => (
+          <ItemList.Row key={index}>
+            <ItemList.RowButton columns={itemsListColumns}>
               {itemsListColumns.map((col, colIndex) => (
-                <EntryList.EntryText key={colIndex} isLoading>
+                <ItemList.ItemText key={colIndex} isLoading>
                   Loading...
-                </EntryList.EntryText>
+                </ItemList.ItemText>
               ))}
-            </EntryList.Entry>
-          ))}
-        </EntryList.Entries>
-      </EntryList.Trim>
-    </EntryList>
+            </ItemList.RowButton>
+          </ItemList.Row>
+        ))}
+      </ItemList.Items>
+    </ItemList>
   );
 }
 
-interface EmptyItemsListProps {
+interface EmptyDatasetItemListProps {
   onAddClick: () => void;
   onImportClick?: () => void;
+  onImportJsonClick?: () => void;
 }
 
-function EmptyItemsList({ onAddClick, onImportClick }: EmptyItemsListProps) {
+function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: EmptyDatasetItemListProps) {
   return (
     <div className="flex h-full items-center justify-center py-12">
       <EmptyState
@@ -262,6 +324,14 @@ function EmptyItemsList({ onAddClick, onImportClick }: EmptyItemsListProps) {
                   <Upload />
                 </Icon>
                 Import CSV
+              </Button>
+            )}
+            {onImportJsonClick && (
+              <Button size="lg" variant="outline" onClick={onImportJsonClick}>
+                <Icon>
+                  <FileJson />
+                </Icon>
+                Import JSON
               </Button>
             )}
           </div>

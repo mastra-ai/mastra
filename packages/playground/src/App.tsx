@@ -50,7 +50,8 @@ import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import { Datasets } from './pages/datasets';
-import { Dataset } from './pages/datasets/dataset';
+import { DatasetPage } from './pages/datasets/dataset';
+import { DatasetItemPage } from './pages/datasets/dataset/item';
 import { DatasetRun } from './pages/datasets/dataset/run';
 import { DatasetCompare } from './pages/datasets/dataset/compare';
 import Observability from './pages/observability';
@@ -79,6 +80,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
+  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
   datasetRunLink: (datasetId: string, runId: string) => `/datasets/${datasetId}/runs/${runId}`,
 };
 
@@ -135,9 +137,10 @@ function App() {
                 <Route path="/scorers/:scorerId" element={<Scorer />} />
                 <Route path="/observability" element={<Observability />} />
                 <Route path="/datasets" element={<Datasets />} />
+                <Route path="/datasets/:datasetId/items/:itemId" element={<DatasetItemPage />} />
                 <Route path="/datasets/:datasetId/runs/:runId" element={<DatasetRun />} />
                 <Route path="/datasets/:datasetId/compare" element={<DatasetCompare />} />
-                <Route path="/datasets/:datasetId" element={<Dataset />} />
+                <Route path="/datasets/:datasetId" element={<DatasetPage />} />
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/agents/:agentId" element={<NavigateTo to="/agents/:agentId/chat" />} />
                 <Route path="/agents/:agentId/tools/:toolId" element={<AgentTool />} />

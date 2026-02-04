@@ -893,20 +893,31 @@ export class MastraClient extends BaseResource {
   // ============================================================================
 
   /**
-   * Lists items in a dataset with optional pagination
+   * Lists items in a dataset with optional pagination and search
    * @param datasetId - ID of the dataset
-   * @param pagination - Optional pagination parameters
+   * @param options - Optional pagination and search parameters
    * @returns Promise containing paginated list of dataset items
    */
   public listDatasetItems(
     datasetId: string,
-    pagination?: { page?: number; perPage?: number },
+    options?: { page?: number; perPage?: number; search?: string },
   ): Promise<ListDatasetItemsResponse> {
     const params = new URLSearchParams();
-    if (pagination?.page !== undefined) params.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) params.set('perPage', String(pagination.perPage));
+    if (options?.page !== undefined) params.set('page', String(options.page));
+    if (options?.perPage !== undefined) params.set('perPage', String(options.perPage));
+    if (options?.search) params.set('search', options.search);
     const query = params.toString();
     return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items${query ? `?${query}` : ''}`);
+  }
+
+  /**
+   * Gets a specific dataset item by ID
+   * @param datasetId - ID of the dataset
+   * @param itemId - ID of the item to retrieve
+   * @returns Promise containing the dataset item
+   */
+  public getDatasetItem(datasetId: string, itemId: string): Promise<DatasetItem> {
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`);
   }
 
   /**

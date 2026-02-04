@@ -23,15 +23,3 @@ export const useDataset = (datasetId: string) => {
     enabled: Boolean(datasetId),
   });
 };
-
-/**
- * Hook to list items in a dataset with optional pagination
- */
-export const useDatasetItems = (datasetId: string, pagination?: { page?: number; perPage?: number }) => {
-  const client = useMastraClient();
-  return useQuery({
-    queryKey: ['dataset-items', datasetId, pagination],
-    queryFn: () => client.listDatasetItems(datasetId, pagination),
-    enabled: Boolean(datasetId),
-  });
-};

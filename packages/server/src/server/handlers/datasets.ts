@@ -238,7 +238,7 @@ export const LIST_ITEMS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
-      const { page, perPage, version } = params;
+      const { page, perPage, version, search } = params;
       const pagination: StoragePagination = {
         page: page ?? 0,
         perPage: perPage ?? 10,
@@ -259,6 +259,7 @@ export const LIST_ITEMS_ROUTE = createRoute({
         datasetId,
         pagination,
         version: version instanceof Date ? version : undefined,
+        search,
       });
       return {
         items: result.items,

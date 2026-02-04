@@ -39,8 +39,8 @@ const variantClasses = {
     'bg-transparent border-transparent hover:bg-surface2 text-neutral3 hover:text-neutral6 disabled:opacity-50 disabled:cursor-not-allowed',
   primary:
     'bg-accent1 hover:bg-accent1/90 text-surface1 font-medium hover:shadow-glow-accent1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none',
-  standard: 'bg-[#333] text-white/80 hover:text-white hover:bg-white/30',
-  secondary: 'bg-[#262626] text-white/80 hover:text-white hover:bg-white/20',
+  standard: 'bg-white/20 text-white/80 hover:text-white hover:bg-white/30',
+  secondary: 'bg-white/10 text-white/80 hover:text-white hover:bg-white/20',
 };
 
 // Base button styles with transitions

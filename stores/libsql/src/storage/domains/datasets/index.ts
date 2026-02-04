@@ -502,6 +502,13 @@ export class DatasetsLibSQL extends DatasetsStorage {
         queryParams.push(args.version.toISOString()); // Compare as ISO timestamp strings
       }
 
+      if (args.search) {
+        // Search in both input and expectedOutput (stored as JSON text)
+        conditions.push(`(LOWER(input) LIKE ? OR LOWER(COALESCE(expectedOutput, '')) LIKE ?)`);
+        const searchPattern = `%${args.search.toLowerCase()}%`;
+        queryParams.push(searchPattern, searchPattern);
+      }
+
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Get total count
