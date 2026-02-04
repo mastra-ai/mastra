@@ -17,7 +17,10 @@ export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
   const {
     control,
     formState: { errors },
+    watch,
   } = form;
+
+  const variables = watch('variables');
 
   return (
     <div className="flex flex-col gap-6 h-full">
@@ -44,6 +47,7 @@ export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
                 showCopyButton={false}
                 placeholder="Enter agent instructions..."
                 wordWrap
+                schema={variables}
                 className={cn('flex-1 min-h-[200px]', errors.instructions && 'border border-accent2')}
               />
             </div>
