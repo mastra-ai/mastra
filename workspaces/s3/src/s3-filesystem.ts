@@ -1,10 +1,3 @@
-/**
- * S3 Filesystem Provider
- *
- * A filesystem implementation backed by Amazon S3 or S3-compatible storage.
- * Works with AWS S3, Cloudflare R2, MinIO, DigitalOcean Spaces, etc.
- */
-
 import {
   S3Client,
   GetObjectCommand,
@@ -29,7 +22,7 @@ import type {
   FilesystemIcon,
   ProviderStatus,
 } from '@mastra/core/workspace';
-import { MastraFilesystem } from '@mastra/core/workspace';
+import { MastraFilesystem, FileNotFoundError } from '@mastra/core/workspace';
 
 /**
  * S3 mount configuration.
@@ -48,7 +41,6 @@ export interface S3MountConfig extends FilesystemMountConfig {
   /** AWS secret access key */
   secretAccessKey?: string;
 }
-import { FileNotFoundError } from '@mastra/core/workspace';
 
 /**
  * Common MIME types by file extension.
