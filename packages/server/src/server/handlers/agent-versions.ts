@@ -267,6 +267,14 @@ export interface AgentsStoreWithVersions<TAgent = any> {
       })
     | null
   >;
+  getVersion: (id: string) => Promise<
+    | (StorageAgentSnapshotType & {
+        id: string;
+        versionNumber: number;
+        [key: string]: any;
+      })
+    | null
+  >;
   createVersion: (
     params: StorageAgentSnapshotType & {
       id: string;
@@ -391,9 +399,17 @@ export async function handleAutoVersioning<TAgent>(
   }
 
   // Get the current active version to compare against
-  const latestVersion = await agentsStore.getLatestVersion(agentId);
-  const previousConfig = latestVersion
-    ? extractConfigFromVersion(latestVersion as unknown as Record<string, unknown>)
+  // IMPORTANT: Use the version that activeVersionId points to, not the "latest" version
+  // Otherwise we compare against newly created versions that aren't active yet
+  const activeVersion = existingAgent.activeVersionId
+    ? await agentsStore.getVersion(existingAgent.activeVersionId)
+    : null;
+
+  // Fall back to latest version if no active version is set
+  const versionToCompare = activeVersion || (await agentsStore.getLatestVersion(agentId));
+
+  const previousConfig = versionToCompare
+    ? extractConfigFromVersion(versionToCompare as unknown as Record<string, unknown>)
     : null;
 
   // Calculate what config fields changed by comparing provided fields against previous version

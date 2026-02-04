@@ -152,7 +152,6 @@ export class MastraEditor implements IMastraEditor {
       if (agentCache) {
         const cached = agentCache.get(id);
         if (cached) {
-          this.logger?.debug(`[getStoredAgentById] Returning cached agent "${id}"`);
           return cached;
         }
         this.logger?.debug(`[getStoredAgentById] Cache miss for agent "${id}", fetching from storage`);
@@ -246,7 +245,6 @@ export class MastraEditor implements IMastraEditor {
 
     if (agentId) {
       agentCache.delete(agentId);
-      this.logger?.debug(`[clearStoredAgentCache] Cleared cache for agent "${agentId}"`);
     } else {
       agentCache.clear();
       this.logger?.debug('[clearStoredAgentCache] Cleared all cached agents');
