@@ -1,5 +1,30 @@
 # @mastra/playground-ui
 
+## 9.0.0-alpha.1
+
+### Minor Changes
+
+- Add Observational Memory UI to the playground. Shows observation/reflection markers inline in the chat thread, and adds an Observational Memory panel to the agent info section with observations, reflection history, token usage, and config. All OM UI is gated behind a context provider that no-ops when OM isn't configured. ([#12599](https://github.com/mastra-ai/mastra/pull/12599))
+
+- Added ContentBlocks, a reusable drag-and-drop component for building ordered lists of editable content. Also includes AgentCMSBlocks, a ready-to-use implementation for agent system prompts with add, delete, and reorder functionality. ([#12629](https://github.com/mastra-ai/mastra/pull/12629))
+
+### Patch Changes
+
+- Fixed variable highlighting in markdown lists - variables like `{{name}}` now correctly display in orange inside list items. ([#12653](https://github.com/mastra-ai/mastra/pull/12653))
+
+- Fixed rule engine bugs: type-safe comparisons for greater_than/less_than operators, array support for contains/not_contains, consistent path parsing for dot notation, and prevented Infinity/NaN strings from being converted to JS special values ([#12624](https://github.com/mastra-ai/mastra/pull/12624))
+
+- Added CMS block conditional rules component and unified JsonSchema types across the codebase. The new AgentCMSBlockRules component allows content blocks to be displayed conditionally based on rules. Also added jsonSchemaToFields utility for bi-directional schema conversion. ([#12651](https://github.com/mastra-ai/mastra/pull/12651))
+
+- Added warning toast and banner when installing skills that aren't discovered due to missing .agents/skills path configuration. ([#12547](https://github.com/mastra-ai/mastra/pull/12547))
+
+- Updated dependencies [[`2770921`](https://github.com/mastra-ai/mastra/commit/2770921eec4d55a36b278d15c3a83f694e462ee5), [`b1695db`](https://github.com/mastra-ai/mastra/commit/b1695db2d7be0c329d499619c7881899649188d0), [`4133d48`](https://github.com/mastra-ai/mastra/commit/4133d48eaa354cdb45920dc6265732ffbc96788d), [`abae238`](https://github.com/mastra-ai/mastra/commit/abae238c755ebaf867bbfa1a3a219ef003a1021a), [`5dd01cc`](https://github.com/mastra-ai/mastra/commit/5dd01cce68d61874aa3ecbd91ee17884cfd5aca2), [`13e0a2a`](https://github.com/mastra-ai/mastra/commit/13e0a2a2bcec01ff4d701274b3727d5e907a6a01), [`c987384`](https://github.com/mastra-ai/mastra/commit/c987384d6c8ca844a9701d7778f09f5a88da7f9f), [`cb8cc12`](https://github.com/mastra-ai/mastra/commit/cb8cc12bfadd526aa95a01125076f1da44e4afa7), [`62f5d50`](https://github.com/mastra-ai/mastra/commit/62f5d5043debbba497dacb7ab008fe86b38b8de3)]:
+  - @mastra/client-js@1.2.0-alpha.1
+  - @mastra/core@1.2.0-alpha.1
+  - @mastra/schema-compat@1.1.0-alpha.0
+  - @mastra/react@0.2.1-alpha.1
+  - @mastra/ai-sdk@1.0.3
+
 ## 8.1.0-alpha.0
 
 ### Minor Changes

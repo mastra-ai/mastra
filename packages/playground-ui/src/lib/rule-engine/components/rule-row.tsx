@@ -2,12 +2,15 @@ import * as React from 'react';
 import { Trash2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import type { ConditionOperator, Rule } from '../types';
+import type { ConditionOperator } from '../types';
 
 import { RuleFieldSelect } from './rule-field-select';
 import { RuleOperatorSelect } from './rule-operator-select';
 import { RuleValueInput } from './rule-value-input';
 import type { RuleRowProps } from './types';
+import { IconButton } from '@/ds/components/IconButton';
+import { Button } from '@/ds/components/Button';
+import { Icon } from '@/ds/icons';
 
 /**
  * A single rule row with field selector, operator selector, and value input
@@ -48,24 +51,19 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
   );
 
   return (
-    <div className={cn('flex items-center gap-2 p-2 rounded-md bg-surface2 border border-border1', className)}>
+    <div className={cn('flex flex-wrap items-center gap-2', className)}>
       <RuleFieldSelect schema={schema} value={rule.field} onChange={handleFieldChange} />
 
       <RuleOperatorSelect value={rule.operator} onChange={handleOperatorChange} />
 
       <RuleValueInput value={rule.value} onChange={handleValueChange} operator={rule.operator} />
 
-      <button
-        type="button"
-        onClick={onRemove}
-        className={cn(
-          'p-1.5 rounded-md text-neutral3 hover:text-accent2 hover:bg-surface4',
-          'transition-colors duration-normal',
-        )}
-        aria-label="Remove rule"
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
+      <Button type="button" onClick={onRemove} variant="ghost" size="sm">
+        <Icon>
+          <Trash2 />
+        </Icon>
+        Remove rule
+      </Button>
     </div>
   );
 };

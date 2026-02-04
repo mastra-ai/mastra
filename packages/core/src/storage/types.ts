@@ -57,9 +57,10 @@ export type PaginationInfo = {
 
 export type MastraMessageFormat = 'v1' | 'v2';
 
-export type StorageListMessagesInput = {
-  threadId: string | string[];
-  resourceId?: string;
+/**
+ * Common options for listing messages (pagination, filtering, ordering)
+ */
+type StorageListMessagesOptions = {
   include?: {
     id: string;
     threadId?: string;
@@ -97,8 +98,34 @@ export type StorageListMessagesInput = {
   orderBy?: StorageOrderBy<'createdAt'>;
 };
 
+/**
+ * Input for listing messages by thread ID.
+ * The resource ID can be optionally provided to filter messages within the thread.
+ */
+export type StorageListMessagesInput = StorageListMessagesOptions & {
+  /**
+   * Thread ID(s) to query messages from.
+   */
+  threadId: string | string[];
+  /**
+   * Optional resource ID to further filter messages within the thread(s).
+   */
+  resourceId?: string;
+};
+
 export type StorageListMessagesOutput = PaginationInfo & {
   messages: MastraDBMessage[];
+};
+
+/**
+ * Input for listing messages by resource ID only (across all threads).
+ * Used by Observational Memory and LongMemEval for resource-scoped queries.
+ */
+export type StorageListMessagesByResourceIdInput = StorageListMessagesOptions & {
+  /**
+   * Resource ID to query ALL messages for the resource across all threads.
+   */
+  resourceId: string;
 };
 
 export type StorageListWorkflowRunsInput = {
@@ -467,7 +494,166 @@ export interface StorageIndexStats extends IndexInfo {
   method?: string; // Index method (btree, hash, etc)
 }
 
+// ============================================
+// Observational Memory Types
+// ============================================
+
+/**
+ * Scope of observational memory
+ */
+export type ObservationalMemoryScope = 'thread' | 'resource';
+
+/**
+ * How the observational memory record was created
+ */
+export type ObservationalMemoryOriginType = 'initial' | 'reflection';
+
+/**
+ * Core database record for observational memory
+ *
+ * For resource scope: One active record per resource, containing observations from ALL threads.
+ * For thread scope: One record per thread.
+ *
+ * Derived values (not stored, computed at runtime):
+ * - reflectionCount: count records with originType: 'reflection'
+ * - lastReflectionAt: createdAt of most recent reflection record
+ * - previousGeneration: record with next-oldest createdAt
+ */
+export interface ObservationalMemoryRecord {
+  // Identity
+  /** Unique record ID */
+  id: string;
+  /** Memory scope - thread or resource */
+  scope: ObservationalMemoryScope;
+  /** Thread ID (null for resource scope) */
+  threadId: string | null;
+  /** Resource ID (always present) */
+  resourceId: string;
+
+  // Timestamps (top-level for easy querying)
+  /** When this record was created */
+  createdAt: Date;
+  /** When this record was last updated */
+  updatedAt: Date;
+  /**
+   * Single cursor for message loading - when we last observed ANY thread for this resource.
+   * Undefined means no observations have been made yet (all messages are "unobserved").
+   */
+  lastObservedAt?: Date;
+
+  // Generation tracking
+  /** How this record was created */
+  originType: ObservationalMemoryOriginType;
+  /** Generation counter - incremented each time a reflection creates a new record */
+  generationCount: number;
+
+  // Observation content
+  /**
+   * Currently active observations.
+   * For resource scope: Contains <thread id="...">...</thread> sections for attribution.
+   * For thread scope: Plain observation text.
+   */
+  activeObservations: string;
+  /** Observations waiting to be activated (async buffering) */
+  bufferedObservations?: string;
+  /** Reflection waiting to be swapped in (async buffering) */
+  bufferedReflection?: string;
+
+  /**
+   * Message IDs observed in the current generation.
+   * Used as a safeguard against re-observation if timestamp filtering fails.
+   * Reset on reflection (new generation starts fresh).
+   */
+  observedMessageIds?: string[];
+
+  /**
+   * The timezone used when formatting dates for the Observer agent.
+   * Stored for debugging and auditing observation dates.
+   * Example: "America/Los_Angeles", "Europe/London"
+   */
+  observedTimezone?: string;
+
+  // Token tracking
+  /** Running total of all tokens observed */
+  totalTokensObserved: number;
+  /** Current size of active observations */
+  observationTokenCount: number;
+  /** Accumulated tokens from pending (unobserved) messages across sessions */
+  pendingMessageTokens: number;
+
+  // State flags
+  /** Is a reflection currently in progress? */
+  isReflecting: boolean;
+  /** Is observation currently in progress? */
+  isObserving: boolean;
+
+  // Configuration
+  /** Current configuration (stored as JSON) */
+  config: Record<string, unknown>;
+
+  // Extensible metadata (app-specific, optional)
+  /** Optional metadata for app-specific extensions */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Input for creating a new observational memory record
+ */
+export interface CreateObservationalMemoryInput {
+  threadId: string | null;
+  resourceId: string;
+  scope: ObservationalMemoryScope;
+  config: Record<string, unknown>;
+  /** The timezone used when formatting dates for the Observer agent (e.g., "America/Los_Angeles") */
+  observedTimezone?: string;
+}
+
+/**
+ * Input for updating active observations.
+ * Uses cursor-based message tracking via lastObservedAt instead of message IDs.
+ */
+export interface UpdateActiveObservationsInput {
+  id: string;
+  observations: string;
+  tokenCount: number;
+  /** Timestamp when these observations were created (for cursor-based message loading) */
+  lastObservedAt: Date;
+  /**
+   * IDs of messages that were observed in this cycle.
+   * Stored in record metadata as a safeguard against re-observation on process restart.
+   * These are appended to any existing IDs and pruned to only include IDs newer than lastObservedAt.
+   */
+  observedMessageIds?: string[];
+  /**
+   * The timezone used when formatting dates for the Observer agent.
+   * Captured from Intl.DateTimeFormat().resolvedOptions().timeZone
+   */
+  observedTimezone?: string;
+}
+
+/**
+ * Input for updating buffered observations.
+ * Note: Async buffering is currently disabled but types are retained for future use.
+ */
+export interface UpdateBufferedObservationsInput {
+  id: string;
+  observations: string;
+  suggestedContinuation?: string;
+}
+
+/**
+ * Input for creating a reflection generation (creates a new record, archives the old one)
+ */
+export interface CreateReflectionGenerationInput {
+  currentRecord: ObservationalMemoryRecord;
+  reflection: string;
+  tokenCount: number;
+}
+
+// ============================================
 // Workflow Storage Types
+// ============================================
+
 export interface UpdateWorkflowStateOptions {
   status: WorkflowRunStatus;
   result?: StepResult<any, any, any, any>;

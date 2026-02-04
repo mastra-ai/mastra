@@ -221,6 +221,19 @@ export interface WorkspaceConfig {
   bm25?: boolean | BM25Config;
 
   /**
+   * Custom index name for the vector store.
+   * If not provided, defaults to a sanitized version of `${id}_search`.
+   *
+   * Must be a valid SQL identifier for SQL-based stores (PgVector, LibSQL):
+   * - Start with a letter or underscore
+   * - Contain only letters, numbers, or underscores
+   * - Maximum 63 characters
+   *
+   * @example 'my_workspace_vectors'
+   */
+  searchIndexName?: string;
+
+  /**
    * Paths to auto-index on init().
    * Files in these directories will be indexed for search.
    * @example ['/docs', '/support']
@@ -433,6 +446,29 @@ export class Workspace {
 
     // Create search engine if search is configured
     if (config.bm25 || (config.vectorStore && config.embedder)) {
+      const buildIndexName = (): string => {
+        // Sanitize default name: replace all non-alphanumeric chars with underscores
+        const defaultName = `${this.id}_search`.replace(/[^a-zA-Z0-9_]/g, '_');
+        const indexName = config.searchIndexName ?? defaultName;
+
+        // Validate SQL identifier format
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(indexName)) {
+          throw new WorkspaceError(
+            `Invalid searchIndexName: "${indexName}". Must start with a letter or underscore, and contain only letters, numbers, or underscores.`,
+            'INVALID_SEARCH_CONFIG',
+            this.id,
+          );
+        }
+        if (indexName.length > 63) {
+          throw new WorkspaceError(
+            `searchIndexName exceeds 63 characters (got ${indexName.length})`,
+            'INVALID_SEARCH_CONFIG',
+            this.id,
+          );
+        }
+        return indexName;
+      };
+
       this._searchEngine = new SearchEngine({
         bm25: config.bm25
           ? {
@@ -444,7 +480,7 @@ export class Workspace {
             ? {
                 vectorStore: config.vectorStore,
                 embedder: config.embedder,
-                indexName: `${this.id}-search`,
+                indexName: buildIndexName(),
               }
             : undefined,
       });
