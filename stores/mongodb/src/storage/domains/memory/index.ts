@@ -1434,6 +1434,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+    // Validate tokenCount before using in $inc
+    if (typeof tokenCount !== 'number' || !Number.isFinite(tokenCount) || tokenCount < 0) {
+      throw new MastraError({
+        id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'INVALID_INPUT'),
+        text: `Invalid tokenCount: must be a finite non-negative number, got ${tokenCount}`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { id, tokenCount },
+      });
+    }
+
     try {
       const collection = await this.getCollection(OM_TABLE);
       const result = await collection.updateOne(
