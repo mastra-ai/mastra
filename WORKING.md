@@ -19,7 +19,7 @@ This document tracks implementation progress for review.
 | 9   | Mount Manager extraction (marker file helpers)                                  | COR-380, COR-385          | **Done** | `mount-manager.ts`, `e2b-sandbox.ts`      |
 | 9b  | Add lifecycle management to MastraFilesystem base class                         | COR-380, COR-484          | **Done** | `mastra-filesystem.ts`, `s3-filesystem.ts`, `gcs-filesystem.ts` |
 | 9c  | Update LocalFilesystem and LocalSandbox to use base class lifecycle             | COR-380                   | **Done** | `local-filesystem.ts`, `local-sandbox.ts`, `errors.ts` |
-| 10  | Implement pathContext with mounts (agent instructions, mount awareness)         | COR-385, COR-491          | Pending  | `workspace.ts`, `composite-filesystem.ts` |
+| 10  | Implement pathContext with mounts (agent instructions, mount awareness)         | COR-385, COR-491          | **Done** | `composite-filesystem.ts`, `s3-filesystem.ts`, `gcs-filesystem.ts`, `e2b-sandbox.ts` |
 | 11  | General cleanup checklist (imports, error handling, hardcoded values, logging)  | COR-380                   | Pending  | Multiple files                            |
 | 12  | Create shared test suite with factory patterns                                  | COR-385                   | Pending  | (see stores/server-adapters pattern)      |
 | 13  | Manual testing (E2B + S3/GCS mounts, readOnly, reconnection, GCS compatibility) | COR-380, COR-385, COR-484 | Pending  |                                           |
@@ -421,58 +421,69 @@ Update both to use the base class hooks (`_doInit()`, `_doStart()`, etc.) and co
 
 Agents need to be aware of mounted filesystems for better path handling and understanding what storage is available.
 
-### Current State
+### Relationship to PR #12591 (COR-491)
 
-**PathContext** (`workspace.ts`):
+This task relates to the workspace agent instructions work in PR #12591 (COR-491):
 
-```typescript
-interface PathContext {
-  filesystem?: { provider: string; basePath?: string };
-  sandbox?: { provider: string; workingDirectory?: string };
-  instructions: string; // Combined from providers' getInstructions()
-}
-```
+- **`getPathContext()`** - Returns instructions for tool descriptions (appended to execute_command tool)
+- **`getAgentInstructions()`** (PR #12591) - Returns comprehensive system prompt instructions via WorkspaceInstructionsProcessor
+- **Both systems** call `getInstructions()` on filesystem/sandbox providers
 
-### Implementation Plan
+Our implementation adds `getInstructions()` to providers, which enables both systems to work.
 
-1. **Add `mounts` to PathContext:**
+### Changes Made
 
-```typescript
-interface PathContext {
-  // ... existing fields ...
-  mounts?: Array<{
-    path: string; // e.g., "/data"
-    provider: string; // e.g., "s3"
-    icon?: FilesystemIcon;
-    displayName?: string; // e.g., "AWS S3"
-    description?: string; // e.g., "Persistent storage for outputs"
-    readOnly?: boolean;
-  }>;
-}
-```
-
-2. **Implement CompositeFilesystem.getInstructions():**
+**1. CompositeFilesystem.getInstructions():**
 
 ```typescript
 getInstructions(): string {
-  const mountInfo = Array.from(this._mounts.entries())
-    .map(([path, fs]) => {
-      const ro = fs.readOnly ? ' (read-only)' : '';
-      return `- ${path}: ${fs.displayName || fs.provider}${ro}`;
+  const mountDescriptions = Array.from(this._mounts.entries())
+    .map(([mountPath, fs]) => {
+      const name = fs.displayName || fs.provider;
+      const access = fs.readOnly ? '(read-only)' : '(read-write)';
+      return `- ${mountPath}: ${name} ${access}`;
     })
     .join('\n');
-  return `Mounted filesystems:\n${mountInfo}`;
+  return `Mounted filesystems:\n${mountDescriptions}\nFiles written via workspace tools are accessible at the same paths in sandbox commands.`;
 }
 ```
 
-3. **Update `getPathContext()` in workspace.ts** to include mount information
+**2. S3Filesystem.getInstructions():**
 
-4. **Consider adding mount info to filesystem tool descriptions**
+```typescript
+getInstructions(): string {
+  const providerName = this.displayName || 'S3';
+  const access = this.readOnly ? 'Read-only' : 'Persistent';
+  return `${providerName} storage in bucket "${this.bucket}". ${access} storage - files are retained across sessions.`;
+}
+```
 
-### Changes Planned
+**3. GCSFilesystem.getInstructions():**
 
-- `packages/core/src/workspace/workspace.ts` - Update PathContext interface, getPathContext()
-- `packages/core/src/workspace/filesystem/composite-filesystem.ts` - Add getInstructions()
+```typescript
+getInstructions(): string {
+  const access = this.readOnly ? 'Read-only' : 'Persistent';
+  return `Google Cloud Storage in bucket "${this.bucketName}". ${access} storage - files are retained across sessions.`;
+}
+```
+
+Also added `readOnly` property support to GCSFilesystem.
+
+**4. E2BSandbox.getInstructions():**
+
+```typescript
+getInstructions(): string {
+  const mountCount = this.mounts.entries.size;
+  const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
+  return `Cloud sandbox with /home/user as working directory.${mountInfo}`;
+}
+```
+
+### Notes
+
+- The `PathContext.mounts` field addition and `getPathContext()` updates can be handled by PR #12591 (COR-491)
+- This PR provides the `getInstructions()` implementations that both systems will use
+- Mount awareness flows through: `getAgentInstructions()` → `this._fs.getInstructions()` → `CompositeFilesystem.getInstructions()`
 
 ---
 
@@ -608,7 +619,7 @@ GCS_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
 - [x] Task 9: Mount Manager extraction
 - [x] Task 9b: MastraFilesystem lifecycle management
 - [x] Task 9c: LocalFilesystem/LocalSandbox lifecycle update
-- [ ] Task 10: pathContext implementation
+- [x] Task 10: pathContext implementation (getInstructions() on providers)
 - [ ] Task 11: General cleanup
 - [ ] Task 12: Shared test suite
 - [ ] Task 13: Manual testing (incl. GCS compatibility)
