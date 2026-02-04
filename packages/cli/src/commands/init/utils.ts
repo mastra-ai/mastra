@@ -960,7 +960,9 @@ export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[
   let content = `# AGENTS.md
 
 This document provides guidance for AI coding agents working in this repository.
+## Project Overview
 
+This is a **Mastra AI agent framework** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
 ## Quick Start
 
 \`\`\`bash
