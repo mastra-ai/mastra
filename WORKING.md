@@ -17,6 +17,7 @@ This document tracks implementation progress for review.
 | 7   | S3Filesystem lazy init pattern (`ensureReady()`)                                | COR-484                   | **Done** | `s3-filesystem.ts`                        |
 | 8   | Extract ensureSandbox/lazy init to MastraSandbox base class                     | COR-380                   | **Done** | `mastra-sandbox.ts`, `e2b-sandbox.ts`     |
 | 9   | Mount Manager extraction (marker file helpers)                                  | COR-380, COR-385          | **Done** | `mount-manager.ts`, `e2b-sandbox.ts`      |
+| 9b  | Add lifecycle management to MastraFilesystem base class                         | COR-380, COR-484          | **Done** | `mastra-filesystem.ts`, `s3-filesystem.ts`, `gcs-filesystem.ts` |
 | 10  | Implement pathContext with mounts (agent instructions, mount awareness)         | COR-385, COR-491          | Pending  | `workspace.ts`, `composite-filesystem.ts` |
 | 11  | General cleanup checklist (imports, error handling, hardcoded values, logging)  | COR-380                   | Pending  | Multiple files                            |
 | 12  | Create shared test suite with factory patterns                                  | COR-385                   | Pending  | (see stores/server-adapters pattern)      |
@@ -326,6 +327,50 @@ isConfigMatching(mountPath: string, storedHash: string): boolean
 
 ---
 
+## Task 9b: Add Lifecycle Management to MastraFilesystem Base Class
+
+### Problem
+
+S3Filesystem had proper status management but no race condition protection. GCSFilesystem had `status = 'ready'` hardcoded (never changed). Neither used the MastraFilesystem base class pattern.
+
+### Solution
+
+Add lifecycle management to MastraFilesystem (matching MastraSandbox pattern):
+
+- `_initPromise`, `_destroyPromise` for race condition safety
+- `init()`, `destroy()` wrappers that manage status transitions
+- `_doInit()`, `_doDestroy()` protected methods for subclasses to override
+- `ensureReady()` for lazy initialization
+- `FilesystemNotReadyError` for status check failures
+
+### Changes Made
+
+#### `packages/core/src/workspace/filesystem/mastra-filesystem.ts`
+
+- Added `FilesystemNotReadyError` class
+- Added `_initPromise`, `_destroyPromise` protected properties
+- Implemented `init()`, `destroy()` with race-condition-safe wrappers
+- Added `_doInit()`, `_doDestroy()` protected methods for subclasses
+- Added `ensureReady()` protected method
+
+#### `workspaces/s3/src/s3-filesystem.ts`
+
+- Changed `init()` to `protected override _doInit()` (removed status management)
+- Changed `destroy()` to `protected override _doDestroy()` (removed status management)
+- Renamed `ensureReady()` to `getReadyClient()` (calls base class `ensureReady()`)
+
+#### `workspaces/gcs/src/gcs-filesystem.ts`
+
+- Now extends `MastraFilesystem` instead of implementing `WorkspaceFilesystem`
+- Changed `status = 'ready'` to `status = 'pending'`
+- Added `super({ name: 'GCSFilesystem' })` in constructor
+- Changed `init()` to `protected override _doInit()`
+- Changed `destroy()` to `protected override _doDestroy()`
+- Added `getReadyBucket()` method for lazy initialization
+- Updated all file operations to use `await this.getReadyBucket()`
+
+---
+
 ## Task 10: Implement pathContext with Mounts
 
 ### Problem
@@ -517,6 +562,7 @@ GCS_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
 - [x] Task 7: S3Filesystem lazy init
 - [x] Task 8: ensureSandbox extraction
 - [x] Task 9: Mount Manager extraction
+- [x] Task 9b: MastraFilesystem lifecycle management
 - [ ] Task 10: pathContext implementation
 - [ ] Task 11: General cleanup
 - [ ] Task 12: Shared test suite

@@ -357,12 +357,10 @@ export class S3Filesystem extends MastraFilesystem {
 
   /**
    * Ensure the filesystem is initialized and return the S3 client.
-   * Calls init() if status is still 'pending', ensuring proper status transitions.
+   * Uses base class ensureReady() for status management, then returns client.
    */
-  private async ensureReady(): Promise<S3Client> {
-    if (this.status === 'pending') {
-      await this.init();
-    }
+  private async getReadyClient(): Promise<S3Client> {
+    await this.getReadyClient();
     return this.getClient();
   }
 
@@ -377,7 +375,7 @@ export class S3Filesystem extends MastraFilesystem {
   // ---------------------------------------------------------------------------
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
-    const client = await this.ensureReady();
+    const client = await this.getReadyClient();
 
     try {
       const response = await client.send(
@@ -404,7 +402,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async writeFile(path: string, content: FileContent, _options?: WriteOptions): Promise<void> {
-    const client = await this.ensureReady();
+    const client = await this.getReadyClient();
 
     const body = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
     const contentType = getMimeType(path);
@@ -440,7 +438,7 @@ export class S3Filesystem extends MastraFilesystem {
       return;
     }
 
-    const client = await this.ensureReady();
+    const client = await this.getReadyClient();
 
     try {
       await client.send(
@@ -457,7 +455,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
-    const client = await this.ensureReady();
+    const client = await this.getReadyClient();
 
     try {
       await client.send(
@@ -497,7 +495,7 @@ export class S3Filesystem extends MastraFilesystem {
     }
 
     // Delete all objects with this prefix
-    const client = await this.ensureReady();
+    const client = await this.getReadyClient();
 
     const prefix = this.toKey(path).replace(/\/$/, '') + '/';
 
@@ -529,7 +527,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
-    const client = await this.ensureReady();
+    const client = await this.getReadyClient();
 
     const prefix = this.toKey(path).replace(/\/$/, '');
     const searchPrefix = prefix ? prefix + '/' : '';
@@ -611,7 +609,7 @@ export class S3Filesystem extends MastraFilesystem {
   // ---------------------------------------------------------------------------
 
   async exists(path: string): Promise<boolean> {
-    const client = await this.ensureReady();
+    const client = await this.getReadyClient();
 
     // Check if it's a file
     try {
@@ -639,7 +637,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async stat(path: string): Promise<FileStat> {
-    const client = await this.ensureReady();
+    const client = await this.getReadyClient();
 
     try {
       const response: { ContentLength?: number; LastModified?: Date } = await client.send(
@@ -677,7 +675,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async isFile(path: string): Promise<boolean> {
-    const client = await this.ensureReady();
+    const client = await this.getReadyClient();
 
     try {
       await client.send(
@@ -693,7 +691,7 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async isDirectory(path: string): Promise<boolean> {
-    const client = await this.ensureReady();
+    const client = await this.getReadyClient();
 
     const response: { Contents?: unknown[] } = await client.send(
       new ListObjectsV2Command({
@@ -707,24 +705,23 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   // ---------------------------------------------------------------------------
-  // Lifecycle
+  // Lifecycle (overrides base class protected methods)
   // ---------------------------------------------------------------------------
 
-  async init(): Promise<void> {
-    this.status = 'initializing';
-    try {
-      // Verify we can access the bucket by creating the client
-      this.getClient();
-      this.status = 'ready';
-    } catch (error) {
-      this.status = 'error';
-      throw error;
-    }
+  /**
+   * Initialize the S3 client.
+   * Status management is handled by the base class.
+   */
+  protected override async _doInit(): Promise<void> {
+    // Verify we can access the bucket by creating the client
+    this.getClient();
   }
 
-  async destroy(): Promise<void> {
-    this.status = 'destroying';
+  /**
+   * Clean up the S3 client.
+   * Status management is handled by the base class.
+   */
+  protected override async _doDestroy(): Promise<void> {
     this._client = null;
-    this.status = 'destroyed';
   }
 }

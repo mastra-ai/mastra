@@ -8,7 +8,6 @@ import { Storage } from '@google-cloud/storage';
 import type { Bucket } from '@google-cloud/storage';
 
 import type {
-  WorkspaceFilesystem,
   FileContent,
   FileStat,
   FileEntry,
@@ -21,6 +20,7 @@ import type {
   FilesystemIcon,
   ProviderStatus,
 } from '@mastra/core/workspace';
+import { MastraFilesystem } from '@mastra/core/workspace';
 
 /**
  * GCS mount configuration.
@@ -159,12 +159,12 @@ export interface GCSFilesystemOptions {
  * });
  * ```
  */
-export class GCSFilesystem implements WorkspaceFilesystem {
+export class GCSFilesystem extends MastraFilesystem {
   readonly id: string;
   readonly name = 'GCSFilesystem';
   readonly provider = 'gcs';
 
-  status: ProviderStatus = 'ready';
+  status: ProviderStatus = 'pending';
 
   // Display metadata for UI
   readonly displayName?: string;
@@ -180,6 +180,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   private _bucket: Bucket | null = null;
 
   constructor(options: GCSFilesystemOptions) {
+    super({ name: 'GCSFilesystem' });
     this.id = options.id ?? `gcs-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this.bucketName = options.bucket;
     this.projectId = options.projectId;
@@ -242,6 +243,15 @@ export class GCSFilesystem implements WorkspaceFilesystem {
     return this._bucket;
   }
 
+  /**
+   * Ensure the filesystem is initialized and return the bucket.
+   * Uses base class ensureReady() for status management, then returns bucket.
+   */
+  private async getReadyBucket(): Promise<Bucket> {
+    await this.ensureReady();
+    return this.getBucket();
+  }
+
   private toKey(path: string): string {
     // Remove leading slash and add prefix
     const cleanPath = path.replace(/^\/+/, '');
@@ -253,7 +263,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   // ---------------------------------------------------------------------------
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
-    const bucket = this.getBucket();
+    const bucket = await this.getReadyBucket();
     const file = bucket.file(this.toKey(path));
 
     try {
@@ -272,7 +282,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   }
 
   async writeFile(path: string, content: FileContent, _options?: WriteOptions): Promise<void> {
-    const bucket = this.getBucket();
+    const bucket = await this.getReadyBucket();
     const file = bucket.file(this.toKey(path));
 
     const body = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
@@ -305,7 +315,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
       return;
     }
 
-    const bucket = this.getBucket();
+    const bucket = await this.getReadyBucket();
     const file = bucket.file(this.toKey(path));
 
     try {
@@ -321,7 +331,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   }
 
   async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
-    const bucket = this.getBucket();
+    const bucket = await this.getReadyBucket();
     const srcFile = bucket.file(this.toKey(src));
     const destFile = bucket.file(this.toKey(dest));
 
@@ -360,14 +370,14 @@ export class GCSFilesystem implements WorkspaceFilesystem {
     }
 
     // Delete all objects with this prefix
-    const bucket = this.getBucket();
+    const bucket = await this.getReadyBucket();
     const prefix = this.toKey(path).replace(/\/$/, '') + '/';
 
     await bucket.deleteFiles({ prefix });
   }
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
-    const bucket = this.getBucket();
+    const bucket = await this.getReadyBucket();
 
     const prefix = this.toKey(path).replace(/\/$/, '');
     const searchPrefix = prefix ? prefix + '/' : '';
@@ -437,7 +447,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   // ---------------------------------------------------------------------------
 
   async exists(path: string): Promise<boolean> {
-    const bucket = this.getBucket();
+    const bucket = await this.getReadyBucket();
     const file = bucket.file(this.toKey(path));
 
     // Check if it's a file
@@ -454,7 +464,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   }
 
   async stat(path: string): Promise<FileStat> {
-    const bucket = this.getBucket();
+    const bucket = await this.getReadyBucket();
     const file = bucket.file(this.toKey(path));
 
     const [exists] = await file.exists();
@@ -490,7 +500,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   }
 
   async isFile(path: string): Promise<boolean> {
-    const bucket = this.getBucket();
+    const bucket = await this.getReadyBucket();
     const file = bucket.file(this.toKey(path));
 
     const [exists] = await file.exists();
@@ -498,7 +508,7 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   }
 
   async isDirectory(path: string): Promise<boolean> {
-    const bucket = this.getBucket();
+    const bucket = await this.getReadyBucket();
 
     const [files] = await bucket.getFiles({
       prefix: this.toKey(path).replace(/\/$/, '') + '/',
@@ -509,15 +519,23 @@ export class GCSFilesystem implements WorkspaceFilesystem {
   }
 
   // ---------------------------------------------------------------------------
-  // Lifecycle
+  // Lifecycle (overrides base class protected methods)
   // ---------------------------------------------------------------------------
 
-  async init(): Promise<void> {
-    // Verify we can access the bucket
+  /**
+   * Initialize the GCS client.
+   * Status management is handled by the base class.
+   */
+  protected override async _doInit(): Promise<void> {
+    // Verify we can access the bucket by creating the client
     this.getBucket();
   }
 
-  async destroy(): Promise<void> {
+  /**
+   * Clean up the GCS client.
+   * Status management is handled by the base class.
+   */
+  protected override async _doDestroy(): Promise<void> {
     this._storage = null;
     this._bucket = null;
   }
