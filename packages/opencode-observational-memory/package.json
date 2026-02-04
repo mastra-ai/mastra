@@ -1,0 +1,50 @@
+{
+  "name": "opencode-observational-memory",
+  "version": "0.1.0",
+  "description": "OpenCode plugin for persistent memory using Mastra's Observational Memory system",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "opencode-observational-memory": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "mastra",
+    "memory",
+    "observational-memory",
+    "ai",
+    "coding-agent"
+  ],
+  "author": "Mastra",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastra-ai/mastra"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.1.51",
+    "@opencode-ai/sdk": "^1.1.51"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3"
+  },
+  "opencode": {
+    "type": "plugin",
+    "hooks": [
+      "chat.message",
+      "event"
+    ]
+  },
+  "files": [
+    "dist"
+  ]
+}
