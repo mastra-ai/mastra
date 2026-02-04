@@ -5,13 +5,13 @@ description: "Learn how to deploy a Mastra application to Netlify"
 
 # Deploy Mastra to Netlify
 
-In this guide, you'll learn how to deploy a Mastra application to Netlify using `@mastra/deployer-netlify`.
+In this guide, you'll learn how to deploy a Mastra application with Netlify using `@mastra/deployer-netlify`. The deployer handles packaging, configuration, and deployment by adapting Mastra's output to create an optimized version of your server.
 
-The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/) class with Netlify specific functionality.
+## Before you begin
 
-:::warning
-Netlify Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/reference/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
-:::
+- You'll need an existing Mastra application. If you don't have one yet, follow the [Getting Started guide](/guides/getting-started/quickstart) to create a simple Mastra app.
+- A Netlify account. If you don't have one, sign up at [Netlify](https://www.netlify.com/).
+- Remove any usage of [LibSQLStore](/reference/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash. Netlify Functions use an ephemeral filesystem and cannot persist files.
 
 ## Installation
 
