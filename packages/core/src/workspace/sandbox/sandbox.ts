@@ -24,13 +24,11 @@
  * ```
  */
 
-import { MastraBase } from '../../base';
-import { RegisteredLogger } from '../../logger';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
-import type { Lifecycle, ProviderStatus } from '../lifecycle';
+import type { Lifecycle } from '../lifecycle';
 
-import { MountManager } from './mount-manager';
+import type { MountManager } from './mount-manager';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 // =============================================================================
@@ -128,50 +126,4 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
    * @param mountPath - Path to unmount
    */
   unmount?(mountPath: string): Promise<void>;
-}
-
-// =============================================================================
-// Base Sandbox Class
-// =============================================================================
-
-/**
- * Base sandbox class for all sandbox providers.
- *
- * MountManager is automatically created if the subclass implements `mount()`.
- * Use `declare readonly mounts: MountManager` to get non-optional typing.
- *
- * @example
- * ```typescript
- * class E2BSandbox extends BaseSandbox {
- *   declare readonly mounts: MountManager;  // Non-optional type
- *
- *   async mount(filesystem, mountPath) { ... }
- *   async unmount(mountPath) { ... }
- * }
- * ```
- */
-export abstract class BaseSandbox extends MastraBase implements WorkspaceSandbox {
-  /** Unique identifier for this sandbox instance */
-  abstract readonly id: string;
-  /** Human-readable name (e.g., 'E2B Sandbox', 'Docker') */
-  abstract override readonly name: string;
-  /** Provider type identifier */
-  abstract readonly provider: string;
-  abstract status: ProviderStatus;
-
-  // Declare optional mount-related properties (from interface)
-  readonly mounts?: MountManager;
-  mount?(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult>;
-
-  constructor(options: { name: string }) {
-    super({ name: options.name, component: RegisteredLogger.WORKSPACE });
-
-    // Automatically create MountManager if subclass implements mount()
-    if (this.mount) {
-      this.mounts = new MountManager({
-        mount: this.mount.bind(this),
-        logger: this.logger,
-      });
-    }
-  }
 }

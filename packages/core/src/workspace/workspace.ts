@@ -30,12 +30,15 @@
  * ```
  */
 
+import type { IMastraLogger } from '../logger';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
 import { CompositeFilesystem } from './filesystem';
-import type { WorkspaceFilesystem, FilesystemIcon, FilesystemMountConfig } from './filesystem';
+import type { WorkspaceFilesystem, FilesystemMountConfig, FilesystemIcon } from './filesystem';
+import { MastraFilesystem } from './filesystem/mastra-filesystem';
 import type { WorkspaceSandbox } from './sandbox';
+import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
 import type { WorkspaceSkills, SkillsResolver } from './skills';
@@ -116,12 +119,14 @@ export interface WorkspaceConfig {
   /**
    * Filesystem provider instance.
    * Use LocalFilesystem for a folder on disk, or AgentFS for Turso-backed storage.
+   * Extend MastraFilesystem for automatic logger integration.
    */
   filesystem?: WorkspaceFilesystem;
 
   /**
    * Sandbox provider instance.
    * Use ComputeSDKSandbox to access E2B, Modal, Docker, etc.
+   * Extend MastraSandbox for automatic logger integration.
    */
   sandbox?: WorkspaceSandbox;
 
@@ -385,7 +390,6 @@ export class Workspace {
   private readonly _config: WorkspaceConfig;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
-  private readonly _mounts?: Record<string, WorkspaceFilesystem>;
 
   constructor(config: WorkspaceConfig) {
     this.id = config.id ?? this.generateId();
@@ -403,7 +407,6 @@ export class Workspace {
         throw new WorkspaceError('Cannot use both "filesystem" and "mounts"', 'INVALID_CONFIG');
       }
 
-      this._mounts = config.mounts;
       this._fs = new CompositeFilesystem({ mounts: config.mounts });
       if (this._sandbox?.mounts) {
         // Inform sandbox about mounts so it can process them on start()
@@ -790,5 +793,26 @@ export class Workspace {
         : undefined,
       instructions,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Logger Integration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Set the logger for this workspace and propagate to providers.
+   * Called by Mastra when the logger is set.
+   * @internal
+   */
+  __setLogger(logger: IMastraLogger): void {
+    // Propagate logger to filesystem provider if it extends MastraFilesystem
+    if (this._fs instanceof MastraFilesystem) {
+      this._fs.__setLogger(logger);
+    }
+
+    // Propagate logger to sandbox provider if it extends MastraSandbox
+    if (this._sandbox instanceof MastraSandbox) {
+      this._sandbox.__setLogger(logger);
+    }
   }
 }

@@ -2211,6 +2211,24 @@
       "docUrl": "https://docs.z.ai/guides/overview/pricing",
       "gateway": "models.dev"
     },
+    "berget": {
+      "url": "https://api.berget.ai/v1",
+      "apiKeyEnvVar": "BERGET_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Berget.AI",
+      "models": [
+        "BAAI/bge-reranker-v2-m3",
+        "KBLab/kb-whisper-large",
+        "intfloat/multilingual-e5-large",
+        "intfloat/multilingual-e5-large-instruct",
+        "meta-llama/Llama-3.3-70B-Instruct",
+        "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+        "openai/gpt-oss-120b",
+        "zai-org/GLM-4.7"
+      ],
+      "docUrl": "https://api.berget.ai",
+      "gateway": "models.dev"
+    },
     "inference": {
       "url": "https://inference.net/v1",
       "apiKeyEnvVar": "INFERENCE_API_KEY",
@@ -2647,7 +2665,6 @@
         "gemini/gemini-2.0-flash-lite",
         "gemini/gemini-2.5-flash",
         "gemini/gemini-2.5-flash-image",
-        "gemini/gemini-2.5-flash-image-preview",
         "gemini/gemini-2.5-flash-lite",
         "gemini/gemini-2.5-flash-lite-preview-09-2025",
         "gemini/gemini-2.5-pro",
@@ -4426,6 +4443,16 @@
       "zai-org/glm-4.7:thinking"
     ],
     "zai": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6", "glm-4.6v", "glm-4.7", "glm-4.7-flash"],
+    "berget": [
+      "BAAI/bge-reranker-v2-m3",
+      "KBLab/kb-whisper-large",
+      "intfloat/multilingual-e5-large",
+      "intfloat/multilingual-e5-large-instruct",
+      "meta-llama/Llama-3.3-70B-Instruct",
+      "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+      "openai/gpt-oss-120b",
+      "zai-org/GLM-4.7"
+    ],
     "inference": [
       "google/gemma-3",
       "meta/llama-3.1-8b-instruct",
@@ -4738,7 +4765,6 @@
       "gemini/gemini-2.0-flash-lite",
       "gemini/gemini-2.5-flash",
       "gemini/gemini-2.5-flash-image",
-      "gemini/gemini-2.5-flash-image-preview",
       "gemini/gemini-2.5-flash-lite",
       "gemini/gemini-2.5-flash-lite-preview-09-2025",
       "gemini/gemini-2.5-pro",

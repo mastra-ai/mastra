@@ -6,6 +6,10 @@ export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';
 export { CompositeFilesystem, type CompositeFilesystemConfig } from './filesystem';
 export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
+// Base Classes for External Providers
+export { MastraFilesystem } from './filesystem';
+export { MastraSandbox } from './sandbox';
+
 // Errors
 export * from './errors';
 export {
@@ -44,7 +48,7 @@ export type {
 export type { FilesystemMountConfig, MountResult, FilesystemIcon } from './filesystem';
 
 // Sandbox
-export { BaseSandbox, MountManager } from './sandbox';
+export { MountManager } from './sandbox';
 export type { WorkspaceSandbox, ExecutionResult, CommandResult, ExecuteCommandOptions, SandboxInfo } from './sandbox';
 export type { MountManagerConfig, MountFn, OnMountHook, OnMountResult } from './sandbox';
 

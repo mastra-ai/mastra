@@ -7,7 +7,6 @@
  * @see https://e2b.dev/docs
  */
 
-import type { IMastraLogger } from '@mastra/core/logger';
 import type {
   SandboxInfo,
   ExecuteCommandOptions,
@@ -16,9 +15,9 @@ import type {
   MountResult,
   FilesystemMountConfig,
   ProviderStatus,
+  MountManager,
 } from '@mastra/core/workspace';
-import type { MountManager } from '@mastra/core/workspace';
-import { BaseSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
 
@@ -66,8 +65,6 @@ export interface E2BSandboxOptions {
   metadata?: Record<string, unknown>;
   /** Supported runtimes (default: ['node', 'python', 'bash']) */
   runtimes?: SandboxRuntime[];
-  /** Optional logger instance */
-  logger?: IMastraLogger;
 }
 
 // =============================================================================
@@ -113,7 +110,7 @@ export interface E2BSandboxOptions {
  *
  * ```
  */
-export class E2BSandbox extends BaseSandbox {
+export class E2BSandbox extends MastraSandbox {
   readonly id: string;
   readonly name = 'E2BSandbox';
   readonly provider = 'e2b';
@@ -137,9 +134,6 @@ export class E2BSandbox extends BaseSandbox {
 
   constructor(options: E2BSandboxOptions = {}) {
     super({ name: 'E2BSandbox' });
-    if (options.logger) {
-      this.__setLogger(options.logger);
-    }
 
     this.id = options.id ?? this.generateId();
     this.timeout = options.timeout ?? 300_000; // 5 minutes;
