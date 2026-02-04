@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
-import { FileText } from 'lucide-react';
+import { Eye, FileText } from 'lucide-react';
 
+import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 import { SectionHeader } from '@/domains/cms';
 
+import { InstructionsPreviewDialog } from './instructions-preview-dialog';
 import type { AgentFormValues } from './utils/form-validation';
 
 interface AgentEditMainProps {
@@ -14,6 +17,7 @@ interface AgentEditMainProps {
 }
 
 export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
   const {
     control,
     formState: { errors },
@@ -21,20 +25,27 @@ export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
   } = form;
 
   const variables = watch('variables');
+  const instructions = watch('instructions');
 
   return (
     <div className="flex flex-col gap-6 h-full">
       {/* Instructions - CodeEditor */}
       <div className="flex flex-col gap-3 flex-1 min-h-0 px-4">
-        <SectionHeader
-          title="Instructions"
-          subtitle="Write your agent's system prompt."
-          icon={
-            <Icon>
-              <FileText className="text-accent5" />
-            </Icon>
-          }
-        />
+        <div className="flex items-center justify-between">
+          <SectionHeader
+            title="Instructions"
+            subtitle="Write your agent's system prompt."
+            icon={
+              <Icon>
+                <FileText className="text-accent5" />
+              </Icon>
+            }
+          />
+          <Button type="button" variant="outline" size="sm" onClick={() => setIsPreviewDialogOpen(true)}>
+            <Eye className="h-4 w-4" />
+            Visualize instructions
+          </Button>
+        </div>
         <Controller
           name="instructions"
           control={control}
@@ -56,6 +67,13 @@ export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
         />
         {errors.instructions && <span className="text-xs text-accent2">{errors.instructions.message}</span>}
       </div>
+
+      <InstructionsPreviewDialog
+        open={isPreviewDialogOpen}
+        onOpenChange={setIsPreviewDialogOpen}
+        instructions={instructions}
+        variablesSchema={variables}
+      />
     </div>
   );
 }
