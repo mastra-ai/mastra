@@ -1346,7 +1346,7 @@ export class Workflow<
       unknown extends TStepState ? TStepState : SubsetOf<TStepState, TState>,
       // Check: previous output (TPrevSchema) must satisfy step's input requirements (TStepInput)
       // If TPrevSchema can be assigned to TStepInput, allow it. Otherwise show expected type.
-      TPrevSchema extends TStepInput ? TStepInput : TPrevSchema,
+      TStepInput,
       TSchemaOut,
       any,
       any,
@@ -1817,13 +1817,7 @@ export class Workflow<
     >;
   }
 
-  foreach<
-    TPrevIsArray extends TPrevSchema extends any[] ? true : false,
-    TStepState,
-    TStepInputSchema extends TPrevSchema extends (infer TElement)[] ? TElement : never,
-    TStepId extends string,
-    TSchemaOut,
-  >(
+  foreach<TPrevIsArray extends true, TStepState, TStepInputSchema, TStepId extends string, TSchemaOut>(
     step: TPrevIsArray extends true
       ? Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>
       : 'Previous step must return an array type',
