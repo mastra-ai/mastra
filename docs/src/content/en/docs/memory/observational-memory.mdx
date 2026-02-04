@@ -168,9 +168,12 @@ Mastra Studio shows OM status in real time in the memory tab: token usage, which
 
 - **[Message history](/docs/memory/message-history)** — high-fidelity record of the current conversation
 - **[Working memory](/docs/memory/working-memory)** — small, structured state (JSON or markdown) for user preferences, names, goals
+- **[Semantic Recall](/docs/memory/semantic-recall)** — RAG-based retrieval of relevant past messages
 - **Observational Memory** — long-context agentic memory that compresses extended sessions
 
-If you're using working memory to store conversation summaries or ongoing state that grows over time, OM is a better fit. Working memory is for small, structured data; OM is for unbounded event logs.
+If you're using working memory to store conversation summaries or ongoing state that grows over time, OM is a better fit. Working memory is for small, structured data; OM is for long-running event logs. OM also manages message history automatically—the `messageTokens` setting controls how much raw history remains before observation runs.
+
+In practical terms, OM replaces both working memory and message history, and has greater accuracy (and lower cost) than Semantic Recall.
 
 ## Related
 
