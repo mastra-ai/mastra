@@ -97,7 +97,9 @@ function propertyToField(prop: JsonSchemaProperty): SchemaField {
     description: prop.description,
     nullable,
     optional: false,
-    properties: prop.properties ? jsonSchemaToFields({ properties: prop.properties, required: prop.required }) : undefined,
+    properties: prop.properties
+      ? jsonSchemaToFields({ properties: prop.properties, required: prop.required })
+      : undefined,
     items: prop.items ? propertyToField(prop.items) : undefined,
   });
 }
@@ -114,7 +116,9 @@ export function jsonSchemaToFields(schema: JsonSchema | undefined): SchemaField[
       description: prop.description,
       nullable,
       optional: !requiredSet.has(name),
-      properties: prop.properties ? jsonSchemaToFields({ properties: prop.properties, required: prop.required }) : undefined,
+      properties: prop.properties
+        ? jsonSchemaToFields({ properties: prop.properties, required: prop.required })
+        : undefined,
       items: prop.items ? propertyToField(prop.items) : undefined,
     });
   });
