@@ -187,7 +187,7 @@ export function AppSidebar() {
         {state === 'collapsed' ? (
           <div className="flex flex-col gap-3 items-center">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
-            <AuthStatus />
+            {isUserAuthenticated && <AuthStatus />}
           </div>
         ) : isUserAuthenticated ? (
           // Authenticated: avatar on same row as logo
@@ -199,16 +199,11 @@ export function AppSidebar() {
             <AuthStatus />
           </span>
         ) : (
-          // Not authenticated: login button on its own row
-          <div className="flex flex-col gap-3">
-            <span className="flex items-center gap-2 pl-3">
-              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-serif text-sm">Mastra Studio</span>
-            </span>
-            <div className="px-3">
-              <AuthStatus />
-            </div>
-          </div>
+          // Not authenticated: no login button (shown in main content via AuthRequired)
+          <span className="flex items-center gap-2 pl-3">
+            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+            <span className="font-serif text-sm">Mastra Studio</span>
+          </span>
         )}
       </div>
 
