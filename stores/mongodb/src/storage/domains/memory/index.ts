@@ -240,28 +240,20 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Validate that threadId is provided
-    const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
-    const hasThreadId =
-      threadId !== undefined &&
-      (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
 
-    if (!hasThreadId) {
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
-          },
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('Either threadId or resourceId must be provided'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
-
-    // Normalize threadId to array
-    const threadIds = Array.isArray(threadId) ? threadId : [threadId!];
 
     if (page < 0) {
       throw new MastraError(
@@ -285,13 +277,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       const collection = await this.getCollection(TABLE_MESSAGES);
 
-      // Build query conditions
-      const query: any = {};
+      // Build query conditions - use $in for multiple thread IDs
+      const query: any = { thread_id: threadIds.length === 1 ? threadIds[0] : { $in: threadIds } };
 
-      // Add thread filter (always present for listMessages)
-      query.thread_id = threadIds.length === 1 ? threadIds[0] : { $in: threadIds };
-
-      // Add resourceId filter if provided
       if (resourceId) {
         query.resourceId = resourceId;
       }

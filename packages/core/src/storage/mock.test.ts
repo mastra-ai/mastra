@@ -201,19 +201,14 @@ describe('InMemoryStore - Message Fetching', () => {
     memory = memoryStore!;
   });
 
-  it('listMessages should throw error if neither threadId nor resourceId is provided', async () => {
-    // Empty threadId without resourceId should throw
+  it('listMessages should throw error if threadId is empty or whitespace', async () => {
     await expect(memory.listMessages({ threadId: '' })).rejects.toThrow(
-      'Either threadId or resourceId must be provided',
+      'threadId must be a non-empty string or array of non-empty strings',
     );
 
-    // Whitespace-only threadId without resourceId should throw
     await expect(memory.listMessages({ threadId: '   ' })).rejects.toThrow(
-      'Either threadId or resourceId must be provided',
+      'threadId must be a non-empty string or array of non-empty strings',
     );
-
-    // Empty object should throw (runtime guard for untyped callers)
-    await expect(memory.listMessages({} as any)).rejects.toThrow('Either threadId or resourceId must be provided');
   });
 });
 

@@ -97,28 +97,16 @@ export class InMemoryMemory extends MemoryStorage {
     page = 0,
     orderBy,
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    // Normalize threadId to array (now required)
-    const normalizedThreadId =
-      threadId && (Array.isArray(threadId) ? threadId.filter(id => id.trim()) : threadId.trim() || undefined);
-    const threadIds = normalizedThreadId
-      ? Array.isArray(normalizedThreadId)
-        ? normalizedThreadId
-        : [normalizedThreadId]
-      : undefined;
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
 
-    // Validate: threadId is required
-    if (!threadIds?.length) {
-      throw new Error('Either threadId or resourceId must be provided');
+    this.logger.debug(`InMemoryMemory: listMessages called for threads ${threadIds.join(', ')}`);
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+      throw new Error('threadId must be a non-empty string or array of non-empty strings');
     }
 
-    if (threadIds?.length) {
-      this.logger.debug(`InMemoryMemory: listMessages called for threads ${threadIds.join(', ')}`);
-      if (optionalResourceId) {
-        this.logger.debug(`InMemoryMemory: filtering by resourceId ${optionalResourceId}`);
-      }
-    }
-
-    const threadIdSet = threadIds ? new Set(threadIds) : undefined;
+    const threadIdSet = new Set(threadIds);
 
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 

@@ -338,15 +338,13 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(result.messages).toHaveLength(5);
     });
 
-    it('should throw when neither threadId nor resourceId is provided', async () => {
-      // Empty threadId without resourceId should throw
+    it('should throw when threadId is empty or whitespace', async () => {
       await expect(memoryStorage.listMessages({ threadId: '' })).rejects.toThrowError(
-        'Either threadId or resourceId must be provided',
+        'threadId must be a non-empty string or array of non-empty strings',
       );
 
-      // Whitespace-only threadId without resourceId should throw
       await expect(memoryStorage.listMessages({ threadId: '   ' })).rejects.toThrowError(
-        'Either threadId or resourceId must be provided',
+        'threadId must be a non-empty string or array of non-empty strings',
       );
     });
 

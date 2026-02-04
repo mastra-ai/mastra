@@ -667,30 +667,22 @@ export class MemoryPG extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Validate that threadId is provided
-    const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
-    const hasThreadId =
-      threadId !== undefined &&
-      (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
+    const threadIds = (Array.isArray(threadId) ? threadId : [threadId]).filter(
+      (id): id is string => typeof id === 'string',
+    );
 
-    if (!hasThreadId) {
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          id: createStorageErrorId('PG', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
-          },
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: Array.isArray(threadId) ? String(threadId) : String(threadId) },
         },
-        new Error('Either threadId or resourceId must be provided'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
-    // Normalize threadId to array
-    const threadIds = Array.isArray(threadId) ? threadId : [threadId!];
-
-    // Validate page parameter
     if (page < 0) {
       throw new MastraError({
         id: createStorageErrorId('PG', 'LIST_MESSAGES', 'INVALID_PAGE'),
@@ -698,7 +690,7 @@ export class MemoryPG extends MemoryStorage {
         category: ErrorCategory.USER,
         text: 'Page number must be non-negative',
         details: {
-          threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
+          threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
           page,
         },
       });
@@ -714,18 +706,10 @@ export class MemoryPG extends MemoryStorage {
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
 
-      // Build WHERE conditions
-      const conditions: string[] = [];
-      const queryParams: any[] = [];
-      let paramIndex = 1;
+      const conditions: string[] = [`thread_id IN (${inPlaceholders(threadIds.length)})`];
+      const queryParams: any[] = [...threadIds];
+      let paramIndex = threadIds.length + 1;
 
-      // Add thread filter
-      const threadPlaceholders = threadIds.map((_, i) => `$${paramIndex + i}`).join(', ');
-      conditions.push(`thread_id IN (${threadPlaceholders})`);
-      queryParams.push(...threadIds);
-      paramIndex += threadIds.length;
-
-      // Add resourceId filter if provided
       if (resourceId) {
         conditions.push(`"resourceId" = $${paramIndex++}`);
         queryParams.push(resourceId);
