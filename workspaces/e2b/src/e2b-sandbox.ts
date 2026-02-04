@@ -610,7 +610,6 @@ export class E2BSandbox extends MastraSandbox {
             ...this.metadata,
             'mastra-sandbox-id': this.id,
           },
-          envs: this.env,
           timeoutMs: this.timeout,
         });
       } catch (createError) {
@@ -628,7 +627,6 @@ export class E2BSandbox extends MastraSandbox {
               ...this.metadata,
               'mastra-sandbox-id': this.id,
             },
-            envs: this.env,
             timeoutMs: this.timeout,
           });
         } else {
@@ -866,12 +864,12 @@ export class E2BSandbox extends MastraSandbox {
     this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`);
 
     try {
-      // Convert ProcessEnv to Record<string, string> by filtering out undefined values
-      const envs = options.env
-        ? Object.fromEntries(
-            Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-          )
-        : undefined;
+      // Merge sandbox default env with per-command env (per-command overrides)
+      // Filter out undefined values to get Record<string, string>
+      const mergedEnv = { ...this.env, ...options.env };
+      const envs = Object.fromEntries(
+        Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
+      );
 
       const result = await sandbox.commands.run(fullCommand, {
         cwd: options.cwd,
