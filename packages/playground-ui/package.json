@@ -75,6 +75,7 @@
     "@autoform/react": "^4.0.0",
     "@autoform/zod": "^4.0.0",
     "@base-ui/react": "^1.1.0",
+    "@codemirror/autocomplete": "^6.18.0",
     "@codemirror/lang-javascript": "^6.2.2",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-markdown": "^6.5.0",

@@ -9,9 +9,11 @@ import { HTMLAttributes, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
 import type { Extension } from '@codemirror/state';
+import type { JsonSchema } from '@/lib/json-schema';
 
 import { CopyButton } from '@/ds/components/CopyButton';
 import { variableHighlight } from './variable-highlight-extension';
+import { createVariableAutocomplete } from './variable-autocomplete-extension';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
 
@@ -71,6 +73,8 @@ export type CodeEditorProps = {
   placeholder?: string;
   /** Enable word wrapping instead of horizontal scrolling */
   wordWrap?: boolean;
+  /** JSON Schema to enable variable autocomplete for {{variable}} placeholders (markdown only) */
+  schema?: JsonSchema;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
 export const CodeEditor = ({
@@ -83,6 +87,7 @@ export const CodeEditor = ({
   highlightVariables = false,
   placeholder,
   wordWrap = false,
+  schema,
   ...props
 }: CodeEditorProps) => {
   const theme = useCodemirrorTheme();
@@ -102,8 +107,12 @@ export const CodeEditor = ({
       exts.push(variableHighlight);
     }
 
+    if (schema && language === 'markdown') {
+      exts.push(createVariableAutocomplete(schema));
+    }
+
     return exts;
-  }, [language, highlightVariables]);
+  }, [language, highlightVariables, schema]);
 
   return (
     <div
