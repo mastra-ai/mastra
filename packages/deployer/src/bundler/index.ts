@@ -22,6 +22,9 @@ import { getWorkspaceInformation } from './workspaceDependencies';
 
 export type { BundlerOptions } from '../build/types';
 export type { BundlerPlatform } from '../build/utils';
+export { getWorkspaceInformation } from './workspaceDependencies';
+export { getPackageRootPath } from '../build/package-info';
+export { slash } from '../build/utils';
 
 export const IS_DEFAULT = Symbol('IS_DEFAULT');
 

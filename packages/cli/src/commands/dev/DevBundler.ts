@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
-import { Bundler } from '@mastra/deployer/bundler';
+import { Bundler, getWorkspaceInformation, getPackageRootPath, slash } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
 import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
@@ -157,6 +157,30 @@ export class DevBundler extends Bundler {
 
       watcher.on('event', cb);
     });
+  }
+
+  async generateTranspileConfig(entryFile: string, outputDirectory: string): Promise<string> {
+    const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
+    const transpilePackages = bundlerOptions?.transpilePackages ?? [];
+    const { workspaceMap } = await getWorkspaceInformation({ mastraEntryFile: entryFile });
+
+    const packages: Array<{ name: string; path: string }> = [];
+
+    for (const pkg of transpilePackages) {
+      const dir = await getPackageRootPath(pkg);
+      if (dir) {
+        packages.push({ name: pkg, path: slash(dir) });
+      }
+    }
+
+    for (const [name, info] of workspaceMap) {
+      packages.push({ name, path: slash(info.location) });
+    }
+
+    const configPath = join(outputDirectory, 'transpile-config.json');
+    await writeFile(configPath, JSON.stringify({ packages }));
+
+    return configPath;
   }
 
   async bundle(): Promise<void> {
