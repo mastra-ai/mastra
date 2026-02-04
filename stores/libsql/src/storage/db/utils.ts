@@ -5,6 +5,37 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
 /**
+ * Safely serializes a value to JSON string, handling non-serializable values
+ * like RPC proxies (Cloudflare Workers), functions, symbols, and circular references.
+ *
+ * Objects with toJSON methods (like RequestContext) are automatically handled
+ * by JSON.stringify's native behavior.
+ *
+ * @param value - The value to serialize
+ * @returns JSON string representation, with non-serializable values removed
+ */
+export const safeStringify = (value: unknown): string => {
+  return JSON.stringify(value, (_key, val) => {
+    if (val === null || val === undefined) return val;
+    if (typeof val === 'function') return undefined;
+    if (typeof val === 'symbol') return undefined;
+
+    if (typeof val === 'object') {
+      try {
+        // RPC proxies throw errors on property access
+        // toJSON methods are automatically called by JSON.stringify
+        Object.keys(val);
+        return val;
+      } catch {
+        return undefined;
+      }
+    }
+
+    return val;
+  });
+};
+
+/**
  * Builds a SQL column list for SELECT statements, wrapping JSONB columns with json()
  * to convert binary JSONB to TEXT.
  *
@@ -112,16 +143,17 @@ export function prepareStatement({ tableName, record }: { tableName: TABLE_NAMES
       // returning an undefined value will cause libsql to throw
       return null;
     }
-    // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
-    // Must check jsonb BEFORE Date, because JSON.stringify properly serializes Dates
+    // For jsonb columns, always stringify (even primitives need to be valid JSON)
+    // Must check jsonb BEFORE Date, because stringify properly serializes Dates
+    // Use safeStringify to handle non-serializable values like RPC proxies
     const colDef = schema[col];
     if (colDef?.type === 'jsonb') {
-      return JSON.stringify(v);
+      return safeStringify(v);
     }
     if (v instanceof Date) {
       return v.toISOString();
     }
-    return typeof v === 'object' ? JSON.stringify(v) : v;
+    return typeof v === 'object' ? safeStringify(v) : v;
   });
   const placeholders = columnNames
     .map(col => {
@@ -182,15 +214,16 @@ export function transformToSqlValue(value: any, forceJsonStringify: boolean = fa
   if (typeof value === 'undefined' || value === null) {
     return null;
   }
-  // For jsonb columns, always JSON.stringify (even primitives need to be valid JSON)
-  // Must check jsonb BEFORE Date, because JSON.stringify properly serializes Dates
+  // For jsonb columns, always stringify (even primitives need to be valid JSON)
+  // Must check jsonb BEFORE Date, because stringify properly serializes Dates
+  // Use safeStringify to handle non-serializable values like RPC proxies
   if (forceJsonStringify) {
-    return JSON.stringify(value);
+    return safeStringify(value);
   }
   if (value instanceof Date) {
     return value.toISOString();
   }
-  return typeof value === 'object' ? JSON.stringify(value) : value;
+  return typeof value === 'object' ? safeStringify(value) : value;
 }
 
 export function prepareDeleteStatement({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): {
