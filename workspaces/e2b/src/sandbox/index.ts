@@ -21,8 +21,8 @@ import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
 
-import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, MountContext } from '../mounts';
-import { mountS3, mountGCS, LOG_PREFIX } from '../mounts';
+import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, MountContext } from './mounts';
+import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 
