@@ -1119,6 +1119,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getUnobservedMessages(allMessages: MastraDBMessage[], record: ObservationalMemoryRecord): MastraDBMessage[] {
     const lastObservedAt = record.lastObservedAt;
+    // Safeguard: track message IDs that were already observed to prevent re-observation
+    // This handles edge cases like process restarts where lastObservedAt might not capture all messages
+    const observedMessageIds = record.observedMessageIds ? new Set(record.observedMessageIds) : undefined;
 
     if (!lastObservedAt) {
       // No observations yet - all messages are unobserved
@@ -1143,7 +1146,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           result.push(virtualMsg);
         }
       } else {
-        // No observation markers - fall back to timestamp-based filtering
+        // No observation markers - fall back to timestamp-based filtering + ID safeguard
+        // First, check if this message ID was already observed (safeguard)
+        if (observedMessageIds?.has(msg.id)) {
+          continue;
+        }
+
         if (!msg.createdAt) {
           // Messages without timestamps are always included
           result.push(msg);
@@ -2312,8 +2320,6 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter,
     abortSignal?: AbortSignal,
   ): Promise<void> {
-    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
-
     // Emit debug event for observation triggered
     this.emitDebugEvent({
       type: 'observation_triggered',
@@ -2398,11 +2404,18 @@ ${formattedMessages}
       // This ensures historical data (like LongMemEval fixtures) works correctly
       const lastObservedAt = this.getMaxMessageTimestamp(unobservedMessages);
 
+      // Collect message IDs being observed for the safeguard
+      // Merge with existing IDs, filter to only keep IDs newer than lastObservedAt
+      const newMessageIds = unobservedMessages.map(m => m.id);
+      const existingIds = freshRecord?.observedMessageIds ?? record.observedMessageIds ?? [];
+      const allObservedIds = [...new Set([...existingIds, ...newMessageIds])];
+
       await this.storage.updateActiveObservations({
         id: record.id,
         observations: newObservations,
         tokenCount: totalTokenCount,
         lastObservedAt,
+        observedMessageIds: allObservedIds,
       });
 
       // Save thread-specific metadata (currentTask, suggestedResponse only)
@@ -2907,11 +2920,17 @@ ${formattedMessages}
         .flatMap(r => r.threadMessages);
       const lastObservedAt = this.getMaxMessageTimestamp(observedMessages);
 
+      // Collect message IDs being observed for the safeguard
+      const newMessageIds = observedMessages.map(m => m.id);
+      const existingIds = record.observedMessageIds ?? [];
+      const allObservedIds = [...new Set([...existingIds, ...newMessageIds])];
+
       await this.storage.updateActiveObservations({
         id: record.id,
         observations: currentObservations,
         tokenCount: totalTokenCount,
         lastObservedAt,
+        observedMessageIds: allObservedIds,
       });
 
       // ════════════════════════════════════════════════════════════════════════

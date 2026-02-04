@@ -1383,6 +1383,7 @@ export class MemoryLibSQL extends MemoryStorage {
       isObserving: Boolean(row.isObserving),
       config: row.config ? JSON.parse(row.config) : {},
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      observedMessageIds: row.observedMessageIds ? JSON.parse(row.observedMessageIds) : undefined,
     };
   }
 
@@ -1510,6 +1511,7 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const now = new Date();
 
+      const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
       const result = await this.#client.execute({
         sql: `UPDATE "${OM_TABLE}" SET
           "activeObservations" = ?,
@@ -1517,6 +1519,7 @@ export class MemoryLibSQL extends MemoryStorage {
           "pendingMessageTokens" = 0,
           "observationTokenCount" = ?,
           "totalTokensObserved" = "totalTokensObserved" + ?,
+          "observedMessageIds" = ?,
           "updatedAt" = ?
         WHERE id = ?`,
         args: [
@@ -1524,6 +1527,7 @@ export class MemoryLibSQL extends MemoryStorage {
           input.lastObservedAt.toISOString(),
           input.tokenCount,
           input.tokenCount,
+          observedMessageIdsJson,
           now.toISOString(),
           input.id,
         ],

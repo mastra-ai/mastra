@@ -856,7 +856,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
-    const { id, observations, tokenCount, lastObservedAt } = input;
+    const { id, observations, tokenCount, lastObservedAt, observedMessageIds } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
@@ -869,9 +869,13 @@ export class InMemoryMemory extends MemoryStorage {
     record.pendingMessageTokens = 0;
 
     // Update timestamps (top-level, not in metadata)
-    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
     record.lastObservedAt = lastObservedAt;
     record.updatedAt = new Date();
+
+    // Store observed message IDs as safeguard against re-observation
+    if (observedMessageIds) {
+      record.observedMessageIds = observedMessageIds;
+    }
   }
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {

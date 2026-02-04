@@ -141,6 +141,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   observationTokenCount: { type: 'integer', nullable: false }, // Current observation size in tokens
   isObserving: { type: 'boolean', nullable: false },
   isReflecting: { type: 'boolean', nullable: false },
+  observedMessageIds: { type: 'jsonb', nullable: true }, // JSON array of message IDs already observed
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };

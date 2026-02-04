@@ -559,8 +559,12 @@ export interface ObservationalMemoryRecord {
   /** Reflection waiting to be swapped in (async buffering) */
   bufferedReflection?: string;
 
-  // Note: Message tracking via IDs has been removed in favor of cursor-based
-  // tracking via lastObservedAt. This is more efficient for long conversations.
+  /**
+   * Message IDs observed in the current generation.
+   * Used as a safeguard against re-observation if timestamp filtering fails.
+   * Reset on reflection (new generation starts fresh).
+   */
+  observedMessageIds?: string[];
 
   // Token tracking
   /** Running total of all tokens observed */
@@ -605,6 +609,12 @@ export interface UpdateActiveObservationsInput {
   tokenCount: number;
   /** Timestamp when these observations were created (for cursor-based message loading) */
   lastObservedAt: Date;
+  /**
+   * IDs of messages that were observed in this cycle.
+   * Stored in record metadata as a safeguard against re-observation on process restart.
+   * These are appended to any existing IDs and pruned to only include IDs newer than lastObservedAt.
+   */
+  observedMessageIds?: string[];
 }
 
 /**

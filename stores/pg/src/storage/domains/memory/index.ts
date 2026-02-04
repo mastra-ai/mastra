@@ -1565,6 +1565,11 @@ export class MemoryPG extends MemoryStorage {
       isObserving: Boolean(row.isObserving),
       config: row.config ? (typeof row.config === 'string' ? JSON.parse(row.config) : row.config) : {},
       metadata: row.metadata ? (typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata) : undefined,
+      observedMessageIds: row.observedMessageIds
+        ? typeof row.observedMessageIds === 'string'
+          ? JSON.parse(row.observedMessageIds)
+          : row.observedMessageIds
+        : undefined,
     };
   }
 
@@ -1713,6 +1718,7 @@ export class MemoryPG extends MemoryStorage {
 
       const lastObservedAtStr = input.lastObservedAt.toISOString();
       const nowStr = now.toISOString();
+      const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
       const result = await this.#db.client.query(
         `UPDATE ${tableName} SET
           "activeObservations" = $1,
@@ -1721,15 +1727,17 @@ export class MemoryPG extends MemoryStorage {
           "pendingMessageTokens" = 0,
           "observationTokenCount" = $4,
           "totalTokensObserved" = "totalTokensObserved" + $5,
-          "updatedAt" = $6,
-          "updatedAtZ" = $7
-        WHERE id = $8`,
+          "observedMessageIds" = $6,
+          "updatedAt" = $7,
+          "updatedAtZ" = $8
+        WHERE id = $9`,
         [
           input.observations,
           lastObservedAtStr,
           lastObservedAtStr,
           input.tokenCount,
           input.tokenCount,
+          observedMessageIdsJson,
           nowStr,
           nowStr,
           input.id,

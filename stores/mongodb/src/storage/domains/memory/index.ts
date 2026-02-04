@@ -1136,6 +1136,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       isObserving: Boolean(doc.isObserving),
       config: doc.config || {},
       metadata: doc.metadata || undefined,
+      observedMessageIds: doc.observedMessageIds || undefined,
     };
   }
 
@@ -1255,6 +1256,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         lastObservedAt: input.lastObservedAt,
         pendingMessageTokens: 0,
         observationTokenCount: safeTokenCount,
+        observedMessageIds: input.observedMessageIds ?? null,
         updatedAt: now,
       };
 
