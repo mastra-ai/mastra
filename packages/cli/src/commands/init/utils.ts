@@ -1063,7 +1063,7 @@ The MCP server provides embedded documentation access within your editor:
    - Code examples
    - Integration guides
 
-Learn more: [MCP Documentation](https://mastra.ai/docs/mcp)
+Learn more in the [MCP Documentation](https://mastra.ai/docs/mcp/overview).
 
 `;
   }
