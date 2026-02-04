@@ -1,111 +1,121 @@
-# Test Reorganization: Integration Tests vs Unit Tests
+# Test Reorganization: E2E Tests vs Unit Tests
 
 ## Overview
 
-This document describes the reorganization of tests in `packages/core` to separate integration tests (that use real LLM APIs) from unit tests (that use mock models).
+This document describes the reorganization of tests in `packages/core` to separate end-to-end tests (that use real LLM APIs) from unit tests (that use mock models).
 
 ## Naming Convention
 
 Tests in this package follow a consistent naming convention:
 
-- **Unit Tests**: `*.test.ts` - Use mock LLM models (e.g., `MockLanguageModelV2`, `createMockModel`, `getDummyResponseModel`)
-- **Integration Tests**: `*.integration.test.ts` - Make real API calls to LLM providers (OpenAI, Google, Anthropic, etc.)
+| Pattern | Description | API Keys Required |
+|---------|-------------|-------------------|
+| `*.test.ts` | Unit tests using mock models | No |
+| `*-integration.test.ts` | Component integration tests (multiple components, but with mocks) | No |
+| `*.e2e.test.ts` | End-to-end tests hitting real LLM APIs | Yes |
 
-## Changes Made
+### Key Distinction
 
-The following test files were renamed from `*.test.ts` to `*.integration.test.ts` because they make real LLM API calls without using mock models:
+- **Unit/Integration tests** (`*.test.ts`, `*-integration.test.ts`): Test components in isolation or together, but use mock LLM models. These are fast, deterministic, and don't require API keys.
+- **E2E tests** (`*.e2e.test.ts`): Test against real external services (OpenAI, Google, Anthropic, etc.). These require API keys and make actual network calls.
+
+## E2E Test Files
+
+The following test files use real LLM APIs and are named with `.e2e.test.ts`:
 
 ### Agent Tests
 
-| Original File | New File | Reason |
-|--------------|----------|--------|
-| `agent/agent-gemini.test.ts` | `agent/agent-gemini.integration.test.ts` | Uses real Gemini models (`google/gemini-2.0-flash-lite`, `google/gemini-3-pro-preview`) |
-| `agent/__tests__/image-prompt.test.ts` | `agent/__tests__/image-prompt.integration.test.ts` | Uses real OpenAI models (`openai('gpt-4o')`) |
-| `agent/__tests__/stopWhen.test.ts` | `agent/__tests__/stopWhen.integration.test.ts` | Uses real OpenAI models (`openai('gpt-4o-mini')`) |
+| File | APIs Used |
+|------|-----------|
+| `agent/agent-gemini.e2e.test.ts` | Google Gemini |
+| `agent/__tests__/image-prompt.e2e.test.ts` | OpenAI |
+| `agent/__tests__/stopWhen.e2e.test.ts` | OpenAI |
 
 ### LLM/Model Tests
 
-| Original File | New File | Reason |
-|--------------|----------|--------|
-| `llm/model/model.loop.test.ts` | `llm/model/model.loop.integration.test.ts` | Uses real OpenAI models for stream/generate testing |
+| File | APIs Used |
+|------|-----------|
+| `llm/model/model.loop.e2e.test.ts` | OpenAI |
+| `llm/model/router.e2e.test.ts` | OpenAI, Anthropic, Google, OpenRouter |
+| `llm/model/embedding-router.e2e.test.ts` | OpenAI, Google |
+| `llm/model/gateways/azure.e2e.test.ts` | Azure OpenAI |
+| `llm/model/gateways/models-dev.e2e.test.ts` | Models.dev Gateway |
+| `llm/model/gateways/netlify.e2e.test.ts` | Netlify AI Gateway |
 
 ### Tools Tests
 
-| Original File | New File | Reason |
-|--------------|----------|--------|
-| `tools/provider-tools.test.ts` | `tools/provider-tools.integration.test.ts` | Uses real Google Search, OpenAI Web Search, and Anthropic Web Search tools with actual API calls |
+| File | APIs Used |
+|------|-----------|
+| `tools/provider-tools.e2e.test.ts` | Google Search, OpenAI Web Search, Anthropic Web Search |
 
 ### Processors Tests
 
-| Original File | New File | Reason |
-|--------------|----------|--------|
-| `processors/processors/token-accuracy.test.ts` | `processors/processors/token-accuracy.integration.test.ts` | Uses real OpenAI model to verify token counting accuracy |
+| File | APIs Used |
+|------|-----------|
+| `processors/processors/token-accuracy.e2e.test.ts` | OpenAI |
 
 ### Evals Tests
 
-| Original File | New File | Reason |
-|--------------|----------|--------|
-| `evals/scorer-custom-gateway.test.ts` | `evals/scorer-custom-gateway.integration.test.ts` | Uses custom gateway that attempts real API calls |
+| File | APIs Used |
+|------|-----------|
+| `evals/scorer-custom-gateway.e2e.test.ts` | Custom Gateway |
 
-## Files NOT Moved
+## Component Integration Tests (Using Mocks)
 
-The following files have "integration" in their names but were not moved because they use mock models (they test component integration, not external API integration):
+These files have "integration" in their names but use mock models. They test how multiple internal components work together:
 
-- `mastra/custom-gateway-integration.test.ts` - Uses mock gateways, no real API calls
-- `processors/processors/processors-integration.test.ts` - Uses mock data to test processor chaining
-- `tools/__tests__/transform-agent-integration.test.ts` - Uses mock models to test tool transformation
-- `tools/unified-integration.test.ts` - Uses `MockLanguageModelV2` for testing tool argument handling
-
-## Pre-existing Integration Tests
-
-These integration test files already existed in the codebase and follow the `.integration.test.ts` naming convention:
-
-- `llm/model/embedding-router.integration.test.ts`
-- `llm/model/router.integration.test.ts`
-- `llm/model/gateways/azure.integration.test.ts`
-- `llm/model/gateways/models-dev.integration.test.ts`
-- `llm/model/gateways/netlify.integration.test.ts`
+- `mastra/custom-gateway-integration.test.ts` - Tests custom gateway configuration
+- `processors/processors/processors-integration.test.ts` - Tests processor chaining
+- `processors/processors/tool-search-integration.test.ts` - Tests tool search with processors
+- `tools/__tests__/transform-agent-integration.test.ts` - Tests tool transforms through agent pipeline
+- `tools/unified-integration.test.ts` - Tests tool argument handling across contexts
 
 ## Running Tests
 
-### Unit Tests Only
-
-To run only unit tests (faster, no API keys required):
+### Unit Tests Only (Fast, No API Keys)
 
 ```bash
-pnpm test:core --exclude '**/*.integration.test.ts'
+pnpm test:core --exclude '**/*.e2e.test.ts'
 ```
 
-### Integration Tests Only
-
-To run integration tests (requires API keys):
+### E2E Tests Only (Requires API Keys)
 
 ```bash
-pnpm test:core --include '**/*.integration.test.ts'
+pnpm test:core --include '**/*.e2e.test.ts'
 ```
 
 ### All Tests
-
-To run all tests:
 
 ```bash
 pnpm test:core
 ```
 
-## Mock Utilities
+## Required Environment Variables for E2E Tests
 
-The following mock utilities are used for unit tests:
+| Variable | Used By |
+|----------|---------|
+| `OPENAI_API_KEY` | Most e2e tests |
+| `ANTHROPIC_API_KEY` | router.e2e.test.ts, provider-tools.e2e.test.ts |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | agent-gemini.e2e.test.ts, router.e2e.test.ts, embedding-router.e2e.test.ts |
+| `AZURE_OPENAI_API_KEY` | azure.e2e.test.ts |
+| `AZURE_OPENAI_ENDPOINT` | azure.e2e.test.ts |
+| `OPENROUTER_API_KEY` | router.e2e.test.ts |
+| `NETLIFY_TOKEN` | netlify.e2e.test.ts |
+| `NETLIFY_SITE_ID` | netlify.e2e.test.ts |
 
-- `test-utils/llm-mock.ts` - Provides `createMockModel` and `MockLanguageModel*` classes
+## Mock Utilities for Unit Tests
+
+When writing new tests, use these mock utilities to avoid making real API calls:
+
+- `@internal/ai-sdk-v5/test` - Provides `MockLanguageModelV2`, `convertArrayToReadableStream`
+- `@internal/ai-sdk-v4/test` - Provides `MockLanguageModelV1`, `simulateReadableStream`
 - `agent/__tests__/mock-model.ts` - Provides `getDummyResponseModel`, `getSingleDummyResponseModel`, `getEmptyResponseModel`, `getErrorResponseModel`
-- `@internal/ai-sdk-v5/test` - Provides `MockLanguageModelV2`
-
-When writing new tests, prefer using these mock utilities to avoid making real API calls in unit tests.
 
 ## Why This Matters
 
-1. **Faster CI/CD**: Unit tests can run quickly without waiting for API responses
+1. **Faster CI/CD**: Unit tests run quickly without waiting for API responses
 2. **No API Key Requirements**: Unit tests don't require API keys to be configured
 3. **Deterministic Results**: Mock models provide consistent, predictable responses
 4. **Cost Savings**: Avoids API costs during development and testing
 5. **Isolation**: Unit tests can run offline and in any environment
+6. **Clear Naming**: `.e2e.test.ts` makes it obvious which tests hit real APIs
