@@ -41,6 +41,7 @@ export type ProcessorArgs = {
   };
   retryCount?: number;
   perStep?: boolean;
+  format?: 'legacy' | 'vnext';
   state?: Record<string, any>;
   outputOptions?: {
     includeState?: boolean;
@@ -66,6 +67,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   private abortControllers: Map<string, AbortController> = new Map();
   // Map of child runId -> parent runId for tracking nested workflows
   private parentChildRelationships: Map<string, string> = new Map();
+  private runFormats: Map<string, 'legacy' | 'vnext' | undefined> = new Map();
 
   constructor({ mastra }: { mastra: Mastra }) {
     super({ mastra });
@@ -109,6 +111,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   private cleanupRun(runId: string): void {
     this.abortControllers.delete(runId);
     this.parentChildRelationships.delete(runId);
+    this.runFormats.delete(runId);
 
     // Clean up any orphaned child entries pointing to this run as their parent
     for (const [childRunId, parentRunId] of this.parentChildRelationships.entries()) {
@@ -198,12 +201,15 @@ export class WorkflowEventProcessor extends EventProcessor {
     stepResults,
     requestContext,
     perStep,
+    format,
     state,
     outputOptions,
     forEachIndex,
   }: ProcessorArgs & { initialState?: Record<string, any> }) {
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
     const initialState = (arguments[0] as any).initialState ?? state ?? {};
+    const resolvedFormat = format ?? this.runFormats.get(runId);
+    this.runFormats.set(runId, resolvedFormat);
     // Create abort controller for this workflow run
     this.getOrCreateAbortController(runId);
 
@@ -541,6 +547,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     outputOptions,
     forEachIndex,
   }: ProcessorArgs) {
+    const streamFormat = this.runFormats.get(runId);
     // Get current state from stepResults.__state or from passed state
     const currentState = resolveCurrentState({ stepResults, state });
     let stepGraph: StepFlowEntry[] = workflow.stepGraph;
@@ -981,6 +988,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
       validateInputs: workflow.options.validateInputs,
       abortController,
+      format: streamFormat,
       perStep,
     });
     requestContext = Object.fromEntries(rc.entries());
