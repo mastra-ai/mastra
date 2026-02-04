@@ -320,34 +320,17 @@ export class E2BSandbox extends MastraSandbox {
   }
 
   /**
-   * Generate a simple hash for use as marker filename.
-   */
-  private markerFilename(mountPath: string): string {
-    // Simple hash - just use a sanitized version for the filename
-    // The actual path is stored inside the file
-    let hash = 0;
-    for (let i = 0; i < mountPath.length; i++) {
-      const char = mountPath.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return `mount-${Math.abs(hash).toString(36)}`;
-  }
-
-  /**
    * Write marker file for detecting config changes on reconnect.
    * Stores both the mount path and config hash in the file.
-   * Format: path|configHash
    */
   private async writeMarkerFile(mountPath: string): Promise<void> {
     if (!this._sandbox) return;
 
-    const entry = this.mounts.get(mountPath);
-    if (!entry?.configHash) return;
+    const markerContent = this.mounts.getMarkerContent(mountPath);
+    if (!markerContent) return;
 
-    const filename = this.markerFilename(mountPath);
+    const filename = this.mounts.markerFilename(mountPath);
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
-    const markerContent = `${mountPath}|${entry.configHash}`;
     try {
       await this._sandbox.commands.run('mkdir -p /tmp/.mastra-mounts');
       await this._sandbox.files.write(markerPath, markerContent);
@@ -384,7 +367,7 @@ export class E2BSandbox extends MastraSandbox {
     this.mounts.delete(mountPath);
 
     // Clean up marker file
-    const filename = this.markerFilename(mountPath);
+    const filename = this.mounts.markerFilename(mountPath);
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
     await this._sandbox.commands.run(`rm -f "${markerPath}" 2>/dev/null || true`);
 
@@ -442,7 +425,6 @@ export class E2BSandbox extends MastraSandbox {
     }
 
     // Also clean up orphaned marker files and empty directories from failed mounts
-    // Marker files store: path|configHash
     try {
       const markersResult = await this._sandbox.commands.run(`ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""`);
       const markerFiles = markersResult.stdout
@@ -451,7 +433,7 @@ export class E2BSandbox extends MastraSandbox {
         .filter(f => f.length > 0 && f.startsWith('mount-'));
 
       // Get the expected marker filenames for comparison
-      const expectedMarkerFiles = new Set(expectedMountPaths.map(p => this.markerFilename(p)));
+      const expectedMarkerFiles = new Set(expectedMountPaths.map(p => this.mounts.markerFilename(p)));
 
       for (const markerFile of markerFiles) {
         // If this marker file doesn't correspond to an expected mount path, clean it up
@@ -460,19 +442,18 @@ export class E2BSandbox extends MastraSandbox {
           const markerResult = await this._sandbox.commands.run(
             `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`,
           );
-          const markerContent = markerResult.stdout.trim();
-          const [mountPath] = markerContent.split('|');
+          const parsed = this.mounts.parseMarkerContent(markerResult.stdout.trim());
 
-          if (mountPath) {
+          if (parsed) {
             // Only clean up if not currently FUSE mounted
-            if (!currentMounts.includes(mountPath)) {
-              this.logger.debug(`${LOG_PREFIX} Cleaning up orphaned marker and directory for ${mountPath}`);
+            if (!currentMounts.includes(parsed.path)) {
+              this.logger.debug(`${LOG_PREFIX} Cleaning up orphaned marker and directory for ${parsed.path}`);
 
               // Remove marker file
               await this._sandbox.commands.run(`rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`);
 
               // Try to remove the directory (will fail if not empty or doesn't exist, which is fine)
-              await this._sandbox.commands.run(`sudo rmdir "${mountPath}" 2>/dev/null || true`);
+              await this._sandbox.commands.run(`sudo rmdir "${parsed.path}" 2>/dev/null || true`);
             }
           } else {
             // Malformed marker file - just delete it
@@ -505,27 +486,22 @@ export class E2BSandbox extends MastraSandbox {
     }
 
     // Path is mounted - check if config matches via marker file
-    const entry = this.mounts.get(mountPath);
-    const expectedHash = entry?.configHash;
-    if (!expectedHash) {
-      return 'mismatched'; // No hash to compare against
-    }
-
-    const filename = this.markerFilename(mountPath);
+    const filename = this.mounts.markerFilename(mountPath);
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
 
     try {
       const markerResult = await this._sandbox.commands.run(`cat "${markerPath}" 2>/dev/null || echo ""`);
-      const markerContent = markerResult.stdout.trim();
+      const parsed = this.mounts.parseMarkerContent(markerResult.stdout.trim());
 
-      // Parse marker content: path|configHash
-      const [storedPath, storedHash] = markerContent.split('|');
+      if (!parsed) {
+        return 'mismatched';
+      }
 
       this.logger.debug(
-        `${LOG_PREFIX} Marker check - stored: "${storedPath}|${storedHash}", expected: "${mountPath}|${expectedHash}"`,
+        `${LOG_PREFIX} Marker check - stored: "${parsed.path}|${parsed.configHash}", mountPath: "${mountPath}"`,
       );
 
-      if (storedPath === mountPath && storedHash === expectedHash) {
+      if (parsed.path === mountPath && this.mounts.isConfigMatching(mountPath, parsed.configHash)) {
         return 'matching';
       }
     } catch {

@@ -276,6 +276,68 @@ export class MountManager {
   }
 
   // ---------------------------------------------------------------------------
+  // Marker File Helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Generate a marker filename for a mount path.
+   * Used by sandboxes to store mount metadata for reconnection detection.
+   *
+   * @param mountPath - The mount path to generate a filename for
+   * @returns A safe filename like "mount-abc123"
+   */
+  markerFilename(mountPath: string): string {
+    let hash = 0;
+    for (let i = 0; i < mountPath.length; i++) {
+      const char = mountPath.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return `mount-${Math.abs(hash).toString(36)}`;
+  }
+
+  /**
+   * Generate marker file content for a mount path.
+   * Format: "path|configHash" - used for detecting config changes on reconnect.
+   *
+   * @param mountPath - The mount path
+   * @returns Marker content string, or null if no config hash available
+   */
+  getMarkerContent(mountPath: string): string | null {
+    const entry = this._entries.get(mountPath);
+    if (!entry?.configHash) {
+      return null;
+    }
+    return `${mountPath}|${entry.configHash}`;
+  }
+
+  /**
+   * Parse marker file content.
+   *
+   * @param content - The marker file content (format: "path|configHash")
+   * @returns Parsed path and configHash, or null if invalid format
+   */
+  parseMarkerContent(content: string): { path: string; configHash: string } | null {
+    const [path, configHash] = content.split('|');
+    if (!path || !configHash) {
+      return null;
+    }
+    return { path, configHash };
+  }
+
+  /**
+   * Check if a config hash matches the expected hash for a mount path.
+   *
+   * @param mountPath - The mount path to check
+   * @param storedHash - The hash from the marker file
+   * @returns true if the hashes match
+   */
+  isConfigMatching(mountPath: string, storedHash: string): boolean {
+    const entry = this._entries.get(mountPath);
+    return entry?.configHash === storedHash;
+  }
+
+  // ---------------------------------------------------------------------------
   // Internal
   // ---------------------------------------------------------------------------
 

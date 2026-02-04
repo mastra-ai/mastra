@@ -16,7 +16,7 @@ This document tracks implementation progress for review.
 | 6 | Clean up E2B sandbox comments | COR-380 | **Done** | `e2b-sandbox.ts` |
 | 7 | S3Filesystem lazy init pattern (`ensureReady()`) | COR-484 | **Done** | `s3-filesystem.ts` |
 | 8 | Extract ensureSandbox/lazy init to MastraSandbox base class | COR-380 | **Done** | `mastra-sandbox.ts`, `e2b-sandbox.ts` |
-| 9 | Mount Manager extraction (marker files, reconcileMounts, checkExistingMount) | COR-380, COR-385 | Pending | `mount-manager.ts` |
+| 9 | Mount Manager extraction (marker file helpers) | COR-380, COR-385 | **Done** | `mount-manager.ts`, `e2b-sandbox.ts` |
 | 10 | Implement pathContext with mounts (agent instructions, mount awareness) | COR-385, COR-491 | Pending | `workspace.ts`, `composite-filesystem.ts` |
 | 11 | General cleanup checklist (imports, error handling, hardcoded values, logging) | COR-380 | Pending | Multiple files |
 | 12 | Create shared test suite with factory patterns | COR-385 | Pending | (see stores/server-adapters pattern) |
@@ -248,22 +248,38 @@ private async ensureSandbox(): Promise<Sandbox> {
 ## Task 9: Mount Manager Extraction
 
 ### Problem
-E2B's `mount()` has useful patterns that could benefit other sandbox providers:
-- Marker file logic for reconnection
-- `reconcileMounts()` for cleaning up stale mounts
-- `checkExistingMount()` for detecting config changes
-- Directory creation with proper permissions
+E2B's `mount()` has marker file logic for reconnection detection. Some of this can be moved to MountManager.
 
 ### Solution
-Extract reusable patterns to MountManager or base class:
-- Abstract marker file concept (sandbox-specific commands)
-- `reconcileMounts()` pattern as base class method
-- `checkExistingMount()` interface
+Extract pure functions (no sandbox execution required) to MountManager:
+- `markerFilename()` - generates marker filename from mount path hash
+- `getMarkerContent()` - generates marker content string (`path|configHash`)
+- `parseMarkerContent()` - parses marker content back to components
+- `isConfigMatching()` - checks if stored hash matches expected
 
-### Changes Planned
-- Review what can be generalized vs what's E2B-specific
-- Update MountManager with extracted logic
-- Keep E2B-specific FUSE details in E2BSandbox
+Keep sandbox-specific operations in E2BSandbox:
+- Actual file I/O (`writeMarkerFile`, reading markers)
+- Mount point detection (`checkExistingMount`)
+- Stale mount cleanup (`reconcileMounts`)
+- These require sandbox commands/file APIs
+
+### Changes Made
+
+#### `packages/core/src/workspace/sandbox/mount-manager.ts`
+Added marker file helpers:
+```typescript
+markerFilename(mountPath: string): string
+getMarkerContent(mountPath: string): string | null
+parseMarkerContent(content: string): { path: string; configHash: string } | null
+isConfigMatching(mountPath: string, storedHash: string): boolean
+```
+
+#### `workspaces/e2b/src/e2b-sandbox.ts`
+- Removed duplicate `markerFilename()` method
+- Updated `writeMarkerFile()` to use `this.mounts.getMarkerContent()` and `this.mounts.markerFilename()`
+- Updated `unmount()` to use `this.mounts.markerFilename()`
+- Updated `reconcileMounts()` to use `this.mounts.markerFilename()` and `this.mounts.parseMarkerContent()`
+- Updated `checkExistingMount()` to use `this.mounts.markerFilename()`, `this.mounts.parseMarkerContent()`, and `this.mounts.isConfigMatching()`
 
 ---
 
@@ -437,7 +453,7 @@ GCS_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
 - [x] Task 6: E2B comments cleanup
 - [x] Task 7: S3Filesystem lazy init
 - [x] Task 8: ensureSandbox extraction
-- [ ] Task 9: Mount Manager extraction
+- [x] Task 9: Mount Manager extraction
 - [ ] Task 10: pathContext implementation
 - [ ] Task 11: General cleanup
 - [ ] Task 12: Shared test suite
