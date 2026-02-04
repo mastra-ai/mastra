@@ -16,7 +16,7 @@ import type { JsonSchema } from '@/lib/json-schema';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 
 import type { AgentFormValues } from './utils/form-validation';
-import { ToolsSection, WorkflowsSection, AgentsSection, ScorersSection } from './sections';
+import { ToolsSection, WorkflowsSection, AgentsSection, ScorersSection, MemorySection } from './sections';
 import { VariableDialog } from './variable-dialog';
 
 interface AgentEditSidebarProps {
@@ -166,6 +166,7 @@ export function AgentEditSidebar({
                 readOnly={readOnly}
               />
               <ScorersSection control={control} readOnly={readOnly} />
+              <MemorySection control={control} readOnly={readOnly} />
             </div>
           </ScrollArea>
         </TabContent>

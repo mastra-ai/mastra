@@ -16,6 +16,13 @@ const scorerConfigSchema = z.object({
   sampling: scoringSamplingConfigSchema.optional(),
 });
 
+const memoryConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  lastMessages: z.union([z.number().min(1), z.literal(false)]).optional(),
+  semanticRecall: z.boolean().optional(),
+  readOnly: z.boolean().optional(),
+});
+
 export const agentFormSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),
   description: z.string().max(500, 'Description must be 500 characters or less').optional(),
@@ -28,6 +35,7 @@ export const agentFormSchema = z.object({
   workflows: z.record(z.string(), entityConfigSchema).optional(),
   agents: z.record(z.string(), entityConfigSchema).optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
+  memory: memoryConfigSchema.optional(),
   variables: z.custom<JsonSchema>().optional(),
 });
 

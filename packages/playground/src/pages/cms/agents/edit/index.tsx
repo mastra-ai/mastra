@@ -73,6 +73,11 @@ function CmsAgentsEditForm({
       allTools.push(...dataSource.integrationTools);
     }
 
+    // Transform memory data from API format to form format
+    const memoryData = dataSource.memory as
+      | { options?: { lastMessages?: number | false; semanticRecall?: boolean; readOnly?: boolean } }
+      | undefined;
+
     return {
       name: dataSource.name || '',
       description: dataSource.description || '',
@@ -85,6 +90,14 @@ function CmsAgentsEditForm({
       workflows: arrayToRecord((dataSource.workflows as string[]) || []),
       agents: arrayToRecord((dataSource.agents as string[]) || []),
       scorers: dataSource.scorers || {},
+      memory: memoryData?.options
+        ? {
+            enabled: true,
+            lastMessages: memoryData.options.lastMessages,
+            semanticRecall: memoryData.options.semanticRecall,
+            readOnly: memoryData.options.readOnly,
+          }
+        : undefined,
     };
   }, [agent, versionData, isViewingVersion]);
 
@@ -128,6 +141,15 @@ function CmsAgentsEditForm({
         workflows: Object.keys(values.workflows || {}),
         agents: Object.keys(values.agents || {}),
         scorers: values.scorers,
+        memory: values.memory?.enabled
+          ? {
+              options: {
+                lastMessages: values.memory.lastMessages,
+                semanticRecall: values.memory.semanticRecall,
+                readOnly: values.memory.readOnly,
+              },
+            }
+          : undefined,
       });
 
       toast.success('Agent updated successfully');

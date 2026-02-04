@@ -44,6 +44,15 @@ function CmsAgentsCreatePage() {
           values.workflows && Object.keys(values.workflows).length > 0 ? Object.keys(values.workflows) : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? Object.keys(values.agents) : undefined,
         scorers: values.scorers && Object.keys(values.scorers).length > 0 ? values.scorers : undefined,
+        memory: values.memory?.enabled
+          ? {
+              options: {
+                lastMessages: values.memory.lastMessages,
+                semanticRecall: values.memory.semanticRecall,
+                readOnly: values.memory.readOnly,
+              },
+            }
+          : undefined,
       };
 
       await createStoredAgent.mutateAsync(createParams);
