@@ -5,7 +5,7 @@ import { Check, PlusIcon } from 'lucide-react';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons';
+import { Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@/ds/icons';
 import { Spinner } from '@/ds/components/Spinner';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
@@ -111,9 +111,18 @@ export function AgentEditSidebar({
     <div className="h-full flex flex-col">
       <Tabs defaultTab="identity" className="flex-1 min-h-0 flex flex-col">
         <TabList className="flex-shrink-0">
-          <Tab value="identity">Identity</Tab>
-          <Tab value="capabilities">Capabilities</Tab>
-          <Tab value="variables">Variables</Tab>
+          <Tab value="identity">
+            <Icon size="sm"><AgentIcon /></Icon>
+            Identity
+          </Tab>
+          <Tab value="capabilities">
+            <Icon size="sm"><ToolsIcon /></Icon>
+            Capabilities
+          </Tab>
+          <Tab value="variables">
+            <Icon size="sm"><VariablesIcon /></Icon>
+            Variables
+          </Tab>
         </TabList>
 
         <TabContent value="identity" className="flex-1 min-h-0 py-0 pb-3">
