@@ -5,6 +5,3 @@
  */
 
 export { GCSFilesystem, type GCSFilesystemOptions, type GCSMountConfig } from './gcs-filesystem';
-
-// Re-export core types for convenience
-export type { MountResult, FilesystemMountConfig } from '@mastra/core/workspace';

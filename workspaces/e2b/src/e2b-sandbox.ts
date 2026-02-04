@@ -21,8 +21,8 @@ import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
 
-import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, E2BR2MountConfig, MountContext } from './mounts';
-import { mountS3, mountGCS, mountR2, LOG_PREFIX } from './mounts';
+import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, MountContext } from './mounts';
+import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
 import { createDefaultMountableTemplate } from './utils/template';
 import type { TemplateSpec } from './utils/template';
 
@@ -132,6 +132,9 @@ export class E2BSandbox extends MastraSandbox {
   /** Promise for template preparation (started in constructor) */
   private _templatePreparePromise?: Promise<string>;
 
+  /** Promise for start() to prevent race conditions from concurrent calls */
+  private _startPromise?: Promise<void>;
+
   constructor(options: E2BSandboxOptions = {}) {
     super({ name: 'E2BSandbox' });
 
@@ -210,17 +213,8 @@ export class E2BSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Mounting "${mountPath}"...`);
 
-    // Get config if available (may be undefined for filesystems that don't support getMountConfig)
-    const config = filesystem.getMountConfig?.() as E2BMountConfig | undefined;
-
-    // Check if filesystem supports native mounting
-    if (!config) {
-      this.mounts.set(mountPath, { filesystem, state: 'unsupported', error: 'Filesystem does not support mounting' });
-      this.logger.debug(
-        `${LOG_PREFIX} Filesystem ${filesystem.provider} (${filesystem.id}) at "${mountPath}" does not support mounting`,
-      );
-      return { success: false, mountPath, error: 'Filesystem does not support mounting' };
-    }
+    // Get mount config - MountManager validates this exists before calling mount()
+    const config = filesystem.getMountConfig?.() as E2BMountConfig;
 
     // Check if already mounted with matching config (e.g., when reconnecting to existing sandbox)
     const existingMount = await this.checkExistingMount(mountPath);
@@ -237,7 +231,7 @@ export class E2BSandbox extends MastraSandbox {
     }
     this.logger.debug(`${LOG_PREFIX} Config type: ${config.type}`);
 
-    // Mark as mounting
+    // Mark as mounting (handles direct mount() calls; MountManager also sets this for processPending)
     this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
 
     // Check if directory exists and is non-empty (would shadow existing files)
@@ -288,11 +282,6 @@ export class E2BSandbox extends MastraSandbox {
           this.logger.debug(`${LOG_PREFIX} Mounting GCS bucket at ${mountPath}...`);
           await mountGCS(mountPath, config as E2BGCSMountConfig, mountCtx);
           this.logger.debug(`${LOG_PREFIX} Mounted GCS bucket at ${mountPath}`);
-          break;
-        case 'r2':
-          this.logger.debug(`${LOG_PREFIX} Mounting R2 bucket at ${mountPath}...`);
-          await mountR2(mountPath, config as E2BR2MountConfig, mountCtx);
-          this.logger.debug(`${LOG_PREFIX} Mounted R2 bucket at ${mountPath}`);
           break;
         default:
           this.mounts.set(mountPath, {
@@ -556,11 +545,29 @@ export class E2BSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   async start(): Promise<void> {
+    // Already running
     if (this._sandbox) {
       this._status = 'running';
       return;
     }
 
+    // Start already in progress - return existing promise to prevent race conditions
+    if (this._startPromise) {
+      return this._startPromise;
+    }
+
+    // Create and store the start promise
+    this._startPromise = this._doStart();
+
+    try {
+      await this._startPromise;
+    } finally {
+      this._startPromise = undefined;
+    }
+  }
+
+  /** Internal start implementation - only called once even with concurrent start() calls */
+  private async _doStart(): Promise<void> {
     this._status = 'starting';
 
     try {
