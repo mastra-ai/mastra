@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
-import { Eye, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
 
-import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
@@ -41,10 +40,10 @@ export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
               </Icon>
             }
           />
-          <Button type="button" variant="outline" size="sm" onClick={() => setIsPreviewDialogOpen(true)}>
+          {/* <Button type="button" variant="outline" size="sm" onClick={() => setIsPreviewDialogOpen(true)}>
             <Eye className="h-4 w-4" />
             Visualize instructions
-          </Button>
+          </Button> */}
         </div>
         <Controller
           name="instructions"

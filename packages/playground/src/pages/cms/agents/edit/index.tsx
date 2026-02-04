@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import type { AgentVersionResponse } from '@mastra/client-js';
 
@@ -20,6 +20,10 @@ import {
   useAgentVersion,
   MainContentLayout,
   Skeleton,
+  type AgentFormValues,
+  Alert,
+  Button,
+  AlertTitle,
 } from '@mastra/playground-ui';
 
 // Type for the agent data (inferred from useStoredAgent)
@@ -40,6 +44,7 @@ interface CmsAgentsEditFormProps {
   selectedVersionId: string | null;
   versionData?: AgentVersionResponse;
   onVersionSelect: (versionId: string) => void;
+  readOnly?: boolean;
 }
 
 // Form component - only rendered when agent data is available
@@ -49,17 +54,19 @@ function CmsAgentsEditForm({
   selectedVersionId,
   versionData,
   onVersionSelect,
+  readOnly = false,
 }: CmsAgentsEditFormProps) {
   const { navigate, paths } = useLinkComponent();
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const [, setSearchParams] = useSearchParams();
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
 
   // Transform agent data to form initial values
   // Use version data when viewing a version, otherwise use current agent data
-  const initialValues = useMemo(() => {
+  const initialValues: AgentFormValues = useMemo(() => {
     const dataSource = isViewingVersion ? versionData : agent;
 
     // Merge code-defined tools and integration tools
@@ -100,6 +107,12 @@ function CmsAgentsEditForm({
   }, [agent, versionData, isViewingVersion]);
 
   const { form } = useAgentEditForm({ initialValues });
+
+  useEffect(() => {
+    if (initialValues) {
+      form.reset(initialValues);
+    }
+  }, [initialValues, form]);
 
   const handlePublish = useCallback(async () => {
     const isValid = await form.trigger();
@@ -169,7 +182,7 @@ function CmsAgentsEditForm({
           isSubmitting={isSubmitting}
           formRef={formRef}
           mode="edit"
-          readOnly={isViewingVersion}
+          readOnly={readOnly || isViewingVersion}
         />
       }
       rightSlot={
@@ -181,7 +194,18 @@ function CmsAgentsEditForm({
       }
     >
       <form ref={formRef} className="h-full">
-        <AgentEditMain form={form} readOnly={isViewingVersion} />
+        {isViewingVersion && (
+          <Alert variant="info" className="mb-4 mx-4">
+            <AlertTitle>You are seeing a specific version of the agent.</AlertTitle>
+
+            <div className="pt-2">
+              <Button type="button" variant="light" onClick={() => setSearchParams({})}>
+                View latest version
+              </Button>
+            </div>
+          </Alert>
+        )}
+        <AgentEditMain form={form} readOnly={readOnly || isViewingVersion} />
       </form>
     </AgentEditLayout>
   );
@@ -211,7 +235,7 @@ function CmsAgentsEditPage() {
   );
 
   // Loading state
-  if (isLoadingAgent || (selectedVersionId && isLoadingVersion)) {
+  if (isLoadingAgent) {
     return (
       <MainContentLayout>
         <Header>
@@ -276,13 +300,14 @@ function CmsAgentsEditPage() {
           Edit agent: {agent.name}
         </HeaderTitle>
       </Header>
+
       <CmsAgentsEditForm
-        key={selectedVersionId ?? ''}
         agent={agent}
         agentId={agentId}
         selectedVersionId={selectedVersionId}
         versionData={versionData}
         onVersionSelect={handleVersionSelect}
+        readOnly={isLoadingVersion}
       />
     </MainContentLayout>
   );
