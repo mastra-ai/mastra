@@ -3,6 +3,7 @@ import type { MastraBase } from '../../../base';
 import type { MastraLLMVNext } from '../../../llm/model/model.loop';
 import type { Mastra } from '../../../mastra';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorState } from '../../../processors';
+import type { RequestContext } from '../../../request-context';
 import type { DynamicArgument } from '../../../types';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
@@ -20,7 +21,12 @@ export type AgentCapabilities = {
   runInputProcessors: Agent['__runInputProcessors'];
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
   outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
-  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
+  inputProcessors?:
+    | InputProcessorOrWorkflow[]
+    | ((args: {
+        requestContext: RequestContext;
+        overrides?: InputProcessorOrWorkflow[];
+      }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
   llm: MastraLLMVNext;
 };
 

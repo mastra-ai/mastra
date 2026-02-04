@@ -142,16 +142,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
         : [structuredProcessor];
     }
 
-    // Resolve input processors from options override or agent capability
-    const effectiveInputProcessors =
-      options.inputProcessors ||
-      (capabilities.inputProcessors
-        ? typeof capabilities.inputProcessors === 'function'
-          ? await capabilities.inputProcessors({
-              requestContext: result.requestContext!,
-            })
-          : capabilities.inputProcessors
-        : []);
+    // Resolve input processors - overrides replace user-configured but auto-derived (memory, skills) are kept
+    const effectiveInputProcessors = capabilities.inputProcessors
+      ? typeof capabilities.inputProcessors === 'function'
+        ? await capabilities.inputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.inputProcessors,
+          })
+        : capabilities.inputProcessors
+      : options.inputProcessors || [];
 
     const messageList = memoryData.messageList!;
 
