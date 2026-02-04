@@ -452,7 +452,6 @@ export type ProviderModelsMap = {
     'bytedance/seed-1.8',
     'cohere/command-a',
     'cohere/embed-v4.0',
-    'deepseek/deepseek-r1',
     'deepseek/deepseek-v3',
     'deepseek/deepseek-v3.1',
     'deepseek/deepseek-v3.1-terminus',
