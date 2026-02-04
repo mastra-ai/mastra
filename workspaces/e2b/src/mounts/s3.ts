@@ -23,6 +23,8 @@ export interface E2BS3MountConfig extends FilesystemMountConfig {
   accessKeyId?: string;
   /** AWS secret access key (optional - omit for public buckets) */
   secretAccessKey?: string;
+  /** Mount as read-only (even if credentials have write access) */
+  readOnly?: boolean;
 }
 
 /**
@@ -107,6 +109,11 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     // For S3-compatible storage (MinIO, R2, etc.)
     const endpoint = config.endpoint.replace(/\/$/, '');
     mountOptions.push(`url=${endpoint}`, 'use_path_request_style', 'sigv4', 'nomultipart');
+  }
+
+  if (config.readOnly) {
+    mountOptions.push('ro');
+    logger.debug(`${LOG_PREFIX} Mounting as read-only`);
   }
 
   // Mount with sudo (required for /dev/fuse access)

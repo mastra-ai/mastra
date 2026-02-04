@@ -20,6 +20,7 @@ import type {
   CopyOptions,
   FilesystemMountConfig,
   FilesystemIcon,
+  FilesystemInfo,
   ProviderStatus,
 } from '@mastra/core/workspace';
 import { MastraFilesystem, FileNotFoundError } from '@mastra/core/workspace';
@@ -40,6 +41,8 @@ export interface S3MountConfig extends FilesystemMountConfig {
   accessKeyId?: string;
   /** AWS secret access key */
   secretAccessKey?: string;
+  /** Mount as read-only */
+  readOnly?: boolean;
 }
 
 /**
@@ -130,6 +133,8 @@ export interface S3FilesystemOptions {
   forcePathStyle?: boolean;
   /** Optional prefix for all keys (acts like a subdirectory) */
   prefix?: string;
+  /** Mount as read-only (blocks write operations, mounts read-only in sandboxes) */
+  readOnly?: boolean;
 }
 
 /**
@@ -181,6 +186,7 @@ export class S3Filesystem extends MastraFilesystem {
   readonly id: string;
   readonly name = 'S3Filesystem';
   readonly provider = 's3';
+  readonly readOnly?: boolean;
 
   status: ProviderStatus = 'ready';
 
@@ -214,6 +220,7 @@ export class S3Filesystem extends MastraFilesystem {
     this.icon = options.icon ?? this.detectIconFromEndpoint(options.endpoint);
     this.displayName = options.displayName ?? this.getDefaultDisplayName(this.icon);
     this.description = options.description;
+    this.readOnly = options.readOnly;
   }
 
   /**
@@ -233,7 +240,30 @@ export class S3Filesystem extends MastraFilesystem {
       config.secretAccessKey = this.secretAccessKey;
     }
 
+    if (this.readOnly) {
+      config.readOnly = true;
+    }
+
     return config;
+  }
+
+  /**
+   * Get filesystem info for status reporting.
+   */
+  getInfo(): FilesystemInfo {
+    return {
+      id: this.id,
+      name: this.name,
+      provider: this.provider,
+      status: this.status,
+      icon: this.icon,
+      metadata: {
+        bucket: this.bucket,
+        region: this.region,
+        ...(this.endpoint && { endpoint: this.endpoint }),
+        ...(this.prefix && { prefix: this.prefix }),
+      },
+    };
   }
 
   /**
