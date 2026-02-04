@@ -2414,7 +2414,7 @@ ${formattedMessages}
       // Merge with existing IDs, filter to only keep IDs newer than lastObservedAt
       const newMessageIds = unobservedMessages.map(m => m.id);
       const existingIds = freshRecord?.observedMessageIds ?? record.observedMessageIds ?? [];
-      const allObservedIds = [...new Set([...existingIds, ...newMessageIds])];
+      const allObservedIds = [...new Set([...(Array.isArray(existingIds) ? existingIds : []), ...newMessageIds])];
 
       await this.storage.updateActiveObservations({
         id: record.id,
