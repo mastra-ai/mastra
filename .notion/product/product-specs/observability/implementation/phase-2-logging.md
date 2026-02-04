@@ -11,7 +11,7 @@
 Phase 2 implements the structured logging system with automatic trace correlation:
 - LoggerContext implementation with auto-correlation
 - LogRecord schema and storage methods
-- LogsBus → exporter routing
+- LogEvent → exporter routing via ObservabilityBus
 - Exporter support for logs signal
 
 ---
@@ -21,7 +21,7 @@ Phase 2 implements the structured logging system with automatic trace correlatio
 | PR | Package | Scope |
 |----|---------|-------|
 | PR 2.1 | `@mastra/core` | LogRecord schema, storage interface extensions |
-| PR 2.2 | `@mastra/observability` | LoggerContext impl, LogsBus wiring, exporters |
+| PR 2.2 | `@mastra/observability` | LoggerContext impl, ObservabilityBus wiring, exporters |
 | PR 2.3 | `stores/duckdb` | Logs table and methods |
 | PR 2.4 | `stores/clickhouse` | Logs table and methods |
 
@@ -152,22 +152,19 @@ export interface ListLogsArgs {
 
 ### 2.1.3 Update StorageCapabilities
 
-**File:** `packages/core/src/storage/domains/observability/base.ts` (modify)
+**File:** `packages/core/src/storage/domains/observability/types.ts` (modify)
 
 ```typescript
-export interface StorageCapabilities {
-  tracing: { /* existing */ };
-  logs: {
-    preferred: 'realtime' | 'insert-only';
-    supported: ('realtime' | 'insert-only')[];
-  };
-  // ...
-}
+// Add LogsStorageStrategy type (if not already added in Phase 1)
+export type LogsStorageStrategy = 'realtime' | 'batch';
 ```
 
+**File:** `packages/core/src/storage/domains/observability/base.ts` (modify)
+
+The `logsStrategy` getter is already defined in Phase 1 (returns `null` by default). No changes needed here - subclasses override to declare support.
+
 **Tasks:**
-- [ ] Update logs capability to match pattern
-- [ ] Ensure backward compat with boolean check
+- [ ] Verify LogsStorageStrategy type exists
 
 ### PR 2.1 Testing
 
@@ -182,7 +179,7 @@ export interface StorageCapabilities {
 ## PR 2.2: @mastra/observability Changes
 
 **Package:** `observability/mastra`
-**Scope:** LoggerContext implementation, LogsBus wiring, exporter updates
+**Scope:** LoggerContext implementation, ObservabilityBus wiring, exporter updates
 
 ### 2.2.1 LoggerContext Implementation
 
@@ -190,7 +187,7 @@ export interface StorageCapabilities {
 
 ```typescript
 import { LoggerContext, LogLevel, LogRecordInput, LogRecord } from '@mastra/core';
-import { LogsBus } from '../bus/logs';
+import { ObservabilityBus } from '../bus/observability';
 import { generateId } from '../utils/id';
 
 export interface LoggerContextConfig {
@@ -217,7 +214,7 @@ export interface LoggerContextConfig {
   source?: string;
 
   // Bus for emission
-  logsBus: LogsBus;
+  observabilityBus: ObservabilityBus;
 
   // Minimum log level
   minLevel?: LogLevel;
@@ -290,7 +287,7 @@ export class LoggerContextImpl implements LoggerContext {
       source: this.config.source,
     };
 
-    this.config.logsBus.emit({ type: 'log', record });
+    this.config.observabilityBus.emit({ type: 'log', record });
   }
 }
 ```
@@ -299,7 +296,7 @@ export class LoggerContextImpl implements LoggerContext {
 - [ ] Implement LoggerContextImpl class
 - [ ] Auto-inject all correlation fields
 - [ ] Support minimum log level filtering
-- [ ] Emit to LogsBus
+- [ ] Emit LogEvent to ObservabilityBus
 
 ### 2.2.2 LoggerContext Factory
 
@@ -327,24 +324,15 @@ export function createLoggerContext(
 - [ ] Create factory that extracts trace correlation from TracingContext
 - [ ] Ensure spanId updates when span changes
 
-### 2.2.3 LogsBus Wiring
+### 2.2.3 Log Event Emission via ObservabilityBus
 
-**File:** `observability/mastra/src/bus/logs.ts` (modify)
+**Note:** Logs are emitted through the unified `ObservabilityBus` created in Phase 1, not a separate LogsBus.
 
-```typescript
-import { LogEvent } from '@mastra/core';
-import { BaseEventBus } from './base';
-
-export class LogsBus extends BaseEventBus<LogEvent> {
-  constructor(options?: { bufferSize?: number; flushIntervalMs?: number }) {
-    super(options ?? { bufferSize: 100, flushIntervalMs: 1000 });
-  }
-}
-```
+The LoggerContext emits LogEvents to the shared ObservabilityBus, which routes them to exporters that implement `onLogEvent()`.
 
 **Tasks:**
-- [ ] Ensure LogsBus is properly configured with defaults
-- [ ] Add reasonable buffer size for logs (higher than traces)
+- [ ] Ensure LoggerContextImpl emits to ObservabilityBus
+- [ ] Verify ObservabilityBus routes LogEvents to `onLogEvent()` handlers
 
 ### 2.2.4 Update BaseObservabilityInstance
 
@@ -372,7 +360,7 @@ createLoggerContext(
     serviceName: this.config.serviceName,
     entityType: entityContext?.entityType,
     entityName: entityContext?.entityName,
-    logsBus: this.logsBus,
+    observabilityBus: this.observabilityBus,
     minLevel: this.config.logLevel,
   });
 }
@@ -380,8 +368,8 @@ createLoggerContext(
 
 **Tasks:**
 - [ ] Add createLoggerContext method
-- [ ] Wire LogsBus to exporters
 - [ ] Pass config values for correlation
+- [ ] Ensure ObservabilityBus routes LogEvents to `onLogEvent()` handlers
 
 ### 2.2.5 Update DefaultExporter
 
@@ -389,11 +377,7 @@ createLoggerContext(
 
 ```typescript
 export class DefaultExporter extends BaseExporter {
-  readonly supportsTraces = true;
-  readonly supportsMetrics = false;
-  readonly supportsLogs = true;  // NEW
-  readonly supportsScores = true;
-  readonly supportsFeedback = false;
+  // Handler presence = signal support
 
   async onLogEvent(event: LogEvent): Promise<void> {
     if (!this.storage) return;
@@ -404,8 +388,7 @@ export class DefaultExporter extends BaseExporter {
 ```
 
 **Tasks:**
-- [ ] Set `supportsLogs = true`
-- [ ] Implement `onLogEvent` to write to storage
+- [ ] Implement `onLogEvent()` handler to write to storage
 - [ ] Consider batching multiple logs
 
 ### 2.2.6 Update JsonExporter
@@ -414,11 +397,7 @@ export class DefaultExporter extends BaseExporter {
 
 ```typescript
 export class JsonExporter extends BaseExporter {
-  readonly supportsTraces = true;
-  readonly supportsMetrics = true;
-  readonly supportsLogs = true;
-  readonly supportsScores = true;
-  readonly supportsFeedback = true;
+  // Handler presence = signal support
 
   async onLogEvent(event: LogEvent): Promise<void> {
     this.output('log', event.record);
@@ -435,7 +414,7 @@ export class JsonExporter extends BaseExporter {
 ```
 
 **Tasks:**
-- [ ] Implement `onLogEvent`
+- [ ] Implement `onLogEvent()` handler
 - [ ] Format output for readability
 
 ### 2.2.7 Update CloudExporter
@@ -443,8 +422,7 @@ export class JsonExporter extends BaseExporter {
 **File:** `observability/cloud/src/exporter.ts` (if exists, modify)
 
 **Tasks:**
-- [ ] Set `supportsLogs = true`
-- [ ] Implement `onLogEvent` to send to Mastra Cloud
+- [ ] Implement `onLogEvent()` handler to send to Mastra Cloud
 - [ ] Include in Phase 2 or defer based on Cloud API readiness
 
 ### 2.2.8 Update GrafanaCloudExporter
@@ -666,19 +644,14 @@ private rowToLogRecord(row: any): LogRecord {
 **File:** `stores/duckdb/src/storage/domains/observability/index.ts` (modify)
 
 ```typescript
-get capabilities(): StorageCapabilities {
-  return {
-    tracing: { preferred: 'realtime', supported: ['realtime', 'batch-with-updates'] },
-    logs: { preferred: 'realtime', supported: ['realtime'] },
-    metrics: { supported: false },
-    scores: { supported: false },
-    feedback: { supported: false },
-  };
+// Add logs strategy getter
+get logsStrategy(): { preferred: LogsStorageStrategy; supported: LogsStorageStrategy[] } {
+  return { preferred: 'batch', supported: ['realtime', 'batch'] };
 }
 ```
 
 **Tasks:**
-- [ ] Set logs capability to supported
+- [ ] Add `logsStrategy` getter to declare logs support
 
 ### PR 2.3 Testing
 

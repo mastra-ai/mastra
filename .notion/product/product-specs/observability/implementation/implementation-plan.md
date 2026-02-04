@@ -42,16 +42,16 @@ World-class observability platform for Mastra with integrated Tracing, Metrics, 
                           ▼
                  ┌─────────────────┐
                  │    Exporters    │
-                 │ (declare T/M/L/S/F) │
+                 │ (implement handlers) │
                  └─────────────────┘
 ```
 
 **Key design decisions:**
 - **Single ObservabilityBus** handles all event types and routes to appropriate handlers
 - **Type-based routing**: Each event type routes to its dedicated handler (`onTracingEvent`, `onScoreEvent`, etc.)
-- **ObservabilityBus cross-posts to MetricsBus** on span lifecycle events (auto-extracted metrics)
-- **ObservabilityBus cross-posts to MetricsBus** on score/feedback events (score distribution metrics)
-- **Each exporter declares** which signals it supports via `supportsTraces`, `supportsMetrics`, `supportsLogs`, `supportsScores`, `supportsFeedback`
+- **Handler presence = support**: Exporters declare support by implementing the handler (no separate flags)
+- **Cross-emission within ObservabilityBus**: TracingEvents generate MetricEvents (auto-extracted metrics)
+- **Cross-emission within ObservabilityBus**: ScoreEvents/FeedbackEvents generate MetricEvents (score distribution metrics)
 - **Backward compatible**: Existing tracing code unchanged, buses are internal infrastructure
 - **Storage-agnostic**: DefaultExporter writes to storage; other exporters send to external systems
 
@@ -135,21 +135,22 @@ interface Histogram {
 ## Event Bus Architecture
 
 ```typescript
-interface EventBus<TEvent> {
+// Base interface for observability event buses
+interface ObservabilityEventBus<TEvent> {
   emit(event: TEvent): void;
   subscribe(handler: (event: TEvent) => void): () => void;
   flush(): Promise<void>;
   shutdown(): Promise<void>;
 }
 
-// Span lifecycle events (TracingBus)
+// Span lifecycle events
 type TracingEvent =
   | { type: 'span.started'; exportedSpan: AnyExportedSpan }
   | { type: 'span.updated'; exportedSpan: AnyExportedSpan }
   | { type: 'span.ended'; exportedSpan: AnyExportedSpan }
   | { type: 'span.error'; exportedSpan: AnyExportedSpan; error: SpanErrorInfo };
 
-// Metrics (MetricsBus)
+// Metrics events
 type MetricEvent = {
   type: 'metric';
   name: string;
@@ -159,7 +160,7 @@ type MetricEvent = {
   timestamp: Date;
 };
 
-// Logs (LogsBus)
+// Logs events
 type LogEvent = {
   type: 'log';
   record: LogRecord;
@@ -192,14 +193,8 @@ type FeedbackEvent = {
 interface ObservabilityExporter {
   readonly name: string;
 
-  // Signal support declarations (all optional, undefined = false)
-  readonly supportsTraces?: boolean;
-  readonly supportsMetrics?: boolean;
-  readonly supportsLogs?: boolean;
-  readonly supportsScores?: boolean;
-  readonly supportsFeedback?: boolean;
-
-  // Signal handlers (optional based on support)
+  // Signal handlers - implement the ones you support
+  // Handler presence = signal support (no separate flags needed)
   onTracingEvent?(event: TracingEvent): void | Promise<void>;
   onMetricEvent?(event: MetricEvent): void | Promise<void>;
   onLogEvent?(event: LogEvent): void | Promise<void>;
@@ -352,17 +347,29 @@ abstract class ObservabilityStorage extends StorageDomain {
   async createFeedback(args: CreateFeedbackArgs): Promise<void> { throw NOT_IMPLEMENTED; }
   async listFeedback(args: ListFeedbackArgs): Promise<PaginatedResult<FeedbackRecord>> { throw NOT_IMPLEMENTED; }
 
-  // === Capabilities ===
-  get capabilities(): StorageCapabilities {
-    return {
-      tracing: { preferred: 'batch-with-updates', supported: ['realtime', 'batch-with-updates', 'insert-only'] },
-      logs: { preferred: 'insert-only', supported: ['realtime', 'insert-only'] },
-      metrics: { preferred: 'insert-only', supported: ['realtime', 'insert-only'] },
-      scores: { supported: true },
-      feedback: { supported: true },
-    };
+  // === Strategy Getters ===
+  // Tracing: non-null default (backward compat - if domain exists, tracing supported)
+  // Others: null by default (opt-in for new signals)
+  // TODO(2.0): Change tracingStrategy to return null by default for consistency
+
+  get tracingStrategy(): StrategyHint<TracingStorageStrategy> {
+    return { preferred: 'batch-with-updates', supported: ['realtime', 'batch-with-updates', 'insert-only'] };
   }
+  get logsStrategy(): StrategyHint<LogsStorageStrategy> { return null; }
+  get metricsStrategy(): StrategyHint<MetricsStorageStrategy> { return null; }
+  get scoresStrategy(): StrategyHint<ScoresStorageStrategy> { return null; }
+  get feedbackStrategy(): StrategyHint<FeedbackStorageStrategy> { return null; }
 }
+
+// Helper type
+type StrategyHint<T> = { preferred: T; supported: T[] } | null;
+
+// Strategy types
+type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
+type LogsStorageStrategy = 'realtime' | 'batch';
+type MetricsStorageStrategy = 'realtime' | 'batch';
+type ScoresStorageStrategy = 'realtime' | 'batch';
+type FeedbackStorageStrategy = 'realtime' | 'batch';
 ```
 
 ---
@@ -456,16 +463,26 @@ const DEFAULT_BLOCKED_LABELS = [
 
 For local development - embedded, columnar, no external dependencies.
 
-**Capabilities:**
+**Strategy Getters:**
 ```typescript
-get capabilities(): StorageCapabilities {
-  return {
-    tracing: { preferred: 'realtime', supported: ['realtime', 'batch-with-updates'] },
-    logs: { preferred: 'realtime', supported: ['realtime'] },
-    metrics: { preferred: 'realtime', supported: ['realtime'] },
-    scores: { supported: true },
-    feedback: { supported: true },
-  };
+get tracingStrategy() {
+  return { preferred: 'batch-with-updates', supported: ['realtime', 'batch-with-updates'] };
+}
+
+get logsStrategy() {
+  return { preferred: 'batch', supported: ['realtime', 'batch'] };
+}
+
+get metricsStrategy() {
+  return { preferred: 'batch', supported: ['realtime', 'batch'] };
+}
+
+get scoresStrategy() {
+  return { preferred: 'batch', supported: ['realtime', 'batch'] };
+}
+
+get feedbackStrategy() {
+  return { preferred: 'batch', supported: ['realtime', 'batch'] };
 }
 ```
 
@@ -629,9 +646,10 @@ Auto-extracted from span lifecycle events.
 ## Implementation Phases
 
 ### Phase 1: Foundation
-- [ ] Event bus infrastructure (TracingBus, MetricsBus, LogsBus)
-- [ ] Exporter interface with signal support declarations
-- [ ] Update existing exporters to declare `supportsTraces: true`
+- [ ] ObservabilityEventBus base infrastructure
+- [ ] ObservabilityBus implementation (handles all event types from start)
+- [ ] Exporter interface with signal handlers
+- [ ] Update existing exporters to implement `onTracingEvent()`
 - [ ] No-op LoggerContext and MetricsContext implementations
 - [ ] Context mixin (`tracing`, `logger`, `metrics` on all contexts)
 - [ ] Backward compat: `tracingContext` alias
@@ -644,7 +662,7 @@ Auto-extracted from span lifecycle events.
 ### Phase 2: Logging
 - [ ] LoggerContext implementation (auto-correlation)
 - [ ] LogRecord schema and storage methods
-- [ ] LogsBus → exporter routing
+- [ ] LogEvent → exporter routing via ObservabilityBus
 - [ ] DefaultExporter: logs support
 - [ ] CloudExporter: logs support
 - [ ] JsonExporter: logs support
@@ -655,8 +673,8 @@ Auto-extracted from span lifecycle events.
 ### Phase 3: Metrics
 - [ ] MetricsContext implementation (auto-labels, cardinality protection)
 - [ ] MetricRecord schema and storage methods
-- [ ] MetricsBus → exporter routing
-- [ ] TracingBus → MetricsBus cross-emission (auto-extracted metrics)
+- [ ] MetricEvent → exporter routing via ObservabilityBus
+- [ ] TracingEvent → MetricEvent cross-emission (auto-extracted metrics)
 - [ ] Built-in metrics catalog
 - [ ] DefaultExporter: metrics support
 - [ ] CloudExporter: metrics support
@@ -666,7 +684,6 @@ Auto-extracted from span lifecycle events.
 - [ ] ClickHouse adapter: metrics table
 
 ### Phase 4: Scores & Feedback
-- [ ] Rename TracingBus → ObservabilityBus (handles all event types)
 - [ ] `span.addScore()` / `span.addFeedback()` APIs
 - [ ] `trace.addScore()` / `trace.addFeedback()` APIs
 - [ ] `mastra.getTrace(traceId)` for post-hoc attachment
@@ -706,15 +723,15 @@ Auto-extracted from span lifecycle events.
 
 ## Detailed Phase Documents
 
-Each phase has a detailed document with PR-by-package breakdowns, specific tasks, and code examples:
+Each phase has a detailed document (or directory) with PR-by-package breakdowns, specific tasks, and code examples:
 
 | Phase | Document | Scope |
 |-------|----------|-------|
-| Phase 1 | [phase-1-foundation.md](./phase-1-foundation.md) | Event buses, context injection, DuckDB adapter |
+| Phase 1 | [phase-1/](./phase-1/) | Event buses, context injection, DuckDB adapter |
 | Phase 1.5 | [phase-1.5-debug-exporters.md](./phase-1.5-debug-exporters.md) | GrafanaCloudExporter, JsonExporter |
-| Phase 2 | [phase-2-logging.md](./phase-2-logging.md) | LoggerContext, LogRecord, storage |
-| Phase 3 | [phase-3-metrics.md](./phase-3-metrics.md) | MetricsContext, auto-extraction, cardinality |
-| Phase 4 | [phase-4-scores-feedback.md](./phase-4-scores-feedback.md) | Score/Feedback APIs, storage |
+| Phase 2 | [phase-2/](./phase-2/) | LoggerContext, LogRecord, storage |
+| Phase 3 | [phase-3/](./phase-3/) | MetricsContext, auto-extraction, cardinality |
+| Phase 4 | [phase-4/](./phase-4/) | Score/Feedback APIs, storage |
 | Phase 5 | [phase-5-tracing-improvements.md](./phase-5-tracing-improvements.md) | SessionId, ObservabilityConfig |
 | Phase 5.5 | [phase-5.5-exporter-expansion.md](./phase-5.5-exporter-expansion.md) | Langfuse, Datadog, OTel expansion |
 | Phase 6 | [phase-6-moment-exporter.md](./phase-6-moment-exporter.md) | MomentExporter, pulse_moments |

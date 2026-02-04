@@ -11,8 +11,8 @@
 Phase 3 implements the metrics system with both direct API and auto-extracted metrics:
 - MetricsContext implementation with auto-labels and cardinality protection
 - MetricRecord schema and storage methods
-- MetricsBus → exporter routing
-- TracingBus → MetricsBus cross-emission for auto-extracted metrics
+- MetricEvent → exporter routing via ObservabilityBus
+- TracingEvent → MetricEvent cross-emission for auto-extracted metrics
 - Built-in metrics catalog
 
 ---
@@ -22,7 +22,7 @@ Phase 3 implements the metrics system with both direct API and auto-extracted me
 | PR | Package | Scope |
 |----|---------|-------|
 | PR 3.1 | `@mastra/core` | MetricRecord schema, storage interface, cardinality config |
-| PR 3.2 | `@mastra/observability` | MetricsContext impl, auto-extraction, MetricsBus wiring |
+| PR 3.2 | `@mastra/observability` | MetricsContext impl, auto-extraction, ObservabilityBus wiring |
 | PR 3.3 | `stores/duckdb` | Metrics table and methods |
 | PR 3.4 | `stores/clickhouse` | Metrics table and methods |
 
@@ -186,24 +186,19 @@ export interface ListMetricsArgs {
 - [ ] Define BatchRecordMetricsArgs interface
 - [ ] Define ListMetricsArgs interface with aggregation
 
-### 3.1.4 Update StorageCapabilities
+### 3.1.4 Verify Storage Strategy Types
+
+**File:** `packages/core/src/storage/domains/observability/types.ts`
 
 ```typescript
-export interface StorageCapabilities {
-  tracing: { /* existing */ };
-  logs: { /* existing */ };
-  metrics: {
-    preferred: 'realtime' | 'insert-only';
-    supported: ('realtime' | 'insert-only')[];
-    supportsAggregation?: boolean;
-  };
-  // ...
-}
+// Verify MetricsStorageStrategy type exists (added in Phase 1)
+export type MetricsStorageStrategy = 'realtime' | 'batch';
 ```
 
+The `metricsStrategy` getter is already defined in Phase 1 (returns `null` by default). Subclasses override to declare support.
+
 **Tasks:**
-- [ ] Update metrics capability to match pattern
-- [ ] Add supportsAggregation flag
+- [ ] Verify MetricsStorageStrategy type exists
 
 ### PR 3.1 Testing
 
@@ -217,7 +212,7 @@ export interface StorageCapabilities {
 ## PR 3.2: @mastra/observability Changes
 
 **Package:** `observability/mastra`
-**Scope:** MetricsContext implementation, auto-extraction, MetricsBus wiring
+**Scope:** MetricsContext implementation, auto-extraction, ObservabilityBus wiring
 
 ### 3.2.1 Cardinality Filter
 
@@ -272,7 +267,7 @@ export class CardinalityFilter {
 
 ```typescript
 import { MetricsContext, Counter, Gauge, Histogram, MetricEvent } from '@mastra/core';
-import { MetricsBus } from '../bus/metrics';
+import { ObservabilityBus } from '../bus/observability';
 import { CardinalityFilter } from '../metrics/cardinality';
 import { generateId } from '../utils/id';
 
@@ -281,7 +276,7 @@ export interface MetricsContextConfig {
   baseLabels: Record<string, string>;
 
   // Bus for emission
-  metricsBus: MetricsBus;
+  observabilityBus: ObservabilityBus;
 
   // Cardinality filter
   cardinalityFilter: CardinalityFilter;
@@ -345,7 +340,7 @@ export class MetricsContextImpl implements MetricsContext {
       timestamp: new Date(),
     };
 
-    this.config.metricsBus.emit(event);
+    this.config.observabilityBus.emit(event);
   }
 }
 ```
@@ -354,7 +349,7 @@ export class MetricsContextImpl implements MetricsContext {
 - [ ] Implement MetricsContextImpl class
 - [ ] Auto-inject base labels
 - [ ] Apply cardinality filter to all labels
-- [ ] Emit to MetricsBus
+- [ ] Emit MetricEvent to ObservabilityBus
 
 ### 3.2.3 NoOp MetricsContext Update
 
@@ -371,10 +366,10 @@ Ensure the NoOp implementation is already in place from Phase 1.
 
 ```typescript
 import { TracingEvent, MetricEvent } from '@mastra/core';
-import { MetricsBus } from '../bus/metrics';
+import { ObservabilityBus } from '../bus/observability';
 
 export class AutoExtractedMetrics {
-  constructor(private metricsBus: MetricsBus) {}
+  constructor(private observabilityBus: ObservabilityBus) {}
 
   /**
    * Extract metrics from tracing events
@@ -558,53 +553,47 @@ export class AutoExtractedMetrics {
 - [ ] Extract score/feedback metrics
 - [ ] Add experiment label placeholder for scores/feedback
 
-### 3.2.5 Update TracingBus for Cross-Emission
+### 3.2.5 Update ObservabilityBus for Auto-Extracted Metrics
 
-**File:** `observability/mastra/src/bus/tracing.ts` (modify)
+**File:** `observability/mastra/src/bus/observability.ts` (modify)
+
+The ObservabilityBus (created in Phase 1) is extended to support auto-extracted metrics. When TracingEvents are processed, the bus can emit corresponding MetricEvents.
 
 ```typescript
-export class TracingBus extends BaseEventBus<TracingEvent> {
-  private metricsBus?: MetricsBus;
+export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEvent> {
+  private exporters: ObservabilityExporter[] = [];
   private autoExtractor?: AutoExtractedMetrics;
 
-  setMetricsBus(bus: MetricsBus): void {
-    this.metricsBus = bus;
-    this.autoExtractor = new AutoExtractedMetrics(bus);
+  enableAutoExtractedMetrics(): void {
+    this.autoExtractor = new AutoExtractedMetrics(this);
   }
 
-  emit(event: TracingEvent): void {
-    super.emit(event);
+  emit(event: ObservabilityEvent): void {
+    // Route to exporters
+    for (const exporter of this.exporters) {
+      this.routeToHandler(exporter, event);
+    }
 
-    // Cross-emit to MetricsBus for auto-extracted metrics
-    if (this.autoExtractor) {
+    // Cross-emit: TracingEvents → MetricEvents
+    if (this.autoExtractor && isTracingEvent(event)) {
       this.autoExtractor.processTracingEvent(event);
     }
   }
+
+  // ... existing routeToHandler implementation from Phase 1
+}
+
+function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
+  return event.type.startsWith('span.');
 }
 ```
 
 **Tasks:**
-- [ ] Wire AutoExtractedMetrics to TracingBus
-- [ ] Call processTracingEvent on each emit
+- [ ] Add enableAutoExtractedMetrics() to ObservabilityBus
+- [ ] Add cross-emission in emit() for TracingEvent → MetricEvent
+- [ ] Add isTracingEvent type guard helper
 
-### 3.2.6 MetricsBus Configuration
-
-**File:** `observability/mastra/src/bus/metrics.ts` (modify)
-
-```typescript
-export class MetricsBus extends BaseEventBus<MetricEvent> {
-  constructor(options?: { bufferSize?: number; flushIntervalMs?: number }) {
-    // Larger buffer for metrics (high volume)
-    super(options ?? { bufferSize: 500, flushIntervalMs: 5000 });
-  }
-}
-```
-
-**Tasks:**
-- [ ] Configure appropriate buffer size for metrics volume
-- [ ] Set reasonable flush interval
-
-### 3.2.7 Update BaseObservabilityInstance
+### 3.2.6 Update BaseObservabilityInstance
 
 **File:** `observability/mastra/src/instances/base.ts` (modify)
 
@@ -618,15 +607,18 @@ constructor(config: ObservabilityConfig) {
   // Initialize cardinality filter
   this.cardinalityFilter = new CardinalityFilter(config.metrics?.cardinality);
 
-  // Wire TracingBus to MetricsBus
-  this.tracingBus.setMetricsBus(this.metricsBus);
+  // Enable auto-extracted metrics if metrics are supported
+  if (config.metrics?.enabled !== false) {
+    this.observabilityBus.enableAutoExtractedMetrics();
+  }
 }
 
 // Add createMetricsContext method
 createMetricsContext(
   entityContext?: { entityType?: string; entityName?: string }
 ): MetricsContext {
-  if (!this.metricsBus) {
+  // Return no-op if metrics not enabled
+  if (!this.config.metrics?.enabled) {
     return noOpMetricsContext;
   }
 
@@ -638,7 +630,7 @@ createMetricsContext(
 
   return new MetricsContextImpl({
     baseLabels,
-    metricsBus: this.metricsBus,
+    observabilityBus: this.observabilityBus,
     cardinalityFilter: this.cardinalityFilter,
     organizationId: this.config.organizationId,
     environment: this.config.environment,
@@ -649,8 +641,8 @@ createMetricsContext(
 
 **Tasks:**
 - [ ] Initialize CardinalityFilter
-- [ ] Wire TracingBus → MetricsBus
-- [ ] Add createMetricsContext method
+- [ ] Enable auto-extracted metrics on ObservabilityBus
+- [ ] Add createMetricsContext method using ObservabilityBus
 
 ### 3.2.8 Update DefaultExporter
 
@@ -658,11 +650,7 @@ createMetricsContext(
 
 ```typescript
 export class DefaultExporter extends BaseExporter {
-  readonly supportsTraces = true;
-  readonly supportsMetrics = true;  // NEW
-  readonly supportsLogs = true;
-  readonly supportsScores = true;
-  readonly supportsFeedback = false;
+  // Handler presence = signal support
 
   async onMetricEvent(event: MetricEvent): Promise<void> {
     if (!this.storage) return;
@@ -685,8 +673,7 @@ export class DefaultExporter extends BaseExporter {
 ```
 
 **Tasks:**
-- [ ] Set `supportsMetrics = true`
-- [ ] Implement `onMetricEvent`
+- [ ] Implement `onMetricEvent()` handler
 - [ ] Consider batching multiple metrics
 
 ### 3.2.9 Update JsonExporter
@@ -898,24 +885,14 @@ private listMetricsAggregated(args: ListMetricsArgs): Promise<PaginatedResult<Me
 ### 3.3.4 Update Capabilities
 
 ```typescript
-get capabilities(): StorageCapabilities {
-  return {
-    tracing: { /* existing */ },
-    logs: { /* existing */ },
-    metrics: {
-      preferred: 'realtime',
-      supported: ['realtime'],
-      supportsAggregation: true,
-    },
-    scores: { supported: false },
-    feedback: { supported: false },
-  };
+// Add metrics strategy getter
+get metricsStrategy(): { preferred: MetricsStorageStrategy; supported: MetricsStorageStrategy[] } {
+  return { preferred: 'batch', supported: ['realtime', 'batch'] };
 }
 ```
 
 **Tasks:**
-- [ ] Set metrics capability
-- [ ] Enable aggregation support
+- [ ] Add `metricsStrategy` getter to declare metrics support
 
 ### PR 3.3 Testing
 

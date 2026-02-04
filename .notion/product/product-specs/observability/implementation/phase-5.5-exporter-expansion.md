@@ -47,11 +47,8 @@ Phase 5.5 expands all existing exporters to support the full signal set where ap
 
 ```typescript
 export class LangfuseExporter extends BaseExporter {
-  readonly supportsTraces = true;
-  readonly supportsMetrics = false;  // Langfuse doesn't have metrics
-  readonly supportsLogs = true;      // NEW
-  readonly supportsScores = true;
-  readonly supportsFeedback = true;  // NEW
+  // Handler presence = signal support
+  // Note: No onMetricEvent - Langfuse doesn't have metrics
 
   async onLogEvent(event: LogEvent): Promise<void> {
     // Langfuse logs can be attached to traces/spans as events
@@ -73,37 +70,34 @@ export class LangfuseExporter extends BaseExporter {
 ```
 
 **Tasks:**
-- [ ] Set `supportsLogs = true`
-- [ ] Implement `onLogEvent` using Langfuse events API
+- [ ] Implement `onLogEvent()` handler using Langfuse events API
 - [ ] Handle trace correlation
 
-### 5.5.1.3 Update Scores Support
+### 5.5.1.3 Add Scores Support
 
-Verify existing `addScoreToTrace` works with new event-based API:
+Implement separate `onScoreEvent` handler:
 
 ```typescript
-async onTracingEvent(event: TracingEvent): Promise<void> {
-  if (event.type === 'score.added') {
-    await this.langfuse.score({
-      traceId: event.traceId,
-      observationId: event.spanId,  // Optional
-      name: event.score.scorerName,
-      value: event.score.score,
-      comment: event.score.reason,
-      dataType: 'NUMERIC',
-    });
-  }
+async onScoreEvent(event: ScoreEvent): Promise<void> {
+  await this.langfuse.score({
+    traceId: event.traceId,
+    observationId: event.spanId,  // Optional
+    name: event.score.scorerName,
+    value: event.score.score,
+    comment: event.score.reason,
+    dataType: 'NUMERIC',
+  });
 }
 ```
 
 **Tasks:**
-- [ ] Verify scores work with new event-based flow
+- [ ] Implement `onScoreEvent()` handler
 - [ ] Handle both trace-level and span-level scores
 
 ### 5.5.1.4 Add Feedback Support
 
 ```typescript
-if (event.type === 'feedback.added') {
+async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
   // Map feedback to Langfuse score (Langfuse uses scores for feedback)
   await this.langfuse.score({
     traceId: event.traceId,
@@ -117,7 +111,7 @@ if (event.type === 'feedback.added') {
 ```
 
 **Tasks:**
-- [ ] Set `supportsFeedback = true`
+- [ ] Implement `onFeedbackEvent()` handler
 - [ ] Map feedback to Langfuse score API
 - [ ] Handle numeric vs string feedback values
 
@@ -147,11 +141,8 @@ if (event.type === 'feedback.added') {
 
 ```typescript
 export class BraintrustExporter extends BaseExporter {
-  readonly supportsTraces = true;
-  readonly supportsMetrics = false;
-  readonly supportsLogs = true;      // NEW
-  readonly supportsScores = true;
-  readonly supportsFeedback = true;  // NEW
+  // Handler presence = signal support
+  // Note: No onMetricEvent - Braintrust doesn't have metrics
 
   async onLogEvent(event: LogEvent): Promise<void> {
     // Braintrust logs as span events
@@ -166,20 +157,19 @@ export class BraintrustExporter extends BaseExporter {
 ```
 
 **Tasks:**
-- [ ] Set `supportsLogs = true`
-- [ ] Implement `onLogEvent` using Braintrust API
+- [ ] Implement `onLogEvent()` handler using Braintrust API
 - [ ] Handle trace correlation
 
-### 5.5.2.3 Update Scores Support
+### 5.5.2.3 Add Scores Support
 
 **Tasks:**
-- [ ] Verify scores work with new event-based flow
+- [ ] Implement `onScoreEvent()` handler
 - [ ] Map to Braintrust scores API
 
 ### 5.5.2.4 Add Feedback Support
 
 **Tasks:**
-- [ ] Set `supportsFeedback = true`
+- [ ] Implement `onFeedbackEvent()` handler
 - [ ] Map feedback to Braintrust feedback API
 - [ ] Handle experiment grouping
 
@@ -207,33 +197,28 @@ export class BraintrustExporter extends BaseExporter {
 
 ```typescript
 export class LangSmithExporter extends BaseExporter {
-  readonly supportsTraces = true;
-  readonly supportsMetrics = false;
-  readonly supportsLogs = false;     // LangSmith logs via traces
-  readonly supportsScores = true;    // NEW
-  readonly supportsFeedback = true;  // NEW
+  // Handler presence = signal support
+  // Note: No onMetricEvent, no onLogEvent - LangSmith logs via traces
 
-  async onTracingEvent(event: TracingEvent): Promise<void> {
-    if (event.type === 'score.added') {
-      await this.langsmith.createFeedback({
-        runId: event.traceId,
-        key: event.score.scorerName,
-        score: event.score.score,
-        comment: event.score.reason,
-      });
-    }
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    await this.langsmith.createFeedback({
+      runId: event.traceId,
+      key: event.score.scorerName,
+      score: event.score.score,
+      comment: event.score.reason,
+    });
   }
 }
 ```
 
 **Tasks:**
-- [ ] Set `supportsScores = true`
+- [ ] Implement `onScoreEvent()` handler
 - [ ] Map scores to LangSmith feedback API
 
 ### 5.5.3.3 Add Feedback Support
 
 ```typescript
-if (event.type === 'feedback.added') {
+async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
   await this.langsmith.createFeedback({
     runId: event.traceId,
     key: event.feedback.feedbackType,
@@ -245,7 +230,7 @@ if (event.type === 'feedback.added') {
 ```
 
 **Tasks:**
-- [ ] Set `supportsFeedback = true`
+- [ ] Implement `onFeedbackEvent()` handler
 - [ ] Map feedback to LangSmith feedback API
 
 ### PR 5.5.3 Testing
@@ -271,11 +256,8 @@ if (event.type === 'feedback.added') {
 
 ```typescript
 export class DatadogExporter extends BaseExporter {
-  readonly supportsTraces = true;
-  readonly supportsMetrics = true;   // NEW
-  readonly supportsLogs = true;      // NEW
-  readonly supportsScores = false;   // Datadog doesn't have native scores
-  readonly supportsFeedback = false;
+  // Handler presence = signal support
+  // Note: No onScoreEvent/onFeedbackEvent - Datadog doesn't have native scores
 
   async onLogEvent(event: LogEvent): Promise<void> {
     // Datadog Log API
@@ -299,8 +281,7 @@ export class DatadogExporter extends BaseExporter {
 ```
 
 **Tasks:**
-- [ ] Set `supportsLogs = true`
-- [ ] Implement `onLogEvent` using Datadog Log API
+- [ ] Implement `onLogEvent()` handler using Datadog Log API
 - [ ] Map log levels to Datadog status
 
 ### 5.5.4.3 Add Metrics Support
@@ -333,8 +314,7 @@ private mapMetricType(type: MetricType): 'gauge' | 'count' | 'rate' {
 ```
 
 **Tasks:**
-- [ ] Set `supportsMetrics = true`
-- [ ] Implement `onMetricEvent` using Datadog Metrics API
+- [ ] Implement `onMetricEvent()` handler using Datadog Metrics API
 - [ ] Map metric types correctly
 
 ### PR 5.5.4 Testing
@@ -361,11 +341,8 @@ private mapMetricType(type: MetricType): 'gauge' | 'count' | 'rate' {
 
 ```typescript
 export class OtelExporter extends BaseExporter {
-  readonly supportsTraces = true;
-  readonly supportsMetrics = true;   // NEW
-  readonly supportsLogs = true;      // NEW
-  readonly supportsScores = false;   // OTLP doesn't have native scores
-  readonly supportsFeedback = false;
+  // Handler presence = signal support
+  // Note: No onScoreEvent/onFeedbackEvent - OTLP doesn't have native scores
 
   private logExporter: OTLPLogExporter;
 
@@ -394,7 +371,7 @@ export class OtelExporter extends BaseExporter {
 ```
 
 **Tasks:**
-- [ ] Set `supportsLogs = true`
+- [ ] Implement `onLogEvent()` handler
 - [ ] Initialize OTLPLogExporter
 - [ ] Map LogRecord to OTLP format
 - [ ] Handle trace correlation
@@ -422,7 +399,7 @@ async onMetricEvent(event: MetricEvent): Promise<void> {
 ```
 
 **Tasks:**
-- [ ] Set `supportsMetrics = true`
+- [ ] Implement `onMetricEvent()` handler
 - [ ] Initialize OTLPMetricExporter
 - [ ] Map MetricEvent to OTLP format
 - [ ] Handle different metric types

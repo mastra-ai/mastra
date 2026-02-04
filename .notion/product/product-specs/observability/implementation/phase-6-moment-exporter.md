@@ -253,11 +253,8 @@ import { generateId } from './utils';
 
 export class MomentExporter extends BaseExporter {
   readonly name = 'MomentExporter';
-  readonly supportsTraces = true;
-  readonly supportsMetrics = false;  // Skipping metrics per discussion
-  readonly supportsLogs = true;
-  readonly supportsScores = true;
-  readonly supportsFeedback = true;
+  // Handler presence = signal support
+  // Note: No onMetricEvent - skipping metrics per discussion
 
   private buffer: Moment[] = [];
   private config: MomentExporterConfig;

@@ -23,7 +23,7 @@ Phase 4 implements the scores and feedback system:
 | PR | Package | Scope |
 |----|---------|-------|
 | PR 4.1 | `@mastra/core` | Score/Feedback schemas, storage interface, APIs |
-| PR 4.2 | `@mastra/observability` | Span/Trace implementations, TracingBus events |
+| PR 4.2 | `@mastra/observability` | Span/Trace implementations, ScoreEvent/FeedbackEvent emission |
 | PR 4.3 | `stores/duckdb` | Scores/Feedback tables and methods |
 | PR 4.4 | `stores/clickhouse` | Scores/Feedback tables and methods |
 
@@ -326,83 +326,7 @@ export interface StorageCapabilities {
 **Package:** `observability/mastra`
 **Scope:** Span/Trace implementations, score/feedback emission, exporter updates
 
-### 4.2.0 Rename TracingBus to ObservabilityBus
-
-**File:** `observability/mastra/src/bus/observability.ts` (rename from tracing.ts)
-
-The TracingBus is extended and renamed to `ObservabilityBus` to handle all signal types with routing to appropriate handlers.
-
-```typescript
-import {
-  TracingEvent, ScoreEvent, FeedbackEvent,
-  ObservabilityExporter
-} from '@mastra/core';
-
-// Union of all observable events
-export type ObservabilityEvent = TracingEvent | ScoreEvent | FeedbackEvent;
-
-export class ObservabilityBus {
-  private exporters: ObservabilityExporter[] = [];
-
-  register(exporter: ObservabilityExporter): void {
-    this.exporters.push(exporter);
-  }
-
-  emit(event: ObservabilityEvent): void {
-    for (const exporter of this.exporters) {
-      this.routeEvent(exporter, event);
-    }
-  }
-
-  private routeEvent(exporter: ObservabilityExporter, event: ObservabilityEvent): void {
-    // Route based on event type to the appropriate handler
-    if (event.type === 'score') {
-      if (exporter.supportsScores && exporter.onScoreEvent) {
-        void exporter.onScoreEvent(event);
-      }
-    } else if (event.type === 'feedback') {
-      if (exporter.supportsFeedback && exporter.onFeedbackEvent) {
-        void exporter.onFeedbackEvent(event);
-      }
-    } else {
-      // TracingEvent types: span.started, span.updated, span.ended, span.error
-      if (exporter.supportsTraces && exporter.onTracingEvent) {
-        void exporter.onTracingEvent(event);
-      }
-    }
-  }
-
-  async flush(): Promise<void> {
-    await Promise.all(
-      this.exporters
-        .filter(e => e.flush)
-        .map(e => e.flush!())
-    );
-  }
-
-  async shutdown(): Promise<void> {
-    await Promise.all(
-      this.exporters
-        .filter(e => e.shutdown)
-        .map(e => e.shutdown!())
-    );
-  }
-}
-```
-
-**Notes:**
-- Single bus handles all observability events (tracing, scores, feedback)
-- Routes events to appropriate handlers based on `type` field
-- Respects `supportsX` flags before calling handlers
-- Maintains consistent EventBus pattern across all signals
-
-**Tasks:**
-- [ ] Rename TracingBus → ObservabilityBus
-- [ ] Add ObservabilityEvent union type
-- [ ] Implement routeEvent() with type-based dispatch
-- [ ] Update all imports from TracingBus to ObservabilityBus
-
----
+**Note:** The `ObservabilityBus` was created in Phase 1 and already handles all event types (TracingEvent, MetricEvent, LogEvent). This phase adds ScoreEvent and FeedbackEvent to the existing bus.
 
 ### 4.2.1 Update Span Implementation
 
@@ -641,11 +565,7 @@ export class HistoricalSpanImpl implements Span {
 
 ```typescript
 export class DefaultExporter extends BaseExporter {
-  readonly supportsTraces = true;
-  readonly supportsMetrics = true;
-  readonly supportsLogs = true;
-  readonly supportsScores = true;
-  readonly supportsFeedback = true;
+  // Handler presence = signal support (no flags needed)
 
   async onTracingEvent(event: TracingEvent): Promise<void> {
     // Handle span events only (span.started, span.updated, span.ended, span.error)
@@ -701,9 +621,8 @@ export class DefaultExporter extends BaseExporter {
 ```
 
 **Tasks:**
-- [ ] Set `supportsFeedback = true`
-- [ ] Handle `score.added` events
-- [ ] Handle `feedback.added` events
+- [ ] Implement `onScoreEvent()` handler
+- [ ] Implement `onFeedbackEvent()` handler
 - [ ] Write to storage
 
 ### 4.2.7 Update JsonExporter
@@ -711,8 +630,7 @@ export class DefaultExporter extends BaseExporter {
 **File:** `observability/mastra/src/exporters/json.ts` (modify)
 
 ```typescript
-readonly supportsScores = true;
-readonly supportsFeedback = true;
+// Handler presence = signal support
 
 async onTracingEvent(event: TracingEvent): Promise<void> {
   // Existing span output
@@ -739,17 +657,14 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
 ```
 
 **Tasks:**
-- [ ] Set supportsScores/supportsFeedback
-- [ ] Implement onScoreEvent handler
-- [ ] Implement onFeedbackEvent handler
+- [ ] Implement `onScoreEvent()` handler
+- [ ] Implement `onFeedbackEvent()` handler
 
 ### 4.2.8 Update CloudExporter
 
 **File:** `observability/cloud/src/exporter.ts` (if exists)
 
 **Tasks:**
-- [ ] Set `supportsScores = true`
-- [ ] Set `supportsFeedback = true`
 - [ ] Implement `onScoreEvent()` handler
 - [ ] Implement `onFeedbackEvent()` handler
 - [ ] Send to Mastra Cloud API

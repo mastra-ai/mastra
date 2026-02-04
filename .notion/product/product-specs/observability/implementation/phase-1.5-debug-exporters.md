@@ -84,11 +84,8 @@ import { BaseExporter, TracingEvent, MetricEvent, LogEvent } from '@mastra/obser
 
 export class GrafanaCloudExporter extends BaseExporter {
   readonly name = 'GrafanaCloudExporter';
-  readonly supportsTraces = true;
-  readonly supportsMetrics = true;
-  readonly supportsLogs = true;
-  readonly supportsScores = false;  // Grafana doesn't have native score concept
-  readonly supportsFeedback = false;
+  // Handler presence = signal support
+  // Note: No onScoreEvent/onFeedbackEvent - Grafana doesn't have native score concept
 
   constructor(config: GrafanaCloudExporterConfig) {
     super();
@@ -111,7 +108,7 @@ export class GrafanaCloudExporter extends BaseExporter {
 
 **Tasks:**
 - [ ] Implement GrafanaCloudExporter class
-- [ ] Signal support declarations
+- [ ] Implement handlers for traces, metrics, logs
 - [ ] Initialize endpoint clients
 
 ### 1.5.1.4 Traces → Tempo (OTLP)
@@ -196,11 +193,8 @@ interface LokiStream {
 ```typescript
 export class JsonExporter extends BaseExporter {
   readonly name = 'JsonExporter';
-  readonly supportsTraces = true;
-  readonly supportsMetrics = true;
-  readonly supportsLogs = true;
-  readonly supportsScores = true;
-  readonly supportsFeedback = true;
+  // Handler presence = signal support
+  // Implements all handlers for debugging purposes
 
   async onTracingEvent(event: TracingEvent): Promise<void> {
     this.output('trace', event);
@@ -214,6 +208,14 @@ export class JsonExporter extends BaseExporter {
     this.output('log', event);
   }
 
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    this.output('score', event);
+  }
+
+  async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
+    this.output('feedback', event);
+  }
+
   private output(type: string, data: unknown): void {
     // Output to console or file based on config
     console.log(JSON.stringify({ type, timestamp: new Date().toISOString(), data }, null, 2));
@@ -222,10 +224,10 @@ export class JsonExporter extends BaseExporter {
 ```
 
 **Tasks:**
-- [ ] Add supportsMetrics = true
-- [ ] Add supportsLogs = true
-- [ ] Implement onMetricEvent
-- [ ] Implement onLogEvent
+- [ ] Implement `onMetricEvent()` handler
+- [ ] Implement `onLogEvent()` handler
+- [ ] Implement `onScoreEvent()` handler
+- [ ] Implement `onFeedbackEvent()` handler
 - [ ] Support console and file output
 
 ### 1.5.2.2 Testing

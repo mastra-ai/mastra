@@ -39,7 +39,7 @@ Changes are organized by npm package to enable independent PRs and avoid cross-p
 **File:** `packages/core/src/observability/types/bus.ts` (new)
 
 ```typescript
-export interface EventBus<TEvent> {
+export interface ObservabilityEventBus<TEvent> {
   emit(event: TEvent): void;
   subscribe(handler: (event: TEvent) => void): () => void;
   flush(): Promise<void>;
@@ -93,7 +93,7 @@ export type FeedbackEvent = {
 ```
 
 **Tasks:**
-- [ ] Create EventBus interface
+- [ ] Create ObservabilityEventBus interface
 - [ ] Define TracingEvent union type (span lifecycle only)
 - [ ] Define MetricEvent type
 - [ ] Define LogEvent type
@@ -142,20 +142,14 @@ export interface Histogram {
 
 **File:** `packages/core/src/observability/types/tracing.ts` (modify)
 
-Add signal support declarations to existing `ObservabilityExporter` interface:
+Add signal handlers to existing `ObservabilityExporter` interface. Handler presence = signal support (no separate flags needed).
 
 ```typescript
 export interface ObservabilityExporter {
   readonly name: string;
 
-  // NEW: Signal support declarations (all optional, undefined = false)
-  readonly supportsTraces?: boolean;
-  readonly supportsMetrics?: boolean;
-  readonly supportsLogs?: boolean;
-  readonly supportsScores?: boolean;
-  readonly supportsFeedback?: boolean;
-
-  // NEW: Signal handlers (optional based on support)
+  // Signal handlers - implement the ones you support
+  // Handler presence = signal support
   onTracingEvent?(event: TracingEvent): void | Promise<void>;
   onMetricEvent?(event: MetricEvent): void | Promise<void>;
   onLogEvent?(event: LogEvent): void | Promise<void>;
@@ -177,7 +171,6 @@ export interface ObservabilityExporter {
 ```
 
 **Tasks:**
-- [ ] Add signal support properties to interface
 - [ ] Add new event handler method signatures
 - [ ] Keep existing methods for backward compat
 - [ ] Add JSDoc deprecation notices where appropriate
@@ -213,73 +206,45 @@ export const noOpMetricsContext: MetricsContext = {
 - [ ] Create NoOp Counter, Gauge, Histogram
 - [ ] Export as singletons
 
-### 1.1.5 Update ToolExecutionContext
+### 1.1.5 ObservabilityContextMixin Interface
 
-**File:** `packages/core/src/tools/types.ts` (modify)
+**File:** `packages/core/src/observability/types/context.ts` (add to existing)
+
+Define the mixin interface that all execution contexts will extend:
 
 ```typescript
-interface ToolExecutionContext<...> {
-  mastra?: MastraUnion;
-  requestContext?: RequestContext<TRequestContext>;
-
-  // Observability (always present, no-op if not configured)
+export interface ObservabilityContextMixin {
+  /** Tracing context for span operations */
   tracing: TracingContext;
+  /** Logger for structured logging */
   logger: LoggerContext;
+  /** Metrics for counters, gauges, histograms */
   metrics: MetricsContext;
-
   /** @deprecated Use `tracing` instead */
   tracingContext: TracingContext;
-
-  abortSignal?: AbortSignal;
-  writer?: ToolStream;
-  agent?: AgentToolExecutionContext<TSuspend, TResume>;
-  workflow?: WorkflowToolExecutionContext<TSuspend, TResume>;
-  mcp?: MCPToolExecutionContext;
 }
 ```
 
 **Tasks:**
-- [ ] Add `tracing`, `logger`, `metrics` to interface (non-optional)
-- [ ] Add deprecated `tracingContext` alias
-- [ ] Update JSDoc comments
+- [ ] Add ObservabilityContextMixin interface
+- [ ] Export from types index
 
-### 1.1.6 Update ExecuteFunctionParams (Workflow Steps)
-
-**File:** `packages/core/src/workflows/step.ts` (modify)
-
-**Tasks:**
-- [ ] Add `tracing`, `logger`, `metrics` to ExecuteFunctionParams
-- [ ] Add deprecated `tracingContext` alias
-- [ ] Ensure existing `tracingContext` references still work
-
-### 1.1.7 Update ProcessorContext
-
-**File:** `packages/core/src/processors/index.ts` (modify)
-
-**Tasks:**
-- [ ] Add `tracing`, `logger`, `metrics` to ProcessorContext
-- [ ] Add deprecated `tracingContext` alias
-
-### 1.1.8 Context Factory
+### 1.1.6 Context Factory
 
 **File:** `packages/core/src/observability/context-factory.ts` (new)
 
 ```typescript
 import { TracingContext } from './types/tracing';
-import { LoggerContext, MetricsContext } from './types/context';
+import { LoggerContext, MetricsContext, ObservabilityContextMixin } from './types/context';
 import { noOpLoggerContext, noOpMetricsContext } from './no-op/context';
-
-export interface ObservabilityContextMixin {
-  tracing: TracingContext;
-  logger: LoggerContext;
-  metrics: MetricsContext;
-  /** @deprecated Use `tracing` instead */
-  tracingContext: TracingContext;
-}
 
 // NoOp tracing context (reference existing implementation)
 const noOpTracingContext: TracingContext = { currentSpan: undefined };
 
+/**
+ * Creates an observability context mixin with real or no-op implementations.
+ * Use this when constructing execution contexts for tools, workflow steps, etc.
+ */
 export function createObservabilityContext(
   tracingContext?: TracingContext,
   loggerContext?: LoggerContext,
@@ -291,7 +256,7 @@ export function createObservabilityContext(
     tracing,
     logger: loggerContext ?? noOpLoggerContext,
     metrics: metricsContext ?? noOpMetricsContext,
-    tracingContext: tracing,
+    tracingContext: tracing,  // deprecated alias
   };
 }
 ```
@@ -300,12 +265,72 @@ export function createObservabilityContext(
 - [ ] Create context factory function
 - [ ] Export from observability index
 
-### 1.1.9 Update Context Creation Points
+### 1.1.7 Update Context Types to Extend Mixin
+
+Update all execution context types to extend `ObservabilityContextMixin`:
+
+**File:** `packages/core/src/tools/types.ts` (modify)
+
+```typescript
+import { ObservabilityContextMixin } from '../observability/types/context';
+
+interface ToolExecutionContext<...> extends ObservabilityContextMixin {
+  mastra?: MastraUnion;
+  requestContext?: RequestContext<TRequestContext>;
+  abortSignal?: AbortSignal;
+  writer?: ToolStream;
+  agent?: AgentToolExecutionContext<TSuspend, TResume>;
+  workflow?: WorkflowToolExecutionContext<TSuspend, TResume>;
+  mcp?: MCPToolExecutionContext;
+}
+```
+
+**File:** `packages/core/src/workflows/step.ts` (modify)
+
+```typescript
+import { ObservabilityContextMixin } from '../observability/types/context';
+
+interface ExecuteFunctionParams<...> extends ObservabilityContextMixin {
+  // existing properties...
+}
+```
+
+**File:** `packages/core/src/processors/index.ts` (modify)
+
+```typescript
+import { ObservabilityContextMixin } from '../observability/types/context';
+
+interface ProcessorContext extends ObservabilityContextMixin {
+  // existing properties...
+}
+```
+
+**Tasks:**
+- [ ] Update ToolExecutionContext to extend ObservabilityContextMixin
+- [ ] Update ExecuteFunctionParams to extend ObservabilityContextMixin
+- [ ] Update ProcessorContext to extend ObservabilityContextMixin
+- [ ] Add imports for ObservabilityContextMixin
+
+### 1.1.8 Update Context Creation Points
 
 **Files:**
 - `packages/core/src/tools/tool-builder/builder.ts`
 - `packages/core/src/workflows/handlers/step.ts`
 - `packages/core/src/processors/runner.ts`
+
+Use `createObservabilityContext()` when building execution contexts:
+
+```typescript
+import { createObservabilityContext } from '../observability/context-factory';
+
+// In context creation code:
+const context: ToolExecutionContext = {
+  mastra,
+  requestContext,
+  ...createObservabilityContext(tracingCtx, loggerCtx, metricsCtx),
+  // other properties...
+};
+```
 
 **Tasks:**
 - [ ] Use `createObservabilityContext()` in tool context creation
@@ -313,49 +338,94 @@ export function createObservabilityContext(
 - [ ] Use `createObservabilityContext()` in processor context creation
 - [ ] Pass real contexts when observability is configured, no-ops otherwise
 
-### 1.1.10 Storage Interface Extensions
+### 1.1.9 Storage Strategy Types
+
+**File:** `packages/core/src/storage/domains/observability/types.ts` (modify)
+
+Add strategy types for each signal (following existing `TracingStorageStrategy` pattern):
+
+```typescript
+// Existing
+export type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
+
+// NEW: Logs storage strategies
+export type LogsStorageStrategy = 'realtime' | 'batch';
+
+// NEW: Metrics storage strategies
+export type MetricsStorageStrategy = 'realtime' | 'batch';
+
+// NEW: Scores storage strategies
+export type ScoresStorageStrategy = 'realtime' | 'batch';
+
+// NEW: Feedback storage strategies
+export type FeedbackStorageStrategy = 'realtime' | 'batch';
+```
+
+**Strategy meanings:**
+- `realtime` - Write immediately as events arrive
+- `batch` - Buffer events and write in batches (better throughput)
+- `batch-with-updates` - (tracing only) Batch writes with span update support
+- `insert-only` - (tracing only) Append-only, no span updates (ClickHouse style)
+
+**Tasks:**
+- [ ] Add LogsStorageStrategy type
+- [ ] Add MetricsStorageStrategy type
+- [ ] Add ScoresStorageStrategy type
+- [ ] Add FeedbackStorageStrategy type
+
+### 1.1.10 Storage Strategy Getters
 
 **File:** `packages/core/src/storage/domains/observability/base.ts` (modify)
 
-Add capability declarations:
+Add strategy getters for new signals. Note: `tracingStrategy` keeps its existing non-null default for backward compatibility.
 
 ```typescript
-export interface StorageCapabilities {
-  tracing: {
-    preferred: TracingStorageStrategy;
-    supported: TracingStorageStrategy[];
-  };
-  logs: {
-    preferred?: 'realtime' | 'insert-only';
-    supported: boolean;
-  };
-  metrics: {
-    preferred?: 'realtime' | 'insert-only';
-    supported: boolean;
-  };
-  scores: { supported: boolean };
-  feedback: { supported: boolean };
-}
+// Helper type for strategy getter return
+type StrategyHint<T> = { preferred: T; supported: T[] } | null;
 
 abstract class ObservabilityStorage extends StorageDomain {
-  // Existing methods...
-
-  get capabilities(): StorageCapabilities {
+  // EXISTING: Tracing - keeps non-null default for backward compat
+  // If a store has ObservabilityStorage domain, it supports tracing
+  // TODO(2.0): Change to return null by default for consistency with other signals
+  public get tracingStrategy(): StrategyHint<TracingStorageStrategy> {
     return {
-      tracing: { preferred: 'batch-with-updates', supported: ['realtime', 'batch-with-updates', 'insert-only'] },
-      logs: { supported: false },
-      metrics: { supported: false },
-      scores: { supported: false },
-      feedback: { supported: false },
+      preferred: 'batch-with-updates',
+      supported: ['realtime', 'batch-with-updates', 'insert-only'],
     };
+  }
+
+  // NEW: Logs, Metrics, Scores, Feedback - null by default (opt-in)
+  public get logsStrategy(): StrategyHint<LogsStorageStrategy> {
+    return null;
+  }
+
+  public get metricsStrategy(): StrategyHint<MetricsStorageStrategy> {
+    return null;
+  }
+
+  public get scoresStrategy(): StrategyHint<ScoresStorageStrategy> {
+    return null;
+  }
+
+  public get feedbackStrategy(): StrategyHint<FeedbackStorageStrategy> {
+    return null;
   }
 }
 ```
 
+**Notes:**
+- `ObservabilityStorage` is an optional domain - stores without it don't support any observability
+- If domain exists: tracing supported by default (backward compat)
+- New signals (logs/metrics/scores/feedback): `null` by default, must explicitly opt-in
+- `null` = not supported, non-null = supported with preferred strategy
+- Stores that want logs/metrics WITHOUT tracing can override `tracingStrategy` to return `null`
+
 **Tasks:**
-- [ ] Define StorageCapabilities interface
-- [ ] Add capabilities getter to base class
-- [ ] Document capability meanings
+- [ ] Add StrategyHint type helper
+- [ ] Add logsStrategy getter (default null)
+- [ ] Add metricsStrategy getter (default null)
+- [ ] Add scoresStrategy getter (default null)
+- [ ] Add feedbackStrategy getter (default null)
 
 ### PR 1.1 Testing
 
@@ -373,14 +443,14 @@ abstract class ObservabilityStorage extends StorageDomain {
 **Package:** `observability/mastra`
 **Scope:** Event bus implementations, base exporter updates
 
-### 1.2.1 Base EventBus Implementation
+### 1.2.1 Base ObservabilityEventBus Implementation
 
 **File:** `observability/mastra/src/bus/base.ts` (new)
 
 ```typescript
-import { EventBus } from '@mastra/core';
+import { ObservabilityEventBus } from '@mastra/core';
 
-export class BaseEventBus<TEvent> implements EventBus<TEvent> {
+export class BaseObservabilityEventBus<TEvent> implements ObservabilityEventBus<TEvent> {
   private subscribers: Set<(event: TEvent) => void> = new Set();
   private buffer: TEvent[] = [];
   private bufferSize: number;
@@ -411,7 +481,7 @@ export class BaseEventBus<TEvent> implements EventBus<TEvent> {
       events.flatMap(event =>
         Array.from(this.subscribers).map(handler =>
           Promise.resolve(handler(event)).catch(err =>
-            console.error('[EventBus] Handler error:', err)
+            console.error('[ObservabilityEventBus] Handler error:', err)
           )
         )
       )
@@ -429,60 +499,79 @@ export class BaseEventBus<TEvent> implements EventBus<TEvent> {
 ```
 
 **Tasks:**
-- [ ] Implement BaseEventBus
+- [ ] Implement BaseObservabilityEventBus
 - [ ] Add buffering support
 - [ ] Add flush interval option
 - [ ] Handle errors gracefully
 
-### 1.2.2 TracingBus Implementation
+### 1.2.2 ObservabilityBus Implementation
 
-**File:** `observability/mastra/src/bus/tracing.ts` (new)
+**File:** `observability/mastra/src/bus/observability.ts` (new)
 
-> **Note:** In Phase 4, TracingBus will be renamed to `ObservabilityBus` and extended to handle all event types (TracingEvent, ScoreEvent, FeedbackEvent) with type-based routing to appropriate handlers.
+The main event bus for all observability signals. Routes events to appropriate exporter handlers based on event type.
 
 ```typescript
-import { TracingEvent } from '@mastra/core';
-import { BaseEventBus } from './base';
+import {
+  TracingEvent, MetricEvent, LogEvent, ScoreEvent, FeedbackEvent,
+  ObservabilityExporter
+} from '@mastra/core';
+import { BaseObservabilityEventBus } from './base';
 
-export class TracingBus extends BaseEventBus<TracingEvent> {
-  private metricsBus?: MetricsBus;
+// Union of all observability events
+export type ObservabilityEvent =
+  | TracingEvent
+  | MetricEvent
+  | LogEvent
+  | ScoreEvent
+  | FeedbackEvent;
 
-  setMetricsBus(bus: MetricsBus): void {
-    this.metricsBus = bus;
+export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEvent> {
+  private exporters: ObservabilityExporter[] = [];
+
+  registerExporter(exporter: ObservabilityExporter): void {
+    this.exporters.push(exporter);
   }
 
-  emit(event: TracingEvent): void {
+  emit(event: ObservabilityEvent): void {
+    // Route to appropriate handler based on event type
+    for (const exporter of this.exporters) {
+      this.routeToHandler(exporter, event);
+    }
+
+    // Also buffer for batch processing if needed
     super.emit(event);
-
-    // Cross-emit to MetricsBus for auto-extracted metrics (Phase 3)
-    // this.emitMetrics(event);
   }
 
-  // Phase 3: Auto-extract metrics from span events
-  // private emitMetrics(event: TracingEvent): void { ... }
+  private routeToHandler(exporter: ObservabilityExporter, event: ObservabilityEvent): void {
+    switch (event.type) {
+      case 'span.started':
+      case 'span.updated':
+      case 'span.ended':
+      case 'span.error':
+        exporter.onTracingEvent?.(event);
+        break;
+      case 'metric':
+        exporter.onMetricEvent?.(event);
+        break;
+      case 'log':
+        exporter.onLogEvent?.(event);
+        break;
+      case 'score':
+        exporter.onScoreEvent?.(event);
+        break;
+      case 'feedback':
+        exporter.onFeedbackEvent?.(event);
+        break;
+    }
+  }
 }
 ```
 
 **Tasks:**
-- [ ] Create TracingBus extending BaseEventBus
-- [ ] Add MetricsBus reference for cross-emission
-- [ ] Stub cross-emission for Phase 3
-
-### 1.2.3 MetricsBus Implementation
-
-**File:** `observability/mastra/src/bus/metrics.ts` (new)
-
-**Tasks:**
-- [ ] Create MetricsBus extending BaseEventBus
-- [ ] Stub for Phase 3 usage
-
-### 1.2.4 LogsBus Implementation
-
-**File:** `observability/mastra/src/bus/logs.ts` (new)
-
-**Tasks:**
-- [ ] Create LogsBus extending BaseEventBus
-- [ ] Stub for Phase 2 usage
+- [ ] Create ObservabilityBus with type-based routing
+- [ ] Add exporter registration
+- [ ] Route events to appropriate handlers
+- [ ] Handle all event types from the start (handlers are no-ops until implemented)
 
 ### 1.2.5 Update BaseExporter
 
@@ -490,25 +579,15 @@ export class TracingBus extends BaseEventBus<TracingEvent> {
 
 ```typescript
 export abstract class BaseExporter implements ObservabilityExporter {
-  // NEW: Default signal support (subclasses override)
-  readonly supportsTraces: boolean = true;
-  readonly supportsMetrics: boolean = false;
-  readonly supportsLogs: boolean = false;
-  readonly supportsScores: boolean = false;
-  readonly supportsFeedback: boolean = false;
-
-  // NEW: Default handlers that delegate to existing methods
+  // Default handler that delegates to existing method for backward compat
   onTracingEvent(event: TracingEvent): void | Promise<void> {
     return this.exportTracingEvent(event);
   }
 
-  onMetricEvent?(event: MetricEvent): void | Promise<void> {
-    // Subclasses override if supportsMetrics
-  }
-
-  onLogEvent?(event: LogEvent): void | Promise<void> {
-    // Subclasses override if supportsLogs
-  }
+  // Subclasses implement handlers for the signals they support
+  // No onMetricEvent = doesn't support metrics
+  // No onLogEvent = doesn't support logs
+  // etc.
 
   // EXISTING methods remain unchanged
   // ...
@@ -516,68 +595,56 @@ export abstract class BaseExporter implements ObservabilityExporter {
 ```
 
 **Tasks:**
-- [ ] Add default signal support properties
 - [ ] Add default onTracingEvent that calls existing method
-- [ ] Add stub onMetricEvent and onLogEvent
+- [ ] Document that handler presence = signal support
 
-### 1.2.6 Update BaseObservabilityInstance
+### 1.2.3 Update BaseObservabilityInstance
 
 **File:** `observability/mastra/src/instances/base.ts` (modify)
 
-Refactor to use event buses:
+Refactor to use ObservabilityBus:
 
 ```typescript
 export class BaseObservabilityInstance {
-  private tracingBus: TracingBus;
-  private metricsBus: MetricsBus;
-  private logsBus: LogsBus;
+  private observabilityBus: ObservabilityBus;
 
   constructor(config: ObservabilityConfig) {
-    // Initialize buses
-    this.tracingBus = new TracingBus();
-    this.metricsBus = new MetricsBus();
-    this.logsBus = new LogsBus();
+    // Initialize single bus for all signals
+    this.observabilityBus = new ObservabilityBus();
 
-    // Wire cross-bus emission
-    this.tracingBus.setMetricsBus(this.metricsBus);
-
-    // Subscribe exporters to appropriate buses
-    this.subscribeExporters(config.exporters);
-  }
-
-  private subscribeExporters(exporters: ObservabilityExporter[]): void {
-    for (const exporter of exporters) {
-      if (exporter.supportsTraces && exporter.onTracingEvent) {
-        this.tracingBus.subscribe(event => exporter.onTracingEvent!(event));
-      }
-      if (exporter.supportsMetrics && exporter.onMetricEvent) {
-        this.metricsBus.subscribe(event => exporter.onMetricEvent!(event));
-      }
-      if (exporter.supportsLogs && exporter.onLogEvent) {
-        this.logsBus.subscribe(event => exporter.onLogEvent!(event));
-      }
+    // Register exporters (bus routes events to appropriate handlers)
+    for (const exporter of config.exporters) {
+      this.observabilityBus.registerExporter(exporter);
     }
   }
 
-  // Refactor existing exportTracingEvent to emit to bus
-  protected async exportTracingEvent(event: TracingEvent): Promise<void> {
-    this.tracingBus.emit(event);
+  // Emit any observability event (bus routes to appropriate handlers)
+  protected emit(event: ObservabilityEvent): void {
+    this.observabilityBus.emit(event);
+  }
+
+  async flush(): Promise<void> {
+    await this.observabilityBus.flush();
+  }
+
+  async shutdown(): Promise<void> {
+    await this.observabilityBus.shutdown();
   }
 }
 ```
 
 **Tasks:**
-- [ ] Create bus instances in constructor
-- [ ] Subscribe exporters based on signal support
-- [ ] Refactor exportTracingEvent to use TracingBus
-- [ ] Add flush/shutdown to propagate to buses
+- [ ] Create ObservabilityBus in constructor
+- [ ] Register exporters with bus
+- [ ] Add convenience emit methods for each event type
+- [ ] Add flush/shutdown delegation
 
 ### PR 1.2 Testing
 
 **Tasks:**
-- [ ] Test BaseEventBus emit/subscribe/flush
-- [ ] Test TracingBus routing to exporters
-- [ ] Test exporter receives only supported signals
+- [ ] Test BaseObservabilityEventBus emit/subscribe/flush
+- [ ] Test ObservabilityBus routing to exporters
+- [ ] Test exporter receives only events for handlers it implements
 - [ ] Test backward compat with existing exporters
 
 ---
@@ -625,8 +692,35 @@ stores/duckdb/src/
 
 **File:** `stores/duckdb/src/storage/domains/observability/index.ts` (new)
 
+```typescript
+import { ObservabilityStorage, TracingStorageStrategy } from '@mastra/core/storage';
+
+export class ObservabilityDuckDB extends ObservabilityStorage {
+  // Override to declare tracing support
+  public override get tracingStrategy(): {
+    preferred: TracingStorageStrategy;
+    supported: TracingStorageStrategy[];
+  } {
+    return {
+      preferred: 'batch-with-updates',  // Batch is more efficient
+      supported: ['realtime', 'batch-with-updates'],
+    };
+  }
+
+  // logsStrategy, metricsStrategy, etc. remain null (not supported in Phase 1)
+  // Will be overridden in later phases when those features are added
+
+  async init(): Promise<void> {
+    // Create spans table...
+  }
+
+  // ... other method implementations
+}
+```
+
 **Tasks:**
 - [ ] Extend ObservabilityStorage base class
+- [ ] Override `tracingStrategy` getter to declare support
 - [ ] Implement `init()` - create spans table
 - [ ] Implement `batchCreateSpans()`
 - [ ] Implement `batchUpdateSpans()`
@@ -636,7 +730,6 @@ stores/duckdb/src/
 - [ ] Implement `listTraces()`
 - [ ] Implement `batchDeleteTraces()`
 - [ ] Implement `dangerouslyClearAll()`
-- [ ] Declare capabilities (tracing only for now)
 
 ### 1.3.4 Spans Table Schema
 
@@ -709,55 +802,51 @@ CREATE INDEX IF NOT EXISTS idx_spans_started_at ON mastra_ai_spans(started_at DE
 **File:** `observability/mastra/src/exporters/default.ts`
 
 **Tasks:**
-- [ ] Add `supportsTraces = true`
-- [ ] Add `supportsMetrics = false` (Phase 3)
-- [ ] Add `supportsLogs = false` (Phase 2)
-- [ ] Add `supportsScores = true`
-- [ ] Add `supportsFeedback = false` (Phase 4)
+- [ ] Implement `onTracingEvent()` (delegates to existing method)
+- [ ] Stub `onScoreEvent()` for Phase 4
+- [ ] Other handlers added in later phases
 
 ### 1.4.2 JsonExporter
 
 **File:** `observability/mastra/src/exporters/json.ts`
 
 **Tasks:**
-- [ ] Add signal support declarations
-- [ ] All signals true for debugging
+- [ ] Implement `onTracingEvent()` (output spans as JSON)
+- [ ] Implement all handlers for debugging purposes
 
 ### 1.4.3 LangfuseExporter
 
 **Package:** `observability/langfuse`
 
 **Tasks:**
-- [ ] Add `supportsTraces = true`
-- [ ] Add `supportsMetrics = false`
-- [ ] Add `supportsLogs = false`
-- [ ] Add `supportsScores = true`
+- [ ] Implement `onTracingEvent()` (existing functionality)
+- [ ] Stub `onScoreEvent()` for Phase 4
 
 ### 1.4.4 BraintrustExporter
 
 **Package:** `observability/braintrust`
 
 **Tasks:**
-- [ ] Add signal support declarations
+- [ ] Implement `onTracingEvent()` handler
 
 ### 1.4.5 OtelExporter
 
 **Package:** `observability/otel-exporter`
 
 **Tasks:**
-- [ ] Add signal support declarations
+- [ ] Implement `onTracingEvent()` handler
 
 ### 1.4.6 Other Exporters
 
 **Tasks:**
 - [ ] Audit all exporters in `observability/` directory
-- [ ] Add signal support declarations to each
+- [ ] Add `onTracingEvent()` handler to each
 
 ### PR 1.4 Testing
 
 **Tasks:**
 - [ ] Verify each exporter loads without error
-- [ ] Verify signal declarations are correct
+- [ ] Verify handlers are called correctly
 
 ---
 
