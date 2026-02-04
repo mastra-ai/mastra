@@ -683,7 +683,7 @@ export class MemoryPG extends MemoryStorage {
             threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
           },
         },
-        new Error('threadId is required'),
+        new Error('Either threadId or resourceId must be provided'),
       );
     }
 
