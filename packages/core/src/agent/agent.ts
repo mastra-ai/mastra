@@ -417,10 +417,9 @@ export class Agent<
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
   }): Promise<ProcessorRunner> {
-    // Use overrides if provided, otherwise resolve from agent config + memory
-    const inputProcessors = inputProcessorOverrides ?? (await this.listResolvedInputProcessors(requestContext));
-
-    const outputProcessors = outputProcessorOverrides ?? (await this.listResolvedOutputProcessors(requestContext));
+    // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
+    const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
+    const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
 
     return new ProcessorRunner({
       inputProcessors,
@@ -519,13 +518,19 @@ export class Agent<
    * All processors are combined into a single workflow for consistency.
    * @internal
    */
-  private async listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
-    // Get configured output processors
-    const configuredProcessors = this.#outputProcessors
-      ? typeof this.#outputProcessors === 'function'
-        ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
-        : this.#outputProcessors
-      : [];
+  private async listResolvedOutputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: OutputProcessorOrWorkflow[],
+  ): Promise<OutputProcessorOrWorkflow[]> {
+    // Get configured output processors - use overrides if provided (from generate/stream options),
+    // otherwise use agent constructor processors
+    const configuredProcessors = configuredProcessorOverrides
+      ? configuredProcessorOverrides
+      : this.#outputProcessors
+        ? typeof this.#outputProcessors === 'function'
+          ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
+          : this.#outputProcessors
+        : [];
 
     // Get memory output processors (with deduplication)
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
@@ -544,13 +549,19 @@ export class Agent<
    * All processors are combined into a single workflow for consistency.
    * @internal
    */
-  private async listResolvedInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
-    // Get configured input processors
-    const configuredProcessors = this.#inputProcessors
-      ? typeof this.#inputProcessors === 'function'
-        ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
-        : this.#inputProcessors
-      : [];
+  private async listResolvedInputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+  ): Promise<InputProcessorOrWorkflow[]> {
+    // Get configured input processors - use overrides if provided (from generate/stream options),
+    // otherwise use agent constructor processors
+    const configuredProcessors = configuredProcessorOverrides
+      ? configuredProcessorOverrides
+      : this.#inputProcessors
+        ? typeof this.#inputProcessors === 'function'
+          ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+          : this.#inputProcessors
+        : [];
 
     // Get memory input processors (with deduplication)
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
@@ -3191,10 +3202,20 @@ export class Agent<
       getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
       executeOnFinish: this.#executeOnFinish.bind(this),
-      inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
-        this.listResolvedInputProcessors(requestContext),
-      outputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
-        this.listResolvedOutputProcessors(requestContext),
+      inputProcessors: async ({
+        requestContext,
+        overrides,
+      }: {
+        requestContext: RequestContext;
+        overrides?: InputProcessorOrWorkflow[];
+      }) => this.listResolvedInputProcessors(requestContext, overrides),
+      outputProcessors: async ({
+        requestContext,
+        overrides,
+      }: {
+        requestContext: RequestContext;
+        overrides?: OutputProcessorOrWorkflow[];
+      }) => this.listResolvedOutputProcessors(requestContext, overrides),
       llm,
     };
 
