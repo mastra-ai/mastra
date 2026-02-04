@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
 import { ChevronRight } from 'lucide-react';
 
-import { Section } from '@/domains/cms';
 import { MemoryIcon } from '@/ds/icons';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
 import { Switch } from '@/ds/components/Switch';
 import type { AgentFormValues } from '../utils/form-validation';
+import { SectionTitle } from '@/domains/cms/components/section/section-title';
 
 interface MemorySectionProps {
   control: Control<AgentFormValues>;
@@ -25,9 +25,9 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3">
           <ChevronRight className="h-4 w-4 text-icon3" />
-          <Section.Title icon={<MemoryIcon className="text-neutral3" />}>
+          <SectionTitle icon={<MemoryIcon className="text-neutral3" />}>
             Memory{isEnabled && <span className="text-accent1 font-normal">(enabled)</span>}
-          </Section.Title>
+          </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="p-3 border-t border-border1 flex flex-col gap-4">

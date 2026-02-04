@@ -5,10 +5,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/c
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useAgent } from '../hooks/use-agent';
-import { useExperimentalFeatures } from '@/lib/experimental-features';
 import { useLinkComponent } from '@/lib/framework';
 import { Truncate } from '@/ds/components/Truncate';
 import { AgentSourceIcon } from './agent-source-icon';
+import { useIsCmsAvailable } from '@/domains/cms';
 
 export interface AgentEntityHeaderProps {
   agentId: string;
@@ -17,17 +17,17 @@ export interface AgentEntityHeaderProps {
 export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { handleCopy } = useCopyToClipboard({ text: agentId });
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
+  const { isCmsAvailable } = useIsCmsAvailable();
   const { navigate } = useLinkComponent();
   const agentName = agent?.name || '';
   const isStoredAgent = agent?.source === 'stored';
 
-  const showStoredAgentBadge = experimentalFeaturesEnabled && isStoredAgent;
+  const showStoredAgentBadge = isCmsAvailable && isStoredAgent;
 
   return (
     <TooltipProvider>
       <EntityHeader
-        icon={experimentalFeaturesEnabled ? <AgentSourceIcon source={agent?.source} /> : <AgentIcon />}
+        icon={isCmsAvailable ? <AgentSourceIcon source={agent?.source} /> : <AgentIcon />}
         title={agentName}
         isLoading={isLoading}
       >

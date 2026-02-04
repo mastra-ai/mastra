@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
 import { Trash2, ChevronRight } from 'lucide-react';
 
-import { Section } from '@/domains/cms';
 import { JudgeIcon, Icon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
@@ -13,6 +12,7 @@ import { Textarea } from '@/ds/components/Textarea';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import type { AgentFormValues } from '../utils/form-validation';
+import { SectionTitle } from '@/domains/cms/components/section/section-title';
 
 interface ScorersSectionProps {
   control: Control<AgentFormValues>;
@@ -55,9 +55,9 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3">
           <ChevronRight className="h-4 w-4 text-icon3" />
-          <Section.Title icon={<JudgeIcon className="text-neutral3" />}>
+          <SectionTitle icon={<JudgeIcon className="text-neutral3" />}>
             Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
-          </Section.Title>
+          </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="p-3 border-t border-border1">

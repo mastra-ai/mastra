@@ -12,13 +12,13 @@ import {
   useAgents,
   AgentsTable,
   AgentIcon,
-  useExperimentalFeatures,
+  useIsCmsAvailable,
 } from '@mastra/playground-ui';
 
 function Agents() {
   const { Link, navigate } = useLinkComponent();
   const { data: agents = {}, isLoading } = useAgents();
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
+  const { isCmsAvailable } = useIsCmsAvailable();
 
   const handleCreateClick = () => {
     navigate('/cms/agents/create');
@@ -35,7 +35,7 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
-          {experimentalFeaturesEnabled && (
+          {isCmsAvailable && (
             <Button variant="light" as={Link} to="/cms/agents/create">
               <Icon>
                 <Plus />
@@ -56,7 +56,7 @@ function Agents() {
         <AgentsTable
           agents={agents}
           isLoading={isLoading}
-          onCreateClick={experimentalFeaturesEnabled ? handleCreateClick : undefined}
+          onCreateClick={isCmsAvailable ? handleCreateClick : undefined}
         />
       </MainContentContent>
     </MainContentLayout>

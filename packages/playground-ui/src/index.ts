@@ -101,5 +101,6 @@ export * from './domains/configuration/index';
 export * from './domains/workspace/index';
 export * from './domains/request-context/index';
 export * from './lib/mastra-platform';
+export * from './domains/cms/index';
 export * from './lib/experimental-features';
 export * from './lib/command';

@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
 import { ChevronRight } from 'lucide-react';
 
-import { Section, EntityAccordionItem } from '@/domains/cms';
+import { EntityAccordionItem } from '@/domains/cms';
 import { AgentIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { useAgents } from '../../../hooks/use-agents';
 import type { AgentFormValues } from '../utils/form-validation';
+import { SectionTitle } from '@/domains/cms/components/section/section-title';
 
 interface EntityConfig {
   description?: string;
@@ -55,9 +56,9 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3">
           <ChevronRight className="h-4 w-4 text-icon3" />
-          <Section.Title icon={<AgentIcon className="text-accent1" />}>
+          <SectionTitle icon={<AgentIcon className="text-accent1" />}>
             Sub-Agents{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
-          </Section.Title>
+          </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="p-3 border-t border-border1">
@@ -113,7 +114,9 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                             name={agent.label}
                             icon={<AgentIcon className="text-accent1" />}
                             description={field.value?.[agent.value]?.description || ''}
-                            onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(agent.value, desc)}
+                            onDescriptionChange={
+                              readOnly ? undefined : desc => handleDescriptionChange(agent.value, desc)
+                            }
                             onRemove={readOnly ? undefined : () => handleRemove(agent.value)}
                           />
                         ))}

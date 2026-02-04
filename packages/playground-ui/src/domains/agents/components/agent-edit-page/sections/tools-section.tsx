@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
 import { ChevronRight } from 'lucide-react';
 
-import { Section, EntityAccordionItem } from '@/domains/cms';
+import { EntityAccordionItem } from '@/domains/cms';
 import { ToolsIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import type { AgentFormValues } from '../utils/form-validation';
+import { SectionTitle } from '@/domains/cms/components/section/section-title';
 
 interface EntityConfig {
   description?: string;
@@ -44,9 +45,9 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3">
           <ChevronRight className="h-4 w-4 text-icon3" />
-          <Section.Title icon={<ToolsIcon className="text-accent6" />}>
+          <SectionTitle icon={<ToolsIcon className="text-accent6" />}>
             Tools{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
-          </Section.Title>
+          </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="p-3 border-t border-border1">
@@ -102,7 +103,9 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
                             name={tool.label}
                             icon={<ToolsIcon className="text-accent6" />}
                             description={field.value?.[tool.value]?.description || ''}
-                            onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(tool.value, desc)}
+                            onDescriptionChange={
+                              readOnly ? undefined : desc => handleDescriptionChange(tool.value, desc)
+                            }
                             onRemove={readOnly ? undefined : () => handleRemove(tool.value)}
                           />
                         ))}
