@@ -5,9 +5,8 @@
  * Uses docs/build/llms-manifest.json as the data source and copies llms.txt files to a flat structure in each package's dist/docs/references/ directory.
  *
  * Usage:
- *   pnpm generate:docs                     # Generate for all packages
- *   pnpm generate:docs @mastra/core        # Generate for a specific package
- *   pnpm generate:docs packages/core       # Generate for a specific package by path
+ * Add "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts", to your package.json scripts.
+ * (Adjust the file path as needed based on your package location)
  */
 
 import fs from 'node:fs';
@@ -17,6 +16,24 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const MONOREPO_ROOT = path.join(__dirname, '..');
+
+interface ExportInfo {
+  types: string;
+  implementation: string;
+  line?: number;
+}
+
+interface ModuleInfo {
+  index: string;
+  chunks: string[];
+}
+
+interface SourceMap {
+  version: string;
+  package: string;
+  exports: Record<string, ExportInfo>;
+  modules: Record<string, ModuleInfo>;
+}
 
 interface ManifestEntry {
   path: string; // e.g., "docs/agents/adding-voice/llms.txt"
@@ -30,6 +47,156 @@ interface LlmsManifest {
   version: string;
   generatedAt: string;
   packages: Record<string, ManifestEntry[]>;
+}
+
+function parseIndexExports(indexPath: string): Map<string, { chunk: string; exportName: string }> {
+  const exports = new Map<string, { chunk: string; exportName: string }>();
+
+  if (!fs.existsSync(indexPath)) {
+    return exports;
+  }
+
+  const content = fs.readFileSync(indexPath, 'utf-8');
+
+  // Parse: export { Agent, TripWire } from '../chunk-IDD63DWQ.js';
+  const regex = /export\s*\{\s*([^}]+)\s*\}\s*from\s*['"]([^'"]+)['"]/g;
+  let match;
+
+  while ((match = regex.exec(content)) !== null) {
+    const names = match[1].split(',').map(n => n.trim().split(' as ')[0].trim());
+    const chunkPath = match[2];
+    const chunk = path.basename(chunkPath);
+
+    for (const name of names) {
+      if (name) {
+        exports.set(name, { chunk, exportName: name });
+      }
+    }
+  }
+
+  return exports;
+}
+
+function findExportLine(chunkPath: string, exportName: string): number | undefined {
+  if (!fs.existsSync(chunkPath)) {
+    return undefined;
+  }
+
+  // Make sure it's a file, not a directory
+  const stat = fs.statSync(chunkPath);
+  if (!stat.isFile()) {
+    return undefined;
+  }
+
+  const content = fs.readFileSync(chunkPath, 'utf-8');
+  const lines = content.split('\n');
+
+  // Look for class or function definition
+  const patterns = [
+    new RegExp(`^var ${exportName} = class`),
+    new RegExp(`^function ${exportName}\\s*\\(`),
+    new RegExp(`^var ${exportName} = function`),
+    new RegExp(`^var ${exportName} = \\(`), // Arrow function
+    new RegExp(`^const ${exportName} = `),
+    new RegExp(`^let ${exportName} = `),
+  ];
+
+  for (let i = 0; i < lines.length; i++) {
+    for (const pattern of patterns) {
+      if (pattern.test(lines[i])) {
+        return i + 1; // 1-indexed
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function generateSourceMap(packageRoot: string): SourceMap {
+  const distDir = path.join(packageRoot, 'dist');
+  const packageJson = getPackageJson(packageRoot);
+
+  const sourceMap: SourceMap = {
+    version: packageJson.version,
+    package: packageJson.name,
+    exports: {},
+    modules: {},
+  };
+
+  // Default modules to analyze
+  const modules = [
+    'agent',
+    'tools',
+    'workflows',
+    'memory',
+    'stream',
+    'llm',
+    'mastra',
+    'mcp',
+    'evals',
+    'processors',
+    'storage',
+    'vector',
+    'voice',
+  ];
+
+  for (const mod of modules) {
+    const indexPath = path.join(distDir, mod, 'index.js');
+
+    if (!fs.existsSync(indexPath)) {
+      continue;
+    }
+
+    const exports = parseIndexExports(indexPath);
+    const chunks = new Set<string>();
+
+    for (const [name, info] of exports) {
+      chunks.add(info.chunk);
+
+      const chunkPath = path.join(distDir, info.chunk);
+      const line = findExportLine(chunkPath, name);
+
+      // Determine the types file
+      let typesFile = `dist/${mod}/index.d.ts`;
+
+      // Check if there's a more specific types file
+      const specificTypesPath = path.join(distDir, mod, `${name.toLowerCase()}.d.ts`);
+      if (fs.existsSync(specificTypesPath)) {
+        typesFile = `dist/${mod}/${name.toLowerCase()}.d.ts`;
+      }
+
+      sourceMap.exports[name] = {
+        types: typesFile,
+        implementation: `dist/${info.chunk}`,
+        line,
+      };
+    }
+
+    sourceMap.modules[mod] = {
+      index: `dist/${mod}/index.js`,
+      chunks: [...chunks],
+    };
+  }
+
+  // Also check root index.js for additional exports
+  const rootIndexPath = path.join(distDir, 'index.js');
+  if (fs.existsSync(rootIndexPath)) {
+    const rootExports = parseIndexExports(rootIndexPath);
+    for (const [name, info] of rootExports) {
+      if (!sourceMap.exports[name]) {
+        const chunkPath = path.join(distDir, info.chunk);
+        const line = findExportLine(chunkPath, name);
+
+        sourceMap.exports[name] = {
+          types: 'dist/index.d.ts',
+          implementation: `dist/${info.chunk}`,
+          line,
+        };
+      }
+    }
+  }
+
+  return sourceMap;
 }
 
 function loadLlmsManifest(): LlmsManifest {
@@ -95,7 +262,8 @@ Use this skill whenever you are working with ${packageName} to obtain the domain
 
 Read the individual reference documents for detailed explanations and code examples.
 ${docList}
-`;
+
+Read [assets/SOURCE_MAP.json](assets/SOURCE_MAP.json) for source code references.`;
 }
 
 function copyDocumentation(manifest: LlmsManifest, packageName: string, docsOutputDir: string): void {
@@ -112,57 +280,18 @@ function copyDocumentation(manifest: LlmsManifest, packageName: string, docsOutp
     if (fs.existsSync(sourcePath)) {
       const content = fs.readFileSync(sourcePath, 'utf-8');
       fs.writeFileSync(targetPath, content, 'utf-8');
-      console.info(`  Copied: ${entry.path} -> references/${targetFileName}`);
     } else {
       console.warn(`  Warning: Source not found: ${sourcePath}`);
     }
   }
 }
 
-function resolvePackagePath(packageArg: string): { packageRoot: string; packageName: string } | null {
-  // If it's a path like "packages/core"
-  if (packageArg.includes('/') && !packageArg.startsWith('@')) {
-    const packageRoot = path.resolve(MONOREPO_ROOT, packageArg);
-    const packageJsonPath = path.join(packageRoot, 'package.json');
-
-    if (!fs.existsSync(packageJsonPath)) {
-      console.error(`Package not found at ${packageArg}`);
-      return null;
-    }
-
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    return { packageRoot, packageName: packageJson.name };
+function getPackageJson(packageRoot: string): { name: string; version: string } {
+  const packageJsonPath = path.join(packageRoot, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) {
+    throw new Error(`package.json not found in ${packageRoot}`);
   }
-
-  // If it's a package name like "@mastra/core"
-  // Search for it in known directories
-  const searchDirs = ['packages', 'stores', 'voice', 'observability', 'deployers', 'client-sdks', 'auth'];
-
-  for (const dir of searchDirs) {
-    const dirPath = path.join(MONOREPO_ROOT, dir);
-    if (!fs.existsSync(dirPath)) continue;
-
-    const subdirs = fs
-      .readdirSync(dirPath, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-      .map(d => d.name);
-
-    for (const subdir of subdirs) {
-      const packageJsonPath = path.join(dirPath, subdir, 'package.json');
-      if (fs.existsSync(packageJsonPath)) {
-        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-        if (packageJson.name === packageArg) {
-          return {
-            packageRoot: path.join(dirPath, subdir),
-            packageName: packageJson.name,
-          };
-        }
-      }
-    }
-  }
-
-  console.error(`Package ${packageArg} not found in monorepo`);
-  return null;
+  return JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
 }
 
 async function generateDocsForPackage(
@@ -170,7 +299,7 @@ async function generateDocsForPackage(
   packageRoot: string,
   manifest: LlmsManifest,
 ): Promise<void> {
-  const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf-8'));
+  const packageJson = getPackageJson(packageRoot);
   const docsOutputDir = path.join(packageRoot, 'dist', 'docs');
   const entries = manifest.packages[packageName];
 
@@ -189,50 +318,25 @@ async function generateDocsForPackage(
   fs.mkdirSync(path.join(docsOutputDir, 'assets'), { recursive: true });
 
   // Step 1: Generate SOURCE_MAP.json in assets/
-  console.info('1. Generating assets/SOURCE_MAP.json...');
-  // TODO: Implement SOURCE_MAP.json generation
+  const sourcemap = generateSourceMap(packageRoot);
+  fs.writeFileSync(path.join(docsOutputDir, 'assets', 'SOURCE_MAP.json'), JSON.stringify(sourcemap, null, 2), 'utf-8');
 
   // Step 2: Copy documentation files
-  console.info('2. Copying documentation files...');
   copyDocumentation(manifest, packageName, docsOutputDir);
 
   // Step 3: Generate SKILL.md
-  console.info('3. Generating SKILL.md...');
   const skillMd = generateSkillMd(packageName, packageJson.version, entries);
   fs.writeFileSync(path.join(docsOutputDir, 'SKILL.md'), skillMd, 'utf-8');
-
-  console.info(`\nDocumentation generation complete for ${packageName}!`);
 }
 
 async function main(): Promise<void> {
-  console.info('Loading llms-manifest.json...\n');
-
   const manifest = loadLlmsManifest();
-  const args = process.argv.slice(2);
+  const packageRoot = process.cwd()
+  const packageName = getPackageJson(packageRoot).name;
 
-  if (args.length > 0) {
-    // Generate for specific package(s)
-    for (const packageArg of args) {
-      const resolved = resolvePackagePath(packageArg);
-      if (resolved) {
-        await generateDocsForPackage(resolved.packageName, resolved.packageRoot, manifest);
-      }
-    }
-  } else {
-    // Generate for all packages in manifest (except "general")
-    const packages = Object.keys(manifest.packages).filter(p => p !== 'general');
-    console.info(`Found ${packages.length} packages in manifest\n`);
-
-    for (const pkg of packages) {
-      const resolved = resolvePackagePath(pkg);
-      if (resolved) {
-        await generateDocsForPackage(resolved.packageName, resolved.packageRoot, manifest);
-      }
-    }
-  }
+  await generateDocsForPackage(packageName, packageRoot, manifest);
 }
 
-// Run if executed directly
 main().catch(error => {
   console.error('Failed to generate package docs:', error);
   process.exit(1);
