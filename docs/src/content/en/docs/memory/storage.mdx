@@ -32,7 +32,7 @@ export const mastra = new Mastra({
 When running `mastra dev` alongside your application (e.g., Next.js), use an absolute path to ensure both processes access the same database:
 
 ```typescript
-url: "file:/Users/yourname/project/mastra.db"
+url: "file:/absolute/path/to/your/project/mastra.db"
 ```
 
 Relative paths like `file:./mastra.db` resolve based on each process's working directory, which may differ.
