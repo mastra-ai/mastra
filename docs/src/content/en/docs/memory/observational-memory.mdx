@@ -39,6 +39,20 @@ OM currently only supports `@mastra/pg`, `@mastra/libsql`, and `@mastra/mongodb`
 
 :::
 
+## Benefits of Observational Memory
+
+- **Prompt caching**: OM's context is stable — observations append over time rather than being dynamically retrieved each turn. This keeps the prompt prefix cacheable, which reduces costs.
+- **Compression**: Raw message history and tool results get compressed into a dense observation log. Smaller context means faster responses and longer coherent conversations.
+- **Zero context rot**: The agent sees relevant information instead of noisy tool calls and irrelevant tokens, so the agent stays on task over long sessions.
+
+### OM vs Working Memory and Message History
+
+- **[Message history](/docs/memory/message-history)** — high-fidelity record of the current conversation
+- **[Working memory](/docs/memory/working-memory)** — small, structured state (JSON or markdown) for user preferences, names, goals
+- **Observational Memory** — long-context agentic memory that compresses extended sessions
+
+If you're using working memory to store conversation summaries or ongoing state that grows over time, OM is a better fit. Working memory is for small, structured data; OM is for unbounded event logs.
+
 ## How It Works
 
 You don't remember every word of every conversation you've ever had. You observe what happened subconsciously, then your brain reflects — reorganizing, combining, and condensing into long-term memory. OM works the same way.
@@ -221,6 +235,17 @@ const memory = new Memory({
 ```
 
 The total budget here is 64,000 tokens (20k + 44k). While observations are still small, message history can expand beyond its 20k threshold into the unused observation space. This lets you choose a rough max context window size and stay within it — if you want to stay under 64k tokens total, this configuration does that while still allowing longer message history when observations haven't accumulated yet.
+
+## Migrating existing threads
+
+If you enable OM on an app that already has threads with message history, there's no manual migration step. OM reads existing messages from storage and observes them lazily when thresholds are exceeded.
+
+### First-run behavior
+
+- **Thread scope**: The first time a thread exceeds `observation.messageTokens`, the Observer processes the backlog.
+- **Resource scope**: All unobserved messages across all threads for a resource are processed together. For users with many existing threads, this initial pass can take significant time. Consider using thread scope for existing apps, or accept a one-time latency hit per resource.
+
+After the initial observation pass, subsequent messages are processed incrementally as usual.
 
 ## Models
 
