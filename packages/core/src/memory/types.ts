@@ -432,6 +432,42 @@ export interface ObservationalMemoryObservationConfig {
    * @default 10000
    */
   maxTokensPerBatch?: number;
+
+  /**
+   * Token interval for async background observation buffering.
+   * When set, observations run asynchronously in the background at this interval,
+   * storing results in a buffer. When the main `messageTokens` threshold is reached,
+   * buffered observations are activated instantly (no blocking LLM call).
+   *
+   * Must be less than `messageTokens`.
+   * If not set, async buffering is disabled and observations run synchronously.
+   *
+   * @example
+   * ```ts
+   * // Buffer every 5k tokens, activate at 20k
+   * observation: {
+   *   messageTokens: 20_000,
+   *   bufferEvery: 5_000,
+   * }
+   * ```
+   */
+  bufferEvery?: number;
+
+  /**
+   * Percentage of buffered observations to activate when threshold is reached (0-100).
+   * Setting this below 100 keeps some observations in reserve, which helps maintain
+   * conversation continuity and provides a buffer for the next activation cycle.
+   *
+   * @default 100 (activate all buffered observations)
+   * @example
+   * ```ts
+   * // Activate 75% of buffered observations, keep 25% in reserve
+   * observation: {
+   *   asyncActivation: 75,
+   * }
+   * ```
+   */
+  asyncActivation?: number;
 }
 
 /**
@@ -478,6 +514,41 @@ export interface ObservationalMemoryReflectionConfig {
    * @default { google: { thinkingConfig: { thinkingBudget: 1024 } } }
    */
   providerOptions?: Record<string, Record<string, unknown> | undefined>;
+
+  /**
+   * Token interval for async background reflection buffering.
+   * When set, reflection runs asynchronously in the background at this interval,
+   * storing the result in a buffer. When the main `observationTokens` threshold is reached,
+   * the buffered reflection is activated instantly (no blocking LLM call).
+   *
+   * Must be less than `observationTokens`.
+   * If not set, async buffering is disabled and reflection runs synchronously.
+   *
+   * @example
+   * ```ts
+   * // Buffer every 10k tokens, activate at 40k
+   * reflection: {
+   *   observationTokens: 40_000,
+   *   bufferEvery: 10_000,
+   * }
+   * ```
+   */
+  bufferEvery?: number;
+
+  /**
+   * Percentage of buffered reflection to activate when threshold is reached (0-100).
+   * Setting this below 100 keeps some content in reserve for continuity.
+   *
+   * @default 100 (activate all buffered reflection)
+   * @example
+   * ```ts
+   * // Activate 75% of buffered reflection, keep 25% in reserve
+   * reflection: {
+   *   asyncActivation: 75,
+   * }
+   * ```
+   */
+  asyncActivation?: number;
 }
 
 /**

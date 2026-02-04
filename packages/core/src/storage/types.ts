@@ -556,8 +556,14 @@ export interface ObservationalMemoryRecord {
   activeObservations: string;
   /** Observations waiting to be activated (async buffering) */
   bufferedObservations?: string;
+  /** Token count of buffered observations */
+  bufferedObservationTokens?: number;
+  /** Message IDs being processed in async buffering */
+  bufferedMessageIds?: string[];
   /** Reflection waiting to be swapped in (async buffering) */
   bufferedReflection?: string;
+  /** Token count of buffered reflection */
+  bufferedReflectionTokens?: number;
 
   /**
    * Message IDs observed in the current generation.
@@ -633,12 +639,58 @@ export interface UpdateActiveObservationsInput {
 
 /**
  * Input for updating buffered observations.
- * Note: Async buffering is currently disabled but types are retained for future use.
+ * Used when async buffering is enabled via `bufferEvery` config.
  */
 export interface UpdateBufferedObservationsInput {
   id: string;
   observations: string;
+  /** Token count of the buffered observations */
+  tokenCount: number;
+  /** Message IDs that were buffered */
+  bufferedMessageIds?: string[];
   suggestedContinuation?: string;
+  currentTask?: string;
+}
+
+/**
+ * Input for swapping buffered observations to active.
+ * Supports partial activation via `activationRatio`.
+ */
+export interface SwapBufferedToActiveInput {
+  id: string;
+  /**
+   * Percentage of buffered observations to activate (0-100).
+   * If set to 100, all buffered observations are moved to active.
+   * If less than 100, only that percentage is activated, the rest stays buffered.
+   */
+  activationRatio: number;
+  /** Timestamp to use as lastObservedAt after swap */
+  lastObservedAt: Date;
+}
+
+/**
+ * Input for updating buffered reflection.
+ * Used when async reflection buffering is enabled via `bufferEvery` config.
+ */
+export interface UpdateBufferedReflectionInput {
+  id: string;
+  reflection: string;
+  /** Token count of the buffered reflection */
+  tokenCount: number;
+}
+
+/**
+ * Input for swapping buffered reflection to active (creates new generation).
+ * Supports partial activation via `activationRatio`.
+ */
+export interface SwapBufferedReflectionToActiveInput {
+  currentRecord: ObservationalMemoryRecord;
+  /**
+   * Percentage of buffered reflection to activate (0-100).
+   * If set to 100, all buffered reflection is used.
+   * If less than 100, only that percentage is used, the rest stays buffered.
+   */
+  activationRatio: number;
 }
 
 /**

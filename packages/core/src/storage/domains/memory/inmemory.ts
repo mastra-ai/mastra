@@ -18,6 +18,9 @@ import type {
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
+  UpdateBufferedReflectionInput,
+  SwapBufferedToActiveInput,
+  SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
 } from '../../types';
 import { filterByDateRange, jsonValueEquals, safelyParseJSON } from '../../utils';
@@ -869,18 +872,40 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
-    const { id, observations } = input;
+    const { id, observations, tokenCount, bufferedMessageIds, suggestedContinuation, currentTask } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
-    record.bufferedObservations = observations;
-    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
+    // Append to existing buffered observations if present
+    if (record.bufferedObservations) {
+      record.bufferedObservations = `${record.bufferedObservations}\n\n${observations}`;
+    } else {
+      record.bufferedObservations = observations;
+    }
+
+    // Track buffered token count (cumulative)
+    record.bufferedObservationTokens = (record.bufferedObservationTokens ?? 0) + tokenCount;
+
+    // Track buffered message IDs
+    if (bufferedMessageIds) {
+      record.bufferedMessageIds = [...(record.bufferedMessageIds ?? []), ...bufferedMessageIds];
+    }
+
+    // Store suggested continuation and current task for later activation
+    if (suggestedContinuation !== undefined) {
+      record.metadata = { ...record.metadata, bufferedSuggestedContinuation: suggestedContinuation };
+    }
+    if (currentTask !== undefined) {
+      record.metadata = { ...record.metadata, bufferedCurrentTask: currentTask };
+    }
+
     record.updatedAt = new Date();
   }
 
-  async swapBufferedToActive(id: string): Promise<void> {
+  async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<void> {
+    const { id, activationRatio, lastObservedAt } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
@@ -890,40 +915,56 @@ export class InMemoryMemory extends MemoryStorage {
       return; // Nothing to swap
     }
 
-    // Append buffered to active (or replace if empty)
+    // Calculate how much of the buffered content to activate
+    const bufferedContent = record.bufferedObservations;
+    const bufferedTokens = record.bufferedObservationTokens ?? 0;
+    const bufferedMessageIds = record.bufferedMessageIds ?? [];
+
+    // For simplicity in InMemory, we split by observation blocks (lines starting with "* ")
+    // In a production implementation, you might want more sophisticated splitting
+    const lines = bufferedContent.split('\n');
+    const totalLines = lines.length;
+    const linesToActivate = Math.ceil((totalLines * activationRatio) / 100);
+
+    const activatedLines = lines.slice(0, linesToActivate);
+    const remainingLines = lines.slice(linesToActivate);
+
+    const activatedContent = activatedLines.join('\n');
+    const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : undefined;
+
+    // Calculate approximate token split
+    const activatedTokens = Math.ceil((bufferedTokens * activationRatio) / 100);
+    const remainingTokens = bufferedTokens - activatedTokens;
+
+    // Split message IDs proportionally
+    const idsToActivate = Math.ceil((bufferedMessageIds.length * activationRatio) / 100);
+    const activatedMessageIds = bufferedMessageIds.slice(0, idsToActivate);
+    const remainingMessageIds = bufferedMessageIds.slice(idsToActivate);
+
+    // Append activated content to active observations
     if (record.activeObservations) {
-      record.activeObservations = `${record.activeObservations}\n\n${record.bufferedObservations}`;
+      record.activeObservations = `${record.activeObservations}\n\n${activatedContent}`;
     } else {
-      record.activeObservations = record.bufferedObservations;
+      record.activeObservations = activatedContent;
     }
 
-    // Clear buffered state
-    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
-    record.bufferedObservations = undefined;
+    // Update observation token count
+    record.observationTokenCount = (record.observationTokenCount ?? 0) + activatedTokens;
 
-    // Update timestamps (top-level, not in metadata)
-    record.lastObservedAt = new Date();
-    record.updatedAt = new Date();
-  }
+    // Move activated message IDs to observed
+    record.observedMessageIds = [...(record.observedMessageIds ?? []), ...activatedMessageIds];
 
-  async markMessagesAsBuffering(id: string, _messageIds: string[]): Promise<void> {
-    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
-    // This method is retained for interface compatibility but is a no-op
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
-    }
-    record.updatedAt = new Date();
-  }
+    // Update buffered state with remaining content
+    record.bufferedObservations = remainingContent;
+    record.bufferedObservationTokens = remainingContent ? remainingTokens : undefined;
+    record.bufferedMessageIds = remainingMessageIds.length > 0 ? remainingMessageIds : undefined;
 
-  async markMessagesAsBuffered(id: string, _messageIds: string[]): Promise<void> {
-    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
-    // This method is retained for interface compatibility but is a no-op
-    const record = this.findObservationalMemoryRecordById(id);
-    if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
-    }
+    // Update timestamps
+    record.lastObservedAt = lastObservedAt;
     record.updatedAt = new Date();
+
+    // Reset pending tokens
+    record.pendingMessageTokens = 0;
   }
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
@@ -962,35 +1003,64 @@ export class InMemoryMemory extends MemoryStorage {
     return newRecord;
   }
 
-  async updateBufferedReflection(id: string, reflection: string): Promise<void> {
+  async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
+    const { id, reflection, tokenCount } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
-    record.bufferedReflection = reflection;
+    // Append to existing buffered reflection if present
+    if (record.bufferedReflection) {
+      record.bufferedReflection = `${record.bufferedReflection}\n\n${reflection}`;
+    } else {
+      record.bufferedReflection = reflection;
+    }
+
+    // Track buffered reflection token count (cumulative)
+    record.bufferedReflectionTokens = (record.bufferedReflectionTokens ?? 0) + tokenCount;
     record.updatedAt = new Date();
   }
 
-  async swapReflectionToActive(id: string): Promise<ObservationalMemoryRecord> {
-    const record = this.findObservationalMemoryRecordById(id);
+  async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
+    const { currentRecord, activationRatio } = input;
+    const record = this.findObservationalMemoryRecordById(currentRecord.id);
     if (!record) {
-      throw new Error(`Observational memory record not found: ${id}`);
+      throw new Error(`Observational memory record not found: ${currentRecord.id}`);
     }
 
     if (!record.bufferedReflection) {
       throw new Error('No buffered reflection to swap');
     }
 
-    // Create a new generation with the reflection
+    const bufferedContent = record.bufferedReflection;
+    const bufferedTokens = record.bufferedReflectionTokens ?? 0;
+
+    // For simplicity in InMemory, we split by lines
+    const lines = bufferedContent.split('\n');
+    const totalLines = lines.length;
+    const linesToActivate = Math.ceil((totalLines * activationRatio) / 100);
+
+    const activatedLines = lines.slice(0, linesToActivate);
+    const remainingLines = lines.slice(linesToActivate);
+
+    const activatedContent = activatedLines.join('\n');
+    const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : undefined;
+
+    // Calculate approximate token split
+    const activatedTokens = Math.ceil((bufferedTokens * activationRatio) / 100);
+    const remainingTokens = bufferedTokens - activatedTokens;
+
+    // Create a new generation with the activated reflection content
     const newRecord = await this.createReflectionGeneration({
       currentRecord: record,
-      reflection: record.bufferedReflection,
-      tokenCount: 0, // Will be calculated by caller
+      reflection: activatedContent,
+      tokenCount: activatedTokens,
     });
 
-    // Clear the buffered reflection from old record
-    record.bufferedReflection = undefined;
+    // Update the old record's buffered state with remaining content
+    record.bufferedReflection = remainingContent;
+    record.bufferedReflectionTokens = remainingContent ? remainingTokens : undefined;
 
     return newRecord;
   }

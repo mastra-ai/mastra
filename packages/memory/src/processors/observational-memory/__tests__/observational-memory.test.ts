@@ -138,23 +138,7 @@ describe('Storage Operations', () => {
     });
   });
 
-  describe('markMessagesAsBuffering', () => {
-    it('should update record timestamp (message IDs removed - cursor-based tracking)', async () => {
-      const initial = await storage.initializeObservationalMemory({
-        threadId,
-        resourceId,
-        scope: 'thread',
-        config: {},
-      });
-
-      const beforeMark = new Date();
-      await storage.markMessagesAsBuffering(initial.id, ['msg-1', 'msg-2']);
-
-      const record = await storage.getObservationalMemory(threadId, resourceId);
-      expect(record?.updatedAt).toBeDefined();
-      expect(record?.updatedAt!.getTime()).toBeGreaterThanOrEqual(beforeMark.getTime());
-    });
-  });
+  // Note: markMessagesAsBuffering was removed - async buffering now uses updateBufferedObservations with bufferedMessageIds
 
   describe('updateBufferedObservations', () => {
     it('should store buffered observations', async () => {
@@ -168,13 +152,15 @@ describe('Storage Operations', () => {
       await storage.updateBufferedObservations({
         id: initial.id,
         observations: '- 🔴 Buffered observation',
+        tokenCount: 50,
       });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.bufferedObservations).toBe('- 🔴 Buffered observation');
+      expect(record?.bufferedObservationTokens).toBe(50);
     });
 
-    it('should replace buffered observations on subsequent updates', async () => {
+    it('should append buffered observations on subsequent updates', async () => {
       const initial = await storage.initializeObservationalMemory({
         threadId,
         resourceId,
@@ -185,15 +171,19 @@ describe('Storage Operations', () => {
       await storage.updateBufferedObservations({
         id: initial.id,
         observations: '- 🔴 First buffered',
+        tokenCount: 30,
       });
 
       await storage.updateBufferedObservations({
         id: initial.id,
         observations: '- 🔴 Second buffered',
+        tokenCount: 20,
       });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
-      expect(record?.bufferedObservations).toBe('- 🔴 Second buffered');
+      expect(record?.bufferedObservations).toContain('- 🔴 First buffered');
+      expect(record?.bufferedObservations).toContain('- 🔴 Second buffered');
+      expect(record?.bufferedObservationTokens).toBe(50);
     });
   });
 
@@ -210,7 +200,6 @@ describe('Storage Operations', () => {
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Active observation',
-
         tokenCount: 50,
         lastObservedAt: new Date(),
       });
@@ -219,15 +208,19 @@ describe('Storage Operations', () => {
       await storage.updateBufferedObservations({
         id: initial.id,
         observations: '- 🟡 Buffered observation',
+        tokenCount: 40,
       });
 
-      await storage.swapBufferedToActive(initial.id);
+      await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 100,
+        lastObservedAt: new Date(),
+      });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.activeObservations).toContain('- 🔴 Active observation');
       expect(record?.activeObservations).toContain('- 🟡 Buffered observation');
       expect(record?.bufferedObservations).toBeUndefined();
-      // Message ID tracking removed - using cursor-based lastObservedAt instead
     });
 
     it('should update lastObservedAt when swapping buffered to active', async () => {
@@ -245,17 +238,19 @@ describe('Storage Operations', () => {
       await storage.updateBufferedObservations({
         id: initial.id,
         observations: '- 🟡 Buffered observation',
+        tokenCount: 40,
       });
 
       const beforeSwap = new Date();
-      await storage.swapBufferedToActive(initial.id);
-      const afterSwap = new Date();
+      await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 100,
+        lastObservedAt: beforeSwap,
+      });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.lastObservedAt).toBeDefined();
-      // lastObservedAt should be set to swap time (first observation)
-      expect(record!.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeSwap.getTime());
-      expect(record!.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterSwap.getTime());
+      expect(record!.lastObservedAt!.getTime()).toBe(beforeSwap.getTime());
     });
   });
 
@@ -1794,32 +1789,35 @@ describe('Scenario: Buffering Flow', () => {
       config: {},
     });
 
-    // Step 1: Mark messages as buffering (async observation started)
-    // Note: Message ID tracking removed - this just updates timestamp now
-    await storage.markMessagesAsBuffering(record.id, ['msg-1', 'msg-2']);
-
-    let current = await storage.getObservationalMemory('thread-1', 'resource-1');
-    expect(current?.updatedAt).toBeDefined();
-
-    // Step 2: Buffering completes - store buffered observations
+    // Step 1: Store buffered observations (async observation in progress)
     await storage.updateBufferedObservations({
       id: record.id,
       observations: '- 🟡 Buffered observation',
+      tokenCount: 50,
+      bufferedMessageIds: ['msg-1', 'msg-2'],
     });
 
-    current = await storage.getObservationalMemory('thread-1', 'resource-1');
+    let current = await storage.getObservationalMemory('thread-1', 'resource-1');
     expect(current?.bufferedObservations).toBe('- 🟡 Buffered observation');
+    expect(current?.bufferedObservationTokens).toBe(50);
+    expect(current?.bufferedMessageIds).toEqual(['msg-1', 'msg-2']);
 
     // Buffered observations should NOT be in active yet
     expect(current?.activeObservations).toBe('');
 
-    // Step 3: Threshold hit, swap buffered to active
-    await storage.swapBufferedToActive(record.id);
+    // Step 2: Threshold hit, swap buffered to active
+    const swapTime = new Date();
+    await storage.swapBufferedToActive({
+      id: record.id,
+      activationRatio: 100,
+      lastObservedAt: swapTime,
+    });
 
     current = await storage.getObservationalMemory('thread-1', 'resource-1');
     expect(current?.activeObservations).toContain('Buffered observation');
     expect(current?.bufferedObservations).toBeUndefined();
-    // Message ID tracking removed - using cursor-based lastObservedAt instead
+    expect(current?.observedMessageIds).toEqual(['msg-1', 'msg-2']);
+    expect(current?.lastObservedAt).toEqual(swapTime);
   });
 });
 

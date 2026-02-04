@@ -92,6 +92,25 @@ export interface ObservationConfig {
    * @default 10000
    */
   maxTokensPerBatch?: number;
+
+  /**
+   * Token interval for async background observation buffering.
+   * When set, observations run asynchronously in the background at this interval,
+   * storing results in a buffer. When the main `messageTokens` threshold is reached,
+   * buffered observations are activated instantly (no blocking LLM call).
+   *
+   * Must be less than `messageTokens`.
+   * If not set, async buffering is disabled and observations run synchronously.
+   */
+  bufferEvery?: number;
+
+  /**
+   * Percentage of buffered observations to activate when threshold is reached (0-100).
+   * Setting this below 100 keeps some observations in reserve for continuity.
+   *
+   * @default 100 (activate all buffered observations)
+   */
+  asyncActivation?: number;
 }
 
 /**
@@ -129,6 +148,25 @@ export interface ReflectionConfig {
    * @default { google: { thinkingConfig: { thinkingBudget: 1024 } } }
    */
   providerOptions?: ProviderOptions;
+
+  /**
+   * Token interval for async background reflection buffering.
+   * When set, reflection runs asynchronously in the background at this interval,
+   * storing the result in a buffer. When the main `observationTokens` threshold is reached,
+   * the buffered reflection is activated instantly (no blocking LLM call).
+   *
+   * Must be less than `observationTokens`.
+   * If not set, async buffering is disabled and reflection runs synchronously.
+   */
+  bufferEvery?: number;
+
+  /**
+   * Percentage of buffered reflection to activate when threshold is reached (0-100).
+   * Setting this below 100 keeps some content in reserve for continuity.
+   *
+   * @default 100 (activate all buffered reflection)
+   */
+  asyncActivation?: number;
 }
 
 /**

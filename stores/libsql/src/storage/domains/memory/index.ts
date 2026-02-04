@@ -16,6 +16,10 @@ import type {
   ObservationalMemoryRecord,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
+  UpdateBufferedObservationsInput,
+  SwapBufferedToActiveInput,
+  UpdateBufferedReflectionInput,
+  SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
 } from '@mastra/core/storage';
 import {
@@ -1375,7 +1379,10 @@ export class MemoryLibSQL extends MemoryStorage {
       generationCount: Number(row.generationCount || 0),
       activeObservations: row.activeObservations || '',
       bufferedObservations: row.activeObservationsPendingUpdate || undefined,
-
+      bufferedObservationTokens: row.bufferedObservationTokens ? Number(row.bufferedObservationTokens) : undefined,
+      bufferedMessageIds: row.bufferedMessageIds ? JSON.parse(row.bufferedMessageIds) : undefined,
+      bufferedReflection: row.bufferedReflection || undefined,
+      bufferedReflectionTokens: row.bufferedReflectionTokens ? Number(row.bufferedReflectionTokens) : undefined,
       totalTokensObserved: Number(row.totalTokensObserved || 0),
       observationTokenCount: Number(row.observationTokenCount || 0),
       pendingMessageTokens: Number(row.pendingMessageTokens || 0),
@@ -1747,6 +1754,319 @@ export class MemoryLibSQL extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, tokenCount },
+        },
+        error,
+      );
+    }
+  }
+
+  // ============================================
+  // Async Buffering Methods
+  // ============================================
+
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    try {
+      const nowStr = new Date().toISOString();
+
+      // First get current record to merge buffered content
+      const current = await this.#client.execute({
+        sql: `SELECT "activeObservationsPendingUpdate", "bufferedObservationTokens", "bufferedMessageIds" FROM "${OM_TABLE}" WHERE id = ?`,
+        args: [input.id],
+      });
+
+      if (!current.rows || current.rows.length === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_BUFFERED_OBSERVATIONS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const row = current.rows[0]!;
+      const existingContent = (row.activeObservationsPendingUpdate as string) || '';
+      const existingTokens = Number(row.bufferedObservationTokens || 0);
+      const existingMessageIds: string[] = row.bufferedMessageIds ? JSON.parse(row.bufferedMessageIds as string) : [];
+
+      // Merge content
+      const newContent = existingContent ? `${existingContent}\n\n${input.observations}` : input.observations;
+      const newTokens = existingTokens + input.tokenCount;
+      const newMessageIds = [...existingMessageIds, ...(input.bufferedMessageIds || [])];
+
+      const result = await this.#client.execute({
+        sql: `UPDATE "${OM_TABLE}" SET
+          "activeObservationsPendingUpdate" = ?,
+          "bufferedObservationTokens" = ?,
+          "bufferedMessageIds" = ?,
+          "updatedAt" = ?
+        WHERE id = ?`,
+        args: [newContent, newTokens, JSON.stringify(newMessageIds), nowStr, input.id],
+      });
+
+      if (result.rowsAffected === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_BUFFERED_OBSERVATIONS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPDATE_BUFFERED_OBSERVATIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<void> {
+    try {
+      const nowStr = new Date().toISOString();
+      const lastObservedAtStr = input.lastObservedAt.toISOString();
+
+      // Get current record
+      const current = await this.#client.execute({
+        sql: `SELECT * FROM "${OM_TABLE}" WHERE id = ?`,
+        args: [input.id],
+      });
+
+      if (!current.rows || current.rows.length === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'SWAP_BUFFERED_TO_ACTIVE', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const row = current.rows[0]!;
+      const bufferedContent = (row.activeObservationsPendingUpdate as string) || '';
+      const bufferedTokens = Number(row.bufferedObservationTokens || 0);
+      const bufferedMessageIds: string[] = row.bufferedMessageIds ? JSON.parse(row.bufferedMessageIds as string) : [];
+
+      if (!bufferedContent) {
+        return; // Nothing to swap
+      }
+
+      // Split by lines for partial activation
+      const lines = bufferedContent.split('\n');
+      const totalLines = lines.length;
+      const linesToActivate = Math.ceil((totalLines * input.activationRatio) / 100);
+
+      const activatedLines = lines.slice(0, linesToActivate);
+      const remainingLines = lines.slice(linesToActivate);
+
+      const activatedContent = activatedLines.join('\n');
+      const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : null;
+
+      // Calculate approximate token split
+      const activatedTokens = Math.ceil((bufferedTokens * input.activationRatio) / 100);
+      const remainingTokens = bufferedTokens - activatedTokens;
+
+      // Split message IDs proportionally
+      const idsToActivate = Math.ceil((bufferedMessageIds.length * input.activationRatio) / 100);
+      const activatedMessageIds = bufferedMessageIds.slice(0, idsToActivate);
+      const remainingMessageIds = bufferedMessageIds.slice(idsToActivate);
+
+      // Get existing values
+      const existingActive = (row.activeObservations as string) || '';
+      const existingTokenCount = Number(row.observationTokenCount || 0);
+      const existingObservedIds: string[] = row.observedMessageIds ? JSON.parse(row.observedMessageIds as string) : [];
+
+      // Calculate new values
+      const newActive = existingActive ? `${existingActive}\n\n${activatedContent}` : activatedContent;
+      const newTokenCount = existingTokenCount + activatedTokens;
+      const newObservedIds = [...existingObservedIds, ...activatedMessageIds];
+
+      await this.#client.execute({
+        sql: `UPDATE "${OM_TABLE}" SET
+          "activeObservations" = ?,
+          "observationTokenCount" = ?,
+          "activeObservationsPendingUpdate" = ?,
+          "bufferedObservationTokens" = ?,
+          "bufferedMessageIds" = ?,
+          "observedMessageIds" = ?,
+          "lastObservedAt" = ?,
+          "pendingMessageTokens" = 0,
+          "updatedAt" = ?
+        WHERE id = ?`,
+        args: [
+          newActive,
+          newTokenCount,
+          remainingContent,
+          remainingContent ? remainingTokens : null,
+          remainingMessageIds.length > 0 ? JSON.stringify(remainingMessageIds) : null,
+          JSON.stringify(newObservedIds),
+          lastObservedAtStr,
+          nowStr,
+          input.id,
+        ],
+      });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'SWAP_BUFFERED_TO_ACTIVE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
+    try {
+      const nowStr = new Date().toISOString();
+
+      // First get current record to merge buffered content
+      const current = await this.#client.execute({
+        sql: `SELECT "bufferedReflection", "bufferedReflectionTokens" FROM "${OM_TABLE}" WHERE id = ?`,
+        args: [input.id],
+      });
+
+      if (!current.rows || current.rows.length === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_BUFFERED_REFLECTION', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const row = current.rows[0]!;
+      const existingContent = (row.bufferedReflection as string) || '';
+      const existingTokens = Number(row.bufferedReflectionTokens || 0);
+
+      // Merge content
+      const newContent = existingContent ? `${existingContent}\n\n${input.reflection}` : input.reflection;
+      const newTokens = existingTokens + input.tokenCount;
+
+      const result = await this.#client.execute({
+        sql: `UPDATE "${OM_TABLE}" SET
+          "bufferedReflection" = ?,
+          "bufferedReflectionTokens" = ?,
+          "updatedAt" = ?
+        WHERE id = ?`,
+        args: [newContent, newTokens, nowStr, input.id],
+      });
+
+      if (result.rowsAffected === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_BUFFERED_REFLECTION', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPDATE_BUFFERED_REFLECTION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
+    try {
+      // Get current record
+      const current = await this.#client.execute({
+        sql: `SELECT * FROM "${OM_TABLE}" WHERE id = ?`,
+        args: [input.currentRecord.id],
+      });
+
+      if (!current.rows || current.rows.length === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.currentRecord.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.currentRecord.id },
+        });
+      }
+
+      const row = current.rows[0]!;
+      const bufferedContent = (row.bufferedReflection as string) || '';
+      const bufferedTokens = Number(row.bufferedReflectionTokens || 0);
+
+      if (!bufferedContent) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
+          text: 'No buffered reflection to swap',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { id: input.currentRecord.id },
+        });
+      }
+
+      // Split by lines for partial activation
+      const lines = bufferedContent.split('\n');
+      const totalLines = lines.length;
+      const linesToActivate = Math.ceil((totalLines * input.activationRatio) / 100);
+
+      const activatedLines = lines.slice(0, linesToActivate);
+      const remainingLines = lines.slice(linesToActivate);
+
+      const activatedContent = activatedLines.join('\n');
+      const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : null;
+
+      // Calculate approximate token split
+      const activatedTokens = Math.ceil((bufferedTokens * input.activationRatio) / 100);
+      const remainingTokens = bufferedTokens - activatedTokens;
+
+      // Create new generation with activated reflection
+      const newRecord = await this.createReflectionGeneration({
+        currentRecord: input.currentRecord,
+        reflection: activatedContent,
+        tokenCount: activatedTokens,
+      });
+
+      // Update old record's buffered state with remaining content
+      const nowStr = new Date().toISOString();
+      await this.#client.execute({
+        sql: `UPDATE "${OM_TABLE}" SET
+          "bufferedReflection" = ?,
+          "bufferedReflectionTokens" = ?,
+          "updatedAt" = ?
+        WHERE id = ?`,
+        args: [remainingContent, remainingContent ? remainingTokens : null, nowStr, input.currentRecord.id],
+      });
+
+      return newRecord;
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.currentRecord.id },
         },
         error,
       );

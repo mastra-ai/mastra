@@ -31,6 +31,10 @@ import type {
   ObservationalMemoryRecord,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
+  UpdateBufferedObservationsInput,
+  SwapBufferedToActiveInput,
+  UpdateBufferedReflectionInput,
+  SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
@@ -1130,6 +1134,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       generationCount: Number(doc.generationCount || 0),
       activeObservations: doc.activeObservations || '',
       bufferedObservations: doc.activeObservationsPendingUpdate || undefined,
+      bufferedObservationTokens: doc.bufferedObservationTokens ? Number(doc.bufferedObservationTokens) : undefined,
+      bufferedMessageIds: doc.bufferedMessageIds || undefined,
+      bufferedReflection: doc.bufferedReflection || undefined,
+      bufferedReflectionTokens: doc.bufferedReflectionTokens ? Number(doc.bufferedReflectionTokens) : undefined,
       totalTokensObserved: Number(doc.totalTokensObserved || 0),
       observationTokenCount: Number(doc.observationTokenCount || 0),
       pendingMessageTokens: Number(doc.pendingMessageTokens || 0),
@@ -1482,6 +1490,297 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, tokenCount },
+        },
+        error,
+      );
+    }
+  }
+
+  // ============================================
+  // Async Buffering Methods
+  // ============================================
+
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+
+      // First get current record to merge buffered content
+      const doc = await collection.findOne({ id: input.id });
+      if (!doc) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_OBSERVATIONS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const existingContent = (doc.activeObservationsPendingUpdate as string) || '';
+      const existingTokens = Number(doc.bufferedObservationTokens || 0);
+      const existingMessageIds: string[] = doc.bufferedMessageIds || [];
+
+      // Merge content
+      const newContent = existingContent ? `${existingContent}\n\n${input.observations}` : input.observations;
+      const newTokens = existingTokens + input.tokenCount;
+      const newMessageIds = [...existingMessageIds, ...(input.bufferedMessageIds || [])];
+
+      const result = await collection.updateOne(
+        { id: input.id },
+        {
+          $set: {
+            activeObservationsPendingUpdate: newContent,
+            bufferedObservationTokens: newTokens,
+            bufferedMessageIds: newMessageIds,
+            updatedAt: new Date(),
+          },
+        },
+      );
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_OBSERVATIONS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_OBSERVATIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+
+      // Get current record
+      const doc = await collection.findOne({ id: input.id });
+      if (!doc) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_TO_ACTIVE', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const bufferedContent = (doc.activeObservationsPendingUpdate as string) || '';
+      const bufferedTokens = Number(doc.bufferedObservationTokens || 0);
+      const bufferedMessageIds: string[] = doc.bufferedMessageIds || [];
+
+      if (!bufferedContent) {
+        return; // Nothing to swap
+      }
+
+      // Split by lines for partial activation
+      const lines = bufferedContent.split('\n');
+      const totalLines = lines.length;
+      const linesToActivate = Math.ceil((totalLines * input.activationRatio) / 100);
+
+      const activatedLines = lines.slice(0, linesToActivate);
+      const remainingLines = lines.slice(linesToActivate);
+
+      const activatedContent = activatedLines.join('\n');
+      const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : null;
+
+      // Calculate approximate token split
+      const activatedTokens = Math.ceil((bufferedTokens * input.activationRatio) / 100);
+      const remainingTokens = bufferedTokens - activatedTokens;
+
+      // Split message IDs proportionally
+      const idsToActivate = Math.ceil((bufferedMessageIds.length * input.activationRatio) / 100);
+      const activatedMessageIds = bufferedMessageIds.slice(0, idsToActivate);
+      const remainingMessageIds = bufferedMessageIds.slice(idsToActivate);
+
+      // Get existing values
+      const existingActive = (doc.activeObservations as string) || '';
+      const existingTokenCount = Number(doc.observationTokenCount || 0);
+      const existingObservedIds: string[] = doc.observedMessageIds || [];
+
+      // Calculate new values
+      const newActive = existingActive ? `${existingActive}\n\n${activatedContent}` : activatedContent;
+      const newTokenCount = existingTokenCount + activatedTokens;
+      const newObservedIds = [...existingObservedIds, ...activatedMessageIds];
+
+      await collection.updateOne(
+        { id: input.id },
+        {
+          $set: {
+            activeObservations: newActive,
+            observationTokenCount: newTokenCount,
+            activeObservationsPendingUpdate: remainingContent,
+            bufferedObservationTokens: remainingContent ? remainingTokens : null,
+            bufferedMessageIds: remainingMessageIds.length > 0 ? remainingMessageIds : null,
+            observedMessageIds: newObservedIds,
+            lastObservedAt: input.lastObservedAt,
+            pendingMessageTokens: 0,
+            updatedAt: new Date(),
+          },
+        },
+      );
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_TO_ACTIVE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+
+      // First get current record to merge buffered content
+      const doc = await collection.findOne({ id: input.id });
+      if (!doc) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_REFLECTION', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const existingContent = (doc.bufferedReflection as string) || '';
+      const existingTokens = Number(doc.bufferedReflectionTokens || 0);
+
+      // Merge content
+      const newContent = existingContent ? `${existingContent}\n\n${input.reflection}` : input.reflection;
+      const newTokens = existingTokens + input.tokenCount;
+
+      const result = await collection.updateOne(
+        { id: input.id },
+        {
+          $set: {
+            bufferedReflection: newContent,
+            bufferedReflectionTokens: newTokens,
+            updatedAt: new Date(),
+          },
+        },
+      );
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_REFLECTION', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_REFLECTION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+
+      // Get current record
+      const doc = await collection.findOne({ id: input.currentRecord.id });
+      if (!doc) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.currentRecord.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.currentRecord.id },
+        });
+      }
+
+      const bufferedContent = (doc.bufferedReflection as string) || '';
+      const bufferedTokens = Number(doc.bufferedReflectionTokens || 0);
+
+      if (!bufferedContent) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
+          text: 'No buffered reflection to swap',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { id: input.currentRecord.id },
+        });
+      }
+
+      // Split by lines for partial activation
+      const lines = bufferedContent.split('\n');
+      const totalLines = lines.length;
+      const linesToActivate = Math.ceil((totalLines * input.activationRatio) / 100);
+
+      const activatedLines = lines.slice(0, linesToActivate);
+      const remainingLines = lines.slice(linesToActivate);
+
+      const activatedContent = activatedLines.join('\n');
+      const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : null;
+
+      // Calculate approximate token split
+      const activatedTokens = Math.ceil((bufferedTokens * input.activationRatio) / 100);
+      const remainingTokens = bufferedTokens - activatedTokens;
+
+      // Create new generation with activated reflection
+      const newRecord = await this.createReflectionGeneration({
+        currentRecord: input.currentRecord,
+        reflection: activatedContent,
+        tokenCount: activatedTokens,
+      });
+
+      // Update old record's buffered state with remaining content
+      await collection.updateOne(
+        { id: input.currentRecord.id },
+        {
+          $set: {
+            bufferedReflection: remainingContent,
+            bufferedReflectionTokens: remainingContent ? remainingTokens : null,
+            updatedAt: new Date(),
+          },
+        },
+      );
+
+      return newRecord;
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.currentRecord.id },
         },
         error,
       );
