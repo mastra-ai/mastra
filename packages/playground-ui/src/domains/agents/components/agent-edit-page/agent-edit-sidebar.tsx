@@ -1,23 +1,75 @@
-import { useState, type RefObject } from 'react';
+import { useCallback, useMemo, type RefObject } from 'react';
 import { Controller, type UseFormReturn, useWatch } from 'react-hook-form';
-import { Check } from 'lucide-react';
+import { Check, PlusIcon } from 'lucide-react';
 
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { Button } from '@/ds/components/Button';
-import { Icon, VariablesIcon } from '@/ds/icons';
+import { Icon } from '@/ds/icons';
 import { Spinner } from '@/ds/components/Spinner';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { Label } from '@/ds/components/Label';
 import { SectionHeader } from '@/domains/cms';
+import { JSONSchemaForm, type SchemaField, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
 import type { JsonSchema } from '@/lib/json-schema';
 
 import { LLMProviders, LLMModels } from '@/domains/llm';
 
 import type { AgentFormValues } from './utils/form-validation';
 import { ToolsSection, WorkflowsSection, AgentsSection, ScorersSection, MemorySection } from './sections';
-import { VariableDialog } from './variable-dialog';
+
+function RecursiveFieldRenderer({
+  field,
+  parentPath,
+  depth,
+}: {
+  field: SchemaField;
+  parentPath: string[];
+  depth: number;
+}) {
+  return (
+    <div className="py-2 border-border1 border-l-4 border-b">
+      <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
+        <div className="space-y-2 px-2">
+          <div className="flex flex-row gap-2 items-center">
+            <JSONSchemaForm.FieldName
+              labelIsHidden
+              placeholder="Variable name"
+              size="md"
+              className="[&_input]:bg-surface3 w-full"
+            />
+
+            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="[&_button]:bg-surface3 w-full" />
+            <JSONSchemaForm.FieldRemove variant="light" size="md" className="shrink-0" />
+          </div>
+
+          <div className="flex flex-row gap-2 items-center">
+            <JSONSchemaForm.FieldOptional />
+            <JSONSchemaForm.FieldNullable />
+          </div>
+        </div>
+
+        <JSONSchemaForm.NestedFields className="pl-2">
+          <JSONSchemaForm.FieldList>
+            {(nestedField, _idx, nestedContext) => (
+              <RecursiveFieldRenderer
+                key={nestedField.id}
+                field={nestedField}
+                parentPath={nestedContext.parentPath}
+                depth={nestedContext.depth}
+              />
+            )}
+          </JSONSchemaForm.FieldList>
+          <JSONSchemaForm.AddField variant="ghost" size="sm" className="mt-2">
+            <PlusIcon className="w-3 h-3 mr-1" />
+            Add nested variable
+          </JSONSchemaForm.AddField>
+        </JSONSchemaForm.NestedFields>
+      </JSONSchemaForm.Field>
+    </div>
+  );
+}
 
 interface AgentEditSidebarProps {
   form: UseFormReturn<AgentFormValues>;
@@ -46,13 +98,14 @@ export function AgentEditSidebar({
 
   const watchedVariables = useWatch({ control, name: 'variables' });
 
-  // Variable dialog state
-  const [isVariableDialogOpen, setIsVariableDialogOpen] = useState(false);
+  const handleVariablesChange = useCallback(
+    (schema: JsonSchema) => {
+      form.setValue('variables', schema, { shouldDirty: true });
+    },
+    [form],
+  );
 
-  const handleSaveVariables = (schema: JsonSchema) => {
-    form.setValue('variables', schema, { shouldDirty: true });
-    setIsVariableDialogOpen(false);
-  };
+  const initialFields = useMemo(() => jsonSchemaToFields(watchedVariables), [watchedVariables]);
 
   return (
     <div className="h-full flex flex-col">
@@ -60,6 +113,7 @@ export function AgentEditSidebar({
         <TabList className="flex-shrink-0">
           <Tab value="identity">Identity</Tab>
           <Tab value="capabilities">Capabilities</Tab>
+          <Tab value="variables">Variables</Tab>
         </TabList>
 
         <TabContent value="identity" className="flex-1 min-h-0 py-0 pb-3">
@@ -170,18 +224,45 @@ export function AgentEditSidebar({
             </div>
           </ScrollArea>
         </TabContent>
+
+        <TabContent value="variables" className="flex-1 min-h-0 py-0 pb-3">
+          <ScrollArea className="h-full">
+            <div className="flex flex-col gap-6 p-4 border-b border-border1">
+              <SectionHeader
+                title="Variables"
+                subtitle={
+                  <>
+                    Variables are dynamic values that change based on the context of each request. Use them in your
+                    agent's instructions with the{' '}
+                    <code className="text-[#F59E0B] font-medium">{'{{variableName}}'}</code> syntax.
+                  </>
+                }
+              />
+            </div>
+
+            <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+              <JSONSchemaForm.Root onChange={handleVariablesChange} defaultValue={initialFields} maxDepth={5}>
+                <JSONSchemaForm.FieldList>
+                  {(field, _index, { parentPath, depth }) => (
+                    <RecursiveFieldRenderer key={field.id} field={field} parentPath={parentPath} depth={depth} />
+                  )}
+                </JSONSchemaForm.FieldList>
+
+                <div className="p-2">
+                  <JSONSchemaForm.AddField variant="outline" size="sm">
+                    <PlusIcon className="w-4 h-4 mr-2" />
+                    Add variable
+                  </JSONSchemaForm.AddField>
+                </div>
+              </JSONSchemaForm.Root>
+            </div>
+          </ScrollArea>
+        </TabContent>
       </Tabs>
 
-      {/* Sticky footer with Pregenerate and Create/Update Agent buttons */}
+      {/* Sticky footer with Create/Update Agent button */}
       {!readOnly && (
-        <div className="flex-shrink-0 p-4 border-t border-border1 flex flex-col gap-2">
-          <Button variant="outline" onClick={() => setIsVariableDialogOpen(true)} className="w-full" type="button">
-            <Icon>
-              <VariablesIcon />
-            </Icon>
-            Manage variables
-          </Button>
-
+        <div className="flex-shrink-0 p-4">
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
               <>
@@ -199,13 +280,6 @@ export function AgentEditSidebar({
           </Button>
         </div>
       )}
-
-      <VariableDialog
-        isOpen={isVariableDialogOpen}
-        onClose={() => setIsVariableDialogOpen(false)}
-        defaultValue={watchedVariables}
-        onSave={handleSaveVariables}
-      />
     </div>
   );
 }
