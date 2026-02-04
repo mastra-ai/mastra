@@ -5,37 +5,59 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
 /**
- * Safely serializes a value to JSON string, handling non-serializable values
- * like RPC proxies (Cloudflare Workers), functions, symbols, and BigInt.
+ * Safely serializes a value to JSON string with pre-sanitization.
+ * Handles RPC proxies (Cloudflare Workers), functions, symbols, BigInt, and circular references.
  *
- * Objects with toJSON methods (like RequestContext) are automatically handled
- * by JSON.stringify's native behavior.
+ * Pre-sanitization is required because RPC proxies throw on toJSON property access,
+ * which happens before JSON.stringify's replacer can intervene.
  *
  * @param value - The value to serialize
  * @returns JSON string representation, with non-serializable values removed
  */
 export const safeStringify = (value: unknown): string => {
-  const result = JSON.stringify(value, (_key, val) => {
+  const seen = new WeakSet<object>();
+
+  const sanitize = (val: unknown): unknown => {
     if (val === null || val === undefined) return val;
     if (typeof val === 'function') return undefined;
     if (typeof val === 'symbol') return undefined;
     if (typeof val === 'bigint') return val.toString();
+    if (typeof val !== 'object') return val;
 
-    if (typeof val === 'object') {
-      try {
-        // RPC proxies throw errors on property access
-        // toJSON methods are automatically called by JSON.stringify
-        Object.keys(val);
-        return val;
-      } catch {
-        return undefined;
-      }
+    // Circular reference check
+    if (seen.has(val)) return undefined;
+    seen.add(val);
+
+    // Check for RPC proxy (throws on property access including toJSON)
+    try {
+      (val as Record<string, unknown>).toJSON;
+      Object.keys(val);
+    } catch {
+      return undefined;
     }
 
-    return val;
-  });
-  // JSON.stringify returns undefined for root-level non-serializable values
-  return result ?? 'null';
+    // Call toJSON if available (like RequestContext)
+    if (typeof (val as Record<string, unknown>).toJSON === 'function') {
+      return sanitize((val as { toJSON: () => unknown }).toJSON());
+    }
+
+    // Recursively sanitize arrays
+    if (Array.isArray(val)) {
+      return val.map(item => sanitize(item));
+    }
+
+    // Recursively sanitize objects
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(val)) {
+      const sanitized = sanitize((val as Record<string, unknown>)[key]);
+      if (sanitized !== undefined) {
+        result[key] = sanitized;
+      }
+    }
+    return result;
+  };
+
+  return JSON.stringify(sanitize(value)) ?? 'null';
 };
 
 /**
