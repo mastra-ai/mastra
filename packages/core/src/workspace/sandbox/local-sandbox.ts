@@ -161,7 +161,7 @@ export class LocalSandbox extends MastraSandbox {
   readonly name = 'LocalSandbox';
   readonly provider = 'local';
 
-  status: ProviderStatus = 'stopped';
+  status: ProviderStatus = 'pending';
 
   private readonly _workingDirectory: string;
   private readonly env: NodeJS.ProcessEnv;
@@ -240,69 +240,74 @@ export class LocalSandbox extends MastraSandbox {
     };
   }
 
-  async start(): Promise<void> {
+  /**
+   * Start the local sandbox.
+   * Creates working directory and sets up seatbelt profile if using macOS isolation.
+   * Status management is handled by the base class.
+   */
+  protected override async _doStart(): Promise<void> {
     this.logger.debug('Starting sandbox', { workingDirectory: this._workingDirectory, isolation: this._isolation });
-    this.status = 'starting';
 
-    try {
-      await fs.mkdir(this.workingDirectory, { recursive: true });
+    await fs.mkdir(this.workingDirectory, { recursive: true });
 
-      // Set up seatbelt profile for macOS sandboxing
-      if (this._isolation === 'seatbelt') {
-        const userProvidedPath = this._nativeSandboxConfig.seatbeltProfilePath;
+    // Set up seatbelt profile for macOS sandboxing
+    if (this._isolation === 'seatbelt') {
+      const userProvidedPath = this._nativeSandboxConfig.seatbeltProfilePath;
 
-        if (userProvidedPath) {
-          // User provided a custom path
-          this._seatbeltProfilePath = userProvidedPath;
-          this._userProvidedProfilePath = true;
+      if (userProvidedPath) {
+        // User provided a custom path
+        this._seatbeltProfilePath = userProvidedPath;
+        this._userProvidedProfilePath = true;
 
-          // Check if file exists at user's path
-          try {
-            this._seatbeltProfile = await fs.readFile(userProvidedPath, 'utf-8');
-          } catch {
-            // File doesn't exist, generate default and write to user's path
-            this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
-            // Ensure parent directory exists
-            await fs.mkdir(path.dirname(userProvidedPath), { recursive: true });
-            await fs.writeFile(userProvidedPath, this._seatbeltProfile, 'utf-8');
-          }
-        } else {
-          // No custom path, use default location
+        // Check if file exists at user's path
+        try {
+          this._seatbeltProfile = await fs.readFile(userProvidedPath, 'utf-8');
+        } catch {
+          // File doesn't exist, generate default and write to user's path
           this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
-
-          // Generate a deterministic hash from workspace path and config
-          // This allows identical sandboxes to share profiles while preventing collisions
-          const configHash = crypto
-            .createHash('sha256')
-            .update(this.workingDirectory)
-            .update(JSON.stringify(this._nativeSandboxConfig))
-            .digest('hex')
-            .slice(0, 8);
-
-          // Write profile to .sandbox-profiles/ in cwd (outside working directory)
-          // This prevents sandboxed processes from reading/modifying their own security profile
-          this._sandboxFolderPath = path.join(process.cwd(), '.sandbox-profiles');
-          await fs.mkdir(this._sandboxFolderPath, { recursive: true });
-          this._seatbeltProfilePath = path.join(this._sandboxFolderPath, `seatbelt-${configHash}.sb`);
-          await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
+          // Ensure parent directory exists
+          await fs.mkdir(path.dirname(userProvidedPath), { recursive: true });
+          await fs.writeFile(userProvidedPath, this._seatbeltProfile, 'utf-8');
         }
+      } else {
+        // No custom path, use default location
+        this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+
+        // Generate a deterministic hash from workspace path and config
+        // This allows identical sandboxes to share profiles while preventing collisions
+        const configHash = crypto
+          .createHash('sha256')
+          .update(this.workingDirectory)
+          .update(JSON.stringify(this._nativeSandboxConfig))
+          .digest('hex')
+          .slice(0, 8);
+
+        // Write profile to .sandbox-profiles/ in cwd (outside working directory)
+        // This prevents sandboxed processes from reading/modifying their own security profile
+        this._sandboxFolderPath = path.join(process.cwd(), '.sandbox-profiles');
+        await fs.mkdir(this._sandboxFolderPath, { recursive: true });
+        this._seatbeltProfilePath = path.join(this._sandboxFolderPath, `seatbelt-${configHash}.sb`);
+        await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
       }
-
-      this.status = 'running';
-      this.logger.debug('Sandbox started', { workingDirectory: this._workingDirectory, status: this.status });
-    } catch (error) {
-      this.status = 'error';
-      this.logger.error('Failed to start sandbox', { workingDirectory: this._workingDirectory, error });
-      throw error;
     }
+
+    this.logger.debug('Sandbox started', { workingDirectory: this._workingDirectory });
   }
 
-  async stop(): Promise<void> {
+  /**
+   * Stop the local sandbox.
+   * Status management is handled by the base class.
+   */
+  protected override async _doStop(): Promise<void> {
     this.logger.debug('Stopping sandbox', { workingDirectory: this._workingDirectory });
-    this.status = 'stopped';
   }
 
-  async destroy(): Promise<void> {
+  /**
+   * Destroy the local sandbox and clean up resources.
+   * Cleans up seatbelt profile if auto-generated.
+   * Status management is handled by the base class.
+   */
+  protected override async _doDestroy(): Promise<void> {
     this.logger.debug('Destroying sandbox', { workingDirectory: this._workingDirectory });
     // Clean up seatbelt profile only if it was auto-generated (not user-provided)
     if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {
@@ -325,8 +330,6 @@ export class LocalSandbox extends MastraSandbox {
       }
       this._sandboxFolderPath = undefined;
     }
-
-    await this.stop();
   }
 
   async isReady(): Promise<boolean> {

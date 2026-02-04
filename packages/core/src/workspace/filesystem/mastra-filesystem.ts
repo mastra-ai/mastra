@@ -21,6 +21,7 @@
 
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger/constants';
+import { FilesystemNotReadyError } from '../errors';
 import type { ProviderStatus } from '../lifecycle';
 import type {
   WorkspaceFilesystem,
@@ -33,16 +34,6 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
-
-/**
- * Error thrown when a filesystem operation is attempted before initialization.
- */
-export class FilesystemNotReadyError extends Error {
-  constructor(id: string) {
-    super(`Filesystem "${id}" is not ready. Call init() first or use ensureReady().`);
-    this.name = 'FilesystemNotReadyError';
-  }
-}
 
 /**
  * Abstract base class for filesystem providers with logger support and lifecycle management.
@@ -147,6 +138,7 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
       this.status = 'ready';
     } catch (error) {
       this.status = 'error';
+      this.logger.error('Failed to initialize filesystem', { error, id: this.id });
       throw error;
     }
   }

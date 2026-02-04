@@ -79,7 +79,7 @@ export class LocalFilesystem extends MastraFilesystem {
   readonly provider = 'local';
   readonly readOnly?: boolean;
 
-  status: ProviderStatus = 'stopped';
+  status: ProviderStatus = 'pending';
 
   private readonly _basePath: string;
   private readonly _contained: boolean;
@@ -186,10 +186,12 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  async ensureInitialized(): Promise<void> {
-    if (this.status !== 'running') {
-      await this.init();
-    }
+  /**
+   * Ensure the filesystem is initialized before operations.
+   * Uses base class ensureReady() for status management.
+   */
+  private async ensureInitialized(): Promise<void> {
+    await this.ensureReady();
   }
 
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
@@ -577,22 +579,23 @@ export class LocalFilesystem extends MastraFilesystem {
     };
   }
 
-  async init(): Promise<void> {
+  /**
+   * Initialize the local filesystem by creating the base directory.
+   * Status management is handled by the base class.
+   */
+  protected override async _doInit(): Promise<void> {
     this.logger.debug('Initializing filesystem', { basePath: this._basePath });
-    this.status = 'starting';
-    try {
-      await fs.mkdir(this._basePath, { recursive: true });
-      this.status = 'running';
-      this.logger.debug('Filesystem initialized', { basePath: this._basePath, status: this.status });
-    } catch (error) {
-      this.status = 'error';
-      this.logger.error('Failed to initialize filesystem', { basePath: this._basePath, error });
-      throw error;
-    }
+    await fs.mkdir(this._basePath, { recursive: true });
+    this.logger.debug('Filesystem initialized', { basePath: this._basePath });
   }
 
-  async destroy(): Promise<void> {
-    // LocalFilesystem doesn't clean up on destroy by default
+  /**
+   * Clean up the local filesystem.
+   * LocalFilesystem doesn't delete files on destroy by default.
+   * Status management is handled by the base class.
+   */
+  protected override async _doDestroy(): Promise<void> {
+    // LocalFilesystem doesn't clean up files on destroy by default
   }
 
   getInfo(): FilesystemInfo {
