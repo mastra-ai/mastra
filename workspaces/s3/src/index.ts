@@ -5,4 +5,4 @@
  * Works with AWS S3, Cloudflare R2, MinIO, DigitalOcean Spaces, etc.
  */
 
-export { S3Filesystem, type S3FilesystemOptions, type S3MountConfig } from './s3-filesystem';
+export { S3Filesystem, type S3FilesystemOptions, type S3MountConfig } from './filesystem';
