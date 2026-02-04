@@ -49,10 +49,50 @@ interface LlmsManifest {
   packages: Record<string, ManifestEntry[]>;
 }
 
+// Cache for chunk file contents and their pre-split lines
+const chunkCache = new Map<string, string[] | null>();
+
+// Cache for file existence checks
+const existsCache = new Map<string, boolean>();
+
+function cachedExists(filePath: string): boolean {
+  const cached = existsCache.get(filePath);
+  if (cached !== undefined) return cached;
+  const exists = fs.existsSync(filePath);
+  existsCache.set(filePath, exists);
+  return exists;
+}
+
+function getChunkLines(chunkPath: string): string[] | null {
+  const cached = chunkCache.get(chunkPath);
+  if (cached !== undefined) return cached;
+
+  if (!cachedExists(chunkPath)) {
+    chunkCache.set(chunkPath, null);
+    return null;
+  }
+
+  try {
+    const stat = fs.statSync(chunkPath);
+    if (!stat.isFile()) {
+      chunkCache.set(chunkPath, null);
+      return null;
+    }
+  } catch {
+    chunkCache.set(chunkPath, null);
+    return null;
+  }
+
+  const content = fs.readFileSync(chunkPath, 'utf-8');
+  const lines = content.split('\n');
+  chunkCache.set(chunkPath, lines);
+  return lines;
+}
+
 function parseIndexExports(indexPath: string): Map<string, { chunk: string; exportName: string }> {
   const exports = new Map<string, { chunk: string; exportName: string }>();
 
-  if (!fs.existsSync(indexPath)) {
+  if (!cachedExists(indexPath)) {
     return exports;
   }
 
@@ -78,18 +118,8 @@ function parseIndexExports(indexPath: string): Map<string, { chunk: string; expo
 }
 
 function findExportLine(chunkPath: string, exportName: string): number | undefined {
-  if (!fs.existsSync(chunkPath)) {
-    return undefined;
-  }
-
-  // Make sure it's a file, not a directory
-  const stat = fs.statSync(chunkPath);
-  if (!stat.isFile()) {
-    return undefined;
-  }
-
-  const content = fs.readFileSync(chunkPath, 'utf-8');
-  const lines = content.split('\n');
+  const lines = getChunkLines(chunkPath);
+  if (!lines) return undefined;
 
   // Look for class or function definition
   const patterns = [
@@ -143,7 +173,7 @@ function generateSourceMap(packageRoot: string): SourceMap {
   for (const mod of modules) {
     const indexPath = path.join(distDir, mod, 'index.js');
 
-    if (!fs.existsSync(indexPath)) {
+    if (!cachedExists(indexPath)) {
       continue;
     }
 
@@ -161,7 +191,7 @@ function generateSourceMap(packageRoot: string): SourceMap {
 
       // Check if there's a more specific types file
       const specificTypesPath = path.join(distDir, mod, `${name.toLowerCase()}.d.ts`);
-      if (fs.existsSync(specificTypesPath)) {
+      if (cachedExists(specificTypesPath)) {
         typesFile = `dist/${mod}/${name.toLowerCase()}.d.ts`;
       }
 
@@ -180,7 +210,7 @@ function generateSourceMap(packageRoot: string): SourceMap {
 
   // Also check root index.js for additional exports
   const rootIndexPath = path.join(distDir, 'index.js');
-  if (fs.existsSync(rootIndexPath)) {
+  if (cachedExists(rootIndexPath)) {
     const rootExports = parseIndexExports(rootIndexPath);
     for (const [name, info] of rootExports) {
       if (!sourceMap.exports[name]) {
@@ -201,7 +231,7 @@ function generateSourceMap(packageRoot: string): SourceMap {
 
 function loadLlmsManifest(): LlmsManifest {
   const manifestPath = path.join(MONOREPO_ROOT, 'docs/build/llms-manifest.json');
-  if (!fs.existsSync(manifestPath)) {
+  if (!cachedExists(manifestPath)) {
     throw new Error('docs/build/llms-manifest.json not found. Run docs build first.');
   }
   return JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
@@ -277,28 +307,35 @@ function copyDocumentation(manifest: LlmsManifest, packageName: string, docsOutp
     const targetFileName = generateFlatFileName(entry);
     const targetPath = path.join(referencesDir, targetFileName);
 
-    if (fs.existsSync(sourcePath)) {
-      const content = fs.readFileSync(sourcePath, 'utf-8');
-      fs.writeFileSync(targetPath, content, 'utf-8');
+    if (cachedExists(sourcePath)) {
+      fs.copyFileSync(sourcePath, targetPath);
     } else {
       console.warn(`  Warning: Source not found: ${sourcePath}`);
     }
   }
 }
 
+// Cache for package.json contents
+const packageJsonCache = new Map<string, { name: string; version: string }>();
+
 function getPackageJson(packageRoot: string): { name: string; version: string } {
+  const cached = packageJsonCache.get(packageRoot);
+  if (cached) return cached;
+
   const packageJsonPath = path.join(packageRoot, 'package.json');
-  if (!fs.existsSync(packageJsonPath)) {
+  if (!cachedExists(packageJsonPath)) {
     throw new Error(`package.json not found in ${packageRoot}`);
   }
-  return JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+  const result = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+  packageJsonCache.set(packageRoot, result);
+  return result;
 }
 
-async function generateDocsForPackage(
+function generateDocsForPackage(
   packageName: string,
   packageRoot: string,
   manifest: LlmsManifest,
-): Promise<void> {
+): void {
   const packageJson = getPackageJson(packageRoot);
   const docsOutputDir = path.join(packageRoot, 'dist', 'docs');
   const entries = manifest.packages[packageName];
@@ -311,8 +348,10 @@ async function generateDocsForPackage(
   console.info(`\nGenerating documentation for ${packageName} (${entries.length} files)\n`);
 
   // Clean and create directory structure
-  if (fs.existsSync(docsOutputDir)) {
+  if (cachedExists(docsOutputDir)) {
     fs.rmSync(docsOutputDir, { recursive: true });
+    // Clear from cache since we deleted it
+    existsCache.delete(docsOutputDir);
   }
   fs.mkdirSync(path.join(docsOutputDir, 'references'), { recursive: true });
   fs.mkdirSync(path.join(docsOutputDir, 'assets'), { recursive: true });
@@ -329,15 +368,17 @@ async function generateDocsForPackage(
   fs.writeFileSync(path.join(docsOutputDir, 'SKILL.md'), skillMd, 'utf-8');
 }
 
-async function main(): Promise<void> {
+function main(): void {
   const manifest = loadLlmsManifest();
-  const packageRoot = process.cwd()
+  const packageRoot = process.cwd();
   const packageName = getPackageJson(packageRoot).name;
 
-  await generateDocsForPackage(packageName, packageRoot, manifest);
+  generateDocsForPackage(packageName, packageRoot, manifest);
 }
 
-main().catch(error => {
+try {
+  main();
+} catch (error) {
   console.error('Failed to generate package docs:', error);
   process.exit(1);
-});
+}
