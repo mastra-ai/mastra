@@ -152,7 +152,6 @@ export class MastraEditor implements IMastraEditor {
       if (agentCache) {
         const cached = agentCache.get(id);
         if (cached) {
-          this.logger?.debug(`[getStoredAgentById] Returning cached agent "${id}"`);
           return cached;
         }
         this.logger?.debug(`[getStoredAgentById] Cache miss for agent "${id}", fetching from storage`);
@@ -246,7 +245,6 @@ export class MastraEditor implements IMastraEditor {
 
     if (agentId) {
       agentCache.delete(agentId);
-      this.logger?.debug(`[clearStoredAgentCache] Cleared cache for agent "${agentId}"`);
     } else {
       agentCache.clear();
       this.logger?.debug('[clearStoredAgentCache] Cleared all cached agents');
@@ -270,10 +268,6 @@ export class MastraEditor implements IMastraEditor {
     const workflows = this.resolveStoredWorkflows(storedAgent.workflows);
     const agents = this.resolveStoredAgents(storedAgent.agents);
     const memory = this.resolveStoredMemory(storedAgent.memory);
-    console.log(
-      `[createAgentFromStoredConfig] Resolved memory: ${memory ? 'Memory instance created' : 'No memory'} for agent \"${storedAgent.id}\"`,
-      { memory },
-    );
     const scorers = this.resolveStoredScorers(storedAgent.scorers);
     const inputProcessors = this.resolveStoredInputProcessors(storedAgent.inputProcessors);
     const outputProcessors = this.resolveStoredOutputProcessors(storedAgent.outputProcessors);
@@ -421,7 +415,6 @@ export class MastraEditor implements IMastraEditor {
    * Uses @mastra/memory Memory class to instantiate from serialized config.
    */
   private resolveStoredMemory(memoryConfig?: SerializedMemoryConfig): MastraMemory | undefined {
-    this.logger?.debug(`[resolveStoredMemory] Called with config:`, { memoryConfig });
     if (!memoryConfig) {
       this.logger?.debug(`[resolveStoredMemory] No memory config provided`);
       return undefined;
@@ -443,9 +436,34 @@ export class MastraEditor implements IMastraEditor {
         }
       }
 
+      // Check if semantic recall is requested but no vector store is available
+      if (memoryConfig.options?.semanticRecall && (!vector || !memoryConfig.embedder)) {
+        // Log a warning about the semantic recall requirement
+        this.logger?.warn(
+          'Semantic recall is enabled but no vector store or embedder are configured. ' +
+            'Creating memory without semantic recall. ' +
+            'To use semantic recall, configure a vector store and embedder in your Mastra instance.',
+        );
+
+        // Create memory config without semantic recall
+        const adjustedOptions = { ...memoryConfig.options, semanticRecall: false };
+        const sharedConfig: SharedMemoryConfig = {
+          storage: this.mastra.getStorage(),
+          vector,
+          options: adjustedOptions,
+          embedder: memoryConfig.embedder,
+          embedderOptions: memoryConfig.embedderOptions,
+        };
+
+        const memoryInstance = new Memory(sharedConfig);
+        return memoryInstance;
+      }
+
       // Construct the full memory config
+      const storage = this.mastra.getStorage();
+
       const sharedConfig: SharedMemoryConfig = {
-        storage: this.mastra.getStorage(),
+        storage: storage,
         vector,
         options: memoryConfig.options,
         embedder: memoryConfig.embedder,
@@ -453,7 +471,8 @@ export class MastraEditor implements IMastraEditor {
       };
 
       // Instantiate Memory class
-      return new Memory(sharedConfig);
+      const memoryInstance = new Memory(sharedConfig);
+      return memoryInstance;
     } catch (error) {
       this.logger?.error('Failed to resolve memory from config', { error });
       return undefined;
