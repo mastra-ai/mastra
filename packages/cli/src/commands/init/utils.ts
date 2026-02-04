@@ -1017,13 +1017,6 @@ npx skills add mastra-ai/skills --skill <skill-name>
 npx skills add mastra-ai/skills --all
 \`\`\`
 
-### How Skills Work
-
-- Skills are automatically discovered and made available to agents in your project
-- Each skill can provide tools, context, and specialized knowledge
-- Agents can access skills without additional configuration once installed
-- Skills are version-controlled and can be updated independently
-
 **Repository**: [https://github.com/mastra-ai/skills](https://github.com/mastra-ai/skills)
 
 `;
