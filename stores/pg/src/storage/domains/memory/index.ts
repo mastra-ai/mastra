@@ -1570,6 +1570,7 @@ export class MemoryPG extends MemoryStorage {
           ? JSON.parse(row.observedMessageIds)
           : row.observedMessageIds
         : undefined,
+      observedTimezone: row.observedTimezone || undefined,
     };
   }
 
@@ -1652,6 +1653,7 @@ export class MemoryPG extends MemoryStorage {
         isReflecting: false,
         isObserving: false,
         config: input.config,
+        observedTimezone: input.observedTimezone,
       };
 
       const tableName = getTableName({
@@ -1665,8 +1667,8 @@ export class MemoryPG extends MemoryStorage {
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
-          "isObserving", "isReflecting", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
+          "isObserving", "isReflecting", "observedTimezone", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`,
         [
           id,
           lookupKey,
@@ -1687,6 +1689,7 @@ export class MemoryPG extends MemoryStorage {
           0,
           false,
           false,
+          input.observedTimezone || null,
           nowStr, // createdAt
           nowStr, // createdAtZ
           nowStr, // updatedAt
@@ -1793,6 +1796,7 @@ export class MemoryPG extends MemoryStorage {
         isObserving: false,
         config: input.currentRecord.config,
         metadata: input.currentRecord.metadata,
+        observedTimezone: input.currentRecord.observedTimezone,
       };
 
       const tableName = getTableName({
@@ -1807,8 +1811,8 @@ export class MemoryPG extends MemoryStorage {
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
-          "isObserving", "isReflecting", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
+          "isObserving", "isReflecting", "observedTimezone", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`,
         [
           id,
           lookupKey,
@@ -1829,6 +1833,7 @@ export class MemoryPG extends MemoryStorage {
           record.observationTokenCount,
           false,
           false,
+          record.observedTimezone || null,
           nowStr, // createdAt
           nowStr, // createdAtZ
           nowStr, // updatedAt

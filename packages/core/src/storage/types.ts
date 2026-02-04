@@ -566,6 +566,13 @@ export interface ObservationalMemoryRecord {
    */
   observedMessageIds?: string[];
 
+  /**
+   * The timezone used when formatting dates for the Observer agent.
+   * Stored for debugging and auditing observation dates.
+   * Example: "America/Los_Angeles", "Europe/London"
+   */
+  observedTimezone?: string;
+
   // Token tracking
   /** Running total of all tokens observed */
   totalTokensObserved: number;
@@ -597,6 +604,8 @@ export interface CreateObservationalMemoryInput {
   resourceId: string;
   scope: ObservationalMemoryScope;
   config: Record<string, unknown>;
+  /** The timezone used when formatting dates for the Observer agent (e.g., "America/Los_Angeles") */
+  observedTimezone?: string;
 }
 
 /**
@@ -615,6 +624,11 @@ export interface UpdateActiveObservationsInput {
    * These are appended to any existing IDs and pruned to only include IDs newer than lastObservedAt.
    */
   observedMessageIds?: string[];
+  /**
+   * The timezone used when formatting dates for the Observer agent.
+   * Captured from Intl.DateTimeFormat().resolvedOptions().timeZone
+   */
+  observedTimezone?: string;
 }
 
 /**

@@ -812,7 +812,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
-    const { threadId, resourceId, scope, config } = input;
+    const { threadId, resourceId, scope, config, observedTimezone } = input;
     const key = this.getObservationalMemoryKey(threadId, resourceId);
     const now = new Date();
 
@@ -844,6 +844,8 @@ export class InMemoryMemory extends MemoryStorage {
       isObserving: false,
       // Configuration
       config,
+      // Timezone used for observation date formatting
+      observedTimezone,
       // Extensible metadata (optional)
       metadata: {},
     };
@@ -959,6 +961,8 @@ export class InMemoryMemory extends MemoryStorage {
       pendingMessageTokens: 0,
       isReflecting: false,
       isObserving: false,
+      // Timezone used for observation date formatting
+      observedTimezone: currentRecord.observedTimezone,
       // Extensible metadata (optional)
       metadata: {},
     };

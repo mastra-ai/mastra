@@ -142,6 +142,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   isObserving: { type: 'boolean', nullable: false },
   isReflecting: { type: 'boolean', nullable: false },
   observedMessageIds: { type: 'jsonb', nullable: true }, // JSON array of message IDs already observed
+  observedTimezone: { type: 'text', nullable: true }, // Timezone used for Observer date formatting (e.g., "America/Los_Angeles")
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };

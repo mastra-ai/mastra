@@ -1384,6 +1384,7 @@ export class MemoryLibSQL extends MemoryStorage {
       config: row.config ? JSON.parse(row.config) : {},
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
       observedMessageIds: row.observedMessageIds ? JSON.parse(row.observedMessageIds) : undefined,
+      observedTimezone: row.observedTimezone || undefined,
     };
   }
 
@@ -1460,6 +1461,7 @@ export class MemoryLibSQL extends MemoryStorage {
         isReflecting: false,
         isObserving: false,
         config: input.config,
+        observedTimezone: input.observedTimezone,
       };
 
       await this.#client.execute({
@@ -1468,8 +1470,8 @@ export class MemoryLibSQL extends MemoryStorage {
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
-          "isObserving", "isReflecting", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          "isObserving", "isReflecting", "observedTimezone", "createdAt", "updatedAt"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           id,
           lookupKey,
@@ -1488,6 +1490,7 @@ export class MemoryLibSQL extends MemoryStorage {
           0,
           false,
           false,
+          input.observedTimezone || null,
           now.toISOString(),
           now.toISOString(),
         ],
@@ -1582,6 +1585,7 @@ export class MemoryLibSQL extends MemoryStorage {
         isObserving: false,
         config: input.currentRecord.config,
         metadata: input.currentRecord.metadata,
+        observedTimezone: input.currentRecord.observedTimezone,
       };
 
       await this.#client.execute({
@@ -1590,8 +1594,8 @@ export class MemoryLibSQL extends MemoryStorage {
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
-          "isObserving", "isReflecting", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          "isObserving", "isReflecting", "observedTimezone", "createdAt", "updatedAt"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           id,
           lookupKey,
@@ -1610,6 +1614,7 @@ export class MemoryLibSQL extends MemoryStorage {
           record.observationTokenCount,
           false,
           false,
+          record.observedTimezone || null,
           now.toISOString(),
           now.toISOString(),
         ],

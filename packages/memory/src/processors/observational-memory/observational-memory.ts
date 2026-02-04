@@ -851,6 +851,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     let record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
 
     if (!record) {
+      // Capture the timezone used for Observer date formatting
+      const observedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
       record = await this.storage.initializeObservationalMemory({
         threadId: ids.threadId,
         resourceId: ids.resourceId,
@@ -860,6 +863,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           reflection: this.reflectionConfig,
           scope: this.scope,
         },
+        observedTimezone,
       });
     }
 

@@ -1137,6 +1137,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       config: doc.config || {},
       metadata: doc.metadata || undefined,
       observedMessageIds: doc.observedMessageIds || undefined,
+      observedTimezone: doc.observedTimezone || undefined,
     };
   }
 
@@ -1206,6 +1207,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         isReflecting: false,
         isObserving: false,
         config: input.config,
+        observedTimezone: input.observedTimezone,
       };
 
       const collection = await this.getCollection(OM_TABLE);
@@ -1227,6 +1229,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         observationTokenCount: 0,
         isObserving: false,
         isReflecting: false,
+        observedTimezone: input.observedTimezone || null,
         createdAt: now,
         updatedAt: now,
       });
@@ -1317,6 +1320,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         isObserving: false,
         config: input.currentRecord.config,
         metadata: input.currentRecord.metadata,
+        observedTimezone: input.currentRecord.observedTimezone,
       };
 
       const collection = await this.getCollection(OM_TABLE);
@@ -1338,6 +1342,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         observationTokenCount: record.observationTokenCount,
         isObserving: false,
         isReflecting: false,
+        observedTimezone: record.observedTimezone || null,
         createdAt: now,
         updatedAt: now,
         metadata: record.metadata || null,
