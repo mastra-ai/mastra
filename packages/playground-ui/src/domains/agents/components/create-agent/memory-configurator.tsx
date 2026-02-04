@@ -60,25 +60,22 @@ export function MemoryConfigurator({
     });
   };
 
-  const semanticRecallEnabled = value?.options?.semanticRecall !== false && value?.options?.semanticRecall !== undefined;
+  const semanticRecallEnabled =
+    value?.options?.semanticRecall !== false && value?.options?.semanticRecall !== undefined;
   const generateTitleEnabled = value?.options?.generateTitle !== false && value?.options?.generateTitle !== undefined;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <Label htmlFor="memory-enabled">Enable Memory</Label>
-        <Switch
-          id="memory-enabled"
-          checked={value !== undefined}
-          onCheckedChange={handleEnabledChange}
-        />
+        <Switch id="memory-enabled" checked={value !== undefined} onCheckedChange={handleEnabledChange} />
       </div>
 
       {value && (
         <Card className="p-4 space-y-4">
           <div className="space-y-2">
             <Label htmlFor="vector-store">Vector Store</Label>
-            <Select value={value.vector === false ? 'none' : (value.vector || 'none')} onValueChange={handleVectorChange}>
+            <Select value={value.vector === false ? 'none' : value.vector || 'none'} onValueChange={handleVectorChange}>
               <SelectTrigger id="vector-store">
                 <SelectValue placeholder="Select vector store" />
               </SelectTrigger>
@@ -99,7 +96,7 @@ export function MemoryConfigurator({
               id="last-messages"
               type="number"
               min={0}
-              value={value.options?.lastMessages === false ? 0 : (value.options?.lastMessages || 10)}
+              value={value.options?.lastMessages === false ? 0 : value.options?.lastMessages || 10}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 const val = parseInt(e.target.value, 10);
                 handleOptionsChange('lastMessages', val === 0 ? false : val);
@@ -163,15 +160,15 @@ export function MemoryConfigurator({
                   type="number"
                   min={1}
                   value={value.options.semanticRecall.topK || 5}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  const topK = parseInt(e.target.value, 10) || 5;
-                  if (typeof value.options?.semanticRecall === 'object') {
-                    handleOptionsChange('semanticRecall', {
-                      ...value.options.semanticRecall,
-                      topK,
-                    });
-                  }
-                }}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    const topK = parseInt(e.target.value, 10) || 5;
+                    if (typeof value.options?.semanticRecall === 'object') {
+                      handleOptionsChange('semanticRecall', {
+                        ...value.options.semanticRecall,
+                        topK,
+                      });
+                    }
+                  }}
                 />
               </div>
 
@@ -186,15 +183,15 @@ export function MemoryConfigurator({
                       ? value.options.semanticRecall.messageRange
                       : 20
                   }
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  const range = parseInt(e.target.value, 10) || 20;
-                  if (typeof value.options?.semanticRecall === 'object') {
-                    handleOptionsChange('semanticRecall', {
-                      ...value.options.semanticRecall,
-                      messageRange: range,
-                    });
-                  }
-                }}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    const range = parseInt(e.target.value, 10) || 20;
+                    if (typeof value.options?.semanticRecall === 'object') {
+                      handleOptionsChange('semanticRecall', {
+                        ...value.options.semanticRecall,
+                        messageRange: range,
+                      });
+                    }
+                  }}
                 />
               </div>
 
@@ -207,15 +204,15 @@ export function MemoryConfigurator({
                   max={1}
                   step={0.1}
                   value={value.options.semanticRecall.threshold || 0.7}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  const threshold = parseFloat(e.target.value) || 0.7;
-                  if (typeof value.options?.semanticRecall === 'object') {
-                    handleOptionsChange('semanticRecall', {
-                      ...value.options.semanticRecall,
-                      threshold,
-                    });
-                  }
-                }}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    const threshold = parseFloat(e.target.value) || 0.7;
+                    if (typeof value.options?.semanticRecall === 'object') {
+                      handleOptionsChange('semanticRecall', {
+                        ...value.options.semanticRecall,
+                        threshold,
+                      });
+                    }
+                  }}
                 />
               </div>
             </Card>

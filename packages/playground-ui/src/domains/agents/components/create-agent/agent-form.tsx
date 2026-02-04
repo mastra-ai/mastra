@@ -177,13 +177,11 @@ export function AgentForm({
     if (!embeddersData?.embedders || !Array.isArray(embeddersData.embedders)) {
       return [];
     }
-    return embeddersData.embedders.map((embedder) => ({
+    return embeddersData.embedders.map(embedder => ({
       id: embedder.id,
       name: embedder.name || embedder.id,
     }));
   }, [embeddersData]);
-
-
 
   // Transform scorers data
   const scorerOptions = React.useMemo(() => {
@@ -206,7 +204,8 @@ export function AgentForm({
     }
   };
 
-  const isLoading = toolsLoading || workflowsLoading || agentsLoading || scorersLoading || vectorsLoading || embeddersLoading;
+  const isLoading =
+    toolsLoading || workflowsLoading || agentsLoading || scorersLoading || vectorsLoading || embeddersLoading;
 
   return (
     <form ref={formRef} onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4 px-6">

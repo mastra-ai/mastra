@@ -398,8 +398,8 @@ export const LIST_VECTORS_ROUTE = createRoute({
 
       // Convert to array and extract metadata
       const vectorList = Object.entries(vectors).map(([name, vector]) => ({
+        id: vector.id || name, // Use the key as the ID since vectors might not have their own id property
         name,
-        id: vector.id,
         type: vector.constructor.name,
       }));
 
@@ -421,7 +421,7 @@ export const LIST_EMBEDDERS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async () => {
     try {
-      const embeddersList = EMBEDDING_MODELS.map((model) => ({
+      const embeddersList = EMBEDDING_MODELS.map(model => ({
         id: `${model.provider}/${model.id}`,
         provider: model.provider,
         name: model.id,
@@ -429,7 +429,7 @@ export const LIST_EMBEDDERS_ROUTE = createRoute({
         dimensions: model.dimensions,
         maxInputTokens: model.maxInputTokens,
       }));
-      
+
       return { embedders: embeddersList };
     } catch (error) {
       return handleError(error, 'Error listing embedders');

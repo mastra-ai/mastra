@@ -13,9 +13,7 @@ import { Input } from '@/ds/components/Input';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { cn } from '@/lib/utils';
 
-export type ScoringSamplingConfig = 
-  | { type: 'none' }
-  | { type: 'ratio'; rate: number };
+export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
 export interface ScorerConfig {
   sampling?: ScoringSamplingConfig;
@@ -278,8 +276,6 @@ function ScorerSamplingConfig({
     }
   };
 
-
-
   return (
     <div className="flex flex-col gap-2 p-2 bg-surface2 rounded-md border border-border1">
       <div className="flex items-center justify-between">
@@ -317,7 +313,6 @@ function ScorerSamplingConfig({
               Ratio (percentage)
             </Label>
           </div>
-
         </RadioGroup>
 
         {samplingType === 'ratio' && (
@@ -337,8 +332,6 @@ function ScorerSamplingConfig({
             />
           </div>
         )}
-
-
       </div>
     </div>
   );

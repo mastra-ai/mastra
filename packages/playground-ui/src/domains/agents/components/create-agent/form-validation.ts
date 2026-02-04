@@ -27,35 +27,40 @@ export const agentFormSchema = z.object({
   tools: z.array(z.string()).optional(),
   workflows: z.array(z.string()).optional(),
   agents: z.array(z.string()).optional(),
-  memory: z.object({
-    vector: z.union([z.string(), z.literal(false)]).optional(),
-    options: z.object({
-      readOnly: z.boolean().optional(),
-      lastMessages: z.union([z.number(), z.literal(false)]).optional(),
-      semanticRecall: z.union([
-        z.boolean(),
-        z.object({
-          topK: z.number(),
-          messageRange: z.union([
-            z.number(),
-            z.object({ before: z.number(), after: z.number() })
-          ]),
-          scope: z.enum(['thread', 'resource']).optional(),
-          threshold: z.number().optional(),
-          indexName: z.string().optional(),
+  memory: z
+    .object({
+      vector: z.union([z.string(), z.literal(false)]).optional(),
+      options: z
+        .object({
+          readOnly: z.boolean().optional(),
+          lastMessages: z.union([z.number(), z.literal(false)]).optional(),
+          semanticRecall: z
+            .union([
+              z.boolean(),
+              z.object({
+                topK: z.number(),
+                messageRange: z.union([z.number(), z.object({ before: z.number(), after: z.number() })]),
+                scope: z.enum(['thread', 'resource']).optional(),
+                threshold: z.number().optional(),
+                indexName: z.string().optional(),
+              }),
+            ])
+            .optional(),
+          generateTitle: z
+            .union([
+              z.boolean(),
+              z.object({
+                model: z.string(),
+                instructions: z.string().optional(),
+              }),
+            ])
+            .optional(),
         })
-      ]).optional(),
-      generateTitle: z.union([
-        z.boolean(),
-        z.object({
-          model: z.string(),
-          instructions: z.string().optional(),
-        })
-      ]).optional(),
-    }).optional(),
-    embedder: z.string().optional(),
-    embedderOptions: z.record(z.string(), z.unknown()).optional(),
-  }).optional(),
+        .optional(),
+      embedder: z.string().optional(),
+      embedderOptions: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
 });
 

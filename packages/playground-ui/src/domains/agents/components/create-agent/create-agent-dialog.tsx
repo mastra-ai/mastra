@@ -23,7 +23,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSuccess }: CreateAgent
       toast.error('Form submission error: No data received');
       return;
     }
-    
+
     if (!values.instructions) {
       toast.error('Form data is invalid. Please fill in all required fields.');
       return;
