@@ -80,6 +80,10 @@ function Agent() {
     return null;
   }
 
+  if (!agent) {
+    return <div className="text-center py-4">Agent not found</div>;
+  }
+
   const handleRefreshThreadList = () => {
     // Create a new URLSearchParams to avoid mutation issues
     const newParams = new URLSearchParams(searchParams);

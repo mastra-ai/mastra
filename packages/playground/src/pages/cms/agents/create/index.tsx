@@ -12,7 +12,9 @@ import {
   HeaderTitle,
   Icon,
   AgentIcon,
+  AgentEditMain,
 } from '@mastra/playground-ui';
+import { Agent } from '@mastra/core';
 
 function CmsAgentsCreatePage() {
   const { navigate, paths } = useLinkComponent();
@@ -83,7 +85,8 @@ function CmsAgentsCreatePage() {
       }
     >
       <form ref={formRef} className="h-full">
-        <AgentEditMainContentBlocks form={form} />
+        <AgentEditMain form={form} />
+        {/* <AgentEditMainContentBlocks form={form} /> */}
       </form>
     </AgentLayout>
   );

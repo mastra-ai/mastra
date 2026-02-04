@@ -21,9 +21,8 @@ interface ScorersSectionProps {
 }
 
 interface ScoringSamplingConfig {
-  type: 'ratio' | 'count';
+  type: 'ratio';
   rate?: number;
-  count?: number;
 }
 
 interface ScorerConfig {
@@ -169,20 +168,12 @@ function ScorerConfigPanel({
       onSamplingChange(undefined);
     } else if (type === 'ratio') {
       onSamplingChange({ type: 'ratio', rate: 0.1 });
-    } else if (type === 'count') {
-      onSamplingChange({ type: 'count', count: 10 });
     }
   };
 
   const handleRateChange = (rate: number) => {
     if (samplingConfig?.type === 'ratio') {
       onSamplingChange({ type: 'ratio', rate });
-    }
-  };
-
-  const handleCountChange = (count: number) => {
-    if (samplingConfig?.type === 'count') {
-      onSamplingChange({ type: 'count', count });
     }
   };
 
@@ -235,12 +226,6 @@ function ScorerConfigPanel({
               Ratio (percentage)
             </Label>
           </div>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="count" id={`${scorerId}-count`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-count`} className="text-sm text-icon5 cursor-pointer">
-              Count (fixed number)
-            </Label>
-          </div>
         </RadioGroup>
 
         {samplingType === 'ratio' && (
@@ -256,24 +241,6 @@ function ScorerConfigPanel({
               step="0.1"
               value={samplingConfig?.rate ?? 0.1}
               onChange={e => handleRateChange(parseFloat(e.target.value))}
-              className="h-8"
-              disabled={readOnly}
-            />
-          </div>
-        )}
-
-        {samplingType === 'count' && (
-          <div className="flex flex-col gap-1.5 mt-1">
-            <Label htmlFor={`count-${scorerId}`} className="text-xs text-icon4">
-              Sample Count
-            </Label>
-            <Input
-              id={`count-${scorerId}`}
-              type="number"
-              min="1"
-              step="1"
-              value={samplingConfig?.count ?? 10}
-              onChange={e => handleCountChange(parseInt(e.target.value, 10))}
               className="h-8"
               disabled={readOnly}
             />

@@ -2,9 +2,8 @@ import { z } from 'zod';
 import type { JsonSchema } from '@/lib/json-schema';
 
 const scoringSamplingConfigSchema = z.object({
-  type: z.enum(['ratio', 'count']),
+  type: z.enum(['ratio']),
   rate: z.number().optional(),
-  count: z.number().optional(),
 });
 
 const entityConfigSchema = z.object({
