@@ -56,6 +56,38 @@ export const useCodemirrorTheme = (): Extension => {
       '.cm-lineNumbers .cm-gutterElement': {
         color: '#939393',
       },
+      // Autocomplete popover - Dracula theme
+      '.cm-tooltip-autocomplete': {
+        backgroundColor: '#282a36',
+        border: '1px solid #44475a',
+        borderRadius: '6px',
+        boxShadow: '0 8px 16px rgba(0, 0, 0, 0.4)',
+      },
+      '.cm-tooltip-autocomplete > ul': {
+        fontFamily: 'var(--geist-mono)',
+      },
+      '.cm-completionLabel': {
+        color: '#f8f8f2',
+      },
+      '.cm-completionDetail': {
+        color: '#A1A1AA',
+        fontSize: '0.7rem',
+        marginLeft: 'auto',
+        paddingLeft: '12px',
+      },
+      '.cm-completionInfo': {
+        backgroundColor: '#282a36',
+        border: '1px solid #44475a',
+        color: '#6272a4',
+        padding: '8px 12px',
+      },
+      '.cm-completionIcon': {
+        display: 'none',
+      },
+      'ul.cm-completionList li[aria-selected]': {
+        backgroundColor: '#44475a',
+        color: '#f8f8f2',
+      },
     });
 
     return [baseTheme, customLineNumberTheme];
