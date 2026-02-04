@@ -7,8 +7,11 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/compon
 import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
 import { Switch } from '@/ds/components/Switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import type { AgentFormValues } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
+import { useVectors } from '@/domains/vectors/hooks/use-vectors';
+import { useEmbedders } from '@/domains/embedders/hooks/use-embedders';
 
 interface MemorySectionProps {
   control: Control<AgentFormValues>;
@@ -19,6 +22,12 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
   const [isOpen, setIsOpen] = useState(false);
   const memoryConfig = useWatch({ control, name: 'memory' });
   const isEnabled = memoryConfig?.enabled ?? false;
+  const semanticRecallEnabled = memoryConfig?.semanticRecall ?? false;
+
+  const { data: vectorsData } = useVectors();
+  const { data: embeddersData } = useEmbedders();
+  const vectors = vectorsData?.vectors ?? [];
+  const embedders = embeddersData?.embedders ?? [];
 
   return (
     <div className="rounded-md border border-border1 bg-surface2">
@@ -101,6 +110,60 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
                     </div>
                   )}
                 />
+
+                {semanticRecallEnabled && (
+                  <>
+                    <Controller
+                      name="memory.vector"
+                      control={control}
+                      render={({ field }) => (
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="memory-vector" className="text-xs text-icon4">
+                            Vector Store
+                          </Label>
+                          <span className="text-xs text-icon3">Select a vector store for semantic search</span>
+                          <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
+                            <SelectTrigger id="memory-vector" className="bg-surface3">
+                              <SelectValue placeholder="Select a vector store" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {vectors.map(vector => (
+                                <SelectItem key={vector.id} value={vector.id}>
+                                  {vector.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    />
+
+                    <Controller
+                      name="memory.embedder"
+                      control={control}
+                      render={({ field }) => (
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="memory-embedder" className="text-xs text-icon4">
+                            Embedder Model
+                          </Label>
+                          <span className="text-xs text-icon3">Select an embedding model for semantic search</span>
+                          <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={readOnly}>
+                            <SelectTrigger id="memory-embedder" className="bg-surface3">
+                              <SelectValue placeholder="Select an embedder model" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {embedders.map(embedder => (
+                                <SelectItem key={embedder.id} value={embedder.id}>
+                                  {embedder.name} ({embedder.provider})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    />
+                  </>
+                )}
 
                 <Controller
                   name="memory.readOnly"

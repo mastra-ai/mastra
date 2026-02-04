@@ -80,7 +80,11 @@ function CmsAgentsEditForm({
 
     // Transform memory data from API format to form format
     const memoryData = dataSource.memory as
-      | { options?: { lastMessages?: number | false; semanticRecall?: boolean; readOnly?: boolean } }
+      | {
+          vector?: string;
+          embedder?: string;
+          options?: { lastMessages?: number | false; semanticRecall?: boolean; readOnly?: boolean };
+        }
       | undefined;
 
     return {
@@ -101,6 +105,8 @@ function CmsAgentsEditForm({
             lastMessages: memoryData.options.lastMessages,
             semanticRecall: memoryData.options.semanticRecall,
             readOnly: memoryData.options.readOnly,
+            vector: memoryData.vector,
+            embedder: memoryData.embedder,
           }
         : undefined,
     };
@@ -154,6 +160,8 @@ function CmsAgentsEditForm({
         scorers: values.scorers,
         memory: values.memory?.enabled
           ? {
+              vector: values.memory.vector,
+              embedder: values.memory.embedder,
               options: {
                 lastMessages: values.memory.lastMessages,
                 semanticRecall: values.memory.semanticRecall,

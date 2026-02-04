@@ -15,12 +15,28 @@ const scorerConfigSchema = z.object({
   sampling: scoringSamplingConfigSchema.optional(),
 });
 
-const memoryConfigSchema = z.object({
-  enabled: z.boolean().optional(),
-  lastMessages: z.union([z.number().min(1), z.literal(false)]).optional(),
-  semanticRecall: z.boolean().optional(),
-  readOnly: z.boolean().optional(),
-});
+const memoryConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    lastMessages: z.union([z.number().min(1), z.literal(false)]).optional(),
+    semanticRecall: z.boolean().optional(),
+    readOnly: z.boolean().optional(),
+    vector: z.string().optional(),
+    embedder: z.string().optional(),
+  })
+  .refine(
+    data => {
+      // If semanticRecall is enabled, vector and embedder are required
+      if (data.semanticRecall && data.enabled) {
+        return !!data.vector && !!data.embedder;
+      }
+      return true;
+    },
+    {
+      message: 'Semantic recall requires both vector and embedder to be configured',
+      path: ['semanticRecall'],
+    },
+  );
 
 export const agentFormSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less'),

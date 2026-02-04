@@ -41,9 +41,7 @@ export function AgentCombobox({
   const agentOptions = Object.keys(agents).map(key => ({
     label: agents[key]?.name || key,
     value: key,
-    start: showSourceIcon ? (
-      <AgentSourceIcon source={agents[key]?.source} tooltipClassName="z-[150]" />
-    ) : undefined,
+    start: showSourceIcon ? <AgentSourceIcon source={agents[key]?.source} tooltipClassName="z-[150]" /> : undefined,
   }));
 
   const handleValueChange = (newAgentId: string) => {
