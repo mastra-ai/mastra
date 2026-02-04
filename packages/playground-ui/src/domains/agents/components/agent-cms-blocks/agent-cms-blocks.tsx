@@ -1,20 +1,18 @@
-'use client';
-
-import { Plus } from 'lucide-react';
-
 import { ContentBlocks } from '@/ds/components/ContentBlocks';
 import { cn } from '@/lib/utils';
 
 import { AgentCMSBlock } from './agent-cms-block';
+import type { JsonSchema } from '@/lib/rule-engine';
 
 export interface AgentCMSBlocksProps {
   items: Array<string>;
   onChange: (items: Array<string>) => void;
   className?: string;
   placeholder?: string;
+  schema?: JsonSchema;
 }
 
-export const AgentCMSBlocks = ({ items, onChange, className, placeholder }: AgentCMSBlocksProps) => {
+export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema }: AgentCMSBlocksProps) => {
   const handleDelete = (index: number) => {
     const newItems = items.filter((_, idx) => idx !== index);
     onChange(newItems);
@@ -28,7 +26,7 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder }: Agen
     <div className={cn('flex flex-col gap-4 w-full', className)}>
       <ContentBlocks items={items} onChange={onChange} className="flex flex-col gap-2 w-full">
         {items.map((_, index) => (
-          <AgentCMSBlock key={index} index={index} onDelete={handleDelete} placeholder={placeholder} />
+          <AgentCMSBlock key={index} index={index} onDelete={handleDelete} placeholder={placeholder} schema={schema} />
         ))}
       </ContentBlocks>
 
