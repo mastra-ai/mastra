@@ -70,6 +70,15 @@ export class MountManager {
     this._onMount = hook;
   }
 
+  /**
+   * Update the logger instance.
+   * Called when the sandbox receives a logger from Mastra.
+   * @internal
+   */
+  __setLogger(logger: IMastraLogger): void {
+    this.logger = logger;
+  }
+
   // ---------------------------------------------------------------------------
   // Entry Access
   // ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@
  */
 
 import { MastraBase } from '../../base';
+import type { IMastraLogger } from '../../logger';
 import { RegisteredLogger } from '../../logger/constants';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { MountResult } from '../filesystem/mount';
@@ -77,5 +78,15 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
         logger: this.logger,
       });
     }
+  }
+
+  /**
+   * Override to propagate logger to MountManager.
+   * @internal
+   */
+  override __setLogger(logger: IMastraLogger): void {
+    super.__setLogger(logger);
+    // Propagate to MountManager if it exists
+    this.mounts?.__setLogger(logger);
   }
 }
