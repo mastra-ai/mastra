@@ -133,6 +133,8 @@ export interface SkillMetadata {
   license?: string;
   compatibility?: unknown;
   metadata?: Record<string, unknown>;
+  /** Path to the skill directory */
+  path: string;
 }
 
 export interface Skill extends SkillMetadata {
@@ -187,4 +189,82 @@ export interface SearchSkillsParams {
   minScore?: number;
   skillNames?: string[];
   includeReferences?: boolean;
+}
+
+// =============================================================================
+// skills.sh Types
+// =============================================================================
+
+export interface SkillsShSkill {
+  id: string;
+  name: string;
+  installs: number;
+  topSource: string;
+}
+
+export interface SkillsShSearchResponse {
+  query: string;
+  searchType: string;
+  skills: SkillsShSkill[];
+  count: number;
+}
+
+export interface SkillsShListResponse {
+  skills: SkillsShSkill[];
+  count: number;
+  limit: number;
+  offset: number;
+}
+
+// =============================================================================
+// skills.sh Install Types
+// =============================================================================
+
+export interface SkillsShInstallParams {
+  workspaceId: string;
+  owner: string;
+  repo: string;
+  skillName: string;
+}
+
+export interface SkillsShInstallResponse {
+  success: boolean;
+  skillName: string;
+  installedPath: string;
+  filesWritten: number;
+}
+
+// =============================================================================
+// skills.sh Remove Types
+// =============================================================================
+
+export interface SkillsShRemoveParams {
+  workspaceId: string;
+  skillName: string;
+}
+
+export interface SkillsShRemoveResponse {
+  success: boolean;
+  skillName: string;
+  removedPath: string;
+}
+
+// =============================================================================
+// skills.sh Update Types
+// =============================================================================
+
+export interface SkillsShUpdateParams {
+  workspaceId: string;
+  skillName?: string;
+}
+
+export interface SkillUpdateResult {
+  skillName: string;
+  success: boolean;
+  filesWritten?: number;
+  error?: string;
+}
+
+export interface SkillsShUpdateResponse {
+  updated: SkillUpdateResult[];
 }

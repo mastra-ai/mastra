@@ -1,5 +1,11 @@
 import path from 'path'
 import fs from 'fs/promises'
+import {
+  type ParsedPackage,
+  normalizeContent,
+  extractFrontMatterBounds,
+  parseFrontMatterYAML,
+} from '../src/utils/frontmatter'
 
 interface ValidationConfig {
   sourceDir: string
@@ -13,23 +19,6 @@ const DEFAULT_CONFIG: ValidationConfig = {
   skipPaths: ['guides/', 'docs/community/', 'docs/getting-started/', 'docs/mastra-cloud/', 'docs/index.mdx', 'models/'],
   packagePattern: /^@mastra\/[\w-]+$/,
   concurrency: 50,
-}
-
-interface FrontMatterBounds {
-  startLine: number
-  endLine: number
-  contentStartLine: number
-  rawContent: string
-}
-
-interface ParsedPackage {
-  value: string
-  lineNumber: number
-}
-
-interface ParsedFrontMatter {
-  packages?: ParsedPackage[]
-  packagesFieldLine?: number
 }
 
 interface ValidationError {
@@ -49,103 +38,6 @@ interface ValidationSummary {
   passed: number
   failed: number
   results: FileValidationResult[]
-}
-
-function normalizeContent(content: string): string {
-  let normalized = content
-
-  // Remove UTF-8 BOM if present
-  if (normalized.charCodeAt(0) === 0xfeff) {
-    normalized = normalized.slice(1)
-  }
-
-  // Normalize CRLF to LF
-  normalized = normalized.replace(/\r\n/g, '\n')
-
-  // Normalize standalone CR to LF
-  normalized = normalized.replace(/\r/g, '\n')
-
-  return normalized
-}
-
-function extractFrontMatterBounds(content: string): FrontMatterBounds | null {
-  const lines = content.split('\n')
-
-  // First line must be exactly "---"
-  if (lines[0]?.trim() !== '---') {
-    return null
-  }
-
-  // Find closing "---"
-  let endLineIndex = -1
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === '---') {
-      endLineIndex = i
-      break
-    }
-  }
-
-  if (endLineIndex === -1) {
-    return null
-  }
-
-  const contentLines = lines.slice(1, endLineIndex)
-
-  return {
-    startLine: 1,
-    endLine: endLineIndex + 1,
-    contentStartLine: 2,
-    rawContent: contentLines.join('\n'),
-  }
-}
-
-function parseFrontMatterYAML(content: string, startLine: number): ParsedFrontMatter {
-  const lines = content.split('\n')
-  const result: ParsedFrontMatter = {}
-
-  let inPackagesArray = false
-  let packages: ParsedPackage[] = []
-
-  for (let i = 0; i < lines.length; i++) {
-    const lineNumber = startLine + i
-    const line = lines[i]
-
-    // Check for array item (indented with "- ")
-    const arrayItemMatch = line.match(/^(\s+)-\s+(.*)$/)
-    if (arrayItemMatch && inPackagesArray) {
-      const rawValue = arrayItemMatch[2]
-      // Remove surrounding quotes if present
-      const value = rawValue.trim().replace(/^["']|["']$/g, '')
-      packages.push({ value, lineNumber })
-      continue
-    }
-
-    // If we hit a non-array line while in packages array, we're done with packages
-    if (inPackagesArray && line.trim() !== '' && !arrayItemMatch) {
-      result.packages = packages
-      inPackagesArray = false
-    }
-
-    // Check for "packages:" key
-    const keyMatch = line.match(/^packages:\s*(.*)$/)
-    if (keyMatch) {
-      result.packagesFieldLine = lineNumber
-      const value = keyMatch[1].trim()
-
-      // Only handle multi-line array format (value should be empty)
-      if (value === '') {
-        inPackagesArray = true
-        packages = []
-      }
-    }
-  }
-
-  // Handle trailing packages array
-  if (inPackagesArray) {
-    result.packages = packages
-  }
-
-  return result
 }
 
 function shouldSkipPath(relativePath: string, skipPaths: string[]): boolean {

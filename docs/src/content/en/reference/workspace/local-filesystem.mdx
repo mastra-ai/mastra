@@ -109,6 +109,10 @@ await filesystem.init();
 
 Called by `workspace.init()`.
 
+### Lazy initialization
+
+LocalFilesystem initializes on first operation if not already initialized, creating the base directory automatically. Calling `init()` explicitly is optional but can be useful to pre-create directories before the first operation.
+
 ### `destroy()`
 
 Clean up filesystem resources.

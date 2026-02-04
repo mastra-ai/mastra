@@ -10,6 +10,7 @@ import {
   chefAgentResponses,
   dynamicAgent,
   evalAgent,
+  dynamicToolsAgent,
   schemaValidatedAgent,
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
@@ -39,6 +40,7 @@ import {
   sensitiveTopicBlocker,
   stepLoggerProcessor,
 } from './processors/index';
+import { MastraEditor } from '@mastra/editor';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -58,6 +60,7 @@ const config = {
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
+    dynamicToolsAgent, // Dynamic tool search example
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
@@ -98,6 +101,7 @@ const config = {
   bundler: {
     sourcemap: true,
   },
+  editor: new MastraEditor(),
   server: {
     build: {
       swaggerUI: true,

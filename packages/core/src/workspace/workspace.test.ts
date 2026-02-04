@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import {
   WorkspaceError,
@@ -264,6 +264,191 @@ Line 3 conclusion`;
       const results = await workspace.search('test');
       expect(results[0]?.metadata?.category).toBe('test');
       expect(results[0]?.metadata?.priority).toBe(1);
+    });
+
+    it('should generate SQL-compatible index names for vector stores', async () => {
+      // SQL identifier pattern used by PgVector, LibSQL, etc.
+      const SQL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+      // Track what index name is passed to the vector store
+      let capturedIndexName: string | undefined;
+
+      // Mock vector store that validates index names like PgVector does
+      const mockVectorStore = {
+        id: 'mock-vector',
+        upsert: vi.fn(async ({ indexName }: { indexName: string }) => {
+          capturedIndexName = indexName;
+          // Validate like PgVector does
+          if (!indexName.match(SQL_IDENTIFIER_PATTERN)) {
+            throw new Error(
+              `Invalid index name: ${indexName}. Must start with a letter or underscore, contain only letters, numbers, or underscores.`,
+            );
+          }
+          return [];
+        }),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+
+      const mockEmbedder = vi.fn(async () => [0.1, 0.2, 0.3]);
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        id: 'test_workspace', // Underscore-only ID
+        filesystem,
+        vectorStore: mockVectorStore as any,
+        embedder: mockEmbedder,
+      });
+
+      // This should work - the generated index name should be SQL-compatible
+      await workspace.index('/doc.txt', 'Test content for vector search');
+
+      // Verify the index name passed to vector store is SQL-compatible
+      expect(capturedIndexName).toBeDefined();
+      expect(capturedIndexName).toMatch(SQL_IDENTIFIER_PATTERN);
+      // Should not contain hyphens
+      expect(capturedIndexName).not.toContain('-');
+    });
+
+    it('should sanitize hyphenated workspace IDs in index names', async () => {
+      const SQL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+      let capturedIndexName: string | undefined;
+
+      const mockVectorStore = {
+        id: 'mock-vector',
+        upsert: vi.fn(async ({ indexName }: { indexName: string }) => {
+          capturedIndexName = indexName;
+          if (!indexName.match(SQL_IDENTIFIER_PATTERN)) {
+            throw new Error(`Invalid index name: ${indexName}`);
+          }
+          return [];
+        }),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+
+      const mockEmbedder = vi.fn(async () => [0.1, 0.2, 0.3]);
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        id: 'my-workspace-id', // Hyphenated ID (like auto-generated IDs)
+        filesystem,
+        vectorStore: mockVectorStore as any,
+        embedder: mockEmbedder,
+      });
+
+      await workspace.index('/doc.txt', 'Test content');
+
+      // Hyphens should be replaced with underscores
+      expect(capturedIndexName).toBe('my_workspace_id_search');
+      expect(capturedIndexName).toMatch(SQL_IDENTIFIER_PATTERN);
+    });
+
+    it('should allow custom searchIndexName configuration', async () => {
+      let capturedIndexName: string | undefined;
+
+      const mockVectorStore = {
+        id: 'mock-vector',
+        upsert: vi.fn(async ({ indexName }: { indexName: string }) => {
+          capturedIndexName = indexName;
+          return [];
+        }),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+
+      const mockEmbedder = vi.fn(async () => [0.1, 0.2, 0.3]);
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        id: 'my-workspace',
+        filesystem,
+        vectorStore: mockVectorStore as any,
+        embedder: mockEmbedder,
+        searchIndexName: 'custom_index_name', // Custom index name
+      });
+
+      await workspace.index('/doc.txt', 'Test content');
+
+      // Should use the custom index name
+      expect(capturedIndexName).toBe('custom_index_name');
+    });
+
+    it('should throw error for invalid searchIndexName starting with digit', () => {
+      const mockVectorStore = {
+        id: 'mock-vector',
+        upsert: vi.fn(async () => []),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+
+      const mockEmbedder = vi.fn(async () => [0.1, 0.2, 0.3]);
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+
+      expect(
+        () =>
+          new Workspace({
+            filesystem,
+            vectorStore: mockVectorStore as any,
+            embedder: mockEmbedder,
+            searchIndexName: '123_invalid', // Invalid: starts with digit
+          }),
+      ).toThrow(/Invalid searchIndexName/);
+    });
+
+    it('should throw error for searchIndexName exceeding 63 characters', () => {
+      const mockVectorStore = {
+        id: 'mock-vector',
+        upsert: vi.fn(async () => []),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+
+      const mockEmbedder = vi.fn(async () => [0.1, 0.2, 0.3]);
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+
+      const longName = 'a'.repeat(64); // 64 characters, exceeds limit
+
+      expect(
+        () =>
+          new Workspace({
+            filesystem,
+            vectorStore: mockVectorStore as any,
+            embedder: mockEmbedder,
+            searchIndexName: longName,
+          }),
+      ).toThrow(/exceeds 63 characters/);
+    });
+
+    it('should sanitize special characters in workspace ID for index name', async () => {
+      const SQL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+      let capturedIndexName: string | undefined;
+
+      const mockVectorStore = {
+        id: 'mock-vector',
+        upsert: vi.fn(async ({ indexName }: { indexName: string }) => {
+          capturedIndexName = indexName;
+          return [];
+        }),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+
+      const mockEmbedder = vi.fn(async () => [0.1, 0.2, 0.3]);
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        id: 'my.workspace@123', // Special characters that need sanitizing
+        filesystem,
+        vectorStore: mockVectorStore as any,
+        embedder: mockEmbedder,
+      });
+
+      await workspace.index('/doc.txt', 'Test content');
+
+      // All special chars should be replaced with underscores
+      expect(capturedIndexName).toBe('my_workspace_123_search');
+      expect(capturedIndexName).toMatch(SQL_IDENTIFIER_PATTERN);
     });
   });
 
