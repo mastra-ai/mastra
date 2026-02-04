@@ -443,10 +443,10 @@ export class MastraEditor implements IMastraEditor {
         // Log a warning about the semantic recall requirement
         this.logger?.warn(
           'Semantic recall is enabled but no vector store or embedder are configured. ' +
-          'Creating memory without semantic recall. ' +
-          'To use semantic recall, configure a vector store and embedder in your Mastra instance.'
+            'Creating memory without semantic recall. ' +
+            'To use semantic recall, configure a vector store and embedder in your Mastra instance.',
         );
-        
+
         // Create memory config without semantic recall
         const adjustedOptions = { ...memoryConfig.options, semanticRecall: false };
         const sharedConfig: SharedMemoryConfig = {
@@ -456,7 +456,6 @@ export class MastraEditor implements IMastraEditor {
           embedder: memoryConfig.embedder,
           embedderOptions: memoryConfig.embedderOptions,
         };
-        
 
         const memoryInstance = new Memory(sharedConfig);
         return memoryInstance;
@@ -464,7 +463,7 @@ export class MastraEditor implements IMastraEditor {
 
       // Construct the full memory config
       const storage = this.mastra.getStorage();
-      
+
       const sharedConfig: SharedMemoryConfig = {
         storage: storage,
         vector,

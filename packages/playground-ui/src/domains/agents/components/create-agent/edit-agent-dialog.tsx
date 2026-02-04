@@ -8,6 +8,7 @@ import { AgentForm } from './agent-form';
 import type { AgentFormValues } from './form-validation';
 import { useStoredAgent, useStoredAgentMutations } from '../../hooks/use-stored-agents';
 import { Spinner } from '@/ds/components/Spinner';
+import type { SerializedMemoryConfig } from '@mastra/client-js';
 
 export interface EditAgentDialogProps {
   agentId: string;
@@ -48,12 +49,12 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
         name: values.name,
         description: values.description,
         instructions: values.instructions,
-        model: values.model as Record<string, unknown>,
+        model: values.model,
         tools: codeDefinedTools,
         integrationTools: integrationToolIds,
         workflows: values.workflows,
         agents: values.agents,
-        memory: values.memory ? ({ key: values.memory } as Record<string, unknown>) : undefined,
+        memory: values.memory,
         scorers: values.scorers,
       });
       toast.success('Agent updated successfully');
@@ -103,12 +104,7 @@ export function EditAgentDialog({ agentId, open, onOpenChange, onSuccess, onDele
       tools: allTools,
       workflows: agent.workflows || [],
       agents: agent.agents || [],
-      memory:
-        agent.memory && typeof agent.memory === 'object' && 'key' in agent.memory
-          ? String(agent.memory.key)
-          : typeof agent.memory === 'string'
-            ? agent.memory
-            : '',
+      memory: agent.memory,
       scorers: agent.scorers || {},
     };
   }, [agent]);

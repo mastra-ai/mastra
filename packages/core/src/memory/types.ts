@@ -787,7 +787,7 @@ export type SharedMemoryConfig = {
    * embedder: openai.embedding("text-embedding-3-small")
    * ```
    */
-  embedder?: EmbeddingModelId | MastraEmbeddingModel<string>;
+  embedder?: EmbeddingModelId | MastraEmbeddingModel<string> | string;
 
   /**
    * Options to pass to the embedder when generating embeddings.

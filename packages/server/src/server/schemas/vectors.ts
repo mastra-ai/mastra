@@ -52,3 +52,24 @@ export const describeIndexResponseSchema = z.object({
 });
 
 export const deleteIndexResponseSchema = successResponseSchema;
+
+export const listVectorsResponseSchema = z.object({
+  vectors: z.array(z.object({
+    name: z.string(),
+    id: z.string(),
+    type: z.string(),
+  }))
+});
+
+export const listEmbeddersResponseSchema = z.object({
+  embedders: z.array(
+    z.object({
+      id: z.string(),
+      provider: z.string(),
+      name: z.string(),
+      description: z.string(),
+      dimensions: z.number(),
+      maxInputTokens: z.number(),
+    }),
+  ),
+});

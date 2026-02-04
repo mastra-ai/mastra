@@ -15,13 +15,15 @@ import { cn } from '@/lib/utils';
 import { useAgents } from '../../hooks/use-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import { useMemoryConfig } from '@/domains/memory/hooks';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { useVectors } from '@/domains/vectors/hooks/use-vectors';
+import { useEmbedders } from '@/domains/embedders/hooks/use-embedders';
 
 import { ModelPicker } from './model-picker';
 import { MultiSelectPicker } from './multi-select-picker';
 import { InstructionsEnhancer } from './instructions-enhancer';
 import { ScorersPicker } from './scorers-picker';
+import { MemoryConfigurator } from './memory-configurator';
 import type { AgentFormValues } from './form-validation';
 
 // Simple validation resolver without zod to avoid version conflicts
@@ -50,9 +52,16 @@ const agentFormResolver: Resolver<AgentFormValues> = async values => {
     errors['model.name'] = { type: 'required', message: 'Model is required' };
   }
 
+  if (Object.keys(errors).length > 0) {
+    return {
+      values: {},
+      errors,
+    };
+  }
+
   return {
-    values: Object.keys(errors).length === 0 ? values : {},
-    errors: Object.keys(errors).length > 0 ? errors : {},
+    values,
+    errors: {},
   };
 };
 
@@ -89,8 +98,9 @@ export function AgentForm({
   const { data: tools, isLoading: toolsLoading } = useTools();
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
   const { data: agents, isLoading: agentsLoading } = useAgents();
-  const { data: memoryConfigsData, isLoading: memoryConfigsLoading } = useMemoryConfig();
   const { data: scorers, isLoading: scorersLoading } = useScorers();
+  const { data: vectorsData, isLoading: vectorsLoading } = useVectors();
+  const { data: embeddersData, isLoading: embeddersLoading } = useEmbedders();
 
   // Form setup
   const {
@@ -108,7 +118,7 @@ export function AgentForm({
       tools: initialValues?.tools ?? [],
       workflows: initialValues?.workflows ?? [],
       agents: initialValues?.agents ?? [],
-      memory: initialValues?.memory ?? '',
+      memory: initialValues?.memory ?? undefined,
       scorers: initialValues?.scorers ?? {},
     },
   });
@@ -154,13 +164,26 @@ export function AgentForm({
     }));
   }, [availableAgents]);
 
-  // Transform memory configs data
-  // Note: MemoryConfig doesn't have an id, so we use memory IDs from a different source
-  // For now, return empty array as memory selection needs to be handled differently
-  const memoryOptions = React.useMemo(() => {
-    // TODO: Implement proper memory config listing
-    return [];
-  }, [memoryConfigsData]);
+  // Transform vectors data for the memory configurator
+  const vectorOptions = React.useMemo(() => {
+    if (!vectorsData?.vectors) return [];
+    return vectorsData.vectors.map(vector => ({
+      id: vector.id,
+      name: vector.name || vector.id,
+    }));
+  }, [vectorsData]);
+
+  const embedderOptions = React.useMemo(() => {
+    if (!embeddersData?.embedders || !Array.isArray(embeddersData.embedders)) {
+      return [];
+    }
+    return embeddersData.embedders.map((embedder) => ({
+      id: embedder.id,
+      name: embedder.name || embedder.id,
+    }));
+  }, [embeddersData]);
+
+
 
   // Transform scorers data
   const scorerOptions = React.useMemo(() => {
@@ -173,10 +196,17 @@ export function AgentForm({
   }, [scorers]);
 
   const handleFormSubmit = async (values: AgentFormValues) => {
-    await onSubmit(values);
+    if (!values || typeof values !== 'object') {
+      return;
+    }
+    try {
+      await onSubmit(values);
+    } catch (error) {
+      throw error;
+    }
   };
 
-  const isLoading = toolsLoading || workflowsLoading || agentsLoading || memoryConfigsLoading || scorersLoading;
+  const isLoading = toolsLoading || workflowsLoading || agentsLoading || scorersLoading || vectorsLoading || embeddersLoading;
 
   return (
     <form ref={formRef} onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col gap-4 px-6">
@@ -339,25 +369,16 @@ export function AgentForm({
               )}
             />
 
-            {/* Memory - Single Select */}
+            {/* Memory Configuration */}
             <Controller
-              name="memory"
               control={control}
+              name="memory"
               render={({ field }) => (
-                <MultiSelectPicker<{ id: string; name: string; description: string }>
-                  label="Memory"
-                  options={memoryOptions}
-                  selected={field.value ? [field.value] : []}
-                  onChange={selected => field.onChange(selected[0] || '')}
-                  getOptionId={option => option.id}
-                  getOptionLabel={option => option.name}
-                  getOptionDescription={option => option.description}
-                  placeholder="Select memory configuration..."
-                  searchPlaceholder="Search memory configs..."
-                  emptyMessage="No memory configurations registered"
-                  disabled={memoryConfigsLoading}
-                  singleSelect={true}
-                  error={errors.memory?.message}
+                <MemoryConfigurator
+                  value={field.value}
+                  onChange={field.onChange}
+                  availableVectors={vectorOptions || []}
+                  availableEmbedders={embedderOptions || []}
                 />
               )}
             />

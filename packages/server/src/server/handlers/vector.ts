@@ -1,3 +1,4 @@
+import { EMBEDDING_MODELS } from '@mastra/core/llm';
 import type { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 import { HTTPException } from '../http-exception';
 import {
@@ -12,6 +13,8 @@ import {
   listIndexesResponseSchema,
   describeIndexResponseSchema,
   deleteIndexResponseSchema,
+  listVectorsResponseSchema,
+  listEmbeddersResponseSchema,
 } from '../schemas/vectors';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -183,6 +186,28 @@ export async function deleteIndex({
   }
 }
 
+// List available vector stores
+export async function listVectorStores({ mastra }: Pick<VectorContext, 'mastra'>) {
+  try {
+    const vectors = mastra.listVectors();
+    if (!vectors) {
+      return { vectors: [] };
+    }
+
+    // Convert to array and extract metadata
+    const vectorList = Object.entries(vectors).map(([name, vector]) => ({
+      name,
+      id: vector.id,
+      type: vector.constructor.name,
+      // Add any other metadata that might be useful
+    }));
+
+    return { vectors: vectorList };
+  } catch (error) {
+    return handleError(error, 'Error listing vector stores');
+  }
+}
+
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
@@ -351,6 +376,63 @@ export const DELETE_INDEX_ROUTE = createRoute({
       return { success: true };
     } catch (error) {
       return handleError(error, 'Error deleting index');
+    }
+  },
+});
+
+export const LIST_VECTORS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/vectors',
+  responseType: 'json',
+  responseSchema: listVectorsResponseSchema,
+  summary: 'List vector stores',
+  description: 'Returns a list of all configured vector stores',
+  tags: ['Vectors'],
+  requiresAuth: true,
+  handler: async ({ mastra }) => {
+    try {
+      const vectors = mastra.listVectors();
+      if (!vectors) {
+        return { vectors: [] };
+      }
+
+      // Convert to array and extract metadata
+      const vectorList = Object.entries(vectors).map(([name, vector]) => ({
+        name,
+        id: vector.id,
+        type: vector.constructor.name,
+      }));
+
+      return { vectors: vectorList };
+    } catch (error) {
+      return handleError(error, 'Error listing vector stores');
+    }
+  },
+});
+
+export const LIST_EMBEDDERS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/embedders',
+  responseType: 'json',
+  responseSchema: listEmbeddersResponseSchema,
+  summary: 'List available embedder models',
+  description: 'Returns a list of all available embedding models',
+  tags: ['Vectors'],
+  requiresAuth: true,
+  handler: async () => {
+    try {
+      const embeddersList = EMBEDDING_MODELS.map((model) => ({
+        id: `${model.provider}/${model.id}`,
+        provider: model.provider,
+        name: model.id,
+        description: model.description || '',
+        dimensions: model.dimensions,
+        maxInputTokens: model.maxInputTokens,
+      }));
+      
+      return { embedders: embeddersList };
+    } catch (error) {
+      return handleError(error, 'Error listing embedders');
     }
   },
 });

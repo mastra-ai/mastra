@@ -1337,6 +1337,35 @@ export interface GetMemoryConfigResponseExtended {
 }
 
 // ============================================================================
+// Vector & Embedder Types
+// ============================================================================
+
+/**
+ * Response for listing available vector stores
+ */
+export interface ListVectorsResponse {
+  vectors: Array<{
+    name: string;
+    id: string;
+    type: string;
+  }>;
+}
+
+/**
+ * Response for listing available embedding models
+ */
+export interface ListEmbeddersResponse {
+  embedders: Array<{
+    id: string;
+    provider: string;
+    name: string;
+    description: string;
+    dimensions: number;
+    maxInputTokens: number;
+  }>;
+}
+
+// ============================================================================
 // Error Types
 // ============================================================================
 

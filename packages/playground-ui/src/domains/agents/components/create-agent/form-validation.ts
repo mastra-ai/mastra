@@ -2,11 +2,15 @@ import { z } from 'zod';
 import type { Provider } from '@mastra/client-js';
 import { cleanProviderId } from '../agent-metadata/utils';
 
-const scoringSamplingConfigSchema = z.object({
-  type: z.enum(['ratio', 'count']),
-  rate: z.number().optional(),
-  count: z.number().optional(),
-});
+const scoringSamplingConfigSchema = z.union([
+  z.object({
+    type: z.literal('none'),
+  }),
+  z.object({
+    type: z.literal('ratio'),
+    rate: z.number(),
+  }),
+]);
 
 const scorerConfigSchema = z.object({
   sampling: scoringSamplingConfigSchema.optional(),
@@ -23,7 +27,35 @@ export const agentFormSchema = z.object({
   tools: z.array(z.string()).optional(),
   workflows: z.array(z.string()).optional(),
   agents: z.array(z.string()).optional(),
-  memory: z.string().optional(),
+  memory: z.object({
+    vector: z.union([z.string(), z.literal(false)]).optional(),
+    options: z.object({
+      readOnly: z.boolean().optional(),
+      lastMessages: z.union([z.number(), z.literal(false)]).optional(),
+      semanticRecall: z.union([
+        z.boolean(),
+        z.object({
+          topK: z.number(),
+          messageRange: z.union([
+            z.number(),
+            z.object({ before: z.number(), after: z.number() })
+          ]),
+          scope: z.enum(['thread', 'resource']).optional(),
+          threshold: z.number().optional(),
+          indexName: z.string().optional(),
+        })
+      ]).optional(),
+      generateTitle: z.union([
+        z.boolean(),
+        z.object({
+          model: z.string(),
+          instructions: z.string().optional(),
+        })
+      ]).optional(),
+    }).optional(),
+    embedder: z.string().optional(),
+    embedderOptions: z.record(z.string(), z.unknown()).optional(),
+  }).optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
 });
 
@@ -40,7 +72,6 @@ export function validateReferences(
   availableTools: string[],
   availableWorkflows: string[],
   availableAgents: string[],
-  availableMemory: string[],
 ): ValidationResult {
   const errors: Record<string, string> = {};
   const warnings: Record<string, string> = {};
@@ -61,11 +92,6 @@ export function validateReferences(
   const invalidAgents = values.agents?.filter(a => !availableAgents.includes(a)) || [];
   if (invalidAgents.length > 0) {
     errors.agents = `Unknown agents: ${invalidAgents.join(', ')}`;
-  }
-
-  // Check memory exists
-  if (values.memory && !availableMemory.includes(values.memory)) {
-    errors.memory = `Unknown memory config: ${values.memory}`;
   }
 
   return {
