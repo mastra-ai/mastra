@@ -178,3 +178,15 @@ console.log(result.id, result.name, result.email);
 ```
 
 Alternatively, update the `outputSchema` to match your actual output, or remove `outputSchema` entirely if you don't need validation.
+
+### Direct tool execution
+
+For people doing direct tool execution, the `tool.execute` property is optional to support client-side tool definitions. Use optional chaining or non-null assertion when calling execute:
+
+```typescript
+// Optional chaining (recommended)
+const result = await weatherTool.execute?.({ location: 'New York' }, {});
+
+// Non-null assertion (when you know execute exists)
+const result = await weatherTool.execute!({ location: 'New York' }, {});
+```
