@@ -309,6 +309,70 @@ Line 3 conclusion`;
       // Should not contain hyphens
       expect(capturedIndexName).not.toContain('-');
     });
+
+    it('should sanitize hyphenated workspace IDs in index names', async () => {
+      const SQL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+      let capturedIndexName: string | undefined;
+
+      const mockVectorStore = {
+        id: 'mock-vector',
+        upsert: vi.fn(async ({ indexName }: { indexName: string }) => {
+          capturedIndexName = indexName;
+          if (!indexName.match(SQL_IDENTIFIER_PATTERN)) {
+            throw new Error(`Invalid index name: ${indexName}`);
+          }
+          return [];
+        }),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+
+      const mockEmbedder = vi.fn(async () => [0.1, 0.2, 0.3]);
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        id: 'my-workspace-id', // Hyphenated ID (like auto-generated IDs)
+        filesystem,
+        vectorStore: mockVectorStore as any,
+        embedder: mockEmbedder,
+      });
+
+      await workspace.index('/doc.txt', 'Test content');
+
+      // Hyphens should be replaced with underscores
+      expect(capturedIndexName).toBe('my_workspace_id_search');
+      expect(capturedIndexName).toMatch(SQL_IDENTIFIER_PATTERN);
+    });
+
+    it('should allow custom searchIndexName configuration', async () => {
+      let capturedIndexName: string | undefined;
+
+      const mockVectorStore = {
+        id: 'mock-vector',
+        upsert: vi.fn(async ({ indexName }: { indexName: string }) => {
+          capturedIndexName = indexName;
+          return [];
+        }),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+
+      const mockEmbedder = vi.fn(async () => [0.1, 0.2, 0.3]);
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        id: 'my-workspace',
+        filesystem,
+        vectorStore: mockVectorStore as any,
+        embedder: mockEmbedder,
+        searchIndexName: 'custom_index_name', // Custom index name
+      });
+
+      await workspace.index('/doc.txt', 'Test content');
+
+      // Should use the custom index name
+      expect(capturedIndexName).toBe('custom_index_name');
+    });
   });
 
   // ===========================================================================

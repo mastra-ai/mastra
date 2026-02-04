@@ -97,6 +97,19 @@ export interface WorkspaceConfig {
   bm25?: boolean | BM25Config;
 
   /**
+   * Custom index name for the vector store.
+   * If not provided, defaults to a sanitized version of `${id}_search`.
+   *
+   * Must be a valid SQL identifier for SQL-based stores (PgVector, LibSQL):
+   * - Start with a letter or underscore
+   * - Contain only letters, numbers, or underscores
+   * - Maximum 63 characters
+   *
+   * @example 'my_workspace_vectors'
+   */
+  searchIndexName?: string;
+
+  /**
    * Paths to auto-index on init().
    * Files in these directories will be indexed for search.
    * @example ['/docs', '/support']
@@ -291,7 +304,8 @@ export class Workspace {
             ? {
                 vectorStore: config.vectorStore,
                 embedder: config.embedder,
-                indexName: `${this.id}-search`,
+                // Use custom name or generate SQL-compatible default (no hyphens)
+                indexName: config.searchIndexName ?? `${this.id.replace(/-/g, '_')}_search`,
               }
             : undefined,
       });
