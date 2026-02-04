@@ -7,7 +7,16 @@ import { gitInit } from '../utils';
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
 import { installMastraSkills } from './skills-install';
-import { createComponentsDir, createMastraDir, getAPIKey, writeAPIKey, writeCodeSample, writeIndexFile } from './utils';
+import {
+  createComponentsDir,
+  createMastraDir,
+  getAPIKey,
+  writeAgentsMarkdown,
+  writeAPIKey,
+  writeClaudeMarkdown,
+  writeCodeSample,
+  writeIndexFile,
+} from './utils';
 import type { Component, LLMProvider } from './utils';
 
 const s = p.spinner();
@@ -135,6 +144,27 @@ export const init = async ({
         directory: process.cwd(),
         versionTag,
       });
+    }
+
+    // Write AGENTS.md and CLAUDE.md if skills or MCP were configured
+    if (skills || mcpServer) {
+      try {
+        // Always write AGENTS.md
+        await writeAgentsMarkdown({ skills, mcpServer });
+
+        // Write CLAUDE.md only if claude-code is in skills list
+        const shouldWriteClaudeMd = skills?.includes('claude-code');
+        if (shouldWriteClaudeMd) {
+          await writeClaudeMarkdown({ skills, mcpServer });
+        }
+      } catch (error) {
+        // Don't fail initialization if markdown files fail to write
+        console.warn(
+          color.yellow(
+            `\nWarning: Failed to create agent guide files: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          ),
+        );
+      }
     }
 
     if (initGit) {

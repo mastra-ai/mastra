@@ -949,3 +949,170 @@ export const checkForPkgJson = async () => {
     process.exit(1);
   }
 };
+
+/**
+ * Generate content for AGENTS.md file
+ */
+export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[]; mcpServer?: Editor }): string {
+  const hasSkills = skills && skills.length > 0;
+  const hasMcp = !!mcpServer;
+
+  let content = `# AI Agents Guide
+
+This guide helps AI agents work efficiently with this Mastra project.
+
+## Quick Start
+
+\`\`\`bash
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Build the project
+npm run build
+\`\`\`
+
+## Project Structure
+
+- \`src/mastra/\` - Main Mastra configuration and components
+- \`src/mastra/agents/\` - AI agent definitions
+- \`src/mastra/tools/\` - Tool implementations
+- \`src/mastra/workflows/\` - Workflow definitions
+
+`;
+
+  // Add skills section if skills were installed
+  if (hasSkills) {
+    content += `## Mastra Skills
+
+Skills are modular capabilities that extend agent functionalities. They provide pre-built tools, integrations, and workflows that agents can leverage to accomplish tasks more effectively.
+
+This project has skills installed for the following agents:
+
+${skills
+  .map(
+    agent =>
+      `- ${agent
+        .split('-')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')}`,
+  )
+  .join('\n')}
+
+### Managing Skills
+
+\`\`\`bash
+# List all installed skills
+npx skills list
+
+# Find skills by keyword or capability
+npx skills find <keyword>
+
+# Add a specific skill from the Mastra skills repository
+npx skills add mastra-ai/skills --skill <skill-name>
+
+# Add all available skills
+npx skills add mastra-ai/skills --all
+\`\`\`
+
+### How Skills Work
+
+- Skills are automatically discovered and made available to agents in your project
+- Each skill can provide tools, context, and specialized knowledge
+- Agents can access skills without additional configuration once installed
+- Skills are version-controlled and can be updated independently
+
+**Repository**: [https://github.com/mastra-ai/skills](https://github.com/mastra-ai/skills)
+
+`;
+  }
+
+  // Add MCP section if MCP server was configured
+  if (hasMcp) {
+    const editorName =
+      mcpServer === 'cursor-global' ? 'Cursor (global)' : mcpServer!.charAt(0).toUpperCase() + mcpServer!.slice(1);
+
+    content += `## MCP Docs Server
+
+This project has the Mastra MCP Docs Server configured for ${editorName}.
+
+### Using MCP Docs
+
+The MCP server provides embedded documentation access within your editor:
+
+1. The server was automatically configured during project creation
+2. Restart your editor to load the MCP server
+3. Use the Mastra docs tools in your editor to access:
+   - API references
+   - Code examples
+   - Integration guides
+
+Learn more: [MCP Documentation](https://mastra.ai/docs/mcp)
+
+`;
+  }
+
+  // Add resources section
+  content += `## Resources
+
+- [Mastra Documentation](https://mastra.ai/docs)
+- [API Reference](https://mastra.ai/reference)
+- [GitHub Repository](https://github.com/mastra-ai/mastra)
+- [Discord Community](https://discord.gg/mastra)
+
+## Development Tips
+
+- Use TypeScript for better type safety and autocomplete
+- Test your agents and workflows before deployment
+- Check the \`.env\` file for required environment variables
+`;
+
+  return content;
+}
+
+/**
+ * Generate content for CLAUDE.md file
+ */
+export function generateClaudeMarkdown({ mcpServer }: { mcpServer?: Editor }): string {
+  return `# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+This is a Mastra project - an AI framework for building agents, workflows, and tools. The project structure follows Mastra conventions with agents, tools, and workflows organized in the \`src/mastra/\` directory.
+
+For complete setup and usage instructions, see [AGENTS.md](./AGENTS.md), which includes:
+- Quick start commands
+- Project structure details
+- Mastra skills usage${mcpServer ? '\n- MCP Docs Server configuration' : ''}
+- Development guidelines
+- Core concepts and resources
+`;
+}
+
+/**
+ * Write AGENTS.md file to project root
+ */
+export async function writeAgentsMarkdown(options: { skills?: string[]; mcpServer?: Editor }): Promise<void> {
+  const content = generateAgentsMarkdown(options);
+  const formattedContent = await prettier.format(content, {
+    parser: 'markdown',
+    singleQuote: true,
+  });
+  const filePath = path.join(process.cwd(), 'AGENTS.md');
+  await fs.writeFile(filePath, formattedContent);
+}
+
+/**
+ * Write CLAUDE.md file to project root
+ */
+export async function writeClaudeMarkdown(options: { skills?: string[]; mcpServer?: Editor }): Promise<void> {
+  const content = generateClaudeMarkdown(options);
+  const formattedContent = await prettier.format(content, {
+    parser: 'markdown',
+    singleQuote: true,
+  });
+  const filePath = path.join(process.cwd(), 'CLAUDE.md');
+  await fs.writeFile(filePath, formattedContent);
+}
