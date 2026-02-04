@@ -115,6 +115,78 @@ new LangSmithExporter({
 
 The `projectName` config option takes precedence over the `LANGCHAIN_PROJECT` environment variable, allowing you to programmatically route traces to different projects.
 
+## Dynamic Configuration
+
+You can dynamically override LangSmith settings per-span using `withLangsmithMetadata`. This is useful for routing traces to different projects based on runtime conditions (e.g., customer, environment, or feature).
+
+### Using the Helper
+
+Use `withLangsmithMetadata` with `buildTracingOptions` to set LangSmith-specific options:
+
+```typescript title="src/agents/support-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangsmithMetadata } from "@mastra/langsmith";
+
+export const supportAgent = new Agent({
+  id: "support-agent",
+  name: "support-agent",
+  instructions: "You are a helpful support agent.",
+  model: "openai/gpt-4o",
+  defaultOptions: {
+    tracingOptions: buildTracingOptions(
+      withLangsmithMetadata({ projectName: "customer-support" }),
+    ),
+  },
+});
+```
+
+### Dynamic Project Routing
+
+Use `requestContext` to route traces to different projects based on runtime conditions.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangsmithMetadata } from "@mastra/langsmith";
+
+export const supportAgent = new Agent({
+  id: "support-agent",
+  name: "support-agent",
+  instructions: "You are a helpful support agent.",
+  model: "openai/gpt-4o",
+  defaultOptions: ({ requestContext }) => {
+    const userTier = requestContext?.get("user-tier") as string;
+    const userId = requestContext?.get("user-id") as string;
+
+    return {
+      tracingOptions: buildTracingOptions(
+        withLangsmithMetadata({
+          projectName: userTier === "entreprise"
+            ? "entreprise-traces"
+            : "standard-traces",
+          tags: [userTier],
+          sessionId: userId,
+        }),
+      ),
+    };
+  },
+});
+```
+
+### Available Fields
+
+The `withLangsmithMetadata` helper accepts these fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `projectName` | string | Override the project for this trace |
+| `tags` | string[] | Additional tags (merged with span tags) |
+| `sessionId` | string | Group related traces by session |
+| `sessionName` | string | Display name for the session |
+
+All fields are optional. The helper merges with any existing metadata, so you can call it multiple times or combine with other tracing options.
+
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)

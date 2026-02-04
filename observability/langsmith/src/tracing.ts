@@ -14,6 +14,7 @@ import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
 import { Client, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
+import type { LangSmithMetadataInput } from './helpers';
 import { formatUsageMetrics } from './metrics';
 
 export interface LangSmithExporterConfig extends ClientConfig, TrackingExporterConfig {
@@ -30,7 +31,7 @@ export interface LangSmithExporterConfig extends ClientConfig, TrackingExporterC
 type LangSmithRoot = undefined;
 type LangSmithSpan = RunTree;
 type LangSmithEvent = RunTree;
-type LangSmithMetadata = unknown;
+type LangSmithMetadata = LangSmithMetadataInput;
 type LangSmithTraceData = TraceData<LangSmithRoot, LangSmithSpan, LangSmithEvent, LangSmithMetadata>;
 
 // Default span type for all spans
@@ -104,7 +105,7 @@ export class LangSmithExporter extends TrackingExporter<
 
     const payload = {
       name: span.name,
-      ...this.buildRunTreePayload(span, true),
+      ...this.buildRunTreePayload(span, traceData, true),
     };
 
     const langSmithSpan = span.isRootSpan ? new RunTree(payload) : parent!.createChild(payload);
@@ -166,7 +167,7 @@ export class LangSmithExporter extends TrackingExporter<
       return;
     }
 
-    const updatePayload = this.buildRunTreePayload(span);
+    const updatePayload = this.buildRunTreePayload(span, traceData);
 
     langSmithSpan.metadata = {
       ...langSmithSpan.metadata,
@@ -204,12 +205,49 @@ export class LangSmithExporter extends TrackingExporter<
     await langSmithSpan.patchRun();
   }
 
-  private buildRunTreePayload(span: AnyExportedSpan, isNew = false): Partial<RunTreeConfig> {
+  /**
+   * Find LangSmith vendor metadata by walking up the span hierarchy.
+   * This allows setting metadata on a parent span and having it apply to children.
+   */
+  private findLangsmithMetadata(
+    traceData: LangSmithTraceData,
+    span: AnyExportedSpan,
+  ): LangSmithMetadataInput | undefined {
+    let currentSpanId: string | undefined = span.id;
+
+    while (currentSpanId) {
+      const providerMetadata = traceData.getMetadata({ spanId: currentSpanId });
+
+      if (providerMetadata) {
+        this.logger.debug(`${this.name}: found vendor metadata`, {
+          traceId: span.traceId,
+          spanId: span.id,
+          metadata: providerMetadata,
+        });
+        return providerMetadata;
+      }
+      currentSpanId = traceData.getParentId({ spanId: currentSpanId });
+    }
+
+    return undefined;
+  }
+
+  private buildRunTreePayload(
+    span: AnyExportedSpan,
+    traceData: LangSmithTraceData,
+    isNew = false,
+  ): Partial<RunTreeConfig> {
+    // Extract vendor metadata from span hierarchy
+    const vendorMetadata = this.findLangsmithMetadata(traceData, span);
+
+    // Build metadata, omitting the langsmith vendor key
+    const spanMetadata = span.metadata ? omitKeys(span.metadata, ['langsmith']) : {};
+
     const payload: Partial<RunTreeConfig> & { metadata: KVMap } = {
       client: this.#client,
       metadata: {
         mastra_span_type: span.type,
-        ...span.metadata,
+        ...spanMetadata,
       },
     };
 
@@ -218,14 +256,26 @@ export class LangSmithExporter extends TrackingExporter<
       payload.start_time = span.startTime.getTime();
     }
 
-    // Add project name if configured
-    if (this.config.projectName) {
-      payload.project_name = this.config.projectName;
+    // Add project name - vendor metadata takes precedence over config
+    const projectName = vendorMetadata?.projectName ?? this.config.projectName;
+    if (projectName) {
+      payload.project_name = projectName;
     }
 
-    // Add tags for root spans
-    if (span.isRootSpan && span.tags?.length) {
-      payload.tags = span.tags;
+    // Add session info to metadata if provided via vendor metadata
+    if (vendorMetadata?.sessionId) {
+      payload.metadata.session_id = vendorMetadata.sessionId;
+    }
+    if (vendorMetadata?.sessionName) {
+      payload.metadata.session_name = vendorMetadata.sessionName;
+    }
+
+    // Merge tags from span and vendor metadata for root spans
+    const spanTags = span.isRootSpan && span.tags?.length ? span.tags : [];
+    const vendorTags = vendorMetadata?.tags ?? [];
+    const allTags = [...spanTags, ...vendorTags].filter((tag, index, arr) => arr.indexOf(tag) === index);
+    if (allTags.length > 0) {
+      payload.tags = allTags;
     }
 
     // Core span data

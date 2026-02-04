@@ -1231,6 +1231,231 @@ describe('TestLangSmithExporter', () => {
       expect(mockRunTree.end).toHaveBeenCalledTimes(3);
     });
   });
+
+  describe('Vendor Metadata', () => {
+    it('should use projectName from span.metadata.langsmith when set', async () => {
+      const span = createMockSpan({
+        id: 'span-with-project',
+        name: 'test-span',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          langsmith: {
+            projectName: 'custom-project',
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      expect(MockRunTreeClass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project_name: 'custom-project',
+        }),
+      );
+    });
+
+    it('should prefer vendor metadata projectName over config projectName', async () => {
+      // Create a new exporter with projectName in config
+      const configExporter = new TestLangSmithExporter({
+        ...config,
+        projectName: 'config-project',
+      });
+
+      const span = createMockSpan({
+        id: 'span-override-project',
+        name: 'test-span',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          langsmith: {
+            projectName: 'override-project',
+          },
+        },
+      });
+
+      await configExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      expect(MockRunTreeClass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project_name: 'override-project',
+        }),
+      );
+    });
+
+    it('should add session_id and session_name to metadata when set', async () => {
+      const span = createMockSpan({
+        id: 'span-with-session',
+        name: 'test-span',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          langsmith: {
+            sessionId: 'session-123',
+            sessionName: 'My Session',
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      expect(MockRunTreeClass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            session_id: 'session-123',
+            session_name: 'My Session',
+          }),
+        }),
+      );
+    });
+
+    it('should merge vendor metadata tags with span tags', async () => {
+      const span = createMockSpan({
+        id: 'span-with-tags',
+        name: 'test-span',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        tags: ['span-tag-1', 'span-tag-2'],
+        metadata: {
+          langsmith: {
+            tags: ['vendor-tag-1', 'vendor-tag-2'],
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      expect(MockRunTreeClass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tags: expect.arrayContaining(['span-tag-1', 'span-tag-2', 'vendor-tag-1', 'vendor-tag-2']),
+        }),
+      );
+    });
+
+    it('should deduplicate tags when merging span and vendor tags', async () => {
+      const span = createMockSpan({
+        id: 'span-with-duplicate-tags',
+        name: 'test-span',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        tags: ['common-tag', 'span-only'],
+        metadata: {
+          langsmith: {
+            tags: ['common-tag', 'vendor-only'],
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      const call = MockRunTreeClass.mock.calls[0][0];
+      expect(call.tags).toHaveLength(3);
+      expect(call.tags).toContain('common-tag');
+      expect(call.tags).toContain('span-only');
+      expect(call.tags).toContain('vendor-only');
+    });
+
+    it('should omit langsmith key from final metadata', async () => {
+      const span = createMockSpan({
+        id: 'span-clean-metadata',
+        name: 'test-span',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          customField: 'custom-value',
+          langsmith: {
+            projectName: 'my-project',
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      expect(MockRunTreeClass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            customField: 'custom-value',
+            mastra_span_type: 'agent_run',
+          }),
+        }),
+      );
+
+      // Should NOT contain langsmith key
+      const call = MockRunTreeClass.mock.calls[0][0];
+      expect(call.metadata.langsmith).toBeUndefined();
+    });
+
+    it('should handle all vendor metadata fields together', async () => {
+      const configExporter = new TestLangSmithExporter({
+        ...config,
+        projectName: 'default-project',
+      });
+
+      const span = createMockSpan({
+        id: 'span-all-vendor',
+        name: 'test-span',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        tags: ['span-tag'],
+        metadata: {
+          userField: 'user-value',
+          langsmith: {
+            projectName: 'custom-project',
+            tags: ['vendor-tag'],
+            sessionId: 'session-456',
+            sessionName: 'Full Test Session',
+          },
+        },
+      });
+
+      await configExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      expect(MockRunTreeClass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project_name: 'custom-project',
+          tags: expect.arrayContaining(['span-tag', 'vendor-tag']),
+          metadata: expect.objectContaining({
+            userField: 'user-value',
+            session_id: 'session-456',
+            session_name: 'Full Test Session',
+            mastra_span_type: 'agent_run',
+          }),
+        }),
+      );
+
+      // Verify langsmith key is omitted
+      const call = MockRunTreeClass.mock.calls[0][0];
+      expect(call.metadata.langsmith).toBeUndefined();
+    });
+  });
 });
 
 // Helper function to create mock spans

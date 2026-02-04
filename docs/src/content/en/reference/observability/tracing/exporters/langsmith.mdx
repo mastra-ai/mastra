@@ -139,3 +139,63 @@ const exporter = new LangSmithExporter({
 | `TOOL_CALL`        | `tool`         |
 | `MCP_TOOL_CALL`    | `tool`         |
 | All others         | `chain`        |
+
+## withLangsmithMetadata
+
+Helper function to add LangSmith-specific metadata to tracing options.
+
+```typescript
+function withLangsmithMetadata(metadata: LangSmithMetadataInput): TracingOptionsUpdater
+```
+
+### LangSmithMetadataInput
+
+<PropertiesTable
+  props={[
+    {
+      name: "projectName",
+      type: "string",
+      description: "Override the project name for this span and its children",
+      required: false,
+    },
+    {
+      name: "tags",
+      type: "string[]",
+      description: "Additional tags to add (merged with span tags)",
+      required: false,
+    },
+    {
+      name: "sessionId",
+      type: "string",
+      description: "Session ID for grouping related traces",
+      required: false,
+    },
+    {
+      name: "sessionName",
+      type: "string",
+      description: "Display name for the session",
+      required: false,
+    },
+  ]}
+/>
+
+### Usage
+
+```typescript
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangsmithMetadata } from "@mastra/langsmith";
+
+// Route to a specific project
+const tracingOptions = buildTracingOptions(
+  withLangsmithMetadata({ projectName: "my-project" }),
+);
+
+// Set multiple fields
+const tracingOptions = buildTracingOptions(
+  withLangsmithMetadata({
+    projectName: "my-project",
+    tags: ["production"],
+    sessionId: "user-123",
+  }),
+);
+```
