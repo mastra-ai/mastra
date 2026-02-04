@@ -7,6 +7,8 @@ import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useAgent } from '../hooks/use-agent';
 import { useExperimentalFeatures } from '@/lib/experimental-features';
 import { useLinkComponent } from '@/lib/framework';
+import { Truncate } from '@/ds/components/Truncate';
+import { AgentSourceIcon } from './agent-source-icon';
 
 export interface AgentEntityHeaderProps {
   agentId: string;
@@ -20,23 +22,35 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const agentName = agent?.name || '';
   const isStoredAgent = agent?.source === 'stored';
 
+  const showStoredAgentBadge = experimentalFeaturesEnabled && isStoredAgent;
+
   return (
     <TooltipProvider>
-      <EntityHeader icon={<AgentIcon />} title={agentName} isLoading={isLoading}>
+      <EntityHeader
+        icon={experimentalFeaturesEnabled ? <AgentSourceIcon source={agent?.source} /> : <AgentIcon />}
+        title={agentName}
+        isLoading={isLoading}
+      >
         <Tooltip>
           <TooltipTrigger asChild>
             <button onClick={handleCopy} className="h-badge-default shrink-0">
               <Badge icon={<CopyIcon />} variant="default">
-                {agentId}
+                {showStoredAgentBadge ? (
+                  <Truncate untilChar="-" withTooltip={false}>
+                    {agentId}
+                  </Truncate>
+                ) : (
+                  agentId
+                )}
               </Badge>
             </button>
           </TooltipTrigger>
           <TooltipContent>Copy Agent ID for use in code</TooltipContent>
         </Tooltip>
-        {experimentalFeaturesEnabled && isStoredAgent && (
+        {showStoredAgentBadge && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <button onClick={() => navigate(`/cms/agents/${agentId}/edit`)} className="h-badge-default shrink-0">
+              <button onClick={() => navigate(`/cms/agents/${agentId}/edit`)} className="h-badge-default shrink-0 ml-2">
                 <Badge icon={<Pencil />} variant="default">
                   Edit
                 </Badge>
