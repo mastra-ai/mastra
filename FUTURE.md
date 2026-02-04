@@ -39,6 +39,7 @@ These methods have patterns that could be generalized, but require sandbox-speci
 See Task 10 in WORKING.md for current plan.
 
 Additional ideas:
+
 - Include mount health/status in context
 - Add mount-specific instructions per filesystem type
 - Consider caching pathContext for performance
@@ -50,10 +51,12 @@ Additional ideas:
 See Task 12 in WORKING.md.
 
 Should follow patterns from:
+
 - `stores/` - storage adapter tests
 - `server-adapters/` - server framework tests
 
 Key aspects to test:
+
 - Filesystem interface compliance
 - Mount lifecycle (pending → mounting → mounted)
 - readOnly enforcement

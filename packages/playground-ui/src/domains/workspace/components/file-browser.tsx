@@ -359,14 +359,14 @@ export function FileBrowser({
                       )}
                     </button>
                     {onDelete && (
-                    <button
-                      onClick={() => handleDelete(entry)}
-                      aria-label={`Delete ${entry.name}`}
-                      className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 text-icon3 transition-all"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                      <button
+                        onClick={() => handleDelete(entry)}
+                        aria-label={`Delete ${entry.name}`}
+                        className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 text-icon3 transition-all"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 </li>
               );
