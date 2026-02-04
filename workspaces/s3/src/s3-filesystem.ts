@@ -188,7 +188,7 @@ export class S3Filesystem extends MastraFilesystem {
   readonly provider = 's3';
   readonly readOnly?: boolean;
 
-  status: ProviderStatus = 'ready';
+  status: ProviderStatus = 'pending';
 
   // Display metadata for UI
   readonly displayName?: string;
@@ -690,11 +690,20 @@ export class S3Filesystem extends MastraFilesystem {
   // ---------------------------------------------------------------------------
 
   async init(): Promise<void> {
-    // Verify we can access the bucket by creating the client
-    this.getClient();
+    this.status = 'initializing';
+    try {
+      // Verify we can access the bucket by creating the client
+      this.getClient();
+      this.status = 'ready';
+    } catch (error) {
+      this.status = 'error';
+      throw error;
+    }
   }
 
   async destroy(): Promise<void> {
+    this.status = 'destroying';
     this._client = null;
+    this.status = 'destroyed';
   }
 }

@@ -7,6 +7,16 @@
  * MountManager is automatically created if the subclass implements `mount()`.
  * Use `declare readonly mounts: MountManager` to get non-optional typing.
  *
+ * ## Lifecycle Management
+ *
+ * The base class provides race-condition-safe lifecycle methods:
+ * - `start()` - Handles concurrent calls, status management, and mount processing
+ * - `stop()` - Handles concurrent calls and status management
+ * - `destroy()` - Handles concurrent calls and status management
+ *
+ * Subclasses should override the protected `_doStart()`, `_doStop()`, and `_doDestroy()`
+ * methods instead of the public lifecycle methods.
+ *
  * External providers can extend this class to get logger support, or implement
  * the WorkspaceSandbox interface directly if they don't need logging.
  */
@@ -34,10 +44,15 @@ import type { WorkspaceSandbox } from './sandbox';
  *   readonly id = 'my-sandbox';
  *   readonly name = 'MyCustomSandbox';
  *   readonly provider = 'custom';
- *   status: ProviderStatus = 'stopped';
+ *   status: ProviderStatus = 'pending';
  *
  *   constructor() {
  *     super({ name: 'MyCustomSandbox' });
+ *   }
+ *
+ *   // Override _doStart instead of start()
+ *   protected async _doStart(): Promise<void> {
+ *     // Your startup logic here
  *   }
  *
  *   async mount(filesystem, mountPath) { ... }
@@ -68,6 +83,19 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   /** Optional mount method - implement to enable mounting support */
   mount?(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult>;
 
+  // ---------------------------------------------------------------------------
+  // Lifecycle Promise Tracking (prevents race conditions)
+  // ---------------------------------------------------------------------------
+
+  /** Promise for start() to prevent race conditions from concurrent calls */
+  protected _startPromise?: Promise<void>;
+
+  /** Promise for stop() to prevent race conditions from concurrent calls */
+  protected _stopPromise?: Promise<void>;
+
+  /** Promise for destroy() to prevent race conditions from concurrent calls */
+  protected _destroyPromise?: Promise<void>;
+
   constructor(options: { name: string }) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
 
@@ -79,6 +107,186 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       });
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Lifecycle Methods (race-condition-safe wrappers)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Start the sandbox.
+   *
+   * This method is race-condition-safe - concurrent calls will return the same promise.
+   * Handles status management and automatically processes pending mounts after startup.
+   *
+   * Subclasses should override `_doStart()` instead of this method.
+   */
+  async start(): Promise<void> {
+    // Already running
+    if (this.status === 'running') {
+      return;
+    }
+
+    // Start already in progress - return existing promise
+    if (this._startPromise) {
+      return this._startPromise;
+    }
+
+    // Create and store the start promise
+    this._startPromise = this._executeStart();
+
+    try {
+      await this._startPromise;
+    } finally {
+      this._startPromise = undefined;
+    }
+  }
+
+  /**
+   * Internal start execution - handles status and mount processing.
+   */
+  private async _executeStart(): Promise<void> {
+    this.status = 'starting';
+
+    try {
+      await this._doStart();
+      this.status = 'running';
+
+      // Process any pending mounts after successful start
+      await this.mounts?.processPending();
+    } catch (error) {
+      this.status = 'error';
+      throw error;
+    }
+  }
+
+  /**
+   * Override this method to implement sandbox startup logic.
+   *
+   * Called by `start()` after status is set to 'starting'.
+   * Status will be set to 'running' on success, 'error' on failure.
+   *
+   * @example
+   * ```typescript
+   * protected async _doStart(): Promise<void> {
+   *   this._sandbox = await Sandbox.create({ ... });
+   * }
+   * ```
+   */
+  protected async _doStart(): Promise<void> {
+    // Default no-op - subclasses override
+  }
+
+  /**
+   * Stop the sandbox.
+   *
+   * This method is race-condition-safe - concurrent calls will return the same promise.
+   * Handles status management.
+   *
+   * Subclasses should override `_doStop()` instead of this method.
+   */
+  async stop(): Promise<void> {
+    // Already stopped
+    if (this.status === 'stopped') {
+      return;
+    }
+
+    // Stop already in progress - return existing promise
+    if (this._stopPromise) {
+      return this._stopPromise;
+    }
+
+    // Create and store the stop promise
+    this._stopPromise = this._executeStop();
+
+    try {
+      await this._stopPromise;
+    } finally {
+      this._stopPromise = undefined;
+    }
+  }
+
+  /**
+   * Internal stop execution - handles status.
+   */
+  private async _executeStop(): Promise<void> {
+    this.status = 'stopping';
+
+    try {
+      await this._doStop();
+      this.status = 'stopped';
+    } catch (error) {
+      this.status = 'error';
+      throw error;
+    }
+  }
+
+  /**
+   * Override this method to implement sandbox stop logic.
+   *
+   * Called by `stop()` after status is set to 'stopping'.
+   * Status will be set to 'stopped' on success, 'error' on failure.
+   */
+  protected async _doStop(): Promise<void> {
+    // Default no-op - subclasses override
+  }
+
+  /**
+   * Destroy the sandbox and clean up all resources.
+   *
+   * This method is race-condition-safe - concurrent calls will return the same promise.
+   * Handles status management.
+   *
+   * Subclasses should override `_doDestroy()` instead of this method.
+   */
+  async destroy(): Promise<void> {
+    // Already destroyed
+    if (this.status === 'destroyed') {
+      return;
+    }
+
+    // Destroy already in progress - return existing promise
+    if (this._destroyPromise) {
+      return this._destroyPromise;
+    }
+
+    // Create and store the destroy promise
+    this._destroyPromise = this._executeDestroy();
+
+    try {
+      await this._destroyPromise;
+    } finally {
+      this._destroyPromise = undefined;
+    }
+  }
+
+  /**
+   * Internal destroy execution - handles status.
+   */
+  private async _executeDestroy(): Promise<void> {
+    this.status = 'destroying';
+
+    try {
+      await this._doDestroy();
+      this.status = 'destroyed';
+    } catch (error) {
+      this.status = 'error';
+      throw error;
+    }
+  }
+
+  /**
+   * Override this method to implement sandbox destroy logic.
+   *
+   * Called by `destroy()` after status is set to 'destroying'.
+   * Status will be set to 'destroyed' on success, 'error' on failure.
+   */
+  protected async _doDestroy(): Promise<void> {
+    // Default no-op - subclasses override
+  }
+
+  // ---------------------------------------------------------------------------
+  // Logger Propagation
+  // ---------------------------------------------------------------------------
 
   /**
    * Override to propagate logger to MountManager.

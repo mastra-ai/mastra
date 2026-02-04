@@ -115,7 +115,9 @@ export class E2BSandbox extends MastraSandbox {
   readonly name = 'E2BSandbox';
   readonly provider = 'e2b';
 
-  private _status: ProviderStatus = 'stopped';
+  // Status is managed by base class lifecycle methods
+  status: ProviderStatus = 'pending';
+
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
 
@@ -131,9 +133,6 @@ export class E2BSandbox extends MastraSandbox {
 
   /** Promise for template preparation (started in constructor) */
   private _templatePreparePromise?: Promise<string>;
-
-  /** Promise for start() to prevent race conditions from concurrent calls */
-  private _startPromise?: Promise<void>;
 
   constructor(options: E2BSandboxOptions = {}) {
     super({ name: 'E2BSandbox' });
@@ -155,10 +154,6 @@ export class E2BSandbox extends MastraSandbox {
 
   private generateId(): string {
     return `e2b-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  }
-
-  get status(): ProviderStatus {
-    return this._status;
   }
 
   get supportedRuntimes(): readonly SandboxRuntime[] {
@@ -541,70 +536,71 @@ export class E2BSandbox extends MastraSandbox {
   }
 
   // ---------------------------------------------------------------------------
-  // Lifecycle
+  // Lifecycle (overrides base class protected methods)
   // ---------------------------------------------------------------------------
 
-  async start(): Promise<void> {
-    // Already running
+  /**
+   * Start the E2B sandbox.
+   * Handles template preparation, existing sandbox reconnection, and new sandbox creation.
+   *
+   * Status management and mount processing are handled by the base class.
+   */
+  protected override async _doStart(): Promise<void> {
+    // Already have a sandbox instance
     if (this._sandbox) {
-      this._status = 'running';
       return;
     }
 
-    // Start already in progress - return existing promise to prevent race conditions
-    if (this._startPromise) {
-      return this._startPromise;
+    // Await template preparation (started in constructor) and existing sandbox search in parallel
+    const [existingSandbox, templateId] = await Promise.all([
+      this.findExistingSandbox(),
+      this._templatePreparePromise || this.resolveTemplate(),
+    ]);
+
+    if (existingSandbox) {
+      this._sandbox = existingSandbox;
+      this._createdAt = new Date();
+      this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
+
+      // Clean up stale mounts from previous config
+      // (processPending is called by base class after _doStart completes)
+      const expectedPaths = Array.from(this.mounts.entries.keys());
+      this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
+      await this.reconcileMounts(expectedPaths);
+      this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
+      return;
     }
 
-    // Create and store the start promise
-    this._startPromise = this._doStart();
-
-    try {
-      await this._startPromise;
-    } finally {
-      this._startPromise = undefined;
+    // If template preparation failed earlier, retry now
+    let resolvedTemplateId = templateId;
+    if (!resolvedTemplateId) {
+      this.logger.debug(`${LOG_PREFIX} Template preparation failed earlier, retrying...`);
+      resolvedTemplateId = await this.resolveTemplate();
     }
-  }
 
-  /** Internal start implementation - only called once even with concurrent start() calls */
-  private async _doStart(): Promise<void> {
-    this._status = 'starting';
+    // Create a new sandbox with our logical ID in metadata
+    // Using betaCreate with autoPause so sandbox pauses on timeout instead of being destroyed
+    this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
 
     try {
-      // Await template preparation (started in constructor) and existing sandbox search in parallel
-      const [existingSandbox, templateId] = await Promise.all([
-        this.findExistingSandbox(),
-        this._templatePreparePromise || this.resolveTemplate(),
-      ]);
+      this._sandbox = await Sandbox.betaCreate(resolvedTemplateId, {
+        autoPause: true,
+        metadata: {
+          ...this.metadata,
+          'mastra-sandbox-id': this.id,
+        },
+        timeoutMs: this.timeout,
+      });
+    } catch (createError) {
+      // If template not found (404), rebuild it and retry
+      const errorStr = String(createError);
+      if (errorStr.includes('404') && errorStr.includes('not found') && !this.templateSpec) {
+        this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${templateId}`);
+        this._resolvedTemplateId = undefined; // Clear cached ID to force rebuild
+        const rebuiltTemplateId = await this.buildDefaultTemplate();
 
-      if (existingSandbox) {
-        this._sandbox = existingSandbox;
-        this._createdAt = new Date();
-        this._status = 'running';
-        this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
-
-        // Clean up stale mounts from previous config, then mount pending
-        const expectedPaths = Array.from(this.mounts.entries.keys());
-        this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
-        await this.reconcileMounts(expectedPaths);
-        this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete, mounting pending filesystems...`);
-        await this.mounts.processPending();
-        return;
-      }
-
-      // If template preparation failed earlier, retry now
-      let resolvedTemplateId = templateId;
-      if (!resolvedTemplateId) {
-        this.logger.debug(`${LOG_PREFIX} Template preparation failed earlier, retrying...`);
-        resolvedTemplateId = await this.resolveTemplate();
-      }
-
-      // Create a new sandbox with our logical ID in metadata
-      // Using betaCreate with autoPause so sandbox pauses on timeout instead of being destroyed
-      this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
-
-      try {
-        this._sandbox = await Sandbox.betaCreate(resolvedTemplateId, {
+        this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
+        this._sandbox = await Sandbox.betaCreate(rebuiltTemplateId, {
           autoPause: true,
           metadata: {
             ...this.metadata,
@@ -612,38 +608,14 @@ export class E2BSandbox extends MastraSandbox {
           },
           timeoutMs: this.timeout,
         });
-      } catch (createError) {
-        // If template not found (404), rebuild it and retry
-        const errorStr = String(createError);
-        if (errorStr.includes('404') && errorStr.includes('not found') && !this.templateSpec) {
-          this.logger.debug(`${LOG_PREFIX} Template not found, rebuilding: ${templateId}`);
-          this._resolvedTemplateId = undefined; // Clear cached ID to force rebuild
-          const rebuiltTemplateId = await this.buildDefaultTemplate();
-
-          this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
-          this._sandbox = await Sandbox.betaCreate(rebuiltTemplateId, {
-            autoPause: true,
-            metadata: {
-              ...this.metadata,
-              'mastra-sandbox-id': this.id,
-            },
-            timeoutMs: this.timeout,
-          });
-        } else {
-          throw createError;
-        }
+      } else {
+        throw createError;
       }
-
-      this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
-      this._createdAt = new Date();
-      this._status = 'running';
-
-      // Mount any pending filesystems
-      await this.mounts.processPending();
-    } catch (error) {
-      this._status = 'error';
-      throw error;
     }
+
+    this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
+    this._createdAt = new Date();
+    // Note: processPending is called by base class after _doStart completes
   }
 
   /**
@@ -757,17 +729,26 @@ export class E2BSandbox extends MastraSandbox {
     return null;
   }
 
-  async stop(): Promise<void> {
+  /**
+   * Stop the E2B sandbox.
+   * Unmounts all filesystems and releases the sandbox reference.
+   * Status management is handled by the base class.
+   */
+  protected override async _doStop(): Promise<void> {
     // Unmount all filesystems before stopping
     for (const mountPath of this.mounts.entries.keys()) {
       await this.unmount(mountPath);
     }
 
     this._sandbox = null;
-    this._status = 'stopped';
   }
 
-  async destroy(): Promise<void> {
+  /**
+   * Destroy the E2B sandbox and clean up all resources.
+   * Unmounts filesystems, kills the sandbox, and clears mount state.
+   * Status management is handled by the base class.
+   */
+  protected override async _doDestroy(): Promise<void> {
     // Unmount all filesystems
     for (const mountPath of this.mounts.entries.keys()) {
       try {
@@ -787,19 +768,24 @@ export class E2BSandbox extends MastraSandbox {
 
     this._sandbox = null;
     this.mounts.clear();
-    this._status = 'destroyed';
   }
 
+  /**
+   * Check if the sandbox is ready for operations.
+   */
   async isReady(): Promise<boolean> {
-    return this._status === 'running' && this._sandbox !== null;
+    return this.status === 'running' && this._sandbox !== null;
   }
 
+  /**
+   * Get information about the current state of the sandbox.
+   */
   async getInfo(): Promise<SandboxInfo> {
     return {
       id: this.id,
       name: this.name,
       provider: this.provider,
-      status: this._status,
+      status: this.status,
       createdAt: this._createdAt ?? new Date(),
       mounts: Array.from(this.mounts.entries).map(([path, { filesystem }]) => ({
         path,
@@ -815,6 +801,11 @@ export class E2BSandbox extends MastraSandbox {
   // Internal Helpers
   // ---------------------------------------------------------------------------
 
+  /**
+   * Ensure the sandbox is started and return the E2B Sandbox instance.
+   * Starts the sandbox if not already running.
+   * @throws {SandboxNotReadyError} if sandbox fails to start
+   */
   private async ensureSandbox(): Promise<Sandbox> {
     if (!this._sandbox) {
       await this.start();
@@ -826,7 +817,7 @@ export class E2BSandbox extends MastraSandbox {
   }
 
   /**
-   * Check if error indicates the sandbox itself is dead/gone.
+   * Check if an error indicates the sandbox itself is dead/gone.
    * Does NOT include code execution timeouts (those are the user's code taking too long).
    * Does NOT include "port is not open" - that needs sandbox kill, not reconnect.
    */
@@ -841,15 +832,23 @@ export class E2BSandbox extends MastraSandbox {
     );
   }
 
+  /**
+   * Handle sandbox timeout by clearing the instance and setting status to stopped.
+   */
   private handleSandboxTimeout(): void {
     this._sandbox = null;
-    this._status = 'stopped';
+    this.status = 'stopped';
   }
 
   // ---------------------------------------------------------------------------
   // Command Execution
   // ---------------------------------------------------------------------------
 
+  /**
+   * Execute a shell command in the sandbox.
+   * Automatically starts the sandbox if not already running.
+   * Retries once if the sandbox is found to be dead.
+   */
   async executeCommand(
     command: string,
     args: string[] = [],

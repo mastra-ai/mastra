@@ -19,6 +19,7 @@
  * ```
  */
 
+import { PermissionError } from '../errors';
 import type { ProviderStatus } from '../lifecycle';
 import type {
   WorkspaceFilesystem,
@@ -184,6 +185,16 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     return false;
   }
 
+  /**
+   * Assert that a filesystem is writable (not read-only).
+   * @throws {PermissionError} if the filesystem is read-only
+   */
+  private assertWritable(fs: WorkspaceFilesystem, path: string, operation: string): void {
+    if (fs.readOnly) {
+      throw new PermissionError(path, `${operation} (filesystem is read-only)`);
+    }
+  }
+
   // ===========================================================================
   // WorkspaceFilesystem Implementation
   // ===========================================================================
@@ -213,18 +224,21 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
   async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
     const r = this.resolveMount(path);
     if (!r) throw new Error(`No mount for path: ${path}`);
+    this.assertWritable(r.fs, path, 'writeFile');
     return r.fs.writeFile(r.fsPath, content, options);
   }
 
   async appendFile(path: string, content: FileContent): Promise<void> {
     const r = this.resolveMount(path);
     if (!r) throw new Error(`No mount for path: ${path}`);
+    this.assertWritable(r.fs, path, 'appendFile');
     return r.fs.appendFile(r.fsPath, content);
   }
 
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
     const r = this.resolveMount(path);
     if (!r) throw new Error(`No mount for path: ${path}`);
+    this.assertWritable(r.fs, path, 'deleteFile');
     return r.fs.deleteFile(r.fsPath, options);
   }
 
@@ -233,6 +247,7 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     const destR = this.resolveMount(dest);
     if (!srcR) throw new Error(`No mount for source: ${src}`);
     if (!destR) throw new Error(`No mount for dest: ${dest}`);
+    this.assertWritable(destR.fs, dest, 'copyFile');
 
     // Same mount - delegate
     if (srcR.mountPath === destR.mountPath) {
@@ -249,6 +264,8 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     const destR = this.resolveMount(dest);
     if (!srcR) throw new Error(`No mount for source: ${src}`);
     if (!destR) throw new Error(`No mount for dest: ${dest}`);
+    this.assertWritable(destR.fs, dest, 'moveFile');
+    this.assertWritable(srcR.fs, src, 'moveFile'); // Source must be writable for delete
 
     // Same mount - delegate
     if (srcR.mountPath === destR.mountPath) {
@@ -272,12 +289,14 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
     const r = this.resolveMount(path);
     if (!r) throw new Error(`No mount for path: ${path}`);
+    this.assertWritable(r.fs, path, 'mkdir');
     return r.fs.mkdir(r.fsPath, options);
   }
 
   async rmdir(path: string, options?: RemoveOptions): Promise<void> {
     const r = this.resolveMount(path);
     if (!r) throw new Error(`No mount for path: ${path}`);
+    this.assertWritable(r.fs, path, 'rmdir');
     return r.fs.rmdir(r.fsPath, options);
   }
 
