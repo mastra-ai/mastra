@@ -3,6 +3,8 @@ import { StorageDomain } from '../base';
 import type {
   Dataset,
   DatasetItem,
+  DatasetItemVersion,
+  DatasetVersion,
   CreateDatasetInput,
   UpdateDatasetInput,
   AddDatasetItemInput,
@@ -11,6 +13,13 @@ import type {
   ListDatasetsOutput,
   ListDatasetItemsInput,
   ListDatasetItemsOutput,
+  CreateItemVersionInput,
+  ListItemVersionsInput,
+  ListItemVersionsOutput,
+  ListDatasetVersionsInput,
+  ListDatasetVersionsOutput,
+  BulkAddItemsInput,
+  BulkDeleteItemsInput,
 } from '../../types';
 
 /**
@@ -93,6 +102,7 @@ export abstract class DatasetsStorage extends StorageDomain {
 
   /**
    * Add an item to a dataset. Validates input/expectedOutput against dataset schemas.
+   * Creates version records for history tracking.
    * Subclasses implement _doAddItem for actual storage operation.
    */
   async addItem(args: AddDatasetItemInput): Promise<DatasetItem> {
@@ -113,7 +123,26 @@ export abstract class DatasetsStorage extends StorageDomain {
       validator.validate(args.expectedOutput, dataset.outputSchema, 'expectedOutput', `${cacheKey}:output`);
     }
 
-    return this._doAddItem(args);
+    // Add the item
+    const item = await this._doAddItem(args);
+
+    // Create version records for history tracking
+    const now = item.version; // Use the item's version timestamp
+    await this.createItemVersion({
+      itemId: item.id,
+      datasetId: item.datasetId,
+      versionNumber: 1,
+      datasetVersion: now,
+      snapshot: {
+        input: item.input,
+        expectedOutput: item.expectedOutput,
+        context: item.context,
+      },
+      isDeleted: false,
+    });
+    await this.createDatasetVersion(item.datasetId, now);
+
+    return item;
   }
 
   /** Subclasses implement actual storage add logic */
@@ -121,6 +150,7 @@ export abstract class DatasetsStorage extends StorageDomain {
 
   /**
    * Update an item in a dataset. Validates changed fields against dataset schemas.
+   * Creates version records for history tracking.
    * Subclasses implement _doUpdateItem for actual storage operation.
    */
   async updateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
@@ -141,17 +171,92 @@ export abstract class DatasetsStorage extends StorageDomain {
       validator.validate(args.expectedOutput, dataset.outputSchema, 'expectedOutput', `${cacheKey}:output`);
     }
 
-    return this._doUpdateItem(args);
+    // Get current version number before update
+    const latestVersion = await this.getLatestItemVersion(args.id);
+    const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+    // Update the item
+    const item = await this._doUpdateItem(args);
+
+    // Create version records for history tracking
+    const now = item.version; // Use the item's version timestamp
+    await this.createItemVersion({
+      itemId: item.id,
+      datasetId: item.datasetId,
+      versionNumber: nextVersionNumber,
+      datasetVersion: now,
+      snapshot: {
+        input: item.input,
+        expectedOutput: item.expectedOutput,
+        context: item.context,
+      },
+      isDeleted: false,
+    });
+    await this.createDatasetVersion(item.datasetId, now);
+
+    return item;
   }
 
   /** Subclasses implement actual storage update logic */
   protected abstract _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem>;
 
-  // Item CRUD - delete doesn't need validation
-  abstract deleteItem(args: { id: string; datasetId: string }): Promise<void>;
+  /**
+   * Delete an item from a dataset. Creates a tombstone version for history tracking.
+   * Subclasses implement _doDeleteItem for actual storage operation.
+   */
+  async deleteItem(args: { id: string; datasetId: string }): Promise<void> {
+    // Get item before delete to capture snapshot
+    const item = await this.getItemById({ id: args.id });
+    if (!item) {
+      // Item doesn't exist, nothing to delete
+      return;
+    }
+
+    // Get current version number
+    const latestVersion = await this.getLatestItemVersion(args.id);
+    const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+    const now = new Date();
+
+    // Create tombstone version record
+    await this.createItemVersion({
+      itemId: args.id,
+      datasetId: args.datasetId,
+      versionNumber: nextVersionNumber,
+      datasetVersion: now,
+      snapshot: {
+        input: item.input,
+        expectedOutput: item.expectedOutput,
+        context: item.context,
+      },
+      isDeleted: true, // Tombstone marker
+    });
+    await this.createDatasetVersion(args.datasetId, now);
+
+    // Delete from items table
+    await this._doDeleteItem(args);
+  }
+
+  /** Subclasses implement actual storage delete logic */
+  protected abstract _doDeleteItem(args: { id: string; datasetId: string }): Promise<void>;
+
   abstract listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput>;
   abstract getItemById(args: { id: string }): Promise<DatasetItem | null>;
 
   // Version-aware queries (snapshot semantics: items at or before version timestamp)
   abstract getItemsByVersion(args: { datasetId: string; version: Date }): Promise<DatasetItem[]>;
+
+  // Item version methods
+  abstract createItemVersion(input: CreateItemVersionInput): Promise<DatasetItemVersion>;
+  abstract getItemVersion(itemId: string, versionNumber?: number): Promise<DatasetItemVersion | null>;
+  abstract getLatestItemVersion(itemId: string): Promise<DatasetItemVersion | null>;
+  abstract listItemVersions(input: ListItemVersionsInput): Promise<ListItemVersionsOutput>;
+
+  // Dataset version methods
+  abstract createDatasetVersion(datasetId: string, version: Date): Promise<DatasetVersion>;
+  abstract listDatasetVersions(input: ListDatasetVersionsInput): Promise<ListDatasetVersionsOutput>;
+
+  // Bulk operations (implemented in base with version tracking)
+  abstract bulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]>;
+  abstract bulkDeleteItems(input: BulkDeleteItemsInput): Promise<void>;
 }

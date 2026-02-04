@@ -19,18 +19,20 @@ const PER_PAGE = 10;
 
 /**
  * Hook to list items in a dataset with infinite scroll pagination and optional search
+ * @param version - Optional version timestamp to view historical snapshot
  */
-export const useDatasetItems = (datasetId: string, search?: string) => {
+export const useDatasetItems = (datasetId: string, search?: string, version?: Date | string | null) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
-    queryKey: ['dataset-items', datasetId, search],
+    queryKey: ['dataset-items', datasetId, search, version],
     queryFn: async ({ pageParam }) => {
       const res = await client.listDatasetItems(datasetId, {
         page: pageParam,
         perPage: PER_PAGE,
         search: search || undefined,
+        version: version || undefined,
       });
       return res;
     },
@@ -40,14 +42,15 @@ export const useDatasetItems = (datasetId: string, search?: string) => {
         return undefined;
       }
       const totalFetched = (lastPageParam + 1) * PER_PAGE;
-      if (totalFetched >= lastPage.pagination.total) {
+      const total = lastPage?.pagination?.total ?? 0;
+      if (totalFetched >= total) {
         return undefined;
       }
       return lastPageParam + 1;
     },
     enabled: Boolean(datasetId),
     select: data => {
-      return data.pages.flatMap(page => page.items);
+      return data.pages.flatMap(page => page?.items ?? []);
     },
     retry: false,
   });

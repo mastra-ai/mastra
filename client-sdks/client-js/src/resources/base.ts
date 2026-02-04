@@ -35,7 +35,10 @@ export class BaseResource {
           headers: {
             ...(options.body &&
             !(options.body instanceof FormData) &&
-            (options.method === 'POST' || options.method === 'PUT')
+            (options.method === 'POST' ||
+              options.method === 'PUT' ||
+              options.method === 'PATCH' ||
+              options.method === 'DELETE')
               ? { 'content-type': 'application/json' }
               : {}),
             ...headers,

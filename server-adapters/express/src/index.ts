@@ -133,7 +133,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     const queryParams = normalizeQueryParams(request.query as Record<string, unknown>);
     let body: unknown;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.headers['content-type'] || '';
 
       if (contentType.includes('multipart/form-data')) {

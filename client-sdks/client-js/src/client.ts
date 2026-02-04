@@ -71,6 +71,15 @@ import type {
   ListDatasetRunsResponse,
   ListDatasetRunResultsResponse,
   CompareRunsResponse,
+  // Dataset version types
+  DatasetVersionEntity,
+  DatasetItemVersion,
+  ListDatasetVersionsResponse,
+  ListDatasetItemVersionsResponse,
+  BulkAddDatasetItemsParams,
+  BulkAddDatasetItemsResponse,
+  BulkDeleteDatasetItemsParams,
+  BulkDeleteDatasetItemsResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -893,6 +902,14 @@ export class MastraClient extends BaseResource {
   // ============================================================================
 
   /**
+   * Transform API item response (context) to client item (metadata)
+   */
+  private transformDatasetItem(item: Record<string, unknown>): DatasetItem {
+    const { context, ...rest } = item;
+    return { ...rest, metadata: context } as DatasetItem;
+  }
+
+  /**
    * Lists items in a dataset with optional pagination and search
    * @param datasetId - ID of the dataset
    * @param options - Optional pagination and search parameters
@@ -900,14 +917,23 @@ export class MastraClient extends BaseResource {
    */
   public listDatasetItems(
     datasetId: string,
-    options?: { page?: number; perPage?: number; search?: string },
+    options?: { page?: number; perPage?: number; search?: string; version?: string | Date },
   ): Promise<ListDatasetItemsResponse> {
     const params = new URLSearchParams();
     if (options?.page !== undefined) params.set('page', String(options.page));
     if (options?.perPage !== undefined) params.set('perPage', String(options.perPage));
     if (options?.search) params.set('search', options.search);
+    if (options?.version) {
+      const versionDate = options.version instanceof Date ? options.version : new Date(options.version);
+      params.set('version', versionDate.toISOString());
+    }
     const query = params.toString();
-    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items${query ? `?${query}` : ''}`);
+    return this.request<{ items: Record<string, unknown>[]; pagination: ListDatasetItemsResponse['pagination'] }>(
+      `/api/datasets/${encodeURIComponent(datasetId)}/items${query ? `?${query}` : ''}`,
+    ).then(res => ({
+      ...res,
+      items: res.items.map(item => this.transformDatasetItem(item)),
+    }));
   }
 
   /**
@@ -917,7 +943,9 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the dataset item
    */
   public getDatasetItem(datasetId: string, itemId: string): Promise<DatasetItem> {
-    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`);
+    return this.request<Record<string, unknown>>(
+      `/api/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`,
+    ).then(item => this.transformDatasetItem(item));
   }
 
   /**
@@ -926,8 +954,13 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the created item
    */
   public addDatasetItem(params: AddDatasetItemParams): Promise<DatasetItem> {
-    const { datasetId, ...body } = params;
-    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items`, { method: 'POST', body });
+    const { datasetId, metadata, ...rest } = params;
+    // Map 'metadata' to 'context' for API compatibility
+    const body = { ...rest, context: metadata };
+    return this.request<Record<string, unknown>>(`/api/datasets/${encodeURIComponent(datasetId)}/items`, {
+      method: 'POST',
+      body,
+    }).then(item => this.transformDatasetItem(item));
   }
 
   /**
@@ -936,11 +969,13 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the updated item
    */
   public updateDatasetItem(params: UpdateDatasetItemParams): Promise<DatasetItem> {
-    const { datasetId, itemId, ...body } = params;
-    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`, {
-      method: 'PATCH',
-      body,
-    });
+    const { datasetId, itemId, metadata, ...rest } = params;
+    // Map 'metadata' to 'context' for API compatibility
+    const body = { ...rest, context: metadata };
+    return this.request<Record<string, unknown>>(
+      `/api/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`,
+      { method: 'PATCH', body },
+    ).then(item => this.transformDatasetItem(item));
   }
 
   /**
@@ -1029,5 +1064,90 @@ export class MastraClient extends BaseResource {
   public compareRuns(params: CompareRunsParams): Promise<CompareRunsResponse> {
     const { datasetId, ...body } = params;
     return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/compare`, { method: 'POST', body });
+  }
+
+  // ============================================================================
+  // Dataset Versions
+  // ============================================================================
+
+  /**
+   * Lists all versions of a dataset
+   * @param datasetId - ID of the dataset
+   * @param pagination - Optional pagination parameters
+   * @returns Promise containing paginated list of dataset versions
+   */
+  public listDatasetVersions(
+    datasetId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<ListDatasetVersionsResponse> {
+    const params = new URLSearchParams();
+    if (pagination?.page !== undefined) params.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) params.set('perPage', String(pagination.perPage));
+    const query = params.toString();
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/versions${query ? `?${query}` : ''}`);
+  }
+
+  /**
+   * Lists all versions of a dataset item
+   * @param datasetId - ID of the dataset
+   * @param itemId - ID of the item
+   * @param pagination - Optional pagination parameters
+   * @returns Promise containing paginated list of item versions
+   */
+  public listDatasetItemVersions(
+    datasetId: string,
+    itemId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<ListDatasetItemVersionsResponse> {
+    const params = new URLSearchParams();
+    if (pagination?.page !== undefined) params.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) params.set('perPage', String(pagination.perPage));
+    const query = params.toString();
+    return this.request(
+      `/api/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/versions${query ? `?${query}` : ''}`,
+    );
+  }
+
+  /**
+   * Gets a specific version of a dataset item
+   * @param datasetId - ID of the dataset
+   * @param itemId - ID of the item
+   * @param versionNumber - Version number to retrieve
+   * @returns Promise containing the item version
+   */
+  public getDatasetItemVersion(datasetId: string, itemId: string, versionNumber: number): Promise<DatasetItemVersion> {
+    return this.request(
+      `/api/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/versions/${versionNumber}`,
+    );
+  }
+
+  // ============================================================================
+  // Dataset Bulk Operations
+  // ============================================================================
+
+  /**
+   * Bulk adds items to a dataset (single version entry)
+   * @param params - Bulk add parameters including datasetId and items array
+   * @returns Promise containing the added items and count
+   */
+  public bulkAddDatasetItems(params: BulkAddDatasetItemsParams): Promise<BulkAddDatasetItemsResponse> {
+    const { datasetId, ...body } = params;
+    return this.request<{ items: Record<string, unknown>[]; count: number }>(
+      `/api/datasets/${encodeURIComponent(datasetId)}/items/bulk`,
+      { method: 'POST', body },
+    ).then(res => ({
+      ...res,
+      items: res.items.map(item => this.transformDatasetItem(item)),
+    }));
+  }
+
+  /**
+   * Bulk deletes items from a dataset (single version entry)
+   * @param params - Bulk delete parameters including datasetId and itemIds array
+   * @returns Promise containing success status and deleted count
+   */
+  public bulkDeleteDatasetItems(params: BulkDeleteDatasetItemsParams): Promise<BulkDeleteDatasetItemsResponse> {
+    const { datasetId, ...body } = params;
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items/bulk`, { method: 'DELETE', body });
   }
 }

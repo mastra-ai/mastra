@@ -64,7 +64,7 @@ export function DatasetDetail({
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
-  } = useDatasetItems(datasetId, debouncedSearch || undefined);
+  } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
   const { data: runsData, isLoading: isRunsLoading } = useDatasetRuns(datasetId);
   const { deleteItems } = useDatasetMutations();
 

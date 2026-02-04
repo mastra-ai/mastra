@@ -6,6 +6,8 @@ import type {
   AddDatasetItemParams,
   UpdateDatasetItemParams,
   TriggerDatasetRunParams,
+  BulkAddDatasetItemsParams,
+  BulkDeleteDatasetItemsParams,
 } from '@mastra/client-js';
 
 /**
@@ -50,6 +52,9 @@ export const useDatasetMutations = () => {
     mutationFn: (params: UpdateDatasetItemParams) => client.updateDatasetItem(params),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      queryClient.invalidateQueries({ queryKey: ['dataset-item', variables.datasetId, variables.itemId] });
+      queryClient.invalidateQueries({ queryKey: ['dataset-item-versions', variables.datasetId, variables.itemId] });
+      queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
   });
 
@@ -62,16 +67,35 @@ export const useDatasetMutations = () => {
     },
   });
 
-  // Bulk delete - sequential since no bulk endpoint exists
+  // Bulk add items using the bulk endpoint
+  const bulkAddItems = useMutation({
+    mutationFn: (params: BulkAddDatasetItemsParams) => client.bulkAddDatasetItems(params),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
+    },
+  });
+
+  // Bulk delete items using the bulk endpoint
+  const bulkDeleteItems = useMutation({
+    mutationFn: (params: BulkDeleteDatasetItemsParams) => client.bulkDeleteDatasetItems(params),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
+    },
+  });
+
+  // @deprecated - use bulkDeleteItems instead
   const deleteItems = useMutation({
     mutationFn: async ({ datasetId, itemIds }: { datasetId: string; itemIds: string[] }) => {
-      for (const itemId of itemIds) {
-        await client.deleteDatasetItem(datasetId, itemId);
-      }
+      return client.bulkDeleteDatasetItems({ datasetId, itemIds });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
       queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
     },
   });
 
@@ -90,6 +114,8 @@ export const useDatasetMutations = () => {
     updateItem,
     deleteItem,
     deleteItems,
+    bulkAddItems,
+    bulkDeleteItems,
     triggerRun,
   };
 };

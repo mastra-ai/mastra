@@ -53,8 +53,9 @@ export interface DatasetItemListProps {
  * Truncate a string to maxLength characters with ellipsis
  */
 function truncateValue(value: unknown, maxLength = 100): string {
+  if (value === undefined || value === null) return '-';
   const str = typeof value === 'string' ? value : JSON.stringify(value);
-  if (str.length <= maxLength) return str;
+  if (!str || str.length <= maxLength) return str || '-';
   return str.slice(0, maxLength) + '...';
 }
 

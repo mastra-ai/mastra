@@ -84,7 +84,10 @@ export function ItemDetailToolbar({
                       variant="ghost"
                       size="sm"
                       className="w-full justify-start gap-2 text-red-500 hover:text-red-400"
-                      onClick={onDelete}
+                      onClick={() => {
+                        setOpen(false);
+                        onDelete();
+                      }}
                     >
                       <Trash2 />
                       Delete Item

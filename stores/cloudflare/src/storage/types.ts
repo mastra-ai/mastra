@@ -17,10 +17,14 @@ import type {
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_RUNS,
   TABLE_DATASET_RUN_RESULTS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_ITEM_VERSIONS,
   SpanRecord,
   StorageAgentType,
   Dataset,
   DatasetItem,
+  DatasetVersion,
+  DatasetItemVersion,
   Run,
   RunResult,
 } from '@mastra/core/storage';
@@ -124,6 +128,8 @@ export type RecordTypes = {
   [TABLE_DATASET_ITEMS]: DatasetItem;
   [TABLE_DATASET_RUNS]: Run;
   [TABLE_DATASET_RUN_RESULTS]: RunResult;
+  [TABLE_DATASET_VERSIONS]: DatasetVersion;
+  [TABLE_DATASET_ITEM_VERSIONS]: DatasetItemVersion;
 };
 
 export type ListOptions = {

@@ -2,6 +2,8 @@ import { calculatePagination, normalizePerPage } from '../../base';
 import type {
   Dataset,
   DatasetItem,
+  DatasetItemVersion,
+  DatasetVersion,
   CreateDatasetInput,
   UpdateDatasetInput,
   AddDatasetItemInput,
@@ -10,6 +12,13 @@ import type {
   ListDatasetsOutput,
   ListDatasetItemsInput,
   ListDatasetItemsOutput,
+  CreateItemVersionInput,
+  ListItemVersionsInput,
+  ListItemVersionsOutput,
+  ListDatasetVersionsInput,
+  ListDatasetVersionsOutput,
+  BulkAddItemsInput,
+  BulkDeleteItemsInput,
 } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
 import { DatasetsStorage } from './base';
@@ -25,6 +34,8 @@ export class DatasetsInMemory extends DatasetsStorage {
   async dangerouslyClearAll(): Promise<void> {
     this.db.datasets.clear();
     this.db.datasetItems.clear();
+    this.db.itemVersions.clear();
+    this.db.datasetVersions.clear();
   }
 
   // Dataset CRUD
@@ -164,7 +175,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     return updated;
   }
 
-  async deleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
     const existing = this.db.datasetItems.get(id);
     if (!existing) {
       throw new Error(`Item not found: ${id}`);
@@ -178,7 +189,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       throw new Error(`Dataset not found: ${datasetId}`);
     }
 
-    // New version timestamp on delete
+    // Update dataset version timestamp
     const now = new Date();
     this.db.datasets.set(datasetId, {
       ...dataset,
@@ -194,12 +205,48 @@ export class DatasetsInMemory extends DatasetsStorage {
   }
 
   async listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput> {
-    let items = Array.from(this.db.datasetItems.values()).filter(item => item.datasetId === args.datasetId);
+    let items: DatasetItem[];
 
-    // Filter by version if specified (snapshot semantics: items at or before this version timestamp)
+    // When version is specified, query itemVersions for historical state
     if (args.version !== undefined) {
       const versionTime = args.version.getTime();
-      items = items.filter(item => item.version.getTime() <= versionTime);
+
+      // Get all versions for this dataset at or before the requested version
+      const relevantVersions = Array.from(this.db.itemVersions.values()).filter(
+        v => v.datasetId === args.datasetId && new Date(v.datasetVersion).getTime() <= versionTime,
+      );
+
+      // Group by itemId and get the latest version for each
+      const latestByItem = new Map<string, DatasetItemVersion>();
+      for (const v of relevantVersions) {
+        const existing = latestByItem.get(v.itemId);
+        if (!existing || new Date(v.datasetVersion).getTime() > new Date(existing.datasetVersion).getTime()) {
+          latestByItem.set(v.itemId, v);
+        }
+      }
+
+      // Convert version snapshots to DatasetItem format, excluding deleted items
+      items = [];
+      for (const v of latestByItem.values()) {
+        if (!v.isDeleted) {
+          // Get the original item to preserve createdAt and as fallback for missing snapshot
+          const originalItem = this.db.datasetItems.get(v.itemId);
+          const snapshot = v.snapshot ?? {};
+          items.push({
+            id: v.itemId,
+            datasetId: v.datasetId,
+            version: new Date(v.datasetVersion),
+            input: snapshot.input ?? originalItem?.input,
+            expectedOutput: snapshot.expectedOutput ?? originalItem?.expectedOutput,
+            context: snapshot.context ?? originalItem?.context,
+            createdAt: originalItem?.createdAt ?? new Date(v.createdAt),
+            updatedAt: new Date(v.datasetVersion),
+          });
+        }
+      }
+    } else {
+      // Current state - query items table directly
+      items = Array.from(this.db.datasetItems.values()).filter(item => item.datasetId === args.datasetId);
     }
 
     // Filter by search term if specified (case-insensitive partial match on input/expectedOutput)
@@ -236,12 +283,245 @@ export class DatasetsInMemory extends DatasetsStorage {
   }
 
   async getItemsByVersion({ datasetId, version }: { datasetId: string; version: Date }): Promise<DatasetItem[]> {
-    // Snapshot semantics: return items that existed at or before this version timestamp
+    // Query itemVersions for historical state at or before this version timestamp
     const versionTime = version.getTime();
-    const items = Array.from(this.db.datasetItems.values()).filter(
-      item => item.datasetId === datasetId && item.version.getTime() <= versionTime,
+
+    // Get all versions for this dataset at or before the requested version
+    const relevantVersions = Array.from(this.db.itemVersions.values()).filter(
+      v => v.datasetId === datasetId && new Date(v.datasetVersion).getTime() <= versionTime,
     );
+
+    // Group by itemId and get the latest version for each
+    const latestByItem = new Map<string, DatasetItemVersion>();
+    for (const v of relevantVersions) {
+      const existing = latestByItem.get(v.itemId);
+      if (!existing || new Date(v.datasetVersion).getTime() > new Date(existing.datasetVersion).getTime()) {
+        latestByItem.set(v.itemId, v);
+      }
+    }
+
+    // Convert version snapshots to DatasetItem format, excluding deleted items
+    const items: DatasetItem[] = [];
+    for (const v of latestByItem.values()) {
+      if (!v.isDeleted) {
+        const originalItem = this.db.datasetItems.get(v.itemId);
+        const snapshot = v.snapshot ?? {};
+        items.push({
+          id: v.itemId,
+          datasetId: v.datasetId,
+          version: new Date(v.datasetVersion),
+          input: snapshot.input ?? originalItem?.input,
+          expectedOutput: snapshot.expectedOutput ?? originalItem?.expectedOutput,
+          context: snapshot.context ?? originalItem?.context,
+          createdAt: originalItem?.createdAt ?? new Date(v.createdAt),
+          updatedAt: new Date(v.datasetVersion),
+        });
+      }
+    }
+
     items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return items;
+  }
+
+  // Item version methods
+  async createItemVersion(input: CreateItemVersionInput): Promise<DatasetItemVersion> {
+    const id = crypto.randomUUID();
+    const version: DatasetItemVersion = {
+      id,
+      itemId: input.itemId,
+      datasetId: input.datasetId,
+      versionNumber: input.versionNumber,
+      datasetVersion: input.datasetVersion,
+      snapshot: input.snapshot,
+      isDeleted: input.isDeleted ?? false,
+      createdAt: new Date(),
+    };
+    this.db.itemVersions.set(id, version);
+    return version;
+  }
+
+  async getItemVersion(itemId: string, versionNumber?: number): Promise<DatasetItemVersion | null> {
+    if (versionNumber !== undefined) {
+      for (const v of this.db.itemVersions.values()) {
+        if (v.itemId === itemId && v.versionNumber === versionNumber) {
+          return v;
+        }
+      }
+      return null;
+    }
+    return this.getLatestItemVersion(itemId);
+  }
+
+  async getLatestItemVersion(itemId: string): Promise<DatasetItemVersion | null> {
+    let latest: DatasetItemVersion | null = null;
+    for (const v of this.db.itemVersions.values()) {
+      if (v.itemId === itemId) {
+        if (!latest || v.versionNumber > latest.versionNumber) {
+          latest = v;
+        }
+      }
+    }
+    return latest;
+  }
+
+  async listItemVersions(input: ListItemVersionsInput): Promise<ListItemVersionsOutput> {
+    const versions: DatasetItemVersion[] = [];
+    for (const v of this.db.itemVersions.values()) {
+      if (v.itemId === input.itemId) {
+        versions.push(v);
+      }
+    }
+    versions.sort((a, b) => b.versionNumber - a.versionNumber);
+
+    const { page, perPage: perPageInput } = input.pagination;
+    const perPage = normalizePerPage(perPageInput, 100);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? versions.length : start + perPage;
+
+    return {
+      versions: versions.slice(start, end),
+      pagination: {
+        total: versions.length,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : versions.length > end,
+      },
+    };
+  }
+
+  // Dataset version methods
+  async createDatasetVersion(datasetId: string, version: Date): Promise<DatasetVersion> {
+    const id = crypto.randomUUID();
+    const dsVersion: DatasetVersion = {
+      id,
+      datasetId,
+      version,
+      createdAt: new Date(),
+    };
+    this.db.datasetVersions.set(id, dsVersion);
+    return dsVersion;
+  }
+
+  async listDatasetVersions(input: ListDatasetVersionsInput): Promise<ListDatasetVersionsOutput> {
+    const versions: DatasetVersion[] = [];
+    for (const v of this.db.datasetVersions.values()) {
+      if (v.datasetId === input.datasetId) {
+        versions.push(v);
+      }
+    }
+    versions.sort((a, b) => b.version.getTime() - a.version.getTime());
+
+    const { page, perPage: perPageInput } = input.pagination;
+    const perPage = normalizePerPage(perPageInput, 100);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? versions.length : start + perPage;
+
+    return {
+      versions: versions.slice(start, end),
+      pagination: {
+        total: versions.length,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : versions.length > end,
+      },
+    };
+  }
+
+  // Bulk operations
+  async bulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]> {
+    const dataset = this.db.datasets.get(input.datasetId);
+    if (!dataset) {
+      throw new Error(`Dataset not found: ${input.datasetId}`);
+    }
+
+    const now = new Date();
+    const items: DatasetItem[] = [];
+
+    for (const itemInput of input.items) {
+      const id = crypto.randomUUID();
+      const item: DatasetItem = {
+        id,
+        datasetId: input.datasetId,
+        version: now,
+        input: itemInput.input,
+        expectedOutput: itemInput.expectedOutput,
+        context: itemInput.context,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.db.datasetItems.set(id, item);
+      items.push(item);
+
+      // Create item version
+      await this.createItemVersion({
+        itemId: id,
+        datasetId: input.datasetId,
+        versionNumber: 1,
+        datasetVersion: now,
+        snapshot: {
+          input: item.input,
+          expectedOutput: item.expectedOutput,
+          context: item.context,
+        },
+        isDeleted: false,
+      });
+    }
+
+    // Update dataset version once for entire bulk operation
+    this.db.datasets.set(input.datasetId, {
+      ...dataset,
+      version: now,
+      updatedAt: now,
+    });
+
+    // Single dataset version entry for bulk
+    await this.createDatasetVersion(input.datasetId, now);
+
+    return items;
+  }
+
+  async bulkDeleteItems(input: BulkDeleteItemsInput): Promise<void> {
+    const dataset = this.db.datasets.get(input.datasetId);
+    if (!dataset) {
+      throw new Error(`Dataset not found: ${input.datasetId}`);
+    }
+
+    const now = new Date();
+
+    for (const itemId of input.itemIds) {
+      const item = this.db.datasetItems.get(itemId);
+      if (!item || item.datasetId !== input.datasetId) continue;
+
+      // Get latest version number
+      const latestVersion = await this.getLatestItemVersion(itemId);
+      const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+      // Create tombstone version
+      await this.createItemVersion({
+        itemId,
+        datasetId: input.datasetId,
+        versionNumber: nextVersionNumber,
+        datasetVersion: now,
+        snapshot: {
+          input: item.input,
+          expectedOutput: item.expectedOutput,
+          context: item.context,
+        },
+        isDeleted: true,
+      });
+
+      // Delete from items
+      this.db.datasetItems.delete(itemId);
+    }
+
+    // Update dataset version once for entire bulk operation
+    this.db.datasets.set(input.datasetId, {
+      ...dataset,
+      version: now,
+      updatedAt: now,
+    });
+
+    // Single dataset version entry for bulk
+    await this.createDatasetVersion(input.datasetId, now);
   }
 }

@@ -15,6 +15,8 @@ export const TABLE_DATASETS = 'mastra_datasets';
 export const TABLE_DATASET_ITEMS = 'mastra_dataset_items';
 export const TABLE_DATASET_RUNS = 'mastra_dataset_runs';
 export const TABLE_DATASET_RUN_RESULTS = 'mastra_dataset_run_results';
+export const TABLE_DATASET_ITEM_VERSIONS = 'mastra_dataset_item_versions';
+export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -29,7 +31,9 @@ export type TABLE_NAMES =
   | typeof TABLE_DATASETS
   | typeof TABLE_DATASET_ITEMS
   | typeof TABLE_DATASET_RUNS
-  | typeof TABLE_DATASET_RUN_RESULTS;
+  | typeof TABLE_DATASET_RUN_RESULTS
+  | typeof TABLE_DATASET_ITEM_VERSIONS
+  | typeof TABLE_DATASET_VERSIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -186,6 +190,24 @@ export const DATASET_RUN_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false },
 };
 
+export const DATASET_ITEM_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  itemId: { type: 'text', nullable: false },
+  datasetId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  datasetVersion: { type: 'timestamp', nullable: false }, // Links to dataset.version
+  snapshot: { type: 'jsonb', nullable: false }, // { input, expectedOutput, context }
+  isDeleted: { type: 'boolean', nullable: false }, // Tombstone marker
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const DATASET_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  datasetId: { type: 'text', nullable: false },
+  version: { type: 'timestamp', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -253,4 +275,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASET_ITEMS]: DATASET_ITEMS_SCHEMA,
   [TABLE_DATASET_RUNS]: DATASET_RUNS_SCHEMA,
   [TABLE_DATASET_RUN_RESULTS]: DATASET_RUN_RESULTS_SCHEMA,
+  [TABLE_DATASET_ITEM_VERSIONS]: DATASET_ITEM_VERSIONS_SCHEMA,
+  [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
 };

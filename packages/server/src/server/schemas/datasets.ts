@@ -285,3 +285,76 @@ export const listResultsResponseSchema = z.object({
   results: z.array(runResultResponseSchema),
   pagination: paginationInfoSchema,
 });
+
+// ============================================================================
+// Version Schemas
+// ============================================================================
+
+// Path params for item version routes
+export const datasetItemVersionPathParams = z.object({
+  datasetId: z.string().describe('Unique identifier for the dataset'),
+  itemId: z.string().describe('Unique identifier for the dataset item'),
+  versionNumber: z.coerce.number().describe('Version number of the item'),
+});
+
+// Item version response schema
+export const itemVersionResponseSchema = z.object({
+  id: z.string(),
+  itemId: z.string(),
+  datasetId: z.string(),
+  versionNumber: z.number(),
+  datasetVersion: z.coerce.date(),
+  snapshot: z.object({
+    input: z.unknown(),
+    expectedOutput: z.unknown().optional(),
+    context: z.record(z.unknown()).optional(),
+  }),
+  isDeleted: z.boolean(),
+  createdAt: z.coerce.date(),
+});
+
+export const listItemVersionsResponseSchema = z.object({
+  versions: z.array(itemVersionResponseSchema),
+  pagination: paginationInfoSchema,
+});
+
+// Dataset version response schema
+export const datasetVersionResponseSchema = z.object({
+  id: z.string(),
+  datasetId: z.string(),
+  version: z.coerce.date(),
+  createdAt: z.coerce.date(),
+});
+
+export const listDatasetVersionsResponseSchema = z.object({
+  versions: z.array(datasetVersionResponseSchema),
+  pagination: paginationInfoSchema,
+});
+
+// ============================================================================
+// Bulk Operation Schemas
+// ============================================================================
+
+export const bulkAddItemsBodySchema = z.object({
+  items: z.array(
+    z.object({
+      input: z.unknown(),
+      expectedOutput: z.unknown().optional(),
+      context: z.record(z.unknown()).optional(),
+    }),
+  ),
+});
+
+export const bulkAddItemsResponseSchema = z.object({
+  items: z.array(datasetItemResponseSchema),
+  count: z.number(),
+});
+
+export const bulkDeleteItemsBodySchema = z.object({
+  itemIds: z.array(z.string()),
+});
+
+export const bulkDeleteItemsResponseSchema = z.object({
+  success: z.boolean(),
+  deletedCount: z.number(),
+});

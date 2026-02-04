@@ -147,7 +147,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     const queryParams = normalizeQueryParams((ctx.query || {}) as Record<string, unknown>);
     let body: unknown;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = ctx.headers['content-type'] || '';
 
       if (contentType.includes('multipart/form-data')) {

@@ -593,6 +593,83 @@ export interface DatasetItem {
   updatedAt: Date;
 }
 
+/** Snapshot of a dataset item at a specific version */
+export interface DatasetItemVersion {
+  id: string;
+  itemId: string;
+  datasetId: string;
+  versionNumber: number;
+  /** Dataset version timestamp this snapshot belongs to */
+  datasetVersion: Date;
+  snapshot: {
+    input: unknown;
+    expectedOutput?: unknown;
+    context?: Record<string, unknown>;
+  };
+  /** True if item was deleted at this version */
+  isDeleted: boolean;
+  createdAt: Date;
+}
+
+/** Dataset version entry - represents a point-in-time snapshot */
+export interface DatasetVersion {
+  id: string;
+  datasetId: string;
+  /** The version timestamp */
+  version: Date;
+  createdAt: Date;
+}
+
+/** Input for creating an item version */
+export interface CreateItemVersionInput {
+  itemId: string;
+  datasetId: string;
+  versionNumber: number;
+  datasetVersion: Date;
+  snapshot: DatasetItemVersion['snapshot'];
+  isDeleted?: boolean;
+}
+
+/** Input for listing item versions */
+export interface ListItemVersionsInput {
+  itemId: string;
+  pagination: StoragePagination;
+}
+
+/** Output for listing item versions */
+export interface ListItemVersionsOutput {
+  versions: DatasetItemVersion[];
+  pagination: PaginationInfo;
+}
+
+/** Input for listing dataset versions */
+export interface ListDatasetVersionsInput {
+  datasetId: string;
+  pagination: StoragePagination;
+}
+
+/** Output for listing dataset versions */
+export interface ListDatasetVersionsOutput {
+  versions: DatasetVersion[];
+  pagination: PaginationInfo;
+}
+
+/** Input for bulk adding items */
+export interface BulkAddItemsInput {
+  datasetId: string;
+  items: Array<{
+    input: unknown;
+    expectedOutput?: unknown;
+    context?: Record<string, unknown>;
+  }>;
+}
+
+/** Input for bulk deleting items */
+export interface BulkDeleteItemsInput {
+  datasetId: string;
+  itemIds: string[];
+}
+
 /** Input for creating a dataset */
 export interface CreateDatasetInput {
   name: string;

@@ -3,6 +3,8 @@ import type { StorageThreadType } from '../../memory/types';
 import type {
   Dataset,
   DatasetItem,
+  DatasetItemVersion,
+  DatasetVersion,
   Run,
   RunResult,
   StorageAgentType,
@@ -31,6 +33,8 @@ export class InMemoryDB {
   readonly agentVersions = new Map<string, AgentVersion>();
   readonly datasets = new Map<string, Dataset>();
   readonly datasetItems = new Map<string, DatasetItem>();
+  readonly itemVersions = new Map<string, DatasetItemVersion>();
+  readonly datasetVersions = new Map<string, DatasetVersion>();
   readonly runs = new Map<string, Run>();
   readonly runResults = new Map<string, RunResult>();
 
@@ -49,6 +53,8 @@ export class InMemoryDB {
     this.agentVersions.clear();
     this.datasets.clear();
     this.datasetItems.clear();
+    this.itemVersions.clear();
+    this.datasetVersions.clear();
     this.runs.clear();
     this.runResults.clear();
   }

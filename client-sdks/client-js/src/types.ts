@@ -1054,3 +1054,87 @@ export interface CompareRunsResponse {
   }>;
   warnings: string[];
 }
+
+// ============================================================================
+// Dataset Version Types
+// ============================================================================
+
+/**
+ * Dataset version entity
+ */
+export interface DatasetVersionEntity {
+  id: string;
+  datasetId: string;
+  version: Date;
+  createdAt: Date;
+}
+
+/**
+ * Dataset item version entity
+ */
+export interface DatasetItemVersion {
+  id: string;
+  itemId: string;
+  datasetId: string;
+  versionNumber: number;
+  datasetVersion: Date;
+  snapshot: {
+    input: unknown;
+    expectedOutput?: unknown;
+    context?: Record<string, unknown>;
+  };
+  isDeleted: boolean;
+  createdAt: Date;
+}
+
+/**
+ * Response for listing dataset versions
+ */
+export interface ListDatasetVersionsResponse {
+  versions: DatasetVersionEntity[];
+  pagination: { page: number; perPage: number; total: number; hasMore: boolean };
+}
+
+/**
+ * Response for listing item versions
+ */
+export interface ListDatasetItemVersionsResponse {
+  versions: DatasetItemVersion[];
+  pagination: { page: number; perPage: number; total: number; hasMore: boolean };
+}
+
+/**
+ * Parameters for bulk adding items
+ */
+export interface BulkAddDatasetItemsParams {
+  datasetId: string;
+  items: Array<{
+    input: unknown;
+    expectedOutput?: unknown;
+    context?: Record<string, unknown>;
+  }>;
+}
+
+/**
+ * Response for bulk adding items
+ */
+export interface BulkAddDatasetItemsResponse {
+  items: DatasetItem[];
+  count: number;
+}
+
+/**
+ * Parameters for bulk deleting items
+ */
+export interface BulkDeleteDatasetItemsParams {
+  datasetId: string;
+  itemIds: string[];
+}
+
+/**
+ * Response for bulk deleting items
+ */
+export interface BulkDeleteDatasetItemsResponse {
+  success: boolean;
+  deletedCount: number;
+}

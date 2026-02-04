@@ -162,7 +162,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     // Use queries() to get all values for repeated params (e.g., ?tags=a&tags=b -> { tags: ['a', 'b'] })
     const queryParams = normalizeQueryParams(request.queries());
     let body: unknown;
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.header('content-type') || '';
 
       if (contentType.includes('multipart/form-data')) {

@@ -6,6 +6,7 @@ import {
   datasetIdPathParams,
   datasetAndRunIdPathParams,
   datasetAndItemIdPathParams,
+  datasetItemVersionPathParams,
   paginationQuerySchema,
   listItemsQuerySchema,
   createDatasetBodySchema,
@@ -14,6 +15,8 @@ import {
   updateItemBodySchema,
   triggerRunBodySchema,
   compareRunsBodySchema,
+  bulkAddItemsBodySchema,
+  bulkDeleteItemsBodySchema,
   datasetResponseSchema,
   datasetItemResponseSchema,
   runResponseSchema,
@@ -23,6 +26,11 @@ import {
   listItemsResponseSchema,
   listRunsResponseSchema,
   listResultsResponseSchema,
+  listDatasetVersionsResponseSchema,
+  listItemVersionsResponseSchema,
+  itemVersionResponseSchema,
+  bulkAddItemsResponseSchema,
+  bulkDeleteItemsResponseSchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -746,6 +754,245 @@ export const COMPARE_RUNS_ROUTE = createRoute({
       return result;
     } catch (error) {
       return handleError(error, 'Error comparing runs');
+    }
+  },
+});
+
+// ============================================================================
+// Version Routes
+// ============================================================================
+
+export const LIST_DATASET_VERSIONS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/datasets/:datasetId/versions',
+  responseType: 'json',
+  pathParamSchema: datasetIdPathParams,
+  queryParamSchema: paginationQuerySchema,
+  responseSchema: listDatasetVersionsResponseSchema,
+  summary: 'List dataset versions',
+  description: 'Returns a paginated list of all versions for the dataset',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, ...params }) => {
+    try {
+      const { page, perPage } = params;
+      const pagination: StoragePagination = {
+        page: page ?? 0,
+        perPage: perPage ?? 10,
+      };
+
+      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
+      if (!datasetsStore) {
+        throw new HTTPException(500, { message: 'Datasets storage not configured' });
+      }
+
+      // Check if dataset exists
+      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
+      if (!dataset) {
+        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
+      }
+
+      const result = await datasetsStore.listDatasetVersions({
+        datasetId,
+        pagination,
+      });
+
+      return {
+        versions: result.versions,
+        pagination: result.pagination,
+      };
+    } catch (error) {
+      return handleError(error, 'Error listing dataset versions');
+    }
+  },
+});
+
+export const LIST_ITEM_VERSIONS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/datasets/:datasetId/items/:itemId/versions',
+  responseType: 'json',
+  pathParamSchema: datasetAndItemIdPathParams,
+  queryParamSchema: paginationQuerySchema,
+  responseSchema: listItemVersionsResponseSchema,
+  summary: 'List item versions',
+  description: 'Returns a paginated list of all versions for the item',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, itemId, ...params }) => {
+    try {
+      const { page, perPage } = params;
+      const pagination: StoragePagination = {
+        page: page ?? 0,
+        perPage: perPage ?? 10,
+      };
+
+      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
+      if (!datasetsStore) {
+        throw new HTTPException(500, { message: 'Datasets storage not configured' });
+      }
+
+      // Check if dataset exists
+      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
+      if (!dataset) {
+        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
+      }
+
+      // Check if item exists and belongs to dataset
+      const item = await datasetsStore.getItemById({ id: itemId });
+      if (!item || item.datasetId !== datasetId) {
+        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
+      }
+
+      const result = await datasetsStore.listItemVersions({
+        itemId,
+        pagination,
+      });
+
+      return {
+        versions: result.versions,
+        pagination: result.pagination,
+      };
+    } catch (error) {
+      return handleError(error, 'Error listing item versions');
+    }
+  },
+});
+
+export const GET_ITEM_VERSION_ROUTE = createRoute({
+  method: 'GET',
+  path: '/datasets/:datasetId/items/:itemId/versions/:versionNumber',
+  responseType: 'json',
+  pathParamSchema: datasetItemVersionPathParams,
+  responseSchema: itemVersionResponseSchema.nullable(),
+  summary: 'Get item version by number',
+  description: 'Returns a specific version of the item',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, itemId, versionNumber }) => {
+    try {
+      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
+      if (!datasetsStore) {
+        throw new HTTPException(500, { message: 'Datasets storage not configured' });
+      }
+
+      // Check if dataset exists
+      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
+      if (!dataset) {
+        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
+      }
+
+      // Check if item exists and belongs to dataset
+      const item = await datasetsStore.getItemById({ id: itemId });
+      if (!item || item.datasetId !== datasetId) {
+        throw new HTTPException(404, { message: `Item not found: ${itemId}` });
+      }
+
+      const version = await datasetsStore.getItemVersion(itemId, versionNumber);
+      if (!version) {
+        throw new HTTPException(404, { message: `Version ${versionNumber} not found for item: ${itemId}` });
+      }
+
+      return version;
+    } catch (error) {
+      return handleError(error, 'Error getting item version');
+    }
+  },
+});
+
+// ============================================================================
+// Bulk Operations Routes
+// ============================================================================
+
+export const BULK_ADD_ITEMS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/:datasetId/items/bulk',
+  responseType: 'json',
+  pathParamSchema: datasetIdPathParams,
+  bodySchema: bulkAddItemsBodySchema,
+  responseSchema: bulkAddItemsResponseSchema,
+  summary: 'Bulk add items to dataset',
+  description: 'Adds multiple items to the dataset in a single operation (single version entry)',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, ...params }) => {
+    try {
+      const { items } = params as {
+        items: Array<{
+          input: unknown;
+          expectedOutput?: unknown;
+          context?: Record<string, unknown>;
+        }>;
+      };
+
+      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
+      if (!datasetsStore) {
+        throw new HTTPException(500, { message: 'Datasets storage not configured' });
+      }
+
+      // Check if dataset exists
+      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
+      if (!dataset) {
+        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
+      }
+
+      const addedItems = await datasetsStore.bulkAddItems({
+        datasetId,
+        items,
+      });
+
+      return {
+        items: addedItems,
+        count: addedItems.length,
+      };
+    } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw new HTTPException(400, {
+          message: error.message,
+          cause: { field: error.field, errors: error.errors },
+        });
+      }
+      return handleError(error, 'Error bulk adding items');
+    }
+  },
+});
+
+export const BULK_DELETE_ITEMS_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/datasets/:datasetId/items/bulk',
+  responseType: 'json',
+  pathParamSchema: datasetIdPathParams,
+  bodySchema: bulkDeleteItemsBodySchema,
+  responseSchema: bulkDeleteItemsResponseSchema,
+  summary: 'Bulk delete items from dataset',
+  description: 'Deletes multiple items from the dataset in a single operation (single version entry)',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, ...params }) => {
+    try {
+      const { itemIds } = params as { itemIds: string[] };
+
+      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
+      if (!datasetsStore) {
+        throw new HTTPException(500, { message: 'Datasets storage not configured' });
+      }
+
+      // Check if dataset exists
+      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
+      if (!dataset) {
+        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
+      }
+
+      await datasetsStore.bulkDeleteItems({
+        datasetId,
+        itemIds,
+      });
+
+      return {
+        success: true,
+        deletedCount: itemIds.length,
+      };
+    } catch (error) {
+      return handleError(error, 'Error bulk deleting items');
     }
   },
 });
