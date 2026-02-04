@@ -324,7 +324,7 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
               enabled: boolean;
               hasRecord?: boolean;
               originType?: string;
-              lastObservedAt?: Date | null;
+              lastObservedAt?: Date;
               tokenCount?: number;
               observationTokenCount?: number;
               isObserving?: boolean;
@@ -346,6 +346,8 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
                   omStatus = {
                     enabled: true,
                     ...status,
+                    // Convert null to undefined for schema compatibility
+                    lastObservedAt: status.lastObservedAt ?? undefined,
                   };
                 } else {
                   omStatus = { enabled: true, hasRecord: false };
