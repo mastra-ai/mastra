@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -1182,7 +1184,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = crypto.randomUUID();
+      const id = randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.threadId, input.resourceId);
 
@@ -1291,7 +1293,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = crypto.randomUUID();
+      const id = randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
 
