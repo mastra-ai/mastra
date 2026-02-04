@@ -521,12 +521,24 @@ No shared tests ensure consistent behavior across filesystem providers.
 
 Create shared test suite similar to the patterns used in `stores/` or `server-adapters/` directories.
 
-### TODO
+### Design Document
 
-- [ ] Review `stores/` test patterns
-- [ ] Review `server-adapters/` test patterns
-- [ ] Create filesystem test suite following same conventions
-- [ ] Apply to LocalFilesystem, S3Filesystem, CompositeFilesystem
+See **[workspaces/TEST-SUITE-DESIGN.md](./workspaces/TEST-SUITE-DESIGN.md)** for full design.
+
+### Progress
+
+- [x] Analyze `stores/_test-utils` patterns
+- [x] Analyze `server-adapters/_test-utils` patterns
+- [x] Create design document with:
+  - Factory pattern signatures
+  - Capability flags
+  - Domain test organization
+  - Provider-specific cleanup
+  - CI/timeout handling decisions
+- [ ] Implement `workspaces/_test-utils` package
+- [ ] Apply to LocalFilesystem, S3Filesystem, GCSFilesystem, CompositeFilesystem
+- [ ] Apply to LocalSandbox, E2BSandbox
+- [ ] Add integration tests
 
 ---
 
