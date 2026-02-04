@@ -132,7 +132,12 @@ describe('flattenSchemaToVariables', () => {
     const result = flattenSchemaToVariables(schema);
 
     expect(result).toContainEqual({ path: 'users', label: 'users', description: undefined, type: 'array' });
-    expect(result).toContainEqual({ path: 'users[].name', label: 'users[].name', description: undefined, type: 'string' });
+    expect(result).toContainEqual({
+      path: 'users[].name',
+      label: 'users[].name',
+      description: undefined,
+      type: 'string',
+    });
     expect(result).toContainEqual({
       path: 'users[].email',
       label: 'users[].email',

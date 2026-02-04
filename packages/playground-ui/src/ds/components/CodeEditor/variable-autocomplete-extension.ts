@@ -1,4 +1,9 @@
-import { autocompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
+import {
+  autocompletion,
+  type Completion,
+  type CompletionContext,
+  type CompletionResult,
+} from '@codemirror/autocomplete';
 import type { Extension } from '@codemirror/state';
 import type { JsonSchema } from '@/lib/json-schema';
 import { flattenSchemaToVariables, type VariableCompletion } from './schema-to-variables';
