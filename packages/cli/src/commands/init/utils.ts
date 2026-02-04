@@ -963,16 +963,29 @@ This document provides guidance for AI coding agents working in this repository.
 ## Project Overview
 
 This is a **Mastra AI agent framework** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
-## Quick Start
+## Commands
+
+Use these commands to interact with the project.
+
+### Installation
 
 \`\`\`bash
-# Install dependencies
 npm install
+\`\`\`
 
-# Run development server
+### Development
+
+Start the Mastra Studio at localhost:4111 by running the \`dev\` script:
+
+\`\`\`bash
 npm run dev
+\`\`\`
 
-# Build the project
+### Build
+
+In order to build a production-ready server, run the \`build\` script:
+
+\`\`\`bash
 npm run build
 \`\`\`
 
