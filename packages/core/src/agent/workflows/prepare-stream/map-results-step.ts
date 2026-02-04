@@ -149,7 +149,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
             requestContext: result.requestContext!,
             overrides: options.inputProcessors,
           })
-        : capabilities.inputProcessors
+        : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
 
     const messageList = memoryData.messageList!;
