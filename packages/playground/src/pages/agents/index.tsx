@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import {
   Header,
@@ -13,22 +12,16 @@ import {
   useAgents,
   AgentsTable,
   AgentIcon,
-  CreateAgentDialog,
-  useExperimentalFeatures,
+  useIsCmsAvailable,
 } from '@mastra/playground-ui';
 
 function Agents() {
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const { Link, navigate, paths } = useLinkComponent();
+  const { Link, navigate } = useLinkComponent();
   const { data: agents = {}, isLoading } = useAgents();
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
+  const { isCmsAvailable } = useIsCmsAvailable();
 
-  const handleAgentCreated = async (agentId: string) => {
-    setIsCreateDialogOpen(false);
-    // Give a small delay for cache invalidation to complete
-    setTimeout(() => {
-      navigate(`${paths.agentLink(agentId)}/chat`);
-    }, 100);
+  const handleCreateClick = () => {
+    navigate('/cms/agents/create');
   };
 
   return (
@@ -42,12 +35,12 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
-          {experimentalFeaturesEnabled && (
-            <Button variant="light" onClick={() => setIsCreateDialogOpen(true)}>
+          {isCmsAvailable && (
+            <Button variant="light" as={Link} to="/cms/agents/create">
               <Icon>
                 <Plus />
               </Icon>
-              Create Agent
+              Create an agent
             </Button>
           )}
           <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
@@ -63,17 +56,9 @@ function Agents() {
         <AgentsTable
           agents={agents}
           isLoading={isLoading}
-          onCreateClick={experimentalFeaturesEnabled ? () => setIsCreateDialogOpen(true) : undefined}
+          onCreateClick={isCmsAvailable ? handleCreateClick : undefined}
         />
       </MainContentContent>
-
-      {experimentalFeaturesEnabled && (
-        <CreateAgentDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
-          onSuccess={handleAgentCreated}
-        />
-      )}
     </MainContentLayout>
   );
 }

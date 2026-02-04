@@ -37,7 +37,7 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
           'border border-border1 text-neutral6 text-ui-sm py-2 rounded-md bg-surface1 hover:bg-surface2 active:bg-surface3',
         )}
       >
-        Add content block
+        Add Instruction block
       </button>
     </div>
   );

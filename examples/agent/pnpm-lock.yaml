@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@mastra/core': link:../../packages/core
+  '@mastra/editor': link:../../packages/editor
   '@mastra/loggers': link:../../packages/loggers
   '@mastra/voice-openai': link:../../voice/openai
   '@mastra/memory': link:../../packages/memory
