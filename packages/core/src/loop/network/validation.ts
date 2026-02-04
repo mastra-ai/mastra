@@ -31,6 +31,7 @@ import { z } from 'zod';
 import type { MastraDBMessage, Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import type { MastraScorer } from '../../evals/base';
+import type { TracingContext } from '../../observability';
 import { ChunkFrom } from '../../stream';
 import type { NetworkChunkType } from '../../stream/types';
 
@@ -179,6 +180,7 @@ export type ValidationRunResult = CompletionRunResult;
 async function runSingleScorer(
   scorer: MastraScorer<any, any, any, any>,
   context: CompletionContext,
+  tracingContext?: TracingContext,
 ): Promise<ScorerResult> {
   const start = Date.now();
 
@@ -188,6 +190,7 @@ async function runSingleScorer(
       input: context,
       output: context.primitiveResult,
       requestContext: context.customContext,
+      tracingContext,
     });
 
     const score = typeof result.score === 'number' ? result.score : 0;
@@ -215,10 +218,12 @@ async function runSingleScorer(
 
 /**
  * Runs all completion scorers according to the configuration
+ * with optional tracingContext
  */
-export async function runCompletionScorers(
+export async function runCompletionScorersWithTracing(
   scorers: MastraScorer<any, any, any, any>[],
   context: CompletionContext,
+  tracingContext?: TracingContext,
   options?: {
     strategy?: 'all' | 'any';
     parallel?: boolean;
@@ -238,7 +243,7 @@ export async function runCompletionScorers(
   });
 
   if (parallel) {
-    const scorerPromises = scorers.map(scorer => runSingleScorer(scorer, context));
+    const scorerPromises = scorers.map(scorer => runSingleScorer(scorer, context, tracingContext));
     const raceResult = await Promise.race([Promise.all(scorerPromises), timeoutPromise]);
 
     if (raceResult === 'timeout') {
@@ -286,6 +291,20 @@ export async function runCompletionScorers(
   };
 }
 
+/**
+ * Runs all completion scorers according to the configuration
+ */
+export async function runCompletionScorers(
+  scorers: MastraScorer<any, any, any, any>[],
+  context: CompletionContext,
+  options?: {
+    strategy?: 'all' | 'any';
+    parallel?: boolean;
+    timeout?: number;
+  },
+) {
+  return runCompletionScorersWithTracing(scorers, context, undefined, options);
+}
 // Legacy function aliases
 /** @deprecated Use runCompletionScorers instead */
 export async function runChecks(
@@ -381,6 +400,7 @@ export async function runDefaultCompletionCheck(
     stepId?: string;
     runId?: string;
   },
+  tracingContext?: TracingContext,
   abortSignal?: AbortSignal,
   onAbort?: (event: any) => Promise<void> | void,
 ): Promise<ScorerResult> {
@@ -446,6 +466,7 @@ export async function runDefaultCompletionCheck(
       structuredOutput: {
         schema: defaultCompletionSchema,
       },
+      tracingContext,
       abortSignal,
       onAbort,
     });
@@ -493,6 +514,7 @@ export async function runDefaultCompletionCheck(
       passed: output?.isComplete ?? false,
       reason: output?.completionReason,
       finalResult: output?.finalResult,
+
       scorerId: 'default-completion',
       scorerName: 'Default LLM Completion',
       duration: Date.now() - start,
@@ -537,6 +559,7 @@ export async function generateFinalResult(
     stepId?: string;
     runId?: string;
   },
+  tracingContext?: TracingContext,
   abortSignal?: AbortSignal,
   onAbort?: (event: any) => Promise<void> | void,
 ): Promise<string | undefined> {
@@ -563,6 +586,7 @@ export async function generateFinalResult(
   const stream = await agent.stream(prompt, {
     maxSteps: 1,
     structuredOutput: { schema: finalResultSchema },
+    tracingContext,
     abortSignal,
     onAbort,
   });
@@ -631,6 +655,7 @@ export async function generateStructuredFinalResult<OUTPUT extends {}>(
     runId?: string;
   },
   abortSignal?: AbortSignal,
+  tracingContext?: TracingContext,
   onAbort?: (event: any) => Promise<void> | void,
 ): Promise<StructuredFinalResult<OUTPUT>> {
   const prompt = `
@@ -648,6 +673,7 @@ export async function generateStructuredFinalResult<OUTPUT extends {}>(
     maxSteps: 1,
     structuredOutput: structuredOutputOptions,
     abortSignal,
+    tracingContext,
     onAbort,
   });
 

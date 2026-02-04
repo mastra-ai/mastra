@@ -25,8 +25,13 @@ function isInstance(
   return obj instanceof BaseObservabilityInstance;
 }
 
+type resolve = (value: void | PromiseLike<void>) => void;
+
 export class Observability extends MastraBase implements ObservabilityEntrypoint {
   #registry = new ObservabilityRegistry();
+
+  #isInitialized = false;
+  #initPromises: Set<resolve> = new Set();
 
   constructor(config: ObservabilityRegistryConfig) {
     super({
@@ -120,18 +125,20 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     }
   }
 
-  setMastraContext(options: { mastra: Mastra }): void {
+  async setMastraContext(options: { mastra: Mastra }): Promise<void> {
     const instances = this.listInstances();
     const { mastra } = options;
 
-    instances.forEach(instance => {
+    for (let [_, instance] of instances) {
       const config = instance.getConfig();
       const exporters = instance.getExporters();
-      exporters.forEach(exporter => {
+      for (let exporter of exporters) {
         // Initialize exporter if it has an init method
         if ('init' in exporter && typeof exporter.init === 'function') {
           try {
-            exporter.init({ mastra, config });
+            //default exporter uses promise
+            //TODO : update types in base interface
+            await exporter.init({ mastra, config });
           } catch (error) {
             this.logger?.warn('Failed to initialize observability exporter', {
               exporterName: exporter.name,
@@ -139,7 +146,24 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
             });
           }
         }
-      });
+      }
+    }
+    this.#isInitialized = true;
+    this.#initPromises.forEach(resolve => resolve());
+    this.#initPromises.clear();
+  }
+
+  /**
+   * Blocks the caller with await until all exporters have been initialized
+   * @returns Promise , use with await to block the caller
+   */
+  ensureInitialized(): Promise<void> {
+    return new Promise(resolve => {
+      if (this.#isInitialized) {
+        resolve();
+        return;
+      }
+      this.#initPromises.add(resolve);
     });
   }
 

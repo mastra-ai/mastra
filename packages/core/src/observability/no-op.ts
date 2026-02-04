@@ -3,8 +3,8 @@ import type { IMastraLogger } from '../logger';
 import type { ObservabilityInstance, ConfigSelectorOptions, ObservabilityEntrypoint, ConfigSelector } from './types';
 
 export class NoOpObservability implements ObservabilityEntrypoint {
-  setMastraContext(_options: { mastra: Mastra }): void {
-    return;
+  setMastraContext(_options: { mastra: Mastra }): Promise<void> {
+    return Promise.resolve();
   }
 
   setLogger(_options: { logger: IMastraLogger }): void {
@@ -17,6 +17,10 @@ export class NoOpObservability implements ObservabilityEntrypoint {
 
   registerInstance(_name: string, _instance: ObservabilityInstance, _isDefault = false): void {
     return;
+  }
+
+  ensureInitialized(): Promise<void> {
+    return Promise.resolve();
   }
 
   getInstance(_name: string): ObservabilityInstance | undefined {

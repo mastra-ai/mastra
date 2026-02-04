@@ -10,6 +10,7 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import { noopLogger } from '../../logger';
+import { EntityType, getOrCreateSpan, SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
@@ -24,11 +25,11 @@ import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
 import type { CompletionConfig, CompletionContext } from './validation';
 import {
-  runValidation,
   formatCompletionFeedback,
   runDefaultCompletionCheck,
   generateFinalResult,
   generateStructuredFinalResult,
+  runCompletionScorersWithTracing,
 } from './validation';
 
 /**
@@ -193,6 +194,7 @@ export async function getRoutingAgent({
     memory: memoryToUse,
     inputProcessors: configuredInputProcessors,
     outputProcessors: configuredOutputProcessors,
+    mastra: agent.getMastraInstance(),
     // @ts-expect-error - internal property for agent network
     _agentNetworkAppend: true,
   });
@@ -510,7 +512,7 @@ export async function createNetworkLoop({
       iteration: z.number(),
       conversationContext: z.array(z.any()).optional(),
     }),
-    execute: async ({ inputData, getInitData, writer }) => {
+    execute: async ({ inputData, getInitData, writer, tracingContext }) => {
       // Check if aborted before executing
       if (abortSignal?.aborted) {
         await onAbort?.({
@@ -616,6 +618,7 @@ export async function createNetworkLoop({
           }),
         },
         requestContext: requestContext,
+        tracingContext: tracingContext,
         maxSteps: 1,
         memory: {
           thread: initData?.threadId ?? runId,
@@ -718,7 +721,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
-    execute: async ({ inputData, writer, getInitData, suspend, resumeData }) => {
+    execute: async ({ inputData, writer, getInitData, suspend, resumeData, tracingContext }) => {
       // Check if aborted before executing
       if (abortSignal?.aborted) {
         await onAbort?.({
@@ -803,6 +806,7 @@ export async function createNetworkLoop({
       const result = await (resumeData
         ? agentForStep.resumeStream(resumeData, {
             requestContext: requestContext,
+            tracingContext: tracingContext,
             runId,
             memory: {
               thread: threadId,
@@ -816,6 +820,7 @@ export async function createNetworkLoop({
           })
         : agentForStep.stream(messagesForSubAgent, {
             requestContext: requestContext,
+            tracingContext: tracingContext,
             runId,
             memory: {
               thread: threadId,
@@ -1058,7 +1063,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
-    execute: async ({ inputData, writer, getInitData, suspend, resumeData, mastra }) => {
+    execute: async ({ inputData, writer, getInitData, suspend, resumeData, mastra, tracingContext }) => {
       // Check if aborted before executing
       if (abortSignal?.aborted) {
         await onAbort?.({
@@ -1163,10 +1168,12 @@ export async function createNetworkLoop({
         ? run.resumeStream({
             resumeData,
             requestContext: requestContext,
+            tracingContext: tracingContext,
           })
         : run.stream({
             inputData: input,
             requestContext: requestContext,
+            tracingContext: tracingContext,
           });
 
       // const wflowAbortCb = () => {
@@ -2010,6 +2017,7 @@ export async function createNetworkLoop({
 export async function networkLoop<OUTPUT = undefined>({
   networkName,
   requestContext,
+  tracingContext,
   runId,
   routingAgent,
   routingAgentOptions,
@@ -2069,6 +2077,7 @@ export async function networkLoop<OUTPUT = undefined>({
   resumeData?: any;
   autoResumeSuspendedTools?: boolean;
   mastra?: Mastra;
+  tracingContext?: TracingContext;
   onAbort?: NetworkOptions<OUTPUT>['onAbort'];
   abortSignal?: NetworkOptions<OUTPUT>['abortSignal'];
 }): Promise<MastraAgentNetworkStream<OUTPUT>> {
@@ -2208,7 +2217,7 @@ export async function networkLoop<OUTPUT = undefined>({
       validationPassed: z.boolean().optional(),
       validationFeedback: z.string().optional(),
     }),
-    execute: async ({ inputData, writer }) => {
+    execute: async ({ inputData, writer, tracingContext }) => {
       const configuredScorers = validation?.scorers || [];
 
       // Build completion context
@@ -2263,7 +2272,12 @@ export async function networkLoop<OUTPUT = undefined>({
           timedOut: false,
         };
       } else if (hasConfiguredScorers) {
-        completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);
+        completionResult = await runCompletionScorersWithTracing(configuredScorers, completionContext, tracingContext, {
+          strategy: validation?.strategy,
+          parallel: validation?.parallel,
+          timeout: validation?.timeout,
+        });
+        await validation?.onComplete?.(completionResult);
 
         // Generate and stream finalResult if validation passed
         if (completionResult.complete) {
@@ -2285,6 +2299,7 @@ export async function networkLoop<OUTPUT = undefined>({
                 runId: runIdToUse,
               },
               abortSignal,
+              tracingContext,
               onAbort,
             );
             generatedFinalResult = structuredResult.text;
@@ -2298,6 +2313,7 @@ export async function networkLoop<OUTPUT = undefined>({
                 stepId: generateId(),
                 runId: runIdToUse,
               },
+              tracingContext,
               abortSignal,
               onAbort,
             );
@@ -2329,6 +2345,7 @@ export async function networkLoop<OUTPUT = undefined>({
             stepId: generateId(),
             runId: runIdToUse,
           },
+          tracingContext,
           abortSignal,
           onAbort,
         );
@@ -2355,6 +2372,7 @@ export async function networkLoop<OUTPUT = undefined>({
               runId,
             },
             abortSignal,
+            tracingContext,
             onAbort,
           );
           if (structuredResult.text) {
@@ -2530,8 +2548,30 @@ export async function networkLoop<OUTPUT = undefined>({
     .then(validationStep)
     .commit();
 
+  await mastra?.observability.ensureInitialized();
+  // Set Tracing context
+  const agentSpan = getOrCreateSpan({
+    type: SpanType.AGENT_RUN,
+    name: `agent run: '${routingAgent.id}'`,
+    entityType: EntityType.AGENT,
+    entityId: routingAgent.id,
+    entityName: routingAgent.name,
+    input: messages,
+    attributes: {
+      conversationId: threadId,
+    },
+    metadata: {
+      runId,
+      resourceId,
+      threadId: threadId,
+    },
+    requestContext,
+    tracingContext,
+    mastra: routingAgent.getMastraInstance(),
+  });
+
   const mainWorkflow = createWorkflow({
-    id: 'agent-loop-main-workflow',
+    id: `${networkName} network`,
     inputSchema: z.object({
       iteration: z.number(),
       task: z.string(),
@@ -2557,6 +2597,18 @@ export async function networkLoop<OUTPUT = undefined>({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      onFinish: result => {
+        // end span on workflow end
+        if (result.error) {
+          agentSpan?.error({ error: result.error, endSpan: true });
+          return;
+        }
+        agentSpan?.end({
+          output: {
+            result: result?.result,
+          },
+        });
+      },
     },
   })
     .dountil(iterationWithValidation, async ({ inputData }) => {
@@ -2587,7 +2639,7 @@ export async function networkLoop<OUTPUT = undefined>({
     messages,
     routingAgent,
     generateId,
-    tracingContext: routingAgentOptions?.tracingContext,
+    tracingContext: { currentSpan: agentSpan },
     memoryConfig: routingAgentMemoryOptions?.options,
   });
 
@@ -2598,6 +2650,7 @@ export async function networkLoop<OUTPUT = undefined>({
         return run.resumeStream({
           resumeData: resumeDataToUse,
           requestContext,
+          tracingContext: { currentSpan: agentSpan },
         }).fullStream;
       }
       return run.stream({
@@ -2613,6 +2666,7 @@ export async function networkLoop<OUTPUT = undefined>({
           verboseIntrospection: true,
         },
         requestContext,
+        tracingContext: { currentSpan: agentSpan },
       }).fullStream;
     },
   });

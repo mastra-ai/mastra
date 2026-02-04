@@ -3440,7 +3440,6 @@ export class Agent<
   ): Promise<MastraAgentNetworkStream<OUTPUT>>;
   async network<OUTPUT = undefined>(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions<OUTPUT>) {
     const requestContextToUse = options?.requestContext || new RequestContext();
-
     // Merge default network options with call-specific options
     const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
     const mergedOptions = {
@@ -3450,7 +3449,6 @@ export class Agent<
       routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
-
     const runId = mergedOptions?.runId || this.#mastra?.generateId() || randomUUID();
 
     // Reserved keys from requestContext take precedence for security.
@@ -3458,7 +3456,6 @@ export class Agent<
     // preventing attackers from hijacking another user's memory by passing different values in the body.
     const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-
     const threadId =
       threadIdFromContext ||
       (typeof mergedOptions?.memory?.thread === 'string'
@@ -3469,6 +3466,7 @@ export class Agent<
     return await networkLoop<OUTPUT>({
       networkName: this.name,
       requestContext: requestContextToUse,
+      tracingContext: mergedOptions.tracingContext,
       runId,
       routingAgent: this,
       routingAgentOptions: {
@@ -3549,6 +3547,7 @@ export class Agent<
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
+      tracingContext: mergedOptions?.tracingContext,
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages: [],

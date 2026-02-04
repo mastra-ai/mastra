@@ -1,3 +1,4 @@
+import { Mastra } from '@mastra/core';
 import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
 import type {
@@ -102,7 +103,6 @@ describe('Observability Registry', () => {
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [new TestExporter()],
       });
-
       observability.registerInstance('test', tracing);
       expect(observability.getInstance('test')).toBe(tracing);
 
@@ -431,6 +431,18 @@ describe('Observability Registry', () => {
       expect(observability.getSelectedInstance(agentOptions)).toBe(observability.getInstance('langfuse'));
       expect(observability.getSelectedInstance(workflowOptions)).toBe(observability.getInstance('datadog'));
       expect(observability.getSelectedInstance(genericOptions)).toBe(observability.getDefaultInstance()); // Falls back to default (console)
+    });
+
+    it('should resolve ensureInitialized', async () => {
+      observability = new Observability({
+        default: { enabled: true },
+        configs: {},
+      });
+      expect(observability.ensureInitialized()).resolves.toBeUndefined();
+
+      new Mastra({
+        observability,
+      });
     });
   });
 

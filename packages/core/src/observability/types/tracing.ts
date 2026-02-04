@@ -809,7 +809,9 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
 export interface ObservabilityEntrypoint {
   shutdown(): Promise<void>;
 
-  setMastraContext(options: { mastra: Mastra }): void;
+  setMastraContext(options: { mastra: Mastra }): Promise<void>;
+
+  ensureInitialized(): Promise<void>;
 
   setLogger(options: { logger: IMastraLogger }): void;
 
