@@ -1,4 +1,3 @@
-import { getSchemaValidator, SchemaUpdateValidationError } from '../../../datasets/validation';
 import { calculatePagination, normalizePerPage } from '../../base';
 import type {
   Dataset,
@@ -51,43 +50,10 @@ export class DatasetsInMemory extends DatasetsStorage {
     return this.db.datasets.get(id) ?? null;
   }
 
-  async updateDataset(args: UpdateDatasetInput): Promise<Dataset> {
+  protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<Dataset> {
     const existing = this.db.datasets.get(args.id);
     if (!existing) {
       throw new Error(`Dataset not found: ${args.id}`);
-    }
-
-    // Check if schemas are being added or modified
-    const inputSchemaChanging =
-      args.inputSchema !== undefined && JSON.stringify(args.inputSchema) !== JSON.stringify(existing.inputSchema);
-    const outputSchemaChanging =
-      args.outputSchema !== undefined && JSON.stringify(args.outputSchema) !== JSON.stringify(existing.outputSchema);
-
-    // If schemas changing, validate all existing items against new schemas
-    if (inputSchemaChanging || outputSchemaChanging) {
-      const items = Array.from(this.db.datasetItems.values()).filter(item => item.datasetId === args.id);
-
-      if (items.length > 0) {
-        const validator = getSchemaValidator();
-        const newInputSchema = args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema;
-        const newOutputSchema = args.outputSchema !== undefined ? args.outputSchema : existing.outputSchema;
-
-        const result = validator.validateBatch(
-          items.map(i => ({ input: i.input, expectedOutput: i.expectedOutput })),
-          newInputSchema,
-          newOutputSchema,
-          `dataset:${args.id}:schema-update`,
-          10, // Max 10 errors to report
-        );
-
-        if (result.invalid.length > 0) {
-          throw new SchemaUpdateValidationError(result.invalid);
-        }
-
-        // Clear old cache since schema changed
-        validator.clearCache(`dataset:${args.id}:input`);
-        validator.clearCache(`dataset:${args.id}:output`);
-      }
     }
 
     const updated: Dataset = {
@@ -135,22 +101,10 @@ export class DatasetsInMemory extends DatasetsStorage {
   }
 
   // Item CRUD with auto-versioning (timestamp-based)
-  async addItem(args: AddDatasetItemInput): Promise<DatasetItem> {
+  protected async _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem> {
     const dataset = this.db.datasets.get(args.datasetId);
     if (!dataset) {
       throw new Error(`Dataset not found: ${args.datasetId}`);
-    }
-
-    // Validate against schemas if enabled
-    const validator = getSchemaValidator();
-    const cacheKey = `dataset:${args.datasetId}`;
-
-    if (dataset.inputSchema) {
-      validator.validate(args.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
-    }
-
-    if (dataset.outputSchema && args.expectedOutput !== undefined) {
-      validator.validate(args.expectedOutput, dataset.outputSchema, 'expectedOutput', `${cacheKey}:output`);
     }
 
     // New version timestamp
@@ -176,7 +130,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     return item;
   }
 
-  async updateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
+  protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
     const existing = this.db.datasetItems.get(args.id);
     if (!existing) {
       throw new Error(`Item not found: ${args.id}`);
@@ -188,18 +142,6 @@ export class DatasetsInMemory extends DatasetsStorage {
     const dataset = this.db.datasets.get(args.datasetId);
     if (!dataset) {
       throw new Error(`Dataset not found: ${args.datasetId}`);
-    }
-
-    // Validate new values against schemas if enabled
-    const validator = getSchemaValidator();
-    const cacheKey = `dataset:${args.datasetId}`;
-
-    if (args.input !== undefined && dataset.inputSchema) {
-      validator.validate(args.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
-    }
-
-    if (args.expectedOutput !== undefined && dataset.outputSchema) {
-      validator.validate(args.expectedOutput, dataset.outputSchema, 'expectedOutput', `${cacheKey}:output`);
     }
 
     // New version timestamp

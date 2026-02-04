@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Switch } from '@/ds/components/Switch';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { SchemaImport } from './schema-import';
 import { cn } from '@/lib/utils';
 import type { JSONSchema7 } from 'json-schema';
 
@@ -20,7 +19,7 @@ interface SchemaFieldProps {
 }
 
 /**
- * Schema field with toggle, JSON editor, and workflow import.
+ * Schema field with toggle and JSON editor.
  * Toggle enables/disables the schema (null = disabled).
  * JSON parsing errors shown inline.
  * Supports auto-population from sourceSchema when autoPopulate is true.
@@ -84,23 +83,13 @@ export function SchemaField({
     }
   };
 
-  const handleImport = (schema: Record<string, unknown>) => {
-    onChange(schema);
-    setJsonText(JSON.stringify(schema, null, 2));
-    setParseError(null);
-  };
-
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Switch checked={isEnabled} onCheckedChange={handleToggle} id={`${schemaType}-schema-toggle`} />
-          <label htmlFor={`${schemaType}-schema-toggle`} className="text-sm font-medium">
-            {label}
-          </label>
-        </div>
-
-        {isEnabled && <SchemaImport schemaType={schemaType} onImport={handleImport} />}
+      <div className="flex items-center gap-2">
+        <Switch checked={isEnabled} onCheckedChange={handleToggle} id={`${schemaType}-schema-toggle`} />
+        <label htmlFor={`${schemaType}-schema-toggle`} className="text-sm font-medium">
+          {label}
+        </label>
       </div>
 
       {isEnabled && (

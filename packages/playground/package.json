@@ -36,6 +36,7 @@
     "@mastra/react": "workspace:*",
     "@posthog/react": "^1.5.2",
     "@tanstack/react-query": "^5.90.9",
+    "date-fns": "^4.1.0",
     "lucide-react": "^0.522.0",
     "posthog-js": "^1.281.0",
     "react": "^19.2.3",
@@ -43,8 +44,8 @@
     "react-router": "^7.6.3"
   },
   "devDependencies": {
-    "@playwright/test": "^1.56.0",
     "@eslint/js": "^9.37.0",
+    "@playwright/test": "^1.56.0",
     "@tailwindcss/container-queries": "^0.1.1",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",

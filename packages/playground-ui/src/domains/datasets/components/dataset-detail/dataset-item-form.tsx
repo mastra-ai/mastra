@@ -5,6 +5,31 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Label } from '@/ds/components/Label';
 import { Pencil } from 'lucide-react';
 
+/** Schema validation error from API */
+export interface SchemaValidationError {
+  field: 'input' | 'expectedOutput';
+  errors: Array<{ path: string; message: string }>;
+}
+
+/** Displays field-level validation errors */
+function ValidationErrors({ field, errors }: { field: string; errors: Array<{ path: string; message: string }> }) {
+  if (!errors.length) return null;
+
+  return (
+    <div className="mt-2 space-y-1">
+      {errors.map((err, idx) => (
+        <p key={idx} className="text-xs text-destructive">
+          <code className="bg-destructive/10 px-1 rounded">
+            {field}
+            {err.path !== '/' ? err.path : ''}
+          </code>
+          : {err.message}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Editable form view for updating dataset item
  */
@@ -15,6 +40,7 @@ export interface EditModeContentProps {
   setExpectedOutputValue: (value: string) => void;
   metadataValue: string;
   setMetadataValue: (value: string) => void;
+  validationErrors: SchemaValidationError | null;
   onSave: () => void;
   onCancel: () => void;
   isSaving: boolean;
@@ -27,6 +53,7 @@ export function EditModeContent({
   setExpectedOutputValue,
   metadataValue,
   setMetadataValue,
+  validationErrors,
   onSave,
   onCancel,
   isSaving,
@@ -43,6 +70,7 @@ export function EditModeContent({
         <div className="space-y-2">
           <Label>Input (JSON) *</Label>
           <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-[120px]" />
+          {validationErrors?.field === 'input' && <ValidationErrors field="input" errors={validationErrors.errors} />}
         </div>
 
         <div className="space-y-2">
@@ -53,6 +81,9 @@ export function EditModeContent({
             showCopyButton={false}
             className="min-h-[100px]"
           />
+          {validationErrors?.field === 'expectedOutput' && (
+            <ValidationErrors field="expectedOutput" errors={validationErrors.errors} />
+          )}
         </div>
 
         <div className="space-y-2">

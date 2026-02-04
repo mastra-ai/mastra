@@ -143,7 +143,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async updateDataset(args: UpdateDatasetInput): Promise<Dataset> {
+  protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<Dataset> {
     try {
       const existing = await this.getDatasetById({ id: args.id });
       if (!existing) {
@@ -282,25 +282,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
   }
 
   // Item CRUD with timestamp versioning
-  async addItem(args: AddDatasetItemInput): Promise<DatasetItem> {
+  protected async _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem> {
     try {
       const now = new Date();
       const nowIso = now.toISOString();
-
-      // Check dataset exists
-      const datasetResult = await this.#client.execute({
-        sql: `SELECT id FROM ${TABLE_DATASETS} WHERE id = ?`,
-        args: [args.datasetId],
-      });
-
-      if (!datasetResult.rows?.[0]) {
-        throw new MastraError({
-          id: createStorageErrorId('LIBSQL', 'ADD_ITEM', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId: args.datasetId },
-        });
-      }
 
       // Update dataset version timestamp
       await this.#client.execute({
@@ -348,7 +333,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async updateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
+  protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
     try {
       // Verify item exists and belongs to dataset
       const existing = await this.getItemById({ id: args.id });

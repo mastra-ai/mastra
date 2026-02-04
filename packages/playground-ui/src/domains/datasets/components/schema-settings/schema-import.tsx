@@ -17,7 +17,7 @@ interface SchemaImportProps {
 const AGENT_INPUT_SCHEMA: Record<string, unknown> = {
   $schema: 'http://json-schema.org/draft-07/schema#',
   description: 'Agent message input (MessageListInput)',
-  oneOf: [
+  anyOf: [
     { type: 'string', description: 'Simple text message' },
     {
       type: 'array',

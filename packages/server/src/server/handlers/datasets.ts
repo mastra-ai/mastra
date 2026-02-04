@@ -1,5 +1,5 @@
 import type { StoragePagination } from '@mastra/core/storage';
-import { runDataset, compareRuns, SchemaValidationError } from '@mastra/core/datasets';
+import { runDataset, compareRuns, SchemaValidationError, SchemaUpdateValidationError } from '@mastra/core/datasets';
 import { HTTPException } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
 import {
@@ -179,6 +179,12 @@ export const UPDATE_DATASET_ROUTE = createRoute({
       // Cast JSONSchema7 to Record<string, unknown> for response schema compatibility
       return dataset as any;
     } catch (error) {
+      if (error instanceof SchemaUpdateValidationError) {
+        throw new HTTPException(400, {
+          message: error.message,
+          cause: { failingItems: error.failingItems },
+        });
+      }
       if (error instanceof SchemaValidationError) {
         throw new HTTPException(400, {
           message: error.message,

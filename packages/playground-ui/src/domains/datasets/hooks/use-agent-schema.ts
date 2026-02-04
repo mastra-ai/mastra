@@ -1,78 +1,61 @@
 import type { JSONSchema7 } from 'json-schema';
 
 /**
- * JSON Schema for ScorerRunInputForAgent type.
- * All agents share the same input schema structure.
+ * JSON Schema for MessageListInput type.
+ * Can be a string, array of strings, message object, or array of message objects.
  */
 const AGENT_INPUT_SCHEMA: JSONSchema7 = {
   $schema: 'http://json-schema.org/draft-07/schema#',
-  type: 'object',
-  description: 'Agent input for scorer evaluation (ScorerRunInputForAgent)',
-  properties: {
-    inputMessages: {
+  description: 'Agent input (MessageListInput) - string, string[], message, or message[]',
+  oneOf: [
+    { type: 'string', description: 'Simple text message' },
+    {
       type: 'array',
-      description: 'User input messages (MastraDBMessage[])',
+      description: 'Array of messages',
       items: {
-        type: 'object',
-        properties: {
-          role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
-          content: { type: 'string' },
-        },
-        required: ['role', 'content'],
-      },
-    },
-    rememberedMessages: {
-      type: 'array',
-      description: 'Messages from memory (MastraDBMessage[])',
-      items: {
-        type: 'object',
-        properties: {
-          role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
-          content: { type: 'string' },
-        },
-        required: ['role', 'content'],
-      },
-    },
-    systemMessages: {
-      type: 'array',
-      description: 'System messages (CoreMessage[])',
-      items: {
-        type: 'object',
-        properties: {
-          role: { type: 'string', enum: ['system'] },
-          content: { type: 'string' },
-        },
-        required: ['role', 'content'],
-      },
-    },
-    taggedSystemMessages: {
-      type: 'object',
-      description: 'Tagged system messages (Record<string, CoreSystemMessage[]>)',
-      additionalProperties: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            role: { type: 'string', enum: ['system'] },
-            content: { type: 'string' },
+        oneOf: [
+          { type: 'string' },
+          {
+            type: 'object',
+            properties: {
+              role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
+              content: { type: 'string' },
+            },
+            required: ['role', 'content'],
           },
-          required: ['role', 'content'],
-        },
+        ],
       },
     },
-  },
-  required: ['inputMessages', 'rememberedMessages', 'systemMessages', 'taggedSystemMessages'],
+    {
+      type: 'object',
+      description: 'Single message object',
+      properties: {
+        role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
+        content: { type: 'string' },
+      },
+      required: ['role', 'content'],
+    },
+  ],
 };
 
 /**
- * Hook that returns the agent input schema.
- * All agents share the same schema (ScorerRunInputForAgent) - no agentId needed.
- * Agents don't have a defined output schema for scorer evaluation.
+ * JSON Schema for agent output (text response).
+ */
+const AGENT_OUTPUT_SCHEMA: JSONSchema7 = {
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  type: 'string',
+  description: 'Agent text response',
+};
+
+/**
+ * Hook that returns the agent input/output schemas.
+ * - inputSchema: MessageListInput (what you pass to agent.generate())
+ * - outputSchema: string (text response)
  */
 export function useAgentSchema() {
   return {
     inputSchema: AGENT_INPUT_SCHEMA,
-    outputSchema: null as JSONSchema7 | null,
+    outputSchema: AGENT_OUTPUT_SCHEMA,
     isLoading: false,
     error: null as Error | null,
   };
