@@ -21,7 +21,6 @@ const iconSizeMap = {
   sm: 'sm',
   md: 'default',
   lg: 'lg',
-  xl: 'lg',
 } as const;
 
 const variantClasses = {
