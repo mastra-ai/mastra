@@ -1,0 +1,1176 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AnthropicSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > should match snapshot for API response schema 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "type": "string",
+              },
+              "id": {
+                "type": "string",
+              },
+              "metadata": {
+                "additionalProperties": {
+                  "type": "string",
+                },
+                "type": "object",
+              },
+              "name": {
+                "type": "string",
+              },
+              "updatedAt": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "id",
+              "name",
+              "createdAt",
+            ],
+            "type": "object",
+          },
+          "type": "array",
+        },
+        "pagination": {
+          "additionalProperties": false,
+          "properties": {
+            "page": {
+              "type": "number",
+            },
+            "pageSize": {
+              "type": "number",
+            },
+            "totalItems": {
+              "type": "number",
+            },
+            "totalPages": {
+              "type": "number",
+            },
+          },
+          "required": [
+            "page",
+            "pageSize",
+            "totalPages",
+            "totalItems",
+          ],
+          "type": "object",
+        },
+      },
+      "required": [
+        "items",
+        "pagination",
+      ],
+      "type": "object",
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+        },
+        "details": {
+          "items": {
+            "type": "string",
+          },
+          "type": "array",
+        },
+        "message": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "code",
+        "message",
+      ],
+      "type": "object",
+    },
+    "status": {
+      "type": "number",
+    },
+  },
+  "required": [
+    "status",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > should match snapshot for claude-3.5-haiku with string constraints 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "content": {
+      "description": "Article content
+constraints: minimum length 100, maximum length 10000",
+      "type": "string",
+    },
+    "metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "type": "string",
+        },
+        "published": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "author",
+        "published",
+      ],
+      "type": "object",
+    },
+    "summary": {
+      "description": "constraints: maximum length 500",
+      "type": "string",
+    },
+    "tags": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "title": {
+      "description": "Article title
+constraints: minimum length 5, maximum length 100",
+      "type": "string",
+    },
+  },
+  "required": [
+    "title",
+    "content",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > should match snapshot for claude-3-5-sonnet with complete schema 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "metadata": {
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean",
+        ],
+      },
+      "type": "object",
+    },
+    "preferences": {
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "type": "string",
+        },
+        "notifications": {
+          "type": "boolean",
+        },
+        "theme": {
+          "enum": [
+            "light",
+            "dark",
+          ],
+          "type": "string",
+        },
+      },
+      "required": [
+        "theme",
+        "notifications",
+        "language",
+      ],
+      "type": "object",
+    },
+    "settings": {
+      "additionalProperties": false,
+      "properties": {
+        "featured": {
+          "type": "boolean",
+        },
+        "public": {
+          "type": "boolean",
+        },
+      },
+      "required": [
+        "public",
+      ],
+      "type": "object",
+    },
+    "tags": {
+      "description": "constraints: minimum length 1, maximum length 5",
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "user": {
+      "additionalProperties": false,
+      "properties": {
+        "age": {
+          "maximum": 120,
+          "minimum": 0,
+          "type": "number",
+        },
+        "email": {
+          "description": "Email address",
+          "format": "email",
+          "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+          "type": "string",
+        },
+        "id": {
+          "description": "User ID",
+          "type": "string",
+        },
+        "name": {
+          "description": "Full name",
+          "type": "string",
+        },
+      },
+      "required": [
+        "id",
+        "name",
+        "email",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "user",
+    "preferences",
+    "tags",
+    "metadata",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > should match snapshot for discriminated union pattern 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "result": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "data": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                },
+                "value": {
+                  "type": "number",
+                },
+              },
+              "required": [
+                "id",
+                "value",
+              ],
+              "type": "object",
+            },
+            "type": {
+              "const": "success",
+              "type": "string",
+            },
+          },
+          "required": [
+            "type",
+            "data",
+          ],
+          "type": "object",
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "error": {
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "type": "string",
+                },
+                "message": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "code",
+                "message",
+              ],
+              "type": "object",
+            },
+            "type": {
+              "const": "error",
+              "type": "string",
+            },
+          },
+          "required": [
+            "type",
+            "error",
+          ],
+          "type": "object",
+        },
+      ],
+    },
+  },
+  "required": [
+    "result",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Arrays > should handle arrays with object items 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "users": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string",
+          },
+          "name": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "name",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "users",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Arrays > should handle nested arrays 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "matrix": {
+      "items": {
+        "items": {
+          "type": "number",
+        },
+        "type": "array",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "matrix",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Arrays > should handle optional arrays 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+    },
+    "tags": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "name",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Arrays > should handle simple array schema 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "tags": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "tags",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Basic Transformations > should handle nullable fields 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "deletedAt": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string",
+        },
+        {
+          "type": "null",
+        },
+      ],
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+    "deletedAt",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Basic Transformations > should handle optional fields 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "age": {
+      "type": "number",
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Basic Transformations > should handle simple object schema 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "age": {
+      "type": "number",
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+    "age",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Complex Schemas > should handle complex real-world schema 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "avatar": {
+      "type": "string",
+    },
+    "bio": {
+      "type": "string",
+    },
+    "deletedAt": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string",
+        },
+        {
+          "type": "null",
+        },
+      ],
+    },
+    "email": {
+      "type": "string",
+    },
+    "id": {
+      "type": "string",
+    },
+    "name": {
+      "type": "string",
+    },
+    "settings": {
+      "additionalProperties": false,
+      "properties": {
+        "notifications": {
+          "type": "boolean",
+        },
+        "theme": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "notifications",
+      ],
+      "type": "object",
+    },
+    "tags": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "id",
+    "email",
+    "name",
+    "deletedAt",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Complex Schemas > should handle partial objects 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "City": {
+      "type": "string",
+    },
+    "Name": {
+      "type": "string",
+    },
+    "Slug": {
+      "type": "string",
+    },
+  },
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Complex Schemas > should handle passthrough objects 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": true,
+  "properties": {
+    "queryText": {
+      "description": "The query text",
+      "type": "string",
+    },
+    "topK": {
+      "description": "Number of results",
+      "type": "number",
+    },
+  },
+  "required": [
+    "queryText",
+    "topK",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Complex Schemas > should handle schema with all basic types 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "arrayField": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "booleanField": {
+      "type": "boolean",
+    },
+    "enumField": {
+      "enum": [
+        "a",
+        "b",
+        "c",
+      ],
+      "type": "string",
+    },
+    "numberField": {
+      "type": "number",
+    },
+    "objectField": {
+      "additionalProperties": false,
+      "properties": {
+        "nested": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "nested",
+      ],
+      "type": "object",
+    },
+    "stringField": {
+      "type": "string",
+    },
+    "unionField": {
+      "type": [
+        "string",
+        "number",
+      ],
+    },
+  },
+  "required": [
+    "stringField",
+    "numberField",
+    "booleanField",
+    "arrayField",
+    "objectField",
+    "enumField",
+    "unionField",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Default Values > should handle array defaults 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+    },
+    "tags": {
+      "default": [],
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+  },
+  "required": [
+    "name",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Default Values > should handle boolean defaults 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "active": {
+      "default": true,
+      "type": "boolean",
+    },
+    "enabled": {
+      "default": false,
+      "type": "boolean",
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Default Values > should handle default values 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "confidence": {
+      "default": 1,
+      "type": "number",
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Default Values > should handle string defaults 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "explanation": {
+      "default": "",
+      "type": "string",
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Descriptions > should handle descriptions with nested objects 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "user": {
+      "additionalProperties": false,
+      "description": "User object",
+      "properties": {
+        "name": {
+          "description": "User name",
+          "type": "string",
+        },
+        "profile": {
+          "additionalProperties": false,
+          "description": "User profile",
+          "properties": {
+            "bio": {
+              "description": "User bio",
+              "type": "string",
+            },
+          },
+          "required": [
+            "bio",
+          ],
+          "type": "object",
+        },
+      },
+      "required": [
+        "name",
+        "profile",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "user",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Descriptions > should preserve field descriptions 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "age": {
+      "description": "The user age",
+      "type": "number",
+    },
+    "email": {
+      "description": "The user email address",
+      "type": "string",
+    },
+    "name": {
+      "description": "The user name",
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+    "age",
+    "email",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Enums > should handle enum schema 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "enum": [
+        "pending",
+        "active",
+        "completed",
+      ],
+      "type": "string",
+    },
+  },
+  "required": [
+    "status",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Enums > should handle optional enum schema 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "active",
+        "completed",
+      ],
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Nested Objects > should handle deeply nested objects 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "user": {
+      "additionalProperties": false,
+      "properties": {
+        "profile": {
+          "additionalProperties": false,
+          "properties": {
+            "bio": {
+              "type": "string",
+            },
+            "settings": {
+              "additionalProperties": false,
+              "properties": {
+                "notifications": {
+                  "type": "boolean",
+                },
+                "theme": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "notifications",
+              ],
+              "type": "object",
+            },
+          },
+          "required": [
+            "settings",
+          ],
+          "type": "object",
+        },
+      },
+      "required": [
+        "profile",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "user",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Nested Objects > should handle nested object schema 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "user": {
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "type": "string",
+        },
+        "name": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "name",
+        "email",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "user",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Nested Objects > should handle optional nested objects 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "type": "string",
+        },
+        "street": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "street",
+      ],
+      "type": "object",
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Records > should handle record schema 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "settings": {
+      "additionalProperties": {
+        "type": "boolean",
+      },
+      "type": "object",
+    },
+  },
+  "required": [
+    "settings",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Records > should handle record with key and value types 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "metadata": {
+      "additionalProperties": {
+        "type": "number",
+      },
+      "type": "object",
+    },
+  },
+  "required": [
+    "metadata",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - String Constraints > Claude 3.5 Haiku > should handle optional strings 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "bio": {
+      "type": "string",
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - String Constraints > Claude 3.5 Haiku > should handle string min/max constraints by adding to description 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "text": {
+      "description": "constraints: minimum length 10, maximum length 1000",
+      "type": "string",
+    },
+  },
+  "required": [
+    "text",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - String Constraints > Claude 3.5 Haiku > should handle string with description and constraints 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "text": {
+      "description": "A text field with constraints
+constraints: minimum length 10, maximum length 1000",
+      "type": "string",
+    },
+  },
+  "required": [
+    "text",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - String Constraints > Claude 3.5 Sonnet (standard model) > should preserve string constraints 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "email": {
+      "format": "email",
+      "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+      "type": "string",
+    },
+    "text": {
+      "maxLength": 1000,
+      "minLength": 10,
+      "type": "string",
+    },
+    "url": {
+      "format": "uri",
+      "type": "string",
+    },
+  },
+  "required": [
+    "email",
+    "url",
+    "text",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Unions > should handle optional union schema 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+    },
+    "value": {
+      "type": [
+        "string",
+        "number",
+      ],
+    },
+  },
+  "required": [
+    "name",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Unions > should handle simple union schema 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "value": {
+      "type": [
+        "string",
+        "number",
+      ],
+    },
+  },
+  "required": [
+    "value",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`AnthropicSchemaCompatLayer > processZodType - Unions > should handle union of objects 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "result": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "data": {
+              "type": "string",
+            },
+            "success": {
+              "type": "boolean",
+            },
+          },
+          "required": [
+            "success",
+            "data",
+          ],
+          "type": "object",
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "error": {
+              "type": "string",
+            },
+          },
+          "required": [
+            "error",
+          ],
+          "type": "object",
+        },
+      ],
+    },
+  },
+  "required": [
+    "result",
+  ],
+  "type": "object",
+}
+`;

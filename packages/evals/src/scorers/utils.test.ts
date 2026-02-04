@@ -7,6 +7,8 @@ import {
   getAssistantMessageFromRunOutput,
   getReasoningFromRunOutput,
   createTestMessage,
+  createToolInvocation,
+  extractToolResults,
 } from './utils';
 
 describe('Scorer Utils', () => {
@@ -298,6 +300,146 @@ describe('Scorer Utils', () => {
 
       // Score should be 0 because no reasoning was available
       expect(result.score).toBe(0);
+    });
+  });
+
+  describe('extractToolResults', () => {
+    it('should extract tool results from output with tool invocations', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Let me check the weather.',
+          role: 'assistant',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'call-1',
+              toolName: 'weatherTool',
+              args: { location: 'London' },
+              result: { temperature: 20, condition: 'sunny' },
+              state: 'result',
+            }),
+          ],
+        }),
+      ];
+
+      const results = extractToolResults(output);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({
+        toolName: 'weatherTool',
+        toolCallId: 'call-1',
+        args: { location: 'London' },
+        result: { temperature: 20, condition: 'sunny' },
+      });
+    });
+
+    it('should return empty array for output without tool invocations', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Hello, how can I help?',
+          role: 'assistant',
+        }),
+      ];
+
+      const results = extractToolResults(output);
+
+      expect(results).toHaveLength(0);
+    });
+
+    it('should extract multiple tool results from multiple messages', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Checking weather...',
+          role: 'assistant',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'call-1',
+              toolName: 'weatherTool',
+              args: { location: 'London' },
+              result: { temperature: 20 },
+              state: 'result',
+            }),
+          ],
+        }),
+        createTestMessage({
+          content: 'Now checking stocks...',
+          role: 'assistant',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'call-2',
+              toolName: 'stockTool',
+              args: { symbol: 'AAPL' },
+              result: { price: 150.5 },
+              state: 'result',
+            }),
+          ],
+        }),
+      ];
+
+      const results = extractToolResults(output);
+
+      expect(results).toHaveLength(2);
+      expect(results[0]?.toolName).toBe('weatherTool');
+      expect(results[1]?.toolName).toBe('stockTool');
+    });
+
+    it('should only include tool invocations with state "result"', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Processing...',
+          role: 'assistant',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'call-1',
+              toolName: 'pendingTool',
+              args: {},
+              result: {},
+              state: 'call', // Not a result yet
+            }),
+            createToolInvocation({
+              toolCallId: 'call-2',
+              toolName: 'completedTool',
+              args: { query: 'test' },
+              result: { data: 'success' },
+              state: 'result',
+            }),
+          ],
+        }),
+      ];
+
+      const results = extractToolResults(output);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.toolName).toBe('completedTool');
+    });
+
+    it('should handle tool invocations with undefined result', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Processing...',
+          role: 'assistant',
+          toolInvocations: [
+            {
+              toolCallId: 'call-1',
+              toolName: 'noResultTool',
+              args: {},
+              result: undefined as any,
+              state: 'result',
+            },
+            createToolInvocation({
+              toolCallId: 'call-2',
+              toolName: 'hasResultTool',
+              args: {},
+              result: { value: 42 },
+              state: 'result',
+            }),
+          ],
+        }),
+      ];
+
+      const results = extractToolResults(output);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.toolName).toBe('hasResultTool');
     });
   });
 });

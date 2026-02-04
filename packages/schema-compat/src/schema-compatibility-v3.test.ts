@@ -1,7 +1,8 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV3 } from '@internal/ai-v6/test';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { SchemaCompatLayer } from './schema-compatibility';
+import type { ZodType } from './schema.types';
 import type { ModelInformation } from './types';
 
 class MockSchemaCompatibility extends SchemaCompatLayer {
@@ -17,7 +18,7 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
     return 'jsonSchema7' as const;
   }
 
-  processZodType(value: z.ZodTypeAny): z.ZodTypeAny {
+  processZodType(value: ZodType): ZodType {
     if (this.isObj(value)) {
       return this.defaultZodObjectHandler(value);
     } else if (this.isArr(value)) {
@@ -36,7 +37,7 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
   }
 }
 
-const mockModel = new MockLanguageModelV1({
+const mockModel = new MockLanguageModelV3({
   modelId: 'test-model',
   defaultObjectGenerationMode: 'json',
 });
@@ -435,8 +436,9 @@ describe('SchemaCompatLayer', () => {
       expect(result.validate!({ name: 'test' }).success).toBe(true);
       expect(result.validate!(undefined).success).toBe(true);
 
-      const jsonSchema = result.jsonSchema;
-      const objectDef = (jsonSchema.anyOf as any[])?.find(def => def.type === 'object');
+      // In Zod v3 with zod-to-json-schema, optional produces anyOf with {not: {}} and the actual type
+      const jsonSchema = result.jsonSchema as any;
+      const objectDef = (jsonSchema.anyOf as any[])?.find((def: any) => def.type === 'object');
       expect(objectDef.properties.name.description).toBe('string:processed');
     });
 
@@ -446,8 +448,9 @@ describe('SchemaCompatLayer', () => {
       expect(result.validate!(['test']).success).toBe(true);
       expect(result.validate!(undefined).success).toBe(true);
 
-      const jsonSchema = result.jsonSchema;
-      const arrayDef = (jsonSchema.anyOf as any[])?.find(def => def.type === 'array');
+      // In Zod v3 with zod-to-json-schema, optional produces anyOf with {not: {}} and the actual type
+      const jsonSchema = result.jsonSchema as any;
+      const arrayDef = (jsonSchema.anyOf as any[])?.find((def: any) => def.type === 'array');
       const items = arrayDef.items as any;
       expect(items.description).toBe('string:processed');
     });
@@ -458,8 +461,9 @@ describe('SchemaCompatLayer', () => {
       expect(result.validate!('test').success).toBe(true);
       expect(result.validate!(undefined).success).toBe(true);
 
-      const jsonSchema = result.jsonSchema;
-      const stringDef = (jsonSchema.anyOf as any[])?.find(def => def.type === 'string');
+      // In Zod v3 with zod-to-json-schema, optional produces anyOf with {not: {}} and the actual type
+      const jsonSchema = result.jsonSchema as any;
+      const stringDef = (jsonSchema.anyOf as any[])?.find((def: any) => def.type === 'string');
       expect(stringDef.description).toBe('string:processed');
     });
   });
