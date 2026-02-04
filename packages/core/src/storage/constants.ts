@@ -11,6 +11,7 @@ export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
+export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -122,6 +123,33 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false },
 };
 
+export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  lookupKey: { type: 'text', nullable: false }, // 'resource:{resourceId}' or 'thread:{threadId}'
+  scope: { type: 'text', nullable: false }, // 'resource' or 'thread'
+  resourceId: { type: 'text', nullable: true },
+  threadId: { type: 'text', nullable: true },
+  activeObservations: { type: 'text', nullable: false }, // JSON array of observations
+  activeObservationsPendingUpdate: { type: 'text', nullable: true }, // JSON array, used during updates
+  originType: { type: 'text', nullable: false }, // 'initialization', 'observation', or 'reflection'
+  config: { type: 'text', nullable: false }, // JSON object
+  generationCount: { type: 'integer', nullable: false },
+  lastObservedAt: { type: 'timestamp', nullable: true },
+  lastReflectionAt: { type: 'timestamp', nullable: true },
+  pendingMessageTokens: { type: 'integer', nullable: false }, // Token count
+  totalTokensObserved: { type: 'integer', nullable: false }, // Running total of all observed tokens
+  observationTokenCount: { type: 'integer', nullable: false }, // Current observation size in tokens
+  isObserving: { type: 'boolean', nullable: false },
+  isReflecting: { type: 'boolean', nullable: false },
+  observedMessageIds: { type: 'jsonb', nullable: true }, // JSON array of message IDs already observed
+  observedTimezone: { type: 'text', nullable: true }, // Timezone used for Observer date formatting (e.g., "America/Los_Angeles")
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+/**
+ * Schema definitions for all core tables.
+ */
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -185,4 +213,12 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+};
+
+/**
+ * Schema for the observational memory table.
+ * Exported separately as OM is optional and not part of TABLE_NAMES.
+ */
+export const OBSERVATIONAL_MEMORY_TABLE_SCHEMA = {
+  [TABLE_OBSERVATIONAL_MEMORY]: OBSERVATIONAL_MEMORY_SCHEMA,
 };

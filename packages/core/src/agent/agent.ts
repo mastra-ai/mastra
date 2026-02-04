@@ -34,9 +34,15 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
 import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
+import type {
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ProcessorWorkflow,
+  Processor,
+} from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
+import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraAgentNetworkStream } from '../stream';
@@ -128,6 +134,7 @@ export class Agent<
 > extends MastraBase {
   public id: TAgentId;
   public name: string;
+  public source?: 'code' | 'stored';
   #instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   readonly #description?: string;
   model: DynamicArgument<MastraModelConfig> | ModelFallbacks;
@@ -180,6 +187,7 @@ export class Agent<
 
     this.name = config.name;
     this.id = config.id ?? config.name;
+    this.source = 'code';
 
     this.#instructions = config.instructions;
     this.#description = config.description;
@@ -402,10 +410,12 @@ export class Agent<
     requestContext,
     inputProcessorOverrides,
     outputProcessorOverrides,
+    processorStates,
   }: {
     requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+    processorStates?: Map<string, ProcessorState>;
   }): Promise<ProcessorRunner> {
     // Use overrides if provided, otherwise resolve from agent config + memory
     const inputProcessors = inputProcessorOverrides ?? (await this.listResolvedInputProcessors(requestContext));
@@ -417,6 +427,7 @@ export class Agent<
       outputProcessors,
       logger: this.logger,
       agentName: this.name,
+      processorStates,
     });
   }
 
@@ -569,6 +580,63 @@ export class Agent<
    */
   public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
     return this.listResolvedOutputProcessors(requestContext);
+  }
+
+  /**
+   * Resolves a processor by its ID from both input and output processors.
+   * This method resolves dynamic processor functions and includes memory-derived processors.
+   * Returns the processor if found, null otherwise.
+   *
+   * @example
+   * ```typescript
+   * const omProcessor = await agent.resolveProcessorById('observational-memory');
+   * if (omProcessor) {
+   *   // Observational memory is configured
+   * }
+   * ```
+   */
+  public async resolveProcessorById<TId extends string = string>(
+    processorId: TId,
+    requestContext?: RequestContext,
+  ): Promise<Processor<TId> | null> {
+    const ctx = requestContext || new RequestContext();
+
+    // Get raw input processors (before combining into workflow)
+    const configuredInputProcessors = this.#inputProcessors
+      ? typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ requestContext: ctx })
+        : this.#inputProcessors
+      : [];
+
+    // Get memory input processors
+    const memory = await this.getMemory({ requestContext: ctx });
+    const memoryInputProcessors = memory ? await memory.getInputProcessors(configuredInputProcessors, ctx) : [];
+
+    // Search all input processors
+    for (const p of [...memoryInputProcessors, ...configuredInputProcessors]) {
+      if (!isProcessorWorkflow(p) && isProcessor(p) && p.id === processorId) {
+        return p as Processor<TId>;
+      }
+    }
+
+    // Get raw output processors (before combining into workflow)
+    const configuredOutputProcessors = this.#outputProcessors
+      ? typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ requestContext: ctx })
+        : this.#outputProcessors
+      : [];
+
+    // Get memory output processors
+    const memoryOutputProcessors = memory ? await memory.getOutputProcessors(configuredOutputProcessors, ctx) : [];
+
+    // Search all output processors
+    for (const p of [...memoryOutputProcessors, ...configuredOutputProcessors]) {
+      if (!isProcessorWorkflow(p) && isProcessor(p) && p.id === processorId) {
+        return p as Processor<TId>;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -1795,11 +1863,13 @@ export class Agent<
     tracingContext,
     messageList,
     inputProcessorOverrides,
+    processorStates,
   }: {
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
+    processorStates?: Map<string, ProcessorState>;
   }): Promise<{
     messageList: MessageList;
     tripwire?: {
@@ -1815,6 +1885,7 @@ export class Agent<
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
+        processorStates,
       });
       try {
         messageList = await runner.runInputProcessors(messageList, tracingContext, requestContext);

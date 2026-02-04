@@ -1,4 +1,6 @@
 import { jsonLanguage } from '@codemirror/lang-json';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { languages } from '@codemirror/language-data';
 import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
@@ -9,6 +11,9 @@ import { cn } from '@/lib/utils';
 import type { Extension } from '@codemirror/state';
 
 import { CopyButton } from '@/ds/components/CopyButton';
+import { variableHighlight } from './variable-highlight-extension';
+
+export type CodeEditorLanguage = 'json' | 'markdown';
 
 export const useCodemirrorTheme = (): Extension => {
   return useMemo(() => {
@@ -21,7 +26,24 @@ export const useCodemirrorTheme = (): Extension => {
         gutterForeground: '#939393',
         background: 'transparent',
       },
-      styles: [{ tag: [t.className, t.propertyName] }],
+      styles: [
+        { tag: [t.className, t.propertyName] },
+        // Markdown-specific styles using Dracula colors
+        { tag: t.heading, color: '#ff79c6', fontWeight: 'bold' },
+        {
+          tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
+          color: '#ff79c6',
+          fontWeight: 'bold',
+        },
+        { tag: t.emphasis, fontStyle: 'italic', color: '#f8f8f2' },
+        { tag: t.strong, fontWeight: 'bold', color: '#f8f8f2' },
+        { tag: t.link, color: '#8be9fd', textDecoration: 'underline' },
+        { tag: t.url, color: '#8be9fd' },
+        { tag: t.monospace, color: '#f1fa8c' },
+        { tag: t.strikethrough, textDecoration: 'line-through' },
+        { tag: t.quote, fontStyle: 'italic', color: '#6272a4' },
+        { tag: t.list, color: '#50fa7b' },
+      ],
     });
 
     const customLineNumberTheme = EditorView.theme({
@@ -44,21 +66,60 @@ export type CodeEditorProps = {
   onChange?: (value: string) => void;
   showCopyButton?: boolean;
   className?: string;
+  highlightVariables?: boolean;
+  language?: CodeEditorLanguage;
+  placeholder?: string;
+  /** Enable word wrapping instead of horizontal scrolling */
+  wordWrap?: boolean;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
-export const CodeEditor = ({ data, value, onChange, showCopyButton = true, className, ...props }: CodeEditorProps) => {
+export const CodeEditor = ({
+  data,
+  value,
+  onChange,
+  showCopyButton = true,
+  className,
+  language = 'json',
+  highlightVariables = false,
+  placeholder,
+  wordWrap = false,
+  ...props
+}: CodeEditorProps) => {
   const theme = useCodemirrorTheme();
   const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
+  const extensions = useMemo(() => {
+    const exts: Extension[] = [];
+
+    if (language === 'json') {
+      exts.push(jsonLanguage);
+    } else if (language === 'markdown') {
+      exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }));
+      exts.push(EditorView.lineWrapping);
+    }
+
+    if (highlightVariables && language === 'markdown') {
+      exts.push(variableHighlight);
+    }
+
+    return exts;
+  }, [language, highlightVariables]);
+
   return (
-    <div className={cn('rounded-md bg-surface4 p-1 font-mono relative', className)} {...props}>
+    <div
+      className={cn('rounded-md bg-surface3 p-1 font-mono relative border border-border1 overflow-hidden', className)}
+      {...props}
+    >
       {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
       <CodeMirror
         value={formattedCode}
         theme={theme}
-        extensions={[jsonLanguage]}
+        extensions={extensions}
         onChange={onChange}
         aria-label="Code editor"
+        placeholder={placeholder}
+        height="100%"
+        style={{ height: '100%' }}
       />
     </div>
   );

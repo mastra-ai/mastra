@@ -6,6 +6,7 @@ export interface PlaygroundQueryClientProps {
 }
 
 export const PlaygroundQueryClient = ({ children, options }: PlaygroundQueryClientProps) => {
+  // QueryClient is created once since this component is high in the tree and won't re-render
   const queryClient = new QueryClient(options);
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;

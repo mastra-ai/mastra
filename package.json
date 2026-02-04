@@ -70,6 +70,7 @@
     "test:tool-builder": "pnpm test packages/core/src/tools/tool-builder/**",
     "test:schema-compat": "pnpm --filter ./packages/schema-compat test",
     "test:docs-mcp": "pnpm --filter ./packages/mcp-docs-server test",
+    "test:editor": "pnpm --filter ./packages/editor test",
     "test:evals": "pnpm --filter ./packages/evals test",
     "test:agent-builder": "pnpm --filter ./packages/agent-builder test",
     "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
