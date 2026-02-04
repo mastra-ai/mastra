@@ -665,7 +665,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     // Validate that threadId is provided
     const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
@@ -724,6 +724,12 @@ export class MemoryPG extends MemoryStorage {
       conditions.push(`thread_id IN (${threadPlaceholders})`);
       queryParams.push(...threadIds);
       paramIndex += threadIds.length;
+
+      // Add resourceId filter if provided
+      if (resourceId) {
+        conditions.push(`"resourceId" = $${paramIndex++}`);
+        queryParams.push(resourceId);
+      }
 
       if (filter?.dateRange?.start) {
         const startOp = filter.dateRange.startExclusive ? '>' : '>=';

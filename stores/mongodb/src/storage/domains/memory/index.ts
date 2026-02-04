@@ -238,7 +238,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     // Validate that threadId is provided
     const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
@@ -290,6 +290,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Add thread filter (always present for listMessages)
       query.thread_id = threadIds.length === 1 ? threadIds[0] : { $in: threadIds };
+
+      // Add resourceId filter if provided
+      if (resourceId) {
+        query.resourceId = resourceId;
+      }
 
       if (filter?.dateRange?.start) {
         const startOp = filter.dateRange.startExclusive ? '$gt' : '$gte';
