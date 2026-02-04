@@ -40,7 +40,6 @@ import {
   sensitiveTopicBlocker,
   stepLoggerProcessor,
 } from './processors/index';
-import { MastraEditor } from '@mastra/editor';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -101,7 +100,6 @@ const config = {
   bundler: {
     sourcemap: true,
   },
-  editor: new MastraEditor(),
   server: {
     build: {
       swaggerUI: true,
