@@ -1,0 +1,526 @@
+/**
+ * foreach tests for workflows
+ *
+ * Uses MockRegistry pattern to decouple mocks from workflow definitions,
+ * enabling proper test isolation via resetMocks().
+ */
+
+import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
+import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
+import { MockRegistry } from '../mock-registry';
+
+/**
+ * Create all workflows needed for foreach tests.
+ */
+export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
+  const { createWorkflow, createStep } = ctx;
+  const workflows: WorkflowRegistry = {};
+
+  // Create a mock registry for this domain
+  const mockRegistry = new MockRegistry();
+
+  // Test: should run a single item concurrency (default) for loop
+  {
+    // Register mock factory
+    mockRegistry.register('foreach-single-concurrency:map', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        await new Promise(resolve => setTimeout(resolve, 1e3));
+        return { value: inputData.value + 11 };
+      }),
+    );
+
+    const mapStep = createStep({
+      id: 'map',
+      description: 'Maps (+11) on the current value',
+      inputSchema: z.object({
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      execute: async ctx => mockRegistry.get('foreach-single-concurrency:map')(ctx),
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      description: 'Final step that prints the result',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+      execute: async ({ inputData }) => {
+        return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+      },
+    });
+
+    const counterWorkflow = createWorkflow({
+      steps: [mapStep, finalStep],
+      id: 'foreach-single-concurrency',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+      options: {
+        validateInputs: false,
+      },
+    });
+
+    counterWorkflow.foreach(mapStep).then(finalStep).commit();
+
+    workflows['foreach-single-concurrency'] = {
+      workflow: counterWorkflow,
+      mocks: {
+        get map() {
+          return mockRegistry.get('foreach-single-concurrency:map');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should run a concurrent for loop
+  {
+    // Register mock factory
+    mockRegistry.register('foreach-concurrent:map', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        await new Promise(resolve => setTimeout(resolve, 1e3));
+        return { value: inputData.value + 11 };
+      }),
+    );
+
+    const mapStep = createStep({
+      id: 'map',
+      description: 'Maps (+11) on the current value',
+      inputSchema: z.object({
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      execute: async ctx => mockRegistry.get('foreach-concurrent:map')(ctx),
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      description: 'Final step that prints the result',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+      execute: async ({ inputData }) => {
+        return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+      },
+    });
+
+    const counterWorkflow = createWorkflow({
+      steps: [mapStep, finalStep],
+      id: 'foreach-concurrent',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+      options: {
+        validateInputs: false,
+      },
+    });
+
+    counterWorkflow.foreach(mapStep, { concurrency: 3 }).then(finalStep).commit();
+
+    workflows['foreach-concurrent'] = {
+      workflow: counterWorkflow,
+      mocks: {
+        get map() {
+          return mockRegistry.get('foreach-concurrent:map');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should run a partial concurrency for loop
+  {
+    // Register mock factory
+    mockRegistry.register('foreach-partial-concurrency:map', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return { value: inputData.value + 11 };
+      }),
+    );
+
+    const mapStep = createStep({
+      id: 'map',
+      description: 'Maps (+11) on the current value',
+      inputSchema: z.object({
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      execute: async ctx => mockRegistry.get('foreach-partial-concurrency:map')(ctx),
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      description: 'Final step that prints the result',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+      execute: async ({ inputData }) => {
+        return { finalValue: inputData.reduce((acc, curr) => acc + curr.value, 0) };
+      },
+    });
+
+    const counterWorkflow = createWorkflow({
+      steps: [mapStep, finalStep],
+      id: 'foreach-partial-concurrency',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({
+        finalValue: z.number(),
+      }),
+      options: {
+        validateInputs: false,
+      },
+    });
+
+    counterWorkflow.foreach(mapStep, { concurrency: 2 }).then(finalStep).commit();
+
+    workflows['foreach-partial-concurrency'] = {
+      workflow: counterWorkflow,
+      mocks: {
+        get map() {
+          return mockRegistry.get('foreach-partial-concurrency:map');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should handle empty array in foreach
+  {
+    // Register mock factory
+    mockRegistry.register('foreach-empty-array:map', () => vi.fn().mockResolvedValue({ value: 100 }));
+
+    const mapStep = createStep({
+      id: 'map',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      execute: async ctx => mockRegistry.get('foreach-empty-array:map')(ctx),
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({ count: z.number() }),
+      execute: async ({ inputData }) => {
+        return { count: inputData.length };
+      },
+    });
+
+    const workflow = createWorkflow({
+      steps: [mapStep, finalStep],
+      id: 'foreach-empty-array',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({ count: z.number() }),
+      options: {
+        validateInputs: false,
+      },
+    });
+
+    workflow.foreach(mapStep).then(finalStep).commit();
+
+    workflows['foreach-empty-array'] = {
+      workflow,
+      mocks: {
+        get map() {
+          return mockRegistry.get('foreach-empty-array:map');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should chain steps before foreach and aggregate results after
+  {
+    // Register mock factory
+    mockRegistry.register('foreach-chained:transform', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        return { doubled: inputData.value * 2 };
+      }),
+    );
+
+    // Step 1: Generate items to iterate over - outputs an array
+    const generateStep = createStep({
+      id: 'generate',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.array(z.object({ value: z.number() })),
+      execute: async ({ inputData }) => {
+        return Array.from({ length: inputData.count }, (_, i) => ({ value: i + 1 }));
+      },
+    });
+
+    // Step 2: Transform each item (used in foreach)
+    const transformStep = createStep({
+      id: 'transform',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ doubled: z.number() }),
+      execute: async ctx => mockRegistry.get('foreach-chained:transform')(ctx),
+    });
+
+    // Step 3: Sum all results
+    const sumStep = createStep({
+      id: 'sum',
+      inputSchema: z.array(z.object({ doubled: z.number() })),
+      outputSchema: z.object({ total: z.number() }),
+      execute: async ({ inputData }) => {
+        const total = inputData.reduce((acc: number, curr: { doubled: number }) => acc + curr.doubled, 0);
+        return { total };
+      },
+    });
+
+    const workflow = createWorkflow({
+      steps: [generateStep, transformStep, sumStep],
+      id: 'foreach-chained',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ total: z.number() }),
+    });
+
+    workflow.then(generateStep).foreach(transformStep).then(sumStep).commit();
+
+    workflows['foreach-chained'] = {
+      workflow,
+      mocks: {
+        get transform() {
+          return mockRegistry.get('foreach-chained:transform');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should aggregate results correctly from foreach with different data types
+  {
+    // Register mock factory
+    mockRegistry.register('foreach-aggregate:process', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        return {
+          name: inputData.name.toUpperCase(),
+          score: inputData.score * 10,
+        };
+      }),
+    );
+
+    const processStep = createStep({
+      id: 'process',
+      inputSchema: z.object({ name: z.string(), score: z.number() }),
+      outputSchema: z.object({ name: z.string(), score: z.number() }),
+      execute: async ctx => mockRegistry.get('foreach-aggregate:process')(ctx),
+    });
+
+    const aggregateStep = createStep({
+      id: 'aggregate',
+      inputSchema: z.array(z.object({ name: z.string(), score: z.number() })),
+      outputSchema: z.object({
+        names: z.array(z.string()),
+        totalScore: z.number(),
+        count: z.number(),
+      }),
+      execute: async ({ inputData }) => {
+        return {
+          names: inputData.map(item => item.name),
+          totalScore: inputData.reduce((acc, curr) => acc + curr.score, 0),
+          count: inputData.length,
+        };
+      },
+    });
+
+    const workflow = createWorkflow({
+      steps: [processStep, aggregateStep],
+      id: 'foreach-aggregate',
+      inputSchema: z.array(z.object({ name: z.string(), score: z.number() })),
+      outputSchema: z.object({
+        names: z.array(z.string()),
+        totalScore: z.number(),
+        count: z.number(),
+      }),
+      options: {
+        validateInputs: false,
+      },
+    });
+
+    workflow.foreach(processStep).then(aggregateStep).commit();
+
+    workflows['foreach-aggregate'] = {
+      workflow,
+      mocks: {
+        get process() {
+          return mockRegistry.get('foreach-aggregate:process');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  return workflows;
+}
+
+/**
+ * Create tests for foreach.
+ */
+export function createForeachTests(ctx: WorkflowTestContext, registry?: WorkflowRegistry) {
+  const { execute, skipTests } = ctx;
+
+  describe('foreach', () => {
+    // Note: Single concurrency test is skipped for Inngest due to snapshot race condition
+    // (steps show "running" instead of "success" when result is returned)
+    it.skipIf(skipTests.foreachSingleConcurrency)('should run a single item concurrency (default) for loop', async () => {
+      const startTime = Date.now();
+      const { workflow } = registry!['foreach-single-concurrency'];
+      const result = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }]);
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      // Sequential execution: 3 items × 1s each = ~3s minimum
+      expect(duration).toBeGreaterThan(3e3 - 200);
+
+      // Verify output (not mock counts - unreliable with memoization)
+      expect(result.steps).toMatchObject({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
+          payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
+    // Note: Timing test skipped for Inngest - network overhead makes timing assertions unreliable
+    it.skipIf(skipTests.foreachConcurrentTiming)('should run a concurrent for loop', async () => {
+      const startTime = Date.now();
+      const { workflow } = registry!['foreach-concurrent'];
+      const result = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }]);
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      // Concurrent execution: 3 items with concurrency=3, ~1s total
+      expect(duration).toBeLessThan(2e3);
+
+      // Verify output (not mock counts - unreliable with memoization)
+      expect(result.steps).toMatchObject({
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 }, { value: 344 }],
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
+        },
+      });
+    });
+
+    // Note: Timing test skipped for Inngest - network overhead makes timing assertions unreliable
+    it.skipIf(skipTests.foreachPartialConcurrencyTiming)('should run a partial concurrency for loop', async () => {
+      const startTime = Date.now();
+      const { workflow } = registry!['foreach-partial-concurrency'];
+      const result = await execute(workflow, [{ value: 1 }, { value: 2 }, { value: 3 }, { value: 4 }]);
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      // Partial concurrency: 4 items with concurrency=2, ~1s (2 batches × 500ms)
+      expect(duration).toBeGreaterThan(900);
+      expect(duration).toBeLessThan(1500);
+
+      // Verify output (not mock counts - unreliable with memoization)
+      expect(result.steps).toMatchObject({
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 13 }, { value: 14 }, { value: 15 }],
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 12 + 13 + 14 + 15 },
+        },
+      });
+    });
+
+    it.skipIf(skipTests.emptyForeach)('should handle empty array in foreach', async () => {
+      const { workflow } = registry!['foreach-empty-array'];
+      const result = await execute(workflow, []);
+
+      // Empty array should pass through without calling map step
+      expect(result.steps).toMatchObject({
+        map: {
+          status: 'success',
+          output: [],
+        },
+        final: {
+          status: 'success',
+          output: { count: 0 },
+        },
+      });
+    });
+
+    it('should chain steps before foreach and aggregate results after', async () => {
+      const { workflow } = registry!['foreach-chained'];
+      const result = await execute(workflow, { count: 3 });
+
+      // generate produces [{ value: 1 }, { value: 2 }, { value: 3 }]
+      // transform doubles each: [{ doubled: 2 }, { doubled: 4 }, { doubled: 6 }]
+      // sum adds: 2 + 4 + 6 = 12
+      expect(result.status).toBe('success');
+      expect(result.steps).toMatchObject({
+        generate: {
+          status: 'success',
+          output: [{ value: 1 }, { value: 2 }, { value: 3 }],
+        },
+        transform: {
+          status: 'success',
+          output: [{ doubled: 2 }, { doubled: 4 }, { doubled: 6 }],
+        },
+        sum: {
+          status: 'success',
+          output: { total: 12 },
+        },
+      });
+    });
+
+    it('should aggregate results correctly from foreach iterations', async () => {
+      const { workflow } = registry!['foreach-aggregate'];
+      const result = await execute(workflow, [
+        { name: 'alice', score: 5 },
+        { name: 'bob', score: 3 },
+        { name: 'charlie', score: 7 },
+      ]);
+
+      expect(result.status).toBe('success');
+      expect(result.steps).toMatchObject({
+        process: {
+          status: 'success',
+          output: [
+            { name: 'ALICE', score: 50 },
+            { name: 'BOB', score: 30 },
+            { name: 'CHARLIE', score: 70 },
+          ],
+        },
+        aggregate: {
+          status: 'success',
+          output: {
+            names: ['ALICE', 'BOB', 'CHARLIE'],
+            totalScore: 150,
+            count: 3,
+          },
+        },
+      });
+    });
+  });
+}

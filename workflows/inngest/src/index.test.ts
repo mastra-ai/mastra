@@ -36,7 +36,7 @@ interface LocalTestContext {
 
 async function resetInngest() {
   await new Promise(resolve => setTimeout(resolve, 1000));
-  await $`docker-compose restart`;
+  await $`docker compose restart`;
   await new Promise(resolve => setTimeout(resolve, 1500));
 }
 

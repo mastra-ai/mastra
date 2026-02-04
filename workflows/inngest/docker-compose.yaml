@@ -1,8 +1,11 @@
-version: '3'
+name: mastra-workflow-tests
 
 services:
-  inngest:
-    image: inngest/inngest:v1.12.1
+  inngest-test:
+    image: inngest/inngest:v1.16.1
+    container_name: mastra-inngest-test
+    # Match original test config: port 4001 for handler
+    # Auto-discovery will find the handler when running on host.docker.internal
     command: inngest dev -p 4000 -u http://host.docker.internal:4001/inngest/api --poll-interval=1
     ports:
       - '4000:4000'

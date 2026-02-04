@@ -41,6 +41,7 @@
     "@hono/node-server": "^1.19.6",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workflow-test-utils": "workspace:*",
     "@koa/router": "^13.0.0",
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
