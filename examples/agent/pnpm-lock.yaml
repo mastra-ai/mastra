@@ -11,6 +11,7 @@ overrides:
   '@mastra/voice-openai': link:../../voice/openai
   '@mastra/memory': link:../../packages/memory
   '@mastra/client-js': link:../../client-sdks/client-js
+  '@mastra/editor': link:../../packages/editor
   '@mastra/mcp': link:../../packages/mcp
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/observability': link:../../observability/mastra
