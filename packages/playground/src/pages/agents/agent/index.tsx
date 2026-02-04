@@ -76,7 +76,7 @@ function Agent() {
     };
   }, [agent]);
 
-  if (isAgentLoading || !agent) {
+  if (isAgentLoading) {
     return null;
   }
 

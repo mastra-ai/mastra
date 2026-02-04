@@ -182,10 +182,6 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created agent' });
       }
-
-      // TODO: The storage layer should set activeVersionId during agent creation
-      // For now, the agent might have null activeVersionId until the first update
-
       return resolved;
     } catch (error) {
       return handleError(error, 'Error creating stored agent');
@@ -252,7 +248,6 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
 
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
-
       const updatedAgent = await agentsStore.updateAgent({
         id: storedAgentId,
         authorId,
@@ -293,31 +288,17 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       const providedConfigFields = Object.fromEntries(Object.entries(configFields).filter(([_, v]) => v !== undefined));
 
       // Handle auto-versioning with retry logic for race conditions
-      // This creates a version if there are meaningful config changes and DOES update activeVersionId
-      const autoVersionResult = await handleAutoVersioning(
-        agentsStore,
-        storedAgentId,
-        existing,
-        updatedAgent,
-        providedConfigFields,
-      );
-
-      if (!autoVersionResult) {
-        throw new Error('handleAutoVersioning returned undefined');
-      }
+      // This creates a version if there are meaningful config changes (does NOT update activeVersionId)
+      await handleAutoVersioning(agentsStore, storedAgentId, existing, updatedAgent, providedConfigFields);
 
       // Clear the cached agent instance so the next request gets the updated config
-      const editor = mastra.getEditor();
-      if (editor) {
-        editor.clearStoredAgentCache(storedAgentId);
-      }
+      mastra.getEditor()?.clearStoredAgentCache(storedAgentId);
 
-      // Return the resolved agent with the updated activeVersionId
+      // Return the resolved agent (thin record + version config)
       const resolved = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
       }
-
       return resolved;
     } catch (error) {
       return handleError(error, 'Error updating stored agent');

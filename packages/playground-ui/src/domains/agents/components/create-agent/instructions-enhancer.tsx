@@ -285,7 +285,7 @@ export function InstructionsEnhancer({
 
     try {
       const result = await enhancePrompt({
-        instructions: value || '',
+        instructions: value,
         userComment: enhanceComment,
       });
       onChange(result.new_prompt);
@@ -310,7 +310,7 @@ export function InstructionsEnhancer({
   return (
     <div className="flex flex-col gap-2">
       <textarea
-        value={value || ''}
+        value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         rows={rows}

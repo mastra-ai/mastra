@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useId } from 'react';
-import { ChevronsUpDown, Search, Trash2 } from 'lucide-react';
+import { ChevronsUpDown, Search, X, Trash2 } from 'lucide-react';
 
 import { Button } from '@/ds/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
@@ -13,7 +13,11 @@ import { Input } from '@/ds/components/Input';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { cn } from '@/lib/utils';
 
-export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
+export interface ScoringSamplingConfig {
+  type: 'ratio' | 'count';
+  rate?: number;
+  count?: number;
+}
 
 export interface ScorerConfig {
   sampling?: ScoringSamplingConfig;
@@ -267,12 +271,20 @@ function ScorerSamplingConfig({
       onSamplingChange(undefined);
     } else if (type === 'ratio') {
       onSamplingChange({ type: 'ratio', rate: 0.1 }); // Default 10%
+    } else if (type === 'count') {
+      onSamplingChange({ type: 'count', count: 10 }); // Default 10 samples
     }
   };
 
   const handleRateChange = (rate: number) => {
     if (samplingConfig?.type === 'ratio') {
       onSamplingChange({ type: 'ratio', rate });
+    }
+  };
+
+  const handleCountChange = (count: number) => {
+    if (samplingConfig?.type === 'count') {
+      onSamplingChange({ type: 'count', count });
     }
   };
 
@@ -313,6 +325,12 @@ function ScorerSamplingConfig({
               Ratio (percentage)
             </Label>
           </div>
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="count" id={`${scorerId}-count`} />
+            <Label htmlFor={`${scorerId}-count`} className="text-sm text-icon5 cursor-pointer">
+              Count (fixed number)
+            </Label>
+          </div>
         </RadioGroup>
 
         {samplingType === 'ratio' && (
@@ -326,8 +344,25 @@ function ScorerSamplingConfig({
               min="0"
               max="1"
               step="0.1"
-              value={samplingConfig?.type === 'ratio' ? samplingConfig.rate : 0.1}
+              value={samplingConfig?.rate ?? 0.1}
               onChange={e => handleRateChange(parseFloat(e.target.value))}
+              className="h-8"
+            />
+          </div>
+        )}
+
+        {samplingType === 'count' && (
+          <div className="flex flex-col gap-1.5 mt-1">
+            <Label htmlFor={`count-${scorerId}`} className="text-xs text-icon4">
+              Sample Count
+            </Label>
+            <Input
+              id={`count-${scorerId}`}
+              type="number"
+              min="1"
+              step="1"
+              value={samplingConfig?.count ?? 10}
+              onChange={e => handleCountChange(parseInt(e.target.value, 10))}
               className="h-8"
             />
           </div>

@@ -23,12 +23,9 @@ function Agents() {
   const { data: agents = {}, isLoading } = useAgents();
   const { experimentalFeaturesEnabled } = useExperimentalFeatures();
 
-  const handleAgentCreated = async (agentId: string) => {
+  const handleAgentCreated = (agentId: string) => {
     setIsCreateDialogOpen(false);
-    // Give a small delay for cache invalidation to complete
-    setTimeout(() => {
-      navigate(`${paths.agentLink(agentId)}/chat`);
-    }, 100);
+    navigate(`${paths.agentLink(agentId)}/chat`);
   };
 
   return (
