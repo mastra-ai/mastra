@@ -4,7 +4,15 @@ import type { QueryResult, IndexStats } from '@mastra/core/vector';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { upsertVectors, createIndex, queryVectors, listIndexes, describeIndex, deleteIndex } from './vector';
+import {
+  upsertVectors,
+  createIndex,
+  queryVectors,
+  listIndexes,
+  describeIndex,
+  deleteIndex,
+  LIST_EMBEDDERS_ROUTE,
+} from './vector';
 
 vi.mock('@mastra/core/vector');
 
@@ -298,6 +306,26 @@ describe('Vector Handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(mockVector.deleteIndex).toHaveBeenCalledWith({ indexName: 'test-index' });
+    });
+  });
+
+  describe('LIST_EMBEDDERS_ROUTE', () => {
+    it('should list available embedders', async () => {
+      const result = await LIST_EMBEDDERS_ROUTE.handler({} as any);
+
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('embedders');
+      expect(Array.isArray(result.embedders)).toBe(true);
+      expect(result.embedders.length).toBeGreaterThan(0);
+
+      // Check structure of first embedder
+      const firstEmbedder = result.embedders[0];
+      expect(firstEmbedder).toHaveProperty('id');
+      expect(firstEmbedder).toHaveProperty('provider');
+      expect(firstEmbedder).toHaveProperty('name');
+      expect(firstEmbedder).toHaveProperty('description');
+      expect(firstEmbedder).toHaveProperty('dimensions');
+      expect(firstEmbedder).toHaveProperty('maxInputTokens');
     });
   });
 });
