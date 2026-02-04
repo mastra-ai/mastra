@@ -1125,7 +1125,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const lastObservedAt = record.lastObservedAt;
     // Safeguard: track message IDs that were already observed to prevent re-observation
     // This handles edge cases like process restarts where lastObservedAt might not capture all messages
-    const observedMessageIds = record.observedMessageIds ? new Set(record.observedMessageIds) : undefined;
+    const observedMessageIds = Array.isArray(record.observedMessageIds)
+      ? new Set(record.observedMessageIds)
+      : undefined;
 
     if (!lastObservedAt) {
       // No observations yet - all messages are unobserved
@@ -1135,6 +1137,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const result: MastraDBMessage[] = [];
 
     for (const msg of allMessages) {
+      // First check: skip if this message ID was already observed (safeguard against re-observation)
+      if (observedMessageIds?.has(msg.id)) {
+        continue;
+      }
+
       // Check if this message has a completed observation
       const endMarkerIndex = this.findLastCompletedObservationBoundary(msg);
       const inProgress = this.hasInProgressObservation(msg);
@@ -1150,12 +1157,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           result.push(virtualMsg);
         }
       } else {
-        // No observation markers - fall back to timestamp-based filtering + ID safeguard
-        // First, check if this message ID was already observed (safeguard)
-        if (observedMessageIds?.has(msg.id)) {
-          continue;
-        }
-
+        // No observation markers - fall back to timestamp-based filtering
         if (!msg.createdAt) {
           // Messages without timestamps are always included
           result.push(msg);

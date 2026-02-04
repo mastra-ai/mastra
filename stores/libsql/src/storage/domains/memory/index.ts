@@ -72,6 +72,12 @@ export class MemoryLibSQL extends MemoryStorage {
         tableName: OM_TABLE as any,
         schema: omSchema,
       });
+      // Add new OM columns for backwards compatibility with existing databases
+      await this.#db.alterTable({
+        tableName: OM_TABLE as any,
+        schema: omSchema,
+        ifNotExists: ['observedMessageIds', 'observedTimezone'],
+      });
     }
     // Add resourceId column for backwards compatibility
     await this.#db.alterTable({
