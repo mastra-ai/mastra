@@ -6,7 +6,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 
 /**
  * Safely serializes a value to JSON string, handling non-serializable values
- * like RPC proxies (Cloudflare Workers), functions, symbols, and circular references.
+ * like RPC proxies (Cloudflare Workers), functions, symbols, and BigInt.
  *
  * Objects with toJSON methods (like RequestContext) are automatically handled
  * by JSON.stringify's native behavior.
@@ -19,6 +19,7 @@ export const safeStringify = (value: unknown): string => {
     if (val === null || val === undefined) return val;
     if (typeof val === 'function') return undefined;
     if (typeof val === 'symbol') return undefined;
+    if (typeof val === 'bigint') return val.toString();
 
     if (typeof val === 'object') {
       try {
