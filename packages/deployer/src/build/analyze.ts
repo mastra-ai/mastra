@@ -52,6 +52,12 @@ export const mastra = new Mastra({
 }
 
 function getPackageNameFromBundledModuleName(moduleName: string) {
+  // New encoding uses __ to separate path segments (e.g., @inner__inner-tools -> @inner/inner-tools)
+  if (moduleName.includes('__')) {
+    return moduleName.replaceAll('__', '/');
+  }
+
+  // Legacy fallback for old format using - as separator
   const chunks = moduleName.split('-');
 
   if (!chunks.length) {

@@ -163,19 +163,17 @@ async function captureDependenciesToOptimize(
 
     for (const [dep, meta] of depsSnapshot) {
       // We only care about workspace deps that we haven't already processed
-      if (
-        !meta.isWorkspace ||
-        internalMap.has(dep) ||
-        !output.facadeModuleId ||
-        output.facadeModuleId?.startsWith('\x00virtual:')
-      ) {
+      if (!meta.isWorkspace || internalMap.has(dep)) {
         continue;
       }
 
       try {
+        const importerPath = output.facadeModuleId
+          ? pathToFileURL(output.facadeModuleId).href
+          : pathToFileURL(projectRoot).href;
         // Absolute path to the dependency using ESM-compatible resolution
         const resolvedPath = resolveModule(dep, {
-          paths: [pathToFileURL(output.facadeModuleId).href],
+          paths: [importerPath],
         });
         if (!resolvedPath) {
           logger.warn(`Could not resolve path for workspace dependency ${dep}`);
