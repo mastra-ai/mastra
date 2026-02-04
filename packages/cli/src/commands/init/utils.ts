@@ -1112,8 +1112,7 @@ For complete setup and usage instructions, see [AGENTS.md](./AGENTS.md), which i
 - Quick start commands
 - Project structure details
 - Mastra skills usage${mcpServer ? '\n- MCP Docs Server configuration' : ''}
-- Development guidelines
-- Core concepts and resources
+- Links to relevant documentation
 `;
 }
 
