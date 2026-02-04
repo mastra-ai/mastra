@@ -350,4 +350,20 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
       return false;
     }
   }
+
+  /**
+   * Get instructions describing the mounted filesystems.
+   * Used by agents to understand available storage locations.
+   */
+  getInstructions(): string {
+    const mountDescriptions = Array.from(this._mounts.entries())
+      .map(([mountPath, fs]) => {
+        const name = fs.displayName || fs.provider;
+        const access = fs.readOnly ? '(read-only)' : '(read-write)';
+        return `- ${mountPath}: ${name} ${access}`;
+      })
+      .join('\n');
+
+    return `Mounted filesystems:\n${mountDescriptions}\nFiles written via workspace tools are accessible at the same paths in sandbox commands.`;
+  }
 }

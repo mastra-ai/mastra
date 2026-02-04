@@ -268,6 +268,16 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   /**
+   * Get instructions describing this S3 filesystem.
+   * Used by agents to understand storage semantics.
+   */
+  getInstructions(): string {
+    const providerName = this.displayName || 'S3';
+    const access = this.readOnly ? 'Read-only' : 'Persistent';
+    return `${providerName} storage in bucket "${this.bucket}". ${access} storage - files are retained across sessions.`;
+  }
+
+  /**
    * Detect the appropriate icon based on the S3 endpoint.
    */
   private detectIconFromEndpoint(endpoint?: string): FilesystemIcon {

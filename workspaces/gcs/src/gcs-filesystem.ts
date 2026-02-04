@@ -111,6 +111,8 @@ export interface GCSFilesystemOptions {
   credentials?: object | string;
   /** Optional prefix for all keys (acts like a subdirectory) */
   prefix?: string;
+  /** Mount as read-only (blocks write operations, mounts read-only in sandboxes) */
+  readOnly?: boolean;
 }
 
 /**
@@ -163,6 +165,7 @@ export class GCSFilesystem extends MastraFilesystem {
   readonly id: string;
   readonly name = 'GCSFilesystem';
   readonly provider = 'gcs';
+  readonly readOnly?: boolean;
 
   status: ProviderStatus = 'pending';
 
@@ -192,6 +195,7 @@ export class GCSFilesystem extends MastraFilesystem {
     this.displayName = options.displayName ?? 'Google Cloud Storage';
     this.icon = options.icon ?? 'gcs';
     this.description = options.description;
+    this.readOnly = options.readOnly;
   }
 
   /**
@@ -210,6 +214,15 @@ export class GCSFilesystem extends MastraFilesystem {
     }
 
     return config;
+  }
+
+  /**
+   * Get instructions describing this GCS filesystem.
+   * Used by agents to understand storage semantics.
+   */
+  getInstructions(): string {
+    const access = this.readOnly ? 'Read-only' : 'Persistent';
+    return `Google Cloud Storage in bucket "${this.bucketName}". ${access} storage - files are retained across sessions.`;
   }
 
   private getStorage(): Storage {

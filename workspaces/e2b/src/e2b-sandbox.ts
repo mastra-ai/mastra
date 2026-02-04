@@ -773,6 +773,16 @@ export class E2BSandbox extends MastraSandbox {
     };
   }
 
+  /**
+   * Get instructions describing this E2B sandbox.
+   * Used by agents to understand the execution environment.
+   */
+  getInstructions(): string {
+    const mountCount = this.mounts.entries.size;
+    const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
+    return `Cloud sandbox with /home/user as working directory.${mountInfo}`;
+  }
+
   // ---------------------------------------------------------------------------
   // Internal Helpers
   // ---------------------------------------------------------------------------
