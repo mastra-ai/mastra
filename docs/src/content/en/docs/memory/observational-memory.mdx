@@ -54,6 +54,8 @@ Every time an agent responds, it sees a context window containing its system pro
 - **Context rot**: the more raw message history an agent carries, the worse it performs.
 - **Context waste**: most of that history contains tokens no longer needed to keep the agent on task.
 
+OM solves both problems by compressing old context into dense observations.
+
 ### Observations
 
 When message history tokens exceed a threshold (default: 30,000), the Observer creates observations — concise notes about what happened:
