@@ -17,7 +17,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodType } from 'zod';
+import type { ZodType } from 'zod/v3';
 import type {
   GenerateLegacyParams,
   GetAgentResponse,
@@ -229,16 +229,17 @@ export class Agent extends BaseResource {
   async generateLegacy(
     params: GenerateLegacyParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
+  // Use `any` in overload return types to avoid "Type instantiation is excessively deep" errors
   async generateLegacy<Output extends JSONSchema7 | ZodType>(
     params: GenerateLegacyParams<Output> & { output: Output; experimental_output?: never },
-  ): Promise<GenerateReturn<any, Output, undefined>>;
+  ): Promise<GenerateReturn<any, any, any>>;
   async generateLegacy<StructuredOutput extends JSONSchema7 | ZodType>(
     params: GenerateLegacyParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
-  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
+  ): Promise<GenerateReturn<any, any, any>>;
   async generateLegacy<
     Output extends JSONSchema7 | ZodType | undefined = undefined,
-    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
-  >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
+    _StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
+  >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
@@ -249,13 +250,10 @@ export class Agent extends BaseResource {
 
     const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
 
-    const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
-      `/agents/${this.agentId}/generate-legacy`,
-      {
-        method: 'POST',
-        body: processedParams,
-      },
-    );
+    const response: GenerateReturn<any, any, any> = await this.request(`/agents/${this.agentId}/generate-legacy`, {
+      method: 'POST',
+      body: processedParams,
+    });
 
     if (response.finishReason === 'tool-calls') {
       const toolCalls = (
@@ -301,8 +299,9 @@ export class Agent extends BaseResource {
               ],
             },
           ];
-          // @ts-expect-error - tool-result message type differs from generate() overload signatures
-          return this.generate({
+          // Recursive call to generateLegacy with updated messages
+          // Using type assertion to handle the complex overload types
+          return (this.generateLegacy as any)({
             ...params,
             messages: updatedMessages,
           });

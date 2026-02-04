@@ -417,7 +417,8 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-    const { page, perPage } = pagination;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
 
     try {
       // ClickHouse stores null strings as empty strings, so check for both
@@ -604,8 +605,8 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       // For endedAt ASC: NULLs LAST (running spans at end when viewing oldest)
       // startedAt is never null (required field), so no special handling needed
       // Note: endedAt is DateTime64 - only check for NULL (not empty string like String columns)
-      const sortField = orderBy.field;
-      const sortDirection = orderBy.direction;
+      const sortField = orderBy?.field ?? 'startedAt';
+      const sortDirection = orderBy?.direction ?? 'DESC';
       let orderClause: string;
       if (sortField === 'endedAt') {
         // Use CASE WHEN to handle NULLs for endedAt (DateTime64 column)

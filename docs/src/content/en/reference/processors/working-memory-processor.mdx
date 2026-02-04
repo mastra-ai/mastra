@@ -80,7 +80,7 @@ const processor = new WorkingMemory({
     },
     {
       name: "templateProvider",
-      type: "{ getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null> }",
+      type: "{ getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfigInternal }): Promise<WorkingMemoryTemplate | null> }",
       description: "Dynamic template provider for runtime template resolution",
       isOptional: true,
     },

@@ -17,7 +17,7 @@ import type {
   AiMessageType,
   MastraMessageV1,
   MastraDBMessage,
-  MemoryConfig,
+  MemoryConfigInternal,
   StorageThreadType,
 } from '@mastra/core/memory';
 import type { TracingOptions } from '@mastra/core/observability';
@@ -40,7 +40,7 @@ import type {
 } from '@mastra/core/workflows';
 
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod/v3';
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -132,7 +132,8 @@ export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined =
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
+  Omit<AgentGenerateOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
 export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -142,7 +143,8 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
+  Omit<AgentStreamOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
 export type StreamParamsBase<OUTPUT = undefined> = {
@@ -328,19 +330,7 @@ export interface GetMemoryConfigParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type GetMemoryConfigResponse = {
-  config: MemoryConfig & {
-    observationalMemory?: {
-      enabled: boolean;
-      scope?: 'thread' | 'resource';
-      shareTokenBudget?: boolean;
-      messageTokens?: number | { min: number; max: number };
-      observationTokens?: number | { min: number; max: number };
-      observationModel?: string;
-      reflectionModel?: string;
-    };
-  };
-};
+export type GetMemoryConfigResponse = { config: MemoryConfigInternal };
 
 export interface UpdateMemoryThreadParams {
   title: string;

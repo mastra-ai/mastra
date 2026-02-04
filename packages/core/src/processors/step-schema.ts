@@ -4,8 +4,7 @@ import { z } from 'zod';
 import type { MastraMessageContentV2, MessageList } from '../agent/message-list';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
-import type { OutputSchema } from '../stream';
-import type { InferSchemaOutput } from '../stream/base/schema';
+import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema/schema';
 import type { StructuredOutputOptions } from './processors';
 
 // =========================================================================
@@ -145,9 +144,9 @@ export const MessageContentSchema = z.object({
   /** Legacy content field for backwards compatibility */
   content: z.string().optional(),
   /** Additional metadata */
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   /** Provider-specific metadata */
-  providerMetadata: z.record(z.unknown()).optional(),
+  providerMetadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 // =========================================================================
@@ -167,9 +166,9 @@ export const ProcessorMessageContentSchema = z
     /** Legacy content field for backwards compatibility */
     content: z.string().optional(),
     /** Additional metadata */
-    metadata: z.record(z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
     /** Provider-specific metadata */
-    providerMetadata: z.record(z.unknown()).optional(),
+    providerMetadata: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();
 
@@ -236,7 +235,9 @@ export type MessagePart = z.infer<typeof MessagePartSchema>;
  * MessageList instance for managing message sources.
  * Required for processors that need to mutate the message list.
  */
-const messageListSchema = z.custom<MessageList>();
+const messageListSchema = z
+  .custom<MessageList>()
+  .describe('MessageList instance for managing message sources');
 
 /**
  * The messages to be processed.
@@ -268,7 +269,7 @@ export const SystemMessageSchema = z
     role: z.literal('system'),
     content: z.union([z.string(), z.array(SystemMessageTextPartSchema)]),
     /** Optional experimental provider-specific extensions */
-    experimental_providerMetadata: z.record(z.unknown()).optional(),
+    experimental_providerMetadata: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();
 
@@ -359,7 +360,7 @@ export const ProcessorInputStepPhaseSchema = z.object({
     .optional()
     .describe('Model settings (temperature, etc.)'),
   structuredOutput: z
-    .custom<StructuredOutputOptions<InferSchemaOutput<OutputSchema>>>()
+    .custom<StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>>()
     .optional()
     .describe('Structured output configuration'),
   steps: z.custom<Array<StepResult<ToolSet>>>().optional().describe('Results from previous steps'),
@@ -373,7 +374,7 @@ export const ProcessorOutputStreamPhaseSchema = z.object({
   phase: z.literal('outputStream'),
   part: z.unknown().nullable().describe('The current chunk being processed. Can be null to skip.'),
   streamParts: z.array(z.unknown()).describe('All chunks seen so far'),
-  state: z.record(z.unknown()).describe('Mutable state object that persists across chunks'),
+  state: z.record(z.string(), z.unknown()).describe('Mutable state object that persists across chunks'),
   messageList: messageListSchema.optional(),
   retryCount: retryCountSchema,
 });
@@ -450,7 +451,7 @@ export const ProcessorStepOutputSchema = z.object({
   // Stream-based fields
   part: z.unknown().nullable().optional(),
   streamParts: z.array(z.unknown()).optional(),
-  state: z.record(z.unknown()).optional(),
+  state: z.record(z.string(), z.unknown()).optional(),
 
   // Output step fields
   finishReason: z.string().optional(),
@@ -461,14 +462,17 @@ export const ProcessorStepOutputSchema = z.object({
   retryCount: z.number().optional(),
 
   // Model and tools configuration (for inputStep phase)
-  model: z.custom<MastraLanguageModel>().optional(),
-  tools: z.custom<ProcessorStepToolsConfig>().optional(),
-  toolChoice: z.custom<ToolChoice<ToolSet>>().optional(),
-  activeTools: z.array(z.string()).optional(),
-  providerOptions: z.custom<SharedProviderOptions>().optional(),
-  modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional(),
-  structuredOutput: z.custom<StructuredOutputOptions<InferSchemaOutput<OutputSchema>>>().optional(),
-  steps: z.custom<Array<StepResult<ToolSet>>>().optional(),
+  model: z.custom<MastraLanguageModel>().optional().describe('Language model instance'),
+  tools: z.custom<ProcessorStepToolsConfig>().optional().describe('Tools configuration'),
+  toolChoice: z.custom<ToolChoice<ToolSet>>().optional().describe('Tool choice setting'),
+  activeTools: z.array(z.string()).optional().describe('Active tool names'),
+  providerOptions: z.custom<SharedProviderOptions>().optional().describe('Provider-specific options'),
+  modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional().describe('Model settings (temperature, etc.)'),
+  structuredOutput: z
+    .custom<StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>>()
+    .optional()
+    .describe('Structured output configuration'),
+  steps: z.custom<Array<StepResult<ToolSet>>>().optional().describe('Results from previous steps'),
 });
 
 /**

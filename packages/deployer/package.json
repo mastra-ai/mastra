@@ -141,7 +141,7 @@
     "type-fest": "^5.2.0",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "^3.25.76"
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",

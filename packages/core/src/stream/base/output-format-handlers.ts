@@ -1,19 +1,19 @@
 import { TransformStream } from 'node:stream/web';
-import { isDeepEqualData, jsonSchema, parsePartialJson } from '@internal/ai-sdk-v5';
-import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
+import { isDeepEqualData, parsePartialJson } from '@internal/ai-sdk-v5';
+import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { isZodType } from '@mastra/schema-compat';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
+import type z4 from 'zod';
 import type z3 from 'zod/v3';
-import z4 from 'zod/v4';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
-import { safeValidateTypes } from '../aisdk/v5/compat';
+import type { StandardSchemaWithJSON } from '../../schema/schema';
+import { standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
 import { getTransformedSchema } from './schema';
-import type { OutputSchema, ZodLikePartialSchema } from './schema';
+import type { ZodLikePartialSchema } from './schema';
 
 /**
  * Escapes unescaped newlines, carriage returns, and tabs within JSON string values.
@@ -123,14 +123,14 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
   /**
    * The original user-provided schema (Zod, JSON Schema, or AI SDK Schema).
    */
-  readonly schema: OutputSchema<OUTPUT> | undefined;
+  readonly schema: StandardSchemaWithJSON<OUTPUT> | undefined;
   /**
    * Validate partial chunks as they are streamed. @planned
    */
   readonly validatePartialChunks: boolean = false;
   readonly partialSchema?: ZodLikePartialSchema<OUTPUT> | undefined;
 
-  constructor(schema?: OutputSchema<OUTPUT>, options: { validatePartialChunks?: boolean } = {}) {
+  constructor(schema?: StandardSchemaWithJSON<OUTPUT>, options: { validatePartialChunks?: boolean } = {}) {
     this.schema = schema;
 
     if (
@@ -152,7 +152,7 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
   }
 
   /**
-   * Validates a value against the schema, preferring Zod's safeParse.
+   * Validates a value against the schema using StandardSchemaWithJSON's validate method.
    */
   protected async validateValue(value: unknown): Promise<ValidationResult<OUTPUT>> {
     if (!this.schema) {
@@ -162,58 +162,32 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
       };
     }
 
-    if (this.isZodSchema(this.schema)) {
-      try {
-        const result = this.schema.safeParse(value);
-        if (result.success) {
-          return {
-            success: true,
-            value: result.data,
-          };
-        } else {
-          return {
-            success: false,
-            error: new MastraError(
-              {
-                domain: ErrorDomain.AGENT,
-                category: ErrorCategory.SYSTEM,
-                id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
-                text: `Structured output validation failed\n${z4.prettifyError(result.error)}\n`,
-                details: {
-                  value: typeof value === 'object' ? JSON.stringify(value) : String(value),
-                },
-              },
-              result.error,
-            ),
-          };
-        }
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error : new Error('Zod validation failed', { cause: error }),
-        };
-      }
-    }
-
+    // Use StandardSchemaWithJSON's validate method
     try {
-      if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
-        // Plain JSONSchema7 object - wrap it using jsonSchema()
-        const result = await safeValidateTypes({ value, schema: jsonSchema(this.schema as JSONSchema7) });
-        return result as ValidationResult<OUTPUT>;
-      } else if ((this.schema as Schema<any>).jsonSchema) {
-        // Already an AI SDK Schema - use it directly
-        const result = await safeValidateTypes({
-          value,
-          schema: this.schema as Schema<OUTPUT>,
-        });
-        return result;
-      } else {
-        // Should not reach here, but handle as fallback
+      const result = await this.schema['~standard'].validate(value);
+
+      // Check if validation succeeded (no issues)
+      if (!result.issues) {
         return {
           success: true,
-          value: value as OUTPUT,
+          value: result.value as OUTPUT,
         };
       }
+
+      // Validation failed - convert issues to error
+      const errorMessages = result.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+      return {
+        success: false,
+        error: new MastraError({
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
+          text: `Structured output validation failed: ${errorMessages}`,
+          details: {
+            value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+          },
+        }),
+      };
     } catch (error) {
       return {
         success: false,
@@ -446,21 +420,9 @@ class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
       return undefined;
     }
 
-    // Get enum values from the schema (need to wrap it first to get jsonSchema)
-    let enumValues: unknown[] | undefined;
-
-    if (this.isZodSchema(this.schema)) {
-      // Use transform-safe zodToJsonSchema to avoid "Transforms cannot be represented in JSON Schema" error
-      const convertedSchema = zodToJsonSchema(this.schema as z3.ZodType<any> | z4.ZodType<any, any>);
-      enumValues = (convertedSchema as JSONSchema7)?.enum;
-    } else if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
-      // Plain JSONSchema7
-      const wrappedSchema = jsonSchema(this.schema as JSONSchema7);
-      enumValues = wrappedSchema.jsonSchema?.enum;
-    } else {
-      // Already an AI SDK Schema
-      enumValues = (this.schema as Schema<any>).jsonSchema?.enum;
-    }
+    // Get enum values from the schema using StandardSchemaWithJSON's jsonSchema conversion
+    const outputJsonSchema = standardSchemaToJSONSchema(this.schema);
+    const enumValues = outputJsonSchema?.enum;
 
     if (!enumValues) {
       return undefined;
@@ -542,7 +504,7 @@ class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
  * @param transformedSchema - Wrapped/transformed schema used for LLM generation (arrays wrapped in {elements: []}, enums in {result: ""})
  * @returns Handler instance for the detected format type
  */
-function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: OutputSchema<OUTPUT> }) {
+function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: StandardSchemaWithJSON<OUTPUT> }) {
   const transformedSchema = getTransformedSchema(schema);
   switch (transformedSchema?.outputFormat) {
     case 'array':
@@ -685,7 +647,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
  * - For arrays: emits opening bracket, new elements, and closing bracket
  * - For objects/no-schema: emits the object as JSON
  */
-export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: OutputSchema<OUTPUT>) {
+export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: StandardSchemaWithJSON<OUTPUT>) {
   let previousArrayLength = 0;
   let hasStartedArray = false;
   let chunkCount = 0;

@@ -15,7 +15,7 @@ export const PlanningIterationInputSchema = z.object({
   projectStructure: ProjectDiscoveryResultSchema,
   research: WorkflowResearchResultSchema,
 
-  userAnswers: z.record(z.string()).optional(),
+  userAnswers: z.record(z.string(), z.string()).optional(),
 });
 
 export const PlanningIterationSuspendSchema = z.object({
@@ -28,7 +28,7 @@ export const PlanningIterationSuspendSchema = z.object({
 });
 
 export const PlanningIterationResumeSchema = z.object({
-  answers: z.record(z.string()),
+  answers: z.record(z.string(), z.string()),
 });
 
 export const PlanningAgentOutputSchema = z.object({

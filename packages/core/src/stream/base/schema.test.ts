@@ -17,12 +17,12 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod/v4';
+import { z } from 'zod';
 import { asJsonSchema } from './schema';
 
 // Mock zod to use zod/v4
 vi.mock('zod', async () => {
-  const zodV4 = await import('zod/v4');
+  const zodV4 = await import('zod');
   return {
     z: zodV4.z,
   };

@@ -1,6 +1,5 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { ProgressNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
-import type { z } from 'zod';
+import type { ProgressNotification } from '@modelcontextprotocol/sdk/types.js';
 import type { InternalMastraMCPClient } from '../client';
 
 interface ProgressClientActionsConfig {
@@ -24,7 +23,7 @@ export class ProgressClientActions {
      * Set a notification handler for progress updates.
      * @param handler The callback function to handle progress notifications.
      */
-    public onUpdate(handler: (params: z.infer<typeof ProgressNotificationSchema>['params']) => void): void {
+    public onUpdate(handler: (params: ProgressNotification['params']) => void): void {
         this.client.setProgressNotificationHandler(handler);
     }
 }

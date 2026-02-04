@@ -16,7 +16,7 @@ import type { ModelMethodType } from '../llm/model/model.loop.types';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { MastraMemory, MemoryConfig } from '../memory';
+import type { MastraMemory, MemoryConfig, MemoryConfigInternal } from '../memory';
 import type { IModelSpanTracker } from '../observability';
 import type {
   InputProcessorOrWorkflow,
@@ -43,7 +43,7 @@ export type StreamInternal = {
   generateId?: IdGenerator;
   currentDate?: () => Date;
   saveQueueManager?: SaveQueueManager; // SaveQueueManager from agent/save-queue
-  memoryConfig?: MemoryConfig; // MemoryConfig from memory/types
+  memoryConfig?: MemoryConfigInternal; // MemoryConfig from memory/types
   threadId?: string;
   resourceId?: string;
   memory?: MastraMemory; // MastraMemory from memory/memory

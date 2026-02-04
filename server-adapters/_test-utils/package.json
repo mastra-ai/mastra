@@ -23,6 +23,6 @@
     "@mastra/core": "workspace:*",
     "@mastra/server": "workspace:*",
     "@mastra/mcp": "workspace:*",
-    "zod": "^3.25.76"
+    "zod": "catalog:"
   }
 }

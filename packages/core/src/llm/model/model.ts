@@ -16,8 +16,8 @@ import {
   OpenAISchemaCompatLayer,
   jsonSchema,
 } from '@mastra/schema-compat';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type { ZodSchema, z } from 'zod';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
+import type { ZodSchema, z } from 'zod/v3';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -109,8 +109,10 @@ export class MastraLLMV1 extends MastraBase {
       );
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion needed to avoid
+    // "Type instantiation is excessively deep" error from complex ZodSchema generic inference
     return applyCompatLayer({
-      schema: schema,
+      schema: schema as any,
       compatLayers: schemaCompatLayers,
       mode: 'aiSdkSchema',
     });
@@ -155,7 +157,9 @@ export class MastraLLMV1 extends MastraBase {
           schema = getZodDef(schema).type as z.ZodType<inferOutput<Z>>;
         }
 
-        const jsonSchemaToUse = zodToJsonSchema(schema, 'jsonSchema7');
+        // Convert Zod schema to JSON Schema via standard schema interface
+        const standardSchema = toStandardSchema(schema as any);
+        const jsonSchemaToUse = standardSchemaToJSONSchema(standardSchema);
 
         schema = jsonSchema<inferOutput<Z>>(jsonSchemaToUse);
       } else {

@@ -1716,12 +1716,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             runId,
             models,
             structuredOutput: {
-              schema: jsonSchema({
-                type: 'object',
-                properties: { content: { type: 'string' } },
-                required: ['content'],
-                additionalProperties: false,
-              }),
+              schema: z.object({ content: z.string() }),
             },
             messageList: createMessageListWithUserMessage(),
           });
