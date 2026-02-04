@@ -236,18 +236,29 @@ export class MastraEditor implements IMastraEditor {
 
   /**
    * Clear the stored agent cache for a specific agent ID, or all cached agents.
+   * When clearing a specific agent, also removes it from Mastra's agent registry
+   * so that fresh data is loaded on next access.
    */
   public clearStoredAgentCache(agentId?: string): void {
     if (!this.mastra) return;
 
     const agentCache = this.mastra.getStoredAgentCache();
-    if (!agentCache) return;
 
     if (agentId) {
-      agentCache.delete(agentId);
+      // Clear from Editor's cache
+      if (agentCache) {
+        agentCache.delete(agentId);
+      }
+      // Also remove from Mastra's agent registry so fresh data is loaded
+      this.mastra.removeAgent(agentId);
+      this.logger?.debug(`[clearStoredAgentCache] Cleared cache and registry for agent "${agentId}"`);
     } else {
-      agentCache.clear();
+      // Clear all from cache
+      if (agentCache) {
+        agentCache.clear();
+      }
       this.logger?.debug('[clearStoredAgentCache] Cleared all cached agents');
+      // Note: Don't clear all agents from Mastra registry as that would remove code-defined agents
     }
   }
 

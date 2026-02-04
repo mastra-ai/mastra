@@ -868,6 +868,41 @@ export class Mastra<
   }
 
   /**
+   * Removes an agent from the Mastra instance by its key or ID.
+   * Used when stored agents are updated/deleted to allow fresh data to be loaded.
+   *
+   * @param keyOrId - The agent key or ID to remove
+   * @returns true if an agent was removed, false if no agent was found
+   *
+   * @example
+   * ```typescript
+   * // Remove by key
+   * mastra.removeAgent('myAgent');
+   *
+   * // Remove by ID
+   * mastra.removeAgent('agent-123');
+   * ```
+   */
+  public removeAgent(keyOrId: string): boolean {
+    const agents = this.#agents as Record<string, Agent<any>>;
+
+    // Try direct key lookup first
+    if (agents[keyOrId]) {
+      delete agents[keyOrId];
+      return true;
+    }
+
+    // Try finding by ID
+    const key = Object.keys(agents).find(k => agents[k]?.id === keyOrId);
+    if (key) {
+      delete agents[key];
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Retrieves a registered vector store by its name.
    *
    * @template TVectorName - The specific vector store name type from the registered vectors
