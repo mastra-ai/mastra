@@ -103,6 +103,7 @@ describe('Observability Registry', () => {
         sampling: { type: SamplingStrategyType.ALWAYS },
         exporters: [new TestExporter()],
       });
+
       observability.registerInstance('test', tracing);
       expect(observability.getInstance('test')).toBe(tracing);
 

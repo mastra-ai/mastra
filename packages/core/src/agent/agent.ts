@@ -3440,6 +3440,7 @@ export class Agent<
   ): Promise<MastraAgentNetworkStream<OUTPUT>>;
   async network<OUTPUT = undefined>(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions<OUTPUT>) {
     const requestContextToUse = options?.requestContext || new RequestContext();
+
     // Merge default network options with call-specific options
     const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
     const mergedOptions = {
@@ -3449,6 +3450,7 @@ export class Agent<
       routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
+
     const runId = mergedOptions?.runId || this.#mastra?.generateId() || randomUUID();
 
     // Reserved keys from requestContext take precedence for security.

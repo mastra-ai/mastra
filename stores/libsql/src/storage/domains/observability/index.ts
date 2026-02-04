@@ -455,6 +455,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
           spans: [],
         };
       }
+
       // Get paginated spans
       const spans = await this.#db.selectMany<SpanRecord>({
         tableName: TABLE_SPANS,

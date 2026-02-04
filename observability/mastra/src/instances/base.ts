@@ -170,6 +170,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceState,
       tags,
     });
+
     if (span.isEvent) {
       this.emitSpanEnded(span);
     } else {

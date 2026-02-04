@@ -207,6 +207,7 @@ export class DefaultExporter extends BaseExporter {
    */
   private addToBuffer(event: TracingEvent): void {
     const spanKey = this.buildSpanKey(event.exportedSpan.traceId, event.exportedSpan.id);
+
     // Set first event time if buffer is empty
     if (this.buffer.totalSize === 0) {
       this.buffer.firstEventTime = new Date();
@@ -665,6 +666,7 @@ export class DefaultExporter extends BaseExporter {
       this.logger.debug('Cannot store traces. Observability storage is not initialized');
       return;
     }
+
     // Initialize strategy if not already done (fallback for edge cases)
     if (!this.#strategyInitialized) {
       this.initializeStrategy(this.#observability, this.#storage?.constructor.name ?? 'Unknown');
