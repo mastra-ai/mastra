@@ -183,3 +183,11 @@ Alternatively, update the `outputSchema` to match your actual output, or remove 
 
 The `tool.execute` property is optional in the type system to support client-side tool definitions where execution logic is handled separately. When calling `execute` directly on a tool instance (rather than through agents or workflows), use optional chaining or non-null assertion:
 
+```typescript
+// Optional chaining (recommended)
+const result = await weatherTool.execute?.({ location: 'New York' }, {});
+
+// Non-null assertion (when you know execute exists)
+const result = await weatherTool.execute!({ location: 'New York' }, {});
+```
+
