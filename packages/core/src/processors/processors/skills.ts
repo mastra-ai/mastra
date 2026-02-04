@@ -564,10 +564,13 @@ ${skillInstructions}`;
       }
 
       // Add instruction to activate skills proactively
+      // Be explicit that skills are NOT tools and must be activated via skill-activate
       messageList.addSystem({
         role: 'system',
         content:
-          'When a user asks about a topic covered by an available skill, activate that skill immediately using the skill-activate tool. Do not ask for permission - just activate the skill and use its instructions to answer the question.',
+          'IMPORTANT: Skills are NOT tools. Do not call skill names directly. ' +
+          'To use a skill, call the skill-activate tool with the skill name as the "name" parameter. ' +
+          'When a user asks about a topic covered by an available skill, activate it immediately without asking for permission.',
       });
     }
 
