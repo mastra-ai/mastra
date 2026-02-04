@@ -2,20 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import type { DatasetItem } from '@mastra/client-js';
-import { TextAndIcon } from '@/ds/components/Text';
-import { KeyValueList } from '@/ds/components/KeyValueList';
-import { Sections } from '@/ds/components/Sections';
-import { Button } from '@/ds/components/Button';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Label } from '@/ds/components/Label';
-import { SideDialog } from '@/ds/components/SideDialog';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/lib/toast';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, Pencil } from 'lucide-react';
-import { format } from 'date-fns/format';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { ItemDetailToolbar } from './item-detail-toolbar';
+import { DatasetItemHeader } from './dataset-item-header';
+import { DatasetItemContent } from './dataset-item-content';
+import { EditModeContent } from './dataset-item-form';
 
 export interface ItemDetailPanelProps {
   datasetId: string;
@@ -150,6 +144,8 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
     <>
       <div className="grid grid-rows-[auto_1fr] h-full gap-8">
         <ItemDetailToolbar
+          datasetId={datasetId}
+          itemId={item.id}
           onPrevious={toPreviousItem()}
           onNext={toNextItem()}
           onEdit={handleEdit}
@@ -172,7 +168,10 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
               isSaving={updateItem.isPending}
             />
           ) : (
-            <ReadOnlyContent item={item} Link={Link} />
+            <>
+              <DatasetItemHeader item={item} Link={Link} />
+              <DatasetItemContent item={item} Link={Link} />
+            </>
           )}
         </div>
       </div>
@@ -193,133 +192,6 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
           </AlertDialog.Footer>
         </AlertDialog.Content>
       </AlertDialog>
-    </>
-  );
-}
-
-/**
- * Read-only view of the dataset item details
- */
-function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<typeof useLinkComponent>['Link'] }) {
-  const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
-
-  return (
-    <>
-      <div className="mb-4">
-        <h3 className="text-lg font-medium flex items-center gap-2">
-          <FileInputIcon className="w-5 h-5" /> Dataset Item
-        </h3>
-        <TextAndIcon>
-          <HashIcon className="w-4 h-4" /> {item.id}
-        </TextAndIcon>
-      </div>
-
-      <Sections>
-        <KeyValueList
-          data={[
-            {
-              label: 'Created',
-              value: format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa'),
-              key: 'createdAt',
-            },
-            ...(item.version
-              ? [
-                  {
-                    label: 'Version',
-                    value: format(new Date(item.version), 'MMM d, yyyy h:mm aaa'),
-                    key: 'version',
-                  },
-                ]
-              : []),
-          ]}
-          LinkComponent={Link}
-        />
-
-        <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={JSON.stringify(item.input, null, 2)} />
-
-        {item.expectedOutput !== null && item.expectedOutput !== undefined && (
-          <SideDialog.CodeSection
-            title="Expected Output"
-            icon={<FileOutputIcon />}
-            codeStr={JSON.stringify(item.expectedOutput, null, 2)}
-          />
-        )}
-
-        {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
-      </Sections>
-    </>
-  );
-}
-
-/**
- * Editable form view for updating dataset item
- */
-interface EditModeContentProps {
-  inputValue: string;
-  setInputValue: (value: string) => void;
-  expectedOutputValue: string;
-  setExpectedOutputValue: (value: string) => void;
-  metadataValue: string;
-  setMetadataValue: (value: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  isSaving: boolean;
-}
-
-function EditModeContent({
-  inputValue,
-  setInputValue,
-  expectedOutputValue,
-  setExpectedOutputValue,
-  metadataValue,
-  setMetadataValue,
-  onSave,
-  onCancel,
-  isSaving,
-}: EditModeContentProps) {
-  return (
-    <>
-      <div className="mb-4">
-        <h3 className="text-lg font-medium flex items-center gap-2">
-          <Pencil className="w-5 h-5" /> Edit Item
-        </h3>
-      </div>
-
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <Label>Input (JSON) *</Label>
-          <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-[120px]" />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Expected Output (JSON, optional)</Label>
-          <CodeEditor
-            value={expectedOutputValue}
-            onChange={setExpectedOutputValue}
-            showCopyButton={false}
-            className="min-h-[100px]"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Metadata (JSON, optional)</Label>
-          <CodeEditor
-            value={metadataValue}
-            onChange={setMetadataValue}
-            showCopyButton={false}
-            className="min-h-[80px]"
-          />
-        </div>
-
-        <div className="flex justify-end gap-2 pt-4">
-          <Button variant="secondary" size="default" onClick={onCancel} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button variant="standard" size="default" onClick={onSave} disabled={isSaving}>
-            {isSaving ? 'Saving...' : 'Save Changes'}
-          </Button>
-        </div>
-      </div>
     </>
   );
 }

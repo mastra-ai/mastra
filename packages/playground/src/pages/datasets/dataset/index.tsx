@@ -16,7 +16,7 @@ import {
 } from '@mastra/playground-ui';
 import { Play } from 'lucide-react';
 
-function Dataset() {
+function DatasetPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const navigate = useNavigate();
 
@@ -133,5 +133,5 @@ function Dataset() {
   );
 }
 
-export { Dataset };
-export default Dataset;
+export { DatasetPage };
+export default DatasetPage;

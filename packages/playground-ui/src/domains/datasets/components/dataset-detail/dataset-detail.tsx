@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useDebounce } from 'use-debounce';
 import { DatasetItem } from '@mastra/client-js';
-import { useDataset, useDatasetItems } from '../../hooks/use-datasets';
+import { useDataset } from '../../hooks/use-datasets';
+import { useDatasetItems } from '../../hooks/use-dataset-items';
 import { useDatasetRuns } from '../../hooks/use-dataset-runs';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
+import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { ItemsMasterDetail } from './items-master-detail';
 import { RunHistory } from './run-history';
 import { DatasetHeader } from './dataset-header';
@@ -53,6 +55,7 @@ export function DatasetDetail({
   const [featuredItemId, setSelectedItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 300);
+  const [activeDatasetVersion, setActiveDatasetVersion] = useState<Date | string | null>(null);
 
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
   const {
@@ -74,6 +77,16 @@ export function DatasetDetail({
 
   const handleItemClose = () => {
     setSelectedItemId(null);
+  };
+
+  // Version selection handler
+  const handleVersionSelect = (version: DatasetVersion) => {
+    // If selecting current version, clear the active version state
+    if (version.isCurrent) {
+      setActiveDatasetVersion(null);
+    } else {
+      setActiveDatasetVersion(version.version);
+    }
   };
 
   // Handler for Create Dataset action from selection
@@ -130,7 +143,7 @@ export function DatasetDetail({
   };
 
   return (
-    <div className="h-full overflow-hidden px-6 pb-4" style={{ border: 'px solid blue' }}>
+    <div className="h-full overflow-hidden px-6 pb-4">
       <div className={cn('h-full w-full', transitions.allSlow)}>
         <div
           className={cn(
@@ -185,6 +198,9 @@ export function DatasetDetail({
                   hasNextPage={hasNextPage}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
+                  activeDatasetVersion={activeDatasetVersion}
+                  currentDatasetVersion={dataset?.version}
+                  onVersionSelect={handleVersionSelect}
                 />
               </TabContent>
 

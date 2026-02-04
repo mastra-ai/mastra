@@ -1,7 +1,10 @@
 // Query hooks
 export * from './hooks/use-datasets';
+export * from './hooks/use-dataset-items';
+export * from './hooks/use-dataset-item-versions';
 export * from './hooks/use-dataset-runs';
 export * from './hooks/use-compare-runs';
+export * from './hooks/use-dataset-versions';
 
 // Mutation hooks
 export * from './hooks/use-dataset-mutations';
@@ -38,6 +41,16 @@ export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';
 export { EditItemDialog } from './components/edit-item-dialog';
 
+// Item detail components
+export { DatasetItemHeader } from './components/dataset-detail/dataset-item-header';
+export type { DatasetItemHeaderProps } from './components/dataset-detail/dataset-item-header';
+export { DatasetItemContent } from './components/dataset-detail/dataset-item-content';
+export type { DatasetItemContentProps } from './components/dataset-detail/dataset-item-content';
+export { EditModeContent } from './components/dataset-detail/dataset-item-form';
+export type { EditModeContentProps } from './components/dataset-detail/dataset-item-form';
+export { ItemPageToolbar } from './components/dataset-detail/item-page-toolbar';
+export type { ItemPageToolbarProps } from './components/dataset-detail/item-page-toolbar';
+
 // CSV import components
 export { CSVImportDialog } from './components/csv-import';
 
@@ -61,3 +74,6 @@ export { ResultDetailDialog } from './components/results/result-detail-dialog';
 // Comparison components
 export { ComparisonView } from './components/comparison/comparison-view';
 export { ScoreDelta } from './components/comparison/score-delta';
+
+// Versions components
+export { DatasetVersionsPanel, DatasetItemVersionsPanel } from './components/versions';

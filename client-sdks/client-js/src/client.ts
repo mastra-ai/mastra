@@ -911,6 +911,16 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Gets a specific dataset item by ID
+   * @param datasetId - ID of the dataset
+   * @param itemId - ID of the item to retrieve
+   * @returns Promise containing the dataset item
+   */
+  public getDatasetItem(datasetId: string, itemId: string): Promise<DatasetItem> {
+    return this.request(`/api/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`);
+  }
+
+  /**
    * Adds an item to a dataset
    * @param params - Item creation parameters including datasetId
    * @returns Promise containing the created item

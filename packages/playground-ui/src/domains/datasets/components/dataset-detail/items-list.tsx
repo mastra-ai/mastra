@@ -43,6 +43,10 @@ export interface DatasetItemListProps {
   // Search props
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
+  // Versions panel props
+  onVersionsClick?: () => void;
+  isVersionsPanelOpen?: boolean;
+  hideVersionsButton?: boolean;
 }
 
 /**
@@ -72,6 +76,9 @@ export function DatasetItemList({
   hasNextPage,
   searchQuery,
   onSearchChange,
+  onVersionsClick,
+  isVersionsPanelOpen,
+  hideVersionsButton,
 }: DatasetItemListProps) {
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
   const selection = useItemSelection();
@@ -178,6 +185,9 @@ export function DatasetItemList({
         onExecuteAction={handleExecuteAction}
         onCancelSelection={handleCancelSelection}
         selectionMode={selectionMode}
+        onVersionsClick={onVersionsClick ?? (() => {})}
+        isVersionsPanelOpen={isVersionsPanelOpen}
+        hideVersionsButton={hideVersionsButton}
       />
 
       {/* Show skeleton during loading, otherwise show the item list */}

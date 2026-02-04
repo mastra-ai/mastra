@@ -16,6 +16,8 @@ import {
   AmpersandIcon,
   MoveRightIcon,
   Search,
+  History,
+  ArrowRightIcon,
 } from 'lucide-react';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Badge } from '@/ds/components/Badge';
@@ -43,6 +45,11 @@ export interface ItemsToolbarProps {
   onExecuteAction: () => void;
   onCancelSelection: () => void;
   selectionMode: 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete';
+
+  // Versions panel
+  onVersionsClick: () => void;
+  isVersionsPanelOpen?: boolean;
+  hideVersionsButton?: boolean;
 }
 
 interface ActionsMenuProps {
@@ -71,7 +78,7 @@ function ActionsMenu({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="secondary" size="default" aria-label="Actions menu">
-          Select <AmpersandIcon />
+          <ArrowRightIcon /> Select and ...
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-1 bg-surface4 ">
@@ -154,6 +161,9 @@ export function ItemsToolbar({
   onExecuteAction,
   onCancelSelection,
   selectionMode,
+  onVersionsClick,
+  isVersionsPanelOpen,
+  hideVersionsButton,
 }: ItemsToolbarProps) {
   const [open, setOpen] = useState(false);
 
@@ -266,6 +276,13 @@ export function ItemsToolbar({
             onAddToDatasetClick={onAddToDatasetClick}
             onDeleteClick={onDeleteClick}
           />
+        )}
+
+        {!hideVersionsButton && (
+          <Button variant="secondary" size="default" onClick={onVersionsClick} aria-label="View versions">
+            <History className="w-4 h-4" />
+            Versions
+          </Button>
         )}
       </div>
     </div>
