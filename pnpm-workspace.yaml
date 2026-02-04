@@ -20,6 +20,7 @@ packages:
   - e2e-tests/workspace-compat
 
 catalog:
+  '@microsoft/api-extractor': '^7.56.0'
   '@vitest/coverage-v8': 4.0.12
   '@vitest/ui': 4.0.12
   vitest: 4.0.16
