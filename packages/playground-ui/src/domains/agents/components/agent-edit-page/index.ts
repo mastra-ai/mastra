@@ -1,3 +1,4 @@
+export * from './agent-edit-layout';
 export * from './agent-edit-main';
 export * from './agent-edit-main-blocks';
 export * from './agent-edit-sidebar';

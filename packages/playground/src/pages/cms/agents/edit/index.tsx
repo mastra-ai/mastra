@@ -10,7 +10,7 @@ import {
   AgentEditMain,
   AgentEditSidebar,
   AgentVersionsPanel,
-  AgentLayout,
+  AgentEditLayout,
   useAgentEditForm,
   Header,
   HeaderTitle,
@@ -21,7 +21,6 @@ import {
   MainContentLayout,
   Skeleton,
 } from '@mastra/playground-ui';
-import { AgentHeader } from '@/domains/agents/agent-header';
 
 // Type for the agent data (inferred from useStoredAgent)
 type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
@@ -41,7 +40,6 @@ interface CmsAgentsEditFormProps {
   selectedVersionId: string | null;
   versionData?: AgentVersionResponse;
   onVersionSelect: (versionId: string) => void;
-  onClearVersion: () => void;
 }
 
 // Form component - only rendered when agent data is available
@@ -51,7 +49,6 @@ function CmsAgentsEditForm({
   selectedVersionId,
   versionData,
   onVersionSelect,
-  onClearVersion,
 }: CmsAgentsEditFormProps) {
   const { navigate, paths } = useLinkComponent();
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
@@ -163,8 +160,7 @@ function CmsAgentsEditForm({
   }, [form, agent, updateStoredAgent, navigate, paths, agentId]);
 
   return (
-    <AgentLayout
-      agentId={agentId}
+    <AgentEditLayout
       leftSlot={
         <AgentEditSidebar
           form={form}
@@ -187,7 +183,7 @@ function CmsAgentsEditForm({
       <form ref={formRef} className="h-full">
         <AgentEditMain form={form} readOnly={isViewingVersion} />
       </form>
-    </AgentLayout>
+    </AgentEditLayout>
   );
 }
 
@@ -214,10 +210,6 @@ function CmsAgentsEditPage() {
     [setSearchParams],
   );
 
-  const handleClearVersion = useCallback(() => {
-    setSearchParams({});
-  }, [setSearchParams]);
-
   // Loading state
   if (isLoadingAgent || (selectedVersionId && isLoadingVersion)) {
     return (
@@ -231,9 +223,13 @@ function CmsAgentsEditPage() {
           </HeaderTitle>
         </Header>
 
-        <AgentLayout
-          agentId="agent-edit"
+        <AgentEditLayout
           leftSlot={
+            <div className="flex items-center justify-center h-full">
+              <Spinner className="h-8 w-8" />
+            </div>
+          }
+          rightSlot={
             <div className="flex items-center justify-center h-full">
               <Spinner className="h-8 w-8" />
             </div>
@@ -242,7 +238,7 @@ function CmsAgentsEditPage() {
           <div className="flex items-center justify-center h-full">
             <Spinner className="h-8 w-8" />
           </div>
-        </AgentLayout>
+        </AgentEditLayout>
       </MainContentLayout>
     );
   }
@@ -259,12 +255,12 @@ function CmsAgentsEditPage() {
             Agent not found
           </HeaderTitle>
         </Header>
-        <AgentLayout
-          agentId="agent-edit"
+        <AgentEditLayout
           leftSlot={<div className="flex items-center justify-center h-full text-icon3">Agent not found</div>}
+          rightSlot={<div className="flex items-center justify-center h-full text-icon3">No versions</div>}
         >
           <div className="flex items-center justify-center h-full text-icon3">Agent not found</div>
-        </AgentLayout>
+        </AgentEditLayout>
       </MainContentLayout>
     );
   }
@@ -272,7 +268,14 @@ function CmsAgentsEditPage() {
   // Render form only when agent data is available
   return (
     <MainContentLayout>
-      <AgentHeader agentId={agentId} />
+      <Header>
+        <HeaderTitle>
+          <Icon>
+            <AgentIcon />
+          </Icon>
+          Edit agent: {agent.name}
+        </HeaderTitle>
+      </Header>
       <CmsAgentsEditForm
         key={selectedVersionId ?? ''}
         agent={agent}
@@ -280,7 +283,6 @@ function CmsAgentsEditPage() {
         selectedVersionId={selectedVersionId}
         versionData={versionData}
         onVersionSelect={handleVersionSelect}
-        onClearVersion={handleClearVersion}
       />
     </MainContentLayout>
   );

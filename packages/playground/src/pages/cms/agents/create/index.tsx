@@ -4,9 +4,8 @@ import {
   toast,
   useLinkComponent,
   useStoredAgentMutations,
-  AgentEditMainContentBlocks,
   AgentEditSidebar,
-  AgentLayout,
+  AgentEditLayout,
   useAgentEditForm,
   AgentEditMain,
   MainContentLayout,
@@ -77,17 +76,15 @@ function CmsAgentsCreatePage() {
           Create an agent from UI
         </HeaderTitle>
       </Header>
-      <AgentLayout
-        agentId="agent-create"
+      <AgentEditLayout
         leftSlot={
           <AgentEditSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} formRef={formRef} />
         }
       >
         <form ref={formRef} className="h-full">
           <AgentEditMain form={form} />
-          {/* <AgentEditMainContentBlocks form={form} /> */}
         </form>
-      </AgentLayout>
+      </AgentEditLayout>
     </MainContentLayout>
   );
 }

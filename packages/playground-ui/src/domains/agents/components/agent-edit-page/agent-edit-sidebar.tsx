@@ -62,7 +62,7 @@ export function AgentEditSidebar({
           <Tab value="capabilities">Capabilities</Tab>
         </TabList>
 
-        <TabContent value="identity" className="flex-1 min-h-0">
+        <TabContent value="identity" className="flex-1 min-h-0 py-0 pb-3">
           <ScrollArea className="h-full">
             <div className="flex flex-col gap-6 p-4">
               <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." />
@@ -149,7 +149,7 @@ export function AgentEditSidebar({
           </ScrollArea>
         </TabContent>
 
-        <TabContent value="capabilities" className="flex-1 min-h-0">
+        <TabContent value="capabilities" className="flex-1 min-h-0 py-0 pb-3">
           <ScrollArea className="h-full">
             <div className="flex flex-col gap-6 p-4">
               <SectionHeader
