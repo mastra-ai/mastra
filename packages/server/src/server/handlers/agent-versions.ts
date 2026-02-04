@@ -412,15 +412,26 @@ export async function handleAutoVersioning<TAgent>(
   }
 
   // Create version with retry logic for race conditions
-  await createVersionWithRetry(agentsStore, agentId, fullConfig, changedFields, {
+  const { versionId } = await createVersionWithRetry(agentsStore, agentId, fullConfig, changedFields, {
     changeMessage: 'Auto-saved after edit',
   });
 
-  // Enforce retention limit (use existing activeVersionId from existingAgent)
-  const activeVersionId = existingAgent.activeVersionId;
-  await enforceRetentionLimit(agentsStore, agentId, activeVersionId);
+  // Update the agent's activeVersionId to point to the new version
+  await agentsStore.updateAgent({
+    id: agentId,
+    activeVersionId: versionId,
+  });
 
-  return { agent: updatedAgent, versionCreated: true };
+  // Update the updatedAgent object with the new activeVersionId
+  const agentWithNewVersion = {
+    ...updatedAgent,
+    activeVersionId: versionId,
+  };
+
+  // Enforce retention limit with the new activeVersionId
+  await enforceRetentionLimit(agentsStore, agentId, versionId);
+
+  return { agent: agentWithNewVersion, versionCreated: true };
 }
 
 // ============================================================================
