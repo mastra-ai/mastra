@@ -20,6 +20,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./processors": {
+      "import": {
+        "types": "./dist/processors/index.d.ts",
+        "default": "./dist/processors/index.js"
+      },
+      "require": {
+        "types": "./dist/processors/index.d.ts",
+        "default": "./dist/processors/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
