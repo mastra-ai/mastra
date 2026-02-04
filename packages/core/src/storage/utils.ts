@@ -1,5 +1,5 @@
 import type { ScoreRowData } from '../evals/types';
-import { TABLE_SCHEMAS, TABLE_SCORERS } from './constants';
+import { POSTGRES_IDENTIFIER_MAX_LENGTH, TABLE_SCHEMAS, TABLE_SCORERS } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type { StorageColumn } from './types';
 
@@ -140,6 +140,26 @@ export function transformRow<T = Record<string, any>>(
  */
 export function transformScoreRow(row: Record<string, any>, options: TransformRowOptions = {}): ScoreRowData {
   return transformRow<ScoreRowData>(row, TABLE_SCORERS, options);
+}
+
+export function truncateIdentifier(value: string, maxLength?: number): string {
+  if (!maxLength || value.length <= maxLength) {
+    return value;
+  }
+  return value.slice(0, maxLength);
+}
+
+export function buildConstraintName({
+  baseName,
+  schemaName,
+  maxLength = POSTGRES_IDENTIFIER_MAX_LENGTH,
+}: {
+  baseName: string;
+  schemaName?: string;
+  maxLength?: number;
+}): string {
+  const prefix = schemaName ? `${schemaName}_` : '';
+  return truncateIdentifier(`${prefix}${baseName}`, maxLength);
 }
 
 /**
