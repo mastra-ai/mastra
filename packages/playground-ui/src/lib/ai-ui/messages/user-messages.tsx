@@ -41,7 +41,11 @@ export const UserMessage = () => {
   const messageId = message?.id;
 
   return (
-    <MessagePrimitive.Root className="w-full flex items-end pb-4 flex-col" data-message-id={messageId}>
+    <MessagePrimitive.Root
+      className="w-full flex items-end pb-4 pt-2 flex-col"
+      data-message-id={messageId}
+      data-message-index={message?.index}
+    >
       {/* <UserActionBar /> */}
       <div className="max-w-[366px] px-5 py-3 text-neutral6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
         <MessagePrimitive.Parts
