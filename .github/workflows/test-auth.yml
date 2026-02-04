@@ -8,6 +8,9 @@ on:
       - 'packages/core/**'
       - '.github/workflows/test-auth.yml'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     # Only run on the main repository, not on forks
