@@ -44,7 +44,6 @@ export const useCodemirrorTheme = (): Extension => {
         { tag: t.monospace, color: '#f1fa8c' },
         { tag: t.strikethrough, textDecoration: 'line-through' },
         { tag: t.quote, fontStyle: 'italic', color: '#6272a4' },
-        { tag: t.list, color: '#50fa7b' },
       ],
     });
 
@@ -87,6 +86,11 @@ export const useCodemirrorTheme = (): Extension => {
       'ul.cm-completionList li[aria-selected]': {
         backgroundColor: '#44475a',
         color: '#f8f8f2',
+      },
+      // Variable highlight styling - uses high specificity to override syntax highlighting
+      '.cm-line .cm-variable-highlight': {
+        color: '#F59E0B !important',
+        fontWeight: '500',
       },
     });
 
