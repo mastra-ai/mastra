@@ -1,11 +1,6 @@
 ---
 '@mastra/core': patch
+'@mastra/libsql': patch
 ---
 
-Fix RequestContext serialization to skip non-serializable values in all workflow paths
-
-- `DefaultExecutionEngine.serializeRequestContext()` now uses `RequestContext.toJSON()`
-- `EventedWorkflow.start()` and `startAsync()` now use `requestContext.toJSON()`
-- `EventedExecutionEngine.execute()` now uses `requestContext.toJSON()`
-
-All paths now properly filter out non-serializable values (functions, symbols, circular references, RPC proxies) when persisting workflow snapshots.
+**Fixed** Workflow runs no longer fail to persist when request context contains non-serializable values (for example functions, circular references, or platform proxy objects). This prevents errors when saving workflow snapshots and scorer results. See #12301.
