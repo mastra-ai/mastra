@@ -94,7 +94,16 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
-    const omSchema = (TABLE_SCHEMAS as Record<string, any>)[OM_TABLE];
+
+    // Dynamically import OM schema to avoid breaking older @mastra/core versions
+    let omSchema: Record<string, any> | undefined;
+    try {
+      const { OBSERVATIONAL_MEMORY_TABLE_SCHEMA } = await import('@mastra/core/storage');
+      omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
+    } catch {
+      // OM not available in this version of core
+    }
+
     if (omSchema) {
       await this.#db.createTable({
         tableName: OM_TABLE as any,
