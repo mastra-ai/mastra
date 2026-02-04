@@ -960,9 +960,11 @@ export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[
   let content = `# AGENTS.md
 
 This document provides guidance for AI coding agents working in this repository.
+
 ## Project Overview
 
-This is a **Mastra AI agent framework** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+This is a **Mastra** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+
 ## Commands
 
 Use these commands to interact with the project.
@@ -1001,7 +1003,7 @@ Folders organize your agent's resources, like agents, tools, and workflows.
 | \`src/mastra/tools\`     | Create reusable tools that your agents can call                                                                                          |
 | \`src/mastra/mcp\`       | (Optional) Implement custom MCP servers to share your tools with external agents                                                         |
 | \`src/mastra/scorers\`   | (Optional) Define scorers for evaluating agent performance over time                                                                     |
-| \`src/mastra/public\`    | (Optional) Contents are copied into the `.build/output` directory during the build process, making them available for serving at runtime |
+| \`src/mastra/public\`    | (Optional) Contents are copied into the \`.build/output\` directory during the build process, making them available for serving at runtime |
 
 ### Top-level files
 
@@ -1010,7 +1012,7 @@ Top-level files define how your Mastra project is configured, built, and connect
 | File                  | Description                                                                                                       |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | \`src/mastra/index.ts\` | Central entry point where you configure and initialize Mastra.                                                    |
-| \`.env.example\`        | Template for environment variables - copy and rename to `.env` to add your secret [model provider](/models) keys. |
+| \`.env.example\`        | Template for environment variables - copy and rename to \`.env\` to add your secret [model provider](/models) keys. |
 | \`package.json\`        | Defines project metadata, dependencies, and available npm scripts.                                                |
 | \`tsconfig.json\`       | Configures TypeScript options such as path aliases, compiler settings, and build output.                          |
 
