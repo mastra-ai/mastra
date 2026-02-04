@@ -373,6 +373,83 @@ Line 3 conclusion`;
       // Should use the custom index name
       expect(capturedIndexName).toBe('custom_index_name');
     });
+
+    it('should throw error for invalid searchIndexName starting with digit', () => {
+      const mockVectorStore = {
+        id: 'mock-vector',
+        upsert: vi.fn(async () => []),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+
+      const mockEmbedder = vi.fn(async () => [0.1, 0.2, 0.3]);
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+
+      expect(
+        () =>
+          new Workspace({
+            filesystem,
+            vectorStore: mockVectorStore as any,
+            embedder: mockEmbedder,
+            searchIndexName: '123_invalid', // Invalid: starts with digit
+          }),
+      ).toThrow(/Invalid searchIndexName/);
+    });
+
+    it('should throw error for searchIndexName exceeding 63 characters', () => {
+      const mockVectorStore = {
+        id: 'mock-vector',
+        upsert: vi.fn(async () => []),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+
+      const mockEmbedder = vi.fn(async () => [0.1, 0.2, 0.3]);
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+
+      const longName = 'a'.repeat(64); // 64 characters, exceeds limit
+
+      expect(
+        () =>
+          new Workspace({
+            filesystem,
+            vectorStore: mockVectorStore as any,
+            embedder: mockEmbedder,
+            searchIndexName: longName,
+          }),
+      ).toThrow(/exceeds 63 characters/);
+    });
+
+    it('should sanitize special characters in workspace ID for index name', async () => {
+      const SQL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+      let capturedIndexName: string | undefined;
+
+      const mockVectorStore = {
+        id: 'mock-vector',
+        upsert: vi.fn(async ({ indexName }: { indexName: string }) => {
+          capturedIndexName = indexName;
+          return [];
+        }),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      };
+
+      const mockEmbedder = vi.fn(async () => [0.1, 0.2, 0.3]);
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        id: 'my.workspace@123', // Special characters that need sanitizing
+        filesystem,
+        vectorStore: mockVectorStore as any,
+        embedder: mockEmbedder,
+      });
+
+      await workspace.index('/doc.txt', 'Test content');
+
+      // All special chars should be replaced with underscores
+      expect(capturedIndexName).toBe('my_workspace_123_search');
+      expect(capturedIndexName).toMatch(SQL_IDENTIFIER_PATTERN);
+    });
   });
 
   // ===========================================================================

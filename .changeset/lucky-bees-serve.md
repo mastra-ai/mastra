@@ -2,8 +2,25 @@
 '@mastra/core': patch
 ---
 
-Fixed workspace search index names to be compatible with SQL-based vector stores (PgVector, LibSQL). Index names now use underscores instead of hyphens, matching SQL identifier requirements.
+**Fixed**
+Workspace search index names now use underscores so they work with SQL-based vector stores (PgVector, LibSQL).
 
-Added `searchIndexName` option to Workspace config for custom index names when needed.
+**Added**
+You can now set a custom index name with `searchIndexName`.
+
+**Why**
+Some SQL vector stores reject hyphens in index names.
+
+**Example**
+```ts
+// Before - would fail with PgVector
+new Workspace({ id: 'my-workspace', vectorStore, embedder });
+
+// After - works with all vector stores
+new Workspace({ id: 'my-workspace', vectorStore, embedder });
+
+// Or use a custom index name
+new Workspace({ vectorStore, embedder, searchIndexName: 'my_workspace_vectors' });
+```
 
 Fixes #12656

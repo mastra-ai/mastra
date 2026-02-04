@@ -293,6 +293,29 @@ export class Workspace {
 
     // Create search engine if search is configured
     if (config.bm25 || (config.vectorStore && config.embedder)) {
+      const buildIndexName = (): string => {
+        // Sanitize default name: replace all non-alphanumeric chars with underscores
+        const defaultName = `${this.id}_search`.replace(/[^a-zA-Z0-9_]/g, '_');
+        const indexName = config.searchIndexName ?? defaultName;
+
+        // Validate SQL identifier format
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(indexName)) {
+          throw new WorkspaceError(
+            `Invalid searchIndexName: "${indexName}". Must start with a letter or underscore, and contain only letters, numbers, or underscores.`,
+            'INVALID_SEARCH_CONFIG',
+            this.id,
+          );
+        }
+        if (indexName.length > 63) {
+          throw new WorkspaceError(
+            `searchIndexName exceeds 63 characters (got ${indexName.length})`,
+            'INVALID_SEARCH_CONFIG',
+            this.id,
+          );
+        }
+        return indexName;
+      };
+
       this._searchEngine = new SearchEngine({
         bm25: config.bm25
           ? {
@@ -304,8 +327,7 @@ export class Workspace {
             ? {
                 vectorStore: config.vectorStore,
                 embedder: config.embedder,
-                // Use custom name or generate SQL-compatible default (no hyphens)
-                indexName: config.searchIndexName ?? `${this.id.replace(/-/g, '_')}_search`,
+                indexName: buildIndexName(),
               }
             : undefined,
       });
