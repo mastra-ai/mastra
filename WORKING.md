@@ -18,6 +18,7 @@ This document tracks implementation progress for review.
 | 8   | Extract ensureSandbox/lazy init to MastraSandbox base class                     | COR-380                   | **Done** | `mastra-sandbox.ts`, `e2b-sandbox.ts`     |
 | 9   | Mount Manager extraction (marker file helpers)                                  | COR-380, COR-385          | **Done** | `mount-manager.ts`, `e2b-sandbox.ts`      |
 | 9b  | Add lifecycle management to MastraFilesystem base class                         | COR-380, COR-484          | **Done** | `mastra-filesystem.ts`, `s3-filesystem.ts`, `gcs-filesystem.ts` |
+| 9c  | Update LocalFilesystem and LocalSandbox to use base class lifecycle             | COR-380                   | **Done** | `local-filesystem.ts`, `local-sandbox.ts`, `errors.ts` |
 | 10  | Implement pathContext with mounts (agent instructions, mount awareness)         | COR-385, COR-491          | Pending  | `workspace.ts`, `composite-filesystem.ts` |
 | 11  | General cleanup checklist (imports, error handling, hardcoded values, logging)  | COR-380                   | Pending  | Multiple files                            |
 | 12  | Create shared test suite with factory patterns                                  | COR-385                   | Pending  | (see stores/server-adapters pattern)      |
@@ -371,6 +372,49 @@ Add lifecycle management to MastraFilesystem (matching MastraSandbox pattern):
 
 ---
 
+## Task 9c: Update LocalFilesystem and LocalSandbox to Use Base Class Lifecycle
+
+### Problem
+
+LocalFilesystem and LocalSandbox had their own status management that didn't use the base class lifecycle patterns we established in Tasks 2-4 and 9b.
+
+### Solution
+
+Update both to use the base class hooks (`_doInit()`, `_doStart()`, etc.) and correct initial status values.
+
+### Changes Made
+
+#### `packages/core/src/workspace/errors.ts`
+
+- Added `FilesystemNotReadyError` (moved from mastra-filesystem.ts for centralization)
+
+#### `packages/core/src/workspace/filesystem/mastra-filesystem.ts`
+
+- Added error logging in `_executeInit()` on failure
+- Now imports `FilesystemNotReadyError` from errors.ts
+
+#### `packages/core/src/workspace/filesystem/local-filesystem.ts`
+
+- Changed `status: ProviderStatus = 'stopped'` → `'pending'`
+- Changed `init()` → `protected override _doInit()`
+- Changed `destroy()` → `protected override _doDestroy()`
+- Updated `ensureInitialized()` to call `await this.ensureReady()`
+
+#### `packages/core/src/workspace/sandbox/local-sandbox.ts`
+
+- Changed `status: ProviderStatus = 'stopped'` → `'pending'`
+- Changed `start()` → `protected override _doStart()`
+- Changed `stop()` → `protected override _doStop()`
+- Changed `destroy()` → `protected override _doDestroy()`
+
+#### `packages/core/src/workspace/sandbox/local-sandbox.test.ts`
+
+- Updated test expectations for new status values:
+  - Initial status: `'stopped'` → `'pending'`
+  - After destroy: `'stopped'` → `'destroyed'`
+
+---
+
 ## Task 10: Implement pathContext with Mounts
 
 ### Problem
@@ -563,6 +607,7 @@ GCS_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
 - [x] Task 8: ensureSandbox extraction
 - [x] Task 9: Mount Manager extraction
 - [x] Task 9b: MastraFilesystem lifecycle management
+- [x] Task 9c: LocalFilesystem/LocalSandbox lifecycle update
 - [ ] Task 10: pathContext implementation
 - [ ] Task 11: General cleanup
 - [ ] Task 12: Shared test suite
