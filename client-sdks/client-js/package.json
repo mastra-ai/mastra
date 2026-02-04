@@ -36,7 +36,7 @@
   "scripts": {
     "lint": "eslint .",
     "build:lib": "tsup --config tsup.config.ts",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts client-sdks/client-js",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "dev": "pnpm build:lib --watch",
     "test": "vitest",
     "test:unit": "vitest run"
