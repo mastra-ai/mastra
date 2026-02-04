@@ -1,10 +1,10 @@
 /**
  * Tests for GitHub Issue #12612
- * Verifies that SkillsProcessor is preserved when custom inputProcessors are used.
+ * Verifies that skill tools are preserved when custom inputProcessors are used.
  *
  * Two scenarios:
- * 1. inputProcessors on Agent constructor - should merge with skills (WORKS)
- * 2. inputProcessors on generate()/stream() options - should merge with skills (CURRENTLY BROKEN)
+ * 1. inputProcessors on Agent constructor - should merge with skills
+ * 2. inputProcessors on generate()/stream() options - should merge with skills
  */
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -200,7 +200,6 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
       });
 
       // Verify that skill tools are available
-      // THIS TEST WILL FAIL with current code - skills get replaced by the override
       const toolNames = getToolNames(capturedTools);
       expect(toolNames).toContain('skill-activate');
       expect(toolNames).toContain('skill-search');
@@ -224,7 +223,6 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
       }
 
       // Verify that skill tools are available
-      // THIS TEST WILL FAIL with current code - skills get replaced by the override
       const toolNames = getToolNames(capturedTools);
       expect(toolNames).toContain('skill-activate');
       expect(toolNames).toContain('skill-search');
