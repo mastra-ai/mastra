@@ -14,13 +14,14 @@ import {
   useAgentEditForm,
   Header,
   HeaderTitle,
-  HeaderAction,
   Icon,
   AgentIcon,
   Spinner,
   useAgentVersion,
-  VersionIndicator,
+  MainContentLayout,
+  Skeleton,
 } from '@mastra/playground-ui';
+import { AgentHeader } from '@/domains/agents/agent-header';
 
 // Type for the agent data (inferred from useStoredAgent)
 type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
@@ -164,21 +165,6 @@ function CmsAgentsEditForm({
   return (
     <AgentLayout
       agentId={agentId}
-      headerSlot={
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <AgentIcon />
-            </Icon>
-            Edit agent: {agent.name}
-          </HeaderTitle>
-          {isViewingVersion && versionData && (
-            <HeaderAction>
-              <VersionIndicator versionNumber={versionData.versionNumber} onClose={onClearVersion} />
-            </HeaderAction>
-          )}
-        </Header>
-      }
       leftSlot={
         <AgentEditSidebar
           form={form}
@@ -235,64 +221,68 @@ function CmsAgentsEditPage() {
   // Loading state
   if (isLoadingAgent || (selectedVersionId && isLoadingVersion)) {
     return (
-      <AgentLayout
-        agentId="agent-edit"
-        headerSlot={
-          <Header>
-            <HeaderTitle>
-              <Icon>
-                <AgentIcon />
-              </Icon>
-              Edit agent
-            </HeaderTitle>
-          </Header>
-        }
-        leftSlot={
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <AgentIcon />
+            </Icon>
+            <Skeleton className="h-6 w-[200px]" />
+          </HeaderTitle>
+        </Header>
+
+        <AgentLayout
+          agentId="agent-edit"
+          leftSlot={
+            <div className="flex items-center justify-center h-full">
+              <Spinner className="h-8 w-8" />
+            </div>
+          }
+        >
           <div className="flex items-center justify-center h-full">
             <Spinner className="h-8 w-8" />
           </div>
-        }
-      >
-        <div className="flex items-center justify-center h-full">
-          <Spinner className="h-8 w-8" />
-        </div>
-      </AgentLayout>
+        </AgentLayout>
+      </MainContentLayout>
     );
   }
 
   // Agent not found state
   if (!agent || !agentId) {
     return (
-      <AgentLayout
-        agentId="agent-edit"
-        headerSlot={
-          <Header>
-            <HeaderTitle>
-              <Icon>
-                <AgentIcon />
-              </Icon>
-              Edit agent
-            </HeaderTitle>
-          </Header>
-        }
-        leftSlot={<div className="flex items-center justify-center h-full text-icon3">Agent not found</div>}
-      >
-        <div className="flex items-center justify-center h-full text-icon3">Agent not found</div>
-      </AgentLayout>
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <AgentIcon />
+            </Icon>
+            Agent not found
+          </HeaderTitle>
+        </Header>
+        <AgentLayout
+          agentId="agent-edit"
+          leftSlot={<div className="flex items-center justify-center h-full text-icon3">Agent not found</div>}
+        >
+          <div className="flex items-center justify-center h-full text-icon3">Agent not found</div>
+        </AgentLayout>
+      </MainContentLayout>
     );
   }
 
   // Render form only when agent data is available
   return (
-    <CmsAgentsEditForm
-      key={selectedVersionId ?? ''}
-      agent={agent}
-      agentId={agentId}
-      selectedVersionId={selectedVersionId}
-      versionData={versionData}
-      onVersionSelect={handleVersionSelect}
-      onClearVersion={handleClearVersion}
-    />
+    <MainContentLayout>
+      <AgentHeader agentId={agentId} />
+      <CmsAgentsEditForm
+        key={selectedVersionId ?? ''}
+        agent={agent}
+        agentId={agentId}
+        selectedVersionId={selectedVersionId}
+        versionData={versionData}
+        onVersionSelect={handleVersionSelect}
+        onClearVersion={handleClearVersion}
+      />
+    </MainContentLayout>
   );
 }
 

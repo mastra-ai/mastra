@@ -8,13 +8,13 @@ import {
   AgentEditSidebar,
   AgentLayout,
   useAgentEditForm,
+  AgentEditMain,
+  MainContentLayout,
   Header,
   HeaderTitle,
   Icon,
   AgentIcon,
-  AgentEditMain,
 } from '@mastra/playground-ui';
-import { Agent } from '@mastra/core';
 
 function CmsAgentsCreatePage() {
   const { navigate, paths } = useLinkComponent();
@@ -68,27 +68,27 @@ function CmsAgentsCreatePage() {
   }, [form, createStoredAgent, navigate, paths]);
 
   return (
-    <AgentLayout
-      agentId="agent-create"
-      headerSlot={
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <AgentIcon />
-            </Icon>
-            Create an agent from UI
-          </HeaderTitle>
-        </Header>
-      }
-      leftSlot={
-        <AgentEditSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} formRef={formRef} />
-      }
-    >
-      <form ref={formRef} className="h-full">
-        <AgentEditMain form={form} />
-        {/* <AgentEditMainContentBlocks form={form} /> */}
-      </form>
-    </AgentLayout>
+    <MainContentLayout>
+      <Header>
+        <HeaderTitle>
+          <Icon>
+            <AgentIcon />
+          </Icon>
+          Create an agent from UI
+        </HeaderTitle>
+      </Header>
+      <AgentLayout
+        agentId="agent-create"
+        leftSlot={
+          <AgentEditSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} formRef={formRef} />
+        }
+      >
+        <form ref={formRef} className="h-full">
+          <AgentEditMain form={form} />
+          {/* <AgentEditMainContentBlocks form={form} /> */}
+        </form>
+      </AgentLayout>
+    </MainContentLayout>
   );
 }
 

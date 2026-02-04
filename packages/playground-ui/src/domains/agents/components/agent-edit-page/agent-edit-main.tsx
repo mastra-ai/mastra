@@ -20,9 +20,9 @@ export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
   } = form;
 
   return (
-    <div className="flex flex-col gap-6 h-full pb-4">
+    <div className="flex flex-col gap-6 h-full">
       {/* Instructions - CodeEditor */}
-      <div className="flex flex-col gap-3 flex-1 min-h-0 px-4 pt-4">
+      <div className="flex flex-col gap-3 flex-1 min-h-0 px-4">
         <SectionHeader
           title="Instructions"
           subtitle="Write your agent's system prompt."

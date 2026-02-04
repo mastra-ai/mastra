@@ -38,13 +38,6 @@ function RecursiveFieldRenderer({
         <JSONSchemaForm.FieldNullable className="shrink-0" />
         <JSONSchemaForm.FieldRemove variant="ghost" size="md" />
       </div>
-      <JSONSchemaForm.FieldDescription
-        label="Description"
-        labelIsHidden
-        placeholder="Description (optional)"
-        size="md"
-        className="mb-2 [&_input]:bg-surface3"
-      />
       <JSONSchemaForm.NestedFields className="ml-4">
         <JSONSchemaForm.FieldList>
           {(nestedField, _idx, nestedContext) => (
