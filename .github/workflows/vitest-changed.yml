@@ -32,14 +32,12 @@ jobs:
       contents: read
 
     steps:
-      # Then checkout the PR code for the actual work
       - name: Checkout PR code
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      # First checkout the base branch to get trusted composite actions
       - name: Checkout trusted actions from base branch
         uses: actions/checkout@v5
         with:
@@ -76,7 +74,9 @@ jobs:
           pnpm vitest run \
             --changed origin/${{ steps.pr-info.outputs.base_ref }} \
             --reporter=blob \
-            --shard=${{ matrix.shard }}/4
+            --outputFile.blob=.vitest-reports/blob-${{ matrix.shard }}.json \
+            --shard=${{ matrix.shard }}/4 \
+            --passWithNoTests
         env:
           NODE_OPTIONS: '--max_old_space_size=6144'
 
@@ -99,19 +99,17 @@ jobs:
       contents: read
 
     steps:
-      # First checkout the base branch to get trusted composite actions
+      - name: Checkout PR code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
       - name: Checkout trusted actions from base branch
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
           sparse-checkout: .github/actions
           path: trusted-actions
-
-      # Then checkout the PR code
-      - name: Checkout PR code
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       # Copy trusted actions into the workspace
       - name: Use trusted actions

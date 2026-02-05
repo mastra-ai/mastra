@@ -3,6 +3,7 @@ import { createCerebras } from '@ai-sdk/cerebras-v5';
 import { createDeepInfra } from '@ai-sdk/deepinfra-v5';
 import { createDeepSeek } from '@ai-sdk/deepseek-v5';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
+import { createGroq } from '@ai-sdk/groq-v5';
 import { createMistral } from '@ai-sdk/mistral-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
@@ -212,6 +213,8 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createAnthropic({ apiKey })(modelId);
       case 'mistral':
         return createMistral({ apiKey })(modelId);
+      case 'groq':
+        return createGroq({ apiKey })(modelId);
       case 'openrouter':
         return createOpenRouter({ apiKey, headers })(modelId);
       case 'xai':
