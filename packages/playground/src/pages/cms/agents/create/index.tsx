@@ -7,7 +7,7 @@ import {
   AgentEditSidebar,
   AgentEditLayout,
   useAgentEditForm,
-  AgentEditMain,
+  AgentEditMainContentBlocks,
   MainContentLayout,
   Header,
   HeaderTitle,
@@ -83,8 +83,8 @@ function CmsAgentsCreatePage() {
         rightSlot={<div />}
       >
         <form ref={formRef} className="h-full">
-          <AgentEditMain form={form} />
-          {/* <AgentEditMainContentBlocks form={form} /> */}
+          {/* <AgentEditMain form={form} /> */}
+          <AgentEditMainContentBlocks form={form} />
         </form>
       </AgentEditLayout>
     </MainContentLayout>
