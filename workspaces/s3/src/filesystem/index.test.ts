@@ -429,43 +429,6 @@ describe('S3Filesystem', () => {
 });
 
 /**
- * Integration tests that require AWS credentials AND a test bucket.
- * These are skipped in CI and only run locally with credentials.
+ * Integration tests are in index.integration.test.ts
+ * They are separated to avoid conflicts with the mocked AWS SDK above.
  */
-describe.skipIf(!process.env.AWS_ACCESS_KEY_ID || !process.env.TEST_S3_BUCKET)(
-  'S3Filesystem Integration',
-  () => {
-  const testBucket = process.env.TEST_S3_BUCKET!;
-  const testRegion = process.env.TEST_S3_REGION || 'us-east-1';
-
-  let fs: S3Filesystem;
-
-  beforeEach(() => {
-    fs = new S3Filesystem({
-      bucket: testBucket,
-      region: testRegion,
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-      prefix: `test-${Date.now()}`,
-    });
-  });
-
-  it('creates client lazily on first operation', async () => {
-    // Client should not be created until we do an operation
-    const exists = await fs.exists('/test.txt');
-    expect(exists).toBe(false);
-  });
-
-  it('can write and read files', async () => {
-    await fs.init();
-
-    await fs.writeFile('/test.txt', 'Hello S3!');
-    const content = await fs.readFile('/test.txt', { encoding: 'utf-8' });
-
-    expect(content).toBe('Hello S3!');
-
-    // Cleanup
-    await fs.deleteFile('/test.txt', { force: true });
-  });
-},
-);

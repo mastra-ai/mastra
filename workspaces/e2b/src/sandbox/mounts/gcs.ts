@@ -27,44 +27,42 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
   const checkResult = await sandbox.commands.run('which gcsfuse || echo "not found"');
   if (checkResult.stdout.includes('not found')) {
     await sandbox.commands.run(
-      'echo "deb https://packages.cloud.google.com/apt gcsfuse-jammy main" | tee /etc/apt/sources.list.d/gcsfuse.list && ' +
-        'curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - && ' +
-        'apt-get update && apt-get install -y gcsfuse',
+      'echo "deb https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list && ' +
+        'curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add - && ' +
+        'sudo apt-get update && sudo apt-get install -y gcsfuse',
     );
   }
+
 
   // Get user's uid/gid for proper file ownership
   const idResult = await sandbox.commands.run('id -u && id -g');
   const [uid, gid] = idResult.stdout.trim().split('\n');
 
-  // Build mount options
-  const mountOptions: string[] = [];
-
-  // Set uid/gid so mounted files are owned by user, not root
-  if (uid && gid) {
-    mountOptions.push(`uid=${uid}`, `gid=${gid}`);
-  }
+  // Build gcsfuse flags
+  // Note: gcsfuse uses --uid/--gid flags, not -o uid=X style
+  const uidGidFlags = uid && gid ? `--uid=${uid} --gid=${gid}` : '';
 
   const hasCredentials = !!config.serviceAccountKey;
   let mountCmd: string;
 
   if (hasCredentials) {
-    // Write service account key
+    // Write service account key with root ownership so sudo gcsfuse can read it
     const keyPath = '/tmp/gcs-key.json';
     await sandbox.commands.run(`sudo rm -f ${keyPath}`);
     await sandbox.files.write(keyPath, config.serviceAccountKey!);
-    await sandbox.commands.run(`chmod 600 ${keyPath}`);
+    // Make readable by root (sudo gcsfuse runs as root)
+    await sandbox.commands.run(`sudo chown root:root ${keyPath} && sudo chmod 600 ${keyPath}`);
 
-    // Mount with credentials
-    const optionsStr = mountOptions.length > 0 ? `-o ${mountOptions.join(' -o ')}` : '';
-    mountCmd = `GOOGLE_APPLICATION_CREDENTIALS=${keyPath} gcsfuse ${optionsStr} ${config.bucket} ${mountPath}`;
+    // Mount with credentials using --key-file flag
+    // Use sudo for /dev/fuse access (same as s3fs)
+    mountCmd = `sudo gcsfuse --key-file=${keyPath} ${uidGidFlags} ${config.bucket} ${mountPath}`;
   } else {
     // Public bucket mode - read-only access without credentials
-    mountOptions.push('anonymous_access');
+    // Use --anonymous-access flag (not -o option)
+    // Use sudo for /dev/fuse access (same as s3fs)
     logger.debug(`${LOG_PREFIX} No credentials provided, mounting GCS as public bucket (read-only)`);
 
-    const optionsStr = mountOptions.length > 0 ? `-o ${mountOptions.join(' -o ')}` : '';
-    mountCmd = `gcsfuse ${optionsStr} ${config.bucket} ${mountPath}`;
+    mountCmd = `sudo gcsfuse --anonymous-access ${uidGidFlags} ${config.bucket} ${mountPath}`;
   }
 
   logger.debug(`${LOG_PREFIX} Mounting GCS:`, mountCmd);

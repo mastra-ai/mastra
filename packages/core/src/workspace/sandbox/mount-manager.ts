@@ -337,6 +337,16 @@ export class MountManager {
     return entry?.configHash === storedHash;
   }
 
+  /**
+   * Compute a hash for a mount config. Used for comparing configs across mounts.
+   *
+   * @param config - The config to hash
+   * @returns A hash string suitable for comparison
+   */
+  computeConfigHash(config: FilesystemMountConfig): string {
+    return this.hashConfig(config);
+  }
+
   // ---------------------------------------------------------------------------
   // Internal
   // ---------------------------------------------------------------------------

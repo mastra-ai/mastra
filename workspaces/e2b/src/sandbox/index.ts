@@ -212,7 +212,7 @@ export class E2BSandbox extends MastraSandbox {
     const config = filesystem.getMountConfig?.() as E2BMountConfig;
 
     // Check if already mounted with matching config (e.g., when reconnecting to existing sandbox)
-    const existingMount = await this.checkExistingMount(mountPath);
+    const existingMount = await this.checkExistingMount(mountPath, config);
     if (existingMount === 'matching') {
       this.logger.debug(
         `${LOG_PREFIX} Detected existing mount for ${filesystem.provider} ("${filesystem.id}") at "${mountPath}" with correct config, skipping`,
@@ -471,9 +471,14 @@ export class E2BSandbox extends MastraSandbox {
   /**
    * Check if a path is already mounted and if the config matches.
    *
+   * @param mountPath - The mount path to check
+   * @param newConfig - The new config to compare against the stored config
    * @returns 'not_mounted' | 'matching' | 'mismatched'
    */
-  private async checkExistingMount(mountPath: string): Promise<'not_mounted' | 'matching' | 'mismatched'> {
+  private async checkExistingMount(
+    mountPath: string,
+    newConfig: E2BMountConfig,
+  ): Promise<'not_mounted' | 'matching' | 'mismatched'> {
     if (!this._sandbox) throw new SandboxNotReadyError(this.id);
 
     // Check if path is a mount point
@@ -497,11 +502,13 @@ export class E2BSandbox extends MastraSandbox {
         return 'mismatched';
       }
 
+      // Compute hash of the NEW config and compare with stored hash
+      const newConfigHash = this.mounts.computeConfigHash(newConfig);
       this.logger.debug(
-        `${LOG_PREFIX} Marker check - stored: "${parsed.path}|${parsed.configHash}", mountPath: "${mountPath}"`,
+        `${LOG_PREFIX} Marker check - stored hash: "${parsed.configHash}", new config hash: "${newConfigHash}"`,
       );
 
-      if (parsed.path === mountPath && this.mounts.isConfigMatching(mountPath, parsed.configHash)) {
+      if (parsed.path === mountPath && parsed.configHash === newConfigHash) {
         return 'matching';
       }
     } catch {

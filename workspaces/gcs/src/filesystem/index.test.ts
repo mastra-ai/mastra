@@ -264,32 +264,6 @@ describe('GCSFilesystem', () => {
 });
 
 /**
- * Integration tests that require GCS credentials.
- * These are skipped in CI and only run locally with credentials.
+ * Integration tests are in index.integration.test.ts
+ * They are separated to avoid conflicts with the mocked GCS SDK above.
  */
-describe.skipIf(!process.env.GCS_SERVICE_ACCOUNT_KEY)('GCSFilesystem Integration', () => {
-  const testBucket = process.env.TEST_GCS_BUCKET!;
-  let credentials: object;
-
-  beforeEach(() => {
-    credentials = JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!);
-  });
-
-  it('can write and read files', async () => {
-    const fs = new GCSFilesystem({
-      bucket: testBucket,
-      credentials,
-      prefix: `test-${Date.now()}`,
-    });
-
-    await fs.init();
-
-    await fs.writeFile('/test.txt', 'Hello GCS!');
-    const content = await fs.readFile('/test.txt', { encoding: 'utf-8' });
-
-    expect(content).toBe('Hello GCS!');
-
-    // Cleanup
-    await fs.deleteFile('/test.txt', { force: true });
-  });
-});

@@ -73,8 +73,9 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
   // S3-compatible services (R2, MinIO, etc.) require credentials
   // public_bucket=1 only works for truly public AWS S3 buckets
   if (!hasCredentials && config.endpoint) {
-    logger.warn(
-      `${LOG_PREFIX} S3-compatible storage (detected endpoint: ${config.endpoint}) requires credentials. ` +
+    throw new Error(
+      `S3-compatible storage requires credentials. ` +
+        `Detected endpoint: ${config.endpoint}. ` +
         `The public_bucket option only works for AWS S3 public buckets, not R2, MinIO, etc.`,
     );
   }

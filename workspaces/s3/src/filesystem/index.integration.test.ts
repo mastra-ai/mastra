@@ -1,0 +1,154 @@
+/**
+ * S3 Filesystem Integration Tests
+ *
+ * These tests require real S3-compatible credentials and run against
+ * actual cloud storage (AWS S3, Cloudflare R2, MinIO, etc.)
+ *
+ * Required environment variables:
+ * - S3_BUCKET: Bucket name
+ * - S3_ACCESS_KEY_ID: Access key
+ * - S3_SECRET_ACCESS_KEY: Secret key
+ * - S3_REGION: Region (optional, defaults to 'auto')
+ * - S3_ENDPOINT: Endpoint URL (optional, for R2/MinIO)
+ */
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+import { S3Filesystem } from './index';
+
+/**
+ * Check if we have S3-compatible credentials.
+ */
+const hasS3Credentials = !!(process.env.S3_ACCESS_KEY_ID && process.env.S3_BUCKET);
+
+/**
+ * Get S3 test configuration from environment.
+ */
+function getS3TestConfig() {
+  return {
+    bucket: process.env.S3_BUCKET!,
+    region: process.env.S3_REGION || 'auto',
+    accessKeyId: process.env.S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+    endpoint: process.env.S3_ENDPOINT,
+  };
+}
+
+describe.skipIf(!hasS3Credentials)('S3Filesystem Integration', () => {
+  const config = getS3TestConfig();
+  let fs: S3Filesystem;
+  let testPrefix: string;
+
+  beforeEach(() => {
+    testPrefix = `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    fs = new S3Filesystem({
+      ...config,
+      prefix: testPrefix,
+    });
+  });
+
+  afterEach(async () => {
+    // Cleanup: delete all files with our test prefix
+    try {
+      const files = await fs.readdir('/');
+      for (const file of files) {
+        if (file.type === 'file') {
+          await fs.deleteFile(`/${file.name}`, { force: true });
+        }
+      }
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  it('creates client lazily on first operation', async () => {
+    // Client should not be created until we do an operation
+    const exists = await fs.exists('/test.txt');
+    expect(exists).toBe(false);
+  });
+
+  it('can write and read files', async () => {
+    await fs.init();
+
+    await fs.writeFile('/test.txt', 'Hello S3!');
+    const content = await fs.readFile('/test.txt', { encoding: 'utf-8' });
+
+    expect(content).toBe('Hello S3!');
+  });
+
+  it('can check file existence', async () => {
+    await fs.init();
+
+    expect(await fs.exists('/nonexistent.txt')).toBe(false);
+
+    await fs.writeFile('/exists.txt', 'I exist');
+    expect(await fs.exists('/exists.txt')).toBe(true);
+  });
+
+  it('can delete files', async () => {
+    await fs.init();
+
+    await fs.writeFile('/to-delete.txt', 'Delete me');
+    expect(await fs.exists('/to-delete.txt')).toBe(true);
+
+    await fs.deleteFile('/to-delete.txt');
+    expect(await fs.exists('/to-delete.txt')).toBe(false);
+  });
+
+  it('can list files', async () => {
+    await fs.init();
+
+    await fs.writeFile('/file1.txt', 'Content 1');
+    await fs.writeFile('/file2.txt', 'Content 2');
+
+    const files = await fs.readdir('/');
+    const names = files.map(f => f.name);
+
+    expect(names).toContain('file1.txt');
+    expect(names).toContain('file2.txt');
+  });
+
+  it('can copy files', async () => {
+    await fs.init();
+
+    await fs.writeFile('/original.txt', 'Original content');
+    await fs.copyFile('/original.txt', '/copied.txt');
+
+    const content = await fs.readFile('/copied.txt', { encoding: 'utf-8' });
+    expect(content).toBe('Original content');
+  });
+
+  it('can move files', async () => {
+    await fs.init();
+
+    await fs.writeFile('/source.txt', 'Move me');
+    await fs.moveFile('/source.txt', '/destination.txt');
+
+    expect(await fs.exists('/source.txt')).toBe(false);
+    expect(await fs.exists('/destination.txt')).toBe(true);
+
+    const content = await fs.readFile('/destination.txt', { encoding: 'utf-8' });
+    expect(content).toBe('Move me');
+  });
+
+  it('can append to files', async () => {
+    await fs.init();
+
+    await fs.writeFile('/append.txt', 'Hello');
+    await fs.appendFile('/append.txt', ' World');
+
+    const content = await fs.readFile('/append.txt', { encoding: 'utf-8' });
+    expect(content).toBe('Hello World');
+  });
+
+  it('can get file stats', async () => {
+    await fs.init();
+
+    await fs.writeFile('/stats.txt', 'Some content');
+    const stat = await fs.stat('/stats.txt');
+
+    expect(stat.name).toBe('stats.txt');
+    expect(stat.type).toBe('file');
+    expect(stat.size).toBeGreaterThan(0);
+  });
+});

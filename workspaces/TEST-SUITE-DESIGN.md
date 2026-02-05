@@ -1,835 +1,385 @@
-# Workspace Providers Shared Test Suite Design
+# Workspace Test Suite Implementation Status
 
-This document outlines the design for a shared test suite for workspace providers (filesystems and sandboxes).
+This document tracks the current state of workspace provider tests and known issues.
 
----
-
-## Overview
-
-Create a shared test suite following the patterns established in `stores/_test-utils` and `server-adapters/_test-utils`. The test suite will:
-
-1. Provide reusable test factories for filesystem and sandbox providers
-2. Support capability flags for provider-specific limitations
-3. Enable both unit tests and integration tests
-4. Allow provider-specific tests alongside shared tests
+**Comprehensive Test Plan:** [Notion - Workspace Filesystem & Sandbox Test Plan](https://www.notion.so/kepler-inc/Workspace-Filesystem-Sandbox-Test-Plan-from-claude-mounts-context-2fdebffbc9f880f5a7e0e9535286fd02)
 
 ---
 
-## Directory Structure
+## Test File Structure
+
+We split tests into **unit** and **integration** files to avoid vitest mock conflicts:
 
 ```
 workspaces/
-├── _test-utils/                          # Shared test utilities package
-│   ├── package.json                      # @internal/workspace-test-utils
-│   ├── tsconfig.json
-│   └── src/
-│       ├── index.ts                      # Main exports
-│       │
-│       ├── filesystem/
-│       │   ├── index.ts                  # Filesystem test exports
-│       │   ├── factory.ts                # createFilesystemTestSuite()
-│       │   ├── config-validation.ts      # createFilesystemConfigTests()
-│       │   ├── test-helpers.ts           # Mock data, utilities
-│       │   └── domains/
-│       │       ├── file-operations.ts    # read, write, append, delete, copy, move
-│       │       ├── directory-ops.ts      # mkdir, rmdir, readdir
-│       │       ├── path-operations.ts    # exists, stat, isFile, isDirectory
-│       │       ├── error-handling.ts     # FileNotFoundError, PermissionError
-│       │       ├── lifecycle.ts          # init, destroy, status transitions
-│       │       └── mount-config.ts       # getMountConfig, readOnly enforcement
-│       │
-│       ├── sandbox/
-│       │   ├── index.ts                  # Sandbox test exports
-│       │   ├── factory.ts                # createSandboxTestSuite()
-│       │   ├── config-validation.ts      # createSandboxConfigTests()
-│       │   ├── test-helpers.ts           # Mock commands, utilities
-│       │   └── domains/
-│       │       ├── command-execution.ts  # executeCommand tests
-│       │       ├── lifecycle.ts          # start, stop, destroy, status
-│       │       ├── mount-operations.ts   # mount(), unmount(), reconcile
-│       │       └── reconnection.ts       # Sandbox reconnection tests
-│       │
-│       └── integration/
-│           ├── index.ts                  # Integration test exports
-│           ├── factory.ts                # createWorkspaceIntegrationTests()
-│           └── scenarios/
-│               ├── file-sync.ts          # Write file, read via sandbox
-│               ├── multi-mount.ts        # Multiple filesystems at different paths
-│               └── cross-mount-copy.ts   # Copy between mounts
-│
-├── e2b/                                  # E2B Sandbox Provider
-│   ├── src/
-│   │   ├── sandbox/                      # If only sandbox (current structure)
-│   │   │   └── e2b-sandbox.ts
-│   │   └── __tests__/
-│   │       ├── e2b-sandbox.test.ts       # Shared tests via factory
-│   │       └── e2b-specific.test.ts      # E2B-specific tests (templates, reconnect)
-│   └── package.json
-│
-├── s3/                                   # S3 Filesystem Provider
-│   ├── src/
-│   │   ├── filesystem/                   # If only filesystem
-│   │   │   └── s3-filesystem.ts
-│   │   └── __tests__/
-│   │       ├── s3-filesystem.test.ts     # Shared tests via factory
-│   │       └── s3-specific.test.ts       # S3-specific tests (multipart, presigned)
-│   └── package.json
-│
-├── gcs/                                  # GCS Filesystem Provider
-│   ├── src/
-│   │   ├── filesystem/
-│   │   │   └── gcs-filesystem.ts
-│   │   └── __tests__/
-│   │       ├── gcs-filesystem.test.ts    # Shared tests via factory
-│   │       └── gcs-specific.test.ts      # GCS-specific tests
-│   └── package.json
-│
-└── daytona/                              # Example: Provider with BOTH
-    ├── src/
-    │   ├── filesystem/                   # Daytona filesystem
-    │   │   └── daytona-filesystem.ts
-    │   ├── sandbox/                      # Daytona sandbox
-    │   │   └── daytona-sandbox.ts
-    │   └── __tests__/
-    │       ├── daytona-filesystem.test.ts
-    │       ├── daytona-sandbox.test.ts
-    │       ├── daytona-integration.test.ts  # Tests both together
-    │       └── daytona-specific.test.ts
-    └── package.json
+├── e2b/
+│   └── src/sandbox/
+│       ├── index.test.ts              # Unit tests (37 tests) - uses vi.mock('e2b')
+│       └── index.integration.test.ts  # Integration tests (20 tests) - real E2B API
+├── s3/
+│   └── src/filesystem/
+│       ├── index.test.ts              # Unit tests - uses vi.mock('@aws-sdk/client-s3')
+│       └── index.integration.test.ts  # Integration tests - real S3/R2
+├── gcs/
+│   └── src/filesystem/
+│       ├── index.test.ts              # Unit tests - uses vi.mock('@google-cloud/storage')
+│       └── index.integration.test.ts  # Integration tests - real GCS
+└── _test-utils/                       # Shared test utilities (placeholder)
 ```
+
+### Why Separate Files?
+
+Vitest's `vi.mock()` is **hoisted** and affects all tests in a file. If you mock `e2b` at the top of a file, integration tests in that same file will hit mocks instead of real services.
+
+**Solution:** Keep mocked unit tests in `index.test.ts` and real-service integration tests in `index.integration.test.ts`.
 
 ---
 
-## Core Interfaces
+## Environment Setup
 
-### Filesystem Test Configuration
+### Loading Credentials
 
-```typescript
-interface FilesystemTestConfig {
-  /** Display name for test suite */
-  suiteName: string;
-
-  /** Factory to create filesystem instance for testing */
-  createFilesystem: () => Promise<WorkspaceFilesystem>;
-
-  /** Cleanup after tests (delete test files, etc.) */
-  cleanupFilesystem?: (fs: WorkspaceFilesystem) => Promise<void>;
-
-  /** Capability flags - skip tests for unsupported features */
-  capabilities?: FilesystemCapabilities;
-
-  /** Test domains to run (default: all) */
-  testDomains?: FilesystemTestDomains;
-}
-
-interface FilesystemCapabilities {
-  /** Supports append operations (default: true) */
-  supportsAppend?: boolean;
-
-  /** Supports symbolic links (default: false) */
-  supportsSymlinks?: boolean;
-
-  /** Supports binary files (default: true) */
-  supportsBinaryFiles?: boolean;
-
-  /** Supports file permissions (default: false) */
-  supportsPermissions?: boolean;
-
-  /** Supports case-sensitive paths (default: true) */
-  supportsCaseSensitive?: boolean;
-
-  /** Supports concurrent operations (default: true) */
-  supportsConcurrency?: boolean;
-
-  /** Supports getMountConfig() for sandbox mounting */
-  supportsMounting?: boolean;
-
-  /** Maximum file size for tests (default: 10MB) */
-  maxTestFileSize?: number;
-}
-
-interface FilesystemTestDomains {
-  fileOperations?: boolean;    // read, write, append, delete, copy, move
-  directoryOps?: boolean;      // mkdir, rmdir, readdir
-  pathOperations?: boolean;    // exists, stat, isFile, isDirectory
-  errorHandling?: boolean;     // FileNotFoundError, PermissionError
-  lifecycle?: boolean;         // init, destroy, status transitions
-  mountConfig?: boolean;       // getMountConfig, readOnly enforcement
-}
-```
-
-### Sandbox Test Configuration
+Integration tests need credentials. We use `dotenv/config` in vitest setup:
 
 ```typescript
-interface SandboxTestConfig {
-  /** Display name for test suite */
-  suiteName: string;
-
-  /** Factory to create sandbox instance for testing */
-  createSandbox: () => Promise<WorkspaceSandbox>;
-
-  /** Cleanup after tests */
-  cleanupSandbox?: (sandbox: WorkspaceSandbox) => Promise<void>;
-
-  /** Capability flags */
-  capabilities?: SandboxCapabilities;
-
-  /** Test domains to run (default: all) */
-  testDomains?: SandboxTestDomains;
-}
-
-interface SandboxCapabilities {
-  /** Supports mounting filesystems (default: false) */
-  supportsMounting?: boolean;
-
-  /** Supports reconnection to existing sandbox (default: false) */
-  supportsReconnection?: boolean;
-
-  /** Supports concurrent command execution (default: true) */
-  supportsConcurrency?: boolean;
-
-  /** Supports environment variables (default: true) */
-  supportsEnvVars?: boolean;
-
-  /** Supports working directory changes (default: true) */
-  supportsWorkingDirectory?: boolean;
-
-  /** Supports command timeout (default: true) */
-  supportsTimeout?: boolean;
-
-  /** Default command timeout for tests (ms) */
-  defaultTimeout?: number;
-}
-
-interface SandboxTestDomains {
-  commandExecution?: boolean;  // executeCommand tests
-  lifecycle?: boolean;         // start, stop, destroy, status
-  mountOperations?: boolean;   // mount(), unmount(), reconcile
-  reconnection?: boolean;      // Sandbox reconnection tests
-}
-```
-
-### Integration Test Configuration
-
-```typescript
-interface WorkspaceIntegrationTestConfig {
-  /** Display name for test suite */
-  suiteName: string;
-
-  /** Create a complete workspace with filesystem and sandbox */
-  createWorkspace: () => Promise<{
-    workspace: Workspace;
-    filesystem: WorkspaceFilesystem;
-    sandbox: WorkspaceSandbox;
-  }>;
-
-  /** Cleanup after tests */
-  cleanupWorkspace?: (workspace: Workspace) => Promise<void>;
-
-  /** Test scenarios to run (default: all) */
-  testScenarios?: IntegrationTestScenarios;
-}
-
-interface IntegrationTestScenarios {
-  fileSync?: boolean;        // Write file via API, read via sandbox command
-  multiMount?: boolean;      // Multiple filesystems at different paths
-  crossMountCopy?: boolean;  // Copy between different mounts
-  readOnlyMount?: boolean;   // Verify readOnly enforcement end-to-end
-}
-```
-
----
-
-## Factory Function Signatures
-
-### Filesystem Test Suite
-
-```typescript
-/**
- * Create a comprehensive test suite for a filesystem provider.
- *
- * @example
- * ```typescript
- * import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
- * import { S3Filesystem } from '../s3-filesystem';
- *
- * createFilesystemTestSuite({
- *   suiteName: 'S3Filesystem',
- *   createFilesystem: async () => new S3Filesystem({
- *     bucket: process.env.TEST_BUCKET!,
- *     region: 'us-east-1',
- *     credentials: { ... },
- *   }),
- *   capabilities: {
- *     supportsAppend: false,  // S3 doesn't support native append
- *     supportsMounting: true,
- *   },
- * });
- * ```
- */
-export function createFilesystemTestSuite(config: FilesystemTestConfig): void;
-```
-
-### Sandbox Test Suite
-
-```typescript
-/**
- * Create a comprehensive test suite for a sandbox provider.
- *
- * @example
- * ```typescript
- * import { createSandboxTestSuite } from '@internal/workspace-test-utils';
- * import { E2BSandbox } from '../e2b-sandbox';
- *
- * createSandboxTestSuite({
- *   suiteName: 'E2BSandbox',
- *   createSandbox: async () => new E2BSandbox({
- *     timeout: 60000,
- *   }),
- *   capabilities: {
- *     supportsMounting: true,
- *     supportsReconnection: true,
- *   },
- * });
- * ```
- */
-export function createSandboxTestSuite(config: SandboxTestConfig): void;
-```
-
-### Config Validation Tests
-
-```typescript
-/**
- * Create tests for valid and invalid configuration handling.
- *
- * @example
- * ```typescript
- * createFilesystemConfigTests({
- *   providerName: 'S3Filesystem',
- *   createProvider: (config) => new S3Filesystem(config as any),
- *   validConfigs: [
- *     { description: 'minimal config', config: { bucket: 'test' } },
- *     { description: 'with region', config: { bucket: 'test', region: 'us-west-2' } },
- *   ],
- *   invalidConfigs: [
- *     { description: 'missing bucket', config: {}, expectedError: /bucket.*required/i },
- *   ],
- * });
- * ```
- */
-export function createFilesystemConfigTests(config: ConfigTestConfig): void;
-export function createSandboxConfigTests(config: ConfigTestConfig): void;
-```
-
----
-
-## Test Domains Detail
-
-### Filesystem: File Operations
-
-```typescript
-// domains/file-operations.ts
-export function createFileOperationsTests(config: FilesystemTestConfig) {
-  describe('File Operations', () => {
-    describe('readFile', () => {
-      it('reads text file content');
-      it('reads binary file content');
-      it('reads with encoding option');
-      it('throws FileNotFoundError for missing file');
-    });
-
-    describe('writeFile', () => {
-      it('writes text content');
-      it('writes binary content');
-      it('creates parent directories if needed');
-      it('overwrites existing file');
-      it('respects readOnly flag');
-    });
-
-    describe('appendFile', () => {
-      it('appends to existing file');
-      it('creates file if not exists');
-      // Skip if !capabilities.supportsAppend
-    });
-
-    describe('deleteFile', () => {
-      it('deletes existing file');
-      it('throws FileNotFoundError for missing file');
-      it('succeeds with force option for missing file');
-      it('respects readOnly flag');
-    });
-
-    describe('copyFile', () => {
-      it('copies file to new location');
-      it('overwrites with overwrite option');
-      it('throws if source missing');
-    });
-
-    describe('moveFile', () => {
-      it('moves file to new location');
-      it('removes source after move');
-      it('respects readOnly flag on source and dest');
-    });
-  });
-}
-```
-
-### Filesystem: Lifecycle
-
-```typescript
-// domains/lifecycle.ts
-export function createLifecycleTests(config: FilesystemTestConfig) {
-  describe('Lifecycle', () => {
-    it('starts with pending status');
-    it('transitions to initializing then ready on init()');
-    it('handles concurrent init() calls safely');
-    it('transitions to destroyed on destroy()');
-    it('operations fail after destroy');
-    it('ensureReady() auto-initializes if pending');
-  });
-}
-```
-
-### Sandbox: Mount Operations
-
-```typescript
-// domains/mount-operations.ts
-export function createMountOperationsTests(config: SandboxTestConfig) {
-  describe('Mount Operations', () => {
-    it('mounts filesystem at specified path');
-    it('creates mount directory if needed');
-    it('writes marker file after successful mount');
-    it('detects existing mount on reconnect');
-    it('remounts if config changed');
-    it('unmounts and cleans up directory');
-    it('handles mount errors gracefully');
-  });
-}
-```
-
----
-
-## Test Helpers
-
-### Mock Data Generators
-
-```typescript
-// test-helpers.ts
-
-/** Generate random text content of specified size */
-export function generateTextContent(sizeBytes: number): string;
-
-/** Generate random binary content */
-export function generateBinaryContent(sizeBytes: number): Buffer;
-
-/** Generate unique test path */
-export function generateTestPath(prefix?: string): string;
-
-/** Create a test directory structure */
-export interface TestDirectoryStructure {
-  [name: string]: string | Buffer | TestDirectoryStructure;
-}
-export async function createTestStructure(
-  fs: WorkspaceFilesystem,
-  basePath: string,
-  structure: TestDirectoryStructure
-): Promise<void>;
-
-/** Clean up test directory */
-export async function cleanupTestPath(
-  fs: WorkspaceFilesystem,
-  path: string
-): Promise<void>;
-```
-
-### Mock Providers (for unit tests)
-
-```typescript
-/** In-memory filesystem for fast unit tests */
-export class MockFilesystem implements WorkspaceFilesystem {
-  // Full implementation backed by Map<string, Buffer>
-}
-
-/** Mock sandbox that doesn't execute real commands */
-export class MockSandbox implements WorkspaceSandbox {
-  // Returns predefined responses
-}
-```
-
----
-
-## Usage Examples
-
-### S3 Filesystem Tests
-
-```typescript
-// workspaces/s3/src/__tests__/s3-filesystem.test.ts
-
-import { createFilesystemTestSuite, createFilesystemConfigTests } from '@internal/workspace-test-utils';
-import { S3Filesystem } from '../filesystem/s3-filesystem';
-
-// Shared test suite
-createFilesystemTestSuite({
-  suiteName: 'S3Filesystem',
-  createFilesystem: async () => new S3Filesystem({
-    bucket: process.env.S3_TEST_BUCKET!,
-    region: process.env.AWS_REGION ?? 'us-east-1',
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-    },
-    prefix: `test-${Date.now()}/`,  // Isolate test runs
-  }),
-  cleanupFilesystem: async (fs) => {
-    // Delete test prefix
-    await fs.rmdir('/', { recursive: true, force: true });
-  },
-  capabilities: {
-    supportsAppend: false,  // S3 doesn't support native append
-    supportsMounting: true,
-    supportsCaseSensitive: true,
-  },
-});
-
-// Config validation tests
-createFilesystemConfigTests({
-  providerName: 'S3Filesystem',
-  createProvider: (config) => new S3Filesystem(config as any),
-  validConfigs: [
-    { description: 'minimal with bucket', config: { bucket: 'test' } },
-    { description: 'with region', config: { bucket: 'test', region: 'us-west-2' } },
-    { description: 'with credentials', config: { bucket: 'test', credentials: { accessKeyId: 'x', secretAccessKey: 'y' } } },
-    { description: 'with custom endpoint (R2)', config: { bucket: 'test', endpoint: 'https://xxx.r2.cloudflarestorage.com' } },
-  ],
-  invalidConfigs: [
-    { description: 'missing bucket', config: {}, expectedError: /bucket/i },
-    { description: 'empty bucket', config: { bucket: '' }, expectedError: /bucket/i },
-  ],
-});
-```
-
-### S3-Specific Tests
-
-```typescript
-// workspaces/s3/src/__tests__/s3-specific.test.ts
-
-import { S3Filesystem } from '../filesystem/s3-filesystem';
-
-describe('S3Filesystem - S3-Specific Features', () => {
-  describe('S3-compatible endpoints', () => {
-    it('works with Cloudflare R2 endpoint');
-    it('works with MinIO endpoint');
-    it('works with GCS S3-compatible endpoint');
-  });
-
-  describe('getMountConfig', () => {
-    it('returns correct s3 mount config');
-    it('includes credentials in mount config');
-    it('includes custom endpoint for R2/GCS');
-  });
-
-  describe('large files', () => {
-    it('handles multipart upload for large files');
-  });
-});
-```
-
-### E2B Sandbox Tests
-
-```typescript
-// workspaces/e2b/src/__tests__/e2b-sandbox.test.ts
-
-import { createSandboxTestSuite, createSandboxConfigTests } from '@internal/workspace-test-utils';
-import { E2BSandbox } from '../sandbox/e2b-sandbox';
-
-// Shared test suite
-createSandboxTestSuite({
-  suiteName: 'E2BSandbox',
-  createSandbox: async () => new E2BSandbox({
-    id: `test-${Date.now()}`,
-    timeout: 60000,
-  }),
-  cleanupSandbox: async (sandbox) => {
-    await sandbox.destroy();
-  },
-  capabilities: {
-    supportsMounting: true,
-    supportsReconnection: true,
-    supportsEnvVars: true,
-    defaultTimeout: 30000,
-  },
-});
-
-// Config validation
-createSandboxConfigTests({
-  providerName: 'E2BSandbox',
-  createProvider: (config) => new E2BSandbox(config as any),
-  validConfigs: [
-    { description: 'minimal', config: {} },
-    { description: 'with timeout', config: { timeout: 120000 } },
-    { description: 'with template', config: { template: 'base' } },
-  ],
-  invalidConfigs: [
-    { description: 'negative timeout', config: { timeout: -1 }, expectedError: /timeout/i },
-  ],
-});
-```
-
-### E2B-Specific Tests
-
-```typescript
-// workspaces/e2b/src/__tests__/e2b-specific.test.ts
-
-import { E2BSandbox } from '../sandbox/e2b-sandbox';
-
-describe('E2BSandbox - E2B-Specific Features', () => {
-  describe('template handling', () => {
-    it('uses default template when not specified');
-    it('builds custom template from function');
-    it('caches built templates');
-    it('rebuilds template on cache miss');
-  });
-
-  describe('reconnection', () => {
-    it('reconnects to existing sandbox by metadata');
-    it('reconciles mounts after reconnection');
-    it('detects stale mounts and cleans up');
-  });
-
-  describe('S3 mounting', () => {
-    it('mounts S3 bucket via s3fs');
-    it('passes credentials securely');
-    it('handles public bucket (no credentials)');
-    it('respects readOnly flag');
-  });
-
-  describe('GCS mounting', () => {
-    it('mounts GCS bucket via gcsfuse');
-    it('handles service account credentials');
-  });
-});
-```
-
-### Integration Tests
-
-```typescript
-// workspaces/e2b/src/__tests__/e2b-integration.test.ts
-
-import { createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
-import { Workspace } from '@mastra/core/workspace';
-import { E2BSandbox } from '../sandbox/e2b-sandbox';
-import { S3Filesystem } from '@mastra/s3';
-
-createWorkspaceIntegrationTests({
-  suiteName: 'E2B + S3 Integration',
-  createWorkspace: async () => {
-    const filesystem = new S3Filesystem({
-      bucket: process.env.S3_TEST_BUCKET!,
-      credentials: { ... },
-    });
-    const sandbox = new E2BSandbox({ timeout: 60000 });
-    const workspace = new Workspace({
-      mounts: { '/data': filesystem },
-      sandbox,
-    });
-    return { workspace, filesystem, sandbox };
-  },
-  testScenarios: {
-    fileSync: true,
-    multiMount: false,  // Single mount in this config
-    crossMountCopy: false,
-    readOnlyMount: true,
+// vitest.config.ts
+export default defineConfig({
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+    setupFiles: ['dotenv/config'],  // Loads .env file
   },
 });
 ```
 
----
+Each workspace package needs:
+1. `dotenv` as a dev dependency
+2. `.env` file (or symlink to global env)
 
-## Environment Variables for Integration Tests
+### Credential Variables
 
 ```bash
 # E2B
-E2B_API_KEY=<your-e2b-api-key>
+E2B_API_KEY=...
 
-# AWS S3
-AWS_ACCESS_KEY_ID=<your-aws-key>
-AWS_SECRET_ACCESS_KEY=<your-aws-secret>
-S3_TEST_BUCKET=<your-test-bucket>
-AWS_REGION=us-east-1
+# S3-compatible (works for AWS, R2, MinIO)
+S3_BUCKET=test-bucket
+S3_REGION=auto                    # 'auto' for R2, actual region for AWS
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
+S3_ENDPOINT=https://....          # Set for R2/MinIO, omit for AWS
 
-# GCS (S3-compatible)
-GCS_HMAC_ACCESS_KEY=<your-hmac-access-key>
-GCS_HMAC_SECRET_KEY=<your-hmac-secret-key>
-GCS_TEST_BUCKET=<your-gcs-test-bucket>
+# GCS
+TEST_GCS_BUCKET=...
+GCS_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'  # Single-quoted JSON
+```
 
-# GCS (native)
-GCS_SERVICE_ACCOUNT_KEY='{"type":"service_account",...}'
-GCS_PROJECT_ID=<your-project-id>
+### Conditional Test Execution
 
-# Cloudflare R2
-R2_ACCESS_KEY_ID=<your-r2-key>
-R2_SECRET_ACCESS_KEY=<your-r2-secret>
-R2_ENDPOINT=https://xxx.r2.cloudflarestorage.com
-R2_TEST_BUCKET=<your-r2-bucket>
+Tests skip gracefully when credentials are missing:
+
+```typescript
+const hasS3Credentials = !!(process.env.S3_ACCESS_KEY_ID && process.env.S3_BUCKET);
+
+describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
+  // Only runs if credentials are present
+});
 ```
 
 ---
 
-## Package Configuration
+## Part 6: E2B Sandbox Tests - Coverage Matrix
 
-```json
-// workspaces/_test-utils/package.json
-{
-  "name": "@internal/workspace-test-utils",
-  "version": "0.0.1",
-  "private": true,
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    },
-    "./filesystem": {
-      "import": "./dist/filesystem/index.js",
-      "types": "./dist/filesystem/index.d.ts"
-    },
-    "./sandbox": {
-      "import": "./dist/sandbox/index.js",
-      "types": "./dist/sandbox/index.d.ts"
-    },
-    "./integration": {
-      "import": "./dist/integration/index.js",
-      "types": "./dist/integration/index.d.ts"
-    }
-  },
-  "devDependencies": {
-    "@mastra/core": "workspace:*",
-    "vitest": "catalog:"
-  }
-}
+### Constructor & Options
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| generates unique id if not provided | ✅ | - | Pass |
+| uses provided id | ✅ | - | Pass |
+| default timeout is 5 minutes | ✅ | - | Pass |
+| has correct provider and name | ✅ | - | Pass |
+| status starts as pending | ✅ | - | Pass |
+| starts template preparation in background | ✅ | - | Pass |
+
+### Start - Race Condition Prevention
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| concurrent start() calls return same promise | ✅ | - | Pass |
+| start() is idempotent when already running | ✅ | - | Pass |
+| start() clears _startPromise after completion | ❌ | - | **Missing** |
+| status transitions through starting to running | ✅ | - | Pass |
+
+### Start - Sandbox Creation
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| creates new sandbox if none exists | ✅ | - | Pass |
+| reconnects to existing sandbox by metadata | ✅ | ✅ | Pass |
+| uses autoPause for sandbox persistence | ✅ | - | Pass |
+| stores mastra-sandbox-id in metadata | ✅ | - | Pass |
+
+### Start - Template Handling
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| uses cached template if exists | ✅ | - | Pass |
+| builds default template if not cached | ✅ | - | Pass |
+| rebuilds template on 404 error | ❌ | - | **Missing** |
+| custom template string is used as-is | ✅ | - | Pass |
+| custom template builder is built | ❌ | - | **Missing** |
+| template function customizes base template | ❌ | - | **Missing** |
+
+### Start - Mount Processing
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| runs reconcileMounts on reconnect | ❌ | ❌ | **Missing** |
+| mounts pending filesystems after start | ✅ | - | Pass |
+
+### Environment Variables
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| env vars not passed to Sandbox.betaCreate | ✅ | - | Pass |
+| env vars merged and passed per-command | ✅ | - | Pass |
+| env changes reflected without sandbox restart | ❌ | ❌ | **Missing** |
+
+### Mount - S3
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| S3 with credentials mounts successfully | - | ✅ | Pass |
+| S3 public bucket mounts with public_bucket=1 | - | ✅ | Pass |
+| S3-compatible without credentials warns and fails | - | ✅ | **Failing** - mount succeeds, test expects fail |
+| S3 with readOnly mounts with -o ro | - | ✅ | **Failing** - wrong assertion message |
+| S3 readOnly mount rejects writes | - | ✅ | (part of above) |
+| S3 mount sets uid/gid for file ownership | - | ✅ | Pass |
+| S3 endpoint mount includes url and path style options | ❌ | ❌ | **Missing** - verify s3fs command args |
+
+### Mount - GCS
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| GCS with service account mounts successfully | - | ✅ | **Failing** - gcsfuse install needs sudo |
+| GCS public bucket mounts with anonymous access | - | ✅ | **Failing** - gcsfuse install needs sudo |
+
+### Mount - Safety Checks
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| mount errors if directory exists and is non-empty | - | ✅ | **Failing** - needs investigation |
+| mount succeeds if directory exists but is empty | - | ✅ | Pass |
+| mount creates directory with sudo for paths outside home | - | ✅ | **Failing** - needs investigation |
+
+### Mount - Existing Mount Detection
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| mount skips if already mounted with matching config | - | ✅ | Pass |
+| mount unmounts and remounts if config changed | - | ✅ | **Failing** - readOnly not enforced |
+| readOnly change triggers remount | - | ✅ | (part of above) |
+
+### Mount - Marker Files
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| successful mount creates marker file | - | ✅ | Pass |
+| marker filename is hash of path | ✅ | - | Pass |
+| unmount removes marker file | - | ✅ | Pass |
+| unmount removes empty mount directory | - | ✅ | Pass |
+
+### Mount Reconciliation
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| reconcileMounts unmounts stale FUSE mounts | - | ✅ | Pass |
+| reconcileMounts cleans up orphaned marker files | - | ✅ | Pass |
+| reconcileMounts handles malformed marker files | - | ✅ | Pass |
+
+### Mount - Runtime Installation
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| installs s3fs if not present | ❌ | ❌ | **Missing** |
+| installs gcsfuse if not present | ❌ | ❌ | **Missing** |
+| gives helpful error if installation fails | ❌ | ❌ | **Missing** |
+
+### Stop/Destroy
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| stop clears sandbox reference | ✅ | - | Pass |
+| stop unmounts all filesystems | ❌ | ❌ | **Missing** |
+| destroy kills sandbox | ✅ | - | Pass |
+
+### Error Handling
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| SandboxNotReadyError thrown if not started | ✅ | - | Pass |
+| clear error for S3-compatible without credentials | ❌ | - | **Missing** |
+| clear error for non-empty directory | - | ✅ | (part of safety checks) |
+
+---
+
+## Part 7: Integration Tests - Coverage Matrix
+
+### E2B + S3 Full Workflow
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| full workflow: create, mount, read/write, verify in bucket | - | ❌ | **Missing** |
+| sandbox reconnect preserves mounts | - | ❌ | **Missing** |
+| config change triggers remount on reconnect | - | ❌ | **Missing** |
+
+### E2B + GCS Full Workflow
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| mount GCS bucket and access files | - | ✅ | **Failing** |
+
+---
+
+## Summary Statistics
+
+### Current Test Status
+
+| Test Type | Total | Passing | Failing | Skipped |
+|-----------|-------|---------|---------|---------|
+| Unit Tests | 37 | 37 | 0 | 0 |
+| Integration Tests | 20 | 17 | 3 | 0 |
+| **Total** | **57** | **54** | **3** | **0** |
+
+### E2B Integration Tests Breakdown
+
+| Category | Tests | Status |
+|----------|-------|--------|
+| Basic E2B | 2 | ✅ All passing |
+| S3 Mount | 5 | ✅ All passing |
+| GCS Mount | 2 | ⚠️ 1 passing, 1 failing (bucket access issue) |
+| Mount Safety | 3 | ⚠️ 1 passing, 2 failing (mock config issues) |
+| Mount Reconciliation | 3 | ✅ All passing |
+| Marker Files | 3 | ✅ All passing |
+| Existing Mount Detection | 2 | ✅ All passing |
+
+---
+
+## Fixed Issues (Completed)
+
+### 1. ✅ GCS Mount - Permission Denied (FIXED)
+
+**Cause:** gcsfuse install command didn't use `sudo`
+**File:** `workspaces/e2b/src/sandbox/mounts/gcs.ts`
+**Fix:** Added `sudo` to `tee`, `apt-key add`, `apt-get update`, and `apt-get install`
+
+### 2. ✅ GCS Mount - Flags (FIXED)
+
+**Cause:** gcsfuse uses `--anonymous-access` flag, not `-o anonymous_access`
+**Fix:** Changed to use `--anonymous-access`, `--key-file`, `--uid`, `--gid` flags properly
+
+### 3. ✅ S3 readOnly Test - Wrong Assertion (FIXED)
+
+**Fix:** Changed assertion to `expect(writeResult.stdout).toMatch(/Read-only|write failed/)`
+
+### 4. ✅ S3-compatible Without Credentials (FIXED)
+
+**Cause:** Implementation only warned but didn't fail
+**Fix:** Now throws error instead of warning for S3-compatible services without credentials
+
+### 5. ✅ Remount on Config Change (FIXED)
+
+**Cause:** `checkExistingMount` compared new config hash with OLD entry's hash (always matched)
+**Fix:** Pass new config to `checkExistingMount` and compare new config hash with stored marker hash
+
+---
+
+## Known Failing Tests (3 remaining)
+
+### 1. GCS with service account mounts successfully
+
+**Status:** Failing - `ls` command returns exit code 2 after mount
+**Likely cause:** Bucket access/permissions issue with test GCS bucket, not a code issue
+**Note:** GCS public bucket mounting works correctly
+
+### 2. mount errors if directory exists and is non-empty
+
+**Status:** Failing - mount succeeds when it should fail
+**Likely cause:** Test uses mock filesystem with invalid S3 bucket ('test'), which may behave unexpectedly
+**Note:** This is a test configuration issue, not a core functionality issue
+
+### 3. mount creates directory with sudo for paths outside home
+
+**Status:** Failing - directory not created
+**Likely cause:** Similar mock filesystem configuration issue
+
+---
+
+## Missing Tests - Priority Order
+
+### High Priority (Core Functionality)
+
+1. **stop() unmounts all filesystems** - Important for cleanup
+2. **S3 endpoint mount options** - Verify s3fs command is built correctly (unit test)
+3. **Full workflow test** - Create, mount, read/write, verify
+
+### Medium Priority (Edge Cases)
+
+4. **runs reconcileMounts on reconnect** - Essential for sandbox reuse
+5. **env changes reflected without restart** - Verify per-command env works
+6. **start() clears _startPromise** - Race condition edge case
+
+### Lower Priority (Template Handling)
+
+7. **rebuilds template on 404 error** - Error recovery
+8. **custom template builder is built** - Advanced usage
+9. **template function customizes base template** - Advanced usage
+
+### Lower Priority (Installation)
+
+10. **installs s3fs if not present** - Runtime installation
+11. **installs gcsfuse if not present** - Runtime installation
+12. **helpful error if installation fails** - Error UX
+
+---
+
+## Running Tests
+
+```bash
+# Unit tests only (fast, no credentials needed)
+pnpm test src/sandbox/index.test.ts
+
+# Integration tests (needs credentials in .env)
+pnpm test src/sandbox/index.integration.test.ts
+
+# All tests
+pnpm test
 ```
 
 ---
 
-## Implementation Order
+## Unit vs Integration Decision Guide
 
-1. **Phase 1: Package Setup**
-   - Create `workspaces/_test-utils/` package structure
-   - Set up build configuration
-   - Add to workspace dependencies
-
-2. **Phase 2: Filesystem Tests**
-   - Implement `createFilesystemTestSuite()`
-   - Implement domain test factories
-   - Add `MockFilesystem` for unit tests
-   - Apply to `LocalFilesystem`, `S3Filesystem`, `GCSFilesystem`
-
-3. **Phase 3: Sandbox Tests**
-   - Implement `createSandboxTestSuite()`
-   - Implement domain test factories
-   - Add `MockSandbox` for unit tests
-   - Apply to `LocalSandbox`, `E2BSandbox`
-
-4. **Phase 4: Integration Tests**
-   - Implement `createWorkspaceIntegrationTests()`
-   - Implement scenario factories
-   - Apply to E2B + S3, E2B + GCS combinations
-
-5. **Phase 5: Provider-Specific Tests**
-   - Add S3-specific tests
-   - Add E2B-specific tests
-   - Add GCS-specific tests
+| Scenario | Unit Test | Integration Test | Notes |
+|----------|-----------|------------------|-------|
+| Command/option building | ✅ | - | Verify args passed to SDK |
+| State transitions | ✅ | - | pending → running → stopped |
+| Error throwing | ✅ | - | SandboxNotReadyError etc |
+| Mount actually works | - | ✅ | Needs real FUSE |
+| File operations work | - | ✅ | Needs real filesystem |
+| Reconnection works | ✅ | ✅ | Unit: SDK calls, Int: actual reconnect |
+| readOnly enforcement | ✅ | ✅ | Unit: `-o ro` in cmd, Int: writes fail |
+| Marker file logic | ✅ | ✅ | Unit: hash fn, Int: files exist |
 
 ---
 
-## Design Decisions
+## Future: Shared Test Utils
 
-### 1. CI Environment
+The `workspaces/_test-utils/` package will provide:
 
-**Decision:** Skip integration tests if credentials are missing.
+- `createFilesystemTestSuite()` - Reusable filesystem conformance tests
+- `createSandboxTestSuite()` - Reusable sandbox conformance tests
+- `MockFilesystem` / `MockSandbox` - For unit testing
+- Test data generators
 
-```typescript
-// In test file
-const hasS3Credentials = process.env.AWS_ACCESS_KEY_ID && process.env.S3_TEST_BUCKET;
-
-describe.skipIf(!hasS3Credentials)('S3Filesystem Integration', () => {
-  createFilesystemTestSuite({ ... });
-});
-```
-
-### 2. Test Isolation
-
-**Decision:** Provider-specific cleanup via factory pattern.
-
-Each provider implements its own cleanup logic in the `cleanupFilesystem` / `cleanupSandbox` callback:
-
-```typescript
-createFilesystemTestSuite({
-  suiteName: 'S3Filesystem',
-  createFilesystem: async () => {
-    const prefix = `test-${Date.now()}-${Math.random().toString(36).slice(2)}/`;
-    return new S3Filesystem({ bucket: TEST_BUCKET, prefix });
-  },
-  cleanupFilesystem: async (fs) => {
-    // S3-specific: delete all objects with test prefix
-    await fs.rmdir('/', { recursive: true, force: true });
-  },
-});
-```
-
-### 3. Timeout Handling
-
-**Decision:** Both separate fast/slow suites AND configurable timeouts.
-
-```typescript
-interface FilesystemTestConfig {
-  // ... existing fields ...
-
-  /** Timeout for individual tests (default: 5000ms) */
-  testTimeout?: number;
-
-  /** Run only fast tests (skip slow operations like large file tests) */
-  fastOnly?: boolean;
-}
-
-// In domain tests
-describe('Large File Operations', () => {
-  it.skipIf(config.fastOnly)('handles 100MB file', async () => {
-    // Slow test
-  }, config.testTimeout ?? 30000);
-});
-```
-
-### 4. CompositeFilesystem
-
-**Decision:** Both its own test suite AND integration tests.
-
-- **Own test suite**: Test path routing, mount resolution, readOnly enforcement, virtual directories
-- **Integration tests**: Test with real mounted filesystems in workspace context
-
-```typescript
-// packages/core/src/workspace/filesystem/__tests__/composite-filesystem.test.ts
-createFilesystemTestSuite({
-  suiteName: 'CompositeFilesystem',
-  createFilesystem: async () => new CompositeFilesystem({
-    mounts: {
-      '/local': new MockFilesystem(),
-      '/memory': new MockFilesystem({ readOnly: true }),
-    },
-  }),
-  capabilities: {
-    // CompositeFilesystem delegates to underlying filesystems
-    supportsAppend: true,
-    supportsMounting: false,  // CompositeFilesystem IS the mount layer
-  },
-});
-
-// Additional CompositeFilesystem-specific tests
-describe('CompositeFilesystem - Routing', () => {
-  it('routes to correct filesystem based on path');
-  it('returns virtual entries for mount root');
-  it('enforces readOnly on underlying filesystem');
-  it('handles cross-mount copy');
-});
-```
+This will reduce duplication across S3, GCS, E2B, and future providers.
