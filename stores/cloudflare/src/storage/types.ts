@@ -13,6 +13,14 @@ import type {
   TABLE_SPANS,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
+  TABLE_DATASET_ITEM_VERSIONS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_RUNS,
+  TABLE_RUN_RESULTS,
+  TABLE_DATASET_RUNS,
+  TABLE_DATASET_RUN_RESULTS,
   SpanRecord,
   StorageAgentType,
 } from '@mastra/core/storage';
@@ -112,6 +120,14 @@ export type RecordTypes = {
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
   [TABLE_AGENT_VERSIONS]: AgentVersion;
+  [TABLE_DATASETS]: Record<string, any>;
+  [TABLE_DATASET_ITEMS]: Record<string, any>;
+  [TABLE_DATASET_ITEM_VERSIONS]: Record<string, any>;
+  [TABLE_DATASET_VERSIONS]: Record<string, any>;
+  [TABLE_RUNS]: Record<string, any>;
+  [TABLE_RUN_RESULTS]: Record<string, any>;
+  [TABLE_DATASET_RUNS]: Record<string, any>;
+  [TABLE_DATASET_RUN_RESULTS]: Record<string, any>;
 };
 
 export type ListOptions = {
