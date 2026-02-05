@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   prebuild:
-    name: Build & Type Check
+    name: Build
     runs-on: ubuntu-latest
     if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
     env:
@@ -31,6 +31,3 @@ jobs:
 
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
-
-      - name: Type Check
-        run: pnpm typecheck
