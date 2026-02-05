@@ -117,8 +117,8 @@ importers:
   service-mastra:
     dependencies:
       '@hono/node-server':
-        specifier: ^1.15.1
-        version: 1.19.7(hono@4.11.4)
+        specifier: ^1.19.9
+        version: 1.19.9(hono@4.11.4)
       '@hono/otel':
         specifier: ^1.0.1
         version: 1.1.0(hono@4.11.4)
@@ -178,8 +178,8 @@ importers:
   service-one:
     dependencies:
       '@hono/node-server':
-        specifier: ^1.19.5
-        version: 1.19.7(hono@4.11.4)
+        specifier: ^1.19.9
+        version: 1.19.9(hono@4.11.4)
       '@hono/otel':
         specifier: ^1.0.1
         version: 1.1.0(hono@4.11.4)
@@ -212,8 +212,8 @@ importers:
   service-two:
     dependencies:
       '@hono/node-server':
-        specifier: ^1.19.5
-        version: 1.19.7(hono@4.11.4)
+        specifier: ^1.19.9
+        version: 1.19.9(hono@4.11.4)
       '@hono/otel':
         specifier: ^1.0.1
         version: 1.1.0(hono@4.11.4)
@@ -581,8 +581,8 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@hono/node-server@1.19.7':
-    resolution: {integrity: sha512-vUcD0uauS7EU2caukW8z5lJKtoGMokxNbJtBiwHgpqxEXokaHCBkQUmCHhjFB1VUTWdqj25QoMkMKzgjq+uhrw==}
+  '@hono/node-server@1.19.9':
+    resolution: {integrity: sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -1927,7 +1927,7 @@ snapshots:
       protobufjs: 7.5.4
       yargs: 17.7.2
 
-  '@hono/node-server@1.19.7(hono@4.11.4)':
+  '@hono/node-server@1.19.9(hono@4.11.4)':
     dependencies:
       hono: 4.11.4
 
