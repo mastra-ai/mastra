@@ -226,6 +226,46 @@ importers:
         specifier: 'catalog:'
         version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
+  auth/cloud:
+    dependencies:
+      '@mastra/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@types/node':
+        specifier: 22.19.7
+        version: 22.19.7
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.0.12(vitest@4.0.16)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.0.12(vitest@4.0.16)
+      eslint:
+        specifier: ^9.37.0
+        version: 9.39.2(jiti@2.6.1)
+      hono:
+        specifier: ^4.7.10
+        version: 4.11.3
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@microsoft/api-extractor@7.56.0(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+
   auth/firebase:
     dependencies:
       firebase-admin:
@@ -306,8 +346,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
       '@workos-inc/node':
-        specifier: ^8.0.0
-        version: 8.1.0
+        specifier: 8.0.0
+        version: 8.0.0
       '@workos/authkit-session':
         specifier: ^0.3.4
         version: 0.3.4
@@ -13677,10 +13717,6 @@ packages:
 
   '@workos-inc/node@8.0.0':
     resolution: {integrity: sha512-D8VDfx0GXeiVm8vccAl0rElW7taebRnrteKPJzZwehwzI9W/Usa4qKfmwxj+7Lh1Z1deEocDRCpZpV7ml4GpWQ==}
-    engines: {node: '>=20.15.0'}
-
-  '@workos-inc/node@8.1.0':
-    resolution: {integrity: sha512-Ep2QSP43y4ZdJIOuL4Hjaq5f0u8Z0qZe7QWzrrBV6cHc/kcicDBcB0AanMP6eB9x3x6FaHfevLbkbjPF4+TCYQ==}
     engines: {node: '>=20.15.0'}
 
   '@workos/authkit-session@0.3.4':
@@ -32870,11 +32906,6 @@ snapshots:
     dependencies:
       iron-webcrypto: 2.0.0
       jose: 6.1.3
-
-  '@workos-inc/node@8.1.0':
-    dependencies:
-      iron-webcrypto: 2.0.0
-      jose: 6.1.2
 
   '@workos/authkit-session@0.3.4':
     dependencies:
