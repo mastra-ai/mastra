@@ -9,13 +9,13 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^1.14.3",
+    "@hono/node-server": "^1.19.9",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/observability": "workspace:*",
-    "hono": "^4.6.0",
+    "hono": "^4.11.7",
     "get-port": "^7.1.0",
     "vitest": "catalog:"
   },

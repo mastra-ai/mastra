@@ -1,13 +1,15 @@
 ---
-title: "Mastra Docs Server | Getting Started"
+title: "Mastra Docs Server | Build with AI"
 description: "Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert."
+packages:
+  - "@mastra/mcp-docs-server"
 ---
 
 import YouTube from "@site/src/components/YouTube-player";
 
 # Mastra Docs Server
 
-The `@mastra/mcp-docs-server` package provides direct access to Mastra’s full knowledge base, including documentation, code examples, blog posts, and changelogs, via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex or any tool that supports MCP.
+The `@mastra/mcp-docs-server` package provides direct access to Mastra’s full documentation via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex or any tool that supports MCP.
 
 These tools are designed to help agents retrieve precise, task-specific information — whether you're adding a feature to an agent, scaffolding a new project, or exploring how something works.
 
@@ -221,7 +223,6 @@ Once configured, you can ask your AI tool questions about Mastra or instruct it 
 
 - "Does Mastra work with the AI SDK?
   How can I use it in my `[React/Svelte/etc]` project?"
-- "What's the latest Mastra news around MCP?"
 - "Does Mastra support `[provider]` speech and voice APIs? Show me an example in my code of how I can use it."
 
 **Debug or update existing code:**
