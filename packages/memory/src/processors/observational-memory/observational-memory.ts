@@ -1451,11 +1451,23 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const lastObservedAt = record.lastObservedAt;
     // Safeguard: track message IDs that were already observed to prevent re-observation
     // This handles edge cases like process restarts where lastObservedAt might not capture all messages
-    const observedMessageIds = Array.isArray(record.observedMessageIds)
-      ? new Set(record.observedMessageIds)
-      : undefined;
+    const observedMessageIds = new Set<string>(
+      Array.isArray(record.observedMessageIds) ? record.observedMessageIds : [],
+    );
 
-    if (!lastObservedAt) {
+    // CRITICAL: Also include message IDs from buffered chunks to prevent re-buffering
+    // Messages that have been buffered but not yet activated are still "observed" from
+    // the perspective of determining what needs to be processed next
+    const bufferedChunks = this.getBufferedChunks(record);
+    for (const chunk of bufferedChunks) {
+      if (Array.isArray(chunk.messageIds)) {
+        for (const id of chunk.messageIds) {
+          observedMessageIds.add(id);
+        }
+      }
+    }
+
+    if (!lastObservedAt && observedMessageIds.size === 0) {
       // No observations yet - all messages are unobserved
       return allMessages;
     }
@@ -1485,8 +1497,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         }
       } else {
         // No observation markers - fall back to timestamp-based filtering
-        if (!msg.createdAt) {
+        if (!msg.createdAt || !lastObservedAt) {
           // Messages without timestamps are always included
+          // Also include messages when there's no lastObservedAt timestamp
           result.push(msg);
         } else {
           const msgDate = new Date(msg.createdAt);
@@ -1943,12 +1956,12 @@ ${suggestedResponse}
    * Calculate all threshold-related values for observation decision making.
    */
   private calculateObservationThresholds(
-    allMessages: MastraDBMessage[],
-    _unobservedMessages: MastraDBMessage[],
+    _allMessages: MastraDBMessage[],
+    unobservedMessages: MastraDBMessage[],
     pendingTokens: number,
     otherThreadTokens: number,
     currentObservationTokens: number,
-    record?: ObservationalMemoryRecord,
+    _record?: ObservationalMemoryRecord,
   ): {
     totalPendingTokens: number;
     threshold: number;
@@ -1956,28 +1969,13 @@ ${suggestedResponse}
     observationTokensPercent: number;
     isSharedBudget: boolean;
   } {
-    // For threshold checking and buffering triggers, we use ALL in-context messages.
-    // This is because after activation, messages may be marked as "observed" but still
-    // in context (mid-stream). We need to track their tokens for threshold calculation.
-    //
-    // For deciding WHAT to observe, we use unobservedMessages (filtered by observedMessageIds).
-    const currentSessionTokens = this.tokenCounter.countMessages(allMessages);
+    // For threshold checking, we use UNOBSERVED messages only.
+    // After activation, messages marked as observed (via lastObservedAt or observedMessageIds)
+    // are excluded, so the threshold correctly reflects what still needs observation.
+    const currentSessionTokens = this.tokenCounter.countMessages(unobservedMessages);
 
-    // Calculate buffered message tokens (messages already processed into buffer chunks)
-    const bufferedChunks = this.getBufferedChunks(record);
-    const bufferedMessageTokens = bufferedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-
-    // Calculate observed message tokens (messages marked as observed via activation)
-    const observedMessageIds = new Set(record?.observedMessageIds ?? []);
-    const observedMessagesInContext = allMessages.filter(m => m?.id && observedMessageIds.has(m.id));
-    const observedMessageTokens = this.tokenCounter.countMessages(observedMessagesInContext);
-
-    // Total pending = all in-context tokens MINUS already-buffered tokens MINUS already-observed tokens
-    // This accounts for messages that are in context but have already been processed
-    const totalPendingTokens = Math.max(
-      0,
-      pendingTokens + currentSessionTokens + otherThreadTokens - bufferedMessageTokens - observedMessageTokens,
-    );
+    // Total pending = unobserved in-context tokens + persisted pending + other threads
+    const totalPendingTokens = Math.max(0, pendingTokens + currentSessionTokens + otherThreadTokens);
 
     const threshold = this.calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
 
@@ -2034,6 +2032,11 @@ ${suggestedResponse}
     });
 
     if (writer) {
+      // Calculate buffered chunk totals for UI
+      const bufferedChunks = this.getBufferedChunks(record);
+      const bufferedMessageTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
+      const bufferedObservationTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.tokenCount ?? 0), 0);
+
       const progressPart: DataOmProgressPart = {
         type: 'data-om-progress',
         data: {
@@ -2047,6 +2050,10 @@ ${suggestedResponse}
           recordId: record.id,
           threadId,
           stepNumber,
+          bufferedChunksCount: bufferedChunks.length,
+          bufferedMessageTokens,
+          bufferedObservationTokens,
+          hasBufferedChunks: bufferedChunks.length > 0,
         },
       };
       await writer.custom(progressPart).catch(() => {
@@ -2075,9 +2082,9 @@ ${suggestedResponse}
     let updatedRecord = record;
 
     await this.withLock(lockKey, async () => {
-      const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
+      let freshRecord = await this.getOrCreateRecord(threadId, resourceId);
       const freshAllMessages = messageList.get.all.db();
-      const freshUnobservedMessages = this.getUnobservedMessages(freshAllMessages, freshRecord);
+      let freshUnobservedMessages = this.getUnobservedMessages(freshAllMessages, freshRecord);
 
       // Re-check threshold inside the lock. Another thread sharing this resource
       // may have already observed, advancing lastObservedAt and reducing the
@@ -2120,15 +2127,12 @@ ${suggestedResponse}
 
         activationResult = await this.tryActivateBufferedObservations(recordAfterWait, lockKey, writer);
         if (activationResult.success) {
-          const postActivationRecord = activationResult.updatedRecord ?? recordAfterWait;
-          const stillUnobserved = this.getUnobservedMessages(freshAllMessages, postActivationRecord);
-          const stillUnobservedTokens = this.tokenCounter.countMessages(stillUnobserved);
-
-          if (stillUnobservedTokens < threshold) {
-            observationSucceeded = true;
-            updatedRecord = postActivationRecord;
-            return;
-          }
+          // Activation succeeded - the buffered observations are now active.
+          // Trust the activation and return success immediately.
+          // The activated chunks have already been moved to activeObservations.
+          observationSucceeded = true;
+          updatedRecord = activationResult.updatedRecord ?? recordAfterWait;
+          return;
         }
       }
 
@@ -2458,7 +2462,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
           record = activationResult.updatedRecord;
 
           // Remove activated messages from context
-          const observedSet = new Set(record.observedMessageIds ?? []);
+          const observedSet = new Set(Array.isArray(record?.observedMessageIds) ? record.observedMessageIds : []);
           const allMsgs = messageList.get.all.db();
           const idsToRemove = allMsgs
             .filter(msg => msg?.id && msg.id !== 'om-continuation' && observedSet.has(msg.id))
@@ -3177,29 +3181,39 @@ ${formattedMessages}
       return;
     }
 
-    // Calculate how many message tokens have already been buffered
-    const chunks = this.getBufferedChunks(freshRecord);
-    const alreadyBufferedMessageTokens = chunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-    const currentMessageTokens = this.tokenCounter.countMessages(unobservedMessages);
+    // Re-calculate unobserved messages using fresh record state
+    // This is critical because getUnobservedMessages now considers buffered chunk messageIds,
+    // so after waiting for a previous buffering op, some messages may already be buffered
+    const freshUnobservedMessages = this.getUnobservedMessages(unobservedMessages, freshRecord);
 
-    // Check if there's enough new content to buffer
-    // We require at least bufferEvery/2 new tokens to avoid tiny incremental buffers
+    // Check if there's enough content to buffer
     const bufferEvery = this.observationConfig.bufferEvery ?? 5000;
     const minNewTokens = bufferEvery / 2;
-    const newTokens = currentMessageTokens - alreadyBufferedMessageTokens;
+    const newTokens = this.tokenCounter.countMessages(freshUnobservedMessages);
 
     if (newTokens < minNewTokens) {
       return; // Not enough new content to buffer
     }
 
-    // Use all unobserved messages - the observer will see the full context
-    // and generate observations for everything not yet observed
-    const messagesToBuffer = unobservedMessages;
+    // Use the fresh unobserved messages (excludes already-buffered ones)
+    const messagesToBuffer = freshUnobservedMessages;
 
     // Seal the messages being buffered to prevent new parts from being added.
     // This ensures that any streaming content after this point goes to new messages,
     // preserving the boundary of what we're buffering.
     this.sealMessagesForBuffering(messagesToBuffer);
+
+    // CRITICAL: Persist the sealed messages to storage immediately.
+    // This ensures that:
+    // 1. The seal metadata (sealedAt on last part) is saved to the database
+    // 2. When MessageList creates new messages for streaming content after the seal,
+    //    those new messages have their own IDs and don't overwrite the sealed messages
+    // 3. The sealed messages remain intact with their content at the time of buffering
+    await this.messageHistory.persistMessages({
+      messages: messagesToBuffer,
+      threadId,
+      resourceId: freshRecord.resourceId ?? undefined,
+    });
 
     // Generate cycle ID and capture start time
     const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -3290,6 +3304,7 @@ ${formattedMessages}
     await this.storage.updateBufferedObservations({
       id: record.id,
       chunk: {
+        cycleId,
         observations: newObservations,
         tokenCount: newTokenCount,
         messageIds: newMessageIds,
@@ -3384,14 +3399,9 @@ ${formattedMessages}
       return { success: false };
     }
 
-    // Calculate what will be activated for the UI marker
-    const activationRatio = this.observationConfig.asyncActivation ?? 0.7;
-    const totalChunks = freshChunks.length;
-    const totalTokens = freshChunks.reduce((sum, c) => sum + c.tokenCount, 0);
-    const totalMessageIds = freshChunks.flatMap(c => c.messageIds).length;
-
     // Perform partial swap with asyncActivation percentage
-    await this.storage.swapBufferedToActive({
+    const activationRatio = this.observationConfig.asyncActivation ?? 0.7;
+    const activationResult = await this.storage.swapBufferedToActive({
       id: freshRecord.id,
       activationRatio,
     });
@@ -3402,19 +3412,22 @@ ${formattedMessages}
     // Fetch updated record
     const updatedRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
 
-    // Emit activation marker for UI feedback
-    if (writer && updatedRecord) {
-      const activationMarker = this.createActivationMarker({
-        cycleId: `activation-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-        operationType: 'observation',
-        chunksActivated: totalChunks,
-        tokensActivated: totalTokens,
-        observationTokens: updatedRecord.observationTokenCount ?? 0,
-        messagesActivated: totalMessageIds,
-        recordId: updatedRecord.id,
-        threadId: updatedRecord.threadId ?? record.threadId ?? '',
-      });
-      void writer.custom(activationMarker);
+    // Emit activation markers for UI feedback - one per activated cycleId
+    // This allows the UI to link each activation back to its original buffering badge
+    if (writer && updatedRecord && activationResult.activatedCycleIds.length > 0) {
+      for (const cycleId of activationResult.activatedCycleIds) {
+        const activationMarker = this.createActivationMarker({
+          cycleId, // Use the original buffering cycleId so UI can link them
+          operationType: 'observation',
+          chunksActivated: activationResult.chunksActivated,
+          tokensActivated: activationResult.messageTokensActivated,
+          observationTokens: activationResult.observationTokensActivated,
+          messagesActivated: activationResult.messagesActivated,
+          recordId: updatedRecord.id,
+          threadId: updatedRecord.threadId ?? record.threadId ?? '',
+        });
+        void writer.custom(activationMarker);
+      }
     }
 
     return { success: true, updatedRecord: updatedRecord ?? undefined };

@@ -37,6 +37,7 @@ import type {
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
   SwapBufferedToActiveInput,
+  SwapBufferedToActiveResult,
   UpdateBufferedReflectionInput,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
@@ -2029,6 +2030,7 @@ export class MemoryPG extends MemoryStorage {
       // Create new chunk with ID and timestamp
       const newChunk: BufferedObservationChunk = {
         id: `ombuf-${randomUUID()}`,
+        cycleId: input.chunk.cycleId,
         observations: input.chunk.observations,
         tokenCount: input.chunk.tokenCount,
         messageIds: input.chunk.messageIds,
@@ -2074,7 +2076,7 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<void> {
+  async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
     try {
       const tableName = getTableName({
         indexName: OM_TABLE,
@@ -2109,39 +2111,61 @@ export class MemoryPG extends MemoryStorage {
       }
 
       if (chunks.length === 0) {
-        return; // Nothing to swap
+        return {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+        };
       }
 
-      // Calculate total buffered message tokens across all chunks
-      const totalBufferedTokens = chunks.reduce((sum, chunk) => sum + chunk.tokenCount, 0);
-      const targetTokens = totalBufferedTokens * input.activationRatio;
+      // Calculate total buffered MESSAGE tokens across all chunks (what we're clearing from context)
+      const totalBufferedMessageTokens = chunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
+      const targetMessageTokens = totalBufferedMessageTokens * input.activationRatio;
 
       // Find the closest chunk boundary to the target, biased under
-      let cumulativeTokens = 0;
+      let cumulativeMessageTokens = 0;
       let chunksToActivate = 0;
       let bestBoundary = 0;
-      let bestBoundaryTokens = 0;
+      let bestBoundaryMessageTokens = 0;
 
       for (let i = 0; i < chunks.length; i++) {
-        cumulativeTokens += chunks[i]!.tokenCount;
+        cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
         const boundary = i + 1;
 
-        // Check if this boundary is closer to target than the previous best
-        const distanceFromTarget = Math.abs(cumulativeTokens - targetTokens);
-        const bestDistance = Math.abs(bestBoundaryTokens - targetTokens);
+        // Prefer boundaries that are under the target (leaves more raw messages in context)
+        // Only go over if there's no under option
+        const isUnder = cumulativeMessageTokens <= targetMessageTokens;
+        const bestIsUnder = bestBoundaryMessageTokens <= targetMessageTokens;
 
-        if (bestBoundary === 0 || distanceFromTarget < bestDistance) {
-          // Prefer this boundary if it's closer
+        if (bestBoundary === 0) {
+          // First boundary, take it
           bestBoundary = boundary;
-          bestBoundaryTokens = cumulativeTokens;
-        } else if (distanceFromTarget === bestDistance && cumulativeTokens < targetTokens) {
-          // If tied, prefer the under boundary
+          bestBoundaryMessageTokens = cumulativeMessageTokens;
+        } else if (isUnder && !bestIsUnder) {
+          // Current is under, best is over - prefer under
           bestBoundary = boundary;
-          bestBoundaryTokens = cumulativeTokens;
+          bestBoundaryMessageTokens = cumulativeMessageTokens;
+        } else if (isUnder && bestIsUnder) {
+          // Both under - prefer the one closer to target (higher)
+          if (cumulativeMessageTokens > bestBoundaryMessageTokens) {
+            bestBoundary = boundary;
+            bestBoundaryMessageTokens = cumulativeMessageTokens;
+          }
+        } else if (!isUnder && !bestIsUnder) {
+          // Both over - prefer the one closer to target (lower)
+          if (cumulativeMessageTokens < bestBoundaryMessageTokens) {
+            bestBoundary = boundary;
+            bestBoundaryMessageTokens = cumulativeMessageTokens;
+          }
         }
+        // If current is over and best is under, keep best (do nothing)
       }
 
-      chunksToActivate = bestBoundary;
+      // If bestBoundary is 0 (no boundary under target), activate at least 1 chunk
+      // since we've reached threshold and need to clear some context
+      chunksToActivate = bestBoundary === 0 ? 1 : bestBoundary;
 
       // Split chunks
       const activatedChunks = chunks.slice(0, chunksToActivate);
@@ -2150,6 +2174,9 @@ export class MemoryPG extends MemoryStorage {
       // Combine activated observations
       const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
       const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
+      const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+      const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
+      const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
 
       // Derive lastObservedAt from the latest activated chunk, or use provided value
       const latestChunk = activatedChunks[activatedChunks.length - 1];
@@ -2188,6 +2215,14 @@ export class MemoryPG extends MemoryStorage {
           input.id,
         ],
       );
+
+      return {
+        chunksActivated: activatedChunks.length,
+        messageTokensActivated: activatedMessageTokens,
+        observationTokensActivated: activatedTokens,
+        messagesActivated: activatedMessageCount,
+        activatedCycleIds,
+      };
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;

@@ -31,6 +31,10 @@ interface ObservationalMemoryContextValue {
   streamProgress: OmProgressData | null;
   /** Update progress data from stream */
   setStreamProgress: (data: OmProgressData | null) => void;
+  /** Set of cycleIds that have been activated (for updating buffering badges) */
+  activatedCycleIds: Set<string>;
+  /** Mark a cycleId as activated */
+  markCycleIdActivated: (cycleId: string) => void;
   /** Clear all progress state (e.g., on thread change) */
   clearProgress: () => void;
 }
@@ -42,15 +46,21 @@ export function ObservationalMemoryProvider({ children }: { children: ReactNode 
   const [isReflectingFromStream, setIsReflectingFromStream] = useState(false);
   const [observationsUpdatedAt, setObservationsUpdatedAt] = useState(0);
   const [streamProgress, setStreamProgress] = useState<OmProgressData | null>(null);
+  const [activatedCycleIds, setActivatedCycleIds] = useState<Set<string>>(new Set());
 
   const signalObservationsUpdated = useCallback(() => {
     setObservationsUpdatedAt(Date.now());
+  }, []);
+
+  const markCycleIdActivated = useCallback((cycleId: string) => {
+    setActivatedCycleIds(prev => new Set([...prev, cycleId]));
   }, []);
 
   const clearProgress = useCallback(() => {
     setStreamProgress(null);
     setIsObservingFromStream(false);
     setIsReflectingFromStream(false);
+    setActivatedCycleIds(new Set());
   }, []);
 
   return (
@@ -64,6 +74,8 @@ export function ObservationalMemoryProvider({ children }: { children: ReactNode 
         signalObservationsUpdated,
         streamProgress,
         setStreamProgress,
+        activatedCycleIds,
+        markCycleIdActivated,
         clearProgress,
       }}
     >
@@ -85,6 +97,8 @@ export function useObservationalMemoryContext() {
       signalObservationsUpdated: () => {},
       streamProgress: null,
       setStreamProgress: () => {},
+      activatedCycleIds: new Set<string>(),
+      markCycleIdActivated: () => {},
       clearProgress: () => {},
     };
   }

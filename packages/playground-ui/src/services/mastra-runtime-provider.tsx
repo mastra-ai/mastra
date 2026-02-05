@@ -4,7 +4,7 @@ import {
   AppendMessage,
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
-import { useState, ReactNode, useRef } from 'react';
+import { useState, ReactNode, useRef, useEffect } from 'react';
 import { RequestContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
@@ -93,7 +93,10 @@ const OM_TOOL_NAME = 'mastra-memory-om-observation';
  * Note: cycleId is unique per observation cycle, while recordId is constant for the entire
  * memory record. Using cycleId ensures each observation cycle gets its own UI element.
  */
-const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessage => {
+const convertOmPartsInMastraMessage = (
+  message: MastraUIMessage,
+  activatedCycleIds?: Set<string>,
+): MastraUIMessage => {
   if (!message || !Array.isArray(message.parts)) {
     return message;
   }
@@ -214,16 +217,20 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
       const startData = parts.bufferingStart?.data || {};
       const endData = parts.bufferingEnd?.data || {};
       const failedData = parts.bufferingFailed?.data || {};
+      const activationData = parts.activation?.data || {};
 
       const isFailed = !!parts.bufferingFailed;
+      // Check both local activation part and global activatedCycleIds set
+      const isActivated = !!parts.activation || activatedCycleIds?.has(cycleId);
       const isComplete = !!parts.bufferingEnd;
-      const isLoading = !isFailed && !isComplete;
+      const isLoading = !isFailed && !isActivated && !isComplete;
 
       const mergedData = {
         ...startData,
         ...(isComplete ? endData : {}),
         ...(isFailed ? failedData : {}),
-        _state: isFailed ? 'buffering-failed' : isComplete ? 'buffering-complete' : 'buffering',
+        ...(isActivated ? activationData : {}),
+        _state: isFailed ? 'buffering-failed' : isActivated ? 'activated' : isComplete ? 'buffering-complete' : 'buffering',
       };
 
       convertedParts.push({
@@ -234,7 +241,7 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
         output: isLoading
           ? undefined
           : {
-              status: isFailed ? 'buffering-failed' : 'buffering-complete',
+              status: isFailed ? 'buffering-failed' : isActivated ? 'activated' : 'buffering-complete',
               omData: mergedData,
             },
         state: isLoading ? 'input-available' : 'output-available',
@@ -286,11 +293,15 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
       if (parts && !parts.bufferingStart) {
         const endData = parts.bufferingEnd?.data || {};
         const failedData = parts.bufferingFailed?.data || {};
+        const activationData = parts.activation?.data || {};
         const isFailed = !!parts.bufferingFailed;
+        // Check both local activation part and global activatedCycleIds set
+        const isActivated = !!parts.activation || activatedCycleIds?.has(cycleId);
 
         const mergedData = {
           ...(parts.bufferingEnd ? endData : failedData),
-          _state: isFailed ? 'buffering-failed' : 'buffering-complete',
+          ...(isActivated ? activationData : {}),
+          _state: isFailed ? 'buffering-failed' : isActivated ? 'activated' : 'buffering-complete',
         };
 
         convertedParts.push({
@@ -299,34 +310,7 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
           toolName: OM_TOOL_NAME,
           input: mergedData,
           output: {
-            status: isFailed ? 'buffering-failed' : 'buffering-complete',
-            omData: mergedData,
-          },
-          state: 'output-available',
-        });
-
-        processedCycleIds.add(cycleId);
-      }
-      continue;
-    }
-    // Handle activation markers (single marker, instant state)
-    else if (part.type === 'data-om-activation' && cycleId && !processedCycleIds.has(cycleId)) {
-      const parts = omPartsByCycleId.get(cycleId);
-      if (parts?.activation) {
-        const activationData = parts.activation.data || {};
-
-        const mergedData = {
-          ...activationData,
-          _state: 'activated',
-        };
-
-        convertedParts.push({
-          type: 'dynamic-tool',
-          toolCallId: `om-activation-${cycleId}`,
-          toolName: OM_TOOL_NAME,
-          input: mergedData,
-          output: {
-            status: 'activated',
+            status: isFailed ? 'buffering-failed' : isActivated ? 'activated' : 'buffering-complete',
             omData: mergedData,
           },
           state: 'output-available',
@@ -482,8 +466,14 @@ export function MastraRuntimeProvider({
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
-  const { setIsObservingFromStream, setIsReflectingFromStream, signalObservationsUpdated, setStreamProgress } =
-    useObservationalMemoryContext();
+  const {
+    setIsObservingFromStream,
+    setIsReflectingFromStream,
+    signalObservationsUpdated,
+    setStreamProgress,
+    activatedCycleIds,
+    markCycleIdActivated,
+  } = useObservationalMemoryContext();
 
   // Helper to signal observation/reflection started (from streaming)
   const handleObservationStart = (operationType?: string) => {
@@ -526,6 +516,14 @@ export function MastraRuntimeProvider({
     // Invalidate both the OM data and status queries to trigger refetch
     queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
     queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+  };
+
+  // Helper to handle activation markers - marks cycleId as activated so buffering badges update
+  const handleActivation = (data: any) => {
+    const cycleId = data?.cycleId;
+    if (cycleId) {
+      markCycleIdActivated(cycleId);
+    }
   };
 
   // Helper to mark in-progress OM markers as disconnected in messages
@@ -600,6 +598,21 @@ export function MastraRuntimeProvider({
     queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
     queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
   };
+
+  // On initial load, scan messages for activation markers and populate activatedCycleIds
+  // This ensures buffering badges show as activated even after page reload
+  useEffect(() => {
+    const allMessages = [...(initialMessages || []), ...(initialLegacyMessages || [])];
+    for (const msg of allMessages) {
+      const parts = (msg as any).parts || (msg as any).content || [];
+      if (!Array.isArray(parts)) continue;
+      for (const part of parts) {
+        if (part?.type === 'data-om-activation' && part?.data?.cycleId) {
+          markCycleIdActivated(part.data.cycleId);
+        }
+      }
+    }
+  }, []); // Only run once on mount
 
   const {
     frequencyPenalty,
@@ -711,9 +724,15 @@ export function MastraRuntimeProvider({
               // Refresh OM sidebar when observation/reflection completes (if OM chunks are passed through network mode)
               if (
                 (chunk as any).type === 'data-om-observation-end' ||
-                (chunk as any).type === 'data-om-observation-failed'
+                (chunk as any).type === 'data-om-observation-failed' ||
+                (chunk as any).type === 'data-om-activation'
               ) {
                 refreshObservationalMemory((chunk as any).data?.operationType);
+              }
+
+              // Mark cycleIds as activated for UI update of buffering badges
+              if ((chunk as any).type === 'data-om-activation') {
+                handleActivation((chunk as any).data);
               }
             },
           });
@@ -767,9 +786,18 @@ export function MastraRuntimeProvider({
                   handleProgressUpdate((chunk as any).data);
                 }
 
-                // Refresh OM sidebar when observation completes
-                if (chunk.type === 'data-om-observation-end' || chunk.type === 'data-om-observation-failed') {
+                // Refresh OM sidebar when observation completes or buffered observations are activated
+                if (
+                  chunk.type === 'data-om-observation-end' ||
+                  chunk.type === 'data-om-observation-failed' ||
+                  chunk.type === 'data-om-activation'
+                ) {
                   refreshObservationalMemory((chunk as any).data?.operationType);
+                }
+
+                // Mark cycleIds as activated for UI update of buffering badges
+                if (chunk.type === 'data-om-activation') {
+                  handleActivation((chunk as any).data);
                 }
               },
               signal: controller.signal,
@@ -1165,8 +1193,9 @@ export function MastraRuntimeProvider({
   const { adapters, isReady } = useAdapters(agentId);
 
   // Convert data-om-* parts to dynamic-tool format BEFORE toAssistantUIMessage
+  // Pass activatedCycleIds so buffering badges can be marked as activated
   const vnextmessages = messages.map(msg => {
-    const converted = convertOmPartsInMastraMessage(msg);
+    const converted = convertOmPartsInMastraMessage(msg, activatedCycleIds);
     return toAssistantUIMessage(converted);
   });
 

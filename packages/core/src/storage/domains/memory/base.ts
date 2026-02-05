@@ -18,6 +18,7 @@ import type {
   UpdateBufferedObservationsInput,
   UpdateBufferedReflectionInput,
   SwapBufferedToActiveInput,
+  SwapBufferedToActiveResult,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
 } from '../../types';
@@ -222,8 +223,10 @@ export abstract class MemoryStorage extends StorageDomain {
    * 2. Moves activated bufferedMessageIds → observedMessageIds
    * 3. Keeps remaining buffered content if activationRatio < 100
    * 4. Updates lastObservedAt
+   *
+   * Returns info about what was activated for UI feedback.
    */
-  async swapBufferedToActive(_input: SwapBufferedToActiveInput): Promise<void> {
+  async swapBufferedToActive(_input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 

@@ -515,6 +515,8 @@ export type ObservationalMemoryOriginType = 'initial' | 'reflection';
 export interface BufferedObservationChunk {
   /** Unique identifier for this chunk */
   id: string;
+  /** Cycle ID for linking to UI buffering markers */
+  cycleId: string;
   /** The observation text content */
   observations: string;
   /** Token count of this chunk's observations */
@@ -537,6 +539,8 @@ export interface BufferedObservationChunk {
  * Input for creating a new buffered observation chunk.
  */
 export interface BufferedObservationChunkInput {
+  /** Cycle ID for linking to UI buffering markers */
+  cycleId: string;
   /** The observation text content */
   observations: string;
   /** Token count of this chunk's observations */
@@ -726,6 +730,23 @@ export interface SwapBufferedToActiveInput {
    * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
    */
   lastObservedAt?: Date;
+}
+
+/**
+ * Result from swapping buffered observations to active.
+ * Contains info about what was activated for UI feedback.
+ */
+export interface SwapBufferedToActiveResult {
+  /** Number of chunks that were activated */
+  chunksActivated: number;
+  /** Total message tokens from activated chunks (context cleared) */
+  messageTokensActivated: number;
+  /** Total observation tokens from activated chunks */
+  observationTokensActivated: number;
+  /** Total messages from activated chunks */
+  messagesActivated: number;
+  /** CycleIds of the activated chunks (for linking UI markers) */
+  activatedCycleIds: string[];
 }
 
 /**

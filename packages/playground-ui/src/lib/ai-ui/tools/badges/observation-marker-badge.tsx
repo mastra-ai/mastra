@@ -405,11 +405,12 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   }
 
   // Activation state - buffered observations have been activated into active observations
+  // Note: This marker shouldn't draw a highlight - it just confirms activation happened
+  // The buffered markers should update to show "activated" state
   if (isActivated) {
     const chunksActivated = omData.chunksActivated ?? 0;
-    const tokensActivated = omData.tokensActivated ?? 0;
+    const tokensActivated = omData.tokensActivated ?? 0; // Message tokens cleared from context
     const messagesActivated = omData.messagesActivated ?? 0;
-    const observationTokens = omData.observationTokens ?? 0;
     const activatedLabel = isReflection ? 'Activated reflection' : 'Activated observations';
 
     return (
@@ -418,14 +419,15 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         data-om-badge={cycleId}
         data-om-state={state}
         data-om-type={isReflection ? 'reflection' : 'observation'}
+        data-om-no-highlight="true"
       >
         <div className="my-1">
           <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-cyan-500/10 text-cyan-600 text-xs font-medium">
             <Brain className="w-3 h-3" />
             <span>
               {activatedLabel}: {chunksActivated} chunk{chunksActivated !== 1 ? 's' : ''},{' '}
-              {messagesActivated} msg{messagesActivated !== 1 ? 's' : ''} →{' '}
-              {formatTokens(observationTokens)} tokens
+              {messagesActivated} msg{messagesActivated !== 1 ? 's' : ''},{' '}
+              {formatTokens(tokensActivated)} context tokens
             </span>
           </div>
         </div>

@@ -350,6 +350,18 @@ export interface DataOmProgressPart {
 
     /** Step number in the agent loop */
     stepNumber: number;
+
+    /** Number of buffered observation chunks waiting to be activated */
+    bufferedChunksCount: number;
+
+    /** Total tokens of messages that have been buffered but not yet activated */
+    bufferedMessageTokens: number;
+
+    /** Total tokens of observations from buffered chunks */
+    bufferedObservationTokens: number;
+
+    /** Whether there are buffered chunks ready for activation */
+    hasBufferedChunks: boolean;
   };
 }
 

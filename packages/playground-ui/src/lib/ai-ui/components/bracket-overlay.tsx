@@ -53,6 +53,7 @@ export function BracketOverlay({ containerRef }: { containerRef: React.RefObject
       const state = (badge.getAttribute('data-om-state') || 'complete') as HighlightPosition['state'];
       const omType = (badge.getAttribute('data-om-type') || 'observation') as OmType;
 
+
       const badgeRect = badge.getBoundingClientRect();
 
       // Find the anchor point (top of the highlight).
