@@ -342,6 +342,24 @@ interface TripwirePayload<TMetadata = unknown> {
   processorId?: string;
 }
 
+/**
+ * Payload for completion-check events emitted during stream/generate scoring.
+ */
+interface CompletionCheckPayload {
+  /** Current iteration number */
+  iteration: number;
+  /** Whether all/any scorers passed based on strategy */
+  passed: boolean;
+  /** Individual scorer results */
+  results: ScorerResult[];
+  /** Total duration of all scoring checks */
+  duration: number;
+  /** Whether scoring timed out */
+  timedOut: boolean;
+  /** Reason from the relevant scorer */
+  reason?: string;
+}
+
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
   agentId: string;
@@ -647,7 +665,8 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'tool-output'; payload: DynamicToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
-  | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload });
+  | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
+  | (BaseChunkType & { type: 'completion-check'; payload: CompletionCheckPayload });
 
 export type WorkflowStreamEvent =
   | (BaseChunkType & {

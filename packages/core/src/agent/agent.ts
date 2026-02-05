@@ -61,6 +61,9 @@ import type {
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
   NetworkOptions,
+  DelegationConfig,
+  DelegationStartContext,
+  DelegationCompleteContext,
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -2135,6 +2138,7 @@ export class Agent<
     tracingContext,
     methodType,
     autoResumeSuspendedTools,
+    delegation,
   }: {
     runId?: string;
     threadId?: string;
@@ -2143,6 +2147,7 @@ export class Agent<
     tracingContext?: TracingContext;
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
+    delegation?: DelegationConfig;
   }) {
     const convertedAgentTools: Record<string, CoreTool> = {};
     const agents = await this.listAgents({ requestContext });
@@ -2177,6 +2182,114 @@ export class Agent<
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
+            const startTime = Date.now();
+            const toolCallId = context?.agent?.toolCallId || randomUUID();
+
+            // Get messages from context - available at tool execution time
+            let contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
+
+            // Apply context filtering if configured
+            if (delegation?.contextFilter) {
+              const filter = delegation.contextFilter;
+
+              // Apply message type filters
+              if (filter.includeSystem === false) {
+                contextMessages = contextMessages.filter(m => m.role !== 'system');
+              }
+
+              if (filter.includeToolMessages === false) {
+                contextMessages = contextMessages.filter(m => {
+                  if (m.role === 'assistant' && m.content) {
+                    // Filter out messages with tool calls
+                    const content = m.content;
+                    if (typeof content === 'object' && content !== null && 'parts' in content) {
+                      const parts = (content as any).parts;
+                      return !parts.some((p: any) => p.type === 'tool-call');
+                    }
+                  }
+                  // Filter out tool result messages
+                  return m.role !== 'tool';
+                });
+              }
+
+              // Apply custom filter function
+              if (filter.filter) {
+                contextMessages = contextMessages.filter(filter.filter);
+              }
+
+              // Apply maxMessages limit (take most recent messages)
+              if (filter.maxMessages && filter.maxMessages > 0 && contextMessages.length > filter.maxMessages) {
+                contextMessages = contextMessages.slice(-filter.maxMessages);
+              }
+            }
+
+            // Derive iteration from the number of assistant messages (rough approximation)
+            // Each iteration typically produces an assistant message
+            const derivedIteration = Math.max(
+              1,
+              contextMessages.filter(m => m.role === 'assistant').length,
+            );
+
+            // Build delegation start context
+            const delegationStartContext: DelegationStartContext = {
+              primitiveId: agentName,
+              primitiveType: 'agent',
+              prompt: inputData.prompt,
+              params: {
+                threadId: inputData.threadId || undefined,
+                resourceId: inputData.resourceId || undefined,
+                instructions: inputData.instructions || undefined,
+                maxSteps: inputData.maxSteps || undefined,
+              },
+              iteration: derivedIteration,
+              runId: runId || randomUUID(),
+              threadId,
+              resourceId,
+              parentAgentId: this.id,
+              parentAgentName: this.name,
+              toolCallId,
+              messages: contextMessages,
+            };
+
+            // Call onDelegationStart hook if provided
+            let effectivePrompt = inputData.prompt;
+            let effectiveInstructions = inputData.instructions;
+            let effectiveMaxSteps = inputData.maxSteps;
+
+            if (delegation?.onDelegationStart) {
+              try {
+                const startResult = await delegation.onDelegationStart(delegationStartContext);
+                if (startResult) {
+                  // Check if delegation should be rejected
+                  if (startResult.proceed === false) {
+                    const rejectionMessage =
+                      startResult.rejectionReason || 'Delegation rejected by onDelegationStart hook';
+                    this.logger.debug(
+                      `[Agent:${this.name}] - Delegation to ${agentName} rejected: ${rejectionMessage}`,
+                    );
+                    return {
+                      text: `[Delegation Rejected] ${rejectionMessage}`,
+                      subAgentThreadId: undefined,
+                      subAgentResourceId: undefined,
+                    };
+                  }
+                  // Apply modifications
+                  if (startResult.modifiedPrompt !== undefined) {
+                    effectivePrompt = startResult.modifiedPrompt;
+                  }
+                  if (startResult.modifiedInstructions !== undefined) {
+                    effectiveInstructions = startResult.modifiedInstructions;
+                  }
+                  if (startResult.modifiedMaxSteps !== undefined) {
+                    effectiveMaxSteps = startResult.modifiedMaxSteps;
+                  }
+                }
+              } catch (hookError) {
+                this.logger.error(`[Agent:${this.name}] - onDelegationStart hook error: ${hookError}`);
+                // Continue with original values on hook error
+              }
+            }
+
             try {
               this.logger.debug(`[Agent:${this.name}] - Executing agent as tool ${agentName}`, {
                 name: agentName,
@@ -2214,19 +2327,11 @@ export class Agent<
                   agent.__setMemory(this.#memory);
                 }
 
-                // const x = agent.generate(' yo', [
-                //   structuredOutput: {
-                //     schema: z.object({
-                //       text: z.string(),
-                //     }),
-                //   },
-                // ]);
-
-                const generateResult = await agent.generate(inputData.prompt, {
+                const generateResult = await agent.generate(effectivePrompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
-                  ...(inputData.instructions && { instructions: inputData.instructions }),
-                  ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                  ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                  ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                   ...(resourceId && threadId
                     ? {
                         memory: {
@@ -2238,7 +2343,7 @@ export class Agent<
                 });
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy(inputData.prompt, {
+                const generateResult = await agent.generateLegacy(effectivePrompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
                 });
@@ -2251,11 +2356,11 @@ export class Agent<
                   agent.__setMemory(this.#memory);
                 }
 
-                const streamResult = await agent.stream(inputData.prompt, {
+                const streamResult = await agent.stream(effectivePrompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
-                  ...(inputData.instructions && { instructions: inputData.instructions }),
-                  ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                  ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                  ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                   ...(resourceId && threadId
                     ? {
                         memory: {
@@ -2285,7 +2390,7 @@ export class Agent<
 
                 result = { text: fullText, subAgentThreadId, subAgentResourceId };
               } else {
-                const streamResult = await agent.streamLegacy(inputData.prompt, {
+                const streamResult = await agent.streamLegacy(effectivePrompt, {
                   requestContext,
                   tracingContext: context?.tracingContext,
                 });
@@ -2310,8 +2415,78 @@ export class Agent<
                 result = { text: fullText };
               }
 
+              // Call onDelegationComplete hook if provided
+              if (delegation?.onDelegationComplete) {
+                try {
+                  let bailed = false;
+                  const delegationCompleteContext: DelegationCompleteContext = {
+                    primitiveId: agentName,
+                    primitiveType: 'agent',
+                    prompt: effectivePrompt,
+                    result,
+                    duration: Date.now() - startTime,
+                    success: true,
+                    iteration: derivedIteration,
+                    runId: runId || randomUUID(),
+                    toolCallId,
+                    parentAgentId: this.id,
+                    parentAgentName: this.name,
+                    messages: contextMessages,
+                    bail: () => {
+                      bailed = true;
+                    },
+                  };
+
+                  const completeResult = await delegation.onDelegationComplete(delegationCompleteContext);
+
+                  // If bailed, add a marker to the result
+                  if (bailed) {
+                    result._bailed = true;
+                  }
+
+                  // Handle feedback if provided
+                  if (completeResult?.feedback) {
+                    result._delegationFeedback = completeResult.feedback;
+                  }
+                  if (completeResult?.stopProcessing) {
+                    result._stopProcessing = true;
+                  }
+                } catch (hookError) {
+                  this.logger.error(`[Agent:${this.name}] - onDelegationComplete hook error: ${hookError}`);
+                }
+              }
+
               return result;
             } catch (err) {
+              // Call onDelegationComplete with error if hook is provided
+              if (delegation?.onDelegationComplete) {
+                try {
+                  const delegationCompleteContext: DelegationCompleteContext = {
+                    primitiveId: agentName,
+                    primitiveType: 'agent',
+                    prompt: effectivePrompt,
+                    result: { text: '' },
+                    duration: Date.now() - startTime,
+                    success: false,
+                    error: err instanceof Error ? err : new Error(String(err)),
+                    iteration: derivedIteration,
+                    runId: runId || randomUUID(),
+                    toolCallId,
+                    parentAgentId: this.id,
+                    parentAgentName: this.name,
+                    messages: contextMessages,
+                    bail: () => {
+                      // Agent call failed, can't bail
+                    },
+                  };
+
+                  await delegation.onDelegationComplete(delegationCompleteContext);
+                } catch (hookError) {
+                  this.logger.error(`[Agent:${this.name}] - onDelegationComplete hook error on failure: ${hookError}`);
+                }
+              }
+
+              // Wrap error in MastraError
               const mastraError = new MastraError(
                 {
                   id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED',
@@ -2589,6 +2764,7 @@ export class Agent<
     methodType,
     memoryConfig,
     autoResumeSuspendedTools,
+    delegation,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -2601,6 +2777,7 @@ export class Agent<
     methodType: AgentMethodType;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
+    delegation?: DelegationConfig;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -2661,6 +2838,7 @@ export class Agent<
       methodType,
       tracingContext,
       autoResumeSuspendedTools,
+      delegation,
     });
 
     const workflowTools = await this.listWorkflowTools({
