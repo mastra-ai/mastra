@@ -1001,6 +1001,17 @@ export function MastraRuntimeProvider({
 
                 // Only process if the last message is from the assistant
                 if (lastMessage && lastMessage.role === 'assistant') {
+                  // Check if this tool call already exists in the content
+                  if (Array.isArray(lastMessage.content)) {
+                    const existingToolCall = lastMessage.content.find(
+                      (part: any) => part.type === 'tool-call' && part.toolCallId === value.toolCallId,
+                    );
+                    if (existingToolCall) {
+                      // Tool call already exists, skip adding duplicate
+                      return currentConversation;
+                    }
+                  }
+
                   // Create a new message with the tool call part
                   const updatedMessage: ThreadMessageLike = {
                     ...lastMessage,
