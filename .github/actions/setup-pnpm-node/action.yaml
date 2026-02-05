@@ -1,5 +1,5 @@
 name: Setup pnpm and Node.js
-description: Setup pnpm with custom registry and Node.js with cache
+description: Setup pnpm with custom registry and Node.js with optimized cache
 
 inputs:
   install-dependencies:
@@ -10,6 +10,14 @@ inputs:
     description: 'Should use package manager cache'
     required: false
     default: 'true'
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '22.13.0'
+  registry-url:
+    description: 'npm registry URL for publishing'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -19,12 +27,29 @@ runs:
       with:
         run_install: false
 
-    - name: Setup Node.js 22.x
+    - name: Get pnpm store directory
+      if: ${{ inputs.package-manager-cache == 'true' }}
+      shell: bash
+      id: pnpm-cache
+      run: |
+        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+    - name: Setup pnpm store cache
+      if: ${{ inputs.package-manager-cache == 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
+
+    - name: Setup Node.js
       uses: actions/setup-node@v6
       with:
-        node-version: 22.13.0
+        node-version: ${{ inputs.node-version }}
         cache: 'pnpm'
         package-manager-cache: ${{ inputs.package-manager-cache == 'true' }}
+        registry-url: ${{ inputs.registry-url }}
 
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}

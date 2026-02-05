@@ -53,19 +53,8 @@ jobs:
         with:
           files: '.changeset/pre.json'
 
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          run_install: false
-
-      - name: Setup Node.js 22.x
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22.13.0
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Build packages
         run: pnpm build
@@ -146,19 +135,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          run_install: false
-
-      - name: Setup Node.js 22.x
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22.13.0
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Enter prerelease mode
         run: |
