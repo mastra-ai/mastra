@@ -860,3 +860,255 @@ describe('E2BSandbox Stop Behavior', () => {
     expect(fusermountCalls.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+/**
+ * Runtime Installation unit tests
+ *
+ * Tests that verify FUSE tools (s3fs, gcsfuse) are installed at runtime
+ * if not present in the sandbox template.
+ */
+describe('E2BSandbox Runtime Installation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('S3 (s3fs)', () => {
+    it('installs s3fs if not present', async () => {
+      // Track which commands have been run
+      const commandsRun: string[] = [];
+
+      mockSandbox.commands.run.mockImplementation((cmd: string) => {
+        commandsRun.push(cmd);
+
+        // First 'which s3fs' returns not found, after install it's found
+        if (cmd.includes('which s3fs')) {
+          const alreadyInstalled = commandsRun.some(c => c.includes('apt-get install'));
+          if (alreadyInstalled) {
+            return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/s3fs', stderr: '' });
+          }
+          return Promise.resolve({ exitCode: 0, stdout: 'not found', stderr: '' });
+        }
+
+        // apt-get commands succeed
+        if (cmd.includes('apt-get')) {
+          return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+        }
+
+        // id command
+        if (cmd.includes('id -u')) {
+          return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '' });
+        }
+
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      });
+
+      const sandbox = new E2BSandbox();
+      await sandbox.start();
+
+      const mockFilesystem = {
+        id: 'test-s3',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 's3',
+          bucket: 'test-bucket',
+          region: 'us-east-1',
+          accessKeyId: 'key',
+          secretAccessKey: 'secret',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/s3');
+
+      // Verify apt-get install was called for s3fs
+      const installCommand = commandsRun.find(cmd => cmd.includes('apt-get install') && cmd.includes('s3fs'));
+      expect(installCommand).toBeDefined();
+    });
+
+    it('gives helpful error if s3fs installation fails', async () => {
+      mockSandbox.commands.run.mockImplementation((cmd: string) => {
+        // which s3fs returns not found
+        if (cmd.includes('which s3fs')) {
+          return Promise.resolve({ exitCode: 0, stdout: 'not found', stderr: '' });
+        }
+
+        // apt-get update succeeds
+        if (cmd.includes('apt-get update')) {
+          return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+        }
+
+        // apt-get install fails
+        if (cmd.includes('apt-get install')) {
+          return Promise.resolve({ exitCode: 1, stdout: '', stderr: 'E: Unable to locate package s3fs' });
+        }
+
+        return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '' });
+      });
+
+      const sandbox = new E2BSandbox();
+      await sandbox.start();
+
+      const mockFilesystem = {
+        id: 'test-s3',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 's3',
+          bucket: 'test-bucket',
+          region: 'us-east-1',
+          accessKeyId: 'key',
+          secretAccessKey: 'secret',
+        }),
+      } as any;
+
+      const result = await sandbox.mount(mockFilesystem, '/data/s3');
+
+      // Should fail with helpful error message
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Failed to install s3fs');
+      // Should mention createMountableTemplate as a solution
+      expect(result.error).toContain('createMountableTemplate');
+    });
+
+    it('skips installation if s3fs is already present', async () => {
+      const commandsRun: string[] = [];
+
+      mockSandbox.commands.run.mockImplementation((cmd: string) => {
+        commandsRun.push(cmd);
+
+        // s3fs is already installed
+        if (cmd.includes('which s3fs')) {
+          return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/s3fs', stderr: '' });
+        }
+
+        if (cmd.includes('id -u')) {
+          return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '' });
+        }
+
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      });
+
+      const sandbox = new E2BSandbox();
+      await sandbox.start();
+
+      const mockFilesystem = {
+        id: 'test-s3',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 's3',
+          bucket: 'test-bucket',
+          region: 'us-east-1',
+          accessKeyId: 'key',
+          secretAccessKey: 'secret',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/s3');
+
+      // apt-get install should NOT be called
+      const installCommand = commandsRun.find(cmd => cmd.includes('apt-get install'));
+      expect(installCommand).toBeUndefined();
+    });
+  });
+
+  describe('GCS (gcsfuse)', () => {
+    it('installs gcsfuse if not present', async () => {
+      const commandsRun: string[] = [];
+
+      mockSandbox.commands.run.mockImplementation((cmd: string) => {
+        commandsRun.push(cmd);
+
+        // First 'which gcsfuse' returns not found, after install it's found
+        if (cmd.includes('which gcsfuse')) {
+          const alreadyInstalled = commandsRun.some(c => c.includes('apt-get install') && c.includes('gcsfuse'));
+          if (alreadyInstalled) {
+            return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/gcsfuse', stderr: '' });
+          }
+          return Promise.resolve({ exitCode: 0, stdout: 'not found', stderr: '' });
+        }
+
+        // apt-get and other setup commands succeed
+        if (cmd.includes('apt-get') || cmd.includes('tee') || cmd.includes('apt-key')) {
+          return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+        }
+
+        if (cmd.includes('id -u')) {
+          return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '' });
+        }
+
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      });
+
+      const sandbox = new E2BSandbox();
+      await sandbox.start();
+
+      const mockFilesystem = {
+        id: 'test-gcs',
+        name: 'GCSFilesystem',
+        provider: 'gcs',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'gcs',
+          bucket: 'test-bucket',
+          serviceAccountKey: JSON.stringify({ type: 'service_account', project_id: 'test' }),
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/gcs');
+
+      // Verify gcsfuse installation commands were run
+      const installCommand = commandsRun.find(
+        cmd => cmd.includes('apt-get install') && cmd.includes('gcsfuse'),
+      );
+      expect(installCommand).toBeDefined();
+
+      // Also verify the apt repo was added
+      const repoCommand = commandsRun.find(cmd => cmd.includes('gcsfuse-jammy'));
+      expect(repoCommand).toBeDefined();
+    });
+
+    it('skips installation if gcsfuse is already present', async () => {
+      const commandsRun: string[] = [];
+
+      mockSandbox.commands.run.mockImplementation((cmd: string) => {
+        commandsRun.push(cmd);
+
+        // gcsfuse is already installed
+        if (cmd.includes('which gcsfuse')) {
+          return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/gcsfuse', stderr: '' });
+        }
+
+        if (cmd.includes('id -u')) {
+          return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '' });
+        }
+
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      });
+
+      const sandbox = new E2BSandbox();
+      await sandbox.start();
+
+      const mockFilesystem = {
+        id: 'test-gcs',
+        name: 'GCSFilesystem',
+        provider: 'gcs',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'gcs',
+          bucket: 'test-bucket',
+          serviceAccountKey: JSON.stringify({ type: 'service_account', project_id: 'test' }),
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/gcs');
+
+      // apt-get install should NOT be called
+      const installCommand = commandsRun.find(cmd => cmd.includes('apt-get install'));
+      expect(installCommand).toBeUndefined();
+    });
+  });
+});

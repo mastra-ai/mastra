@@ -11,20 +11,29 @@ This document tracks the current state of workspace provider tests and known iss
 We split tests into **unit** and **integration** files to avoid vitest mock conflicts:
 
 ```
+packages/core/src/workspace/
+├── sandbox/
+│   ├── mount-manager.test.ts         # MountManager unit tests (35 tests)
+│   ├── mastra-sandbox.test.ts        # MastraSandbox base class tests (9 tests)
+│   └── local-sandbox.test.ts         # LocalSandbox conformance tests (45+ tests)
+├── filesystem/
+│   ├── mastra-filesystem.test.ts     # MastraFilesystem base class tests (8 tests)
+│   └── local-filesystem.test.ts      # LocalFilesystem conformance tests (50+ tests)
+
 workspaces/
 ├── e2b/
 │   └── src/sandbox/
-│       ├── index.test.ts              # Unit tests (37 tests) - uses vi.mock('e2b')
-│       └── index.integration.test.ts  # Integration tests (20 tests) - real E2B API
+│       ├── index.test.ts             # E2B unit tests (54 tests) - uses vi.mock('e2b')
+│       └── index.integration.test.ts # E2B integration tests (27 tests) - real E2B API
 ├── s3/
 │   └── src/filesystem/
-│       ├── index.test.ts              # Unit tests - uses vi.mock('@aws-sdk/client-s3')
-│       └── index.integration.test.ts  # Integration tests - real S3/R2
+│       ├── index.test.ts             # S3 unit tests (35 tests) - uses vi.mock('@aws-sdk/client-s3')
+│       └── index.integration.test.ts # S3 integration tests - real S3/R2
 ├── gcs/
 │   └── src/filesystem/
-│       ├── index.test.ts              # Unit tests - uses vi.mock('@google-cloud/storage')
-│       └── index.integration.test.ts  # Integration tests - real GCS
-└── _test-utils/                       # Shared test utilities (placeholder)
+│       ├── index.test.ts             # GCS unit tests (28 tests) - uses vi.mock('@google-cloud/storage')
+│       └── index.integration.test.ts # GCS integration tests - real GCS
+└── _test-utils/                      # Shared test utilities (placeholder)
 ```
 
 ### Why Separate Files?
@@ -88,7 +97,200 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 
 ---
 
-## Part 6: E2B Sandbox Tests - Coverage Matrix
+## Part 1: Core Package Tests (`@mastra/core`)
+
+### MountManager Tests
+
+**File:** `packages/core/src/workspace/sandbox/mount-manager.test.ts`
+**Status:** ✅ **COMPLETE** (35 tests)
+
+| Test Category | Tests | Status |
+|---------------|-------|--------|
+| Entry Management | 7 | ✅ Pass |
+| Config Hashing | 3 | ✅ Pass |
+| Processing Pending Mounts | 7 | ✅ Pass |
+| onMount Hook Integration | 6 | ✅ Pass |
+| Logger Integration | 5 | ✅ Pass |
+| Marker File Helpers | 7 | ✅ Pass |
+
+### MastraSandbox Base Class Tests
+
+**File:** `packages/core/src/workspace/sandbox/mastra-sandbox.test.ts`
+**Status:** ✅ **COMPLETE** (9 tests)
+
+| Test Category | Tests | Status |
+|---------------|-------|--------|
+| MountManager Creation | 3 | ✅ Pass |
+| Logger Propagation | 3 | ✅ Pass |
+| Lifecycle Methods | 3 | ✅ Pass |
+
+### MastraFilesystem Base Class Tests
+
+**File:** `packages/core/src/workspace/filesystem/mastra-filesystem.test.ts`
+**Status:** ✅ **COMPLETE** (8 tests)
+
+| Test Category | Tests | Status |
+|---------------|-------|--------|
+| Logger Integration | 3 | ✅ Pass |
+| Component Type | 1 | ✅ Pass |
+| Lifecycle Methods | 4 | ✅ Pass |
+
+### Logger Propagation Chain
+
+**File:** `packages/core/src/workspace/workspace-logger.test.ts`
+**Status:** ✅ **COMPLETE** (20+ tests)
+
+| Test | Unit | Integration | Status |
+|------|:----:|:-----------:|--------|
+| Workspace.__setLogger propagates to filesystem | ✅ | - | Pass |
+| Workspace.__setLogger propagates to sandbox | ✅ | - | Pass |
+| Workspace.__setLogger propagates to both | ✅ | - | Pass |
+| MastraSandbox propagates to MountManager | ✅ | - | Pass |
+| Mastra -> Workspace -> Providers chain | - | ✅ | Pass |
+| Mastra -> Agent -> Workspace chain | - | ✅ | Pass |
+| Agent workspace factory receives logger | - | ✅ | Pass (documented limitation) |
+| setLogger after construction re-propagates | - | ✅ | Pass |
+
+---
+
+## Part 2: Filesystem Conformance Tests
+
+### LocalFilesystem (Reference Implementation)
+
+**File:** `packages/core/src/workspace/filesystem/local-filesystem.test.ts`
+**Status:** ✅ **COMPLETE** (50+ tests)
+
+| Test Category | Tests | Status |
+|---------------|-------|--------|
+| Constructor | 2 | ✅ Pass |
+| init | 1 | ✅ Pass |
+| readFile | 5 | ✅ Pass |
+| writeFile | 5 | ✅ Pass |
+| appendFile | 2 | ✅ Pass |
+| deleteFile | 4 | ✅ Pass |
+| copyFile | 5 | ✅ Pass |
+| moveFile | 3 | ✅ Pass |
+| mkdir | 4 | ✅ Pass |
+| rmdir | 6 | ✅ Pass |
+| readdir | 6 | ✅ Pass |
+| exists | 3 | ✅ Pass |
+| stat | 3 | ✅ Pass |
+| Contained Mode | 4 | ✅ Pass |
+| MIME Type Detection | 10 | ✅ Pass |
+
+### Shared Filesystem Test Suite
+
+**Status:** ❌ **NOT IMPLEMENTED**
+
+The Notion plan specifies reusable conformance tests that should pass for ANY WorkspaceFilesystem implementation. This would include:
+
+- Required Interface tests (id, name, provider)
+- File Operations tests (writeFile, readFile roundtrip)
+- Directory Operations tests (mkdir, readdir)
+- File Metadata tests (stat, exists)
+- Delete Operations tests (remove)
+- Copy Operations tests (copy)
+- Read-Only Mode tests
+- Optional Mounting Support tests
+- Optional getInfo() tests
+
+**TODO:** Create `workspaces/_test-utils/createFilesystemTestSuite()` factory function.
+
+---
+
+## Part 3: Sandbox Conformance Tests
+
+### LocalSandbox (Reference Implementation)
+
+**File:** `packages/core/src/workspace/sandbox/local-sandbox.test.ts`
+**Status:** ✅ **COMPLETE** (45+ tests)
+
+| Test Category | Tests | Status |
+|---------------|-------|--------|
+| Constructor | 3 | ✅ Pass |
+| Lifecycle | 4 | ✅ Pass |
+| getInfo | 1 | ✅ Pass |
+| executeCommand | 6 | ✅ Pass |
+| Timeout Handling | 1 | ✅ Pass |
+| Working Directory | 2 | ✅ Pass |
+| Environment Variables | 5 | ✅ Pass |
+| Native Sandboxing - Detection | 5 | ✅ Pass |
+| Native Sandboxing - Configuration | 4 | ✅ Pass |
+| Seatbelt Isolation (macOS) | 8 | ✅ Pass |
+| Bwrap Isolation (Linux) | 4 | ✅ Pass |
+
+### Shared Sandbox Test Suite
+
+**Status:** ❌ **NOT IMPLEMENTED**
+
+The Notion plan specifies reusable conformance tests that should pass for ANY WorkspaceSandbox implementation. This would include:
+
+- Required Interface tests (id, name, provider, status)
+- Lifecycle tests (start, stop)
+- Command Execution tests
+- Optional Mounting tests
+
+**TODO:** Create `workspaces/_test-utils/createSandboxTestSuite()` factory function.
+
+---
+
+## Part 4: S3 Filesystem Tests (`@mastra/s3`)
+
+### Unit Tests
+
+**File:** `workspaces/s3/src/filesystem/index.test.ts`
+**Status:** ✅ **COMPLETE** (35 tests)
+
+| Test Category | Tests | Status |
+|---------------|-------|--------|
+| Constructor & Options | 6 | ✅ Pass |
+| Icon Detection | 6 | ✅ Pass |
+| Display Name | 4 | ✅ Pass |
+| getMountConfig() | 6 | ✅ Pass |
+| getInfo() | 5 | ✅ Pass |
+| getInstructions() | 3 | ✅ Pass |
+| S3 Client Configuration | 3 | ✅ Pass |
+| Path Handling | 2 | ✅ Pass |
+| Prefix Handling | 3 | ✅ Pass |
+
+### Integration Tests
+
+**File:** `workspaces/s3/src/filesystem/index.integration.test.ts`
+**Status:** ✅ **EXISTS** (needs coverage review)
+
+| Test | Status |
+|------|--------|
+| Read/write roundtrip | ✅ |
+| Create parent directories | ✅ |
+| Directory operations | ✅ |
+| Delete operations | ✅ |
+
+---
+
+## Part 5: GCS Filesystem Tests (`@mastra/gcs`)
+
+### Unit Tests
+
+**File:** `workspaces/gcs/src/filesystem/index.test.ts`
+**Status:** ✅ **COMPLETE** (28 tests)
+
+| Test Category | Tests | Status |
+|---------------|-------|--------|
+| Constructor & Options | 8 | ✅ Pass |
+| Icon and Display Name | 4 | ✅ Pass |
+| getMountConfig() | 4 | ✅ Pass |
+| getInfo() | 1 | ✅ Pass |
+| getInstructions() | 3 | ✅ Pass |
+| Prefix Handling | 2 | ✅ Pass |
+
+### Integration Tests
+
+**File:** `workspaces/gcs/src/filesystem/index.integration.test.ts`
+**Status:** ✅ **EXISTS** (needs coverage review)
+
+---
+
+## Part 6: E2B Sandbox Tests (`@mastra/e2b`)
 
 ### Constructor & Options
 
@@ -203,9 +405,10 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 
 | Test | Unit | Integration | Status |
 |------|:----:|:-----------:|--------|
-| installs s3fs if not present | ❌ | ❌ | **Missing** |
-| installs gcsfuse if not present | ❌ | ❌ | **Missing** |
-| gives helpful error if installation fails | ❌ | ❌ | **Missing** |
+| installs s3fs if not present | ✅ | - | Pass |
+| installs gcsfuse if not present | ✅ | - | Pass |
+| skips installation if already present | ✅ | - | Pass |
+| gives helpful error if s3fs installation fails | ✅ | - | Pass |
 
 ### Stop/Destroy
 
@@ -226,7 +429,7 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 
 ---
 
-## Part 7: Integration Tests - Coverage Matrix
+## Part 7: Integration Tests
 
 ### E2B + S3 Full Workflow
 
@@ -248,26 +451,32 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 
 ### Current Test Status
 
-| Test Type | Total | Passing | Failing | Skipped |
-|-----------|-------|---------|---------|---------|
-| Unit Tests | 49 | 49 | 0 | 0 |
-| Integration Tests | 27 | 27 | 0 | 0 |
-| **Total** | **76** | **76** | **0** | **0** |
+| Section | Total Tests | Passing | Missing |
+|---------|-------------|---------|---------|
+| Part 1: Core Package (MountManager) | 35 | 35 | 0 |
+| Part 1: Core Package (MastraSandbox) | 9 | 9 | 0 |
+| Part 1: Core Package (MastraFilesystem) | 8 | 8 | 0 |
+| Part 1: Logger Propagation Chain | 20+ | 20+ | 0 |
+| Part 2: LocalFilesystem | 50+ | 50+ | 0 |
+| Part 2: Shared Filesystem Suite | N/A | N/A | **Not Implemented** |
+| Part 3: LocalSandbox | 45+ | 45+ | 0 |
+| Part 3: Shared Sandbox Suite | N/A | N/A | **Not Implemented** |
+| Part 4: S3 Unit Tests | 35 | 35 | 0 |
+| Part 4: S3 Integration Tests | ~10 | ~10 | 0 |
+| Part 5: GCS Unit Tests | 28 | 28 | 0 |
+| Part 5: GCS Integration Tests | ~8 | ~8 | 0 |
+| Part 6: E2B Unit Tests | 54 | 54 | 0 |
+| Part 6: E2B Integration Tests | 27 | 27 | 0 |
+| Part 6: Runtime Installation | 5 | 5 | 0 |
 
-### E2B Integration Tests Breakdown
+### Missing Tests Summary
 
-| Category | Tests | Status |
-|----------|-------|--------|
-| Basic E2B | 2 | ✅ All passing |
-| S3 Mount | 5 | ✅ All passing |
-| GCS Mount | 2 | ✅ All passing |
-| Mount Safety | 3 | ✅ All passing |
-| Mount Reconciliation | 3 | ✅ All passing |
-| Marker Files | 3 | ✅ All passing |
-| Existing Mount Detection | 2 | ✅ All passing |
-| Full Workflow | 3 | ✅ All passing |
-| Stop/Destroy | 1 | ✅ All passing |
-| Environment Variables | 2 | ✅ All passing |
+| Priority | Section | Missing Tests |
+|----------|---------|---------------|
+| Low | Shared Filesystem Suite | Factory pattern (not tests) |
+| Low | Shared Sandbox Suite | Factory pattern (not tests) |
+
+**Note:** All concrete tests are now implemented. The shared test suite factory patterns are optional infrastructure improvements for reducing duplication across providers.
 
 ---
 
@@ -317,44 +526,23 @@ Also added `TEST_GCS_BUCKET` to skipIf condition.
 
 ---
 
-## Missing Tests - Priority Order
-
-### ✅ Implemented (High Priority)
-
-1. ~~**stop() unmounts all filesystems**~~ - ✅ Unit + Integration
-2. ~~**S3 endpoint mount options**~~ - ✅ Unit test
-3. ~~**Full workflow test**~~ - ✅ Integration test
-4. ~~**runs reconcileMounts on reconnect**~~ - ✅ Unit test
-5. ~~**env changes reflected without restart**~~ - ✅ Integration test
-6. ~~**start() clears _startPromise**~~ - ✅ Unit test
-7. ~~**rebuilds template on 404 error**~~ - ✅ Unit test
-8. ~~**custom template builder is built**~~ - ✅ Unit test
-9. ~~**template function customizes base template**~~ - ✅ Unit test
-
-### Still Missing (Lower Priority - Installation)
-
-1. **installs s3fs if not present** - Runtime installation verification
-2. **installs gcsfuse if not present** - Runtime installation verification
-3. **helpful error if installation fails** - Error UX verification
-
-These are lower priority because:
-- The installation logic is simple (apt-get install)
-- It's tested implicitly by integration tests (they fail if install doesn't work)
-- Adding explicit tests would require sandboxes without s3fs/gcsfuse pre-installed
-
----
-
 ## Running Tests
 
 ```bash
-# Unit tests only (fast, no credentials needed)
-pnpm test src/sandbox/index.test.ts
+# Core package tests
+cd packages/core && pnpm test
 
-# Integration tests (needs credentials in .env)
-pnpm test src/sandbox/index.integration.test.ts
+# E2B tests (unit only, fast)
+cd workspaces/e2b && pnpm test src/sandbox/index.test.ts
 
-# All tests
-pnpm test
+# E2B tests (integration, needs E2B_API_KEY)
+cd workspaces/e2b && pnpm test src/sandbox/index.integration.test.ts
+
+# S3 tests
+cd workspaces/s3 && pnpm test
+
+# GCS tests
+cd workspaces/gcs && pnpm test
 ```
 
 ---
