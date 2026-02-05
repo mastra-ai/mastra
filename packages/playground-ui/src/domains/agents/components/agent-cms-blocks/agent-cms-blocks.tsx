@@ -31,8 +31,8 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
   return (
     <div className={cn('flex flex-col gap-4 w-full h-full overflow-y-auto', className)}>
       {items.length > 0 && (
-        <div className="rounded-md border border-border1 overflow-y-auto h-full">
-          <ContentBlocks items={items} onChange={onChange} className="flex flex-col w-full h-full">
+        <div className="overflow-y-auto h-full">
+          <ContentBlocks items={items} onChange={onChange} className="flex flex-col gap-4 w-full">
             {items.map((block, index) => (
               <AgentCMSBlock
                 key={block.id}

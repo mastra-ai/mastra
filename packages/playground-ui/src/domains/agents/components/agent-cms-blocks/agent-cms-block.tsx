@@ -1,4 +1,5 @@
-import { GripVertical, Ruler, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronRight, GripVertical, Ruler, Trash2 } from 'lucide-react';
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 
 import { ContentBlock } from '@/ds/components/ContentBlocks';
@@ -6,7 +7,7 @@ import type { JsonSchema, Rule } from '@/lib/rule-engine';
 import { RuleBuilder } from '@/lib/rule-engine';
 import { IconButton } from '@/ds/components/IconButton';
 import { Icon } from '@/ds/icons';
-import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { cn } from '@/lib/utils';
 import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
@@ -39,6 +40,12 @@ const AgentCMSBlockContent = ({
   onDelete,
   schema,
 }: AgentCMSBlockContentProps) => {
+  const hasVariablesSet = Object.keys(schema?.properties ?? {}).length > 0;
+  const showRulesSection = schema && hasVariablesSet;
+  const ruleCount = block.rules.length;
+
+  const [isRulesOpen, setIsRulesOpen] = useState(ruleCount > 0);
+
   const handleContentChange = (content: string) => {
     onBlockChange({ ...block, content });
   };
@@ -47,39 +54,19 @@ const AgentCMSBlockContent = ({
     onBlockChange({ ...block, rules });
   };
 
-  const hasVariablesSet = Object.keys(schema?.properties ?? {}).length > 0;
-
   return (
-    <div className="h-full min-h-[300px] grid grid-rows-[auto_1fr]">
-      {/* Drag handle - always visible, top-left */}
-
+    <div className="h-full min-h-[300px] grid grid-rows-[auto_1fr_auto]">
+      {/* Top bar with drag handle and delete button */}
       <div className="bg-surface2 px-2 py-1 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Icon>
-                  <GripVertical />
-                </Icon>
-              </TooltipTrigger>
-              <TooltipContent>Drag to reorder</TooltipContent>
-            </Tooltip>
-          </div>
-
-          {/* Action bar - hover-visible, top-right */}
-
-          {schema && hasVariablesSet ? (
-            <Popover>
-              <PopoverTrigger asChild>
-                <IconButton variant="ghost" size="sm" tooltip="Display conditions">
-                  <Ruler />
-                </IconButton>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-96 p-0">
-                <RuleBuilder schema={schema} rules={block.rules} onChange={handleRulesChange} />
-              </PopoverContent>
-            </Popover>
-          ) : null}
+        <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Icon>
+                <GripVertical />
+              </Icon>
+            </TooltipTrigger>
+            <TooltipContent>Drag to reorder</TooltipContent>
+          </Tooltip>
         </div>
 
         {onDelete && (
@@ -89,17 +76,46 @@ const AgentCMSBlockContent = ({
         )}
       </div>
 
-      {/* CodeEditor - add top padding for action bar space */}
-      <CodeEditor
-        value={block.content}
-        onChange={handleContentChange}
-        placeholder={placeholder}
-        className="border-none rounded-none text-neutral6 h-full bg-surface2"
-        language="markdown"
-        highlightVariables
-        showCopyButton={false}
-        schema={schema}
-      />
+      <div className="h-full grid grid-rows-[1fr_auto]">
+        {/* CodeEditor */}
+        <CodeEditor
+          value={block.content}
+          onChange={handleContentChange}
+          placeholder={placeholder}
+          className="border-none rounded-none text-neutral6 h-full bg-surface2"
+          language="markdown"
+          highlightVariables
+          showCopyButton={false}
+          schema={schema}
+        />
+
+        {/* Rules disclosure section */}
+        {showRulesSection && (
+          <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-t border-border1 bg-surface2">
+            <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2">
+              <Icon>
+                <ChevronRight
+                  className={cn('text-icon3 transition-transform', {
+                    'rotate-90': isRulesOpen,
+                  })}
+                />
+              </Icon>
+              <Icon>
+                <Ruler className="text-accent6" />
+              </Icon>
+              <span className="text-neutral5 text-ui-sm">Display Conditions</span>
+              {ruleCount > 0 && (
+                <span className="text-neutral3 text-ui-sm">
+                  ({ruleCount} {ruleCount === 1 ? 'rule' : 'rules'})
+                </span>
+              )}
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <RuleBuilder schema={schema} rules={block.rules} onChange={handleRulesChange} />
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+      </div>
     </div>
   );
 };
@@ -117,7 +133,7 @@ export const AgentCMSBlock = ({
     <ContentBlock
       index={index}
       draggableId={block.id}
-      className={cn(index > 0 && 'border-t border-dashed border-border1', 'h-full', className)}
+      className={cn('h-full rounded-md border border-border1 overflow-hidden', className)}
     >
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
         <AgentCMSBlockContent
