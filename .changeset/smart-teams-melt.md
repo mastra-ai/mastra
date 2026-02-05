@@ -2,19 +2,28 @@
 '@mastra/langsmith': minor
 ---
 
-Added vendor metadata support to LangSmith exporter. You can now dynamically route traces to different LangSmith projects and set session/tag metadata per-span using `withLangsmithMetadata`:
+Added `withLangsmithMetadata` helper for dynamic LangSmith configuration per-span.
 
+**Why:** Previously, `projectName` could only be set globally in the exporter config. Users needed to dynamically route traces to different LangSmith projects based on runtime conditions (e.g., customer tier, environment).
+
+**Before:**
+```typescript
+const tracingOptions = buildTracingOptions();
+// No way to override projectName per-span
+```
+
+**After:**
 ```typescript
 import { buildTracingOptions } from '@mastra/observability';
 import { withLangsmithMetadata } from '@mastra/langsmith';
 
 const tracingOptions = buildTracingOptions(
   withLangsmithMetadata({
-    projectName: 'my-project',
+    projectName: 'enterprise-traces',
     tags: ['production'],
     sessionId: 'user-123',
   }),
 );
 ```
 
-This follows the same pattern as the Langfuse exporter's `withLangfusePrompt` helper.
+Follows the same pattern as `withLangfusePrompt` in the Langfuse exporter.
