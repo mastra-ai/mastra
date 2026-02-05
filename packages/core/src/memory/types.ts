@@ -858,7 +858,7 @@ export type SharedMemoryConfig = {
    * embedder: openai.embedding("text-embedding-3-small")
    * ```
    */
-  embedder?: EmbeddingModelId | MastraEmbeddingModel<string>;
+  embedder?: EmbeddingModelId | MastraEmbeddingModel<string> | string;
 
   /**
    * Options to pass to the embedder when generating embeddings.
@@ -951,8 +951,9 @@ export type SerializedMemoryConfig = {
   /**
    * Embedding model ID in the format "provider/model"
    * (e.g., "openai/text-embedding-3-small")
+   * Can be a predefined EmbeddingModelId or a custom string
    */
-  embedder?: EmbeddingModelId;
+  embedder?: EmbeddingModelId | string;
 
   /**
    * Options to pass to the embedder, omitting telemetry

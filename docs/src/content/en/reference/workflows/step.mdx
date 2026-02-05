@@ -145,6 +145,12 @@ const agentStep = createStep(testAgent, {
       description: "Async function containing step logic",
       required: true,
     },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "Optional key-value pairs for storing additional step information. Values must be serializable (no functions, circular references, etc.).",
+      required: false,
+    },
   ]}
 />
 

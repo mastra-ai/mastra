@@ -26,7 +26,7 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
 }) => {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={cn('min-w-[140px] text-neutral6', className)} size="sm">
+      <SelectTrigger className={cn('min-w-[140px] text-neutral6 bg-surface4', className)} size="sm">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

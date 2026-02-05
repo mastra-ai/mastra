@@ -28,7 +28,7 @@
     "changeset": "pnpm --filter @internal/changeset-cli start",
     "changeset-cli": "changeset",
     "ci:publish": "pnpm publish -r",
-    "build": "pnpm turbo build --filter \"!./examples/*\" --filter \"!./examples/**/*\" --filter \"!./docs/\"",
+    "build": "pnpm turbo build --filter \"!./examples/*\" --filter \"!./examples/**/*\"",
     "build:server-adapters": "pnpm turbo build --filter \"./server-adapters/*\"",
     "build:integrations": "pnpm turbo build --filter \"./integrations/*\"",
     "build:packages": "pnpm turbo build --filter \"./packages/*\"",
@@ -51,7 +51,6 @@
     "build:observability": "pnpm turbo build --filter \"./observability/*\"",
     "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground --filter ./client-sdks/react",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
-    "generate:docs": "pnpx tsx ./scripts/generate-package-docs.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:watch:combined-stores": "pnpm --filter \"./stores/*\" test:watch",
@@ -98,7 +97,7 @@
   "resolutions": {
     "typescript": "^5.9.3",
     "@types/node": "22.19.7",
-    "cookie": ">=0.7.2",
+    "cookie": ">=1.1.1",
     "tmp": ">=0.2.5",
     "jsondiffpatch": ">=0.7.3",
     "ssri": ">=6.0.2",
@@ -113,7 +112,7 @@
     }
   },
   "license": "Apache-2.0",
-  "packageManager": "pnpm@10.18.2",
+  "packageManager": "pnpm@10.27.0",
   "dependencies": {
     "globby": "^14.1.0",
     "node-forge": "1.3.2",
