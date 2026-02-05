@@ -1407,3 +1407,18 @@ export class MastraClientError extends Error {
     this.body = body;
   }
 }
+
+// ============================================
+// Dataset Types
+// ============================================
+
+export interface DatasetItem {
+  id: string;
+  datasetId: string;
+  version: string | Date;
+  input: unknown;
+  expectedOutput?: unknown;
+  context?: unknown;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
