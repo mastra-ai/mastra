@@ -501,9 +501,9 @@ export class AIV4Adapter {
 
     const rawCreatedAt =
       'metadata' in coreMessage &&
-        coreMessage.metadata &&
-        typeof coreMessage.metadata === 'object' &&
-        'createdAt' in coreMessage.metadata
+      coreMessage.metadata &&
+      typeof coreMessage.metadata === 'object' &&
+      'createdAt' in coreMessage.metadata
         ? coreMessage.metadata.createdAt
         : undefined;
 
