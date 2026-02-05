@@ -17,7 +17,7 @@ importers:
   .:
     devDependencies:
       '@hono/otel':
-        specifier: ^1.0.1
+        specifier: ^1.1.0
         version: 1.1.0(hono@4.11.4)
       '@types/node':
         specifier: ^20.19.30
@@ -41,8 +41,8 @@ importers:
   instrumentation:
     dependencies:
       '@arizeai/openinference-genai':
-        specifier: ^0.1.5
-        version: 0.1.5(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.38.0)
+        specifier: ^0.1.6
+        version: 0.1.6(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.38.0)
       '@arizeai/openinference-semantic-conventions':
         specifier: ^2.1.7
         version: 2.1.7
@@ -53,7 +53,7 @@ importers:
         specifier: 3.0.0
         version: 3.0.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))
       '@hono/otel':
-        specifier: ^1.0.1
+        specifier: ^1.1.0
         version: 1.1.0(hono@4.11.4)
       '@opentelemetry/api':
         specifier: ^1.9.0
@@ -117,10 +117,10 @@ importers:
   service-mastra:
     dependencies:
       '@hono/node-server':
-        specifier: ^1.15.1
-        version: 1.19.7(hono@4.11.4)
+        specifier: ^1.19.9
+        version: 1.19.9(hono@4.11.4)
       '@hono/otel':
-        specifier: ^1.0.1
+        specifier: ^1.1.0
         version: 1.1.0(hono@4.11.4)
       '@hono/swagger-ui':
         specifier: ^0.5.2
@@ -178,10 +178,10 @@ importers:
   service-one:
     dependencies:
       '@hono/node-server':
-        specifier: ^1.19.5
-        version: 1.19.7(hono@4.11.4)
+        specifier: ^1.19.9
+        version: 1.19.9(hono@4.11.4)
       '@hono/otel':
-        specifier: ^1.0.1
+        specifier: ^1.1.0
         version: 1.1.0(hono@4.11.4)
       '@mastra/hono-multi-instrumentation':
         specifier: workspace:*
@@ -212,10 +212,10 @@ importers:
   service-two:
     dependencies:
       '@hono/node-server':
-        specifier: ^1.19.5
-        version: 1.19.7(hono@4.11.4)
+        specifier: ^1.19.9
+        version: 1.19.9(hono@4.11.4)
       '@hono/otel':
-        specifier: ^1.0.1
+        specifier: ^1.1.0
         version: 1.1.0(hono@4.11.4)
       '@mastra/hono-multi-instrumentation':
         specifier: workspace:*
@@ -245,8 +245,8 @@ importers:
 
 packages:
 
-  '@arizeai/openinference-genai@0.1.5':
-    resolution: {integrity: sha512-tGh/eohqme1k5IGhLjqwl2QIDZb1S/7eM8i65V0omXQelnddx3zpyrspHwmhzX4YR6AT5utX0R1ehs854IzW4Q==}
+  '@arizeai/openinference-genai@0.1.6':
+    resolution: {integrity: sha512-SYXKe/wKS5rrXfq2nrxvNqy3qtJzZeIp3AWAMWzmkKqd5e0R/jAquuAawhIY8Jxof0jhuhYm/QBsE+tqEg8fkg==}
     peerDependencies:
       '@opentelemetry/api': '>=1.9.0'
       '@opentelemetry/semantic-conventions': '>=1.37.0'
@@ -581,8 +581,8 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@hono/node-server@1.19.7':
-    resolution: {integrity: sha512-vUcD0uauS7EU2caukW8z5lJKtoGMokxNbJtBiwHgpqxEXokaHCBkQUmCHhjFB1VUTWdqj25QoMkMKzgjq+uhrw==}
+  '@hono/node-server@1.19.9':
+    resolution: {integrity: sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -1726,7 +1726,7 @@ packages:
 
 snapshots:
 
-  '@arizeai/openinference-genai@0.1.5(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.38.0)':
+  '@arizeai/openinference-genai@0.1.6(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.38.0)':
     dependencies:
       '@arizeai/openinference-semantic-conventions': 2.1.7
       '@opentelemetry/api': 1.9.0
@@ -1927,7 +1927,7 @@ snapshots:
       protobufjs: 7.5.4
       yargs: 17.7.2
 
-  '@hono/node-server@1.19.7(hono@4.11.4)':
+  '@hono/node-server@1.19.9(hono@4.11.4)':
     dependencies:
       hono: 4.11.4
 
