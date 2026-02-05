@@ -162,8 +162,8 @@ export const supportAgent = new Agent({
     return {
       tracingOptions: buildTracingOptions(
         withLangsmithMetadata({
-          projectName: userTier === "entreprise"
-            ? "entreprise-traces"
+          projectName: userTier === "enterprise"
+            ? "enterprise-traces"
             : "standard-traces",
           tags: [userTier],
           sessionId: userId,
