@@ -34,11 +34,15 @@ export function InstructionsPreviewDialog({
   }, [open, defaultValues]);
 
   const { compiledInstructions, parseError } = useMemo(() => {
+    if (!open) return { compiledInstructions: '', parseError: null };
+
     try {
       const variables = JSON.parse(variablesJson || '{}') as Record<string, unknown>;
 
       // Filter blocks by eligibility based on their rules
-      const eligibleBlocks = blocks.filter(block => isEligible(block.rules, variables));
+      const eligibleBlocks = blocks.filter(block =>
+        block.rules.length > 0 ? isEligible(block.rules, variables) : true,
+      );
 
       // Join eligible block contents
       const joinedInstructions = eligibleBlocks.map(b => b.content).join('\n\n');
@@ -54,7 +58,7 @@ export function InstructionsPreviewDialog({
         parseError: 'Invalid JSON',
       };
     }
-  }, [blocks, variablesJson]);
+  }, [blocks, variablesJson, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
