@@ -24,7 +24,7 @@
     "posttest": "docker compose down",
     "lint": "eslint .",
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/upstash",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts"
   },
   "license": "Apache-2.0",

@@ -230,7 +230,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'deployer/cloudflare', label: 'Cloudflare' },
-        { type: 'doc', id: 'deployer/deployer', label: 'Deployer' },
+        { type: 'doc', id: 'deployer/index', label: 'Deployer' },
         { type: 'doc', id: 'deployer/netlify', label: 'Netlify' },
         { type: 'doc', id: 'deployer/vercel', label: 'Vercel' },
       ],
@@ -312,6 +312,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'memory/memory-class', label: 'Memory Class' },
+        { type: 'doc', id: 'memory/observational-memory', label: 'Observational Memory' },
         { type: 'doc', id: 'memory/createThread', label: '.createThread()' },
         {
           type: 'doc',

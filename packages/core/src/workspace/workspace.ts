@@ -30,11 +30,14 @@
  * ```
  */
 
+import type { IMastraLogger } from '../logger';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
 import type { WorkspaceFilesystem } from './filesystem';
+import { MastraFilesystem } from './filesystem/mastra-filesystem';
 import type { WorkspaceSandbox } from './sandbox';
+import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
 import type { WorkspaceSkills, SkillsResolver } from './skills';
@@ -60,12 +63,14 @@ export interface WorkspaceConfig {
   /**
    * Filesystem provider instance.
    * Use LocalFilesystem for a folder on disk, or AgentFS for Turso-backed storage.
+   * Extend MastraFilesystem for automatic logger integration.
    */
   filesystem?: WorkspaceFilesystem;
 
   /**
    * Sandbox provider instance.
    * Use ComputeSDKSandbox to access E2B, Modal, Docker, etc.
+   * Extend MastraSandbox for automatic logger integration.
    */
   sandbox?: WorkspaceSandbox;
 
@@ -90,6 +95,19 @@ export interface WorkspaceConfig {
    * Pass true for defaults, or a BM25Config object for custom parameters.
    */
   bm25?: boolean | BM25Config;
+
+  /**
+   * Custom index name for the vector store.
+   * If not provided, defaults to a sanitized version of `${id}_search`.
+   *
+   * Must be a valid SQL identifier for SQL-based stores (PgVector, LibSQL):
+   * - Start with a letter or underscore
+   * - Contain only letters, numbers, or underscores
+   * - Maximum 63 characters
+   *
+   * @example 'my_workspace_vectors'
+   */
+  searchIndexName?: string;
 
   /**
    * Paths to auto-index on init().
@@ -275,6 +293,29 @@ export class Workspace {
 
     // Create search engine if search is configured
     if (config.bm25 || (config.vectorStore && config.embedder)) {
+      const buildIndexName = (): string => {
+        // Sanitize default name: replace all non-alphanumeric chars with underscores
+        const defaultName = `${this.id}_search`.replace(/[^a-zA-Z0-9_]/g, '_');
+        const indexName = config.searchIndexName ?? defaultName;
+
+        // Validate SQL identifier format
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(indexName)) {
+          throw new WorkspaceError(
+            `Invalid searchIndexName: "${indexName}". Must start with a letter or underscore, and contain only letters, numbers, or underscores.`,
+            'INVALID_SEARCH_CONFIG',
+            this.id,
+          );
+        }
+        if (indexName.length > 63) {
+          throw new WorkspaceError(
+            `searchIndexName exceeds 63 characters (got ${indexName.length})`,
+            'INVALID_SEARCH_CONFIG',
+            this.id,
+          );
+        }
+        return indexName;
+      };
+
       this._searchEngine = new SearchEngine({
         bm25: config.bm25
           ? {
@@ -286,7 +327,7 @@ export class Workspace {
             ? {
                 vectorStore: config.vectorStore,
                 embedder: config.embedder,
-                indexName: `${this.id}-search`,
+                indexName: buildIndexName(),
               }
             : undefined,
       });
@@ -633,5 +674,26 @@ export class Workspace {
         : undefined,
       instructions,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Logger Integration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Set the logger for this workspace and propagate to providers.
+   * Called by Mastra when the logger is set.
+   * @internal
+   */
+  __setLogger(logger: IMastraLogger): void {
+    // Propagate logger to filesystem provider if it extends MastraFilesystem
+    if (this._fs instanceof MastraFilesystem) {
+      this._fs.__setLogger(logger);
+    }
+
+    // Propagate logger to sandbox provider if it extends MastraSandbox
+    if (this._sandbox instanceof MastraSandbox) {
+      this._sandbox.__setLogger(logger);
+    }
   }
 }

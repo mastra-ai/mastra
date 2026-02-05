@@ -5,7 +5,7 @@ import { StudioConfig } from '../types';
 import { Link2 } from 'lucide-react';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { InputField } from '@/ds/components/FormFields';
 
 export interface StudioConfigFormProps {

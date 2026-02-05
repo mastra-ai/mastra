@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -12,12 +14,24 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
+
+/**
+ * Local constant for the observational memory table name.
+ * Defined locally to avoid a static import that crashes on older @mastra/core
+ * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
+ */
+const OM_TABLE = 'mastra_observational_memory' as const;
 import type {
   StorageResourceType,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  ObservationalMemoryRecord,
+  CreateObservationalMemoryInput,
+  UpdateActiveObservationsInput,
+  CreateReflectionGenerationInput,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -25,12 +39,14 @@ import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { formatDateForMongoDB } from '../utils';
 
 export class MemoryStorageMongoDB extends MemoryStorage {
+  readonly supportsObservationalMemory = true;
+
   #connector: MongoDBConnector;
   #skipDefaultIndexes?: boolean;
   #indexes?: MongoDBIndexConfig[];
 
   /** Collections managed by this domain */
-  static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
+  static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, OM_TABLE] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
@@ -71,6 +87,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       { collection: TABLE_RESOURCES, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_RESOURCES, keys: { createdAt: -1 } },
       { collection: TABLE_RESOURCES, keys: { updatedAt: -1 } },
+      // Observational Memory collection indexes
+      { collection: OM_TABLE, keys: { id: 1 }, options: { unique: true } },
+      { collection: OM_TABLE, keys: { lookupKey: 1 } },
+      { collection: OM_TABLE, keys: { lookupKey: 1, generationCount: -1 } },
     ];
   }
 
@@ -366,6 +386,158 @@ export class MemoryStorageMongoDB extends MemoryStorage {
             threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  public async listMessagesByResourceId(
+    args: StorageListMessagesByResourceIdInput,
+  ): Promise<StorageListMessagesOutput> {
+    const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+
+    if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resourceId: resourceId ?? '' },
+        },
+        new Error('resourceId is required'),
+      );
+    }
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      // Determine sort field and direction
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+      const sortOrder = direction === 'ASC' ? 1 : -1;
+
+      const collection = await this.getCollection(TABLE_MESSAGES);
+
+      // Build query conditions
+      const query: any = {};
+
+      // Add resourceId filter (required for listMessagesByResourceId)
+      query.resourceId = resourceId;
+
+      if (filter?.dateRange?.start) {
+        const startOp = filter.dateRange.startExclusive ? '$gt' : '$gte';
+        query.createdAt = { ...query.createdAt, [startOp]: formatDateForMongoDB(filter.dateRange.start) };
+      }
+
+      if (filter?.dateRange?.end) {
+        const endOp = filter.dateRange.endExclusive ? '$lt' : '$lte';
+        query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
+      }
+
+      // Get total count
+      const total = await collection.countDocuments(query);
+
+      const messages: any[] = [];
+
+      // Step 1: Get paginated messages
+      if (perPage !== 0) {
+        const sortObj: any = { [field]: sortOrder };
+        let cursor = collection.find(query).sort(sortObj).skip(offset);
+
+        // Only apply limit if not unlimited
+        // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+        if (perPageInput !== false) {
+          cursor = cursor.limit(perPage);
+        }
+
+        const dataResult = await cursor.toArray();
+        messages.push(...dataResult.map((row: any) => this.parseRow(row)));
+      }
+
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(messages.map(m => m.id));
+      if (include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (includeMessages) {
+          // Deduplicate: only add messages that aren't already in the paginated results
+          for (const includeMsg of includeMessages) {
+            if (!messageIds.has(includeMsg.id)) {
+              messages.push(includeMsg);
+              messageIds.add(includeMsg.id);
+            }
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(messages, 'memory');
+      let finalMessages = list.get.all.db();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        // Fallback to string comparison for non-numeric fields
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
+      });
+
+      // Calculate hasMore based on pagination window
+      const hasMore = perPageInput !== false && offset + perPage < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
         },
         error,
       );
@@ -927,6 +1099,389 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
+        },
+        error,
+      );
+    }
+  }
+
+  // ============================================
+  // Observational Memory Methods
+  // ============================================
+
+  private getOMKey(threadId: string | null, resourceId: string): string {
+    return threadId ? `thread:${threadId}` : `resource:${resourceId}`;
+  }
+
+  private parseOMDocument(doc: any): ObservationalMemoryRecord {
+    return {
+      id: doc.id,
+      scope: doc.scope,
+      threadId: doc.threadId || null,
+      resourceId: doc.resourceId,
+      createdAt: doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt),
+      updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt : new Date(doc.updatedAt),
+      lastObservedAt: doc.lastObservedAt
+        ? doc.lastObservedAt instanceof Date
+          ? doc.lastObservedAt
+          : new Date(doc.lastObservedAt)
+        : undefined,
+      originType: doc.originType || 'initial',
+      generationCount: Number(doc.generationCount || 0),
+      activeObservations: doc.activeObservations || '',
+      bufferedObservations: doc.activeObservationsPendingUpdate || undefined,
+      totalTokensObserved: Number(doc.totalTokensObserved || 0),
+      observationTokenCount: Number(doc.observationTokenCount || 0),
+      pendingMessageTokens: Number(doc.pendingMessageTokens || 0),
+      isReflecting: Boolean(doc.isReflecting),
+      isObserving: Boolean(doc.isObserving),
+      config: doc.config || {},
+      metadata: doc.metadata || undefined,
+      observedMessageIds: doc.observedMessageIds || undefined,
+      observedTimezone: doc.observedTimezone || undefined,
+    };
+  }
+
+  async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      const collection = await this.getCollection(OM_TABLE);
+      const doc = await collection.findOne({ lookupKey }, { sort: { generationCount: -1 } });
+      if (!doc) return null;
+      return this.parseOMDocument(doc);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getObservationalMemoryHistory(
+    threadId: string | null,
+    resourceId: string,
+    limit: number = 10,
+  ): Promise<ObservationalMemoryRecord[]> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      const collection = await this.getCollection(OM_TABLE);
+      const docs = await collection.find({ lookupKey }).sort({ generationCount: -1 }).limit(limit).toArray();
+      return docs.map((doc: any) => this.parseOMDocument(doc));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'GET_OBSERVATIONAL_MEMORY_HISTORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId, limit },
+        },
+        error,
+      );
+    }
+  }
+
+  async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
+    try {
+      const id = randomUUID();
+      const now = new Date();
+      const lookupKey = this.getOMKey(input.threadId, input.resourceId);
+
+      const record: ObservationalMemoryRecord = {
+        id,
+        scope: input.scope,
+        threadId: input.threadId,
+        resourceId: input.resourceId,
+        createdAt: now,
+        updatedAt: now,
+        lastObservedAt: undefined,
+        originType: 'initial',
+        generationCount: 0,
+        activeObservations: '',
+        totalTokensObserved: 0,
+        observationTokenCount: 0,
+        pendingMessageTokens: 0,
+        isReflecting: false,
+        isObserving: false,
+        config: input.config,
+        observedTimezone: input.observedTimezone,
+      };
+
+      const collection = await this.getCollection(OM_TABLE);
+      await collection.insertOne({
+        id,
+        lookupKey,
+        scope: input.scope,
+        resourceId: input.resourceId,
+        threadId: input.threadId || null,
+        activeObservations: '',
+        activeObservationsPendingUpdate: null,
+        originType: 'initial',
+        config: input.config,
+        generationCount: 0,
+        lastObservedAt: null,
+        lastReflectionAt: null,
+        pendingMessageTokens: 0,
+        totalTokensObserved: 0,
+        observationTokenCount: 0,
+        isObserving: false,
+        isReflecting: false,
+        observedTimezone: input.observedTimezone || null,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      return record;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'INITIALIZE_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: input.threadId, resourceId: input.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    try {
+      const now = new Date();
+      const collection = await this.getCollection(OM_TABLE);
+      const safeTokenCount = Number.isFinite(input.tokenCount) && input.tokenCount >= 0 ? input.tokenCount : 0;
+
+      const updateDoc: any = {
+        activeObservations: input.observations,
+        lastObservedAt: input.lastObservedAt,
+        pendingMessageTokens: 0,
+        observationTokenCount: safeTokenCount,
+        observedMessageIds: input.observedMessageIds ?? null,
+        updatedAt: now,
+      };
+
+      const result = await collection.updateOne(
+        { id: input.id },
+        {
+          $set: updateDoc,
+          $inc: { totalTokensObserved: safeTokenCount },
+        },
+      );
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_ACTIVE_OBSERVATIONS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_ACTIVE_OBSERVATIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    try {
+      const id = randomUUID();
+      const now = new Date();
+      const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
+
+      const record: ObservationalMemoryRecord = {
+        id,
+        scope: input.currentRecord.scope,
+        threadId: input.currentRecord.threadId,
+        resourceId: input.currentRecord.resourceId,
+        createdAt: now,
+        updatedAt: now,
+        lastObservedAt: input.currentRecord.lastObservedAt,
+        originType: 'reflection',
+        generationCount: input.currentRecord.generationCount + 1,
+        activeObservations: input.reflection,
+        totalTokensObserved: input.currentRecord.totalTokensObserved,
+        observationTokenCount: input.tokenCount,
+        pendingMessageTokens: 0,
+        isReflecting: false,
+        isObserving: false,
+        config: input.currentRecord.config,
+        metadata: input.currentRecord.metadata,
+        observedTimezone: input.currentRecord.observedTimezone,
+      };
+
+      const collection = await this.getCollection(OM_TABLE);
+      await collection.insertOne({
+        id,
+        lookupKey,
+        scope: record.scope,
+        resourceId: record.resourceId,
+        threadId: record.threadId || null,
+        activeObservations: input.reflection,
+        activeObservationsPendingUpdate: null,
+        originType: 'reflection',
+        config: record.config,
+        generationCount: input.currentRecord.generationCount + 1,
+        lastObservedAt: record.lastObservedAt || null,
+        lastReflectionAt: now,
+        pendingMessageTokens: record.pendingMessageTokens,
+        totalTokensObserved: record.totalTokensObserved,
+        observationTokenCount: record.observationTokenCount,
+        isObserving: false,
+        isReflecting: false,
+        observedTimezone: record.observedTimezone || null,
+        createdAt: now,
+        updatedAt: now,
+        metadata: record.metadata || null,
+      });
+
+      return record;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'CREATE_REFLECTION_GENERATION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { currentRecordId: input.currentRecord.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      const result = await collection.updateOne({ id }, { $set: { isReflecting, updatedAt: new Date() } });
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SET_REFLECTING_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isReflecting },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SET_REFLECTING_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isReflecting },
+        },
+        error,
+      );
+    }
+  }
+
+  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      const result = await collection.updateOne({ id }, { $set: { isObserving, updatedAt: new Date() } });
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SET_OBSERVING_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isObserving },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SET_OBSERVING_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isObserving },
+        },
+        error,
+      );
+    }
+  }
+
+  async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      const collection = await this.getCollection(OM_TABLE);
+      await collection.deleteMany({ lookupKey });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'CLEAR_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+    // Validate tokenCount before using in $inc
+    if (typeof tokenCount !== 'number' || !Number.isFinite(tokenCount) || tokenCount < 0) {
+      throw new MastraError({
+        id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'INVALID_INPUT'),
+        text: `Invalid tokenCount: must be a finite non-negative number, got ${tokenCount}`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { id, tokenCount },
+      });
+    }
+
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      const result = await collection.updateOne(
+        { id },
+        {
+          $inc: { pendingMessageTokens: tokenCount },
+          $set: { updatedAt: new Date() },
+        },
+      );
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, tokenCount },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'ADD_PENDING_MESSAGE_TOKENS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, tokenCount },
         },
         error,
       );

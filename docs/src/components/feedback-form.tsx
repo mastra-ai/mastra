@@ -2,24 +2,24 @@ import { Button } from './ui/button'
 import { Textarea } from './ui/textarea'
 import { Input } from './ui/input'
 import { cn } from '@site/src/lib/utils'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { valibotResolver } from '@hookform/resolvers/valibot'
+import * as v from 'valibot'
 import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { z } from 'zod'
 import { Form, FormControl, FormField, FormItem, FormMessage } from './ui/forms'
 import { Label } from './ui/label'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import { CancelIcon } from './copy-page-icons'
 
-const feedbackSchema = z.object({
-  feedback: z.string().min(5, 'Please enter your feedback'),
-  email: z.email('Please enter a valid email address').optional().or(z.literal('')),
-  rating: z.number().min(1).max(5).optional(),
-  page: z.string(),
-  userAgent: z.string().optional(),
+const feedbackSchema = v.object({
+  feedback: v.pipe(v.string(), v.nonEmpty('Please enter your feedback'), v.minLength(5)),
+  email: v.optional(v.union([v.pipe(v.string(), v.email()), v.literal('')])),
+  rating: v.optional(v.pipe(v.number(), v.minValue(1), v.maxValue(5))),
+  page: v.string(),
+  userAgent: v.optional(v.string()),
 })
 
-type FeedbackFormData = z.infer<typeof feedbackSchema>
+type FeedbackFormData = v.InferInput<typeof feedbackSchema>
 
 interface FeedbackFormProps {
   isOpen: boolean
@@ -109,7 +109,7 @@ export const FeedbackForm = ({ isOpen, onClose, currentPage }: FeedbackFormProps
   const [errorMessage, setErrorMessage] = useState<string>('')
 
   const form = useForm<FeedbackFormData>({
-    resolver: zodResolver(feedbackSchema),
+    resolver: valibotResolver(feedbackSchema),
     defaultValues: {
       feedback: '',
       email: '',
