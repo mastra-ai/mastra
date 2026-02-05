@@ -5,11 +5,37 @@
 
 ---
 
-## 1.1.1 Event Bus Interfaces
+## File Organization
+
+Types are organized by signal to match the existing `tracing.ts` pattern:
+
+```
+packages/core/src/observability/types/
+├── tracing.ts      # (existing) TracingContext, Span, ExportedSpan, SpanRecord, TracingEvent
+├── logging.ts      # (new) LoggerContext, ExportedLog, LogEvent
+├── metrics.ts      # (new) MetricsContext, ExportedMetric, MetricEvent, cardinality config
+├── scores.ts       # (new) ScoreInput, ExportedScore, ScoreEvent
+├── feedback.ts     # (new) FeedbackInput, ExportedFeedback, FeedbackEvent
+├── bus.ts          # (new) ObservabilityEventBus interface, ObservabilityEvent union
+├── context.ts      # (new) ObservabilityContextMixin (combines signal contexts)
+└── index.ts        # re-exports all types
+```
+
+**Note:** Record types (LogRecord, MetricRecord, ScoreRecord, FeedbackRecord) are defined in Phase 6 as Zod schemas for storage/API validation.
+
+---
+
+## 1.1.1 Event Bus Interface
 
 **File:** `packages/core/src/observability/types/bus.ts` (new)
 
 ```typescript
+import { TracingEvent } from './tracing';
+import { LogEvent } from './logging';
+import { MetricEvent } from './metrics';
+import { ScoreEvent } from './scores';
+import { FeedbackEvent } from './feedback';
+
 export interface ObservabilityEventBus<TEvent> {
   emit(event: TEvent): void;
   subscribe(handler: (event: TEvent) => void): () => void;
@@ -17,68 +43,44 @@ export interface ObservabilityEventBus<TEvent> {
   shutdown(): Promise<void>;
 }
 
-// Span lifecycle events only
-export type TracingEventType =
-  | 'span.started'
-  | 'span.updated'
-  | 'span.ended'
-  | 'span.error';
-
-export type TracingEvent =
-  | { type: 'span.started'; exportedSpan: AnyExportedSpan }
-  | { type: 'span.updated'; exportedSpan: AnyExportedSpan }
-  | { type: 'span.ended'; exportedSpan: AnyExportedSpan }
-  | { type: 'span.error'; exportedSpan: AnyExportedSpan; error: SpanErrorInfo };
-
-export type MetricEvent = {
-  type: 'metric';
-  name: string;
-  metricType: 'counter' | 'gauge' | 'histogram';
-  value: number;
-  labels: Record<string, string>;
-  timestamp: Date;
-};
-
-export type LogEvent = {
-  type: 'log';
-  record: LogRecord;
-};
-
-// Scores (separate from TracingEvent for independent handling/retention)
-export type ScoreEvent = {
-  type: 'score';
-  traceId: string;
-  spanId?: string;
-  score: ScoreInput;
-  timestamp: Date;
-};
-
-// Feedback (separate from TracingEvent for independent handling/retention)
-export type FeedbackEvent = {
-  type: 'feedback';
-  traceId: string;
-  spanId?: string;
-  feedback: FeedbackInput;
-  timestamp: Date;
-};
+// Union of all observability events
+export type ObservabilityEvent =
+  | TracingEvent
+  | LogEvent
+  | MetricEvent
+  | ScoreEvent
+  | FeedbackEvent;
 ```
 
 **Tasks:**
 - [ ] Create ObservabilityEventBus interface
-- [ ] Define TracingEvent union type (span lifecycle only)
-- [ ] Define MetricEvent type
-- [ ] Define LogEvent type
-- [ ] Define ScoreEvent type
-- [ ] Define FeedbackEvent type
+- [ ] Define ObservabilityEvent union (imports from signal files)
 - [ ] Export from types index
 
 ---
 
-## 1.1.2 Context Interfaces
+## 1.1.2 Logging Types
 
-**File:** `packages/core/src/observability/types/context.ts` (new)
+**File:** `packages/core/src/observability/types/logging.ts` (new)
+
+Follow the pattern established in `packages/core/src/observability/types/tracing.ts`:
 
 ```typescript
+// ============================================================================
+// Log Level
+// ============================================================================
+
+/** Log severity levels */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+
+// ============================================================================
+// LoggerContext (API Interface)
+// ============================================================================
+
+/**
+ * LoggerContext - API for emitting structured logs.
+ * Logs are automatically correlated with the current span's trace/span IDs.
+ */
 export interface LoggerContext {
   debug(message: string, data?: Record<string, unknown>): void;
   info(message: string, data?: Record<string, unknown>): void;
@@ -86,6 +88,95 @@ export interface LoggerContext {
   error(message: string, data?: Record<string, unknown>): void;
 }
 
+// ============================================================================
+// ExportedLog (Event Bus Transport)
+// ============================================================================
+
+/**
+ * Log data transported via the event bus.
+ * Must be JSON-serializable (Date serializes via toJSON()).
+ *
+ * Context fields (runId, sessionId, userId, environment, etc.) are stored
+ * in metadata, following the same pattern as tracing spans.
+ */
+export interface ExportedLog {
+  /** When the log was emitted */
+  timestamp: Date;
+
+  /** Log severity level */
+  level: LogLevel;
+
+  /** Human-readable log message */
+  message: string;
+
+  /** Structured data associated with this log */
+  data?: Record<string, unknown>;
+
+  /** Trace ID for correlation (from current span) */
+  traceId?: string;
+
+  /** Span ID for correlation (from current span) */
+  spanId?: string;
+
+  /** Optional tags for filtering/categorization */
+  tags?: string[];
+
+  /**
+   * User-defined metadata.
+   * Context fields are stored here: runId, sessionId, userId, environment,
+   * serviceName, organizationId, entityType, entityName, etc.
+   * This follows the same pattern as BaseSpan.metadata in tracing.ts.
+   */
+  metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
+// LogEvent (Event Bus Event)
+// ============================================================================
+
+/** Log event emitted to the ObservabilityBus */
+export interface LogEvent {
+  type: 'log';
+  log: ExportedLog;
+}
+```
+
+**Notes:**
+- Follows the same metadata pattern as `BaseSpan` in tracing.ts
+- Context fields go in `metadata` rather than separate fields
+- LogRecord (storage format) is defined in Phase 6 with Zod schemas
+
+**Tasks:**
+- [ ] Define `LogLevel` type
+- [ ] Create LoggerContext interface
+- [ ] Create ExportedLog interface with JSDoc comments
+- [ ] Create LogEvent interface
+- [ ] Export all types from types index
+
+---
+
+## 1.1.3 Metrics Types
+
+**File:** `packages/core/src/observability/types/metrics.ts` (new)
+
+Follow the pattern established in `packages/core/src/observability/types/tracing.ts`:
+
+```typescript
+// ============================================================================
+// Metric Type
+// ============================================================================
+
+/** Types of metrics */
+export type MetricType = 'counter' | 'gauge' | 'histogram';
+
+// ============================================================================
+// MetricsContext (API Interface)
+// ============================================================================
+
+/**
+ * MetricsContext - API for emitting metrics.
+ * Provides counter, gauge, and histogram metric types.
+ */
 export interface MetricsContext {
   counter(name: string): Counter;
   gauge(name: string): Gauge;
@@ -103,21 +194,422 @@ export interface Gauge {
 export interface Histogram {
   record(value: number, additionalLabels?: Record<string, string>): void;
 }
+
+// ============================================================================
+// ExportedMetric (Event Bus Transport)
+// ============================================================================
+
+/**
+ * Metric data transported via the event bus.
+ * Represents a single metric observation.
+ * Must be JSON-serializable (Date serializes via toJSON()).
+ *
+ * Environment fields (organizationId, environment, serviceName) are stored
+ * in metadata, following the same pattern as tracing spans.
+ *
+ * Note: Histogram aggregation (bucket counts, sum, count) is computed at
+ * the storage layer, not in the individual metric event.
+ */
+export interface ExportedMetric {
+  /** When the metric was recorded */
+  timestamp: Date;
+
+  /** Metric name (e.g., mastra_agent_duration_ms) */
+  name: string;
+
+  /** Type of metric */
+  metricType: MetricType;
+
+  /** Metric value (single observation) */
+  value: number;
+
+  /** Metric labels for dimensional filtering */
+  labels: Record<string, string>;
+
+  /**
+   * User-defined metadata.
+   * Environment fields are stored here: organizationId, environment,
+   * serviceName, etc. These are kept separate from labels to avoid
+   * cardinality issues.
+   */
+  metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
+// MetricEvent (Event Bus Event)
+// ============================================================================
+
+/** Metric event emitted to the ObservabilityBus */
+export interface MetricEvent {
+  type: 'metric';
+  metric: ExportedMetric;
+}
+
+// ============================================================================
+// Cardinality Protection
+// ============================================================================
+
+/**
+ * Default labels to block from metrics to prevent cardinality explosion.
+ * These are high-cardinality fields that should not be used as metric labels.
+ */
+export const DEFAULT_BLOCKED_LABELS = [
+  'trace_id',
+  'span_id',
+  'run_id',
+  'request_id',
+  'user_id',
+  'resource_id',
+  'session_id',
+  'thread_id',
+] as const;
+
+/** Cardinality protection configuration */
+export interface CardinalityConfig {
+  /**
+   * Labels to block from metrics.
+   * Set to undefined to use DEFAULT_BLOCKED_LABELS.
+   * Set to empty array to allow all labels.
+   */
+  blockedLabels?: string[];
+
+  /**
+   * Whether to block UUID-like values in labels.
+   * @default true
+   */
+  blockUUIDs?: boolean;
+}
+
+/** Metrics-specific configuration */
+export interface MetricsConfig {
+  /** Whether metrics are enabled */
+  enabled?: boolean;
+  /** Cardinality protection settings */
+  cardinality?: CardinalityConfig;
+}
 ```
 
+**Notes:**
+- Follows the same metadata pattern as `BaseSpan` in tracing.ts
+- Environment fields go in `metadata` (not `labels`) to avoid cardinality explosion
+- ExportedMetric stores single observations; histogram aggregation computed at query time
+- MetricRecord (storage format) is defined in Phase 6 with Zod schemas
+
 **Tasks:**
-- [ ] Create LoggerContext interface
+- [ ] Define `MetricType` type
 - [ ] Create MetricsContext interface
 - [ ] Create Counter, Gauge, Histogram interfaces
-- [ ] Export from types index
+- [ ] Create ExportedMetric interface with JSDoc comments
+- [ ] Create MetricEvent interface
+- [ ] Define `DEFAULT_BLOCKED_LABELS` constant
+- [ ] Define `CardinalityConfig` interface
+- [ ] Define `MetricsConfig` interface
+- [ ] Export all types from types index
 
 ---
 
-## 1.1.3 Exporter Interface Extensions
+## 1.1.4 Scores Types
+
+**File:** `packages/core/src/observability/types/scores.ts` (new)
+
+Follow the pattern established in `packages/core/src/observability/types/tracing.ts`:
+
+```typescript
+// ============================================================================
+// ScoreInput (User Input)
+// ============================================================================
+
+/**
+ * User-provided score data for evaluating span/trace quality.
+ * Used with span.addScore() and trace.addScore().
+ */
+export interface ScoreInput {
+  /** Name of the scorer (e.g., "relevance", "accuracy", "toxicity") */
+  scorerName: string;
+
+  /** Numeric score value (typically 0-1 or 0-100) */
+  score: number;
+
+  /** Human-readable explanation of the score */
+  reason?: string;
+
+  /** Experiment identifier for A/B testing or evaluation runs */
+  experiment?: string;
+
+  /** Additional metadata specific to this score */
+  metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
+// ExportedScore (Event Bus Transport)
+// ============================================================================
+
+/**
+ * Score data transported via the event bus.
+ * Must be JSON-serializable (Date serializes via toJSON()).
+ *
+ * Context fields (organizationId, userId, environment, etc.) are stored
+ * in metadata, following the same pattern as tracing spans. The metadata
+ * is inherited from the span/trace being scored.
+ */
+export interface ExportedScore {
+  /** When the score was recorded */
+  timestamp: Date;
+
+  /** Trace being scored */
+  traceId: string;
+
+  /** Specific span being scored (undefined = trace-level score) */
+  spanId?: string;
+
+  /** Name of the scorer */
+  scorerName: string;
+
+  /** Numeric score value */
+  score: number;
+
+  /** Human-readable explanation */
+  reason?: string;
+
+  /** Experiment identifier for A/B testing */
+  experiment?: string;
+
+  /**
+   * User-defined metadata.
+   * Inherited from the span/trace being scored, merged with score-specific metadata.
+   * Contains context fields: organizationId, userId, environment, serviceName,
+   * entityType, entityName, etc.
+   */
+  metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
+// ScoreEvent (Event Bus Event)
+// ============================================================================
+
+/** Score event emitted to the ObservabilityBus */
+export interface ScoreEvent {
+  type: 'score';
+  score: ExportedScore;
+}
+```
+
+**Notes:**
+- Follows the same metadata pattern as `BaseSpan` in tracing.ts
+- Context is inherited from the span/trace being scored
+- ScoreRecord (storage format) is defined in Phase 6 with Zod schemas
+
+**Tasks:**
+- [ ] Create ScoreInput interface with JSDoc comments
+- [ ] Create ExportedScore interface with JSDoc comments
+- [ ] Create ScoreEvent interface
+- [ ] Export all types from types index
+
+---
+
+## 1.1.5 Feedback Types
+
+**File:** `packages/core/src/observability/types/feedback.ts` (new)
+
+Follow the pattern established in `packages/core/src/observability/types/tracing.ts`:
+
+```typescript
+// ============================================================================
+// FeedbackInput (User Input)
+// ============================================================================
+
+/**
+ * User-provided feedback data for human evaluation of span/trace quality.
+ * Used with span.addFeedback() and trace.addFeedback().
+ */
+export interface FeedbackInput {
+  /** Source of the feedback (e.g., "user", "admin", "qa") */
+  source: string;
+
+  /** Type of feedback (e.g., "thumbs", "rating", "correction") */
+  feedbackType: string;
+
+  /** Feedback value (e.g., "up"/"down", 1-5, correction text) */
+  value: number | string;
+
+  /** Optional comment explaining the feedback */
+  comment?: string;
+
+  /** User who provided the feedback */
+  userId?: string;
+
+  /** Experiment identifier for A/B testing or evaluation runs */
+  experiment?: string;
+
+  /** Additional metadata specific to this feedback */
+  metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
+// ExportedFeedback (Event Bus Transport)
+// ============================================================================
+
+/**
+ * Feedback data transported via the event bus.
+ * Must be JSON-serializable (Date serializes via toJSON()).
+ *
+ * Context fields (organizationId, environment, etc.) are stored
+ * in metadata, following the same pattern as tracing spans. The metadata
+ * is inherited from the span/trace receiving feedback.
+ */
+export interface ExportedFeedback {
+  /** When the feedback was recorded */
+  timestamp: Date;
+
+  /** Trace receiving feedback */
+  traceId: string;
+
+  /** Specific span receiving feedback (undefined = trace-level feedback) */
+  spanId?: string;
+
+  /** Source of the feedback */
+  source: string;
+
+  /** Type of feedback */
+  feedbackType: string;
+
+  /** Feedback value */
+  value: number | string;
+
+  /** Optional comment */
+  comment?: string;
+
+  /** Experiment identifier for A/B testing */
+  experiment?: string;
+
+  /**
+   * User-defined metadata.
+   * Inherited from the span/trace receiving feedback, merged with feedback-specific metadata.
+   * Contains context fields: organizationId, environment, serviceName,
+   * entityType, entityName, etc. The userId from FeedbackInput is also stored here.
+   */
+  metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
+// FeedbackEvent (Event Bus Event)
+// ============================================================================
+
+/** Feedback event emitted to the ObservabilityBus */
+export interface FeedbackEvent {
+  type: 'feedback';
+  feedback: ExportedFeedback;
+}
+```
+
+**Notes:**
+- Follows the same metadata pattern as `BaseSpan` in tracing.ts
+- Context is inherited from the span/trace receiving feedback
+- userId from FeedbackInput is stored in metadata
+- FeedbackRecord (storage format) is defined in Phase 6 with Zod schemas
+
+**Tasks:**
+- [ ] Create FeedbackInput interface with JSDoc comments
+- [ ] Create ExportedFeedback interface with JSDoc comments
+- [ ] Create FeedbackEvent interface
+- [ ] Export all types from types index
+
+---
+
+## 1.1.6 Update tracing.ts
 
 **File:** `packages/core/src/observability/types/tracing.ts` (modify)
 
-Add signal handlers to existing `ObservabilityExporter` interface. Handler presence = signal support (no separate flags needed).
+Add TracingEvent type, update Span interface, and add Trace interface:
+
+```typescript
+import type { ScoreInput } from './scores';
+import type { FeedbackInput } from './feedback';
+
+// ============================================================================
+// TracingEvent (Event Bus Event)
+// ============================================================================
+
+/**
+ * TracingEvent - Event bus payload for span lifecycle events
+ */
+export type TracingEvent =
+  | { type: 'span.started'; span: AnyExportedSpan }
+  | { type: 'span.updated'; span: AnyExportedSpan }
+  | { type: 'span.ended'; span: AnyExportedSpan }
+  | { type: 'span.error'; span: AnyExportedSpan; error: SpanErrorInfo };
+
+// ============================================================================
+// Span Interface (update existing)
+// ============================================================================
+
+export interface Span {
+  // Existing properties...
+  readonly traceId: string;
+  readonly spanId: string;
+  readonly name: string;
+
+  // NEW: For score/feedback context inheritance
+  readonly metadata?: Record<string, unknown>;
+  readonly isRootSpan: boolean;
+
+  // Existing methods...
+  setStatus(status: SpanStatus): void;
+  setAttribute(key: string, value: AttributeValue): void;
+  addEvent(name: string, attributes?: Record<string, AttributeValue>): void;
+  end(): void;
+
+  // NEW: Score and Feedback
+  addScore(score: ScoreInput): void;
+  addFeedback(feedback: FeedbackInput): void;
+}
+
+// ============================================================================
+// Trace Interface (new)
+// ============================================================================
+
+export interface Trace {
+  readonly traceId: string;
+  readonly spans: ReadonlyArray<Span>;
+
+  /** Get a specific span by ID */
+  getSpan(spanId: string): Span | null;
+
+  /**
+   * Add a score at the trace level.
+   * Uses root span's metadata for context.
+   */
+  addScore(score: ScoreInput): void;
+
+  /**
+   * Add feedback at the trace level.
+   * Uses root span's metadata for context.
+   */
+  addFeedback(feedback: FeedbackInput): void;
+}
+```
+
+**Notes:**
+- Span.metadata and Span.isRootSpan are needed for score/feedback context inheritance
+- Trace-level scores/feedback use root span's metadata for context
+
+**Tasks:**
+- [ ] Add TracingEvent type to tracing.ts
+- [ ] Verify AnyExportedSpan and SpanErrorInfo are exported
+- [ ] Add `metadata` readonly property to Span interface
+- [ ] Add `isRootSpan` readonly property to Span interface
+- [ ] Add `addScore()` to Span interface
+- [ ] Add `addFeedback()` to Span interface
+- [ ] Add Trace interface
+- [ ] Export Trace from types index
+
+---
+
+## 1.1.7 Exporter Interface Extensions
+
+**File:** `packages/core/src/observability/types/exporter.ts` (new or modify existing)
+
+Add signal handlers to `ObservabilityExporter` interface. Handler presence = signal support (no separate flags needed).
 
 ```typescript
 export interface ObservabilityExporter {
@@ -152,7 +644,7 @@ export interface ObservabilityExporter {
 
 ---
 
-## 1.1.4 NoOp Context Implementations
+## 1.1.8 NoOp Context Implementations
 
 **File:** `packages/core/src/observability/no-op/context.ts` (new)
 
@@ -185,13 +677,17 @@ export const noOpMetricsContext: MetricsContext = {
 
 ---
 
-## 1.1.5 ObservabilityContextMixin Interface
+## 1.1.9 ObservabilityContextMixin Interface
 
-**File:** `packages/core/src/observability/types/context.ts` (add to existing)
+**File:** `packages/core/src/observability/types/context.ts` (new)
 
-Define the mixin interface that all execution contexts will extend:
+Define the mixin interface that combines all signal contexts:
 
 ```typescript
+import { TracingContext } from './tracing';
+import { LoggerContext } from './logging';
+import { MetricsContext } from './metrics';
+
 export interface ObservabilityContextMixin {
   /** Tracing context for span operations */
   tracing: TracingContext;
@@ -205,18 +701,21 @@ export interface ObservabilityContextMixin {
 ```
 
 **Tasks:**
-- [ ] Add ObservabilityContextMixin interface
+- [ ] Create context.ts with ObservabilityContextMixin
+- [ ] Import context types from signal-specific files
 - [ ] Export from types index
 
 ---
 
-## 1.1.6 Context Factory
+## 1.1.10 Context Factory
 
 **File:** `packages/core/src/observability/context-factory.ts` (new)
 
 ```typescript
 import { TracingContext } from './types/tracing';
-import { LoggerContext, MetricsContext, ObservabilityContextMixin } from './types/context';
+import { LoggerContext } from './types/logging';
+import { MetricsContext } from './types/metrics';
+import { ObservabilityContextMixin } from './types/context';
 import { noOpLoggerContext, noOpMetricsContext } from './no-op/context';
 
 // NoOp tracing context (reference existing implementation)
@@ -248,7 +747,7 @@ export function createObservabilityContext(
 
 ---
 
-## 1.1.7 Update Context Types to Extend Mixin
+## 1.1.11 Update Context Types to Extend Mixin
 
 Update all execution context types to extend `ObservabilityContextMixin`:
 
@@ -296,7 +795,7 @@ interface ProcessorContext extends ObservabilityContextMixin {
 
 ---
 
-## 1.1.8 Update Context Creation Points
+## 1.1.12 Update Context Creation Points
 
 **Files:**
 - `packages/core/src/tools/tool-builder/builder.ts`
@@ -325,7 +824,7 @@ const context: ToolExecutionContext = {
 
 ---
 
-## 1.1.9 Storage Strategy Types
+## 1.1.13 Storage Strategy Types
 
 **File:** `packages/core/src/storage/domains/observability/types.ts` (modify)
 
@@ -362,7 +861,7 @@ export type FeedbackStorageStrategy = 'realtime' | 'batch';
 
 ---
 
-## 1.1.10 Storage Strategy Getters
+## 1.1.14 Storage Strategy Getters
 
 **File:** `packages/core/src/storage/domains/observability/base.ts` (modify)
 
@@ -418,6 +917,30 @@ abstract class ObservabilityStorage extends StorageDomain {
 
 ---
 
+## 1.1.15 Add Mastra.getTrace() API
+
+**File:** `packages/core/src/mastra/types.ts` (modify)
+
+```typescript
+import type { Trace } from '../observability/types/tracing';
+
+export interface Mastra {
+  // Existing...
+
+  /**
+   * Retrieve a trace for post-hoc score/feedback attachment.
+   * Returns null if trace not found or storage not configured.
+   */
+  getTrace(traceId: string): Promise<Trace | null>;
+}
+```
+
+**Tasks:**
+- [ ] Add `getTrace()` to Mastra interface
+- [ ] Import Trace type
+
+---
+
 ## PR 1.1 Testing
 
 **Tasks:**
@@ -426,3 +949,17 @@ abstract class ObservabilityStorage extends StorageDomain {
 - [ ] Test backward compat (tracingContext alias)
 - [ ] Test type exports compile correctly
 - [ ] Ensure existing tests still pass
+- [ ] Verify LogLevel type includes all levels
+- [ ] Verify ExportedLog can be created with metadata
+- [ ] Verify LogEvent has correct discriminant
+- [ ] Verify MetricType type includes all types
+- [ ] Verify ExportedMetric can be created with single observation
+- [ ] Verify MetricEvent has correct discriminant
+- [ ] Verify cardinality config defaults work as expected
+- [ ] Verify ScoreInput/ExportedScore include experiment field
+- [ ] Verify ScoreEvent has correct discriminant
+- [ ] Verify FeedbackInput/ExportedFeedback include experiment field
+- [ ] Verify FeedbackEvent has correct discriminant
+- [ ] Verify Span interface includes metadata, isRootSpan, addScore, addFeedback
+- [ ] Verify Trace interface includes spans, getSpan, addScore, addFeedback
+- [ ] Verify Mastra interface includes getTrace

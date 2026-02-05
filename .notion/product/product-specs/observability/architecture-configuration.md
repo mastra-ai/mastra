@@ -93,40 +93,81 @@ mastra.logger.info("Application started", { version: "1.0.0" });
 mastra.metrics.counter('background_jobs_total').add(1, { job_type: 'cleanup' });
 ```
 
+### Signal Type Architecture
+
+Each signal follows a three-tier type pattern to separate concerns:
+
+| Tier | Purpose | Serializable | Examples |
+|------|---------|--------------|----------|
+| **Input** | User-facing API parameters | Not required | `ScoreInput`, `FeedbackInput`, method params |
+| **Exported** | Event bus transport, exporter consumption | **Required** | `ExportedLog`, `ExportedMetric`, `ExportedScore` |
+| **Record** | Storage format, database schemas | Required | `LogRecord`, `MetricRecord`, `ScoreRecord` |
+
+**Key principles:**
+- **Input types** are ergonomic for users (can include functions, complex objects)
+- **Exported types** are serializable (JSON-safe) for event bus and network transport
+- **Record types** are optimized for storage (may differ per backend)
+- Conversion happens at boundaries: Input → Exported (context APIs), Exported → Record (storage adapters)
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│   Input     │ ──► │   Exported   │ ──► │   Record    │
+│  (User API) │     │ (Event Bus)  │     │  (Storage)  │
+└─────────────┘     └──────────────┘     └─────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │  Exporters  │
+                    │ (consume    │
+                    │  Exported)  │
+                    └─────────────┘
+```
+
+**Signal type mappings:**
+
+| Signal | Input | Exported | Record |
+|--------|-------|----------|--------|
+| Tracing | `Span` (runtime) | `AnyExportedSpan` | `SpanRecord` |
+| Logs | method params | `ExportedLog` | `LogRecord` |
+| Metrics | method params | `ExportedMetric` | `MetricRecord` |
+| Scores | `ScoreInput` | `ExportedScore` | `ScoreRecord` |
+| Feedback | `FeedbackInput` | `ExportedFeedback` | `FeedbackRecord` |
+
 ### Event Bus Architecture
 
-Each signal has its own event bus. TracingBus events cross-push to MetricsBus for automatic metric extraction.
+A single `ObservabilityBus` handles all event types and routes to appropriate exporter handlers. Cross-emission generates MetricEvents from TracingEvents for automatic metric extraction.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         Observability                               │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  ┌────────────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │ TracingBus         │  │ MetricsBus   │  │ LogsBus      │         │
-│  │                    │  │              │  │              │         │
-│  │ span.start ────────┼─→│ metric.emit  │  │ log.emit     │         │
-│  │ span.end ──────────┼─→│              │  │              │         │
-│  │ score.added ───────┼─→│              │  │              │         │
-│  │ feedback.added ────┼─→│              │  │              │         │
-│  │                    │  │              │  │              │         │
-│  └──────────┬─────────┘  └──────┬───────┘  └──────┬───────┘         │
-│             │                   │                 │                 │
-│             └───────────────────┼─────────────────┘                 │
-│                                 ▼                                   │
-│                          ┌─────────────┐                            │
-│                          │  Exporters  │                            │
-│                          │ (T/M/L)     │                            │
-│                          └─────────────┘                            │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                    ObservabilityBus                          │   │
+│  │                                                              │   │
+│  │  TracingEvent  ──► onTracingEvent()  ──► (cross-emit metrics)│   │
+│  │  LogEvent      ──► onLogEvent()                              │   │
+│  │  MetricEvent   ──► onMetricEvent()                           │   │
+│  │  ScoreEvent    ──► onScoreEvent()    ──► (cross-emit metrics)│   │
+│  │  FeedbackEvent ──► onFeedbackEvent() ──► (cross-emit metrics)│   │
+│  │                                                              │   │
+│  └──────────────────────────┬───────────────────────────────────┘   │
+│                             │                                       │
+│                             ▼                                       │
+│                      ┌─────────────┐                                │
+│                      │  Exporters  │                                │
+│                      │ (T/M/L/S/F) │                                │
+│                      └─────────────┘                                │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key points:**
-- TracingBus emits to MetricsBus on span lifecycle (for built-in metric extraction)
-- Score and feedback events also cross-push to MetricsBus (for score distribution metrics)
-- Each exporter receives only the signals it supports
-- Buses are decoupled for independent scaling and failure isolation
+- Single ObservabilityBus routes all event types to appropriate handlers
+- Handler presence = signal support (no separate capability flags)
+- Cross-emission: TracingEvents generate MetricEvents (for built-in metric extraction)
+- Cross-emission: ScoreEvents/FeedbackEvents generate MetricEvents (for score distribution)
+- All event payloads use Exported types (serializable)
 
 **Auto-extracted metrics from scores/feedback:**
 

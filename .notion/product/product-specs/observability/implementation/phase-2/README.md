@@ -1,18 +1,19 @@
-# Phase 2: Logging
+# Phase 2: Debug Exporters
 
 **Status:** Planning
-**Prerequisites:** Phase 1 (Foundation), Phase 1.5 (Debug Exporters)
-**Estimated Scope:** LoggerContext implementation, storage, exporters
+**Prerequisites:** Phase 1 (Foundation)
+**Estimated Scope:** Debug exporters for development and production visibility
 
 ---
 
 ## Overview
 
-Phase 2 implements the structured logging system with automatic trace correlation:
-- LoggerContext implementation with auto-correlation
-- LogRecord schema and storage methods
-- LogEvent → exporter routing via ObservabilityBus
-- Exporter support for logs signal
+Phase 2 builds exporters for ALL signals early to validate interfaces and provide developer visibility:
+- GrafanaCloudExporter: handlers for T/M/L (Tempo/Loki/Mimir) - production debugging
+- JsonExporter: handlers for T/M/L/S/F (console output) - local development
+- Validate Exported type serialization works correctly
+
+**Note:** These exporters consume Exported types from the event bus, validating the type architecture established in Phase 1.
 
 ---
 
@@ -20,60 +21,37 @@ Phase 2 implements the structured logging system with automatic trace correlatio
 
 | PR | Package | Scope | File |
 |----|---------|-------|------|
-| PR 2.1 | `@mastra/core` | LogRecord schema, storage interface extensions | [pr-2.1-core-changes.md](./pr-2.1-core-changes.md) |
-| PR 2.2 | `@mastra/observability` | LoggerContext impl, ObservabilityBus wiring, exporters | [pr-2.2-observability-changes.md](./pr-2.2-observability-changes.md) |
-| PR 2.3 | `stores/duckdb` | Logs table and methods | [pr-2.3-duckdb-logs.md](./pr-2.3-duckdb-logs.md) |
-| PR 2.4 | `stores/clickhouse` | Logs table and methods | [pr-2.4-clickhouse-logs.md](./pr-2.4-clickhouse-logs.md) |
-
----
-
-## Integration Testing
-
-After all PRs merged:
-
-**Tasks:**
-- [ ] E2E test: Log from tool, verify trace correlation
-- [ ] E2E test: Log from workflow step, verify trace correlation
-- [ ] E2E test: Logs appear in DefaultExporter storage
-- [ ] E2E test: Logs appear in JsonExporter output
-- [ ] E2E test: Filter logs by trace ID
-- [ ] E2E test: Search logs by message content
+| PR 2.1 | `observability/grafana-cloud` (new) | GrafanaCloudExporter for T/M/L | [pr-2.1-grafana-cloud.md](./pr-2.1-grafana-cloud.md) |
+| PR 2.2 | `observability/mastra` | JsonExporter for T/M/L/S/F | [pr-2.2-json-exporter.md](./pr-2.2-json-exporter.md) |
 
 ---
 
 ## Dependencies Between PRs
 
-```
-PR 2.1 (@mastra/core)
-    ↓
-PR 2.2 (@mastra/observability) ← depends on core types
-    ↓
-PR 2.3 (stores/duckdb) ← depends on core storage interface
-    ↓
-PR 2.4 (stores/clickhouse) ← depends on core storage interface
-```
+PR 2.1 and PR 2.2 can be done in parallel after Phase 1 is complete.
 
-**Note:** PR 2.3 and PR 2.4 can be done in parallel after PR 2.2.
-
-**Merge order:** 2.1 → 2.2 → (2.3 | 2.4)
+```
+Phase 1 complete
+    ↓
+PR 2.1 (GrafanaCloud)  ← can run in parallel
+PR 2.2 (JsonExporter)  ← can run in parallel
+```
 
 ---
 
 ## Definition of Done
 
-- [ ] LoggerContext implementation complete
-- [ ] Logs emitted from tools/workflows have trace correlation
-- [ ] DefaultExporter writes logs to storage
-- [ ] JsonExporter outputs logs
-- [ ] DuckDB adapter stores and retrieves logs
-- [ ] ClickHouse adapter stores and retrieves logs
-- [ ] All tests pass
-- [ ] Documentation updated
+- [ ] GrafanaCloudExporter package created and working (T/M/L)
+- [ ] JsonExporter outputs T/M/L/S/F events
+- [ ] Exported types serialize correctly (validated)
+- [ ] Documentation for GrafanaCloudExporter config
+- [ ] Tests passing
 
 ---
 
-## Open Questions
+## Notes
 
-1. Should we add a `mastra.logger` direct API for logging outside trace context?
-2. What should the default log retention be for ClickHouse?
-3. Should we support structured logging format standards (like OpenTelemetry Logs)?
+- This phase validates the Exported type architecture from Phase 1
+- GrafanaCloudExporter provides production debugging visibility
+- JsonExporter provides local development debugging
+- Can start using GrafanaCloudExporter immediately with Grafana Cloud free tier

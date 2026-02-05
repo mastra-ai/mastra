@@ -1,19 +1,22 @@
-# Phase 3: Metrics
+# Phase 3: Logging, Metrics & Scores/Feedback
 
 **Status:** Planning
-**Prerequisites:** Phase 1 (Foundation), Phase 2 (Logging)
-**Estimated Scope:** MetricsContext implementation, auto-extracted metrics, storage
+**Prerequisites:** Phase 1 (Foundation), Phase 2 (Debug Exporters)
+**Estimated Scope:** LoggerContext, MetricsContext, Score/Feedback APIs implementation
 
 ---
 
 ## Overview
 
-Phase 3 implements the metrics system with both direct API and auto-extracted metrics:
-- MetricsContext implementation with auto-labels and cardinality protection
-- MetricRecord schema and storage methods
-- MetricEvent → exporter routing via ObservabilityBus
-- TracingEvent → MetricEvent cross-emission for auto-extracted metrics
-- Built-in metrics catalog
+Phase 3 implements all signal context implementations in `@mastra/observability`:
+- **Logging:** LoggerContext with automatic trace correlation
+- **Metrics:** MetricsContext with cardinality protection and auto-extracted metrics
+- **Scores & Feedback:** span/trace APIs for quality evaluation
+
+**Note:**
+- All core types (ExportedLog, ExportedMetric, ExportedScore, ExportedFeedback, etc.) are defined in Phase 1 (PR 1.1)
+- Exporter support is already implemented in Phase 2 (Debug Exporters)
+- Storage adapters are implemented in Phase 6
 
 ---
 
@@ -21,10 +24,11 @@ Phase 3 implements the metrics system with both direct API and auto-extracted me
 
 | PR | Package | Scope | File |
 |----|---------|-------|------|
-| PR 3.1 | `@mastra/core` | MetricRecord schema, storage interface, cardinality config | [pr-3.1-core-changes.md](./pr-3.1-core-changes.md) |
-| PR 3.2 | `@mastra/observability` | MetricsContext impl, auto-extraction, ObservabilityBus wiring | [pr-3.2-observability-changes.md](./pr-3.2-observability-changes.md) |
-| PR 3.3 | `stores/duckdb` | Metrics table and methods | [pr-3.3-duckdb-metrics.md](./pr-3.3-duckdb-metrics.md) |
-| PR 3.4 | `stores/clickhouse` | Metrics table and methods | [pr-3.4-clickhouse-metrics.md](./pr-3.4-clickhouse-metrics.md) |
+| PR 3.1 | `@mastra/observability` | LoggerContext implementation | [pr-3.1-logging.md](./pr-3.1-logging.md) |
+| PR 3.2 | `@mastra/observability` | MetricsContext, cardinality, auto-extraction | [pr-3.2-metrics.md](./pr-3.2-metrics.md) |
+| PR 3.3 | `@mastra/observability` | Score/Feedback APIs, Trace class | [pr-3.3-scores-feedback.md](./pr-3.3-scores-feedback.md) |
+
+**Merge order:** 3.1 → 3.2 → 3.3 (3.2 includes auto-extraction for scores/feedback from 3.3)
 
 ---
 
@@ -45,8 +49,10 @@ Reference table for auto-extracted metrics:
 | `mastra_model_requests_started` | counter | model, provider, agent |
 | `mastra_model_requests_ended` | counter | model, provider, agent, status |
 | `mastra_model_duration_ms` | histogram | model, provider, agent |
-| `mastra_model_input_tokens` | counter | model, provider, agent, token_type |
-| `mastra_model_output_tokens` | counter | model, provider, agent, token_type |
+| `mastra_model_input_tokens` | counter | model, provider, agent |
+| `mastra_model_output_tokens` | counter | model, provider, agent |
+| `mastra_model_cache_read_tokens` | counter | model, provider, agent |
+| `mastra_model_cache_write_tokens` | counter | model, provider, agent |
 
 ### Tool Metrics
 | Metric | Type | Labels |
@@ -65,60 +71,67 @@ Reference table for auto-extracted metrics:
 ### Score/Feedback Metrics
 | Metric | Type | Labels |
 |--------|------|--------|
-| `mastra_scores_total` | counter | scorer, entity_type, entity_name, experiment |
+| `mastra_scores_total` | counter | scorer, experiment |
 | `mastra_feedback_total` | counter | feedback_type, source, experiment |
 
 ---
 
 ## Integration Testing
 
-After all PRs merged:
+After PR merged:
 
-**Tasks:**
+**Logging Tests:**
+- [ ] E2E test: Log from tool, verify trace correlation
+- [ ] E2E test: Log from workflow step, verify trace correlation
+- [ ] E2E test: Logs appear in JsonExporter output
+- [ ] E2E test: LogEvents routed through ObservabilityBus
+
+**Metrics Tests:**
 - [ ] E2E test: Auto-extracted metrics appear when agent runs
 - [ ] E2E test: Token usage metrics extracted from LLM calls
 - [ ] E2E test: Direct metrics API works from tool context
 - [ ] E2E test: Cardinality filter blocks high-cardinality labels
-- [ ] E2E test: Metrics appear in storage and exporters
-- [ ] E2E test: Aggregation queries return correct results
+- [ ] E2E test: MetricEvents routed through ObservabilityBus
 
----
-
-## Dependencies Between PRs
-
-```
-PR 3.1 (@mastra/core)
-    ↓
-PR 3.2 (@mastra/observability) ← depends on core types
-    ↓
-PR 3.3 (stores/duckdb) ← depends on core storage interface
-    ↓
-PR 3.4 (stores/clickhouse) ← depends on core storage interface
-```
-
-**Note:** PR 3.3 and PR 3.4 can be done in parallel after PR 3.2.
-
-**Merge order:** 3.1 → 3.2 → (3.3 | 3.4)
+**Score/Feedback Tests:**
+- [ ] E2E test: Add score to active span
+- [ ] E2E test: Add feedback to active span
+- [ ] E2E test: Add score to trace (no span)
+- [ ] E2E test: Retrieve trace and add post-hoc score
+- [ ] E2E test: Retrieve trace and add post-hoc feedback
+- [ ] E2E test: ScoreEvents/FeedbackEvents routed through ObservabilityBus
 
 ---
 
 ## Definition of Done
 
+**Logging:**
+- [ ] LoggerContext implementation complete
+- [ ] Logs emitted from tools/workflows have trace correlation
+- [ ] LogEvent emission to ObservabilityBus working
+
+**Metrics:**
 - [ ] MetricsContext implementation complete
 - [ ] Auto-extracted metrics flowing from span events
 - [ ] Cardinality protection working
-- [ ] DefaultExporter writes metrics to storage
-- [ ] JsonExporter outputs metrics
-- [ ] DuckDB adapter stores and retrieves metrics with aggregation
-- [ ] ClickHouse adapter stores and retrieves metrics with aggregation
+- [ ] MetricEvent emission to ObservabilityBus working
+
+**Scores & Feedback:**
+- [ ] span.addScore() and span.addFeedback() working
+- [ ] trace.addScore() and trace.addFeedback() working
+- [ ] mastra.getTrace() returns Trace with spans
+- [ ] Post-hoc score/feedback attachment working
+- [ ] ScoreEvent/FeedbackEvent emission to ObservabilityBus working
+
+**General:**
 - [ ] All tests pass
-- [ ] Documentation updated with metrics catalog
+- [ ] Documentation updated
 
 ---
 
 ## Open Questions
 
-1. Should histogram buckets be configurable per-metric or global?
-2. What should the default histogram boundaries be?
-3. Should we add pre-aggregation for common time-series queries?
-4. Do we need a separate metrics registry for discovery?
+1. Should we add a `mastra.logger` direct API for logging outside trace context?
+2. Should histogram buckets be configurable per-metric or global?
+3. Should we support batch score/feedback creation?
+4. What's the migration path from existing `addScoreToTrace` API?

@@ -1,4 +1,4 @@
-# Phase 6: MomentExporter
+# Phase 9: MomentExporter
 
 **Status:** Planning
 **Prerequisites:** Phase 1-5
@@ -8,7 +8,7 @@
 
 ## Overview
 
-Phase 6 implements the MomentExporter for Mastra Pulse - an internal event store approach for building a graph of moments:
+Phase 9 implements the MomentExporter for Mastra Pulse - an internal event store approach for building a graph of moments:
 - Moment schema (event store approach)
 - MomentExporter implementation
 - ClickHouse pulse_moments table
@@ -21,18 +21,18 @@ Phase 6 implements the MomentExporter for Mastra Pulse - an internal event store
 
 | PR | Package | Scope |
 |----|---------|-------|
-| PR 6.1 | `@mastra/core` | Moment types and interfaces |
-| PR 6.2 | `observability/pulse` (new) | MomentExporter implementation |
-| PR 6.3 | `stores/clickhouse` | pulse_moments table |
+| PR 9.1 | `@mastra/core` | Moment types and interfaces |
+| PR 9.2 | `observability/pulse` (new) | MomentExporter implementation |
+| PR 9.3 | `stores/clickhouse` | pulse_moments table |
 
 ---
 
-## PR 6.1: @mastra/core Moment Types
+## PR 9.1: @mastra/core Moment Types
 
 **Package:** `packages/core`
 **Scope:** Moment types and interfaces
 
-### 6.1.1 Moment Schema
+### 9.1.1 Moment Schema
 
 **File:** `packages/core/src/observability/types/moment.ts` (new)
 
@@ -132,7 +132,7 @@ export interface MomentInput {
 - [ ] Define MomentInput interface
 - [ ] Export from types index
 
-### 6.1.2 Moment Storage Interface
+### 9.1.2 Moment Storage Interface
 
 **File:** `packages/core/src/storage/domains/observability/base.ts` (modify)
 
@@ -175,7 +175,7 @@ export interface ListMomentsArgs {
 - [ ] Add optional moment methods to storage interface
 - [ ] Define argument types
 
-### PR 6.1 Testing
+### PR 9.1 Testing
 
 **Tasks:**
 - [ ] Test Moment schema validation
@@ -183,12 +183,12 @@ export interface ListMomentsArgs {
 
 ---
 
-## PR 6.2: MomentExporter Implementation
+## PR 9.2: MomentExporter Implementation
 
 **Package:** `observability/pulse` (new package)
 **Scope:** MomentExporter that captures individual events as moments
 
-### 6.2.1 Package Setup
+### 9.2.1 Package Setup
 
 **Structure:**
 ```
@@ -211,7 +211,7 @@ observability/pulse/
 - [ ] Set up package.json with dependencies
 - [ ] Set up tsconfig.json
 
-### 6.2.2 MomentExporter Configuration
+### 9.2.2 MomentExporter Configuration
 
 **File:** `observability/pulse/src/types.ts`
 
@@ -237,7 +237,7 @@ export interface MomentExporterConfig {
 - [ ] Define config interface
 - [ ] Define defaults
 
-### 6.2.3 MomentExporter Implementation
+### 9.2.3 MomentExporter Implementation
 
 **File:** `observability/pulse/src/exporter.ts`
 
@@ -246,8 +246,11 @@ import {
   BaseExporter,
   TracingEvent,
   LogEvent,
+  ScoreEvent,
+  FeedbackEvent,
   Moment,
   MomentKind,
+  AnyExportedSpan,
 } from '@mastra/core';
 import { generateId } from './utils';
 
@@ -288,24 +291,74 @@ export class MomentExporter extends BaseExporter {
 
     const moment: Moment = {
       id: generateId(),
-      timestamp: event.record.timestamp,
+      timestamp: new Date(event.log.timestamp),
       kind: 'log.added',
-      traceId: event.record.traceId,
-      spanId: event.record.spanId,
-      runId: event.record.runId,
-      sessionId: event.record.sessionId,
-      threadId: event.record.threadId,
-      requestId: event.record.requestId,
-      organizationId: event.record.organizationId ?? this.config.organizationId,
-      userId: event.record.userId,
-      serviceName: event.record.serviceName,
-      environment: event.record.environment,
-      entityType: event.record.entityType,
-      entityName: event.record.entityName,
+      traceId: event.log.traceId,
+      spanId: event.log.spanId,
+      runId: event.log.runId,
+      sessionId: event.log.sessionId,
+      threadId: event.log.threadId,
+      requestId: event.log.requestId,
+      organizationId: event.log.organizationId ?? this.config.organizationId,
+      userId: event.log.userId,
+      serviceName: event.log.serviceName,
+      environment: event.log.environment,
+      entityType: event.log.entityType,
+      entityName: event.log.entityName,
       payload: JSON.stringify({
-        level: event.record.level,
-        message: event.record.message,
-        data: event.record.data,
+        level: event.log.level,
+        message: event.log.message,
+        data: event.log.data,
+      }),
+    };
+
+    this.buffer.push(moment);
+    if (this.buffer.length >= this.config.batchSize!) {
+      await this.flush();
+    }
+  }
+
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    if (!this.isKindEnabled('score.added')) return;
+
+    const moment: Moment = {
+      id: generateId(),
+      timestamp: new Date(event.score.timestamp),
+      kind: 'score.added',
+      traceId: event.score.traceId,
+      spanId: event.score.spanId,
+      organizationId: this.config.organizationId,
+      payload: JSON.stringify({
+        scorerName: event.score.scorerName,
+        score: event.score.score,
+        reason: event.score.reason,
+        metadata: event.score.metadata,
+      }),
+    };
+
+    this.buffer.push(moment);
+    if (this.buffer.length >= this.config.batchSize!) {
+      await this.flush();
+    }
+  }
+
+  async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
+    if (!this.isKindEnabled('feedback.added')) return;
+
+    const moment: Moment = {
+      id: generateId(),
+      timestamp: new Date(event.feedback.timestamp),
+      kind: 'feedback.added',
+      traceId: event.feedback.traceId,
+      spanId: event.feedback.spanId,
+      userId: event.feedback.userId,
+      organizationId: this.config.organizationId,
+      payload: JSON.stringify({
+        source: event.feedback.source,
+        feedbackType: event.feedback.feedbackType,
+        value: event.feedback.value,
+        comment: event.feedback.comment,
+        metadata: event.feedback.metadata,
       }),
     };
 
@@ -318,19 +371,15 @@ export class MomentExporter extends BaseExporter {
   private tracingEventToMoment(event: TracingEvent): Moment | null {
     switch (event.type) {
       case 'span.started':
-        return this.spanToMoment(event.exportedSpan, 'span.started');
+        return this.spanToMoment(event.span, 'span.started');
       case 'span.ended':
-        return this.spanToMoment(event.exportedSpan, 'span.ended');
+        return this.spanToMoment(event.span, 'span.ended');
       case 'span.updated':
-        return this.spanToMoment(event.exportedSpan, 'span.updated');
+        return this.spanToMoment(event.span, 'span.updated');
       case 'span.error':
-        return this.spanToMoment(event.exportedSpan, 'span.error', {
+        return this.spanToMoment(event.span, 'span.error', {
           error: event.error,
         });
-      case 'score.added':
-        return this.scoreToMoment(event);
-      case 'feedback.added':
-        return this.feedbackToMoment(event);
       default:
         return null;
     }
@@ -343,7 +392,7 @@ export class MomentExporter extends BaseExporter {
   ): Moment {
     return {
       id: generateId(),
-      timestamp: kind === 'span.ended' ? span.endedAt ?? new Date() : span.startedAt ?? new Date(),
+      timestamp: kind === 'span.ended' ? new Date(span.endedAt ?? Date.now()) : new Date(span.startedAt ?? Date.now()),
       kind,
       traceId: span.traceId,
       spanId: span.id,
@@ -364,39 +413,6 @@ export class MomentExporter extends BaseExporter {
         status: span.status,
         ...extraPayload,
       }),
-    };
-  }
-
-  private scoreToMoment(event: {
-    traceId: string;
-    spanId?: string;
-    score: ScoreInput;
-  }): Moment {
-    return {
-      id: generateId(),
-      timestamp: new Date(),
-      kind: 'score.added',
-      traceId: event.traceId,
-      spanId: event.spanId,
-      organizationId: this.config.organizationId,
-      payload: JSON.stringify(event.score),
-    };
-  }
-
-  private feedbackToMoment(event: {
-    traceId: string;
-    spanId?: string;
-    feedback: FeedbackInput;
-  }): Moment {
-    return {
-      id: generateId(),
-      timestamp: new Date(),
-      kind: 'feedback.added',
-      traceId: event.traceId,
-      spanId: event.spanId,
-      userId: event.feedback.userId,
-      organizationId: this.config.organizationId,
-      payload: JSON.stringify(event.feedback),
     };
   }
 
@@ -454,7 +470,7 @@ export class MomentExporter extends BaseExporter {
 - [ ] Implement batching and flushing
 - [ ] Support enabledKinds filtering
 
-### 6.2.4 Export Index
+### 9.2.4 Export Index
 
 **File:** `observability/pulse/src/index.ts`
 
@@ -467,7 +483,7 @@ export type { MomentExporterConfig } from './types';
 - [ ] Export MomentExporter
 - [ ] Export types
 
-### PR 6.2 Testing
+### PR 9.2 Testing
 
 **Tasks:**
 - [ ] Test span.started moment creation
@@ -480,12 +496,12 @@ export type { MomentExporterConfig } from './types';
 
 ---
 
-## PR 6.3: ClickHouse pulse_moments Table
+## PR 9.3: ClickHouse pulse_moments Table
 
 **Package:** `stores/clickhouse`
 **Scope:** Create pulse_moments table (standalone, not in ObservabilityStorage)
 
-### 6.3.1 pulse_moments Table Schema
+### 9.3.1 pulse_moments Table Schema
 
 **File:** `stores/clickhouse/sql/pulse_moments.sql` (documentation/reference)
 
@@ -546,7 +562,7 @@ TTL toDateTime(Timestamp) + INTERVAL 90 DAY
 - [ ] Create table creation SQL
 - [ ] Document schema for MomentExporter usage
 
-### 6.3.2 Table Creation Utility
+### 9.3.2 Table Creation Utility
 
 **File:** `observability/pulse/src/setup.ts` (optional utility)
 
@@ -566,7 +582,7 @@ export async function createPulseMomentsTable(client: ClickHouseClient): Promise
 - [ ] Create setup utility for table creation
 - [ ] Add to MomentExporter init if needed
 
-### PR 6.3 Testing
+### PR 9.3 Testing
 
 **Tasks:**
 - [ ] Test table creation
@@ -686,14 +702,14 @@ After all PRs merged:
 ## Dependencies Between PRs
 
 ```
-PR 6.1 (@mastra/core types)
+PR 9.1 (@mastra/core types)
     ↓
-PR 6.2 (observability/pulse) ← depends on core types
+PR 9.2 (observability/pulse) ← depends on core types
     ↓
-PR 6.3 (ClickHouse table) ← depends on pulse exporter
+PR 9.3 (ClickHouse table) ← depends on pulse exporter
 ```
 
-**Merge order:** 6.1 → 6.2 → 6.3
+**Merge order:** 9.1 → 9.2 → 9.3
 
 ---
 

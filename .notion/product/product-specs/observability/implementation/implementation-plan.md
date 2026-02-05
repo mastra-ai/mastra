@@ -1,13 +1,181 @@
 # Observability Implementation Plan
 
-**Date:** 2026-02-04
+**Date:** 2026-02-05
 **Status:** Draft - Ready for Implementation
 
 ---
 
 ## Overview
 
-World-class observability platform for Mastra with integrated Tracing, Metrics, and Logging (T/M/L). Designed for enterprise environments with high-volume ingestion, multi-tenancy, compliance, and integration with existing infrastructure.
+World-class observability platform for Mastra with integrated Tracing, Metrics, Logging, Scores, and Feedback (T/M/L/S/F). Designed for enterprise environments with high-volume ingestion, multi-tenancy, compliance, and integration with existing infrastructure.
+
+---
+
+## Type Architecture
+
+Each signal follows a three-tier type pattern:
+
+| Tier | Purpose | Serializable | Example |
+|------|---------|--------------|---------|
+| **Input** | User-facing API parameters | Not required | `ScoreInput`, method params |
+| **Exported** | Event bus transport, exporter consumption | **Required** | `ExportedLog`, `ExportedMetric` |
+| **Record** | Storage format, database schemas | Required | `LogRecord`, `MetricRecord` |
+
+**Key principles:**
+- **Input types** are ergonomic for users (can include functions, complex objects)
+- **Exported types** are serializable (JSON-safe) for event bus and network transport
+- **Record types** are optimized for storage (may differ per backend)
+- Conversion happens at boundaries: Input → Exported (context APIs), Exported → Record (storage adapters)
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│   Input     │ ──► │   Exported   │ ──► │   Record    │
+│  (User API) │     │ (Event Bus)  │     │  (Storage)  │
+└─────────────┘     └──────────────┘     └─────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │  Exporters  │
+                    │ (consume    │
+                    │  Exported)  │
+                    └─────────────┘
+```
+
+### Type Examples
+
+**Tracing (existing pattern to follow):**
+```typescript
+// Input: Runtime object with methods
+interface Span { ... }
+
+// Exported: Serializable data for event bus
+interface ExportedSpan { ... }  // AnyExportedSpan
+
+// Record: Storage format
+interface SpanRecord { ... }
+```
+
+**Logs:**
+```typescript
+// Input: Method parameters (not a separate type)
+logger.info(message: string, data?: Record<string, unknown>)
+
+// Exported: Serializable for event bus
+interface ExportedLog {
+  timestamp: Date;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  message: string;
+  data?: Record<string, unknown>;
+  traceId?: string;
+  spanId?: string;
+  // ... correlation fields
+}
+
+// Record: Storage format
+interface LogRecord {
+  id: string;
+  timestamp: Date;
+  // ... similar to ExportedLog with DB-specific additions
+}
+```
+
+**Metrics:**
+```typescript
+// Input: Method parameters
+counter.add(value: number, labels?: Record<string, string>)
+
+// Exported: Serializable for event bus
+interface ExportedMetric {
+  timestamp: Date;
+  name: string;
+  metricType: 'counter' | 'gauge' | 'histogram';
+  value: number;
+  labels: Record<string, string>;
+}
+
+// Record: Storage format
+interface MetricRecord { ... }
+```
+
+**Scores:**
+```typescript
+// Input: User-provided data
+interface ScoreInput {
+  scorerName: string;
+  score: number;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+// Exported: Serializable for event bus
+interface ExportedScore {
+  timestamp: Date;
+  traceId: string;
+  spanId?: string;
+  scorerName: string;
+  score: number;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+// Record: Storage format
+interface ScoreRecord { ... }
+```
+
+**Feedback:**
+```typescript
+// Input: User-provided data
+interface FeedbackInput {
+  source: string;
+  feedbackType: string;
+  value: number | string;
+  comment?: string;
+  userId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+// Exported: Serializable for event bus
+interface ExportedFeedback {
+  timestamp: Date;
+  traceId: string;
+  spanId?: string;
+  source: string;
+  feedbackType: string;
+  value: number | string;
+  comment?: string;
+  userId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+// Record: Storage format
+interface FeedbackRecord { ... }
+```
+
+---
+
+## Event Types
+
+Events use the Exported types for transport:
+
+```typescript
+type TracingEvent =
+  | { type: 'span.started'; span: AnyExportedSpan }
+  | { type: 'span.updated'; span: AnyExportedSpan }
+  | { type: 'span.ended'; span: AnyExportedSpan }
+  | { type: 'span.error'; span: AnyExportedSpan; error: SpanErrorInfo };
+
+type LogEvent = { type: 'log'; log: ExportedLog };
+type MetricEvent = { type: 'metric'; metric: ExportedMetric };
+type ScoreEvent = { type: 'score'; score: ExportedScore };
+type FeedbackEvent = { type: 'feedback'; feedback: ExportedFeedback };
+
+type ObservabilityEvent =
+  | TracingEvent
+  | LogEvent
+  | MetricEvent
+  | ScoreEvent
+  | FeedbackEvent;
+```
 
 ---
 
@@ -33,10 +201,10 @@ World-class observability platform for Mastra with integrated Tracing, Metrics, 
    │  (routes by event type to handlers)          │
    │                                              │
    │  TracingEvent  → onTracingEvent()            │
+   │  LogEvent      → onLogEvent()                │
+   │  MetricEvent   → onMetricEvent()             │
    │  ScoreEvent    → onScoreEvent()              │
    │  FeedbackEvent → onFeedbackEvent()           │
-   │  MetricEvent   → onMetricEvent()             │
-   │  LogEvent      → onLogEvent()                │
    └──────────────────────┬───────────────────────┘
                           │
                           ▼
@@ -48,18 +216,17 @@ World-class observability platform for Mastra with integrated Tracing, Metrics, 
 
 **Key design decisions:**
 - **Single ObservabilityBus** handles all event types and routes to appropriate handlers
-- **Type-based routing**: Each event type routes to its dedicated handler (`onTracingEvent`, `onScoreEvent`, etc.)
-- **Handler presence = support**: Exporters declare support by implementing the handler (no separate flags)
-- **Cross-emission within ObservabilityBus**: TracingEvents generate MetricEvents (auto-extracted metrics)
-- **Cross-emission within ObservabilityBus**: ScoreEvents/FeedbackEvents generate MetricEvents (score distribution metrics)
-- **Backward compatible**: Existing tracing code unchanged, buses are internal infrastructure
-- **Storage-agnostic**: DefaultExporter writes to storage; other exporters send to external systems
+- **Type-based routing**: Each event type routes to its dedicated handler
+- **Handler presence = support**: Exporters declare support by implementing the handler
+- **Exported types are serializable**: All event payloads are JSON-safe
+- **Storage conversion in storage layer**: Exported → Record happens in storage adapters
+- **Cross-emission**: TracingEvents can generate MetricEvents (auto-extracted metrics)
 
 ---
 
 ## Context API
 
-All execution contexts (tools, workflow steps, processors) gain unified observability access:
+All execution contexts gain unified observability access:
 
 ```typescript
 interface ObservabilityContextMixin {
@@ -68,121 +235,8 @@ interface ObservabilityContextMixin {
   metrics: MetricsContext;     // always present, no-op if not configured
 
   /** @deprecated Use `tracing` instead */
-  tracingContext: TracingContext;  // alias, also always present
+  tracingContext: TracingContext;
 }
-```
-
-**Usage:**
-```typescript
-execute: async (input, { tracing, logger, metrics }) => {
-  logger.info("Processing");
-  metrics.counter("calls").add(1);
-  const span = tracing.currentSpan;
-}
-```
-
-**Note:** Existing NoOp tracing implementation to reuse/reference.
-
----
-
-## LoggerContext Interface
-
-```typescript
-interface LoggerContext {
-  debug(message: string, data?: Record<string, unknown>): void;
-  info(message: string, data?: Record<string, unknown>): void;
-  warn(message: string, data?: Record<string, unknown>): void;
-  error(message: string, data?: Record<string, unknown>): void;
-}
-```
-
-**Auto-injected into each log record:**
-- `traceId`, `spanId` - from active trace
-- `entityType`, `entityName`, `entityId` - agent/tool/workflow info
-- `runId`, `sessionId`, `threadId` - execution context
-- `environment`, `serviceName` - from config
-
----
-
-## MetricsContext Interface
-
-```typescript
-interface MetricsContext {
-  counter(name: string): Counter;
-  gauge(name: string): Gauge;
-  histogram(name: string): Histogram;
-}
-
-interface Counter {
-  add(value: number, additionalLabels?: Record<string, string>): void;
-}
-
-interface Gauge {
-  set(value: number, additionalLabels?: Record<string, string>): void;
-}
-
-interface Histogram {
-  record(value: number, additionalLabels?: Record<string, string>): void;
-}
-```
-
-**Auto-injected labels:**
-- `agent`, `tool`, `workflow` - from entity context
-- `env`, `service` - from config
-
----
-
-## Event Bus Architecture
-
-```typescript
-// Base interface for observability event buses
-interface ObservabilityEventBus<TEvent> {
-  emit(event: TEvent): void;
-  subscribe(handler: (event: TEvent) => void): () => void;
-  flush(): Promise<void>;
-  shutdown(): Promise<void>;
-}
-
-// Span lifecycle events
-type TracingEvent =
-  | { type: 'span.started'; exportedSpan: AnyExportedSpan }
-  | { type: 'span.updated'; exportedSpan: AnyExportedSpan }
-  | { type: 'span.ended'; exportedSpan: AnyExportedSpan }
-  | { type: 'span.error'; exportedSpan: AnyExportedSpan; error: SpanErrorInfo };
-
-// Metrics events
-type MetricEvent = {
-  type: 'metric';
-  name: string;
-  metricType: 'counter' | 'gauge' | 'histogram';
-  value: number;
-  labels: Record<string, string>;
-  timestamp: Date;
-};
-
-// Logs events
-type LogEvent = {
-  type: 'log';
-  record: LogRecord;
-};
-
-// Scores (separate from TracingEvent for independent handling)
-type ScoreEvent = {
-  type: 'score';
-  traceId: string;
-  spanId?: string;
-  score: ScoreInput;
-  timestamp: Date;
-};
-
-// Feedback (separate from TracingEvent for independent handling)
-type FeedbackEvent = {
-  type: 'feedback';
-  traceId: string;
-  spanId?: string;
-  feedback: FeedbackInput;
-  timestamp: Date;
-};
 ```
 
 ---
@@ -194,235 +248,16 @@ interface ObservabilityExporter {
   readonly name: string;
 
   // Signal handlers - implement the ones you support
-  // Handler presence = signal support (no separate flags needed)
+  // Handler presence = signal support
   onTracingEvent?(event: TracingEvent): void | Promise<void>;
-  onMetricEvent?(event: MetricEvent): void | Promise<void>;
   onLogEvent?(event: LogEvent): void | Promise<void>;
+  onMetricEvent?(event: MetricEvent): void | Promise<void>;
   onScoreEvent?(event: ScoreEvent): void | Promise<void>;
   onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>;
 
   // Lifecycle
   flush?(): Promise<void>;
   shutdown?(): Promise<void>;
-
-  // DEPRECATED - use span.addScore() instead
-  /** @deprecated Use span.addScore() or trace.addScore() instead */
-  addScoreToTrace?(args: AddScoreToTraceArgs): Promise<void>;
-}
-```
-
----
-
-## Storage Schemas
-
-### Logs Schema
-
-```typescript
-const logRecordSchema = z.object({
-  id: z.string(),
-  timestamp: z.date(),
-  level: z.string(),
-  message: z.string(),
-  data: z.record(z.unknown()).optional(),
-
-  // Correlation
-  traceId: z.string().optional(),
-  spanId: z.string().optional(),
-  runId: z.string().optional(),
-  sessionId: z.string().optional(),
-  threadId: z.string().optional(),
-  requestId: z.string().optional(),
-
-  // Entity context
-  entityType: z.string().optional(),
-  entityName: z.string().optional(),
-
-  // Multi-tenancy
-  userId: z.string().optional(),
-  organizationId: z.string().optional(),
-  resourceId: z.string().optional(),
-
-  // Environment
-  environment: z.string().optional(),
-  serviceName: z.string().optional(),
-  source: z.string().optional(),
-
-  // Filtering
-  tags: z.array(z.string()).optional(),
-});
-```
-
-### Metrics Schema (cardinality-safe)
-
-```typescript
-const metricRecordSchema = z.object({
-  id: z.string(),
-  timestamp: z.date(),
-  name: z.string(),
-  type: z.string(),
-  value: z.number(),
-
-  labels: z.record(z.string()),
-
-  organizationId: z.string().optional(),
-  environment: z.string().optional(),
-  serviceName: z.string().optional(),
-
-  bucketBoundaries: z.array(z.number()).optional(),
-  bucketCounts: z.array(z.number()).optional(),
-});
-```
-
-### Score Schema
-
-```typescript
-const scoreRecordSchema = z.object({
-  id: z.string(),
-  timestamp: z.date(),
-  traceId: z.string(),
-  spanId: z.string().optional(),
-
-  scorerName: z.string(),
-  score: z.number(),
-  reason: z.string().optional(),
-  metadata: z.record(z.unknown()).optional(),
-
-  organizationId: z.string().optional(),
-  environment: z.string().optional(),
-  serviceName: z.string().optional(),
-});
-```
-
-**TODO:** Verify scores table alignment with existing evals scores schema.
-
-### Feedback Schema
-
-```typescript
-const feedbackRecordSchema = z.object({
-  id: z.string(),
-  timestamp: z.date(),
-
-  traceId: z.string(),
-  spanId: z.string().optional(),
-
-  source: z.string(),
-  feedbackType: z.string(),
-  value: z.union([z.number(), z.string()]),
-  comment: z.string().optional(),
-
-  userId: z.string().optional(),
-  organizationId: z.string().optional(),
-  environment: z.string().optional(),
-  serviceName: z.string().optional(),
-});
-```
-
-**TODO:** Revisit table name `mastra_ai_trace_feedback`.
-
----
-
-## ObservabilityStorage Interface
-
-```typescript
-abstract class ObservabilityStorage extends StorageDomain {
-  // === Tracing (existing) ===
-  async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> { throw NOT_IMPLEMENTED; }
-  async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> { throw NOT_IMPLEMENTED; }
-  async getSpan(args: GetSpanArgs): Promise<TraceSpan | null> { throw NOT_IMPLEMENTED; }
-  async listTraces(args: ListTracesArgs): Promise<PaginatedResult<TraceSpan>> { throw NOT_IMPLEMENTED; }
-
-  // === Logs (new) ===
-  async batchCreateLogs(args: BatchCreateLogsArgs): Promise<void> { throw NOT_IMPLEMENTED; }
-  async listLogs(args: ListLogsArgs): Promise<PaginatedResult<LogRecord>> { throw NOT_IMPLEMENTED; }
-
-  // === Metrics (new) ===
-  async batchRecordMetrics(args: BatchRecordMetricsArgs): Promise<void> { throw NOT_IMPLEMENTED; }
-  async listMetrics(args: ListMetricsArgs): Promise<PaginatedResult<MetricRecord>> { throw NOT_IMPLEMENTED; }
-
-  // === Scores (moved from separate system) ===
-  async createScore(args: CreateScoreArgs): Promise<void> { throw NOT_IMPLEMENTED; }
-  async listScores(args: ListScoresArgs): Promise<PaginatedResult<ScoreRecord>> { throw NOT_IMPLEMENTED; }
-
-  // === Feedback (new) ===
-  async createFeedback(args: CreateFeedbackArgs): Promise<void> { throw NOT_IMPLEMENTED; }
-  async listFeedback(args: ListFeedbackArgs): Promise<PaginatedResult<FeedbackRecord>> { throw NOT_IMPLEMENTED; }
-
-  // === Strategy Getters ===
-  // Tracing: non-null default (backward compat - if domain exists, tracing supported)
-  // Others: null by default (opt-in for new signals)
-  // TODO(2.0): Change tracingStrategy to return null by default for consistency
-
-  get tracingStrategy(): StrategyHint<TracingStorageStrategy> {
-    return { preferred: 'batch-with-updates', supported: ['realtime', 'batch-with-updates', 'insert-only'] };
-  }
-  get logsStrategy(): StrategyHint<LogsStorageStrategy> { return null; }
-  get metricsStrategy(): StrategyHint<MetricsStorageStrategy> { return null; }
-  get scoresStrategy(): StrategyHint<ScoresStorageStrategy> { return null; }
-  get feedbackStrategy(): StrategyHint<FeedbackStorageStrategy> { return null; }
-}
-
-// Helper type
-type StrategyHint<T> = { preferred: T; supported: T[] } | null;
-
-// Strategy types
-type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
-type LogsStorageStrategy = 'realtime' | 'batch';
-type MetricsStorageStrategy = 'realtime' | 'batch';
-type ScoresStorageStrategy = 'realtime' | 'batch';
-type FeedbackStorageStrategy = 'realtime' | 'batch';
-```
-
----
-
-## Tracing Improvements
-
-### Score/Feedback APIs
-
-```typescript
-interface Span {
-  addScore(score: ScoreInput): void;
-  addFeedback(feedback: FeedbackInput): void;
-}
-
-interface ScoreInput {
-  scorerName: string;
-  score: number;
-  reason?: string;
-  metadata?: Record<string, unknown>;
-}
-
-interface FeedbackInput {
-  source: string;
-  feedbackType: string;
-  value: number | string;
-  comment?: string;
-  userId?: string;
-  metadata?: Record<string, unknown>;
-}
-```
-
-### Trace Retrieval
-
-```typescript
-interface Mastra {
-  getTrace(traceId: string): Promise<Trace | null>;
-}
-
-interface Trace {
-  traceId: string;
-  spans: Span[];
-
-  addScore(score: ScoreInput): void;
-  addFeedback(feedback: FeedbackInput): void;
-  getSpan(spanId: string): Span | null;
-}
-```
-
-### SessionId Support
-
-```typescript
-interface TracingOptions {
-  sessionId?: string;    // new: multi-turn conversation grouping
 }
 ```
 
@@ -445,270 +280,128 @@ interface ObservabilityConfig {
 
   metrics?: {
     cardinality?: {
-      blockedLabels?: string[];   // undefined = DEFAULT_BLOCKED_LABELS
-      blockUUIDs?: boolean;        // default: true
+      blockedLabels?: string[];
+      blockUUIDs?: boolean;
     };
   };
 }
-
-const DEFAULT_BLOCKED_LABELS = [
-  'trace_id', 'span_id', 'run_id',
-  'request_id', 'user_id', 'resource_id'
-];
 ```
-
----
-
-## DuckDB Adapter
-
-For local development - embedded, columnar, no external dependencies.
-
-**Strategy Getters:**
-```typescript
-get tracingStrategy() {
-  return { preferred: 'batch-with-updates', supported: ['realtime', 'batch-with-updates'] };
-}
-
-get logsStrategy() {
-  return { preferred: 'batch', supported: ['realtime', 'batch'] };
-}
-
-get metricsStrategy() {
-  return { preferred: 'batch', supported: ['realtime', 'batch'] };
-}
-
-get scoresStrategy() {
-  return { preferred: 'batch', supported: ['realtime', 'batch'] };
-}
-
-get feedbackStrategy() {
-  return { preferred: 'batch', supported: ['realtime', 'batch'] };
-}
-```
-
----
-
-## ClickHouse Adapter
-
-For production - high-volume ingestion, insert-only.
-
-### Logs Table
-
-```sql
-CREATE TABLE mastra_ai_logs (
-  Timestamp DateTime64(9) CODEC(Delta(8), ZSTD(1)),
-  LogId String CODEC(ZSTD(1)),
-  Level LowCardinality(String) CODEC(ZSTD(1)),
-  Message String CODEC(ZSTD(1)),
-  Data Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-
-  TraceId String CODEC(ZSTD(1)),
-  SpanId String CODEC(ZSTD(1)),
-
-  ServiceName LowCardinality(String) CODEC(ZSTD(1)),
-  EntityType LowCardinality(String) CODEC(ZSTD(1)),
-  EntityName LowCardinality(String) CODEC(ZSTD(1)),
-  Environment LowCardinality(String) CODEC(ZSTD(1)),
-  OrganizationId LowCardinality(String) CODEC(ZSTD(1)),
-
-  INDEX idx_trace_id TraceId TYPE bloom_filter(0.001) GRANULARITY 1,
-  INDEX idx_data_key mapKeys(Data) TYPE bloom_filter(0.01) GRANULARITY 1,
-  INDEX idx_data_value mapValues(Data) TYPE bloom_filter(0.01) GRANULARITY 1
-)
-ENGINE = MergeTree
-PARTITION BY toDate(Timestamp)
-ORDER BY (ServiceName, Level, toUnixTimestamp(Timestamp))
-```
-
-### Metrics Table
-
-```sql
-CREATE TABLE mastra_ai_metrics (
-  Timestamp DateTime64(9) CODEC(Delta(8), ZSTD(1)),
-  MetricId String CODEC(ZSTD(1)),
-  Name LowCardinality(String) CODEC(ZSTD(1)),
-  Type LowCardinality(String) CODEC(ZSTD(1)),
-  Value Float64 CODEC(ZSTD(1)),
-  Labels Map(LowCardinality(String), String) CODEC(ZSTD(1)),
-
-  ServiceName LowCardinality(String) CODEC(ZSTD(1)),
-  Environment LowCardinality(String) CODEC(ZSTD(1)),
-  OrganizationId LowCardinality(String) CODEC(ZSTD(1)),
-
-  INDEX idx_labels_key mapKeys(Labels) TYPE bloom_filter(0.01) GRANULARITY 1,
-  INDEX idx_labels_value mapValues(Labels) TYPE bloom_filter(0.01) GRANULARITY 1
-)
-ENGINE = MergeTree
-PARTITION BY toDate(Timestamp)
-ORDER BY (Name, toUnixTimestamp(Timestamp))
-```
-
----
-
-## MomentExporter (Pulse)
-
-Internal-only exporter for event store experimentation.
-
-**Moment Kinds:**
-```typescript
-type MomentKind =
-  | 'span.started'
-  | 'span.ended'
-  | 'span.updated'
-  | 'span.error'
-  | 'score.added'
-  | 'feedback.added'
-  | 'log.added';
-  // Future: 'deploy.completed', 'config.changed', 'metric.recorded', etc.
-```
-
-**Moment Schema (ClickHouse):**
-```sql
-CREATE TABLE pulse_moments (
-  Id String,
-  Timestamp DateTime64(9),
-  Kind LowCardinality(String),
-
-  TraceId String,
-  SpanId String,
-  ParentSpanId String,
-
-  RunId String,
-  SessionId String,
-  ThreadId String,
-  RequestId String,
-
-  OrganizationId String,
-  UserId String,
-
-  ServiceName LowCardinality(String),
-  Environment LowCardinality(String),
-  EntityType LowCardinality(String),
-  EntityName LowCardinality(String),
-
-  Payload String,
-
-  INDEX idx_trace_id TraceId TYPE bloom_filter(0.001) GRANULARITY 1,
-  INDEX idx_span_id SpanId TYPE bloom_filter(0.001) GRANULARITY 1,
-  INDEX idx_org_id OrganizationId TYPE bloom_filter(0.01) GRANULARITY 1
-)
-ENGINE = MergeTree
-PARTITION BY toDate(Timestamp)
-ORDER BY (OrganizationId, Kind, toUnixTimestamp(Timestamp))
-```
-
-**Extensibility:** `Kind` is `LowCardinality(String)` - new kinds can be added without schema migration.
-
----
-
-## Built-in Metrics Catalog
-
-Auto-extracted from span lifecycle events.
-
-### Agent Metrics
-| Metric | Type | Labels |
-|--------|------|--------|
-| `mastra_agent_runs_started` | counter | agent, env, service |
-| `mastra_agent_runs_ended` | counter | agent, status, env, service |
-| `mastra_agent_duration_ms` | histogram | agent, status, env, service |
-
-### Model Metrics
-| Metric | Type | Labels |
-|--------|------|--------|
-| `mastra_model_requests_started` | counter | model, provider, agent |
-| `mastra_model_requests_ended` | counter | model, provider, agent, status |
-| `mastra_model_duration_ms` | histogram | model, provider, agent |
-| `mastra_model_input_tokens` | counter | model, provider, agent, token_type |
-| `mastra_model_output_tokens` | counter | model, provider, agent, token_type |
-
-### Tool Metrics
-| Metric | Type | Labels |
-|--------|------|--------|
-| `mastra_tool_calls_started` | counter | tool, agent, env |
-| `mastra_tool_calls_ended` | counter | tool, agent, status, env |
-| `mastra_tool_duration_ms` | histogram | tool, agent, env |
-
-### Workflow Metrics
-| Metric | Type | Labels |
-|--------|------|--------|
-| `mastra_workflow_runs_started` | counter | workflow, env |
-| `mastra_workflow_runs_ended` | counter | workflow, status, env |
-| `mastra_workflow_duration_ms` | histogram | workflow, status, env |
-
-### Score/Feedback Metrics
-| Metric | Type | Labels |
-|--------|------|--------|
-| `mastra_scores_total` | counter | scorer, entity_type, entity_name, experiment |
-| `mastra_feedback_total` | counter | feedback_type, source, experiment |
 
 ---
 
 ## Implementation Phases
 
 ### Phase 1: Foundation
-- [ ] ObservabilityEventBus base infrastructure
-- [ ] ObservabilityBus implementation (handles all event types from start)
+Core infrastructure - event bus, context injection, type definitions, configuration.
+
+- [ ] Type architecture: Input, Exported, Record types for all signals
+- [ ] ObservabilityEventBus interface and base implementation
+- [ ] ObservabilityBus with type-based routing to handlers
 - [ ] Exporter interface with signal handlers
-- [ ] Update existing exporters to implement `onTracingEvent()`
+- [ ] BaseExporter: `onTracingEvent()` delegates to existing `exportTracingEvent()`
 - [ ] No-op LoggerContext and MetricsContext implementations
 - [ ] Context mixin (`tracing`, `logger`, `metrics` on all contexts)
 - [ ] Backward compat: `tracingContext` alias
-- [ ] DuckDB adapter: spans table (new adapter)
+- [ ] Unified ObservabilityConfig on Mastra
 
-### Phase 1.5: Debug Exporters
-- [ ] GrafanaCloudExporter (T/M/L) - for debugging/production visibility
-- [ ] JsonExporter updates - ensure T/M/L debug output
+### Phase 2: Debug Exporters
+Build exporters for ALL signals early to validate interfaces and provide developer visibility.
 
-### Phase 2: Logging
-- [ ] LoggerContext implementation (auto-correlation)
-- [ ] LogRecord schema and storage methods
-- [ ] LogEvent → exporter routing via ObservabilityBus
-- [ ] DefaultExporter: logs support
-- [ ] CloudExporter: logs support
-- [ ] JsonExporter: logs support
-- [ ] GrafanaCloudExporter: logs support (Loki)
-- [ ] DuckDB adapter: logs table
-- [ ] ClickHouse adapter: logs table
+- [ ] JsonExporter: handlers for T/M/L/S/F (console output)
+- [ ] GrafanaCloudExporter: handlers for T/M/L/S/F (Tempo/Loki/Mimir)
+- [ ] Validate Exported type serialization works correctly
 
-### Phase 3: Metrics
-- [ ] MetricsContext implementation (auto-labels, cardinality protection)
-- [ ] MetricRecord schema and storage methods
-- [ ] MetricEvent → exporter routing via ObservabilityBus
+### Phase 3: Logging
+LoggerContext implementation - no exporter work (Phase 2 exporters already handle LogEvent).
+
+- [ ] LoggerContext implementation with auto-correlation
+- [ ] ExportedLog type finalization
+- [ ] LogRecord schema (for storage in Phase 6)
+- [ ] LogEvent emission to ObservabilityBus
+
+### Phase 4: Metrics
+MetricsContext implementation - no exporter work.
+
+- [ ] MetricsContext implementation with auto-labels
+- [ ] Cardinality protection (blocked labels, UUID detection)
+- [ ] ExportedMetric type finalization
+- [ ] MetricRecord schema (for storage in Phase 6)
+- [ ] MetricEvent emission to ObservabilityBus
 - [ ] TracingEvent → MetricEvent cross-emission (auto-extracted metrics)
 - [ ] Built-in metrics catalog
-- [ ] DefaultExporter: metrics support
-- [ ] CloudExporter: metrics support
-- [ ] JsonExporter: metrics support
-- [ ] GrafanaCloudExporter: metrics support (Mimir)
-- [ ] DuckDB adapter: metrics table
-- [ ] ClickHouse adapter: metrics table
 
-### Phase 4: Scores & Feedback
+### Phase 5: Scores & Feedback
+Score/Feedback APIs - no exporter work.
+
 - [ ] `span.addScore()` / `span.addFeedback()` APIs
 - [ ] `trace.addScore()` / `trace.addFeedback()` APIs
 - [ ] `mastra.getTrace(traceId)` for post-hoc attachment
-- [ ] Score/Feedback schemas and storage methods
-- [ ] ScoreEvent / FeedbackEvent types with separate handlers
-- [ ] DefaultExporter: `onScoreEvent()` / `onFeedbackEvent()` handlers
-- [ ] CloudExporter: scores/feedback support
+- [ ] ExportedScore / ExportedFeedback type finalization
+- [ ] ScoreRecord / FeedbackRecord schemas (for storage in Phase 6)
+- [ ] ScoreEvent / FeedbackEvent emission to ObservabilityBus
 
-### Phase 5: Tracing Improvements
-- [ ] SessionId support in TracingOptions and span schema
-- [ ] Unified ObservabilityConfig on Mastra
-- [ ] Deprecate top-level `logger` config with migration path
+### Phase 6: Stores & DefaultExporter
+Storage adapters and the DefaultExporter that writes to storage.
 
-### Phase 5.5: Exporter Expansion
+- [ ] DefaultExporter: Exported → Record conversion, writes to storage
+- [ ] DuckDB adapter: spans, logs, metrics, scores, feedback tables
+- [ ] ClickHouse adapter: spans, logs, metrics, scores, feedback tables
+- [ ] Storage strategy getters for each signal
+- [ ] Batch write optimizations
+
+### Phase 7: Server & Client APIs
+HTTP APIs and client SDK for accessing stored data.
+
+- [ ] Server routes for traces, logs, metrics, scores, feedback
+- [ ] client-js SDK updates
+- [ ] CloudExporter (writes to Mastra Cloud API)
+
+### Phase 8: Third-Party Exporters
+Expand third-party integrations to support additional signals.
+
+- [ ] OtelExporter: logs, metrics support
 - [ ] LangfuseExporter: logs, scores, feedback support
 - [ ] BraintrustExporter: logs, scores, feedback support
 - [ ] LangSmithExporter: scores, feedback support
 - [ ] DatadogExporter: logs, metrics support
-- [ ] OtelExporter: logs, metrics support
-- [ ] Other exporters: audit and expand capabilities
+- [ ] ArizeExporter: traces, scores support
+- [ ] Other exporters: audit and expand
 
-### Phase 6: MomentExporter
+### Phase 9: MomentExporter
+Internal event store for advanced use cases.
+
 - [ ] Moment schema (event store approach)
 - [ ] MomentExporter implementation
 - [ ] ClickHouse pulse_moments table
+
+---
+
+## Phase Dependencies
+
+```
+Phase 1 (Foundation)
+    ↓
+Phase 2 (Debug Exporters) ← validates interfaces early
+    ↓
+Phase 3 (Logging) ──────┐
+    ↓                   │
+Phase 4 (Metrics) ──────┼── can run in parallel
+    ↓                   │
+Phase 5 (Scores/Feedback)┘
+    ↓
+Phase 6 (Stores & DefaultExporter)
+    ↓
+Phase 7 (Server & Client) ← depends on storage
+    ↓
+Phase 8 (3rd-Party Exporters) ← can start after Phase 2
+    ↓
+Phase 9 (MomentExporter)
+```
+
+**Notes:**
+- Phases 3, 4, 5 can run in parallel after Phase 2
+- Phase 8 can start after Phase 2 (exporters just need Exported types)
+- Phase 6, 7, 9 must be sequential
 
 ---
 
@@ -718,23 +411,70 @@ Auto-extracted from span lifecycle events.
 - `tracingContext` alias for `tracing` (deprecated)
 - Top-level `logger` config deprecated but still works
 - All contexts gain `tracing`, `logger`, `metrics` (always present, no-op if not configured)
+- BaseExporter delegates `onTracingEvent()` to existing `exportTracingEvent()`
+
+---
+
+## Storage Strategy Getters
+
+```typescript
+abstract class ObservabilityStorage extends StorageDomain {
+  // Tracing: non-null default (backward compat)
+  // TODO(2.0): Change to return null by default
+  get tracingStrategy(): StrategyHint<TracingStorageStrategy> {
+    return { preferred: 'batch-with-updates', supported: [...] };
+  }
+
+  // Others: null by default (opt-in)
+  get logsStrategy(): StrategyHint<LogsStorageStrategy> { return null; }
+  get metricsStrategy(): StrategyHint<MetricsStorageStrategy> { return null; }
+  get scoresStrategy(): StrategyHint<ScoresStorageStrategy> { return null; }
+  get feedbackStrategy(): StrategyHint<FeedbackStorageStrategy> { return null; }
+}
+
+type StrategyHint<T> = { preferred: T; supported: T[] } | null;
+```
+
+---
+
+## Built-in Metrics Catalog
+
+Auto-extracted from span lifecycle events (Phase 4).
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `mastra_agent_runs_started` | counter | agent, env, service |
+| `mastra_agent_runs_ended` | counter | agent, status, env, service |
+| `mastra_agent_duration_ms` | histogram | agent, status, env, service |
+| `mastra_model_requests_started` | counter | model, provider, agent |
+| `mastra_model_requests_ended` | counter | model, provider, agent, status |
+| `mastra_model_duration_ms` | histogram | model, provider, agent |
+| `mastra_model_input_tokens` | counter | model, provider, agent |
+| `mastra_model_output_tokens` | counter | model, provider, agent |
+| `mastra_tool_calls_started` | counter | tool, agent, env |
+| `mastra_tool_calls_ended` | counter | tool, agent, status, env |
+| `mastra_tool_duration_ms` | histogram | tool, agent, env |
+| `mastra_workflow_runs_started` | counter | workflow, env |
+| `mastra_workflow_runs_ended` | counter | workflow, status, env |
+| `mastra_workflow_duration_ms` | histogram | workflow, status, env |
+| `mastra_scores_total` | counter | scorer, entity_type, experiment |
+| `mastra_feedback_total` | counter | feedback_type, source, experiment |
 
 ---
 
 ## Detailed Phase Documents
 
-Each phase has a detailed document (or directory) with PR-by-package breakdowns, specific tasks, and code examples:
-
 | Phase | Document | Scope |
 |-------|----------|-------|
-| Phase 1 | [phase-1/](./phase-1/) | Event buses, context injection, DuckDB adapter |
-| Phase 1.5 | [phase-1.5-debug-exporters.md](./phase-1.5-debug-exporters.md) | GrafanaCloudExporter, JsonExporter |
-| Phase 2 | [phase-2/](./phase-2/) | LoggerContext, LogRecord, storage |
-| Phase 3 | [phase-3/](./phase-3/) | MetricsContext, auto-extraction, cardinality |
-| Phase 4 | [phase-4/](./phase-4/) | Score/Feedback APIs, storage |
-| Phase 5 | [phase-5-tracing-improvements.md](./phase-5-tracing-improvements.md) | SessionId, ObservabilityConfig |
-| Phase 5.5 | [phase-5.5-exporter-expansion.md](./phase-5.5-exporter-expansion.md) | Langfuse, Datadog, OTel expansion |
-| Phase 6 | [phase-6-moment-exporter.md](./phase-6-moment-exporter.md) | MomentExporter, pulse_moments |
+| Phase 1 | [phase-1/](./phase-1/) | Foundation, event bus, config |
+| Phase 2 | [phase-2/](./phase-2/) | Debug exporters (Json, GrafanaCloud) |
+| Phase 3 | [phase-3/](./phase-3/) | LoggerContext implementation |
+| Phase 4 | [phase-4/](./phase-4/) | MetricsContext, auto-extraction |
+| Phase 5 | [phase-5/](./phase-5/) | Score/Feedback APIs |
+| Phase 6 | [phase-6/](./phase-6/) | Stores & DefaultExporter |
+| Phase 7 | [phase-7/](./phase-7/) | Server & client-js |
+| Phase 8 | [phase-8/](./phase-8/) | Third-party exporters |
+| Phase 9 | [phase-9/](./phase-9/) | MomentExporter |
 
 ---
 
@@ -745,4 +485,3 @@ Each phase has a detailed document (or directory) with PR-by-package breakdowns,
 - [ ] Reference existing NoOp tracing implementation
 - [ ] Decide on changeset strategy (per-PR or per-phase)
 - [ ] Create migration guide for deprecated `tracingContext`
-- [ ] Decide if DuckDB should be default for local dev

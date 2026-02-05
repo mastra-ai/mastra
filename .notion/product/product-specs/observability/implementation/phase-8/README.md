@@ -1,20 +1,23 @@
-# Phase 5.5: Exporter Expansion
+# Phase 8: Third-Party Exporters
 
 **Status:** Planning
-**Prerequisites:** Phase 1-5
+**Prerequisites:** Phase 2 (Debug Exporters)
 **Estimated Scope:** Expand existing exporters to support additional signals
 
 ---
 
 ## Overview
 
-Phase 5.5 expands all existing exporters to support the full signal set where applicable:
-- LangfuseExporter: logs, scores, feedback
-- BraintrustExporter: logs, scores, feedback
-- LangSmithExporter: scores, feedback
-- DatadogExporter: logs, metrics
-- OtelExporter: logs, metrics
+Phase 8 expands all existing third-party exporters to support the full signal set where applicable:
+- OtelExporter: logs, metrics support
+- LangfuseExporter: logs, scores, feedback support
+- BraintrustExporter: logs, scores, feedback support
+- LangSmithExporter: scores, feedback support
+- DatadogExporter: logs, metrics support
+- ArizeExporter: traces, scores support
 - Other exporters: audit and expand
+
+**Note:** This phase can start after Phase 2 (Debug Exporters) since exporters only need the Exported types. It can run in parallel with Phases 3-7.
 
 ---
 
@@ -22,28 +25,108 @@ Phase 5.5 expands all existing exporters to support the full signal set where ap
 
 | PR | Package | Scope |
 |----|---------|-------|
-| PR 5.5.1 | `observability/langfuse` | Logs, scores, feedback support |
-| PR 5.5.2 | `observability/braintrust` | Logs, scores, feedback support |
-| PR 5.5.3 | `observability/langsmith` | Scores, feedback support |
-| PR 5.5.4 | `observability/datadog` | Logs, metrics support |
-| PR 5.5.5 | `observability/otel-exporter` | Logs, metrics support |
-| PR 5.5.6 | Other exporters | Audit and expand |
+| PR 8.1 | `observability/otel-exporter` | Logs, metrics support |
+| PR 8.2 | `observability/langfuse` | Logs, scores, feedback support |
+| PR 8.3 | `observability/braintrust` | Logs, scores, feedback support |
+| PR 8.4 | `observability/langsmith` | Scores, feedback support |
+| PR 8.5 | `observability/datadog` | Logs, metrics support |
+| PR 8.6 | Other exporters | Audit and expand |
 
 ---
 
-## PR 5.5.1: LangfuseExporter Expansion
+## PR 8.1: OtelExporter Expansion
+
+**Package:** `observability/otel-exporter`
+**Scope:** Add logs and metrics support
+
+### 8.1.1 Current State Audit
+
+**Tasks:**
+- [ ] Audit current OtelExporter capabilities
+- [ ] Review OTLP protocol for logs and metrics
+
+### 8.1.2 Add Logs Support
+
+```typescript
+export class OtelExporter extends BaseExporter {
+  // Handler presence = signal support
+  // Note: No onScoreEvent/onFeedbackEvent - OTLP doesn't have native scores
+
+  private logExporter: OTLPLogExporter;
+
+  async onLogEvent(event: LogEvent): Promise<void> {
+    // Convert ExportedLog to OTLP LogRecord format
+    const logRecord = {
+      timeUnixNano: BigInt(new Date(event.log.timestamp).getTime() * 1_000_000),
+      severityNumber: this.mapSeverity(event.log.level),
+      severityText: event.log.level.toUpperCase(),
+      body: { stringValue: event.log.message },
+      attributes: this.toAttributes(event.log.data),
+      traceId: this.hexToBytes(event.log.traceId),
+      spanId: this.hexToBytes(event.log.spanId),
+    };
+
+    await this.logExporter.export([logRecord]);
+  }
+}
+```
+
+**Tasks:**
+- [ ] Implement `onLogEvent()` handler
+- [ ] Initialize OTLPLogExporter
+- [ ] Map ExportedLog to OTLP format
+- [ ] Handle trace correlation
+
+### 8.1.3 Add Metrics Support
+
+```typescript
+async onMetricEvent(event: MetricEvent): Promise<void> {
+  // Convert ExportedMetric to OTLP Metric format
+  const metric = {
+    name: event.metric.name,
+    description: '',
+    unit: '1',
+    [event.metric.metricType]: {
+      dataPoints: [{
+        timeUnixNano: BigInt(new Date(event.metric.timestamp).getTime() * 1_000_000),
+        [event.metric.metricType === 'histogram' ? 'sum' : 'asDouble']: event.metric.value,
+        attributes: this.toAttributes(event.metric.labels),
+      }],
+    },
+  };
+
+  await this.metricExporter.export([metric]);
+}
+```
+
+**Tasks:**
+- [ ] Implement `onMetricEvent()` handler
+- [ ] Initialize OTLPMetricExporter
+- [ ] Map ExportedMetric to OTLP format
+- [ ] Handle different metric types
+
+### PR 8.1 Testing
+
+**Tasks:**
+- [ ] Test logs export to OTLP endpoint
+- [ ] Test metrics export to OTLP endpoint
+- [ ] Test with Jaeger/Grafana/other OTLP backends
+
+---
+
+## PR 8.2: LangfuseExporter Expansion
 
 **Package:** `observability/langfuse`
 **Scope:** Add logs, scores, and feedback support
 
-### 5.5.1.1 Current State Audit
+### 8.2.1 Current State Audit
 
 **Tasks:**
 - [ ] Audit current LangfuseExporter capabilities
 - [ ] Review Langfuse API for log/score/feedback support
 - [ ] Identify API endpoints for each signal
 
-### 5.5.1.2 Add Logs Support
+### 8.2.2 Add Logs Support
 
 ```typescript
 export class LangfuseExporter extends BaseExporter {
@@ -52,17 +135,16 @@ export class LangfuseExporter extends BaseExporter {
 
   async onLogEvent(event: LogEvent): Promise<void> {
     // Langfuse logs can be attached to traces/spans as events
-    // or sent as standalone observations
     await this.langfuse.event({
-      traceId: event.record.traceId,
+      traceId: event.log.traceId,
       name: 'log',
-      level: event.record.level,
-      input: event.record.message,
+      level: event.log.level,
+      input: event.log.message,
       metadata: {
-        ...event.record.data,
-        level: event.record.level,
-        entityType: event.record.entityType,
-        entityName: event.record.entityName,
+        ...event.log.data,
+        level: event.log.level,
+        entityType: event.log.entityType,
+        entityName: event.log.entityName,
       },
     });
   }
@@ -73,15 +155,13 @@ export class LangfuseExporter extends BaseExporter {
 - [ ] Implement `onLogEvent()` handler using Langfuse events API
 - [ ] Handle trace correlation
 
-### 5.5.1.3 Add Scores Support
-
-Implement separate `onScoreEvent` handler:
+### 8.2.3 Add Scores Support
 
 ```typescript
 async onScoreEvent(event: ScoreEvent): Promise<void> {
   await this.langfuse.score({
-    traceId: event.traceId,
-    observationId: event.spanId,  // Optional
+    traceId: event.score.traceId,
+    observationId: event.score.spanId,  // Optional
     name: event.score.scorerName,
     value: event.score.score,
     comment: event.score.reason,
@@ -94,14 +174,14 @@ async onScoreEvent(event: ScoreEvent): Promise<void> {
 - [ ] Implement `onScoreEvent()` handler
 - [ ] Handle both trace-level and span-level scores
 
-### 5.5.1.4 Add Feedback Support
+### 8.2.4 Add Feedback Support
 
 ```typescript
 async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
   // Map feedback to Langfuse score (Langfuse uses scores for feedback)
   await this.langfuse.score({
-    traceId: event.traceId,
-    observationId: event.spanId,
+    traceId: event.feedback.traceId,
+    observationId: event.feedback.spanId,
     name: `feedback_${event.feedback.feedbackType}`,
     value: typeof event.feedback.value === 'number' ? event.feedback.value : 0,
     comment: event.feedback.comment,
@@ -115,7 +195,7 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
 - [ ] Map feedback to Langfuse score API
 - [ ] Handle numeric vs string feedback values
 
-### PR 5.5.1 Testing
+### PR 8.2 Testing
 
 **Tasks:**
 - [ ] Test logs appear in Langfuse
@@ -125,19 +205,19 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
 
 ---
 
-## PR 5.5.2: BraintrustExporter Expansion
+## PR 8.3: BraintrustExporter Expansion
 
 **Package:** `observability/braintrust`
 **Scope:** Add logs, scores, and feedback support
 
-### 5.5.2.1 Current State Audit
+### 8.3.1 Current State Audit
 
 **Tasks:**
 - [ ] Audit current BraintrustExporter capabilities
 - [ ] Review Braintrust API for log/score/feedback support
 - [ ] Identify API endpoints for each signal
 
-### 5.5.2.2 Add Logs Support
+### 8.3.2 Add Logs Support
 
 ```typescript
 export class BraintrustExporter extends BaseExporter {
@@ -147,10 +227,10 @@ export class BraintrustExporter extends BaseExporter {
   async onLogEvent(event: LogEvent): Promise<void> {
     // Braintrust logs as span events
     await this.braintrust.log({
-      spanId: event.record.spanId,
-      message: event.record.message,
-      level: event.record.level,
-      metadata: event.record.data,
+      spanId: event.log.spanId,
+      message: event.log.message,
+      level: event.log.level,
+      metadata: event.log.data,
     });
   }
 }
@@ -160,20 +240,20 @@ export class BraintrustExporter extends BaseExporter {
 - [ ] Implement `onLogEvent()` handler using Braintrust API
 - [ ] Handle trace correlation
 
-### 5.5.2.3 Add Scores Support
+### 8.3.3 Add Scores Support
 
 **Tasks:**
 - [ ] Implement `onScoreEvent()` handler
-- [ ] Map to Braintrust scores API
+- [ ] Map ExportedScore to Braintrust scores API
 
-### 5.5.2.4 Add Feedback Support
+### 8.3.4 Add Feedback Support
 
 **Tasks:**
 - [ ] Implement `onFeedbackEvent()` handler
-- [ ] Map feedback to Braintrust feedback API
+- [ ] Map ExportedFeedback to Braintrust feedback API
 - [ ] Handle experiment grouping
 
-### PR 5.5.2 Testing
+### PR 8.3 Testing
 
 **Tasks:**
 - [ ] Test logs appear in Braintrust
@@ -182,18 +262,18 @@ export class BraintrustExporter extends BaseExporter {
 
 ---
 
-## PR 5.5.3: LangSmithExporter Expansion
+## PR 8.4: LangSmithExporter Expansion
 
 **Package:** `observability/langsmith` (if exists)
 **Scope:** Add scores and feedback support
 
-### 5.5.3.1 Current State Audit
+### 8.4.1 Current State Audit
 
 **Tasks:**
 - [ ] Audit current LangSmithExporter capabilities
 - [ ] Review LangSmith API for score/feedback support
 
-### 5.5.3.2 Add Scores Support
+### 8.4.2 Add Scores Support
 
 ```typescript
 export class LangSmithExporter extends BaseExporter {
@@ -202,7 +282,7 @@ export class LangSmithExporter extends BaseExporter {
 
   async onScoreEvent(event: ScoreEvent): Promise<void> {
     await this.langsmith.createFeedback({
-      runId: event.traceId,
+      runId: event.score.traceId,
       key: event.score.scorerName,
       score: event.score.score,
       comment: event.score.reason,
@@ -213,14 +293,14 @@ export class LangSmithExporter extends BaseExporter {
 
 **Tasks:**
 - [ ] Implement `onScoreEvent()` handler
-- [ ] Map scores to LangSmith feedback API
+- [ ] Map ExportedScore to LangSmith feedback API
 
-### 5.5.3.3 Add Feedback Support
+### 8.4.3 Add Feedback Support
 
 ```typescript
 async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
   await this.langsmith.createFeedback({
-    runId: event.traceId,
+    runId: event.feedback.traceId,
     key: event.feedback.feedbackType,
     score: typeof event.feedback.value === 'number' ? event.feedback.value : undefined,
     value: typeof event.feedback.value === 'string' ? event.feedback.value : undefined,
@@ -231,9 +311,9 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
 
 **Tasks:**
 - [ ] Implement `onFeedbackEvent()` handler
-- [ ] Map feedback to LangSmith feedback API
+- [ ] Map ExportedFeedback to LangSmith feedback API
 
-### PR 5.5.3 Testing
+### PR 8.4 Testing
 
 **Tasks:**
 - [ ] Test scores appear in LangSmith
@@ -241,18 +321,18 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
 
 ---
 
-## PR 5.5.4: DatadogExporter Expansion
+## PR 8.5: DatadogExporter Expansion
 
 **Package:** `observability/datadog` (if exists, or create)
 **Scope:** Add logs and metrics support
 
-### 5.5.4.1 Current State Audit
+### 8.5.1 Current State Audit
 
 **Tasks:**
 - [ ] Check if DatadogExporter exists
 - [ ] Review Datadog API for logs/metrics
 
-### 5.5.4.2 Add Logs Support
+### 8.5.2 Add Logs Support
 
 ```typescript
 export class DatadogExporter extends BaseExporter {
@@ -264,15 +344,15 @@ export class DatadogExporter extends BaseExporter {
     await this.datadogClient.logIntake.submitLog({
       body: [{
         ddsource: 'mastra',
-        ddtags: `env:${event.record.environment},service:${event.record.serviceName}`,
+        ddtags: `env:${event.log.environment},service:${event.log.serviceName}`,
         hostname: this.hostname,
-        message: event.record.message,
-        service: event.record.serviceName,
-        status: this.mapLevel(event.record.level),
+        message: event.log.message,
+        service: event.log.serviceName,
+        status: this.mapLevel(event.log.level),
         attributes: {
-          traceId: event.record.traceId,
-          spanId: event.record.spanId,
-          ...event.record.data,
+          traceId: event.log.traceId,
+          spanId: event.log.spanId,
+          ...event.log.data,
         },
       }],
     });
@@ -284,20 +364,20 @@ export class DatadogExporter extends BaseExporter {
 - [ ] Implement `onLogEvent()` handler using Datadog Log API
 - [ ] Map log levels to Datadog status
 
-### 5.5.4.3 Add Metrics Support
+### 8.5.3 Add Metrics Support
 
 ```typescript
 async onMetricEvent(event: MetricEvent): Promise<void> {
   // Datadog Metrics API
-  const timestamp = Math.floor(event.timestamp.getTime() / 1000);
+  const timestamp = Math.floor(new Date(event.metric.timestamp).getTime() / 1000);
 
   await this.datadogClient.metricsApi.submitMetrics({
     body: {
       series: [{
-        metric: event.name,
-        type: this.mapMetricType(event.metricType),
-        points: [[timestamp, event.value]],
-        tags: Object.entries(event.labels).map(([k, v]) => `${k}:${v}`),
+        metric: event.metric.name,
+        type: this.mapMetricType(event.metric.metricType),
+        points: [[timestamp, event.metric.value]],
+        tags: Object.entries(event.metric.labels).map(([k, v]) => `${k}:${v}`),
       }],
     },
   });
@@ -317,7 +397,7 @@ private mapMetricType(type: MetricType): 'gauge' | 'count' | 'rate' {
 - [ ] Implement `onMetricEvent()` handler using Datadog Metrics API
 - [ ] Map metric types correctly
 
-### PR 5.5.4 Testing
+### PR 8.5 Testing
 
 **Tasks:**
 - [ ] Test logs appear in Datadog
@@ -326,123 +406,37 @@ private mapMetricType(type: MetricType): 'gauge' | 'count' | 'rate' {
 
 ---
 
-## PR 5.5.5: OtelExporter Expansion
-
-**Package:** `observability/otel-exporter`
-**Scope:** Add logs and metrics support
-
-### 5.5.5.1 Current State Audit
-
-**Tasks:**
-- [ ] Audit current OtelExporter capabilities
-- [ ] Review OTLP protocol for logs and metrics
-
-### 5.5.5.2 Add Logs Support
-
-```typescript
-export class OtelExporter extends BaseExporter {
-  // Handler presence = signal support
-  // Note: No onScoreEvent/onFeedbackEvent - OTLP doesn't have native scores
-
-  private logExporter: OTLPLogExporter;
-
-  constructor(config: OtelExporterConfig) {
-    // Initialize OTLP exporters for each signal
-    this.traceExporter = new OTLPTraceExporter(config);
-    this.logExporter = new OTLPLogExporter(config);
-    this.metricExporter = new OTLPMetricExporter(config);
-  }
-
-  async onLogEvent(event: LogEvent): Promise<void> {
-    // Convert to OTLP LogRecord format
-    const logRecord = {
-      timeUnixNano: BigInt(event.record.timestamp.getTime() * 1_000_000),
-      severityNumber: this.mapSeverity(event.record.level),
-      severityText: event.record.level.toUpperCase(),
-      body: { stringValue: event.record.message },
-      attributes: this.toAttributes(event.record.data),
-      traceId: this.hexToBytes(event.record.traceId),
-      spanId: this.hexToBytes(event.record.spanId),
-    };
-
-    await this.logExporter.export([logRecord]);
-  }
-}
-```
-
-**Tasks:**
-- [ ] Implement `onLogEvent()` handler
-- [ ] Initialize OTLPLogExporter
-- [ ] Map LogRecord to OTLP format
-- [ ] Handle trace correlation
-
-### 5.5.5.3 Add Metrics Support
-
-```typescript
-async onMetricEvent(event: MetricEvent): Promise<void> {
-  // Convert to OTLP Metric format
-  const metric = {
-    name: event.name,
-    description: '',
-    unit: '1',
-    [event.metricType]: {
-      dataPoints: [{
-        timeUnixNano: BigInt(event.timestamp.getTime() * 1_000_000),
-        [event.metricType === 'histogram' ? 'sum' : 'asDouble']: event.value,
-        attributes: this.toAttributes(event.labels),
-      }],
-    },
-  };
-
-  await this.metricExporter.export([metric]);
-}
-```
-
-**Tasks:**
-- [ ] Implement `onMetricEvent()` handler
-- [ ] Initialize OTLPMetricExporter
-- [ ] Map MetricEvent to OTLP format
-- [ ] Handle different metric types
-
-### PR 5.5.5 Testing
-
-**Tasks:**
-- [ ] Test logs export to OTLP endpoint
-- [ ] Test metrics export to OTLP endpoint
-- [ ] Test with Jaeger/Grafana/other OTLP backends
-
----
-
-## PR 5.5.6: Other Exporters Audit
+## PR 8.6: Other Exporters Audit
 
 **Scope:** Audit remaining exporters and expand where applicable
 
-### 5.5.6.1 Exporter Inventory
+### 8.6.1 Exporter Inventory
 
 **Tasks:**
 - [ ] List all exporters in `observability/` directory
 - [ ] Document current signal support for each
 - [ ] Identify expansion opportunities
 
-### 5.5.6.2 Expansion Candidates
+### 8.6.2 Expansion Candidates
 
 | Exporter | Traces | Metrics | Logs | Scores | Feedback | Notes |
 |----------|--------|---------|------|--------|----------|-------|
-| DefaultExporter | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
-| JsonExporter | ✅ | ✅ | ✅ | ✅ | ✅ | Done |
-| CloudExporter | ✅ | ? | ? | ? | ? | Depends on Cloud API |
-| GrafanaCloudExporter | ✅ | ✅ | ✅ | ❌ | ❌ | Done (Phase 1.5) |
-| LangfuseExporter | ✅ | ❌ | ✅ | ✅ | ✅ | PR 5.5.1 |
-| BraintrustExporter | ✅ | ❌ | ✅ | ✅ | ✅ | PR 5.5.2 |
-| LangSmithExporter | ✅ | ❌ | ❌ | ✅ | ✅ | PR 5.5.3 |
-| DatadogExporter | ✅ | ✅ | ✅ | ❌ | ❌ | PR 5.5.4 |
-| OtelExporter | ✅ | ✅ | ✅ | ❌ | ❌ | PR 5.5.5 |
+| DefaultExporter | ✅ | ✅ | ✅ | ✅ | ✅ | Phase 6 |
+| JsonExporter | ✅ | ✅ | ✅ | ✅ | ✅ | Phase 2 |
+| CloudExporter | ✅ | ? | ? | ? | ? | Phase 7 |
+| GrafanaCloudExporter | ✅ | ✅ | ✅ | ❌ | ❌ | Phase 2 |
+| OtelExporter | ✅ | ✅ | ✅ | ❌ | ❌ | PR 8.1 |
+| LangfuseExporter | ✅ | ❌ | ✅ | ✅ | ✅ | PR 8.2 |
+| BraintrustExporter | ✅ | ❌ | ✅ | ✅ | ✅ | PR 8.3 |
+| LangSmithExporter | ✅ | ❌ | ❌ | ✅ | ✅ | PR 8.4 |
+| DatadogExporter | ✅ | ✅ | ✅ | ❌ | ❌ | PR 8.5 |
+| ArizeExporter | ✅ | ❌ | ❌ | ✅ | ❌ | TBD |
 
 **Tasks:**
 - [ ] Update this table as exporters are expanded
 - [ ] Document any exporters that can't support certain signals
 
-### 5.5.6.3 Signal Support Matrix Documentation
+### 8.6.3 Signal Support Matrix Documentation
 
 **File:** `observability/README.md` or docs
 
@@ -470,17 +464,17 @@ After all PRs merged:
 
 ## Dependencies Between PRs
 
-PRs 5.5.1 through 5.5.6 can be done in parallel after Phase 5 is complete.
+PRs 8.1 through 8.6 can be done in parallel after Phase 2 is complete.
 
 ```
-Phase 5 complete
+Phase 2 complete
     ↓
-PR 5.5.1 (Langfuse)
-PR 5.5.2 (Braintrust)   All can run in parallel
-PR 5.5.3 (LangSmith)
-PR 5.5.4 (Datadog)
-PR 5.5.5 (Otel)
-PR 5.5.6 (Others)
+PR 8.1 (Otel)
+PR 8.2 (Langfuse)    All can run in parallel
+PR 8.3 (Braintrust)
+PR 8.4 (LangSmith)
+PR 8.5 (Datadog)
+PR 8.6 (Others)
 ```
 
 ---
