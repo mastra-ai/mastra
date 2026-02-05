@@ -269,6 +269,8 @@ export class MastraLLMV1 extends MastraBase {
         },
         attributes: {
           finishReason: result.finishReason,
+          responseId: result.response?.id,
+          responseModel: result.response?.modelId,
           usage: convertV4Usage(result.usage),
         },
       });
@@ -370,6 +372,8 @@ export class MastraLLMV1 extends MastraBase {
           },
           attributes: {
             finishReason: result.finishReason,
+            responseId: result.response?.id,
+            responseModel: result.response?.modelId,
             usage: convertV4Usage(result.usage),
           },
         });
@@ -820,10 +824,7 @@ export class MastraLLMV1 extends MastraBase {
     Tools extends ToolSet = ToolSet,
   >(
     messages: string | string[] | CoreMessage[],
-    {
-      output,
-      ...rest
-    }: Omit<
+    args?: Omit<
       Output extends undefined
         ? GenerateTextWithMessagesArgs<Tools, StructuredOutput>
         : Omit<GenerateObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput' | 'output'>,
@@ -831,25 +832,23 @@ export class MastraLLMV1 extends MastraBase {
     > & { output?: Output },
   ): Promise<GenerateReturn<Tools, Output, StructuredOutput>> {
     const msgs = this.convertToMessages(messages);
+    const { output, ...rest } = args ?? ({} as NonNullable<typeof args>);
 
     if (!output) {
-      const { maxSteps, onStepFinish, ...textOptions } = rest as Omit<
-        GenerateTextWithMessagesArgs<Tools, StructuredOutput>,
-        'messages'
-      >;
       return (await this.__text<Tools, StructuredOutput>({
         messages: msgs,
-        maxSteps,
-        onStepFinish,
-        ...textOptions,
-      })) as unknown as GenerateReturn<Tools, Output, StructuredOutput>;
+        ...(rest as unknown as Omit<GenerateTextWithMessagesArgs<Tools, StructuredOutput>, 'messages'>),
+      })) as GenerateReturn<Tools, Output, StructuredOutput>;
     }
 
     return (await this.__textObject({
       messages: msgs,
       structuredOutput: output as NonNullable<Output>,
-      ...rest,
-    })) as unknown as GenerateReturn<Tools, Output, StructuredOutput>;
+      ...(rest as unknown as Omit<
+        GenerateObjectWithMessagesArgs<NonNullable<Output>>,
+        'messages' | 'structuredOutput'
+      >),
+    })) as GenerateReturn<Tools, Output, StructuredOutput>;
   }
 
   stream<
@@ -858,12 +857,7 @@ export class MastraLLMV1 extends MastraBase {
     Tools extends ToolSet = ToolSet,
   >(
     messages: string | string[] | CoreMessage[],
-    {
-      maxSteps = 5,
-      output,
-      onFinish,
-      ...rest
-    }: Omit<
+    args?: Omit<
       Output extends undefined
         ? StreamTextWithMessagesArgs<Tools, StructuredOutput>
         : Omit<StreamObjectWithMessagesArgs<NonNullable<Output>>, 'structuredOutput' | 'output'> & { maxSteps?: never },
@@ -871,21 +865,31 @@ export class MastraLLMV1 extends MastraBase {
     > & { output?: Output },
   ): StreamReturn<Tools, Output, StructuredOutput> {
     const msgs = this.convertToMessages(messages);
+    const { output, ...rest } = args ?? ({} as NonNullable<typeof args>);
 
     if (!output) {
+      const {
+        maxSteps = 5,
+        onFinish,
+        ...streamRest
+      } = rest as unknown as Omit<StreamTextWithMessagesArgs<Tools, StructuredOutput>, 'messages'>;
       return this.__stream({
         messages: msgs,
         maxSteps,
         onFinish: onFinish as StreamTextOnFinishCallback<Tools> | undefined,
-        ...rest,
-      }) as unknown as StreamReturn<Tools, Output, StructuredOutput>;
+        ...streamRest,
+      }) as StreamReturn<Tools, Output, StructuredOutput>;
     }
 
+    const { onFinish, ...objectRest } = rest as unknown as Omit<
+      StreamObjectWithMessagesArgs<NonNullable<Output>>,
+      'messages' | 'structuredOutput'
+    >;
     return this.__streamObject({
       messages: msgs,
       structuredOutput: output as NonNullable<Output>,
       onFinish: onFinish as StreamObjectOnFinishCallback<inferOutput<Output>> | undefined,
-      ...rest,
-    }) as unknown as StreamReturn<Tools, Output, StructuredOutput>;
+      ...objectRest,
+    }) as StreamReturn<Tools, Output, StructuredOutput>;
   }
 }

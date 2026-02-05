@@ -49,14 +49,22 @@ import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
+import Workspace from './pages/workspace';
+import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
+import CmsAgentsCreatePage from './pages/cms/agents/create';
+import CmsAgentsEditPage from './pages/cms/agents/edit';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
+  agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) =>
+    workspaceId
+      ? `/workspaces/${workspaceId}/skills/${skillName}?agentId=${encodeURIComponent(agentId)}`
+      : `/workspaces`,
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}?new=true`,
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
@@ -68,6 +76,12 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
+  skillLink: (skillName: string, workspaceId?: string) =>
+    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
+  workspaceSkillLink: (skillName: string, workspaceId?: string) =>
+    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  workspacesLink: () => `/workspaces`,
   processorsLink: () => `/processors`,
   processorLink: (processorId: string) => `/processors/${processorId}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
@@ -108,6 +122,8 @@ const routes = [
       { path: '/scorers/:scorerId', element: <Scorer /> },
       { path: '/observability', element: <Observability /> },
       { path: '/agents', element: <Agents /> },
+      { path: '/cms/agents/create', element: <CmsAgentsCreatePage /> },
+      { path: '/cms/agents/:agentId/edit', element: <CmsAgentsEditPage /> },
       { path: '/agents/:agentId/tools/:toolId', element: <AgentTool /> },
       {
         path: '/agents/:agentId',
@@ -135,6 +151,10 @@ const routes = [
       { path: '/mcps', element: <MCPs /> },
       { path: '/mcps/:serverId', element: <McpServerPage /> },
       { path: '/mcps/:serverId/tools/:toolId', element: <MCPServerToolExecutor /> },
+
+      { path: '/workspaces', element: <Workspace /> },
+      { path: '/workspaces/:workspaceId', element: <Workspace /> },
+      { path: '/workspaces/:workspaceId/skills/:skillName', element: <WorkspaceSkillDetailPage /> },
 
       { path: '/workflows', element: <Workflows /> },
       {

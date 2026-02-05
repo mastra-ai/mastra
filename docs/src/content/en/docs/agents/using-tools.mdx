@@ -64,69 +64,6 @@ export const weatherAgent = new Agent({
 });
 ```
 
-## Controlling `toolName` in stream responses
-
-The `toolName` in stream responses is determined by the **object key** you use, not the `id` property of the tool, agent, or workflow.
-
-```typescript
-// Tool defined with id: "weather-tool"
-export const weatherTool = createTool({
-  id: "weather-tool",
-  // ...
-});
-
-// Using the variable name as the key
-tools: { weatherTool }
-// Stream returns: toolName: "weatherTool"
-
-// Using the tool's id as the key
-tools: { [weatherTool.id]: weatherTool }
-// Stream returns: toolName: "weather-tool"
-
-// Using a custom key
-tools: { "my-custom-name": weatherTool }
-// Stream returns: toolName: "my-custom-name"
-```
-
-This lets you specify how tools are identified in the stream. If you want the `toolName` to match the tool's `id`, use the tool's `id` as the object key.
-
-### Sub-agents and workflows as tools
-
-Sub-agents and workflows follow the same pattern. They are converted to tools with a prefix followed by your object key:
-
-| Property | Prefix | Example key | `toolName` |
-|----------|--------|-------------|------------|
-| `agents` | `agent-` | `weather` | `agent-weather` |
-| `workflows` | `workflow-` | `research` | `workflow-research` |
-
-```typescript
-const orchestrator = new Agent({
-  // ...
-  agents: {
-    weather: weatherAgent,  // toolName: "agent-weather"
-  },
-  workflows: {
-    research: researchWorkflow,  // toolName: "workflow-research"
-  },
-});
-```
-
-Note that for sub-agents, you'll see two different identifiers in stream responses:
-- `toolName: "agent-weather"` in tool call events — the generated tool wrapper name
-- `id: "weather-agent"` in `data-tool-agent` chunks — the sub-agent's actual `id` property
-
-## Calling an agent
-
-The agent uses the tool's `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and passes it to the tool's inputData parameter.
-
-```typescript title="src/test-tool.ts"
-import { mastra } from "./mastra";
-
-const agent = mastra.getAgent("weatherAgent");
-
-const result = await agent.generate("What's the weather in London?");
-```
-
 ## Using multiple tools
 
 When multiple tools are available, the agent may choose to use one, several, or none, depending on what's needed to answer the query.
@@ -141,6 +78,38 @@ export const weatherAgent = new Agent({
   tools: { weatherTool, activitiesTool },
 });
 ```
+
+## Using agents as tools
+
+Agents can be added to other agents through the `agents` configuration. When you add a subagent, Mastra automatically converts it to a tool that the parent agent can call. The generated tool is named `agent-<agentName>`.
+
+```typescript title="src/mastra/agents/parent-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+export const parentAgent = new Agent({
+  id: "parent-agent",
+  name: "Parent Agent",
+  description: "Take care in writing a good description here",
+  instructions: `Instructions`,
+  model: "openai/gpt-5.1",
+  agents: {
+    // highlight-next-line
+    subAgent,
+  },
+});
+
+// highlight-start
+const subAgent = new Agent({
+  id: "sub-agent",
+  name: "Sub Agent",
+  description: "Take care in writing a good description here",
+  instructions: `Instructions`,
+  model: "openai/gpt-5.1",
+})
+// highlight-end
+```
+
+The subagent should include a `description` to help the parent agent understand when to use it. See the [`toolName` docs](#subagents-and-workflows-as-tools) to learn more about the tool naming scheme.
 
 ## Using workflows as tools
 
@@ -174,17 +143,10 @@ import { z } from "zod";
 
 export const researchWorkflow = createWorkflow({
   id: "research-workflow",
+  // highlight-next-line
   description: "Gathers information on a topic and compiles a summary report.",
-  inputSchema: z.object({
-    topic: z.string(),
-  }),
-  outputSchema: z.object({
-    summary: z.string(),
-    sources: z.array(z.string()),
-  }),
+  // Rest of the workflow...
 })
-  .then(gatherSourcesStep)
-  .then(compileReportStep)
   .commit();
 ```
 
@@ -197,6 +159,58 @@ When the agent calls the workflow tool, it receives a response containing the wo
 }
 ```
 
+See the [`toolName` docs](#subagents-and-workflows-as-tools) to learn more about the tool naming scheme.
+
+## Controlling `toolName` in stream responses
+
+The `toolName` in stream responses is determined by the **object key** you use, not the `id` property of the tool, agent, or workflow.
+
+```typescript
+// Tool defined with id: "weather-tool"
+export const weatherTool = createTool({
+  id: "weather-tool",
+  // ...
+});
+
+// Using the variable name as the key
+tools: { weatherTool }
+// Stream returns: toolName: "weatherTool"
+
+// Using the tool's id as the key
+tools: { [weatherTool.id]: weatherTool }
+// Stream returns: toolName: "weather-tool"
+
+// Using a custom key
+tools: { "my-custom-name": weatherTool }
+// Stream returns: toolName: "my-custom-name"
+```
+
+This lets you specify how tools are identified in the stream. If you want the `toolName` to match the tool's `id`, use the tool's `id` as the object key.
+
+### Subagents and workflows as tools
+
+Subagents and workflows follow the same pattern. They are converted to tools with a prefix followed by your object key:
+
+| Property | Prefix | Example key | `toolName` |
+|----------|--------|-------------|------------|
+| `agents` | `agent-` | `weather` | `agent-weather` |
+| `workflows` | `workflow-` | `research` | `workflow-research` |
+
+```typescript
+const orchestrator = new Agent({
+  agents: {
+    weather: weatherAgent,  // toolName: "agent-weather"
+  },
+  workflows: {
+    research: researchWorkflow,  // toolName: "workflow-research"
+  },
+});
+```
+
+Note that for subagents, you'll see two different identifiers in stream responses:
+- `toolName: "agent-weather"` in tool call events — the generated tool wrapper name
+- `id: "weather-agent"` in `data-tool-agent` chunks — the subagent's actual `id` property
+
 ## Tools with structured output
 
 When using tools with [structured output](/docs/agents/structured-output), some models don't support combining both features in the same API call. If your tools aren't being called when structured output is enabled, or you receive errors about incompatible options, see [Combining tools and structured output](/docs/agents/structured-output#combining-tools-and-structured-output) for model compatibility information and workarounds.
@@ -204,6 +218,7 @@ When using tools with [structured output](/docs/agents/structured-output), some 
 ## Related
 
 - [MCP Overview](/docs/mcp/overview)
+- [Dynamic Tool Search](/reference/processors/tool-search-processor) - Load tools on demand for agents with large tool libraries
 - [Structured Output](/docs/agents/structured-output)
 - [Agent Memory](/docs/agents/agent-memory)
 - [Request Context](/docs/server/request-context)

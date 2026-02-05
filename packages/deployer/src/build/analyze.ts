@@ -1,20 +1,21 @@
-import type { IMastraLogger } from '@mastra/core/logger';
-import * as babel from '@babel/core';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
+import { basename, join, relative } from 'node:path';
+import * as babel from '@babel/core';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
 import type { OutputAsset, OutputChunk } from 'rollup';
-import { basename, join, parse, relative } from 'node:path';
+import * as stackTraceParser from 'stacktrace-parser';
+import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
+import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
-import { getBundlerOptions } from './bundlerOptions';
-import { checkConfigExport } from './babel/check-config-export';
-import { getWorkspaceInformation, type WorkspacePackageInfo } from '../bundler/workspaceDependencies';
-import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { getPackageName, isBuiltinModule, isDependencyPartOfPackage, type BundlerPlatform } from './utils';
 import { GLOBAL_EXTERNALS } from './analyze/constants';
-import * as stackTraceParser from 'stacktrace-parser';
+import { checkConfigExport } from './babel/check-config-export';
+import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
+import { getPackageName, isBuiltinModule, isDependencyPartOfPackage } from './utils';
+import type { BundlerPlatform } from './utils';
 
 type ErrorId =
   | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
@@ -51,6 +52,12 @@ export const mastra = new Mastra({
 }
 
 function getPackageNameFromBundledModuleName(moduleName: string) {
+  // New encoding uses __ to separate path segments (e.g., @inner__inner-tools -> @inner/inner-tools)
+  if (moduleName.includes('__')) {
+    return moduleName.replaceAll('__', '/');
+  }
+
+  // Legacy fallback for old format using - as separator
   const chunks = moduleName.split('-');
 
   if (!chunks.length) {
@@ -314,7 +321,7 @@ export async function analyzeBundle(
 export const mastra = new Mastra({
   // your options
 })
-  
+
 If you think your configuration is valid, please open an issue.`);
   }
 

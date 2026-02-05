@@ -85,7 +85,7 @@ export const agent = new Agent({
       name: "readOnly",
       type: "boolean",
       description:
-        "When true, prevents memory from saving new messages. Useful for read-only operations like previews or internal routing agents.",
+        "When true, prevents memory from saving new messages and provides working memory as read-only context (without the updateWorkingMemory tool). Useful for read-only operations like previews, internal routing agents, or sub agents that should reference but not modify memory.",
       isOptional: true,
       defaultValue: "false",
     },
@@ -105,6 +105,14 @@ export const agent = new Agent({
       isOptional: true,
       defaultValue:
         "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
+    },
+    {
+      name: "observationalMemory",
+      type: "boolean | ObservationalMemoryOptions",
+      description:
+        "Enable Observational Memory for long-context agentic memory. Set to `true` for defaults, or pass a config object to customize token budgets, models, and scope. See [Observational Memory reference](/reference/memory/observational-memory) for configuration details.",
+      isOptional: true,
+      defaultValue: "false",
     },
     {
       name: "generateTitle",
@@ -213,6 +221,7 @@ export const agent = new Agent({
 - [Getting Started with Memory](/docs/memory/overview)
 - [Semantic Recall](/docs/memory/semantic-recall)
 - [Working Memory](/docs/memory/working-memory)
+- [Observational Memory](/docs/memory/observational-memory)
 - [Memory Processors](/docs/memory/memory-processors)
 - [createThread](/reference/memory/createThread)
 - [recall](/reference/memory/recall)

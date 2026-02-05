@@ -504,8 +504,8 @@ export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
   storage: new LibSQLStore({
     id: "mastra-storage",
-    // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
-    url: ":memory:",
+    // stores observability, scores, ... into persistent file storage
+    url: "file:./mastra.db",
   }),
   logger: new PinoLogger({
     name: 'Mastra',
@@ -669,6 +669,8 @@ interface InteractivePromptArgs {
     llmProvider?: boolean;
     llmApiKey?: boolean;
     gitInit?: boolean;
+    skills?: boolean;
+    mcpServer?: boolean;
   };
 }
 
@@ -717,82 +719,190 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         }
         return undefined;
       },
-      configureEditorWithDocsMCP: async () => {
-        const editor = await p.select({
-          message: `Make your IDE into a Mastra expert? (Installs Mastra's MCP server)`,
+      configureMastraToolingForAgents: async () => {
+        if (skip?.skills && skip?.mcpServer) return { skills: undefined, mcpServer: undefined };
+
+        const choice = await p.select({
+          message: `Configure Mastra tooling for agents?`,
           options: [
-            { value: 'skip', label: 'Skip for now', hint: 'default' },
-            {
-              value: 'cursor',
-              label: 'Cursor (project only)',
-            },
-            {
-              value: 'cursor-global',
-              label: 'Cursor (global, all projects)',
-            },
-            {
-              value: 'windsurf',
-              label: 'Windsurf',
-            },
-            {
-              value: 'vscode',
-              label: 'VSCode',
-            },
-            {
-              value: 'antigravity',
-              label: 'Antigravity',
-            },
-          ] satisfies { value: Editor | 'skip'; label: string; hint?: string }[],
+            { value: 'skills', label: 'Skills', hint: 'recommended' },
+            { value: 'mcp', label: 'MCP Docs Server' },
+          ],
+          initialValue: 'skills',
         });
 
-        if (editor === `skip`) return undefined;
-
-        if (editor === `cursor`) {
-          p.log.message(
-            `\nNote: you will need to go into Cursor Settings -> MCP Settings and manually enable the installed Mastra MCP server.\n`,
-          );
+        if (p.isCancel(choice)) {
+          return { skills: undefined, mcpServer: undefined };
         }
 
-        if (editor === `cursor-global`) {
-          const confirm = await p.select({
-            message: `Global install will add/update ${cursorGlobalMCPConfigPath} and make the Mastra docs MCP server available in all your Cursor projects. Continue?`,
-            options: [
-              { value: 'yes', label: 'Yes, I understand' },
-              { value: 'skip', label: 'No, skip for now' },
-            ],
+        if (choice === 'skills') {
+          // Popular agents
+          const POPULAR_AGENTS: { value: string; label: string }[] = [
+            { value: 'claude-code', label: 'Claude Code' },
+            { value: 'cursor', label: 'Cursor' },
+            { value: 'codex', label: 'Codex' },
+            { value: 'opencode', label: 'OpenCode' },
+            { value: 'windsurf', label: 'Windsurf' },
+            { value: 'github-copilot', label: 'GitHub Copilot' },
+            { value: 'cline', label: 'Cline' },
+            { value: 'continue', label: 'Continue' },
+            { value: 'gemini-cli', label: 'Gemini CLI' },
+            { value: 'replit', label: 'Replit' },
+            { value: 'roo', label: 'Roo Code' },
+          ];
+
+          // All agents (alphabetically)
+          const ALL_AGENTS: { value: string; label: string }[] = [
+            ...POPULAR_AGENTS,
+            { value: 'adal', label: 'AdaL' },
+            { value: 'amp', label: 'Amp' },
+            { value: 'antigravity', label: 'Antigravity' },
+            { value: 'augment', label: 'Augment' },
+            { value: 'codebuddy', label: 'CodeBuddy' },
+            { value: 'command-code', label: 'Command Code' },
+            { value: 'crush', label: 'Crush' },
+            { value: 'droid', label: 'Droid' },
+            { value: 'goose', label: 'Goose' },
+            { value: 'iflow-cli', label: 'iFlow CLI' },
+            { value: 'junie', label: 'Junie' },
+            { value: 'kilo', label: 'Kilo Code' },
+            { value: 'kimi-cli', label: 'Kimi Code CLI' },
+            { value: 'kiro-cli', label: 'Kiro CLI' },
+            { value: 'kode', label: 'Kode' },
+            { value: 'mcpjam', label: 'MCPJam' },
+            { value: 'mistral-vibe', label: 'Mistral Vibe' },
+            { value: 'mux', label: 'Mux' },
+            { value: 'neovate', label: 'Neovate' },
+            { value: 'openclaude', label: 'OpenClaude IDE' },
+            { value: 'openclaw', label: 'OpenClaw' },
+            { value: 'openhands', label: 'OpenHands' },
+            { value: 'pi', label: 'Pi' },
+            { value: 'pochi', label: 'Pochi' },
+            { value: 'qoder', label: 'Qoder' },
+            { value: 'qwen-code', label: 'Qwen Code' },
+            { value: 'trae', label: 'Trae' },
+            { value: 'trae-cn', label: 'Trae CN' },
+            { value: 'zencoder', label: 'Zencoder' },
+          ];
+
+          // Show popular agents first with "Show all" option
+          const initialSelection = await p.multiselect({
+            message: 'Select agent(s) to install skills for:',
+            options: [...POPULAR_AGENTS, { value: '__show_all__', label: '+ Show all agents (29 more)' }],
+            initialValues: ['claude-code', 'codex', 'opencode', 'cursor'],
+            required: true,
           });
-          if (confirm !== `yes`) {
-            return undefined;
+
+          if (p.isCancel(initialSelection)) {
+            return { skills: undefined, mcpServer: undefined };
           }
+
+          let selectedAgents = initialSelection as string[];
+
+          // If user selected "Show all", show full list
+          if (selectedAgents.includes('__show_all__')) {
+            // Remove the __show_all__ marker and use those as pre-selected
+            const preSelected = selectedAgents.filter(a => a !== '__show_all__');
+
+            const fullSelection = await p.multiselect({
+              message: 'Select agent(s) to install skills for:',
+              options: ALL_AGENTS,
+              initialValues: preSelected,
+              required: true,
+            });
+
+            if (p.isCancel(fullSelection)) {
+              return { skills: undefined, mcpServer: undefined };
+            }
+
+            selectedAgents = fullSelection as string[];
+          }
+
+          return { skills: selectedAgents, mcpServer: undefined };
         }
 
-        if (editor === `windsurf`) {
-          const confirm = await p.select({
-            message: `Windsurf only supports a global MCP config (at ${windsurfGlobalMCPConfigPath}) is it ok to add/update that global config?\nThis means the Mastra docs MCP server will be available in all your Windsurf projects.`,
+        // If MCP selected, show editor sub-selection
+        if (choice === 'mcp') {
+          const editor = await p.select({
+            message: `Which editor?`,
             options: [
-              { value: 'yes', label: 'Yes, I understand' },
-              { value: 'skip', label: 'No, skip for now' },
-            ],
+              {
+                value: 'cursor',
+                label: 'Cursor (project only)',
+              },
+              {
+                value: 'cursor-global',
+                label: 'Cursor (global, all projects)',
+              },
+              {
+                value: 'windsurf',
+                label: 'Windsurf',
+              },
+              {
+                value: 'vscode',
+                label: 'VSCode',
+              },
+              {
+                value: 'antigravity',
+                label: 'Antigravity',
+              },
+            ] satisfies { value: Editor; label: string }[],
           });
-          if (confirm !== `yes`) {
-            return undefined;
+
+          if (p.isCancel(editor)) {
+            return { skills: undefined, mcpServer: undefined };
           }
+
+          // Handle MCP editor selections with confirmations
+          if (editor === `cursor`) {
+            p.log.message(
+              `\nNote: you will need to go into Cursor Settings -> MCP Settings and manually enable the installed Mastra MCP server.\n`,
+            );
+          }
+
+          if (editor === `cursor-global`) {
+            const confirm = await p.select({
+              message: `Global install will add/update ${cursorGlobalMCPConfigPath} and make the Mastra docs MCP server available in all your Cursor projects. Continue?`,
+              options: [
+                { value: 'yes', label: 'Yes, I understand' },
+                { value: 'no', label: 'No, cancel' },
+              ],
+            });
+            if (confirm !== `yes`) {
+              return { skills: undefined, mcpServer: undefined };
+            }
+          }
+
+          if (editor === `windsurf`) {
+            const confirm = await p.select({
+              message: `Windsurf only supports a global MCP config (at ${windsurfGlobalMCPConfigPath}) is it ok to add/update that global config?\nThis means the Mastra docs MCP server will be available in all your Windsurf projects.`,
+              options: [
+                { value: 'yes', label: 'Yes, I understand' },
+                { value: 'no', label: 'No, cancel' },
+              ],
+            });
+            if (confirm !== `yes`) {
+              return { skills: undefined, mcpServer: undefined };
+            }
+          }
+
+          if (editor === `antigravity`) {
+            const confirm = await p.select({
+              message: `Antigravity only supports a global MCP config (at ${antigravityGlobalMCPConfigPath}). Is it ok to add/update that global config?\nThis will make the Mastra docs MCP server available in all Antigravity projects.`,
+              options: [
+                { value: 'yes', label: 'Yes, I understand' },
+                { value: 'no', label: 'No, cancel' },
+              ],
+            });
+
+            if (confirm !== `yes`) {
+              return { skills: undefined, mcpServer: undefined };
+            }
+          }
+          return { skills: undefined, mcpServer: editor };
         }
 
-        if (editor === `antigravity`) {
-          const confirm = await p.select({
-            message: `Antigravity only supports a global MCP config (at ${antigravityGlobalMCPConfigPath}). Is it ok to add/update that global config?\nThis will make the Mastra docs MCP server available in all Antigravity projects.`,
-            options: [
-              { value: 'yes', label: 'Yes, I understand' },
-              { value: 'skip', label: 'No, skip for now' },
-            ],
-          });
-
-          if (confirm !== `yes`) {
-            return undefined;
-          }
-        }
-        return editor;
+        return { skills: undefined, mcpServer: undefined };
       },
       initGit: async () => {
         if (skip?.gitInit) return false;
@@ -811,7 +921,13 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
     },
   );
 
-  return mastraProject;
+  // Flatten the configureMastraToolingForAgents return value
+  const { configureMastraToolingForAgents, ...rest } = mastraProject;
+  return {
+    ...rest,
+    skills: configureMastraToolingForAgents?.skills as string[] | undefined,
+    mcpServer: configureMastraToolingForAgents?.mcpServer as Editor | undefined,
+  };
 };
 
 /**
@@ -833,3 +949,175 @@ export const checkForPkgJson = async () => {
     process.exit(1);
   }
 };
+
+/**
+ * Generate content for AGENTS.md file
+ */
+export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[]; mcpServer?: Editor }): string {
+  const hasSkills = skills && skills.length > 0;
+  const hasMcp = !!mcpServer;
+
+  let content = `# AGENTS.md
+
+This document provides guidance for AI coding agents working in this repository.
+
+## Project Overview
+
+This is a **Mastra** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+
+## Commands
+
+Use these commands to interact with the project.
+
+### Installation
+
+\`\`\`bash
+npm install
+\`\`\`
+
+### Development
+
+Start the Mastra Studio at localhost:4111 by running the \`dev\` script:
+
+\`\`\`bash
+npm run dev
+\`\`\`
+
+### Build
+
+In order to build a production-ready server, run the \`build\` script:
+
+\`\`\`bash
+npm run build
+\`\`\`
+
+## Project Structure
+
+Folders organize your agent's resources, like agents, tools, and workflows.
+
+| Folder                 | Description                                                                                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| \`src/mastra\`           | Entry point for all Mastra-related code and configuration.                                                                               |
+| \`src/mastra/agents\`    | Define and configure your agents - their behavior, goals, and tools.                                                                     |
+| \`src/mastra/workflows\` | Define multi-step workflows that orchestrate agents and tools together.                                                                  |
+| \`src/mastra/tools\`     | Create reusable tools that your agents can call                                                                                          |
+| \`src/mastra/mcp\`       | (Optional) Implement custom MCP servers to share your tools with external agents                                                         |
+| \`src/mastra/scorers\`   | (Optional) Define scorers for evaluating agent performance over time                                                                     |
+| \`src/mastra/public\`    | (Optional) Contents are copied into the \`.build/output\` directory during the build process, making them available for serving at runtime |
+
+### Top-level files
+
+Top-level files define how your Mastra project is configured, built, and connected to its environment.
+
+| File                  | Description                                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| \`src/mastra/index.ts\` | Central entry point where you configure and initialize Mastra.                                                    |
+| \`.env.example\`        | Template for environment variables - copy and rename to \`.env\` to add your secret [model provider](/models) keys. |
+| \`package.json\`        | Defines project metadata, dependencies, and available npm scripts.                                                |
+| \`tsconfig.json\`       | Configures TypeScript options such as path aliases, compiler settings, and build output.                          |
+
+`;
+
+  // Add skills section if skills were installed
+  if (hasSkills) {
+    content += `## Mastra Skills
+
+Skills are modular capabilities that extend agent functionalities. They provide pre-built tools, integrations, and workflows that agents can leverage to accomplish tasks more effectively.
+
+This project has skills installed for the following agents:
+
+${skills
+  .map(
+    agent =>
+      `- ${agent
+        .split('-')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')}`,
+  )
+  .join('\n')}
+
+### Using Skills
+
+Skills are automatically available to agents in your project once installed. Agents can access and use these skills without additional configuration.
+
+`;
+  }
+
+  // Add MCP section if MCP server was configured
+  if (hasMcp) {
+    const editorName =
+      mcpServer === 'cursor-global' ? 'Cursor (global)' : mcpServer!.charAt(0).toUpperCase() + mcpServer!.slice(1);
+
+    content += `## MCP Docs Server
+
+This project has the Mastra MCP Docs Server configured for ${editorName}.
+
+### Using MCP Docs
+
+The MCP server provides embedded documentation access within your editor:
+
+1. The server was automatically configured during project creation
+2. Restart your editor to load the MCP server
+3. Use the Mastra docs tools in your editor to access:
+   - API references
+   - Code examples
+   - Integration guides
+
+Learn more in the [MCP Documentation](https://mastra.ai/docs/mcp/overview).
+
+`;
+  }
+
+  // Add resources section
+  content += `## Resources
+
+- [Mastra Documentation](https://mastra.ai/llms.txt)
+- [Mastra .well-known skills discovery](https://mastra.ai/.well-known/skills/index.json)
+`;
+
+  return content;
+}
+
+/**
+ * Generate content for CLAUDE.md file
+ */
+export function generateClaudeMarkdown({ mcpServer }: { mcpServer?: Editor }): string {
+  return `# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+This is a Mastra project - an AI framework for building agents, workflows, and tools. The project structure follows Mastra conventions with agents, tools, and workflows organized in the \`src/mastra/\` directory.
+
+For complete setup and usage instructions, see [AGENTS.md](./AGENTS.md), which includes:
+- Quick start commands
+- Project structure details
+- Mastra skills usage${mcpServer ? '\n- MCP Docs Server configuration' : ''}
+- Links to relevant documentation
+`;
+}
+
+/**
+ * Write AGENTS.md file to project root
+ */
+export async function writeAgentsMarkdown(options: { skills?: string[]; mcpServer?: Editor }): Promise<void> {
+  const content = generateAgentsMarkdown(options);
+  const formattedContent = await prettier.format(content, {
+    parser: 'markdown',
+    singleQuote: true,
+  });
+  const filePath = path.join(process.cwd(), 'AGENTS.md');
+  await fs.writeFile(filePath, formattedContent);
+}
+
+/**
+ * Write CLAUDE.md file to project root
+ */
+export async function writeClaudeMarkdown(options: { skills?: string[]; mcpServer?: Editor }): Promise<void> {
+  const content = generateClaudeMarkdown(options);
+  const formattedContent = await prettier.format(content, {
+    parser: 'markdown',
+    singleQuote: true,
+  });
+  const filePath = path.join(process.cwd(), 'CLAUDE.md');
+  await fs.writeFile(filePath, formattedContent);
+}

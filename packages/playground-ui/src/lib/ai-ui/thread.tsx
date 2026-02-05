@@ -20,6 +20,7 @@ import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
 import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
+import { BracketOverlay } from './components/bracket-overlay';
 
 export interface ThreadProps {
   agentName?: string;
@@ -30,6 +31,7 @@ export interface ThreadProps {
 
 export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
@@ -41,7 +43,8 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
       <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
         <ThreadWelcome agentName={agentName} />
 
-        <div className="max-w-3xl w-full mx-auto px-4 pb-7">
+        <div ref={messagesContainerRef} className="relative max-w-3xl w-full mx-auto px-4 pb-7">
+          <BracketOverlay containerRef={messagesContainerRef} />
           <ThreadPrimitive.Messages
             components={{
               UserMessage: UserMessage,
@@ -92,7 +95,6 @@ interface ComposerProps {
 
 const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -100,17 +102,11 @@ const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
           <ComposerAttachments />
         </div>
 
-        <div
-          className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2"
-          onClick={() => {
-            textareaRef.current?.focus();
-          }}
-        >
+        <div className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2">
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
-              ref={textareaRef}
+              autoFocus
               className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none"
-              autoFocus={document.activeElement === document.body}
               placeholder="Enter your message..."
               name=""
               id=""

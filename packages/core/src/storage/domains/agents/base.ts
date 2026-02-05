@@ -1,9 +1,12 @@
 import type {
   StorageAgentType,
+  StorageAgentSnapshotType,
+  StorageResolvedAgentType,
   StorageCreateAgentInput,
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
+  StorageListAgentsResolvedOutput,
   StorageOrderBy,
   ThreadOrderBy,
   ThreadSortDirection,
@@ -16,18 +19,15 @@ import { StorageDomain } from '../base';
 
 /**
  * Represents a stored version of an agent configuration.
+ * The config fields are top-level on the version row (no nested snapshot object).
  */
-export interface AgentVersion {
+export interface AgentVersion extends StorageAgentSnapshotType {
   /** UUID identifier for this version */
   id: string;
   /** ID of the agent this version belongs to */
   agentId: string;
   /** Sequential version number (1, 2, 3, ...) */
   versionNumber: number;
-  /** Optional vanity name for this version */
-  name?: string;
-  /** Full agent configuration snapshot */
-  snapshot: StorageAgentType;
   /** Array of field names that changed from the previous version */
   changedFields?: string[];
   /** Optional message describing the changes */
@@ -38,18 +38,15 @@ export interface AgentVersion {
 
 /**
  * Input for creating a new agent version.
+ * Config fields are top-level (no nested snapshot object).
  */
-export interface CreateVersionInput {
+export interface CreateVersionInput extends StorageAgentSnapshotType {
   /** UUID identifier for this version */
   id: string;
   /** ID of the agent this version belongs to */
   agentId: string;
   /** Sequential version number */
   versionNumber: number;
-  /** Optional vanity name for this version */
-  name?: string;
-  /** Full agent configuration snapshot */
-  snapshot: StorageAgentType;
   /** Array of field names that changed from the previous version */
   changedFields?: string[];
   /** Optional message describing the changes */
@@ -138,68 +135,117 @@ export abstract class AgentsStorage extends StorageDomain {
   // ==========================================================================
 
   /**
-   * Retrieves an agent by its unique identifier (raw, without version resolution).
+   * Retrieves an agent by its unique identifier (raw thin record, without version resolution).
    * @param id - The unique identifier of the agent
-   * @returns The agent if found, null otherwise
+   * @returns The thin agent record if found, null otherwise
    */
   abstract getAgentById({ id }: { id: string }): Promise<StorageAgentType | null>;
 
   /**
-   * Retrieves an agent by its unique identifier, resolving from the active version if set.
+   * Retrieves an agent by its unique identifier, resolving config from the active version.
    * This is the preferred method for fetching stored agents as it ensures the returned
    * configuration matches the active version.
    *
    * @param id - The unique identifier of the agent
-   * @returns The agent config (from active version snapshot if set), or null if not found
+   * @returns The resolved agent (metadata + version config), or null if not found
    */
-  async getAgentByIdResolved({ id }: { id: string }): Promise<StorageAgentType | null> {
+  async getAgentByIdResolved({ id }: { id: string }): Promise<StorageResolvedAgentType | null> {
     const agent = await this.getAgentById({ id });
 
     if (!agent) {
       return null;
     }
 
-    // If an active version is set, resolve from that version's snapshot
+    // Try to get the version to merge with
+    let version: AgentVersion | null = null;
+
+    // If an active version is set, use that
     if (agent.activeVersionId) {
-      const activeVersion = await this.getVersion(agent.activeVersionId);
-      if (activeVersion) {
-        // Return the snapshot with id and activeVersionId preserved from the current agent record
-        return {
-          ...activeVersion.snapshot,
-          id: agent.id,
-          activeVersionId: agent.activeVersionId,
-        };
+      version = await this.getVersion(agent.activeVersionId);
+
+      // Warn if activeVersionId points to a non-existent version
+      if (!version) {
+        console.warn(
+          `[AgentsStorage] Agent ${agent.id} has activeVersionId ${agent.activeVersionId} but version not found. Falling back to latest version.`,
+        );
       }
     }
 
-    return agent;
+    // If no active version or it wasn't found, fall back to latest version
+    if (!version) {
+      version = await this.getLatestVersion(agent.id);
+    }
+
+    // If we have a version, merge its config with agent metadata
+    if (version) {
+      // Extract snapshot config fields from the version
+      const {
+        id: _versionId,
+        agentId: _agentId,
+        versionNumber: _versionNumber,
+        changedFields: _changedFields,
+        changeMessage: _changeMessage,
+        createdAt: _createdAt,
+        ...snapshotConfig
+      } = version;
+
+      // Return merged agent metadata + version config
+      return {
+        ...agent,
+        ...snapshotConfig,
+      };
+    }
+
+    // No versions exist - return thin record cast as resolved (config fields will be undefined)
+    return agent as StorageResolvedAgentType;
   }
 
   /**
    * Lists all agents with version resolution.
-   * For each agent that has an activeVersionId, the config is resolved from the version snapshot.
+   * For each agent that has an activeVersionId, the config is resolved from the version.
    *
    * @param args - Pagination and ordering options
    * @returns Paginated list of resolved agents
    */
-  async listAgentsResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+  async listAgentsResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsResolvedOutput> {
     const result = await this.listAgents(args);
 
-    // Resolve each agent's active version
+    // Resolve each agent's active version or latest version
     const resolvedAgents = await Promise.all(
       result.agents.map(async agent => {
+        // Try to get the version to merge with
+        let version: AgentVersion | null = null;
+
+        // If an active version is set, use that
         if (agent.activeVersionId) {
-          const activeVersion = await this.getVersion(agent.activeVersionId);
-          if (activeVersion) {
-            return {
-              ...activeVersion.snapshot,
-              // Ensure id and activeVersionId are preserved from the current agent record
-              id: agent.id,
-              activeVersionId: agent.activeVersionId,
-            };
-          }
+          version = await this.getVersion(agent.activeVersionId);
         }
-        return agent;
+
+        // If no active version or it wasn't found, fall back to latest version
+        if (!version) {
+          version = await this.getLatestVersion(agent.id);
+        }
+
+        // If we have a version, merge its config with agent metadata
+        if (version) {
+          const {
+            id: _versionId,
+            agentId: _agentId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshotConfig
+          } = version;
+
+          return {
+            ...agent,
+            ...snapshotConfig,
+          } as StorageResolvedAgentType;
+        }
+
+        // No versions exist - return thin record cast as resolved
+        return agent as StorageResolvedAgentType;
       }),
     );
 
@@ -211,8 +257,8 @@ export abstract class AgentsStorage extends StorageDomain {
 
   /**
    * Creates a new agent in storage.
-   * @param agent - The agent data to create
-   * @returns The created agent with timestamps
+   * @param agent - The agent data to create (thin record fields + initial snapshot)
+   * @returns The created thin agent record with timestamps
    */
   abstract createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType>;
 
@@ -220,7 +266,7 @@ export abstract class AgentsStorage extends StorageDomain {
    * Updates an existing agent in storage.
    * @param id - The unique identifier of the agent to update
    * @param updates - The fields to update
-   * @returns The updated agent
+   * @returns The updated thin agent record
    */
   abstract updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType>;
 
@@ -233,7 +279,7 @@ export abstract class AgentsStorage extends StorageDomain {
   /**
    * Lists all agents with optional pagination.
    * @param args - Pagination and ordering options
-   * @returns Paginated list of agents
+   * @returns Paginated list of thin agent records
    */
   abstract listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput>;
 
@@ -243,7 +289,7 @@ export abstract class AgentsStorage extends StorageDomain {
 
   /**
    * Creates a new version record for an agent.
-   * @param input - The version data to create
+   * @param input - The version data to create (config fields are top-level)
    * @returns The created version with timestamp
    */
   abstract createVersion(input: CreateVersionInput): Promise<AgentVersion>;

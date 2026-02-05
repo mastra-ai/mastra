@@ -143,6 +143,14 @@ export const mastra = new Mastra({
 });
 ```
 
+### Registering subagents
+
+You can register subagents within an agent. They'll be executed as tools from the parent agent. Read the [using agents as tools](/docs/agents/using-tools#using-agents-as-tools) documentation to learn more.
+
+### Registering subworkflows
+
+You can register subworkflows within an agent. They'll be executed as tools from the parent agent. Read the [using workflows as tools](/docs/agents/using-tools#using-workflows-as-tools) documentation to learn more.
+
 ## Referencing an agent
 
 You can call agents from workflow steps, tools, the Mastra Client, or the command line. Get a reference by calling `.getAgent()` on your `mastra` or `mastraClient` instance, depending on your setup:
@@ -333,6 +341,12 @@ export const testAgent = new Agent({
 :::info
 
 See [Request Context](/docs/server/request-context) for more information.
+
+:::
+
+:::tip
+
+For type-safe request context schema validation, see [Schema Validation](/docs/server/request-context#schema-validation).
 
 :::
 

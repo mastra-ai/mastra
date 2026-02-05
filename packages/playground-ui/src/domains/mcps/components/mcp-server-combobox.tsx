@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { Combobox } from '@/ds/components/Combobox';
 import { useMCPServers } from '../hooks/use-mcp-servers';
 import { useLinkComponent } from '@/lib/framework';

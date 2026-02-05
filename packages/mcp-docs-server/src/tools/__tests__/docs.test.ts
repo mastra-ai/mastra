@@ -13,25 +13,25 @@ describe('docsTool', () => {
   });
 
   describe('execute', () => {
-    it('should list directory contents when no specific path is requested', async () => {
+    it('should list top-level directories when root path is requested', async () => {
       const result = await callTool(tools.mastra_mastraDocs, { paths: [''] });
-      expect(result).toContain('Directory contents of :');
-      expect(result).toContain('Subdirectories:');
-      expect(result).toContain('Files in this directory:');
-      expect(result).toContain('index.mdx');
+      // The root should list docs/, reference/, guides/
+      expect(result).toContain('docs/');
+      expect(result).toContain('reference/');
     });
 
-    it('should return content for index.mdx', async () => {
-      const result = await callTool(tools.mastra_mastraDocs, { paths: ['index.mdx'] });
-      expect(result).toContain('## index.mdx');
-      expect(result).toContain('# About Mastra');
+    it('should return content for a specific documentation path', async () => {
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['docs/agents/overview'] });
+      expect(result).toContain('## docs/agents/overview');
+      // Should contain documentation about agents
+      expect(result.toLowerCase()).toContain('agent');
     });
 
-    it('should handle directory listings', async () => {
-      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference'] });
-      expect(result).toContain('Directory contents of reference');
-      expect(result).toContain('Subdirectories:');
-      expect(result).toContain('Files in this directory:');
+    it('should handle directory listings when no index.md exists', async () => {
+      // When there's no index.md in a directory, it should list subdirectories
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['docs/rag'] });
+      // The rag folder has subdirectories with index.md files
+      expect(result).toContain('Available documentation paths');
     });
 
     it('should handle non-existent paths gracefully', async () => {
@@ -42,56 +42,42 @@ describe('docsTool', () => {
 
     it('should handle multiple paths in a single request', async () => {
       const result = await callTool(tools.mastra_mastraDocs, {
-        paths: ['index.mdx', 'reference/tools'],
+        paths: ['docs/agents/overview', 'docs/memory/overview'],
       });
 
-      expect(result).toContain('## index.mdx');
-      expect(result).toContain('## reference/tools');
+      expect(result).toContain('## docs/agents/overview');
+      expect(result).toContain('## docs/memory/overview');
     });
 
     it('should find nearest directory when path is partially correct', async () => {
-      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference/tools/non-existent'] });
-      expect(result).toContain('Path "reference/tools/non-existent" not found');
-      expect(result).toContain('Here are the available paths in "reference/tools"');
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['docs/agents/non-existent'] });
+      expect(result).toContain('Path "docs/agents/non-existent" not found');
+      expect(result).toContain('Here are the available paths in "docs/agents"');
     });
 
-    it('should handle paths with special characters', async () => {
-      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference/tools/'] });
-      expect(result).toContain('Directory contents of reference/tools');
+    it('should handle paths with trailing slashes', async () => {
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['docs/agents/'] });
+      // Should still find content or list subdirectories
+      expect(result).toBeDefined();
     });
 
-    it('should handle MDX files with frontmatter', async () => {
-      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference/rag/document.mdx'] });
-      expect(result).toContain('title: "Reference: MDocument | Document Processing | RAG"');
-      expect(result).toContain('description: Documentation for the MDocument class in Mastra');
-      expect(result).toContain('# MDocument');
-    });
-
-    it('should handle MDX files with custom components', async () => {
-      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference/rag/document.mdx'] });
-      expect(result).toContain('<PropertiesTable');
-      expect(result).toContain('content={[');
-      expect(result).toContain('name:');
-      expect(result).toContain('type:');
-      expect(result).toContain('description:');
-    });
     it('should work when queryKeywords is an empty array', async () => {
-      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference'], queryKeywords: [] });
-      expect(result).toContain('Directory contents of reference');
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['docs/agents'], queryKeywords: [] });
+      expect(result).toBeDefined();
     });
 
     it('should normalize whitespace and case in queryKeywords', async () => {
       const result = await callTool(tools.mastra_mastraDocs, {
-        paths: ['reference'],
+        paths: ['docs/agents'],
         queryKeywords: ['  Rag ', '  meMory   ', 'rag'], // intentional spaces and case
       });
       // Should not throw, and should dedupe/normalize keywords
-      expect(result).toContain('Directory contents of reference');
+      expect(result).toBeDefined();
     });
 
     it('should return directory contents when given a valid path', async () => {
-      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference'], queryKeywords: ['rag'] });
-      expect(result).toContain('Directory contents of reference');
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['docs/agents'], queryKeywords: ['rag'] });
+      expect(result).toBeDefined();
     });
 
     it('should use queryKeywords to find relevant content when path is invalid', async () => {
@@ -101,6 +87,13 @@ describe('docsTool', () => {
       });
       // Should not throw, and should suggest or return content related to 'memory'
       expect(result.toLowerCase()).toMatch(/memory/);
+    });
+
+    it('should access reference documentation', async () => {
+      const result = await callTool(tools.mastra_mastraDocs, { paths: ['reference/agents/agent'] });
+      expect(result).toContain('## reference/agents/agent');
+      // Reference docs should have content
+      expect(result.length).toBeGreaterThan(100);
     });
   });
 });

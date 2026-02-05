@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto';
  */
 export const createSampleAgent = ({
   id = `agent-${randomUUID()}`,
+  authorId,
+  metadata,
   name = 'Test Agent',
   description,
   instructions = 'You are a helpful assistant',
@@ -19,13 +21,14 @@ export const createSampleAgent = ({
   outputProcessors,
   memory,
   scorers,
-  metadata,
 }: Partial<StorageCreateAgentInput> = {}): StorageCreateAgentInput => ({
   id,
   name,
-  ...(description && { description }),
   instructions,
   model,
+  ...(authorId && { authorId }),
+  ...(metadata && { metadata }),
+  ...(description && { description }),
   ...(tools && { tools }),
   ...(defaultOptions && { defaultOptions }),
   ...(workflows && { workflows }),
@@ -34,7 +37,6 @@ export const createSampleAgent = ({
   ...(outputProcessors && { outputProcessors }),
   ...(memory && { memory }),
   ...(scorers && { scorers }),
-  ...(metadata && { metadata }),
 });
 
 /**
@@ -53,18 +55,17 @@ export const createFullSampleAgent = ({
     provider: 'openai',
     name: 'gpt-4',
     temperature: 0.7,
-    maxTokens: 2000,
+    maxCompletionTokens: 2000,
   },
   tools: ['calculator', 'webSearch'],
   defaultOptions: {
     maxSteps: 5,
-    temperature: 0.5,
   },
   workflows: ['order-workflow', 'support-workflow'],
   agents: ['helper-agent'],
-  inputProcessors: [{ type: 'sanitize', config: { stripHtml: true } }],
-  outputProcessors: [{ type: 'format', config: { style: 'markdown' } }],
-  memory: 'thread-memory',
+  inputProcessors: ['sanitize-processor'],
+  outputProcessors: ['format-processor'],
+  memory: { vector: 'default-vector' },
   scorers: {
     relevance: { sampling: { type: 'ratio', rate: 0.8 } },
   },
