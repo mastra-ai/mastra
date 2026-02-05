@@ -3,7 +3,6 @@ import { Memory } from "@mastra/memory";
 import { weatherTool } from "../tools";
 import { getCurrentTimeTool } from "../tools/client";
 
-
 export const weatherAgent = new Agent({
   id: "weather-agent",
   name: "Weather Agent",

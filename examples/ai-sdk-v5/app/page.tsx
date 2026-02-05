@@ -21,8 +21,8 @@ export default function Chat() {
     fetcher,
   );
 
-  const { sendMessage, messages, addToolOutput, status, setMessages } =
-    useChat({
+  const { sendMessage, messages, addToolOutput, status, setMessages } = useChat(
+    {
       transport: new DefaultChatTransport({
         api: "/api/chat",
         prepareSendMessagesRequest({ messages }) {
@@ -49,7 +49,8 @@ export default function Chat() {
           });
         }
       },
-    });
+    },
+  );
 
   useEffect(() => {
     if (initialMessages.length > 0) {
