@@ -840,7 +840,7 @@ export interface DatasetItem {
   version: Date;
   input: unknown;
   expectedOutput?: unknown;
-  context?: unknown;
+  context?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -854,7 +854,7 @@ export interface DatasetItemVersion {
   snapshot?: {
     input?: unknown;
     expectedOutput?: unknown;
-    context?: unknown;
+    context?: Record<string, unknown>;
   };
   isDeleted: boolean;
   createdAt: Date;
@@ -930,7 +930,7 @@ export interface CreateItemVersionInput {
   snapshot?: {
     input?: unknown;
     expectedOutput?: unknown;
-    context?: unknown;
+    context?: Record<string, unknown>;
   };
   isDeleted?: boolean;
 }
