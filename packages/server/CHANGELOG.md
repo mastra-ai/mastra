@@ -1,5 +1,22 @@
 # @mastra/server
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fix stored agents functionality: ([#12704](https://github.com/mastra-ai/mastra/pull/12704))
+  - Fixed auto-versioning bug where `activeVersionId` wasn't being updated when creating new versions
+  - Added `GET /vectors` endpoint to list available vector stores
+  - Added `GET /embedders` endpoint to list available embedding models
+  - Added validation for memory configuration when semantic recall is enabled
+  - Fixed version comparison in `handleAutoVersioning` to use the active version instead of latest
+  - Added proper cache clearing after agent updates
+
+- Added source repository info to workspace skill listings so clients can distinguish identically named skills installed from different repos. ([#12678](https://github.com/mastra-ai/mastra/pull/12678))
+
+- Updated dependencies [[`90f7894`](https://github.com/mastra-ai/mastra/commit/90f7894568dc9481f40a4d29672234fae23090bb), [`8109aee`](https://github.com/mastra-ai/mastra/commit/8109aeeab758e16cd4255a6c36f044b70eefc6a6)]:
+  - @mastra/core@1.2.1-alpha.0
+
 ## 1.2.0
 
 ### Minor Changes
