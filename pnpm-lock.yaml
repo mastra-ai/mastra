@@ -3307,10 +3307,10 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0(@types/react@19.2.2)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@codemirror/autocomplete':
-        specifier: ^6.18.0
+        specifier: ^6.20.0
         version: 6.20.0
       '@codemirror/lang-javascript':
-        specifier: ^6.2.2
+        specifier: ^6.2.4
         version: 6.2.4
       '@codemirror/lang-json':
         specifier: ^6.0.2
@@ -3322,10 +3322,10 @@ importers:
         specifier: ^6.5.2
         version: 6.5.2
       '@codemirror/state':
-        specifier: ^6.5.2
+        specifier: ^6.5.4
         version: 6.5.4
       '@codemirror/view':
-        specifier: ^6.38.6
+        specifier: ^6.39.12
         version: 6.39.12
       '@dagrejs/dagre':
         specifier: ^1.1.8
