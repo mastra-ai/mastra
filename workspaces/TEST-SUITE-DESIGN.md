@@ -107,7 +107,8 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 |------|:----:|:-----------:|--------|
 | concurrent start() calls return same promise | ✅ | - | Pass |
 | start() is idempotent when already running | ✅ | - | Pass |
-| start() clears _startPromise after completion | ❌ | - | **Missing** |
+| start() clears _startPromise after completion | ✅ | - | Pass |
+| start() clears _startPromise after error | ✅ | - | Pass |
 | status transitions through starting to running | ✅ | - | Pass |
 
 ### Start - Sandbox Creation
@@ -125,16 +126,16 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 |------|:----:|:-----------:|--------|
 | uses cached template if exists | ✅ | - | Pass |
 | builds default template if not cached | ✅ | - | Pass |
-| rebuilds template on 404 error | ❌ | - | **Missing** |
+| rebuilds template on 404 error | ✅ | - | Pass |
 | custom template string is used as-is | ✅ | - | Pass |
-| custom template builder is built | ❌ | - | **Missing** |
-| template function customizes base template | ❌ | - | **Missing** |
+| custom template builder is built | ✅ | - | Pass |
+| template function customizes base template | ✅ | - | Pass |
 
 ### Start - Mount Processing
 
 | Test | Unit | Integration | Status |
 |------|:----:|:-----------:|--------|
-| runs reconcileMounts on reconnect | ❌ | ❌ | **Missing** |
+| runs reconcileMounts on reconnect | ✅ | - | Pass |
 | mounts pending filesystems after start | ✅ | - | Pass |
 
 ### Environment Variables
@@ -142,8 +143,8 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 | Test | Unit | Integration | Status |
 |------|:----:|:-----------:|--------|
 | env vars not passed to Sandbox.betaCreate | ✅ | - | Pass |
-| env vars merged and passed per-command | ✅ | - | Pass |
-| env changes reflected without sandbox restart | ❌ | ❌ | **Missing** |
+| env vars merged and passed per-command | ✅ | ✅ | Pass |
+| env changes reflected without sandbox restart | - | ✅ | Pass |
 
 ### Mount - S3
 
@@ -155,7 +156,8 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 | S3 with readOnly mounts with -o ro | - | ✅ | Pass |
 | S3 readOnly mount rejects writes | - | ✅ | (part of above) |
 | S3 mount sets uid/gid for file ownership | - | ✅ | Pass |
-| S3 endpoint mount includes url and path style options | ❌ | ❌ | **Missing** - verify s3fs command args |
+| S3 endpoint mount includes url and path style options | ✅ | - | Pass |
+| S3 readOnly includes ro option in mount command | ✅ | - | Pass |
 
 ### Mount - GCS
 
@@ -210,15 +212,16 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 | Test | Unit | Integration | Status |
 |------|:----:|:-----------:|--------|
 | stop clears sandbox reference | ✅ | - | Pass |
-| stop unmounts all filesystems | ❌ | ❌ | **Missing** |
+| stop unmounts all filesystems | ✅ | ✅ | Pass |
 | destroy kills sandbox | ✅ | - | Pass |
 
 ### Error Handling
 
 | Test | Unit | Integration | Status |
 |------|:----:|:-----------:|--------|
-| SandboxNotReadyError thrown if not started | ✅ | - | Pass |
-| clear error for S3-compatible without credentials | ❌ | - | **Missing** |
+| SandboxNotReadyError thrown if instance accessed before start | ✅ | - | Pass |
+| executeCommand auto-starts sandbox if not running | ✅ | - | Pass |
+| clear error for S3-compatible without credentials | ✅ | - | Pass |
 | clear error for non-empty directory | - | ✅ | (part of safety checks) |
 
 ---
@@ -229,9 +232,9 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 
 | Test | Unit | Integration | Status |
 |------|:----:|:-----------:|--------|
-| full workflow: create, mount, read/write, verify in bucket | - | ❌ | **Missing** |
-| sandbox reconnect preserves mounts | - | ❌ | **Missing** |
-| config change triggers remount on reconnect | - | ❌ | **Missing** |
+| full workflow: create, mount, read/write, verify in bucket | - | ✅ | Pass |
+| sandbox reconnect preserves mounts | - | ✅ | Pass |
+| config change triggers remount on reconnect | - | ✅ | Pass |
 
 ### E2B + GCS Full Workflow
 
@@ -247,9 +250,9 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 
 | Test Type | Total | Passing | Failing | Skipped |
 |-----------|-------|---------|---------|---------|
-| Unit Tests | 37 | 37 | 0 | 0 |
-| Integration Tests | 20 | 20 | 0 | 0 |
-| **Total** | **57** | **57** | **0** | **0** |
+| Unit Tests | 49 | 49 | 0 | 0 |
+| Integration Tests | 27 | 27 | 0 | 0 |
+| **Total** | **76** | **76** | **0** | **0** |
 
 ### E2B Integration Tests Breakdown
 
@@ -262,6 +265,9 @@ describe.skipIf(!hasS3Credentials)('S3 Integration', () => {
 | Mount Reconciliation | 3 | ✅ All passing |
 | Marker Files | 3 | ✅ All passing |
 | Existing Mount Detection | 2 | ✅ All passing |
+| Full Workflow | 3 | ✅ All passing |
+| Stop/Destroy | 1 | ✅ All passing |
+| Environment Variables | 2 | ✅ All passing |
 
 ---
 
@@ -313,29 +319,28 @@ Also added `TEST_GCS_BUCKET` to skipIf condition.
 
 ## Missing Tests - Priority Order
 
-### High Priority (Core Functionality)
+### ✅ Implemented (High Priority)
 
-1. **stop() unmounts all filesystems** - Important for cleanup
-2. **S3 endpoint mount options** - Verify s3fs command is built correctly (unit test)
-3. **Full workflow test** - Create, mount, read/write, verify
+1. ~~**stop() unmounts all filesystems**~~ - ✅ Unit + Integration
+2. ~~**S3 endpoint mount options**~~ - ✅ Unit test
+3. ~~**Full workflow test**~~ - ✅ Integration test
+4. ~~**runs reconcileMounts on reconnect**~~ - ✅ Unit test
+5. ~~**env changes reflected without restart**~~ - ✅ Integration test
+6. ~~**start() clears _startPromise**~~ - ✅ Unit test
+7. ~~**rebuilds template on 404 error**~~ - ✅ Unit test
+8. ~~**custom template builder is built**~~ - ✅ Unit test
+9. ~~**template function customizes base template**~~ - ✅ Unit test
 
-### Medium Priority (Edge Cases)
+### Still Missing (Lower Priority - Installation)
 
-4. **runs reconcileMounts on reconnect** - Essential for sandbox reuse
-5. **env changes reflected without restart** - Verify per-command env works
-6. **start() clears _startPromise** - Race condition edge case
+1. **installs s3fs if not present** - Runtime installation verification
+2. **installs gcsfuse if not present** - Runtime installation verification
+3. **helpful error if installation fails** - Error UX verification
 
-### Lower Priority (Template Handling)
-
-7. **rebuilds template on 404 error** - Error recovery
-8. **custom template builder is built** - Advanced usage
-9. **template function customizes base template** - Advanced usage
-
-### Lower Priority (Installation)
-
-10. **installs s3fs if not present** - Runtime installation
-11. **installs gcsfuse if not present** - Runtime installation
-12. **helpful error if installation fails** - Error UX
+These are lower priority because:
+- The installation logic is simple (apt-get install)
+- It's tested implicitly by integration tests (they fail if install doesn't work)
+- Adding explicit tests would require sandboxes without s3fs/gcsfuse pre-installed
 
 ---
 
