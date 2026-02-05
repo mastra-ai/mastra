@@ -1,4 +1,6 @@
-import type { SchemaField, FieldType, JSONSchemaOutput, JSONSchemaProperty } from './types';
+import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
+import type { SchemaField, FieldType } from './types';
+import { createField } from './types';
 
 function fieldTypeToJSONSchemaType(type: FieldType): string {
   switch (type) {
@@ -9,11 +11,11 @@ function fieldTypeToJSONSchemaType(type: FieldType): string {
   }
 }
 
-function fieldToJSONSchemaProperty(field: SchemaField): JSONSchemaProperty {
+function fieldToJSONSchemaProperty(field: SchemaField): JsonSchemaProperty {
   const baseType = fieldTypeToJSONSchemaType(field.type);
   const type = field.nullable ? [baseType, 'null'] : baseType;
 
-  const property: JSONSchemaProperty = { type };
+  const property: JsonSchemaProperty = { type };
 
   if (field.description) {
     property.description = field.description;
@@ -35,10 +37,10 @@ function fieldToJSONSchemaProperty(field: SchemaField): JSONSchemaProperty {
 }
 
 function fieldsToPropertiesAndRequired(fields: SchemaField[]): {
-  properties: Record<string, JSONSchemaProperty>;
+  properties: Record<string, JsonSchemaProperty>;
   required: string[];
 } {
-  const properties: Record<string, JSONSchemaProperty> = {};
+  const properties: Record<string, JsonSchemaProperty> = {};
   const required: string[] = [];
 
   for (const field of fields) {
@@ -54,10 +56,10 @@ function fieldsToPropertiesAndRequired(fields: SchemaField[]): {
   return { properties, required };
 }
 
-export function fieldsToJSONSchema(fields: SchemaField[]): JSONSchemaOutput {
+export function fieldsToJSONSchema(fields: SchemaField[]): JsonSchema {
   const { properties, required } = fieldsToPropertiesAndRequired(fields);
 
-  const schema: JSONSchemaOutput = {
+  const schema: JsonSchema = {
     type: 'object',
     properties,
   };
@@ -67,6 +69,59 @@ export function fieldsToJSONSchema(fields: SchemaField[]): JSONSchemaOutput {
   }
 
   return schema;
+}
+
+// --- Hydration: Convert JsonSchema back to SchemaField[] ---
+
+function parsePropertyType(type: string | string[] | undefined): { type: string; nullable: boolean } {
+  if (Array.isArray(type)) {
+    const nullable = type.includes('null');
+    const baseType = type.find(t => t !== 'null') || 'string';
+    return { type: baseType, nullable };
+  }
+  return { type: type || 'string', nullable: false };
+}
+
+function jsonSchemaTypeToFieldType(type: string): FieldType {
+  if (['string', 'number', 'boolean', 'object', 'array'].includes(type)) {
+    return type as FieldType;
+  }
+  return 'string';
+}
+
+function propertyToField(prop: JsonSchemaProperty): SchemaField {
+  const { type, nullable } = parsePropertyType(prop.type);
+  return createField({
+    name: '',
+    type: jsonSchemaTypeToFieldType(type),
+    description: prop.description,
+    nullable,
+    optional: false,
+    properties: prop.properties
+      ? jsonSchemaToFields({ properties: prop.properties, required: prop.required })
+      : undefined,
+    items: prop.items ? propertyToField(prop.items) : undefined,
+  });
+}
+
+export function jsonSchemaToFields(schema: JsonSchema | undefined): SchemaField[] {
+  if (!schema?.properties) return [];
+  const requiredSet = new Set(schema.required || []);
+
+  return Object.entries(schema.properties).map(([name, prop]) => {
+    const { type, nullable } = parsePropertyType(prop.type);
+    return createField({
+      name,
+      type: jsonSchemaTypeToFieldType(type),
+      description: prop.description,
+      nullable,
+      optional: !requiredSet.has(name),
+      properties: prop.properties
+        ? jsonSchemaToFields({ properties: prop.properties, required: prop.required })
+        : undefined,
+      items: prop.items ? propertyToField(prop.items) : undefined,
+    });
+  });
 }
 
 export function getFieldsAtPath(fields: SchemaField[], path: string[]): SchemaField[] {

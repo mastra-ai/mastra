@@ -9,6 +9,7 @@ import { getInputOptions as getBundlerInputOptions } from './bundler';
 import { aliasHono } from './plugins/hono-alias';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
+import type { BundlerOptions } from './types';
 import { getPackageName, slash } from './utils';
 import type { BundlerPlatform } from './utils';
 
@@ -16,7 +17,14 @@ export async function getInputOptions(
   entryFile: string,
   platform: BundlerPlatform,
   env?: Record<string, string>,
-  { sourcemap = false }: { sourcemap?: boolean } = {},
+  {
+    sourcemap = false,
+    bundlerOptions = {
+      enableSourcemap: false,
+      enableEsmShim: true,
+      externals: true,
+    },
+  }: { sourcemap?: boolean; bundlerOptions?: BundlerOptions } = {},
 ) {
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
@@ -30,6 +38,7 @@ export async function getInputOptions(
       projectRoot: workspaceRoot || process.cwd(),
       platform,
       isDev: true,
+      bundlerOptions,
     },
     noopLogger,
   );
@@ -51,7 +60,7 @@ export async function getInputOptions(
     },
     platform,
     env,
-    { sourcemap, isDev: true, workspaceRoot, projectRoot },
+    { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset: bundlerOptions?.externals === true },
   );
 
   if (Array.isArray(inputOptions.plugins)) {

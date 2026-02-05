@@ -13,7 +13,7 @@ import { Spinner } from '@/ds/components/Spinner';
 import { Input } from '@/ds/components/Input';
 import { useAgent } from '../../hooks/use-agent';
 import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers';
-import { findProviderById } from '../agent-metadata/utils';
+import { cleanProviderId } from '../agent-metadata/utils';
 
 export const PromptEnhancer = ({ agentId }: { agentId: string }) => {
   const { isDirty, prompt, setPrompt, resetPrompt } = useAgentPromptExperiment();
@@ -73,7 +73,8 @@ const PromptEnhancerTextarea = ({ agentId }: { agentId: string }) => {
 
   // Check if a provider has an API key configured
   const isProviderConnected = (providerId: string) => {
-    const provider = findProviderById(providers, providerId);
+    const cleanId = cleanProviderId(providerId);
+    const provider = providers.find(p => cleanProviderId(p.id) === cleanId);
     return provider?.connected === true;
   };
 

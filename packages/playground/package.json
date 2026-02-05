@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.1-alpha.0",
   "type": "module",
   "homepage": "https://mastra.ai",
   "files": [
@@ -44,7 +44,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
-    "@eslint/js": "^9.37.0",
+    "@eslint/js": "^9.39.2",
     "@tailwindcss/container-queries": "^0.1.1",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",

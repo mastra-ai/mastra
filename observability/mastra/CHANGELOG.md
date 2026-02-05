@@ -1,5 +1,60 @@
 # @mastra/observability
 
+## 1.2.0
+
+### Minor Changes
+
+- Increased default serialization limits for AI tracing. The maxStringLength is now 128KB (previously 1KB) and maxDepth is 8 (previously 6). These changes prevent truncation of large LLM prompts and responses during tracing. ([#12579](https://github.com/mastra-ai/mastra/pull/12579))
+
+  To restore the previous behavior, set `serializationOptions` in your observability config:
+
+  ```ts
+  serializationOptions: {
+    maxStringLength: 1024,
+    maxDepth: 6,
+  }
+  ```
+
+### Patch Changes
+
+- Fix CloudFlare Workers deployment failure caused by `fileURLToPath` being called at module initialization time. ([#12540](https://github.com/mastra-ai/mastra/pull/12540))
+
+  Moved `SNAPSHOTS_DIR` calculation from top-level module code into a lazy getter function. In CloudFlare Workers (V8 runtime), `import.meta.url` is `undefined` during worker startup, causing the previous code to throw. The snapshot functionality is only used for testing, so deferring initialization has no impact on normal operation.
+
+- Updated dependencies [[`e6fc281`](https://github.com/mastra-ai/mastra/commit/e6fc281896a3584e9e06465b356a44fe7faade65), [`97be6c8`](https://github.com/mastra-ai/mastra/commit/97be6c8963130fca8a664fcf99d7b3a38e463595), [`2770921`](https://github.com/mastra-ai/mastra/commit/2770921eec4d55a36b278d15c3a83f694e462ee5), [`b1695db`](https://github.com/mastra-ai/mastra/commit/b1695db2d7be0c329d499619c7881899649188d0), [`5fe1fe0`](https://github.com/mastra-ai/mastra/commit/5fe1fe0109faf2c87db34b725d8a4571a594f80e), [`4133d48`](https://github.com/mastra-ai/mastra/commit/4133d48eaa354cdb45920dc6265732ffbc96788d), [`5dd01cc`](https://github.com/mastra-ai/mastra/commit/5dd01cce68d61874aa3ecbd91ee17884cfd5aca2), [`13e0a2a`](https://github.com/mastra-ai/mastra/commit/13e0a2a2bcec01ff4d701274b3727d5e907a6a01), [`f6673b8`](https://github.com/mastra-ai/mastra/commit/f6673b893b65b7d273ad25ead42e990704cc1e17), [`cd6be8a`](https://github.com/mastra-ai/mastra/commit/cd6be8ad32741cd41cabf508355bb31b71e8a5bd), [`9eb4e8e`](https://github.com/mastra-ai/mastra/commit/9eb4e8e39efbdcfff7a40ff2ce07ce2714c65fa8), [`c987384`](https://github.com/mastra-ai/mastra/commit/c987384d6c8ca844a9701d7778f09f5a88da7f9f), [`cb8cc12`](https://github.com/mastra-ai/mastra/commit/cb8cc12bfadd526aa95a01125076f1da44e4afa7), [`aa37c84`](https://github.com/mastra-ai/mastra/commit/aa37c84d29b7db68c72517337932ef486c316275), [`62f5d50`](https://github.com/mastra-ai/mastra/commit/62f5d5043debbba497dacb7ab008fe86b38b8de3), [`47eba72`](https://github.com/mastra-ai/mastra/commit/47eba72f0397d0d14fbe324b97940c3d55e5a525)]:
+  - @mastra/core@1.2.0
+
+## 1.2.0-alpha.1
+
+### Patch Changes
+
+- Fix CloudFlare Workers deployment failure caused by `fileURLToPath` being called at module initialization time. ([#12540](https://github.com/mastra-ai/mastra/pull/12540))
+
+  Moved `SNAPSHOTS_DIR` calculation from top-level module code into a lazy getter function. In CloudFlare Workers (V8 runtime), `import.meta.url` is `undefined` during worker startup, causing the previous code to throw. The snapshot functionality is only used for testing, so deferring initialization has no impact on normal operation.
+
+- Updated dependencies [[`2770921`](https://github.com/mastra-ai/mastra/commit/2770921eec4d55a36b278d15c3a83f694e462ee5), [`b1695db`](https://github.com/mastra-ai/mastra/commit/b1695db2d7be0c329d499619c7881899649188d0), [`4133d48`](https://github.com/mastra-ai/mastra/commit/4133d48eaa354cdb45920dc6265732ffbc96788d), [`5dd01cc`](https://github.com/mastra-ai/mastra/commit/5dd01cce68d61874aa3ecbd91ee17884cfd5aca2), [`13e0a2a`](https://github.com/mastra-ai/mastra/commit/13e0a2a2bcec01ff4d701274b3727d5e907a6a01), [`c987384`](https://github.com/mastra-ai/mastra/commit/c987384d6c8ca844a9701d7778f09f5a88da7f9f), [`cb8cc12`](https://github.com/mastra-ai/mastra/commit/cb8cc12bfadd526aa95a01125076f1da44e4afa7), [`62f5d50`](https://github.com/mastra-ai/mastra/commit/62f5d5043debbba497dacb7ab008fe86b38b8de3)]:
+  - @mastra/core@1.2.0-alpha.1
+
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- Increased default serialization limits for AI tracing. The maxStringLength is now 128KB (previously 1KB) and maxDepth is 8 (previously 6). These changes prevent truncation of large LLM prompts and responses during tracing. ([#12579](https://github.com/mastra-ai/mastra/pull/12579))
+
+  To restore the previous behavior, set `serializationOptions` in your observability config:
+
+  ```ts
+  serializationOptions: {
+    maxStringLength: 1024,
+    maxDepth: 6,
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`e6fc281`](https://github.com/mastra-ai/mastra/commit/e6fc281896a3584e9e06465b356a44fe7faade65), [`97be6c8`](https://github.com/mastra-ai/mastra/commit/97be6c8963130fca8a664fcf99d7b3a38e463595), [`5fe1fe0`](https://github.com/mastra-ai/mastra/commit/5fe1fe0109faf2c87db34b725d8a4571a594f80e), [`f6673b8`](https://github.com/mastra-ai/mastra/commit/f6673b893b65b7d273ad25ead42e990704cc1e17), [`cd6be8a`](https://github.com/mastra-ai/mastra/commit/cd6be8ad32741cd41cabf508355bb31b71e8a5bd), [`9eb4e8e`](https://github.com/mastra-ai/mastra/commit/9eb4e8e39efbdcfff7a40ff2ce07ce2714c65fa8), [`aa37c84`](https://github.com/mastra-ai/mastra/commit/aa37c84d29b7db68c72517337932ef486c316275), [`47eba72`](https://github.com/mastra-ai/mastra/commit/47eba72f0397d0d14fbe324b97940c3d55e5a525)]:
+  - @mastra/core@1.2.0-alpha.0
+
 ## 1.1.0
 
 ### Minor Changes

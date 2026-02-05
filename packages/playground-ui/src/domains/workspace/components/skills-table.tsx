@@ -3,7 +3,7 @@ import { Icon } from '@/ds/icons/Icon';
 import { EntryList } from '@/ds/components/EntryList';
 import { SkillIcon } from '@/ds/icons/SkillIcon';
 import { useLinkComponent } from '@/lib/framework';
-import { BookOpen, Plus } from 'lucide-react';
+import { AlertTriangle, BookOpen, Plus } from 'lucide-react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
 
@@ -11,6 +11,8 @@ export interface SkillsTableProps {
   skills: SkillMetadata[];
   isLoading: boolean;
   isSkillsConfigured?: boolean;
+  /** True if .agents/skills has skills that aren't being discovered */
+  hasUndiscoveredAgentSkills?: boolean;
   /** Base path for skill links (should include workspaceId, e.g., /workspaces/{id}/skills) */
   basePath?: string;
   /** Callback when "Add Skill" is clicked (only shown if provided) */
@@ -39,6 +41,7 @@ export function SkillsTable({
   skills,
   isLoading,
   isSkillsConfigured = true,
+  hasUndiscoveredAgentSkills = false,
   basePath = '/workspace/skills',
   onAddSkill,
   onUpdateSkill,
@@ -70,13 +73,27 @@ export function SkillsTable({
     <div className="space-y-4">
       {/* Header Actions */}
       {onAddSkill && (
-        <div className="flex items-center">
+        <div className="flex items-center gap-4">
           <Button variant="default" size="sm" onClick={onAddSkill}>
             <Icon>
               <Plus className="h-4 w-4" />
             </Icon>
             Add Skill
           </Button>
+        </div>
+      )}
+
+      {/* Warning for undiscovered skills */}
+      {hasUndiscoveredAgentSkills && (
+        <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-medium text-amber-500">Skills installed but not discovered</p>
+            <p className="text-icon4 mt-1">
+              You have skills in <code className="px-1 py-0.5 rounded bg-surface4 text-xs">.agents/skills</code> that
+              aren&apos;t being discovered. Add this path to your workspace skills configuration to see them.
+            </p>
+          </div>
         </div>
       )}
 

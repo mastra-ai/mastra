@@ -106,40 +106,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'workspace/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/filesystem',
-          label: 'Filesystem',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/sandbox',
-          label: 'Sandbox',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/skills',
-          label: 'Skills',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/search',
-          label: 'Search and Indexing',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Workflows',
       items: [
         {
@@ -264,6 +230,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'memory/observational-memory',
+          label: 'Observational Memory',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'memory/memory-processors',
           label: 'Memory Processors',
         },
@@ -297,6 +271,40 @@ const sidebars = {
           type: 'doc',
           id: 'rag/graph-rag',
           label: 'GraphRAG',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Workspaces',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'workspace/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/filesystem',
+          label: 'Filesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/sandbox',
+          label: 'Sandbox',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/skills',
+          label: 'Skills',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/search',
+          label: 'Search and Indexing',
         },
       ],
     },

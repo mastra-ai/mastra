@@ -7,7 +7,7 @@ import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/sc
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
-import type { StepResult } from './types';
+import type { OutputWriter, StepResult } from './types';
 import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
@@ -62,6 +62,7 @@ export type ExecuteFunctionParams<
   engine: EngineType;
   abortSignal: AbortSignal;
   writer: ToolStream;
+  outputWriter?: OutputWriter;
   validateSchemas?: boolean;
 };
 
