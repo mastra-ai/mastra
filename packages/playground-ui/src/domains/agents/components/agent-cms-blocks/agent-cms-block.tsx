@@ -45,34 +45,32 @@ const AgentCMSBlockContent = ({
   };
 
   return (
-    <div>
-      <div className="border border-border1 rounded-md w-full bg-surface2">
-        <div className="flex items-center justify-between p-2 border-b border-border1">
-          <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6">
-            <Icon>
-              <GripVertical />
-            </Icon>
-          </div>
-
-          {onDelete && (
-            <IconButton variant="ghost" size="sm" onClick={onDelete} tooltip="Delete block">
-              <Trash2 />
-            </IconButton>
-          )}
+    <div className="h-full min-h-[300px] [&:not(:first-child)]:border-t [&:not(:first-child)]:border-dashed [&:not(:first-child)]:border-border1">
+      <div className="flex items-center justify-between p-2">
+        <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6">
+          <Icon>
+            <GripVertical />
+          </Icon>
         </div>
 
-        <CodeEditor
-          value={block.content}
-          onChange={handleContentChange}
-          placeholder={placeholder}
-          className="border-none rounded-none text-neutral6 min-h-[200px]"
-          language="markdown"
-          highlightVariables
-          schema={schema}
-        />
-
-        <AgentCMSBlockRules schema={schema} rules={block.rules} onChange={handleRulesChange} />
+        {onDelete && (
+          <IconButton variant="ghost" size="sm" onClick={onDelete} tooltip="Delete block">
+            <Trash2 />
+          </IconButton>
+        )}
       </div>
+
+      <CodeEditor
+        value={block.content}
+        onChange={handleContentChange}
+        placeholder={placeholder}
+        className="border-none rounded-none text-neutral6 min-h-[300px]"
+        language="markdown"
+        highlightVariables
+        schema={schema}
+      />
+
+      <AgentCMSBlockRules schema={schema} rules={block.rules} onChange={handleRulesChange} />
     </div>
   );
 };

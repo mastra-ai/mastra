@@ -30,19 +30,21 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
 
   return (
     <div className={cn('flex flex-col gap-4 w-full', className)}>
-      <ContentBlocks items={items} onChange={onChange} className="flex flex-col gap-2 w-full">
-        {items.map((block, index) => (
-          <AgentCMSBlock
-            key={block.id}
-            index={index}
-            block={block}
-            onBlockChange={updatedBlock => handleBlockChange(index, updatedBlock)}
-            onDelete={handleDelete}
-            placeholder={placeholder}
-            schema={schema}
-          />
-        ))}
-      </ContentBlocks>
+      <div className="rounded-md border border-border1 overflow-hidden bg-surface2">
+        <ContentBlocks items={items} onChange={onChange} className="flex flex-col w-full">
+          {items.map((block, index) => (
+            <AgentCMSBlock
+              key={block.id}
+              index={index}
+              block={block}
+              onBlockChange={updatedBlock => handleBlockChange(index, updatedBlock)}
+              onDelete={handleDelete}
+              placeholder={placeholder}
+              schema={schema}
+            />
+          ))}
+        </ContentBlocks>
+      </div>
 
       <button
         type="button"
