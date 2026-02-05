@@ -38,13 +38,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'getting-started/mcp-docs-server',
-          label: 'MCP Docs Server',
+          id: 'getting-started/manual-install',
+          label: 'Manual Install',
         },
         {
           type: 'doc',
-          id: 'getting-started/manual-install',
-          label: 'Manual Install',
+          id: 'getting-started/build-with-ai',
+          label: 'Build with AI',
         },
       ],
     },
@@ -101,40 +101,6 @@ const sidebars = {
           type: 'doc',
           id: 'agents/adding-voice',
           label: 'Voice',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Workspace',
-      customProps: {
-        tags: ['new'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'workspace/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/filesystem',
-          label: 'Filesystem',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/sandbox',
-          label: 'Sandbox',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/skills',
-          label: 'Skills',
-        },
-        {
-          type: 'doc',
-          id: 'workspace/search',
-          label: 'Search and Indexing',
         },
       ],
     },
@@ -264,6 +230,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'memory/observational-memory',
+          label: 'Observational Memory',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'memory/memory-processors',
           label: 'Memory Processors',
         },
@@ -297,6 +271,40 @@ const sidebars = {
           type: 'doc',
           id: 'rag/graph-rag',
           label: 'GraphRAG',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Workspaces',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'workspace/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/filesystem',
+          label: 'Filesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/sandbox',
+          label: 'Sandbox',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/skills',
+          label: 'Skills',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/search',
+          label: 'Search and Indexing',
         },
       ],
     },
@@ -634,6 +642,23 @@ const sidebars = {
           type: 'doc',
           id: 'voice/speech-to-speech',
           label: 'Speech to Speech',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Build with AI',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'build-with-ai/skills',
+          label: 'Skills',
+        },
+        {
+          type: 'doc',
+          id: 'build-with-ai/mcp-docs-server',
+          label: 'MCP Docs Server',
         },
       ],
     },

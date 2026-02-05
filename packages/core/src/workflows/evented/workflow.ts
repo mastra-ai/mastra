@@ -649,7 +649,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
-      const input = inputData as ProcessorStepOutput;
+      const input = inputData as ProcessorStepOutput & { abortSignal?: AbortSignal };
       const {
         phase,
         messages,
@@ -672,6 +672,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        // Abort signal for cancelling in-flight processor work (e.g. OM observations)
+        abortSignal,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -727,6 +729,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         retryCount: retryCount ?? 0,
         requestContext,
         tracingContext: processorTracingContext,
+        state: state ?? {},
+        abortSignal,
       };
 
       // Pass-through data that should flow to the next processor in a chain

@@ -242,8 +242,17 @@ export class CoreToolBuilder extends MastraBase {
     logType?: 'tool' | 'toolset' | 'client-tool',
     processedSchema?: z.ZodTypeAny,
   ) {
-    // dont't add memory or mastra to logging
-    const { logger, mastra: _mastra, memory: _memory, requestContext, model, ...rest } = options;
+    // don't add memory, mastra, or tracing context to logging (tracingContext may contain sensitive observability credentials)
+    const {
+      logger,
+      mastra: _mastra,
+      memory: _memory,
+      requestContext,
+      model,
+      tracingContext: _tracingContext,
+      tracingPolicy: _tracingPolicy,
+      ...rest
+    } = options;
     const logModelObject = {
       modelId: model?.modelId,
       provider: model?.provider,
@@ -485,7 +494,7 @@ export class CoreToolBuilder extends MastraBase {
             domain: ErrorDomain.TOOL,
             category: ErrorCategory.USER,
             details: {
-              errorMessage: String(error),
+              errorMessage: String(err),
               argsJson: JSON.stringify(args),
               model: model?.modelId ?? '',
             },
@@ -574,7 +583,7 @@ export class CoreToolBuilder extends MastraBase {
 
     if (applicableLayer && originalSchema) {
       // Get the transformed Zod schema (with constraints removed/modified)
-      processedZodSchema = applicableLayer.processZodType(originalSchema);
+      processedZodSchema = applicableLayer.processZodType(originalSchema) as z.ZodTypeAny;
       // Convert to AI SDK Schema for the LLM
       processedSchema = applyCompatLayer({
         schema: originalSchema,

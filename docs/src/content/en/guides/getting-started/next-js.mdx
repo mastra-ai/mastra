@@ -56,6 +56,16 @@ This creates a `src/mastra` folder with an example weather agent and the followi
 
 You'll call `weather-agent.ts` from your Next.js routes in the next steps.
 
+:::tip[Using Mastra Studio alongside Next.js]
+If you want to run `mastra dev` (Mastra Studio) alongside your Next.js app and have both share the same database, update the storage URL in `src/mastra/index.ts` to use an absolute path:
+
+```typescript
+url: "file:/absolute/path/to/your/project/mastra.db"
+```
+
+Relative paths resolve based on each process's working directory, which differs between `next dev` and `mastra dev`.
+:::
+
 ## Install AI SDK UI & AI Elements
 
 Install AI SDK UI along with the Mastra adapter:

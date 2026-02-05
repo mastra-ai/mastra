@@ -255,8 +255,19 @@ export const skillSchema = skillMetadataSchema.extend({
   assets: z.array(z.string()),
 });
 
+/**
+ * Source info for skills installed via skills.sh
+ * Stored in .meta.json when a skill is installed
+ */
+export const skillsShSourceSchema = z.object({
+  owner: z.string().describe('GitHub owner/org'),
+  repo: z.string().describe('GitHub repository'),
+});
+
 export const skillMetadataWithPathSchema = skillMetadataSchema.extend({
   path: z.string().describe('Path to the skill directory'),
+  /** Source info for skills installed via skills.sh (from .meta.json) */
+  skillsShSource: skillsShSourceSchema.optional(),
 });
 
 export const listSkillsResponseSchema = z.object({

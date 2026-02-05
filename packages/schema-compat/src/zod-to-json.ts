@@ -1,7 +1,6 @@
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
-import type { ZodType as ZodSchemaV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 
@@ -164,8 +163,28 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
   return result;
 }
 
+// export function zotToJsonSchema(zodSchema: ZodSchemaV3 | ZodSchemaV4, target: Targets = 'jsonSchema7', strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative'): JSONSchema7 {
+//   const target = 'draft-07' as StandardJSONSchemaV1.Target;
+//   const standardSchema = toStandardSchema(zodSchema);
+//   const jsonSchema = standardSchemaToJSONSchema(standardSchema, {
+//     target,
+//   });
+
+//   traverse(jsonSchema, {
+//     cb: {
+//       pre: (schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema) => {
+//         this.preProcessJSONNode(schema, parentSchema);
+//       },
+//       post: (schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema) => {
+//         this.postProcessJSONNode(schema, parentSchema);
+//       },
+//     },
+//   });
+
+// }
+
 export function zodToJsonSchema(
-  zodSchema: ZodSchemaV3 | ZodSchemaV4,
+  zodSchema: any,
   target: Targets = 'jsonSchema7',
   strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative',
 ): JSONSchema7 {

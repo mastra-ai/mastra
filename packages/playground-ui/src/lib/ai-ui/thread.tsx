@@ -20,6 +20,7 @@ import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
 import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
+import { BracketOverlay } from './components/bracket-overlay';
 
 export interface ThreadProps {
   agentName?: string;
@@ -30,6 +31,7 @@ export interface ThreadProps {
 
 export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
@@ -41,7 +43,8 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
       <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
         <ThreadWelcome agentName={agentName} />
 
-        <div className="max-w-3xl w-full mx-auto px-4 pb-7">
+        <div ref={messagesContainerRef} className="relative max-w-3xl w-full mx-auto px-4 pb-7">
+          <BracketOverlay containerRef={messagesContainerRef} />
           <ThreadPrimitive.Messages
             components={{
               UserMessage: UserMessage,
