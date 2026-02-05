@@ -190,6 +190,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
             toolCallId = _chunk.payload.toolCallId;
           }
         }
+        expect(toolCallId).toBeTruthy();
         if (toolCallId) {
           const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
           for await (const _chunk of resumeStream.fullStream) {

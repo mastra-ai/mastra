@@ -478,6 +478,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               message.content.metadata?.pendingToolApprovals) as Record<string, any>;
             if (pendingOrSuspendedTools[inputData.toolName]) {
               suspendedToolRunId = pendingOrSuspendedTools[inputData.toolName].runId;
+              break;
             }
 
             const dataToolSuspendedParts = message.content.parts?.filter(
@@ -489,6 +490,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
               if (foundTool) {
                 suspendedToolRunId = (foundTool as any).data.runId;
+                break;
               }
             }
           }
