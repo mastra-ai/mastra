@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AgentCMSBlocks } from './agent-cms-blocks';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { complexSchema } from '@/lib/rule-engine/components/fixtures';
+import { createInstructionBlock, type InstructionBlock } from '../agent-edit-page/utils/form-validation';
 
 const meta: Meta<typeof AgentCMSBlocks> = {
   title: 'Domain/Agents/AgentCMSBlocks',
@@ -18,9 +19,9 @@ export default meta;
 type Story = StoryObj<typeof AgentCMSBlocks>;
 
 const InteractiveExample = () => {
-  const [items, setItems] = useState<Array<string>>([
-    'You are a helpful assistant that answers questions about programming.',
-    'Always be polite and professional in your responses.',
+  const [items, setItems] = useState<Array<InstructionBlock>>([
+    createInstructionBlock('You are a helpful assistant that answers questions about programming.'),
+    createInstructionBlock('Always be polite and professional in your responses.'),
   ]);
 
   return (
@@ -42,7 +43,7 @@ export const Default: Story = {
 };
 
 const EmptyExample = () => {
-  const [items, setItems] = useState<Array<string>>([]);
+  const [items, setItems] = useState<Array<InstructionBlock>>([]);
 
   return (
     <div className="w-[500px]">
@@ -63,7 +64,9 @@ export const Empty: Story = {
 };
 
 const SingleBlockExample = () => {
-  const [items, setItems] = useState<Array<string>>(['Single content block with some text.']);
+  const [items, setItems] = useState<Array<InstructionBlock>>([
+    createInstructionBlock('Single content block with some text.'),
+  ]);
 
   return (
     <div className="w-[500px]">

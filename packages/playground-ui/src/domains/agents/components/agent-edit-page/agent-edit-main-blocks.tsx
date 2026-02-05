@@ -1,4 +1,4 @@
-import { UseFormReturn } from 'react-hook-form';
+import { UseFormReturn, Controller } from 'react-hook-form';
 import { Blocks, Eye } from 'lucide-react';
 import { useState } from 'react';
 
@@ -15,9 +15,9 @@ interface AgentEditMainProps {
 }
 
 export function AgentEditMainContentBlocks({ form, readOnly: _readOnly = false }: AgentEditMainProps) {
-  const [items, setItems] = useState<Array<string>>([]);
   const schema = form.watch('variables');
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
+  const blocks = form.watch('instructionBlocks') ?? [];
 
   return (
     <div className="flex flex-col gap-6 h-full p-4">
@@ -30,12 +30,24 @@ export function AgentEditMainContentBlocks({ form, readOnly: _readOnly = false }
         </Button>
       </div>
 
-      <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." schema={schema} />
+      <Controller
+        name="instructionBlocks"
+        control={form.control}
+        defaultValue={[]}
+        render={({ field }) => (
+          <AgentCMSBlocks
+            items={field.value ?? []}
+            onChange={field.onChange}
+            placeholder="Enter content..."
+            schema={schema}
+          />
+        )}
+      />
 
       <InstructionsPreviewDialog
         open={isPreviewDialogOpen}
         onOpenChange={setIsPreviewDialogOpen}
-        instructions={items.join('\n')}
+        instructions={blocks.map(b => b.content).join('\n')}
         variablesSchema={schema}
       />
     </div>

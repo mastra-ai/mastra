@@ -1,5 +1,26 @@
 import { z } from 'zod';
+import { v4 as uuid } from '@lukeed/uuid';
 import type { JsonSchema } from '@/lib/json-schema';
+
+const instructionBlockSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  rules: z.array(
+    z.object({
+      field: z.string(),
+      operator: z.enum(['equals', 'not_equals', 'contains', 'not_contains', 'greater_than', 'less_than', 'in', 'not_in']),
+      value: z.unknown(),
+    }),
+  ),
+});
+
+export type InstructionBlock = z.infer<typeof instructionBlockSchema>;
+
+export const createInstructionBlock = (content = '', rules: InstructionBlock['rules'] = []): InstructionBlock => ({
+  id: uuid(),
+  content,
+  rules,
+});
 
 const scoringSamplingConfigSchema = z.object({
   type: z.enum(['ratio']),
@@ -52,6 +73,7 @@ export const agentFormSchema = z.object({
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
   memory: memoryConfigSchema.optional(),
   variables: z.custom<JsonSchema>().optional(),
+  instructionBlocks: z.array(instructionBlockSchema).optional(),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;

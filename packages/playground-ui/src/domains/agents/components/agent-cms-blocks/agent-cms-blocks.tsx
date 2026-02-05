@@ -3,10 +3,11 @@ import { cn } from '@/lib/utils';
 
 import { AgentCMSBlock } from './agent-cms-block';
 import type { JsonSchema } from '@/lib/rule-engine';
+import { createInstructionBlock, type InstructionBlock } from '../agent-edit-page/utils/form-validation';
 
 export interface AgentCMSBlocksProps {
-  items: Array<string>;
-  onChange: (items: Array<string>) => void;
+  items: Array<InstructionBlock>;
+  onChange: (items: Array<InstructionBlock>) => void;
   className?: string;
   placeholder?: string;
   schema?: JsonSchema;
@@ -19,14 +20,27 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
   };
 
   const handleAdd = () => {
-    onChange([...items, '']);
+    onChange([...items, createInstructionBlock()]);
+  };
+
+  const handleBlockChange = (index: number, updatedBlock: InstructionBlock) => {
+    const newItems = items.map((item, idx) => (idx === index ? updatedBlock : item));
+    onChange(newItems);
   };
 
   return (
     <div className={cn('flex flex-col gap-4 w-full', className)}>
       <ContentBlocks items={items} onChange={onChange} className="flex flex-col gap-2 w-full">
-        {items.map((_, index) => (
-          <AgentCMSBlock key={index} index={index} onDelete={handleDelete} placeholder={placeholder} schema={schema} />
+        {items.map((block, index) => (
+          <AgentCMSBlock
+            key={block.id}
+            index={index}
+            block={block}
+            onBlockChange={updatedBlock => handleBlockChange(index, updatedBlock)}
+            onDelete={handleDelete}
+            placeholder={placeholder}
+            schema={schema}
+          />
         ))}
       </ContentBlocks>
 

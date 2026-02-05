@@ -1,17 +1,18 @@
 import { GripVertical, Trash2 } from 'lucide-react';
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 
-import { ContentBlock, useContentBlock } from '@/ds/components/ContentBlocks';
+import { ContentBlock } from '@/ds/components/ContentBlocks';
 import type { JsonSchema, Rule } from '@/lib/rule-engine';
 import { IconButton } from '@/ds/components/IconButton';
-import { Textarea } from '@/components/ui/textarea';
 import { Icon } from '@/ds/icons';
 import { AgentCMSBlockRules } from './agent-cms-block-rules';
-import { useState } from 'react';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
 
 export interface AgentCMSBlockProps {
   index: number;
+  block: InstructionBlock;
+  onBlockChange: (block: InstructionBlock) => void;
   onDelete?: (index: number) => void;
   placeholder?: string;
   className?: string;
@@ -19,15 +20,29 @@ export interface AgentCMSBlockProps {
 }
 
 interface AgentCMSBlockContentProps {
+  block: InstructionBlock;
+  onBlockChange: (block: InstructionBlock) => void;
   placeholder?: string;
   dragHandleProps?: DraggableProvidedDragHandleProps | null;
   onDelete?: () => void;
   schema?: JsonSchema;
 }
 
-const AgentCMSBlockContent = ({ placeholder, dragHandleProps, onDelete, schema }: AgentCMSBlockContentProps) => {
-  const [item, setItem] = useContentBlock();
-  const [rules, setRules] = useState<Rule[]>([]);
+const AgentCMSBlockContent = ({
+  block,
+  onBlockChange,
+  placeholder,
+  dragHandleProps,
+  onDelete,
+  schema,
+}: AgentCMSBlockContentProps) => {
+  const handleContentChange = (content: string) => {
+    onBlockChange({ ...block, content });
+  };
+
+  const handleRulesChange = (rules: Rule[]) => {
+    onBlockChange({ ...block, rules });
+  };
 
   return (
     <div>
@@ -47,8 +62,8 @@ const AgentCMSBlockContent = ({ placeholder, dragHandleProps, onDelete, schema }
         </div>
 
         <CodeEditor
-          value={item}
-          onChange={setItem}
+          value={block.content}
+          onChange={handleContentChange}
           placeholder={placeholder}
           className="border-none rounded-none text-neutral6 min-h-[200px]"
           language="markdown"
@@ -56,17 +71,27 @@ const AgentCMSBlockContent = ({ placeholder, dragHandleProps, onDelete, schema }
           schema={schema}
         />
 
-        <AgentCMSBlockRules schema={schema} rules={rules} onChange={setRules} />
+        <AgentCMSBlockRules schema={schema} rules={block.rules} onChange={handleRulesChange} />
       </div>
     </div>
   );
 };
 
-export const AgentCMSBlock = ({ index, onDelete, placeholder, className, schema }: AgentCMSBlockProps) => {
+export const AgentCMSBlock = ({
+  index,
+  block,
+  onBlockChange,
+  onDelete,
+  placeholder,
+  className,
+  schema,
+}: AgentCMSBlockProps) => {
   return (
-    <ContentBlock index={index} className={className}>
+    <ContentBlock index={index} draggableId={block.id} className={className}>
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
         <AgentCMSBlockContent
+          block={block}
+          onBlockChange={onBlockChange}
           placeholder={placeholder}
           dragHandleProps={dragHandleProps}
           onDelete={onDelete ? () => onDelete(index) : undefined}
