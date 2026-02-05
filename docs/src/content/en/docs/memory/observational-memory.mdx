@@ -8,9 +8,13 @@ packages:
 
 # Observational Memory
 
+**Added in:** `@mastra/memory@1.1.0`
+
 Observational Memory (OM) is Mastra's memory system for long-context agentic memory. Two background agents — an **Observer** and a **Reflector** — watch your agent's conversations and maintain a dense observation log that replaces raw message history as it grows.
 
 ## Quick Start
+
+Enable `observationalMemory` in the memory options when creating your agent:
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from "@mastra/memory";
@@ -22,6 +26,7 @@ export const agent = new Agent({
   model: "openai/gpt-5-mini",
   memory: new Memory({
     options: {
+      // highlight-next-line
       observationalMemory: true,
     },
   }),
@@ -78,9 +83,9 @@ When observations exceed their threshold (default: 40,000 tokens), the Reflector
 
 The result is a three-tier system:
 
-1. **Recent messages** — exact conversation history for the current task
-2. **Observations** — a log of what the Observer has seen
-3. **Reflections** — condensed observations when memory becomes too long
+1. **Recent messages**: Exact conversation history for the current task
+2. **Observations**: A log of what the Observer has seen
+3. **Reflections**: Condensed observations when memory becomes too long
 
 ## Models
 
@@ -100,7 +105,7 @@ const memory = new Memory({
 });
 ```
 
-See [model configuration](/reference/memory/observational-memory#models) for using different models per agent.
+See [model configuration](/reference/memory/observational-memory#custom-model) for using different models per agent.
 
 ## Scopes
 
@@ -132,7 +137,7 @@ In resource scope, unobserved messages across *all* threads are processed togeth
 
 ## Token Budgets
 
-OM uses token thresholds to decide when to observe and reflect. See [token budget configuration](/reference/memory/observational-memory#token-budgets) for details.
+OM uses token thresholds to decide when to observe and reflect. See [token budget configuration](/reference/memory/observational-memory#shared-token-budget) for details.
 
 ```typescript
 const memory = new Memory({
@@ -166,10 +171,9 @@ Mastra Studio shows OM status in real time in the memory tab: token usage, which
 
 ## Comparing OM with other memory features
 
-- **[Message history](/docs/memory/message-history)** — high-fidelity record of the current conversation
-- **[Working memory](/docs/memory/working-memory)** — small, structured state (JSON or markdown) for user preferences, names, goals
-- **[Semantic Recall](/docs/memory/semantic-recall)** — RAG-based retrieval of relevant past messages
-- **Observational Memory** — long-context agentic memory that compresses extended sessions
+- **[Message history](/docs/memory/message-history)**: High-fidelity record of the current conversation
+- **[Working memory](/docs/memory/working-memory)**: Small, structured state (JSON or markdown) for user preferences, names, goals
+- **[Semantic Recall](/docs/memory/semantic-recall)**: RAG-based retrieval of relevant past messages
 
 If you're using working memory to store conversation summaries or ongoing state that grows over time, OM is a better fit. Working memory is for small, structured data; OM is for long-running event logs. OM also manages message history automatically—the `messageTokens` setting controls how much raw history remains before observation runs.
 
@@ -177,7 +181,7 @@ In practical terms, OM replaces both working memory and message history, and has
 
 ## Related
 
-- [Observational Memory Reference](/reference/memory/observational-memory) — configuration options and API
+- [Observational Memory Reference](/reference/memory/observational-memory)
 - [Memory Overview](/docs/memory/overview)
 - [Message History](/docs/memory/message-history)
 - [Memory Processors](/docs/memory/memory-processors)
