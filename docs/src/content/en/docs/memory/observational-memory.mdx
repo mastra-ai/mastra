@@ -105,7 +105,7 @@ const memory = new Memory({
 });
 ```
 
-See [model configuration](/reference/memory/observational-memory#models) for using different models per agent.
+See [model configuration](/reference/memory/observational-memory#custom-model) for using different models per agent.
 
 ## Scopes
 
@@ -137,7 +137,7 @@ In resource scope, unobserved messages across *all* threads are processed togeth
 
 ## Token Budgets
 
-OM uses token thresholds to decide when to observe and reflect. See [token budget configuration](/reference/memory/observational-memory#token-budgets) for details.
+OM uses token thresholds to decide when to observe and reflect. See [token budget configuration](/reference/memory/observational-memory#shared-token-budget) for details.
 
 ```typescript
 const memory = new Memory({
