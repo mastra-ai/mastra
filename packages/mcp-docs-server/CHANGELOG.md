@@ -1,5 +1,12 @@
 # @mastra/mcp-docs-server
 
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`90f7894`](https://github.com/mastra-ai/mastra/commit/90f7894568dc9481f40a4d29672234fae23090bb), [`8109aee`](https://github.com/mastra-ai/mastra/commit/8109aeeab758e16cd4255a6c36f044b70eefc6a6)]:
+  - @mastra/core@1.2.1-alpha.0
+
 ## 1.1.0
 
 ### Minor Changes
