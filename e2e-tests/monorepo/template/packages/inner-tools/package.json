@@ -13,6 +13,7 @@
   "dependencies": {
     "@mastra/core": "monorepo-test",
     "@inner/lodash": "workspace:*",
-    "@inner/native-binding-package": "workspace:*"
+    "@inner/native-binding-package": "workspace:*",
+    "bcrypt": "^6.0.0"
   }
 }
