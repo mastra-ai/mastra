@@ -206,8 +206,8 @@ export class LangSmithExporter extends TrackingExporter<
   }
 
   /**
-   * Find LangSmith vendor metadata by walking up the span hierarchy.
-   * This allows setting metadata on a parent span and having it apply to children.
+   * Find LangSmith vendor metadata by walking up the span hierarchy and merging.
+   * Metadata is merged from ancestors with child values taking precedence over parent values.
    *
    * TODO(2.0): Extract shared `findVendorMetadata()` to base TrackingExporter class
    * and reuse here and in LangfuseExporter.findLangfusePrompt()
@@ -216,23 +216,39 @@ export class LangSmithExporter extends TrackingExporter<
     traceData: LangSmithTraceData,
     span: AnyExportedSpan,
   ): LangSmithMetadataInput | undefined {
+    // Collect metadata from all ancestors (current span first, then parents)
+    const metadataChain: LangSmithMetadataInput[] = [];
     let currentSpanId: string | undefined = span.id;
 
     while (currentSpanId) {
       const providerMetadata = traceData.getMetadata({ spanId: currentSpanId });
-
       if (providerMetadata) {
-        this.logger.debug(`${this.name}: found vendor metadata`, {
-          traceId: span.traceId,
-          spanId: span.id,
-          metadata: providerMetadata,
-        });
-        return providerMetadata;
+        metadataChain.push(providerMetadata);
       }
       currentSpanId = traceData.getParentId({ spanId: currentSpanId });
     }
 
-    return undefined;
+    if (metadataChain.length === 0) {
+      return undefined;
+    }
+
+    // Merge from ancestors to current span (parent values first, child values override)
+    const merged: LangSmithMetadataInput = {};
+    for (let i = metadataChain.length - 1; i >= 0; i--) {
+      const meta = metadataChain[i];
+      if (meta.projectName !== undefined) merged.projectName = meta.projectName;
+      if (meta.sessionId !== undefined) merged.sessionId = meta.sessionId;
+      if (meta.sessionName !== undefined) merged.sessionName = meta.sessionName;
+    }
+
+    this.logger.debug(`${this.name}: merged vendor metadata from hierarchy`, {
+      traceId: span.traceId,
+      spanId: span.id,
+      metadataKeys: Object.keys(merged),
+      ancestorCount: metadataChain.length,
+    });
+
+    return merged;
   }
 
   private buildRunTreePayload(
