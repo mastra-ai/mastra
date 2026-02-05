@@ -2,48 +2,38 @@
 
 import type { DatasetItem } from '@mastra/client-js';
 import { TextAndIcon } from '@/ds/components/Text';
-import { KeyValueList } from '@/ds/components/KeyValueList';
-import { HashIcon, FileInputIcon } from 'lucide-react';
+import { MainHeader } from '@/ds/components/MainHeader';
+import { Calendar1Icon, HistoryIcon, FileCodeIcon } from 'lucide-react';
 import { format } from 'date-fns/format';
-import type { useLinkComponent } from '@/lib/framework';
+import { CopyButton } from '@/ds/components/CopyButton';
 
 /**
  * Header component for dataset item details
  */
 export interface DatasetItemHeaderProps {
   item: DatasetItem;
-  Link: ReturnType<typeof useLinkComponent>['Link'];
 }
 
-export function DatasetItemHeader({ item, Link }: DatasetItemHeaderProps) {
+export function DatasetItemHeader({ item }: DatasetItemHeaderProps) {
   return (
-    <div className="mb-4">
-      <h3 className="text-lg font-medium flex items-center gap-2">
-        <FileInputIcon className="w-5 h-5" /> Dataset Item
-      </h3>
-      <TextAndIcon>
-        <HashIcon className="w-4 h-4" /> {item.id}
-      </TextAndIcon>
-
-      <KeyValueList
-        data={[
-          {
-            label: 'Created',
-            value: format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa'),
-            key: 'createdAt',
-          },
-          ...(item.version
-            ? [
-                {
-                  label: 'Version',
-                  value: format(new Date(item.version), 'MMM d, yyyy h:mm aaa'),
-                  key: 'version',
-                },
-              ]
-            : []),
-        ]}
-        LinkComponent={Link}
-      />
-    </div>
+    <MainHeader withMargins={false}>
+      <MainHeader.Column>
+        <MainHeader.Title size="smaller">
+          <FileCodeIcon />
+          <span className="truncate">{item.id}</span>
+          <CopyButton content={item.id} tooltip={`Copy item ID: ${item.id}`} />
+        </MainHeader.Title>
+        <MainHeader.Description>
+          <TextAndIcon>
+            <Calendar1Icon /> Created {format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa')}
+          </TextAndIcon>
+          {item.version && (
+            <TextAndIcon>
+              <HistoryIcon /> Version {format(new Date(item.version), 'MMM d, yyyy h:mm aaa')}
+            </TextAndIcon>
+          )}
+        </MainHeader.Description>
+      </MainHeader.Column>
+    </MainHeader>
   );
 }

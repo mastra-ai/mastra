@@ -12,7 +12,7 @@ import { ItemDetailPanel } from './item-detail-panel';
 import { DatasetVersionsPanel } from '../versions';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { ArrowRightToLineIcon } from 'lucide-react';
-
+import { Columns } from '@/ds/components/Columns/columns';
 export interface ItemsMasterDetailProps {
   datasetId: string;
   items: DatasetItem[];
@@ -85,16 +85,10 @@ export function ItemsMasterDetail({
   };
 
   // Show side panel if versions is open OR an item is selected
-  const showSidePanel = isVersionsPanelOpen || selectedItem;
+  const isSidePanelActive = Boolean(isVersionsPanelOpen || selectedItem);
 
   return (
-    <div
-      className={cn(
-        'grid h-full overflow-hidden gap-10',
-        transitions.allSlow, // 300ms transition
-        showSidePanel ? 'grid-cols-[1fr_auto]' : 'grid-cols-1',
-      )}
-    >
+    <Columns isSideColumnVisible={isSidePanelActive}>
       {/* List column - always visible */}
       <div className={cn('flex flex-col h-full overflow-hidden gap-4')}>
         {isViewingOldVersion && activeDatasetVersion && (
@@ -126,7 +120,7 @@ export function ItemsMasterDetail({
       </div>
 
       {/* Detail column - shows versions panel or item detail */}
-      {showSidePanel && (
+      {isSidePanelActive && (
         <div
           className={cn('flex flex-col h-full overflow-hidden', {
             'w-[12rem]': isVersionsPanelOpen && !selectedItem,
@@ -153,6 +147,6 @@ export function ItemsMasterDetail({
           )}
         </div>
       )}
-    </div>
+    </Columns>
   );
 }

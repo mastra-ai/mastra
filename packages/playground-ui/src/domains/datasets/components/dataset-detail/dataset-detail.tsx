@@ -19,6 +19,7 @@ import { AlertDialog } from '@/ds/components/AlertDialog';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import { Columns } from '@/ds/components/Columns';
 
 export interface DatasetDetailProps {
   datasetId: string;
@@ -154,79 +155,78 @@ export function DatasetDetail({
   };
 
   return (
-    <div className="h-full overflow-hidden px-[3vw] pb-4">
-      <div className={cn('h-full w-full', transitions.allSlow)}>
-        <div
-          className={cn(
-            'grid grid-rows-[auto_1fr] mx-auto h-full w-full m-auto',
-            featuredItemId ? 'max-w-[120rem]' : 'max-w-[90rem]',
-          )}
-        >
-          {/* Header */}
-          <DatasetHeader
-            dataset={dataset}
-            isLoading={isDatasetLoading}
-            onEditClick={onEditClick}
-            onDuplicateClick={() => setDuplicateDialogOpen(true)}
-            onDeleteClick={onDeleteClick}
-            runTriggerSlot={runTriggerSlot}
-            onRunClick={onRunClick}
-          />
+    <>
+      <div className="h-full overflow-hidden px-[3vw] pb-4">
+        <div className={cn('h-full w-full', transitions.allSlow)}>
+          <div
+            className={cn(
+              'grid grid-rows-[auto_1fr] mx-auto h-full w-full m-auto',
+              featuredItemId ? 'max-w-[120rem]' : 'max-w-[90rem]',
+            )}
+          >
+            {/* Header */}
+            <DatasetHeader
+              dataset={dataset}
+              isLoading={isDatasetLoading}
+              onEditClick={onEditClick}
+              onDuplicateClick={() => setDuplicateDialogOpen(true)}
+              onDeleteClick={onDeleteClick}
+              runTriggerSlot={runTriggerSlot}
+              onRunClick={onRunClick}
+            />
 
-          {/* Content with tabs */}
-          <div className="flex-1 overflow-hidden flex flex-col">
-            <Tabs
-              defaultTab="items"
-              value={activeTab}
-              onValueChange={setActiveTab}
-              className="grid grid-rows-[auto_1fr] h-full"
-            >
-              <TabList>
-                <Tab value="items">Items ({items.length})</Tab>
-                <Tab value="runs">Run History ({runs.length})</Tab>
-              </TabList>
+            {/* Content with tabs */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              <Tabs
+                defaultTab="items"
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="grid grid-rows-[auto_1fr] h-full"
+              >
+                <TabList>
+                  <Tab value="items">Items ({items.length})</Tab>
+                  <Tab value="runs">Run History ({runs.length})</Tab>
+                </TabList>
 
-              <TabContent value="items" className="flex-1 overflow-hidden mt-4">
-                <ItemsMasterDetail
-                  datasetId={datasetId}
-                  items={items}
-                  isLoading={isItemsLoading}
-                  featuredItemId={featuredItemId}
-                  onItemSelect={handleItemSelect}
-                  onItemClose={handleItemClose}
-                  onAddClick={onAddItemClick ?? (() => {})}
-                  onImportClick={() => setImportDialogOpen(true)}
-                  onImportJsonClick={() => setImportJsonDialogOpen(true)}
-                  onBulkDeleteClick={handleBulkDeleteClick}
-                  onCreateDatasetClick={handleCreateDatasetClick}
-                  onAddToDatasetClick={handleAddToDatasetClick}
-                  datasetName={dataset?.name}
-                  clearSelectionTrigger={clearSelectionTrigger}
-                  setEndOfListElement={setEndOfListElement}
-                  isFetchingNextPage={isFetchingNextPage}
-                  hasNextPage={hasNextPage}
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  activeDatasetVersion={activeDatasetVersion}
-                  currentDatasetVersion={dataset?.version}
-                  onVersionSelect={handleVersionSelect}
-                />
-              </TabContent>
+                <TabContent value="items" className="grid overflow-auto mt-4">
+                  <ItemsMasterDetail
+                    datasetId={datasetId}
+                    items={items}
+                    isLoading={isItemsLoading}
+                    featuredItemId={featuredItemId}
+                    onItemSelect={handleItemSelect}
+                    onItemClose={handleItemClose}
+                    onAddClick={onAddItemClick ?? (() => {})}
+                    onImportClick={() => setImportDialogOpen(true)}
+                    onImportJsonClick={() => setImportJsonDialogOpen(true)}
+                    onBulkDeleteClick={handleBulkDeleteClick}
+                    onCreateDatasetClick={handleCreateDatasetClick}
+                    onAddToDatasetClick={handleAddToDatasetClick}
+                    datasetName={dataset?.name}
+                    clearSelectionTrigger={clearSelectionTrigger}
+                    setEndOfListElement={setEndOfListElement}
+                    isFetchingNextPage={isFetchingNextPage}
+                    hasNextPage={hasNextPage}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    activeDatasetVersion={activeDatasetVersion}
+                    currentDatasetVersion={dataset?.version}
+                    onVersionSelect={handleVersionSelect}
+                  />
+                </TabContent>
 
-              <TabContent value="runs" className="flex-1 overflow-auto">
-                <RunHistory runs={runs} isLoading={isRunsLoading} datasetId={datasetId} />
-              </TabContent>
-            </Tabs>
+                <TabContent value="runs" className="grid overflow-auto">
+                  <RunHistory runs={runs} isLoading={isRunsLoading} datasetId={datasetId} />
+                </TabContent>
+              </Tabs>
+            </div>
           </div>
         </div>
       </div>
-
       {/* CSV Import Dialog */}
       <CSVImportDialog datasetId={datasetId} open={importDialogOpen} onOpenChange={setImportDialogOpen} />
-
       {/* JSON Import Dialog */}
       <JSONImportDialog datasetId={datasetId} open={importJsonDialogOpen} onOpenChange={setImportJsonDialogOpen} />
-
       {/* Create Dataset From Items Dialog */}
       <CreateDatasetFromItemsDialog
         open={createDialogOpen}
@@ -234,7 +234,6 @@ export function DatasetDetail({
         items={itemsForCreate}
         onSuccess={handleCreateSuccess}
       />
-
       {/* Add Items to Dataset Dialog */}
       <AddItemsToDatasetDialog
         open={addToDatasetDialogOpen}
@@ -242,7 +241,6 @@ export function DatasetDetail({
         items={itemsForAddToDataset}
         currentDatasetId={datasetId}
       />
-
       {/* Duplicate Dataset Dialog */}
       <DuplicateDatasetDialog
         open={duplicateDialogOpen}
@@ -252,7 +250,6 @@ export function DatasetDetail({
         sourceDatasetDescription={(dataset as { description?: string } | undefined)?.description}
         onSuccess={onNavigateToDataset}
       />
-
       {/* Bulk Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialog.Content>
@@ -271,6 +268,6 @@ export function DatasetDetail({
           </AlertDialog.Footer>
         </AlertDialog.Content>
       </AlertDialog>
-    </div>
+    </>
   );
 }

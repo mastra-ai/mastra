@@ -7,6 +7,7 @@ import {
   getSqlType,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SPANS,
+  TABLE_DATASETS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
@@ -574,6 +575,11 @@ export class LibSQLDB extends MastraBase {
       if (tableName === TABLE_SPANS) {
         await this.migrateSpansTable();
       }
+
+      // Run migrations for Datasets table to add any new columns
+      if (tableName === TABLE_DATASETS) {
+        await this.migrateDatasetsTable();
+      }
     } catch (error) {
       // Rethrow MastraError (especially for migration required errors) - these must stop init
       if (error instanceof MastraError) {
@@ -664,6 +670,33 @@ export class LibSQLDB extends MastraBase {
       }
       // Log warning but don't fail for other errors - schema migrations should be best-effort
       this.logger.warn(`LibSQLDB: Failed to migrate spans table ${TABLE_SPANS}:`, error);
+    }
+  }
+
+  /**
+   * Migrates the datasets table schema to add new columns (inputSchema, outputSchema, version).
+   * This adds columns that don't exist in older versions of the schema.
+   */
+  private async migrateDatasetsTable(): Promise<void> {
+    const schema = TABLE_SCHEMAS[TABLE_DATASETS];
+
+    try {
+      // Add any columns from current schema that don't exist in the database
+      for (const [columnName, columnDef] of Object.entries(schema)) {
+        const columnExists = await this.hasColumn(TABLE_DATASETS, columnName);
+        if (!columnExists) {
+          const sqlType = this.getSqlType(columnDef.type);
+          // For new columns, use nullable (no default needed) since existing rows will have NULL
+          const alterSql = `ALTER TABLE "${TABLE_DATASETS}" ADD COLUMN "${columnName}" ${sqlType}`;
+          await this.client.execute(alterSql);
+          this.logger.debug(`LibSQLDB: Added column '${columnName}' to ${TABLE_DATASETS}`);
+        }
+      }
+
+      this.logger.debug(`LibSQLDB: Migration completed for ${TABLE_DATASETS}`);
+    } catch (error) {
+      // Log warning but don't fail - schema migrations should be best-effort
+      this.logger.warn(`LibSQLDB: Failed to migrate datasets table ${TABLE_DATASETS}:`, error);
     }
   }
 

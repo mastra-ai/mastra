@@ -63,13 +63,12 @@ export { TargetSelector, type TargetType } from './components/run-trigger/target
 export { ScorerSelector } from './components/run-trigger/scorer-selector';
 
 // Results components
+export { RunResultsList, type RunResultsListProps } from './components/results/run-results-list';
 export {
-  ResultsTable,
-  type ResultsTableProps,
-  type ScoreData,
-  type RunResultData,
-} from './components/results/results-table';
-export { ResultDetailDialog } from './components/results/result-detail-dialog';
+  RunResultsMasterDetail,
+  type RunResultsMasterDetailProps,
+} from './components/results/run-results-master-detail';
+export { RunStats, type RunStatsProps } from './components/results/run-stats';
 
 // Comparison components
 export { ComparisonView } from './components/comparison/comparison-view';

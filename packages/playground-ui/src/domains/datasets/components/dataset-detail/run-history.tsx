@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import { DatasetRun } from '@mastra/client-js';
-import { Button } from '@/ds/components/Button';
 import { Badge } from '@/ds/components/Badge';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
-import { Skeleton } from '@/ds/components/Skeleton';
+import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
-import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { useLinkComponent } from '@/lib/framework';
-import { Play, GitCompare } from 'lucide-react';
+import { Play } from 'lucide-react';
+import { RunsToolbar } from './runs-toolbar';
 
 export interface RunHistoryProps {
   runs: DatasetRun[];
@@ -32,6 +30,26 @@ const statusLabelMap: Record<RunStatus, string> = {
   failed: 'Failed',
 };
 
+const runsListColumns = [
+  { name: 'runId', label: 'Run ID', size: '6rem' },
+  { name: 'target', label: 'Target', size: '1fr' },
+  { name: 'status', label: 'Status', size: '6rem' },
+  { name: 'date', label: 'Created', size: '10rem' },
+];
+
+/**
+ * Truncate run ID to first 8 characters or until the first dash
+ */
+function truncateRunId(id: string): string {
+  const dashIndex = id.indexOf('-');
+  if (dashIndex > 0 && dashIndex <= 8) {
+    return id.slice(0, dashIndex);
+  }
+  return id.slice(0, 8);
+}
+
+const runsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '2.5rem' }, ...runsListColumns];
+
 /**
  * Format a date for display
  */
@@ -48,15 +66,18 @@ function formatDate(date: Date | string): string {
 
 export function RunHistory({ runs, isLoading, datasetId }: RunHistoryProps) {
   const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
+  const [isSelectionActive, setIsSelectionActive] = useState(false);
   const { navigate } = useLinkComponent();
 
-  // Toggle run selection for comparison
+  const columns = isSelectionActive ? runsListColumnsWithCheckbox : runsListColumns;
+
+  // Toggle run selection for comparison (max 2)
   const toggleRunSelection = (runId: string) => {
     setSelectedRunIds(prev => {
       if (prev.includes(runId)) {
         return prev.filter(id => id !== runId);
       }
-      // Only allow selecting 2 runs max
+      // Only allow selecting 2 runs max - replace oldest if selecting 3rd
       if (prev.length >= 2) {
         return [prev[1], runId];
       }
@@ -67,10 +88,18 @@ export function RunHistory({ runs, isLoading, datasetId }: RunHistoryProps) {
   // Navigate to comparison view
   const handleCompare = () => {
     if (selectedRunIds.length === 2) {
-      // Navigate to comparison view with both run IDs
       const [runIdA, runIdB] = selectedRunIds;
       navigate(`/datasets/${datasetId}/compare?runA=${runIdA}&runB=${runIdB}`);
     }
+  };
+
+  const handleCancelSelection = () => {
+    setSelectedRunIds([]);
+    setIsSelectionActive(false);
+  };
+
+  const handleRowClick = (runId: string) => {
+    navigate(`/datasets/${datasetId}/runs/${runId}`);
   };
 
   if (isLoading) {
@@ -81,96 +110,96 @@ export function RunHistory({ runs, isLoading, datasetId }: RunHistoryProps) {
     return <EmptyRunHistory />;
   }
 
-  const canCompare = selectedRunIds.length === 2;
-
   return (
-    <div className="flex flex-col gap-3">
-      {/* Comparison toolbar */}
-      <div className="flex items-center justify-between px-3 pt-3">
-        <div className="text-ui-sm text-neutral3">
-          {selectedRunIds.length === 0
-            ? 'Select two runs to compare'
-            : selectedRunIds.length === 1
-              ? '1 run selected — select one more to compare'
-              : '2 runs selected'}
-        </div>
-        <Button variant="outline" size="sm" disabled={!canCompare} onClick={handleCompare}>
-          <GitCompare className="w-4 h-4" />
-          Compare
-        </Button>
-      </div>
+    <div className="grid grid-rows-[auto_1fr] gap-4 h-full">
+      <RunsToolbar
+        hasRuns={runs.length > 0}
+        onCompareClick={() => setIsSelectionActive(true)}
+        isSelectionActive={isSelectionActive}
+        selectedCount={selectedRunIds.length}
+        onExecuteCompare={handleCompare}
+        onCancelSelection={handleCancelSelection}
+      />
 
-      <ScrollableContainer>
-        <Table>
-          <Thead>
-            <Th style={{ width: 40 }}>&nbsp;</Th>
-            <Th style={{ width: 100 }}>Status</Th>
-            <Th>Target</Th>
-            <Th style={{ width: 180 }}>Created</Th>
-          </Thead>
-          <Tbody>
+      <ItemList>
+        <ItemList.Header columns={columns}>
+          {columns.map(col => (
+            <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
+          ))}
+        </ItemList.Header>
+
+        <ItemList.Scroller>
+          <ItemList.Items>
             {runs.map(run => {
-              const isSelected = selectedRunIds.includes(run.id);
               const status = run.status as RunStatus;
+              const isSelected = selectedRunIds.includes(run.id);
+              const entry = { id: run.id };
 
               return (
-                <Row
-                  key={run.id}
-                  selected={isSelected}
-                  onClick={() => navigate(`/datasets/${datasetId}/runs/${run.id}`)}
-                >
-                  <Cell>
-                    <Checkbox
-                      checked={isSelected}
-                      onClick={e => e.stopPropagation()}
-                      onCheckedChange={() => toggleRunSelection(run.id)}
-                    />
-                  </Cell>
-                  <Cell>
-                    <Badge variant={statusVariantMap[status]}>{statusLabelMap[status]}</Badge>
-                  </Cell>
-                  <Cell className="text-ui-sm text-neutral4">
-                    <span className="text-neutral3">{run.targetType}:</span> {run.targetId}
-                  </Cell>
-                  <Cell className="text-ui-sm text-neutral3">{formatDate(run.createdAt)}</Cell>
-                </Row>
+                <ItemList.Row key={run.id} isSelected={isSelected}>
+                  <ItemList.RowButton
+                    entry={entry}
+                    isSelected={isSelected}
+                    columns={columns}
+                    onClick={() => handleRowClick(run.id)}
+                  >
+                    {isSelectionActive && (
+                      <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => {}}
+                          onClick={e => {
+                            e.stopPropagation();
+                            toggleRunSelection(run.id);
+                          }}
+                          aria-label={`Select run ${run.id}`}
+                        />
+                      </div>
+                    )}
+                    <ItemList.ItemText>{truncateRunId(run.id)}</ItemList.ItemText>
+                    <ItemList.ItemText>
+                      <span className="text-neutral3">{run.targetType}:</span> {run.targetId}
+                    </ItemList.ItemText>
+                    <div>
+                      <Badge variant={statusVariantMap[status]}>{statusLabelMap[status]}</Badge>
+                    </div>
+                    <ItemList.ItemText>{formatDate(run.createdAt)}</ItemList.ItemText>
+                  </ItemList.RowButton>
+                </ItemList.Row>
               );
             })}
-          </Tbody>
-        </Table>
-      </ScrollableContainer>
+          </ItemList.Items>
+        </ItemList.Scroller>
+      </ItemList>
     </div>
   );
 }
 
 function RunHistorySkeleton() {
   return (
-    <Table>
-      <Thead>
-        <Th style={{ width: 40 }}>&nbsp;</Th>
-        <Th style={{ width: 100 }}>Status</Th>
-        <Th>Target</Th>
-        <Th style={{ width: 180 }}>Created</Th>
-      </Thead>
-      <Tbody>
-        {Array.from({ length: 5 }).map((_, index) => (
-          <Row key={index}>
-            <Cell>
-              <Skeleton className="h-4 w-4" />
-            </Cell>
-            <Cell>
-              <Skeleton className="h-5 w-20" />
-            </Cell>
-            <Cell>
-              <Skeleton className="h-4 w-1/2" />
-            </Cell>
-            <Cell>
-              <Skeleton className="h-4 w-32" />
-            </Cell>
-          </Row>
-        ))}
-      </Tbody>
-    </Table>
+    <div className="grid grid-rows-[auto_1fr] gap-4 h-full">
+      <div className="h-9" /> {/* Toolbar placeholder */}
+      <ItemList>
+        <ItemList.Header columns={runsListColumns}>
+          {runsListColumns.map(col => (
+            <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
+          ))}
+        </ItemList.Header>
+        <ItemList.Items>
+          {Array.from({ length: 5 }).map((_, index) => (
+            <ItemList.Row key={index}>
+              <ItemList.RowButton columns={runsListColumns}>
+                {runsListColumns.map((_, colIndex) => (
+                  <ItemList.ItemText key={colIndex} isLoading>
+                    Loading...
+                  </ItemList.ItemText>
+                ))}
+              </ItemList.RowButton>
+            </ItemList.Row>
+          ))}
+        </ItemList.Items>
+      </ItemList>
+    </div>
   );
 }
 

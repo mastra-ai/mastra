@@ -1,35 +1,39 @@
 import { useParams, Link } from 'react-router';
-import { Database, PlayCircle, ArrowLeft } from 'lucide-react';
+import { format } from 'date-fns';
+import { Database, PlayCircle, Calendar1Icon, CrosshairIcon } from 'lucide-react';
 import {
   Header,
-  HeaderTitle,
   MainContentLayout,
-  MainContentContent,
   Icon,
-  Button,
-  HeaderAction,
   Breadcrumb,
   Crumb,
-  PageHeader,
-  KeyValueList,
-  Badge,
+  MainHeader,
   Spinner,
-  useLinkComponent,
+  TextAndIcon,
+  CopyButton,
+  useDataset,
   useDatasetRun,
   useDatasetRunResults,
-  ResultsTable,
+  RunResultsMasterDetail,
+  RunStats,
+  useAgents,
+  useWorkflows,
+  useScorers,
 } from '@mastra/playground-ui';
 
 function DatasetRun() {
   const { datasetId, runId } = useParams<{ datasetId: string; runId: string }>();
-  const { Link: FrameworkLink } = useLinkComponent();
 
+  const { data: dataset } = useDataset(datasetId ?? '');
   const { data: run, isLoading: runLoading, error: runError } = useDatasetRun(datasetId!, runId!);
   const { data: resultsData, isLoading: resultsLoading } = useDatasetRunResults({
     datasetId: datasetId!,
     runId: runId!,
     runStatus: run?.status,
   });
+  const { data: agents } = useAgents();
+  const { data: workflows } = useWorkflows();
+  const { data: scorers } = useScorers();
 
   if (runLoading) {
     return (
@@ -51,46 +55,39 @@ function DatasetRun() {
     );
   }
 
-  const statusVariant =
-    run.status === 'completed'
-      ? 'success'
-      : run.status === 'failed'
-        ? 'error'
-        : run.status === 'running'
-          ? 'info'
-          : 'default';
-
-  const runInfo = [
-    {
-      key: 'status',
-      label: 'Status',
-      value: <Badge variant={statusVariant}>{run.status}</Badge>,
-    },
-    {
-      key: 'target',
-      label: 'Target',
-      value: `${run.targetType}: ${run.targetId}`,
-    },
-    {
-      key: 'created',
-      label: 'Created',
-      value: new Date(run.createdAt).toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      }),
-    },
-    {
-      key: 'progress',
-      label: 'Progress',
-      value: `${run.succeededCount + run.failedCount} / ${run.totalItems} (${run.failedCount} failed)`,
-    },
-  ];
-
   // Transform results for the table
   const results = resultsData?.results ?? [];
+
+  // Get target link path based on target type
+  const getTargetPath = () => {
+    switch (run?.targetType) {
+      case 'agent':
+        return `/agents/${run.targetId}`;
+      case 'workflow':
+        return `/workflows/${run.targetId}`;
+      case 'scorer':
+        return `/evals/scorers/${run.targetId}`;
+      default:
+        return '#';
+    }
+  };
+
+  // Get target name based on target type
+  const getTargetName = () => {
+    const targetId = run?.targetId;
+    if (!targetId) return targetId;
+
+    switch (run?.targetType) {
+      case 'agent':
+        return agents?.[targetId]?.name ?? targetId;
+      case 'workflow':
+        return workflows?.[targetId]?.name ?? targetId;
+      case 'scorer':
+        return scorers?.[targetId]?.scorer?.config?.name ?? targetId;
+      default:
+        return targetId;
+    }
+  };
 
   return (
     <MainContentLayout>
@@ -103,41 +100,50 @@ function DatasetRun() {
             Datasets
           </Crumb>
           <Crumb as={Link} to={`/datasets/${datasetId}`}>
-            {datasetId}
+            {dataset?.name || datasetId}
           </Crumb>
           <Crumb isCurrent>
             <Icon>
               <PlayCircle />
             </Icon>
-            Run {runId?.slice(0, 8)}
+            Run
           </Crumb>
         </Breadcrumb>
-        <HeaderAction>
-          <Button as={Link} to={`/datasets/${datasetId}`} variant="outline">
-            <Icon>
-              <ArrowLeft />
-            </Icon>
-            Back to Dataset
-          </Button>
-        </HeaderAction>
       </Header>
 
-      <MainContentContent>
-        <div className="max-w-[100rem] w-full px-12 mx-auto grid content-start gap-8">
-          <PageHeader
-            title={`Run ${runId?.slice(0, 8)}`}
-            description={`Dataset run for ${run.targetType} "${run.targetId}"`}
-            icon={<PlayCircle />}
-          />
+      <div className="h-full overflow-hidden px-6 pb-4">
+        <div className="grid gap-6 max-w-[100rem] mx-auto grid-rows-[auto_1fr] h-full">
+          <MainHeader>
+            <MainHeader.Column>
+              <MainHeader.Title>
+                <PlayCircle />
+                {runId} {runId && <CopyButton content={runId} />}
+              </MainHeader.Title>
+              <MainHeader.Description>
+                <TextAndIcon>
+                  <Calendar1Icon /> Created at {format(new Date(run.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                </TextAndIcon>
+                {run.completedAt && (
+                  <TextAndIcon>
+                    <Calendar1Icon /> Completed at {format(new Date(run.completedAt), "MMM d, yyyy 'at' h:mm a")}
+                  </TextAndIcon>
+                )}
+              </MainHeader.Description>
+              <MainHeader.Description>
+                <TextAndIcon>
+                  <CrosshairIcon /> Target
+                  <Link to={getTargetPath()}>{getTargetName()}</Link>
+                </TextAndIcon>
+              </MainHeader.Description>
+            </MainHeader.Column>
+            <MainHeader.Column>
+              <RunStats run={run} />
+            </MainHeader.Column>
+          </MainHeader>
 
-          <KeyValueList data={runInfo} LinkComponent={FrameworkLink} />
-
-          <section>
-            <h3 className="text-sm font-medium text-neutral5 mb-4">Results</h3>
-            <ResultsTable results={results} isLoading={resultsLoading} />
-          </section>
+          <RunResultsMasterDetail results={results} isLoading={resultsLoading} />
         </div>
-      </MainContentContent>
+      </div>
     </MainContentLayout>
   );
 }

@@ -6,15 +6,33 @@ export interface MainHeaderRootProps {
   title?: string | 'loading';
   description?: string | 'loading';
   icon?: React.ReactNode;
+  withMargins?: boolean;
   className?: string;
 }
 
-export function MainHeaderRoot({ children, title, description, icon, className }: MainHeaderRootProps) {
+export function MainHeaderRoot({
+  children,
+  title,
+  description,
+  icon,
+  className,
+  withMargins = true,
+}: MainHeaderRootProps) {
   const titleIsLoading = title === 'loading';
   const descriptionIsLoading = description === 'loading';
 
   return children ? (
-    <header className={cn('grid grid-cols-[1fr_auto] gap-16 w-full mt-[6vh] mb-[4vh]', className)}>{children}</header>
+    <header
+      className={cn(
+        'grid grid-cols-[1fr_auto] gap-16 w-full ',
+        {
+          'mt-[6vh] mb-[4vh]': withMargins,
+        },
+        className,
+      )}
+    >
+      {children}
+    </header>
   ) : (
     <header className={cn('grid gap-2 pt-8 pb-8', className)}>
       <h1

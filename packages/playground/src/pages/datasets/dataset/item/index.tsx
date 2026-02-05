@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, Link } from 'react-router';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import {
@@ -26,7 +26,8 @@ import {
   Icon,
   type DatasetItemVersion,
   Header,
-  HeaderTitle,
+  Breadcrumb,
+  Crumb,
   MainHeader,
   cn,
   ButtonsGroup,
@@ -38,13 +39,12 @@ import {
 
 function DatasetItemPage() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
-  const { Link } = useLinkComponent();
+  const { Link: FrameworkLink } = useLinkComponent();
   const navigate = useNavigate();
 
   // Use versions as single source of truth - works for both active and deleted items
   const { data: versions, isLoading: isVersionsLoading } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
   const { updateItem, deleteItem } = useDatasetMutations();
-  const { data: item, isLoading: isDatasetItemLoading } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId ?? '');
 
   // Derive item state from versions
@@ -210,14 +210,25 @@ function DatasetItemPage() {
 
   return (
     <>
-      <MainContentLayout className="">
+      <MainContentLayout>
         <Header>
-          <HeaderTitle>
-            <Icon>
-              <FileCodeIcon />
-            </Icon>
-            Dataset Item
-          </HeaderTitle>
+          <Breadcrumb>
+            <Crumb as={Link} to="/datasets">
+              <Icon>
+                <DatabaseIcon />
+              </Icon>
+              Datasets
+            </Crumb>
+            <Crumb as={Link} to={`/datasets/${datasetId}`}>
+              {dataset?.name || datasetId}
+            </Crumb>
+            <Crumb isCurrent>
+              <Icon>
+                <FileCodeIcon />
+              </Icon>
+              Item
+            </Crumb>
+          </Breadcrumb>
         </Header>
         <div className="h-full overflow-hidden px-6 pb-4">
           <div className="grid gap-6 max-w-[60rem] mx-auto grid-rows-[auto_1fr] h-full">
@@ -230,17 +241,19 @@ function DatasetItemPage() {
                 <MainHeader.Description></MainHeader.Description>
                 <MainHeader.Description>
                   <TextAndIcon>
-                    <DatabaseIcon /> {dataset?.name}
+                    Item of <DatabaseIcon /> {dataset?.name}
                   </TextAndIcon>
                 </MainHeader.Description>
                 <MainHeader.Description>
                   <TextAndIcon>
                     <Calendar1Icon /> Created at{' '}
-                    {item?.createdAt ? format(new Date(item.createdAt), 'MMM d, yyyy') : ''}
+                    {latestVersion?.createdAt ? format(new Date(latestVersion.createdAt), 'MMM d, yyyy') : ''}
                   </TextAndIcon>
                   <TextAndIcon>
                     <HistoryIcon /> Latest version{' '}
-                    {item?.version ? format(new Date(item.version), "MMM d, yyyy 'at' h:mm a") : ''}
+                    {latestVersion?.datasetVersion
+                      ? format(new Date(latestVersion.datasetVersion), "MMM d, yyyy 'at' h:mm a")
+                      : ''}
                   </TextAndIcon>
                 </MainHeader.Description>
               </MainHeader.Column>
@@ -311,7 +324,7 @@ function DatasetItemPage() {
                 ) : (
                   displayItem && (
                     <div className="grid content-start">
-                      <DatasetItemContent item={displayItem} Link={Link} />
+                      <DatasetItemContent item={displayItem} Link={FrameworkLink} />
                     </div>
                   )
                 )}

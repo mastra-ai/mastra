@@ -995,8 +995,12 @@ export interface DatasetRun {
   targetType: string;
   targetId: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
+  totalItems: number;
+  succeededCount: number;
+  failedCount: number;
   createdAt: Date;
   updatedAt: Date;
+  startedAt?: Date;
   completedAt?: Date;
 }
 
@@ -1017,7 +1021,7 @@ export interface DatasetRunResult {
   itemId: string;
   output: unknown;
   error?: string;
-  latencyMs: number;
+  latency: number;
   createdAt: Date;
 }
 

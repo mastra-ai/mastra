@@ -109,7 +109,7 @@ function DatasetPage() {
             dataset={{
               id: dataset.id,
               name: dataset.name,
-              description: dataset.description,
+              description: dataset?.description || '',
             }}
           />
         )}

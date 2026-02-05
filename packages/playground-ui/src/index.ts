@@ -51,6 +51,7 @@ export * from './ds/components/Tooltip';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';
+export * from './ds/components/Columns';
 export * from './ds/components/MainContent';
 export * from './ds/components/Sections';
 

@@ -18,15 +18,27 @@ export const Breadcrumb = ({ children, label }: BreadcrumbProps) => {
   );
 };
 
-export interface CrumbProps {
-  isCurrent?: boolean;
-  as: React.ElementType;
+type CrumbBaseProps = {
   className?: string;
-  to: string;
-  prefetch?: boolean | null;
   children: React.ReactNode;
   action?: React.ReactNode;
-}
+};
+
+type CrumbLinkProps = CrumbBaseProps & {
+  isCurrent?: false;
+  as: React.ElementType;
+  to: string;
+  prefetch?: boolean | null;
+};
+
+type CrumbCurrentProps = CrumbBaseProps & {
+  isCurrent: true;
+  as?: React.ElementType;
+  to?: string;
+  prefetch?: boolean | null;
+};
+
+export type CrumbProps = CrumbLinkProps | CrumbCurrentProps;
 
 export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps) => {
   const Root = as || 'span';
