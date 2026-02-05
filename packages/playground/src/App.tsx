@@ -57,6 +57,11 @@ import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
 import CmsAgentsCreatePage from './pages/cms/agents/create';
 import CmsAgentsEditPage from './pages/cms/agents/edit';
+import Datasets from './pages/datasets';
+import DatasetPage from './pages/datasets/dataset';
+import DatasetItemPage from './pages/datasets/dataset/item';
+import DatasetRun from './pages/datasets/dataset/run';
+import DatasetCompare from './pages/datasets/dataset/compare';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -87,6 +92,9 @@ const paths: LinkComponentProviderProps['paths'] = {
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
+  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
+  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
+  datasetRunLink: (datasetId: string, runId: string) => `/datasets/${datasetId}/runs/${runId}`,
 };
 
 const RootLayout = () => {
@@ -174,6 +182,12 @@ const routes = [
           { path: 'graph/:runId', element: <Workflow /> },
         ],
       },
+
+      { path: '/datasets', element: <Datasets /> },
+      { path: '/datasets/:datasetId', element: <DatasetPage /> },
+      { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
+      { path: '/datasets/:datasetId/runs/:runId', element: <DatasetRun /> },
+      { path: '/datasets/:datasetId/compare', element: <DatasetCompare /> },
 
       { index: true, loader: () => redirect('/agents') },
       { path: '/request-context', element: <RequestContext /> },

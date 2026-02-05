@@ -9,6 +9,7 @@ import {
   MessagesSquareIcon,
   FolderIcon,
   Cpu,
+  DatabaseIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -68,6 +69,12 @@ const mainNavigation: NavSection[] = [
         url: '/scorers',
         icon: <GaugeIcon />,
         isOnMastraPlatform: true,
+      },
+      {
+        name: 'Datasets',
+        url: '/datasets',
+        icon: <DatabaseIcon />,
+        isOnMastraPlatform: false,
       },
       {
         name: 'Workspaces',
