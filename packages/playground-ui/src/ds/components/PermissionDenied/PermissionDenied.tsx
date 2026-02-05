@@ -16,13 +16,7 @@ export interface PermissionDeniedProps {
   className?: string;
 }
 
-export function PermissionDenied({
-  resource,
-  title,
-  description,
-  actionSlot,
-  className,
-}: PermissionDeniedProps) {
+export function PermissionDenied({ resource, title, description, actionSlot, className }: PermissionDeniedProps) {
   const defaultTitle = 'Permission Denied';
   const defaultDescription = resource
     ? `You don't have permission to access ${resource}. Contact your administrator for access.`

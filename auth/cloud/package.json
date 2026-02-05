@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/auth-workos",
+  "name": "@mastra/auth-cloud",
   "version": "1.0.0",
-  "description": "Mastra WorkOS Auth integration",
+  "description": "Mastra Cloud authentication with PKCE OAuth",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,10 +26,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/auth": "workspace:*",
-    "@workos-inc/node": "8.0.0",
-    "@workos/authkit-session": "^0.3.4",
-    "lru-cache": "^11.1.0"
+    "@mastra/auth": "workspace:*"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
@@ -39,7 +36,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.7",
-    "hono": "^4.11.3",
+    "hono": "^4.7.10",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
@@ -55,7 +52,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "auth/workos"
+    "directory": "auth/cloud"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
