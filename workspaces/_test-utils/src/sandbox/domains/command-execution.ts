@@ -133,5 +133,44 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
         expect(result.exitCode).not.toBe(0);
       }, getContext().testTimeout);
     });
+
+    describe('concurrency', () => {
+      it('executes multiple commands concurrently', async () => {
+        const { sandbox, capabilities } = getContext();
+        if (!capabilities.supportsConcurrency) return;
+        if (!sandbox.executeCommand) return;
+
+        // Run multiple commands in parallel
+        const results = await Promise.all([
+          sandbox.executeCommand('echo', ['first']),
+          sandbox.executeCommand('echo', ['second']),
+          sandbox.executeCommand('echo', ['third']),
+        ]);
+
+        // All commands should succeed
+        expect(results[0].exitCode).toBe(0);
+        expect(results[0].stdout.trim()).toBe('first');
+        expect(results[1].exitCode).toBe(0);
+        expect(results[1].stdout.trim()).toBe('second');
+        expect(results[2].exitCode).toBe(0);
+        expect(results[2].stdout.trim()).toBe('third');
+      }, getContext().testTimeout);
+
+      it('concurrent commands do not interfere with each other', async () => {
+        const { sandbox, capabilities } = getContext();
+        if (!capabilities.supportsConcurrency) return;
+        if (!sandbox.executeCommand) return;
+
+        // Run commands that set different env vars
+        const results = await Promise.all([
+          sandbox.executeCommand('sh', ['-c', 'echo $VAR'], { env: { VAR: 'value1' } }),
+          sandbox.executeCommand('sh', ['-c', 'echo $VAR'], { env: { VAR: 'value2' } }),
+        ]);
+
+        // Each command should see its own env vars
+        expect(results[0].stdout.trim()).toBe('value1');
+        expect(results[1].stdout.trim()).toBe('value2');
+      }, getContext().testTimeout);
+    });
   });
 }

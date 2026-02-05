@@ -104,6 +104,7 @@ export function createFilesystemTestSuite(config: FilesystemTestConfig): void {
       testTimeout,
       fastOnly,
       cleanup: () => cleanupTestPath(fs, testBasePath),
+      createFilesystem,
     });
 
     // Register domain tests

@@ -57,6 +57,7 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
     testDomains = {},
     testTimeout = 30000,
     fastOnly = false,
+    createMountableFilesystem,
   } = config;
 
   // Merge capabilities with defaults
@@ -89,6 +90,8 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
       capabilities,
       testTimeout,
       fastOnly,
+      createSandbox,
+      createMountableFilesystem,
     });
 
     // Register domain tests

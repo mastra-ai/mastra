@@ -93,6 +93,31 @@ export function createFileOperationsTests(getContext: () => TestContext): void {
         const result = await fs.readFile(path, { encoding: 'utf-8' });
         expect(result).toBe(content);
       });
+
+      it('writes with recursive option to create parent dirs', async () => {
+        const { fs, getTestPath } = getContext();
+        const path = `${getTestPath()}/deeply/nested/path/file.txt`;
+        const content = 'content in nested path';
+
+        // Write with recursive option
+        await fs.writeFile(path, content, { recursive: true });
+
+        const result = await fs.readFile(path, { encoding: 'utf-8' });
+        expect(result).toBe(content);
+      });
+
+      it('writes Buffer content', async () => {
+        const { fs, getTestPath, capabilities } = getContext();
+        if (!capabilities.supportsBinaryFiles) return;
+
+        const path = `${getTestPath()}/buffer-write.bin`;
+        const content = Buffer.from([0x48, 0x65, 0x6c, 0x6c, 0x6f]); // "Hello" in bytes
+
+        await fs.writeFile(path, content);
+
+        const result = await fs.readFile(path);
+        expect(Buffer.from(result as Buffer).equals(content)).toBe(true);
+      });
     });
 
     describe('readFile', () => {

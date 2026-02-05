@@ -78,6 +78,31 @@ export function createErrorHandlingTests(getContext: () => TestContext): void {
 
         await expect(fs.deleteFile(path)).rejects.toThrow(PermissionError);
       });
+
+      it('throws PermissionError when creating directory on readOnly filesystem', async () => {
+        const { fs, getTestPath } = getContext();
+
+        // Skip if filesystem is not read-only
+        if (!fs.readOnly) return;
+
+        const path = `${getTestPath()}/new-dir`;
+
+        await expect(fs.mkdir(path)).rejects.toThrow(PermissionError);
+      });
+
+      it('allows read operations on readOnly filesystem', async () => {
+        const { fs } = getContext();
+
+        // Skip if filesystem is not read-only
+        if (!fs.readOnly) return;
+
+        // These operations should work on a read-only filesystem
+        // exists() should not throw
+        await expect(fs.exists('/')).resolves.not.toThrow();
+
+        // readdir() on root should not throw (assuming root exists)
+        await expect(fs.readdir('/')).resolves.not.toThrow();
+      });
     });
 
     describe('Directory errors', () => {

@@ -2,7 +2,7 @@
  * Types for sandbox test configuration.
  */
 
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import type { WorkspaceFilesystem, WorkspaceSandbox } from '@mastra/core/workspace';
 
 /**
  * Configuration for the sandbox test suite.
@@ -28,6 +28,12 @@ export interface SandboxTestConfig {
 
   /** Run only fast tests (skip slow operations) */
   fastOnly?: boolean;
+
+  /**
+   * Optional factory to create a filesystem with getMountConfig() for mount tests.
+   * Required for mount operation tests that actually mount filesystems.
+   */
+  createMountableFilesystem?: () => Promise<WorkspaceFilesystem> | WorkspaceFilesystem;
 }
 
 /**
