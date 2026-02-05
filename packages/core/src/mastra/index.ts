@@ -888,14 +888,24 @@ export class Mastra<
 
     // Try direct key lookup first
     if (agents[keyOrId]) {
+      const agentId = agents[keyOrId]?.id;
       delete agents[keyOrId];
+      // Clear from stored agents cache to prevent stale data
+      if (agentId) {
+        this.#storedAgentsCache.delete(agentId);
+      }
       return true;
     }
 
     // Try finding by ID
     const key = Object.keys(agents).find(k => agents[k]?.id === keyOrId);
     if (key) {
+      const agentId = agents[key]?.id;
       delete agents[key];
+      // Clear from stored agents cache to prevent stale data
+      if (agentId) {
+        this.#storedAgentsCache.delete(agentId);
+      }
       return true;
     }
 

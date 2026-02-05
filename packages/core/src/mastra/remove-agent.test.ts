@@ -124,4 +124,58 @@ describe('Mastra.removeAgent', () => {
     const retrieved = mastra.getAgent('myAgent');
     expect(retrieved.name).toBe('New Agent');
   });
+
+  it('should clear storedAgentsCache when removing an agent by key', () => {
+    const testAgent = new Agent({
+      id: 'cached-agent-id',
+      name: 'Test Agent',
+      instructions: 'You are a test agent',
+      model: 'openai/gpt-4o',
+    });
+
+    const mastra = new Mastra({
+      agents: {
+        testAgent,
+      },
+    });
+
+    // Simulate a cached agent by adding to the cache
+    const cache = mastra.getStoredAgentCache();
+    cache.set('cached-agent-id', testAgent);
+    expect(cache.has('cached-agent-id')).toBe(true);
+
+    // Remove the agent by key
+    const removed = mastra.removeAgent('testAgent');
+    expect(removed).toBe(true);
+
+    // Verify cache entry is also cleared
+    expect(cache.has('cached-agent-id')).toBe(false);
+  });
+
+  it('should clear storedAgentsCache when removing an agent by ID', () => {
+    const testAgent = new Agent({
+      id: 'cached-agent-id-2',
+      name: 'Test Agent',
+      instructions: 'You are a test agent',
+      model: 'openai/gpt-4o',
+    });
+
+    const mastra = new Mastra({
+      agents: {
+        myAgent: testAgent,
+      },
+    });
+
+    // Simulate a cached agent by adding to the cache
+    const cache = mastra.getStoredAgentCache();
+    cache.set('cached-agent-id-2', testAgent);
+    expect(cache.has('cached-agent-id-2')).toBe(true);
+
+    // Remove the agent by ID (not key)
+    const removed = mastra.removeAgent('cached-agent-id-2');
+    expect(removed).toBe(true);
+
+    // Verify cache entry is also cleared
+    expect(cache.has('cached-agent-id-2')).toBe(false);
+  });
 });
