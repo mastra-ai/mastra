@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { format } from 'date-fns';
 import type { DatasetItem } from '@mastra/client-js';
 import {
   MainContentLayout,
@@ -14,6 +15,7 @@ import {
   useDatasetMutations,
   Button,
 } from '@mastra/playground-ui';
+import type { DatasetVersion } from '@mastra/playground-ui';
 import { Play } from 'lucide-react';
 
 function DatasetPage() {
@@ -27,6 +29,9 @@ function DatasetPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editItemDialogOpen, setEditItemDialogOpen] = useState(false);
   const [itemToEdit, setItemToEdit] = useState<DatasetItem | null>(null);
+
+  // Version selection state for run experiment button
+  const [activeVersion, setActiveVersion] = useState<Date | string | null>(null);
 
   // Fetch dataset for edit dialog
   const { data: dataset } = useDataset(datasetId ?? '');
@@ -61,6 +66,11 @@ function DatasetPage() {
     deleteItem.mutate({ datasetId, itemId });
   };
 
+  // Version selection handler for contextual run button
+  const handleVersionSelect = (version: DatasetVersion | null) => {
+    setActiveVersion(version?.version ?? null);
+  };
+
   return (
     <MainContentLayout className="grid-rows-1">
       <MainContentContent className="content-stretch">
@@ -71,16 +81,19 @@ function DatasetPage() {
           onDeleteClick={() => setDeleteDialogOpen(true)}
           onEditItem={handleEditItem}
           onDeleteItem={handleDeleteItem}
+          activeDatasetVersion={activeVersion}
+          onVersionSelect={handleVersionSelect}
           runTriggerSlot={
             <Button variant="standard" size="default" onClick={() => setRunDialogOpen(true)}>
               <Play />
-              Run Experiment
+              {activeVersion ? `Run on ${format(new Date(activeVersion), 'MMM d, yyyy')}` : 'Run Experiment'}
             </Button>
           }
         />
 
         <RunTriggerDialog
           datasetId={datasetId}
+          version={activeVersion ?? undefined}
           open={runDialogOpen}
           onOpenChange={setRunDialogOpen}
           onSuccess={handleRunSuccess}

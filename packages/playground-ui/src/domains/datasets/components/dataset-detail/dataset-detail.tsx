@@ -28,6 +28,9 @@ export interface DatasetDetailProps {
   onAddItemClick?: () => void;
   runTriggerSlot?: React.ReactNode;
   onNavigateToDataset?: (datasetId: string) => void;
+  // Controlled mode: parent manages version state
+  activeDatasetVersion?: Date | string | null;
+  onVersionSelect?: (version: DatasetVersion | null) => void;
 }
 
 type TabValue = 'items' | 'runs';
@@ -40,6 +43,8 @@ export function DatasetDetail({
   onAddItemClick,
   runTriggerSlot,
   onNavigateToDataset,
+  activeDatasetVersion: controlledVersion,
+  onVersionSelect: onVersionSelectProp,
 }: DatasetDetailProps) {
   const [activeTab, setActiveTab] = useState<TabValue>('items');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -55,7 +60,11 @@ export function DatasetDetail({
   const [featuredItemId, setSelectedItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 300);
-  const [activeDatasetVersion, setActiveDatasetVersion] = useState<Date | string | null>(null);
+  // Internal state only used when not in controlled mode
+  const [internalVersion, setInternalVersion] = useState<Date | string | null>(null);
+  // Use controlled version if provided, otherwise internal state
+  const isControlled = controlledVersion !== undefined;
+  const activeDatasetVersion = isControlled ? controlledVersion : internalVersion;
 
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
   const {
@@ -79,13 +88,15 @@ export function DatasetDetail({
     setSelectedItemId(null);
   };
 
-  // Version selection handler
+  // Version selection handler - supports both controlled and uncontrolled modes
   const handleVersionSelect = (version: DatasetVersion) => {
-    // If selecting current version, clear the active version state
-    if (version.isCurrent) {
-      setActiveDatasetVersion(null);
+    const newValue = version.isCurrent ? null : version;
+    // In controlled mode, call parent callback
+    if (onVersionSelectProp) {
+      onVersionSelectProp(newValue);
     } else {
-      setActiveDatasetVersion(version.version);
+      // Uncontrolled mode - update internal state
+      setInternalVersion(version.isCurrent ? null : version.version);
     }
   };
 

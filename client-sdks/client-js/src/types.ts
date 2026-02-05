@@ -956,6 +956,7 @@ export interface TriggerDatasetRunParams {
   targetType: 'agent' | 'workflow' | 'scorer';
   targetId: string;
   scorerIds?: string[];
+  version?: Date | string;
 }
 
 /**

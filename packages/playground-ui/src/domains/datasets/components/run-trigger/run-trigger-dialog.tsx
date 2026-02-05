@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { format } from 'date-fns';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { TargetSelector, TargetType } from './target-selector';
 import { ScorerSelector } from './scorer-selector';
@@ -17,12 +18,13 @@ import { toast } from 'sonner';
 
 export interface RunTriggerDialogProps {
   datasetId: string;
+  version?: Date | string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (runId: string) => void;
 }
 
-export function RunTriggerDialog({ datasetId, open, onOpenChange, onSuccess }: RunTriggerDialogProps) {
+export function RunTriggerDialog({ datasetId, version, open, onOpenChange, onSuccess }: RunTriggerDialogProps) {
   const [targetType, setTargetType] = useState<TargetType | ''>('');
   const [targetId, setTargetId] = useState<string>('');
   const [selectedScorers, setSelectedScorers] = useState<string[]>([]);
@@ -41,6 +43,7 @@ export function RunTriggerDialog({ datasetId, open, onOpenChange, onSuccess }: R
         targetType,
         targetId,
         scorerIds: selectedScorers.length > 0 ? selectedScorers : undefined,
+        version,
       });
 
       toast.success('Run triggered successfully');
@@ -73,7 +76,11 @@ export function RunTriggerDialog({ datasetId, open, onOpenChange, onSuccess }: R
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Run Dataset</DialogTitle>
-          <DialogDescription>Execute all items in this dataset against a target.</DialogDescription>
+          <DialogDescription>
+            {version
+              ? `Execute items from ${format(new Date(version), 'MMM d, yyyy')} version against a target.`
+              : 'Execute all items in this dataset against a target.'}
+          </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="grid gap-6">
