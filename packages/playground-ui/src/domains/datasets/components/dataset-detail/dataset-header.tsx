@@ -3,21 +3,13 @@
 import { useState } from 'react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
 import { Button } from '@/ds/components/Button';
-import { Skeleton } from '@/ds/components/Skeleton';
 import { Icon } from '@/ds/icons/Icon';
-import { MoreVertical, Pencil, Copy, Trash2, Play } from 'lucide-react';
-
-export interface DatasetHeaderProps {
-  name?: string;
-  description?: string;
-  version?: Date | string;
-  isLoading?: boolean;
-  onEditClick?: () => void;
-  onDuplicateClick?: () => void;
-  onDeleteClick?: () => void;
-  runTriggerSlot?: React.ReactNode;
-  onRunClick?: () => void;
-}
+import { MoreVertical, Pencil, Copy, Trash2, Play, DatabaseIcon, Calendar1Icon, HistoryIcon } from 'lucide-react';
+import { MainHeader } from '@/ds/components/MainHeader';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Dataset } from '@mastra/core/storage';
+import { format } from 'date-fns/format';
+import { TextAndIcon } from '@/ds/components/Text';
 
 /**
  * Format version date for display
@@ -98,55 +90,66 @@ function HeaderActionsMenu({ onEditClick, onDuplicateClick, onDeleteClick }: Hea
   );
 }
 
+export interface DatasetHeaderProps {
+  dataset?: any;
+  isLoading?: boolean;
+  onEditClick?: () => void;
+  onDuplicateClick?: () => void;
+  onDeleteClick?: () => void;
+  runTriggerSlot?: React.ReactNode;
+  onRunClick?: () => void;
+  className?: string;
+}
+
 /**
  * Dataset header with name, description, actions menu, and run button.
  * Edit/Delete/Duplicate in three-dot menu.
  * Schema Settings moved to Edit Dataset dialog.
  */
 export function DatasetHeader({
-  name,
-  description,
-  version,
+  dataset,
   isLoading = false,
   onEditClick,
   onDuplicateClick,
   onDeleteClick,
   runTriggerSlot,
   onRunClick,
+  className,
 }: DatasetHeaderProps) {
   return (
-    <header className="flex items-start justify-between py-6 gap-4">
-      {/* Left side: Name + Description */}
-      <div className="flex flex-col gap-1">
-        {isLoading ? (
-          <Skeleton className="h-7 w-48" />
-        ) : (
-          <>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold text-neutral6">{name ?? 'Dataset'}</h1>
-              {version && <span className="text-ui-sm text-neutral3 font-normal">v{formatVersion(version)}</span>}
-            </div>
-            {description && <p className="text-sm text-muted-foreground">{description}</p>}
-          </>
-        )}
-      </div>
-
-      {/* Right side: Menu + Run button */}
-      <div className="flex items-center gap-3">
-        {runTriggerSlot ? (
-          runTriggerSlot
-        ) : onRunClick ? (
-          <Button variant="outline" size="sm" onClick={onRunClick}>
-            <Play />
-            Run Experiment
-          </Button>
-        ) : null}
-        <HeaderActionsMenu
-          onEditClick={onEditClick}
-          onDuplicateClick={onDuplicateClick}
-          onDeleteClick={onDeleteClick}
-        />
-      </div>
-    </header>
+    <MainHeader className={className}>
+      <MainHeader.Column>
+        <MainHeader.Title isLoading={isLoading}>
+          <DatabaseIcon /> {dataset?.name}
+        </MainHeader.Title>
+        <MainHeader.Description isLoading={isLoading}>{dataset?.description}</MainHeader.Description>
+        <MainHeader.Description isLoading={isLoading}>
+          <TextAndIcon>
+            <Calendar1Icon /> Created at {dataset?.createdAt ? format(new Date(dataset.createdAt), 'MMM d, yyyy') : ''}
+          </TextAndIcon>
+          <TextAndIcon>
+            <HistoryIcon /> Latest version{' '}
+            {dataset?.version ? format(new Date(dataset.version), "MMM d, yyyy 'at' h:mm a") : ''}
+          </TextAndIcon>
+        </MainHeader.Description>
+      </MainHeader.Column>
+      <MainHeader.Column>
+        <ButtonsGroup>
+          {runTriggerSlot ? (
+            runTriggerSlot
+          ) : onRunClick ? (
+            <Button variant="outline" size="sm" onClick={onRunClick}>
+              <Play />
+              Run Experiment
+            </Button>
+          ) : null}
+          <HeaderActionsMenu
+            onEditClick={onEditClick}
+            onDuplicateClick={onDuplicateClick}
+            onDeleteClick={onDeleteClick}
+          />
+        </ButtonsGroup>
+      </MainHeader.Column>
+    </MainHeader>
   );
 }

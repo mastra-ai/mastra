@@ -8,6 +8,7 @@ import { Icon, IconProps } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 import { transitions } from '@/ds/primitives/transitions';
 import { focusRing } from '@/ds/primitives/transitions';
+import { Button } from '../Button';
 
 export type CopyButtonProps = {
   content: string;
@@ -39,18 +40,21 @@ export function CopyButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
           onClick={handleCopy}
           type="button"
-          className={cn('rounded-lg p-1', transitions.all, focusRing.visible, 'hover:bg-surface4', className)}
+          variant="secondary"
+          size="tiny"
+          //className={cn('rounded-lg p-1', transitions.all, focusRing.visible, 'hover:bg-surface4', className)}
         >
-          <Icon
+          {copied ? <CheckIcon /> : <CopyIcon />}
+          {/* <Icon
             className={cn('text-neutral3', transitions.all, 'hover:text-neutral6', copied && 'text-accent1')}
             size={iconSize}
           >
             {copied ? <CheckIcon /> : <CopyIcon />}
-          </Icon>
-        </button>
+          </Icon> */}
+        </Button>
       </TooltipTrigger>
       <TooltipContent>{copied ? 'Copied!' : tooltip}</TooltipContent>
     </Tooltip>

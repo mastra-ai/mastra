@@ -1,7 +1,15 @@
 import { useParams, useNavigate } from 'react-router';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { ArrowRightToLineIcon, Edit2Icon, FileCodeIcon, Trash2Icon } from 'lucide-react';
+import {
+  ArrowRightToLineIcon,
+  Calendar1Icon,
+  DatabaseIcon,
+  Edit2Icon,
+  FileCodeIcon,
+  HistoryIcon,
+  Trash2Icon,
+} from 'lucide-react';
 import {
   MainContentLayout,
   MainContentContent,
@@ -19,10 +27,13 @@ import {
   type DatasetItemVersion,
   Header,
   HeaderTitle,
-  PageHeader,
+  MainHeader,
   cn,
   ButtonsGroup,
   toast,
+  TextAndIcon,
+  useDataset,
+  CopyButton,
 } from '@mastra/playground-ui';
 
 function DatasetItemPage() {
@@ -33,6 +44,8 @@ function DatasetItemPage() {
   // Use versions as single source of truth - works for both active and deleted items
   const { data: versions, isLoading: isVersionsLoading } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
   const { updateItem, deleteItem } = useDatasetMutations();
+  const { data: item, isLoading: isDatasetItemLoading } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
+  const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId ?? '');
 
   // Derive item state from versions
   const latestVersion = versions?.[0] ?? null;
@@ -59,7 +72,7 @@ function DatasetItemPage() {
       );
       setMetadataValue(latestVersion.snapshot.context ? JSON.stringify(latestVersion.snapshot.context, null, 2) : '');
     }
-  }, [latestVersion?.versionNumber, isDeleted]);
+  }, [latestVersion?.versionNumber, isDeleted, latestVersion]);
 
   const handleVersionSelect = (version: DatasetItemVersion) => {
     // For deleted items, always keep a version selected
@@ -208,31 +221,54 @@ function DatasetItemPage() {
         </Header>
         <div className="h-full overflow-hidden px-6 pb-4">
           <div className="grid gap-6 max-w-[60rem] mx-auto grid-rows-[auto_1fr] h-full">
-            <div className="grid grid-cols-[1fr_auto] gap-6 items-center">
-              <PageHeader title="Dataset Item" icon={<FileCodeIcon />} />
-              {!isEditing && !isDeleted && (
-                <ButtonsGroup>
-                  <Button
-                    variant="standard"
-                    size="default"
-                    onClick={handleEditClick}
-                    disabled={isViewingOldVersion}
-                    title={isViewingOldVersion ? 'Return to latest version to edit' : undefined}
-                  >
-                    <Edit2Icon /> Edit
-                  </Button>
-                  <Button
-                    variant="standard"
-                    size="default"
-                    onClick={handleDeleteClick}
-                    disabled={isViewingOldVersion}
-                    title={isViewingOldVersion ? 'Return to latest version to delete' : undefined}
-                  >
-                    <Trash2Icon /> Delete
-                  </Button>
-                </ButtonsGroup>
-              )}
-            </div>
+            <MainHeader>
+              <MainHeader.Column>
+                <MainHeader.Title>
+                  <FileCodeIcon />
+                  {itemId} <CopyButton content={itemId} />
+                </MainHeader.Title>
+                <MainHeader.Description></MainHeader.Description>
+                <MainHeader.Description>
+                  <TextAndIcon>
+                    <DatabaseIcon /> {dataset?.name}
+                  </TextAndIcon>
+                </MainHeader.Description>
+                <MainHeader.Description>
+                  <TextAndIcon>
+                    <Calendar1Icon /> Created at{' '}
+                    {item?.createdAt ? format(new Date(item.createdAt), 'MMM d, yyyy') : ''}
+                  </TextAndIcon>
+                  <TextAndIcon>
+                    <HistoryIcon /> Latest version{' '}
+                    {item?.version ? format(new Date(item.version), "MMM d, yyyy 'at' h:mm a") : ''}
+                  </TextAndIcon>
+                </MainHeader.Description>
+              </MainHeader.Column>
+              <MainHeader.Column>
+                {!isEditing && !isDeleted && (
+                  <ButtonsGroup>
+                    <Button
+                      variant="standard"
+                      size="default"
+                      onClick={handleEditClick}
+                      disabled={isViewingOldVersion}
+                      title={isViewingOldVersion ? 'Return to latest version to edit' : undefined}
+                    >
+                      <Edit2Icon /> Edit
+                    </Button>
+                    <Button
+                      variant="standard"
+                      size="default"
+                      onClick={handleDeleteClick}
+                      disabled={isViewingOldVersion}
+                      title={isViewingOldVersion ? 'Return to latest version to delete' : undefined}
+                    >
+                      <Trash2Icon /> Delete
+                    </Button>
+                  </ButtonsGroup>
+                )}
+              </MainHeader.Column>
+            </MainHeader>
 
             <div className="grid grid-cols-[1fr_1px_auto] gap-12 overflow-y-auto">
               <div

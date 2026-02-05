@@ -154,19 +154,17 @@ export function DatasetDetail({
   };
 
   return (
-    <div className="h-full overflow-hidden px-6 pb-4">
+    <div className="h-full overflow-hidden px-[3vw] pb-4">
       <div className={cn('h-full w-full', transitions.allSlow)}>
         <div
           className={cn(
             'grid grid-rows-[auto_1fr] mx-auto h-full w-full m-auto',
-            featuredItemId ? 'max-w-[100rem]' : 'max-w-[60rem]',
+            featuredItemId ? 'max-w-[120rem]' : 'max-w-[90rem]',
           )}
         >
           {/* Header */}
           <DatasetHeader
-            name={dataset?.name}
-            description={(dataset as { description?: string } | undefined)?.description}
-            version={dataset?.version}
+            dataset={dataset}
             isLoading={isDatasetLoading}
             onEditClick={onEditClick}
             onDuplicateClick={() => setDuplicateDialogOpen(true)}
