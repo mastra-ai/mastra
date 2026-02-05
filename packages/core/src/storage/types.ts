@@ -815,3 +815,263 @@ export function buildStorageSchema<Shape extends z.ZodRawShape>(
 
   return result as Record<keyof Shape & string, StorageColumn>;
 }
+
+// ============================================
+// Dataset Types
+// ============================================
+
+export type TargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
+
+export interface Dataset {
+  id: string;
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  version: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DatasetItem {
+  id: string;
+  datasetId: string;
+  version: Date;
+  input: unknown;
+  expectedOutput?: unknown;
+  context?: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DatasetItemVersion {
+  id: string;
+  itemId: string;
+  datasetId: string;
+  versionNumber: number;
+  datasetVersion: Date;
+  snapshot?: {
+    input?: unknown;
+    expectedOutput?: unknown;
+    context?: unknown;
+  };
+  isDeleted: boolean;
+  createdAt: Date;
+}
+
+export interface DatasetVersion {
+  id: string;
+  datasetId: string;
+  version: Date;
+  createdAt: Date;
+}
+
+// Dataset CRUD Input/Output Types
+
+export interface CreateDatasetInput {
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+}
+
+export interface UpdateDatasetInput {
+  id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+}
+
+export interface AddDatasetItemInput {
+  datasetId: string;
+  input: unknown;
+  expectedOutput?: unknown;
+  context?: unknown;
+}
+
+export interface UpdateDatasetItemInput {
+  id: string;
+  datasetId: string;
+  input?: unknown;
+  expectedOutput?: unknown;
+  context?: unknown;
+}
+
+export interface ListDatasetsInput {
+  pagination: StoragePagination;
+}
+
+export interface ListDatasetsOutput {
+  datasets: Dataset[];
+  pagination: PaginationInfo;
+}
+
+export interface ListDatasetItemsInput {
+  datasetId: string;
+  version?: Date;
+  search?: string;
+  pagination: StoragePagination;
+}
+
+export interface ListDatasetItemsOutput {
+  items: DatasetItem[];
+  pagination: PaginationInfo;
+}
+
+export interface CreateItemVersionInput {
+  itemId: string;
+  datasetId: string;
+  versionNumber: number;
+  datasetVersion: Date;
+  snapshot?: {
+    input?: unknown;
+    expectedOutput?: unknown;
+    context?: unknown;
+  };
+  isDeleted?: boolean;
+}
+
+export interface ListItemVersionsInput {
+  itemId: string;
+  pagination: StoragePagination;
+}
+
+export interface ListItemVersionsOutput {
+  versions: DatasetItemVersion[];
+  pagination: PaginationInfo;
+}
+
+export interface ListDatasetVersionsInput {
+  datasetId: string;
+  pagination: StoragePagination;
+}
+
+export interface ListDatasetVersionsOutput {
+  versions: DatasetVersion[];
+  pagination: PaginationInfo;
+}
+
+export interface BulkAddItemsInput {
+  datasetId: string;
+  items: Array<{
+    input: unknown;
+    expectedOutput?: unknown;
+    context?: unknown;
+  }>;
+}
+
+export interface BulkDeleteItemsInput {
+  datasetId: string;
+  itemIds: string[];
+}
+
+// ============================================
+// Run Types (Dataset Experiment Runs)
+// ============================================
+
+export type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface Run {
+  id: string;
+  datasetId: string;
+  datasetVersion: Date;
+  targetType: TargetType;
+  targetId: string;
+  status: RunStatus;
+  totalItems: number;
+  succeededCount: number;
+  failedCount: number;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface RunResult {
+  id: string;
+  runId: string;
+  itemId: string;
+  itemVersion: Date;
+  input: unknown;
+  output: unknown;
+  expectedOutput: unknown;
+  latency: number;
+  error: string | null;
+  startedAt: Date;
+  completedAt: Date;
+  retryCount: number;
+  traceId: string | null;
+  scores: Array<{
+    scorerId: string;
+    scorerName: string;
+    score: number | null;
+    reason: string | null;
+    error: string | null;
+  }>;
+  createdAt: Date;
+}
+
+export interface CreateRunInput {
+  id?: string;
+  datasetId: string;
+  datasetVersion: Date;
+  targetType: TargetType;
+  targetId: string;
+  totalItems: number;
+}
+
+export interface UpdateRunInput {
+  id: string;
+  status?: RunStatus;
+  succeededCount?: number;
+  failedCount?: number;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+export interface AddRunResultInput {
+  id?: string;
+  runId: string;
+  itemId: string;
+  itemVersion: Date;
+  input: unknown;
+  output: unknown;
+  expectedOutput: unknown;
+  latency: number;
+  error: string | null;
+  startedAt: Date;
+  completedAt: Date;
+  retryCount: number;
+  traceId?: string | null;
+  scores?: Array<{
+    scorerId: string;
+    scorerName: string;
+    score: number | null;
+    reason: string | null;
+    error: string | null;
+  }>;
+}
+
+export interface ListRunsInput {
+  datasetId?: string;
+  pagination: StoragePagination;
+}
+
+export interface ListRunsOutput {
+  runs: Run[];
+  pagination: PaginationInfo;
+}
+
+export interface ListRunResultsInput {
+  runId: string;
+  pagination: StoragePagination;
+}
+
+export interface ListRunResultsOutput {
+  results: RunResult[];
+  pagination: PaginationInfo;
+}

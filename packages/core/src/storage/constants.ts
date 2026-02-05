@@ -13,6 +13,18 @@ export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
 export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
 
+// Dataset tables
+export const TABLE_DATASETS = 'mastra_datasets';
+export const TABLE_DATASET_ITEMS = 'mastra_dataset_items';
+export const TABLE_DATASET_ITEM_VERSIONS = 'mastra_dataset_item_versions';
+export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
+
+// Run tables
+export const TABLE_RUNS = 'mastra_runs';
+export const TABLE_RUN_RESULTS = 'mastra_run_results';
+export const TABLE_DATASET_RUNS = 'mastra_dataset_runs';
+export const TABLE_DATASET_RUN_RESULTS = 'mastra_dataset_run_results';
+
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
   | typeof TABLE_MESSAGES
@@ -22,7 +34,15 @@ export type TABLE_NAMES =
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
-  | typeof TABLE_AGENT_VERSIONS;
+  | typeof TABLE_AGENT_VERSIONS
+  | typeof TABLE_DATASETS
+  | typeof TABLE_DATASET_ITEMS
+  | typeof TABLE_DATASET_ITEM_VERSIONS
+  | typeof TABLE_DATASET_VERSIONS
+  | typeof TABLE_RUNS
+  | typeof TABLE_RUN_RESULTS
+  | typeof TABLE_DATASET_RUNS
+  | typeof TABLE_DATASET_RUN_RESULTS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -147,6 +167,87 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
+// Dataset schemas
+export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  inputSchema: { type: 'jsonb', nullable: true },
+  outputSchema: { type: 'jsonb', nullable: true },
+  version: { type: 'timestamp', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  datasetId: { type: 'text', nullable: false },
+  version: { type: 'timestamp', nullable: false },
+  input: { type: 'jsonb', nullable: false },
+  expectedOutput: { type: 'jsonb', nullable: true },
+  context: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const DATASET_ITEM_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  itemId: { type: 'text', nullable: false },
+  datasetId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  datasetVersion: { type: 'timestamp', nullable: false },
+  snapshot: { type: 'jsonb', nullable: true },
+  isDeleted: { type: 'boolean', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const DATASET_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  datasetId: { type: 'text', nullable: false },
+  version: { type: 'timestamp', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+// Run schemas
+export const RUNS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  datasetId: { type: 'text', nullable: false },
+  datasetVersion: { type: 'timestamp', nullable: false },
+  targetType: { type: 'text', nullable: false },
+  targetId: { type: 'text', nullable: false },
+  status: { type: 'text', nullable: false },
+  totalItems: { type: 'integer', nullable: false },
+  succeededCount: { type: 'integer', nullable: false },
+  failedCount: { type: 'integer', nullable: false },
+  startedAt: { type: 'timestamp', nullable: true },
+  completedAt: { type: 'timestamp', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const RUN_RESULTS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  runId: { type: 'text', nullable: false },
+  itemId: { type: 'text', nullable: false },
+  itemVersion: { type: 'timestamp', nullable: false },
+  input: { type: 'jsonb', nullable: false },
+  output: { type: 'jsonb', nullable: true },
+  expectedOutput: { type: 'jsonb', nullable: true },
+  latency: { type: 'integer', nullable: false },
+  error: { type: 'text', nullable: true },
+  startedAt: { type: 'timestamp', nullable: false },
+  completedAt: { type: 'timestamp', nullable: false },
+  retryCount: { type: 'integer', nullable: false },
+  traceId: { type: 'text', nullable: true },
+  scores: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+// Aliases for run schemas (used by LibSQL runs adapter)
+export const DATASET_RUNS_SCHEMA = RUNS_SCHEMA;
+export const DATASET_RUN_RESULTS_SCHEMA = RUN_RESULTS_SCHEMA;
+
 /**
  * Schema definitions for all core tables.
  */
@@ -213,6 +314,14 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+  [TABLE_DATASETS]: DATASETS_SCHEMA,
+  [TABLE_DATASET_ITEMS]: DATASET_ITEMS_SCHEMA,
+  [TABLE_DATASET_ITEM_VERSIONS]: DATASET_ITEM_VERSIONS_SCHEMA,
+  [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
+  [TABLE_RUNS]: RUNS_SCHEMA,
+  [TABLE_RUN_RESULTS]: RUN_RESULTS_SCHEMA,
+  [TABLE_DATASET_RUNS]: DATASET_RUNS_SCHEMA,
+  [TABLE_DATASET_RUN_RESULTS]: DATASET_RUN_RESULTS_SCHEMA,
 };
 
 /**

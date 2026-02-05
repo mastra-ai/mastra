@@ -6,6 +6,12 @@ import type {
   StorageResourceType,
   StorageWorkflowRun,
   ObservationalMemoryRecord,
+  Dataset,
+  DatasetItem,
+  DatasetItemVersion,
+  DatasetVersion,
+  Run,
+  RunResult,
 } from '../types';
 import type { AgentVersion } from './agents';
 import type { TraceEntry } from './observability';
@@ -29,6 +35,16 @@ export class InMemoryDB {
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
+  // Dataset domain maps
+  readonly datasets = new Map<string, Dataset>();
+  readonly datasetItems = new Map<string, DatasetItem>();
+  readonly itemVersions = new Map<string, DatasetItemVersion>();
+  readonly datasetVersions = new Map<string, DatasetVersion>();
+
+  // Run domain maps
+  readonly runs = new Map<string, Run>();
+  readonly runResults = new Map<string, RunResult>();
+
   /**
    * Clears all data from all collections.
    * Useful for testing.
@@ -43,5 +59,11 @@ export class InMemoryDB {
     this.agents.clear();
     this.agentVersions.clear();
     this.observationalMemory.clear();
+    this.datasets.clear();
+    this.datasetItems.clear();
+    this.itemVersions.clear();
+    this.datasetVersions.clear();
+    this.runs.clear();
+    this.runResults.clear();
   }
 }

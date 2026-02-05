@@ -22,6 +22,14 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_agents: new Map(),
       mastra_agent_versions: new Map(),
       mastra_observational_memory: new Map(),
+      mastra_datasets: new Map(),
+      mastra_dataset_items: new Map(),
+      mastra_dataset_item_versions: new Map(),
+      mastra_dataset_versions: new Map(),
+      mastra_runs: new Map(),
+      mastra_run_results: new Map(),
+      mastra_dataset_runs: new Map(),
+      mastra_dataset_run_results: new Map(),
     };
   }
 
