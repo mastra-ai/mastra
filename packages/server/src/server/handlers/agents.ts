@@ -533,7 +533,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   if (!agent) {
     logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
     try {
-      agent = await mastra.getStoredAgentById(agentId);
+      agent = (await mastra.getEditor()?.getStoredAgentById(agentId)) ?? null;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -735,7 +735,16 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
       // Also fetch and include stored agents
       try {
-        const storedAgentsResult = await mastra.listStoredAgents();
+        const editor = mastra.getEditor();
+
+        let storedAgentsResult;
+        try {
+          storedAgentsResult = await editor?.listStoredAgents();
+        } catch (error) {
+          console.error('Error listing stored agents:', error);
+          storedAgentsResult = null;
+        }
+
         if (storedAgentsResult?.agents) {
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const agent of storedAgentsResult.agents) {
@@ -747,6 +756,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
                 requestContext,
                 partial: isPartial,
               });
+
               // Don't overwrite code-defined agents with same ID
               if (!serializedAgents[serialized.id]) {
                 serializedAgents[serialized.id] = serialized;

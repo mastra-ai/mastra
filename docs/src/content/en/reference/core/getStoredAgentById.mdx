@@ -85,7 +85,7 @@ When creating an `Agent` instance from stored configuration, the method resolves
 
 - **Tools**: Resolved from `tools` registered in Mastra config
 - **Workflows**: Resolved from `workflows` registered in Mastra config
-- **Sub-agents**: Resolved from `agents` registered in Mastra config
+- **Subagents**: Resolved from `agents` registered in Mastra config
 - **Memory**: Resolved from `memory` registered in Mastra config
 - **Scorers**: Resolved from `scorers` registered in Mastra config, including sampling configuration
 
@@ -138,7 +138,7 @@ When using `raw: true`, the returned object has the following structure:
     {
       name: "agents",
       type: "Record<string, unknown>",
-      description: "Sub-agent references to resolve from registry.",
+      description: "Subagent references to resolve from registry.",
       isOptional: true,
     },
     {

@@ -1,5 +1,403 @@
 # @mastra/core
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed stale agent data in CMS pages by adding removeAgent method to Mastra and updating clearStoredAgentCache to clear both Editor cache and Mastra registry when stored agents are updated or deleted ([#12693](https://github.com/mastra-ai/mastra/pull/12693))
+
+- Update memory config and exports: ([#12704](https://github.com/mastra-ai/mastra/pull/12704))
+  - Updated `SerializedMemoryConfig` to allow `embedder?: EmbeddingModelId | string` for flexibility
+  - Exported `EMBEDDING_MODELS` and `EmbeddingModelInfo` for use in server endpoints
+
+## 1.2.0
+
+### Minor Changes
+
+- Added Observational Memory — a new memory system that keeps your agent's context window small while preserving long-term memory across conversations. ([#12599](https://github.com/mastra-ai/mastra/pull/12599))
+
+  **Why:** Long conversations cause context rot and waste tokens. Observational Memory compresses conversation history into observations (5–40x compression) and periodically condenses those into reflections. Your agent stays fast and focused, even after thousands of messages.
+
+  **Usage:**
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+  import { PostgresStore } from '@mastra/pg';
+
+  const memory = new Memory({
+    storage: new PostgresStore({ connectionString: process.env.DATABASE_URL }),
+    options: {
+      observationalMemory: true,
+    },
+  });
+
+  const agent = new Agent({
+    name: 'my-agent',
+    model: openai('gpt-4o'),
+    memory,
+  });
+  ```
+
+  **What's new:**
+  - `observationalMemory: true` enables the three-tier memory system (recent messages → observations → reflections)
+  - Thread-scoped (per-conversation) and resource-scoped (shared across all threads for a user) modes
+  - Manual `observe()` API for triggering observation outside the normal agent loop
+  - New OM storage methods for pg, libsql, and mongodb adapters (conditionally enabled)
+  - `Agent.findProcessor()` method for looking up processors by ID
+  - `processorStates` for persisting processor state across loop iterations
+  - Abort signal propagation to processors
+  - `ProcessorStreamWriter` for custom stream events from processors
+
+- Created @mastra/editor package for managing and resolving stored agent configurations ([#12631](https://github.com/mastra-ai/mastra/pull/12631))
+
+  This major addition introduces the editor package, which provides a complete solution for storing, versioning, and instantiating agent configurations from a database. The editor seamlessly integrates with Mastra's storage layer to enable dynamic agent management.
+
+  **Key Features:**
+  - **Agent Storage & Retrieval**: Store complete agent configurations including instructions, model settings, tools, workflows, nested agents, scorers, processors, and memory configuration
+  - **Version Management**: Create and manage multiple versions of agents, with support for activating specific versions
+  - **Dependency Resolution**: Automatically resolves and instantiates all agent dependencies (tools, workflows, sub-agents, etc.) from the Mastra registry
+  - **Caching**: Built-in caching for improved performance when repeatedly accessing stored agents
+  - **Type Safety**: Full TypeScript support with proper typing for stored configurations
+
+  **Usage Example:**
+
+  ```typescript
+  import { MastraEditor } from '@mastra/editor';
+  import { Mastra } from '@mastra/core';
+
+  // Initialize editor with Mastra
+  const mastra = new Mastra({
+    /* config */
+    editor: new MastraEditor(),
+  });
+
+  // Store an agent configuration
+  const agentId = await mastra.storage.stores?.agents?.createAgent({
+    name: 'customer-support',
+    instructions: 'Help customers with inquiries',
+    model: { provider: 'openai', name: 'gpt-4' },
+    tools: ['search-kb', 'create-ticket'],
+    workflows: ['escalation-flow'],
+    memory: { vector: 'pinecone-db' },
+  });
+
+  // Retrieve and use the stored agent
+  const agent = await mastra.getEditor()?.getStoredAgentById(agentId);
+  const response = await agent?.generate('How do I reset my password?');
+
+  // List all stored agents
+  const agents = await mastra.getEditor()?.listStoredAgents({ pageSize: 10 });
+  ```
+
+  **Storage Improvements:**
+  - Fixed JSONB handling in LibSQL, PostgreSQL, and MongoDB adapters
+  - Improved agent resolution queries to properly merge version data
+  - Enhanced type safety for serialized configurations
+
+- Added logger support to Workspace filesystem and sandbox providers. Providers extending MastraFilesystem or MastraSandbox now automatically receive the Mastra logger for consistent logging of file operations and command executions. ([#12606](https://github.com/mastra-ai/mastra/pull/12606))
+
+- Added ToolSearchProcessor for dynamic tool discovery. ([#12290](https://github.com/mastra-ai/mastra/pull/12290))
+
+  Agents can now discover and load tools on demand instead of having all tools available upfront. This reduces context token usage by ~94% when working with large tool libraries.
+
+  **New API:**
+
+  ```typescript
+  import { ToolSearchProcessor } from '@mastra/core/processors';
+  import { Agent } from '@mastra/core';
+
+  // Create a processor with searchable tools
+  const toolSearch = new ToolSearchProcessor({
+    tools: {
+      createIssue: githubTools.createIssue,
+      sendEmail: emailTools.send,
+      // ... hundreds of tools
+    },
+    search: {
+      topK: 5, // Return top 5 results (default: 5)
+      minScore: 0.1, // Filter results below this score (default: 0)
+    },
+  });
+
+  // Attach processor to agent
+  const agent = new Agent({
+    name: 'my-agent',
+    inputProcessors: [toolSearch],
+    tools: {
+      /* always-available tools */
+    },
+  });
+  ```
+
+  **How it works:**
+
+  The processor automatically provides two meta-tools to the agent:
+  - `search_tools` - Search for available tools by keyword relevance
+  - `load_tool` - Load a specific tool into the conversation
+
+  The agent discovers what it needs via search and loads tools on demand. Loaded tools are available immediately and persist within the conversation thread.
+
+  **Why:**
+
+  When agents have access to 100+ tools (from MCP servers or integrations), including all tool definitions in the context can consume significant tokens (~1,500 tokens per tool). This pattern reduces context usage by giving agents only the tools they need, when they need them.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`e6fc281`](https://github.com/mastra-ai/mastra/commit/e6fc281896a3584e9e06465b356a44fe7faade65))
+
+- Fixed processors returning `{ tools: {}, toolChoice: 'none' }` being ignored. Previously, when a processor returned empty tools with an explicit `toolChoice: 'none'` to prevent tool calls, the toolChoice was discarded and defaulted to 'auto'. This fix preserves the explicit 'none' value, enabling patterns like ensuring a final text response when `maxSteps` is reached. ([#12601](https://github.com/mastra-ai/mastra/pull/12601))
+
+- Fix moonshotai/kimi-k2.5 multi-step tool calling failing with "reasoning_content is missing in assistant tool call message" ([#12530](https://github.com/mastra-ai/mastra/pull/12530))
+  - Changed moonshotai and moonshotai-cn (China version) providers to use Anthropic-compatible API endpoints instead of OpenAI-compatible
+    - moonshotai: `https://api.moonshot.ai/anthropic/v1`
+    - moonshotai-cn: `https://api.moonshot.cn/anthropic/v1`
+  - This properly handles reasoning_content for kimi-k2.5 model
+
+- Fixed custom input processors from disabling workspace skill tools in generate() and stream(). Custom processors now replace only the processors you configured, while memory and skills remain available. Fixes #12612. ([#12676](https://github.com/mastra-ai/mastra/pull/12676))
+
+- **Fixed** ([#12673](https://github.com/mastra-ai/mastra/pull/12673))
+  Workspace search index names now use underscores so they work with SQL-based vector stores (PgVector, LibSQL).
+
+  **Added**
+  You can now set a custom index name with `searchIndexName`.
+
+  **Why**
+  Some SQL vector stores reject hyphens in index names.
+
+  **Example**
+
+  ```ts
+  // Before - would fail with PgVector
+  new Workspace({ id: 'my-workspace', vectorStore, embedder });
+
+  // After - works with all vector stores
+  new Workspace({ id: 'my-workspace', vectorStore, embedder });
+
+  // Or use a custom index name
+  new Workspace({ vectorStore, embedder, searchIndexName: 'my_workspace_vectors' });
+  ```
+
+  Fixes #12656
+
+- Catch up evented workflows on parity with default execution engine ([#12555](https://github.com/mastra-ai/mastra/pull/12555))
+
+- Expose token usage from embedding operations ([#12556](https://github.com/mastra-ai/mastra/pull/12556))
+  - `saveMessages` now returns `usage: { tokens: number }` with aggregated token count from all embeddings
+  - `recall` now returns `usage: { tokens: number }` from the vector search query embedding
+  - Updated abstract method signatures in `MastraMemory` to include optional `usage` in return types
+
+  This allows users to track embedding token usage when using the Memory class.
+
+- Fixed a security issue where sensitive observability credentials (such as Langfuse API keys) could be exposed in tool execution error logs. The tracingContext is now properly excluded from logged data. ([#12669](https://github.com/mastra-ai/mastra/pull/12669))
+
+- Fixed issue where some models incorrectly call skill names directly as tools instead of using skill-activate. Added clearer system instructions that explicitly state skills are NOT tools and must be activated via skill-activate with the skill name as the "name" parameter. Fixes #12654. ([#12677](https://github.com/mastra-ai/mastra/pull/12677))
+
+- Improved workspace filesystem error handling: return 404 for not-found errors instead of 500, show user-friendly error messages in UI, and add MastraClientError class with status/body properties for better error handling ([#12533](https://github.com/mastra-ai/mastra/pull/12533))
+
+- Improved workspace tool descriptions with clearer usage guidance for read_file, edit_file, and execute_command tools. ([#12640](https://github.com/mastra-ai/mastra/pull/12640))
+
+- Fixed JSON parsing in agent network to handle malformed LLM output. Uses parsePartialJson from AI SDK to recover truncated JSON, missing braces, and unescaped control characters instead of failing immediately. This reduces unnecessary retry round-trips when the routing agent generates slightly malformed JSON for tool/workflow prompts. Fixes #12519. ([#12526](https://github.com/mastra-ai/mastra/pull/12526))
+
+- Updated dependencies [[`abae238`](https://github.com/mastra-ai/mastra/commit/abae238c755ebaf867bbfa1a3a219ef003a1021a)]:
+  - @mastra/schema-compat@1.1.0
+
+## 1.2.0-alpha.1
+
+### Minor Changes
+
+- Added Observational Memory — a new memory system that keeps your agent's context window small while preserving long-term memory across conversations. ([#12599](https://github.com/mastra-ai/mastra/pull/12599))
+
+  **Why:** Long conversations cause context rot and waste tokens. Observational Memory compresses conversation history into observations (5–40x compression) and periodically condenses those into reflections. Your agent stays fast and focused, even after thousands of messages.
+
+  **Usage:**
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+  import { PostgresStore } from '@mastra/pg';
+
+  const memory = new Memory({
+    storage: new PostgresStore({ connectionString: process.env.DATABASE_URL }),
+    options: {
+      observationalMemory: true,
+    },
+  });
+
+  const agent = new Agent({
+    name: 'my-agent',
+    model: openai('gpt-4o'),
+    memory,
+  });
+  ```
+
+  **What's new:**
+  - `observationalMemory: true` enables the three-tier memory system (recent messages → observations → reflections)
+  - Thread-scoped (per-conversation) and resource-scoped (shared across all threads for a user) modes
+  - Manual `observe()` API for triggering observation outside the normal agent loop
+  - New OM storage methods for pg, libsql, and mongodb adapters (conditionally enabled)
+  - `Agent.findProcessor()` method for looking up processors by ID
+  - `processorStates` for persisting processor state across loop iterations
+  - Abort signal propagation to processors
+  - `ProcessorStreamWriter` for custom stream events from processors
+
+- Created @mastra/editor package for managing and resolving stored agent configurations ([#12631](https://github.com/mastra-ai/mastra/pull/12631))
+
+  This major addition introduces the editor package, which provides a complete solution for storing, versioning, and instantiating agent configurations from a database. The editor seamlessly integrates with Mastra's storage layer to enable dynamic agent management.
+
+  **Key Features:**
+  - **Agent Storage & Retrieval**: Store complete agent configurations including instructions, model settings, tools, workflows, nested agents, scorers, processors, and memory configuration
+  - **Version Management**: Create and manage multiple versions of agents, with support for activating specific versions
+  - **Dependency Resolution**: Automatically resolves and instantiates all agent dependencies (tools, workflows, sub-agents, etc.) from the Mastra registry
+  - **Caching**: Built-in caching for improved performance when repeatedly accessing stored agents
+  - **Type Safety**: Full TypeScript support with proper typing for stored configurations
+
+  **Usage Example:**
+
+  ```typescript
+  import { MastraEditor } from '@mastra/editor';
+  import { Mastra } from '@mastra/core';
+
+  // Initialize editor with Mastra
+  const mastra = new Mastra({
+    /* config */
+    editor: new MastraEditor(),
+  });
+
+  // Store an agent configuration
+  const agentId = await mastra.storage.stores?.agents?.createAgent({
+    name: 'customer-support',
+    instructions: 'Help customers with inquiries',
+    model: { provider: 'openai', name: 'gpt-4' },
+    tools: ['search-kb', 'create-ticket'],
+    workflows: ['escalation-flow'],
+    memory: { vector: 'pinecone-db' },
+  });
+
+  // Retrieve and use the stored agent
+  const agent = await mastra.getEditor()?.getStoredAgentById(agentId);
+  const response = await agent?.generate('How do I reset my password?');
+
+  // List all stored agents
+  const agents = await mastra.getEditor()?.listStoredAgents({ pageSize: 10 });
+  ```
+
+  **Storage Improvements:**
+  - Fixed JSONB handling in LibSQL, PostgreSQL, and MongoDB adapters
+  - Improved agent resolution queries to properly merge version data
+  - Enhanced type safety for serialized configurations
+
+- Added logger support to Workspace filesystem and sandbox providers. Providers extending MastraFilesystem or MastraSandbox now automatically receive the Mastra logger for consistent logging of file operations and command executions. ([#12606](https://github.com/mastra-ai/mastra/pull/12606))
+
+### Patch Changes
+
+- Fixed custom input processors from disabling workspace skill tools in generate() and stream(). Custom processors now replace only the processors you configured, while memory and skills remain available. Fixes #12612. ([#12676](https://github.com/mastra-ai/mastra/pull/12676))
+
+- **Fixed** ([#12673](https://github.com/mastra-ai/mastra/pull/12673))
+  Workspace search index names now use underscores so they work with SQL-based vector stores (PgVector, LibSQL).
+
+  **Added**
+  You can now set a custom index name with `searchIndexName`.
+
+  **Why**
+  Some SQL vector stores reject hyphens in index names.
+
+  **Example**
+
+  ```ts
+  // Before - would fail with PgVector
+  new Workspace({ id: 'my-workspace', vectorStore, embedder });
+
+  // After - works with all vector stores
+  new Workspace({ id: 'my-workspace', vectorStore, embedder });
+
+  // Or use a custom index name
+  new Workspace({ vectorStore, embedder, searchIndexName: 'my_workspace_vectors' });
+  ```
+
+  Fixes #12656
+
+- Fixed a security issue where sensitive observability credentials (such as Langfuse API keys) could be exposed in tool execution error logs. The tracingContext is now properly excluded from logged data. ([#12669](https://github.com/mastra-ai/mastra/pull/12669))
+
+- Fixed issue where some models incorrectly call skill names directly as tools instead of using skill-activate. Added clearer system instructions that explicitly state skills are NOT tools and must be activated via skill-activate with the skill name as the "name" parameter. Fixes #12654. ([#12677](https://github.com/mastra-ai/mastra/pull/12677))
+
+- Improved workspace tool descriptions with clearer usage guidance for read_file, edit_file, and execute_command tools. ([#12640](https://github.com/mastra-ai/mastra/pull/12640))
+
+- Updated dependencies [[`abae238`](https://github.com/mastra-ai/mastra/commit/abae238c755ebaf867bbfa1a3a219ef003a1021a)]:
+  - @mastra/schema-compat@1.1.0-alpha.0
+
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- Added ToolSearchProcessor for dynamic tool discovery. ([#12290](https://github.com/mastra-ai/mastra/pull/12290))
+
+  Agents can now discover and load tools on demand instead of having all tools available upfront. This reduces context token usage by ~94% when working with large tool libraries.
+
+  **New API:**
+
+  ```typescript
+  import { ToolSearchProcessor } from '@mastra/core/processors';
+  import { Agent } from '@mastra/core';
+
+  // Create a processor with searchable tools
+  const toolSearch = new ToolSearchProcessor({
+    tools: {
+      createIssue: githubTools.createIssue,
+      sendEmail: emailTools.send,
+      // ... hundreds of tools
+    },
+    search: {
+      topK: 5, // Return top 5 results (default: 5)
+      minScore: 0.1, // Filter results below this score (default: 0)
+    },
+  });
+
+  // Attach processor to agent
+  const agent = new Agent({
+    name: 'my-agent',
+    inputProcessors: [toolSearch],
+    tools: {
+      /* always-available tools */
+    },
+  });
+  ```
+
+  **How it works:**
+
+  The processor automatically provides two meta-tools to the agent:
+  - `search_tools` - Search for available tools by keyword relevance
+  - `load_tool` - Load a specific tool into the conversation
+
+  The agent discovers what it needs via search and loads tools on demand. Loaded tools are available immediately and persist within the conversation thread.
+
+  **Why:**
+
+  When agents have access to 100+ tools (from MCP servers or integrations), including all tool definitions in the context can consume significant tokens (~1,500 tokens per tool). This pattern reduces context usage by giving agents only the tools they need, when they need them.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`e6fc281`](https://github.com/mastra-ai/mastra/commit/e6fc281896a3584e9e06465b356a44fe7faade65))
+
+- Fixed processors returning `{ tools: {}, toolChoice: 'none' }` being ignored. Previously, when a processor returned empty tools with an explicit `toolChoice: 'none'` to prevent tool calls, the toolChoice was discarded and defaulted to 'auto'. This fix preserves the explicit 'none' value, enabling patterns like ensuring a final text response when `maxSteps` is reached. ([#12601](https://github.com/mastra-ai/mastra/pull/12601))
+
+- Fix moonshotai/kimi-k2.5 multi-step tool calling failing with "reasoning_content is missing in assistant tool call message" ([#12530](https://github.com/mastra-ai/mastra/pull/12530))
+  - Changed moonshotai and moonshotai-cn (China version) providers to use Anthropic-compatible API endpoints instead of OpenAI-compatible
+    - moonshotai: `https://api.moonshot.ai/anthropic/v1`
+    - moonshotai-cn: `https://api.moonshot.cn/anthropic/v1`
+  - This properly handles reasoning_content for kimi-k2.5 model
+
+- Catch up evented workflows on parity with default execution engine ([#12555](https://github.com/mastra-ai/mastra/pull/12555))
+
+- Expose token usage from embedding operations ([#12556](https://github.com/mastra-ai/mastra/pull/12556))
+  - `saveMessages` now returns `usage: { tokens: number }` with aggregated token count from all embeddings
+  - `recall` now returns `usage: { tokens: number }` from the vector search query embedding
+  - Updated abstract method signatures in `MastraMemory` to include optional `usage` in return types
+
+  This allows users to track embedding token usage when using the Memory class.
+
+- Improved workspace filesystem error handling: return 404 for not-found errors instead of 500, show user-friendly error messages in UI, and add MastraClientError class with status/body properties for better error handling ([#12533](https://github.com/mastra-ai/mastra/pull/12533))
+
+- Fixed JSON parsing in agent network to handle malformed LLM output. Uses parsePartialJson from AI SDK to recover truncated JSON, missing braces, and unescaped control characters instead of failing immediately. This reduces unnecessary retry round-trips when the routing agent generates slightly malformed JSON for tool/workflow prompts. Fixes #12519. ([#12526](https://github.com/mastra-ai/mastra/pull/12526))
+
 ## 1.1.0
 
 ### Minor Changes

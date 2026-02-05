@@ -24,8 +24,34 @@ export interface AddSkillDialogProps {
   workspaceId: string;
   onInstall: (params: { repository: string; skillName: string }) => void;
   isInstalling?: boolean;
-  /** Names of skills that are already installed (to show indicator and prevent re-install) */
+  /**
+   * Unique IDs of skills installed via skills.sh (format: "owner/repo/skillName").
+   * Used for precise matching - only the exact source/skill combo shows as installed.
+   */
+  installedSkillIds?: string[];
+  /**
+   * Names of skills that are already installed (fallback when source info unavailable).
+   * Skills matching by name only will show as installed regardless of source.
+   */
   installedSkillNames?: string[];
+}
+
+/**
+ * Generate a unique identifier for a skills.sh skill (for selection tracking).
+ * Uses topSource + name since a repo can only have one skill with a given name.
+ */
+function getSkillUniqueId(skill: SkillsShSkill): string {
+  return `${skill.topSource}/${skill.name}`;
+}
+
+/**
+ * Generate an installed skill ID from a skills.sh skill.
+ * Format: "owner/repo/skillName" - matches what we build from workspace skills with skillsShSource.
+ */
+function getInstalledSkillId(skill: SkillsShSkill): string | null {
+  const parsed = parseSkillSource(skill.topSource, skill.name);
+  if (!parsed) return null;
+  return `${parsed.owner}/${parsed.repo}/${skill.name}`;
 }
 
 export function AddSkillDialog({
@@ -34,6 +60,7 @@ export function AddSkillDialog({
   workspaceId,
   onInstall,
   isInstalling,
+  installedSkillIds = [],
   installedSkillNames = [],
 }: AddSkillDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,7 +123,23 @@ export function AddSkillDialog({
   const hasSearchResults = searchQuery.trim().length >= 2;
 
   // Check if selected skill is already installed
-  const isSelectedSkillInstalled = selectedSkill ? installedSkillNames.includes(selectedSkill.name) : false;
+  // Check both precise IDs (for skills.sh installed skills) and names (for local/external skills)
+  const isSelectedSkillInstalled = useMemo(() => {
+    if (!selectedSkill) return false;
+
+    // Check precise match (owner/repo/name) for skills.sh installed skills
+    const installedId = getInstalledSkillId(selectedSkill);
+    if (installedId && installedSkillIds.includes(installedId)) {
+      return true;
+    }
+
+    // Check name match for local/external skills without source tracking
+    if (installedSkillNames.includes(selectedSkill.name)) {
+      return true;
+    }
+
+    return false;
+  }, [selectedSkill, installedSkillIds, installedSkillNames]);
 
   // Handle install
   const handleInstall = useCallback(() => {
@@ -159,15 +202,21 @@ export function AddSkillDialog({
                 ) : (
                   <div className="p-2 space-y-1">
                     {displaySkills.map(skill => {
-                      const isInstalled = installedSkillNames.includes(skill.name);
+                      const skillUniqueId = getSkillUniqueId(skill);
+                      const installedId = getInstalledSkillId(skill);
+                      // Check precise match (skills.sh) OR name match (local/external)
+                      const isInstalled =
+                        (installedId && installedSkillIds.includes(installedId)) ||
+                        installedSkillNames.includes(skill.name);
+                      const selectedSkillUniqueId = selectedSkill ? getSkillUniqueId(selectedSkill) : null;
                       return (
                         <button
-                          key={skill.id}
+                          key={skillUniqueId}
                           onClick={() => setSelectedSkill(skill)}
                           className={cn(
                             'w-full text-left px-3 py-2 rounded-md transition-colors',
                             'hover:bg-surface4',
-                            selectedSkill?.id === skill.id && 'bg-surface5 border border-accent1',
+                            selectedSkillUniqueId === skillUniqueId && 'bg-surface5 border border-accent1',
                           )}
                         >
                           <div className="flex items-start justify-between gap-2">

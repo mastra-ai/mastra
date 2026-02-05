@@ -1555,8 +1555,8 @@ See the [branching-workflow.ts](https://github.com/mastra-ai/ui-dojo/blob/main/s
 
 ### Progress indicators in agent networks
 
-When using agent networks, you can emit custom progress events from tools used by sub-agents to show which agent is currently active.
+When using agent networks, you can emit custom progress events from tools used by subagents to show which agent is currently active.
 
-The UI Dojo example includes a `stage` field in the event data to identify which sub-agent is running (e.g., `"report-generation"`, `"report-review"`). The frontend groups events by this field and displays the latest status for each.
+The UI Dojo example includes a `stage` field in the event data to identify which subagent is running (e.g., `"report-generation"`, `"report-review"`). The frontend groups events by this field and displays the latest status for each.
 
 See the [report-generation-tool.ts](https://github.com/mastra-ai/ui-dojo/blob/main/src/mastra/tools/report-generation-tool.ts) (backend) and [agent-network-custom-events.tsx](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/agent-network-custom-events.tsx) (frontend) in UI Dojo.

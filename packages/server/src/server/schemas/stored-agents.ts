@@ -1,5 +1,7 @@
 import z from 'zod';
 import { paginationInfoSchema, createPagePaginationSchema } from './common';
+import { defaultOptionsSchema } from './default-options';
+import { serializedMemoryConfigSchema } from './memory-config';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -42,11 +44,10 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
  */
 const scorerConfigSchema = z.object({
   sampling: z
-    .object({
-      type: z.enum(['ratio', 'count']),
-      rate: z.number().optional(),
-      count: z.number().optional(),
-    })
+    .union([
+      z.object({ type: z.literal('none') }),
+      z.object({ type: z.literal('ratio'), rate: z.number().min(0).max(1) }),
+    ])
     .optional(),
 });
 
@@ -58,18 +59,24 @@ const snapshotConfigSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
   instructions: z.string().describe('System instructions for the agent'),
-  model: z.record(z.string(), z.unknown()).describe('Model configuration (provider, name, etc.)'),
+  model: z
+    .object({
+      provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
+      name: z.string().describe('Model name (e.g., gpt-4o, claude-3-opus)'),
+    })
+    .passthrough()
+    .describe('Model configuration (provider, name, and optional params)'),
   tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
-  defaultOptions: z.record(z.string(), z.unknown()).optional().describe('Default options for generate/stream calls'),
+  defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),
   workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
   agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
   integrationTools: z
     .array(z.string())
     .optional()
     .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
-  inputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Input processor configurations'),
-  outputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Output processor configurations'),
-  memory: z.record(z.string(), z.unknown()).optional().describe('Memory configuration object'),
+  inputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
+  outputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
+  memory: serializedMemoryConfigSchema.optional().describe('Memory configuration object (SerializedMemoryConfig)'),
   scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
 });
 
@@ -114,24 +121,30 @@ export const storedAgentSchema = z.object({
   activeVersionId: z.string().optional(),
   authorId: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
   // Version snapshot config fields (resolved from active version)
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
   instructions: z.string().describe('System instructions for the agent'),
-  model: z.record(z.string(), z.unknown()).describe('Model configuration (provider, name, etc.)'),
+  model: z
+    .object({
+      provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
+      name: z.string().describe('Model name (e.g., gpt-4o, claude-3-opus)'),
+    })
+    .passthrough()
+    .describe('Model configuration (provider, name, and optional params)'),
   tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
-  defaultOptions: z.record(z.string(), z.unknown()).optional().describe('Default options for generate/stream calls'),
+  defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),
   workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
   agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
   integrationTools: z
     .array(z.string())
     .optional()
     .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
-  inputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Input processor configurations'),
-  outputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Output processor configurations'),
-  memory: z.record(z.string(), z.unknown()).optional().describe('Memory configuration object'),
+  inputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
+  outputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
+  memory: serializedMemoryConfigSchema.optional().describe('Memory configuration object (SerializedMemoryConfig)'),
   scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
 });
 
@@ -154,8 +167,27 @@ export const createStoredAgentResponseSchema = storedAgentSchema;
 
 /**
  * Response for PATCH /stored/agents/:storedAgentId
+ *
+ * The response can be either:
+ * 1. A thin agent record (no version) - only has id, status, dates, etc.
+ * 2. A resolved agent (with version) - has all config fields from the version
+ *
+ * We use a union to handle both cases properly.
  */
-export const updateStoredAgentResponseSchema = storedAgentSchema;
+export const updateStoredAgentResponseSchema = z.union([
+  // Thin agent record (no version config)
+  z.object({
+    id: z.string(),
+    status: z.string(),
+    activeVersionId: z.string().optional(),
+    authorId: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    createdAt: z.coerce.date(),
+    updatedAt: z.coerce.date(),
+  }),
+  // Resolved agent (thin record + version config)
+  storedAgentSchema,
+]);
 
 /**
  * Response for DELETE /stored/agents/:storedAgentId
