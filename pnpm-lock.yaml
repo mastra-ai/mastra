@@ -2419,6 +2419,9 @@ importers:
       '@ai-sdk/google-v5':
         specifier: npm:@ai-sdk/google@2.0.40
         version: '@ai-sdk/google@2.0.40(zod@3.25.76)'
+      '@ai-sdk/groq-v5':
+        specifier: npm:@ai-sdk/groq@2.0.34
+        version: '@ai-sdk/groq@2.0.34(zod@3.25.76)'
       '@ai-sdk/mistral-v5':
         specifier: npm:@ai-sdk/mistral@2.0.24
         version: '@ai-sdk/mistral@2.0.24(zod@3.25.76)'
@@ -5843,6 +5846,12 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4
+
+  '@ai-sdk/groq@2.0.34':
+    resolution: {integrity: sha512-wfCYkVgmVjxNA32T57KbLabVnv9aFUflJ4urJ7eWgTwbnmGQHElCTu+rJ3ydxkXSqxOkXPwMOttDm7XNrvPjmg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
 
   '@ai-sdk/mistral@2.0.24':
     resolution: {integrity: sha512-X9IW0vUCHIq//L1ukirB3j54Hrde5zt40m0uG+ouEE9xz62BPT7Ue94qWL6U02u42vnaoGUE7VxrncwPVMjQjQ==}
@@ -22325,6 +22334,12 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.3(zod@3.25.76)
+      zod: 3.25.76
+
+  '@ai-sdk/groq@2.0.34(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.1
+      '@ai-sdk/provider-utils': 3.0.20(zod@3.25.76)
       zod: 3.25.76
 
   '@ai-sdk/mistral@2.0.24(zod@3.25.76)':
