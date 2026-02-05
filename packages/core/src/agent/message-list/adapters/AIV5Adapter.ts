@@ -3,8 +3,22 @@ import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
-import type { MastraDBMessage, MastraMessageContentV2, MessageSource } from '../state/types';
+import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
 import type { AIV5Type } from '../types';
+
+/**
+ * Filter out empty text parts from message parts array.
+ * Empty text blocks are not allowed by Anthropic's API and cause request failures.
+ * This can happen during streaming when text-start/text-end events occur without actual content.
+ */
+function filterEmptyTextParts(parts: MastraMessagePart[]): MastraMessagePart[] {
+  return parts.filter(part => {
+    if (part.type === 'text') {
+      return part.text !== '';
+    }
+    return true;
+  });
+}
 
 /**
  * Extract tool name from AI SDK v5 tool type string
@@ -453,6 +467,9 @@ export class AIV5Adapter {
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);
 
+    // Filter out empty text parts to prevent Anthropic API errors
+    const filteredV2Parts = filterEmptyTextParts(v2Parts as MastraMessagePart[]);
+
     return {
       id: uiMsg.id,
       role: uiMsg.role,
@@ -461,7 +478,7 @@ export class AIV5Adapter {
       resourceId,
       content: {
         format: 2,
-        parts: v2Parts as MastraMessageContentV2['parts'],
+        parts: filteredV2Parts as MastraMessageContentV2['parts'],
         toolInvocations,
         reasoning,
         experimental_attachments,
@@ -664,17 +681,11 @@ export class AIV5Adapter {
       }
     }
 
-    // Insert step-start if assistant message starts after tool result
-    if (modelMsg.role === 'assistant' && lastPartWasToolResult && mastraDBParts.length > 0) {
-      const lastPart = mastraDBParts[mastraDBParts.length - 1];
-      if (lastPart && lastPart.type !== 'text') {
-        const emptyTextPart: MastraDBMessage['content']['parts'][number] = { type: 'text', text: '' };
-        mastraDBParts.push(emptyTextPart);
-      }
-    }
+    // Filter out empty text parts to prevent Anthropic API errors
+    const filteredMastraDBParts = filterEmptyTextParts(mastraDBParts);
 
     // Build V2 content string
-    const contentString = mastraDBParts
+    const contentString = filteredMastraDBParts
       .filter(p => p.type === 'text')
       .map(p => p.text)
       .join('\n');
@@ -697,7 +708,7 @@ export class AIV5Adapter {
       createdAt: new Date(),
       content: {
         format: 2,
-        parts: mastraDBParts,
+        parts: filteredMastraDBParts,
         toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
         reasoning: reasoningParts.length > 0 ? reasoningParts.join('\n') : undefined,
         experimental_attachments: experimental_attachments.length > 0 ? experimental_attachments : undefined,
