@@ -312,6 +312,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'memory/memory-class', label: 'Memory Class' },
+        { type: 'doc', id: 'memory/observational-memory', label: 'Observational Memory' },
         { type: 'doc', id: 'memory/createThread', label: '.createThread()' },
         {
           type: 'doc',

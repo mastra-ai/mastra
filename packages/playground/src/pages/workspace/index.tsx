@@ -628,7 +628,12 @@ export default function Workspace() {
           workspaceId={effectiveWorkspaceId}
           onInstall={handleInstallSkill}
           isInstalling={installSkill.isPending}
-          installedSkillNames={skills.map(s => s.name)}
+          // Pass precise IDs for skills with source info (format: owner/repo/name)
+          installedSkillIds={skills
+            .filter(s => s.skillsShSource)
+            .map(s => `${s.skillsShSource!.owner}/${s.skillsShSource!.repo}/${s.name}`)}
+          // Fallback to names for skills without source info
+          installedSkillNames={skills.filter(s => !s.skillsShSource).map(s => s.name)}
         />
       )}
     </MainContentLayout>
