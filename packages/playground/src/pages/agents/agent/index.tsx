@@ -10,6 +10,7 @@ import {
   AgentInformation,
   AgentPromptExperimentProvider,
   TracingSettingsProvider,
+  ObservationalMemoryProvider,
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
   type AgentSettingsType,
@@ -75,13 +76,19 @@ function Agent() {
     };
   }, [agent]);
 
-  if (isAgentLoading) {
+  if (isAgentLoading || !agent) {
     return null;
   }
 
+  if (!agent) {
+    return <div className="text-center py-4">Agent not found</div>;
+  }
+
   const handleRefreshThreadList = () => {
-    searchParams.delete('new');
-    setSearchParams(searchParams);
+    // Create a new URLSearchParams to avoid mutation issues
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('new');
+    setSearchParams(newParams, { replace: true });
     refreshThreads();
   };
 
@@ -92,35 +99,37 @@ function Agent() {
           <SchemaRequestContextProvider>
             <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
               <ThreadInputProvider>
-                <ActivatedSkillsProvider>
-                  <AgentLayout
-                    agentId={agentId!}
-                    leftSlot={
-                      Boolean(memory?.result) && (
-                        <AgentSidebar
-                          agentId={agentId!}
-                          threadId={threadId!}
-                          threads={threads || []}
-                          isLoading={isThreadsLoading}
-                        />
-                      )
-                    }
-                    rightSlot={<AgentInformation agentId={agentId!} threadId={threadId!} />}
-                  >
-                    <AgentChat
-                      key={threadId}
+                <ObservationalMemoryProvider>
+                  <ActivatedSkillsProvider>
+                    <AgentLayout
                       agentId={agentId!}
-                      agentName={agent?.name}
-                      modelVersion={agent?.modelVersion}
-                      threadId={threadId}
-                      memory={memory?.result}
-                      refreshThreadList={handleRefreshThreadList}
-                      modelList={agent?.modelList}
-                      messageId={messageId}
-                      isNewThread={isNewThread}
-                    />
-                  </AgentLayout>
-                </ActivatedSkillsProvider>
+                      leftSlot={
+                        Boolean(memory?.result) && (
+                          <AgentSidebar
+                            agentId={agentId!}
+                            threadId={threadId!}
+                            threads={threads || []}
+                            isLoading={isThreadsLoading}
+                          />
+                        )
+                      }
+                      rightSlot={<AgentInformation agentId={agentId!} threadId={threadId!} />}
+                    >
+                      <AgentChat
+                        key={threadId}
+                        agentId={agentId!}
+                        agentName={agent?.name}
+                        modelVersion={agent?.modelVersion}
+                        threadId={threadId}
+                        memory={memory?.result}
+                        refreshThreadList={handleRefreshThreadList}
+                        modelList={agent?.modelList}
+                        messageId={messageId}
+                        isNewThread={isNewThread}
+                      />
+                    </AgentLayout>
+                  </ActivatedSkillsProvider>
+                </ObservationalMemoryProvider>
               </ThreadInputProvider>
             </WorkingMemoryProvider>
           </SchemaRequestContextProvider>

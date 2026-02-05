@@ -629,15 +629,16 @@ describe('Span', () => {
         exporters: [testExporter],
       });
 
-      const longString = 'a'.repeat(2000);
+      // Default maxStringLength is 128KB - create a string longer than that
+      const longString = 'a'.repeat(150 * 1024);
       const span = tracing.startSpan({
         type: SpanType.GENERIC,
         name: 'test',
         input: { data: longString },
       });
 
-      // Default maxStringLength is 1024
-      expect(span.input.data.length).toBeLessThanOrEqual(1024 + 15);
+      // Default maxStringLength is 128 * 1024 (128KB)
+      expect(span.input.data.length).toBeLessThanOrEqual(128 * 1024 + 15);
       expect(span.input.data).toContain('[truncated]');
       span.end();
     });

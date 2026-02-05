@@ -13,9 +13,25 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const SNAPSHOTS_DIR = join(__dirname, '..', '__snapshots__');
+/**
+ * Lazily compute the snapshots directory to avoid CloudFlare Workers compatibility issues.
+ * In non-Node.js environments (like CloudFlare Workers), import.meta.url may be undefined
+ * at module load time, causing fileURLToPath to throw.
+ */
+let _snapshotsDir: string | undefined;
+function getSnapshotsDir(): string {
+  if (!_snapshotsDir) {
+    if (typeof import.meta.url !== 'string') {
+      throw new Error(
+        'Snapshot functionality requires a Node.js environment. ' + 'import.meta.url is not available in this runtime.',
+      );
+    }
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    _snapshotsDir = join(__dirname, '..', '__snapshots__');
+  }
+  return _snapshotsDir;
+}
 
 import type {
   TracingEvent,
@@ -851,7 +867,7 @@ export class JsonExporter extends BaseExporter {
    */
   async assertMatchesSnapshot(snapshotName: string, options?: { updateSnapshot?: boolean }): Promise<void> {
     // Resolve snapshot path relative to the __snapshots__ directory
-    const snapshotPath = join(SNAPSHOTS_DIR, snapshotName);
+    const snapshotPath = join(getSnapshotsDir(), snapshotName);
     const normalizedTree = this.buildNormalizedTree();
     const structureGraph = this.generateStructureGraph(normalizedTree);
 

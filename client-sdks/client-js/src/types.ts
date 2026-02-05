@@ -23,7 +23,12 @@ import type {
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { PaginationInfo, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  WorkflowRuns,
+  StorageListMessagesInput,
+  ObservationalMemoryRecord,
+} from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
 import type {
@@ -321,7 +326,19 @@ export interface GetMemoryConfigParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type GetMemoryConfigResponse = { config: MemoryConfig };
+export type GetMemoryConfigResponse = {
+  config: MemoryConfig & {
+    observationalMemory?: {
+      enabled: boolean;
+      scope?: 'thread' | 'resource';
+      shareTokenBudget?: boolean;
+      messageTokens?: number | { min: number; max: number };
+      observationTokens?: number | { min: number; max: number };
+      observationModel?: string;
+      reflectionModel?: string;
+    };
+  };
+};
 
 export interface UpdateMemoryThreadParams {
   title: string;
@@ -595,39 +612,131 @@ export interface TimeTravelParams {
 // ============================================================================
 
 /**
+ * Semantic recall configuration for vector-based memory retrieval
+ */
+export interface SemanticRecallConfig {
+  topK: number;
+  messageRange: number | { before: number; after: number };
+  scope?: 'thread' | 'resource';
+  threshold?: number;
+  indexName?: string;
+}
+
+/**
+ * Title generation configuration
+ */
+export type TitleGenerationConfig =
+  | boolean
+  | {
+      model: string; // Model ID in format provider/model-name
+      instructions?: string;
+    };
+
+/**
+ * Serialized memory configuration matching SerializedMemoryConfig from @mastra/core
+ *
+ * Note: When semanticRecall is enabled, both `vector` (string, not false) and `embedder` must be configured.
+ */
+export interface SerializedMemoryConfig {
+  /**
+   * Vector database identifier. Required when semanticRecall is enabled.
+   * Set to false to explicitly disable vector search.
+   */
+  vector?: string | false;
+  options?: {
+    readOnly?: boolean;
+    lastMessages?: number | false;
+    /**
+     * Semantic recall configuration. When enabled (true or object),
+     * requires both `vector` and `embedder` to be configured.
+     */
+    semanticRecall?: boolean | SemanticRecallConfig;
+    generateTitle?: TitleGenerationConfig;
+  };
+  /**
+   * Embedding model ID in the format "provider/model"
+   * (e.g., "openai/text-embedding-3-small")
+   * Required when semanticRecall is enabled.
+   */
+  embedder?: string;
+  /**
+   * Options to pass to the embedder
+   */
+  embedderOptions?: Record<string, unknown>;
+}
+
+/**
+ * Default options for agent execution (serializable subset of AgentExecutionOptionsBase)
+ */
+export interface DefaultOptions {
+  runId?: string;
+  savePerStep?: boolean;
+  maxSteps?: number;
+  activeTools?: string[];
+  maxProcessorRetries?: number;
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
+  modelSettings?: {
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+    topK?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    stopSequences?: string[];
+    seed?: number;
+    maxRetries?: number;
+  };
+  returnScorerData?: boolean;
+  tracingOptions?: {
+    traceName?: string;
+    attributes?: Record<string, unknown>;
+    spanId?: string;
+    traceId?: string;
+  };
+  requireToolApproval?: boolean;
+  autoResumeSuspendedTools?: boolean;
+  toolCallConcurrency?: number;
+  includeRawChunks?: boolean;
+  [key: string]: unknown; // Allow additional provider-specific options
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
-  sampling?: {
-    type: 'ratio' | 'count';
-    rate?: number;
-    count?: number;
-  };
+  sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
 }
 
 /**
  * Stored agent data returned from API
  */
 export interface StoredAgentResponse {
+  // Thin agent record fields
   id: string;
   status: string;
+  activeVersionId?: string;
   authorId?: string;
-  name: string;
-  description?: string;
-  instructions: string;
-  model: Record<string, unknown>;
-  tools?: string[];
-  integrationTools?: string[];
-  defaultOptions?: Record<string, unknown>;
-  workflows?: string[];
-  agents?: string[];
-  inputProcessors?: Record<string, unknown>[];
-  outputProcessors?: Record<string, unknown>[];
-  memory?: Record<string, unknown>;
-  scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  // Version snapshot config fields (resolved from active version)
+  name: string;
+  description?: string;
+  instructions: string;
+  model: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  tools?: string[];
+  defaultOptions?: DefaultOptions;
+  workflows?: string[];
+  agents?: string[];
+  integrationTools?: string[];
+  inputProcessors?: string[];
+  outputProcessors?: string[];
+  memory?: SerializedMemoryConfig;
+  scorers?: Record<string, StoredAgentScorerConfig>;
 }
 
 /**
@@ -640,6 +749,8 @@ export interface ListStoredAgentsParams {
     field?: 'createdAt' | 'updatedAt';
     direction?: 'ASC' | 'DESC';
   };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -664,15 +775,19 @@ export interface CreateStoredAgentParams {
   name: string;
   description?: string;
   instructions: string;
-  model: Record<string, unknown>;
+  model: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
   tools?: string[];
-  defaultOptions?: Record<string, unknown>;
+  defaultOptions?: DefaultOptions;
   workflows?: string[];
   agents?: string[];
   integrationTools?: string[];
-  inputProcessors?: Record<string, unknown>[];
-  outputProcessors?: Record<string, unknown>[];
-  memory?: Record<string, unknown>;
+  inputProcessors?: string[];
+  outputProcessors?: string[];
+  memory?: SerializedMemoryConfig;
   scorers?: Record<string, StoredAgentScorerConfig>;
 }
 
@@ -685,15 +800,19 @@ export interface UpdateStoredAgentParams {
   name?: string;
   description?: string;
   instructions?: string;
-  model?: Record<string, unknown>;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
   tools?: string[];
-  defaultOptions?: Record<string, unknown>;
+  defaultOptions?: DefaultOptions;
   workflows?: string[];
   agents?: string[];
   integrationTools?: string[];
-  inputProcessors?: Record<string, unknown>[];
-  outputProcessors?: Record<string, unknown>[];
-  memory?: Record<string, unknown>;
+  inputProcessors?: string[];
+  outputProcessors?: string[];
+  memory?: SerializedMemoryConfig;
   scorers?: Record<string, StoredAgentScorerConfig>;
 }
 
@@ -716,15 +835,19 @@ export interface AgentVersionResponse {
   name: string;
   description?: string;
   instructions: string;
-  model: Record<string, unknown>;
+  model: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
   tools?: string[];
-  defaultOptions?: Record<string, unknown>;
+  defaultOptions?: DefaultOptions;
   workflows?: string[];
   agents?: string[];
   integrationTools?: string[];
-  inputProcessors?: Record<string, unknown>[];
-  outputProcessors?: Record<string, unknown>[];
-  memory?: Record<string, unknown>;
+  inputProcessors?: string[];
+  outputProcessors?: string[];
+  memory?: SerializedMemoryConfig;
   scorers?: Record<string, StoredAgentScorerConfig>;
   changedFields?: string[];
   changeMessage?: string;
@@ -1156,6 +1279,90 @@ export interface ExecuteProcessorResponse {
   };
   tripwire?: ProcessorTripwireResult;
   error?: string;
+}
+
+// ============================================================================
+// Observational Memory Types
+// ============================================================================
+
+/**
+ * Parameters for getting observational memory
+ */
+export interface GetObservationalMemoryParams {
+  agentId: string;
+  resourceId?: string;
+  threadId?: string;
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+/**
+ * Response for observational memory endpoint
+ */
+export interface GetObservationalMemoryResponse {
+  record: ObservationalMemoryRecord | null;
+  history?: ObservationalMemoryRecord[];
+}
+
+/**
+ * Extended memory status response with OM info
+ */
+export interface GetMemoryStatusResponse {
+  result: boolean;
+  observationalMemory?: {
+    enabled: boolean;
+    hasRecord?: boolean;
+    originType?: string;
+    lastObservedAt?: Date | null;
+    tokenCount?: number;
+    observationTokenCount?: number;
+    isObserving?: boolean;
+    isReflecting?: boolean;
+  };
+}
+
+/**
+ * Extended memory config response with OM config
+ */
+export interface GetMemoryConfigResponseExtended {
+  config: MemoryConfig & {
+    observationalMemory?: {
+      enabled: boolean;
+      scope?: 'thread' | 'resource';
+      messageTokens?: number | { min: number; max: number };
+      observationTokens?: number | { min: number; max: number };
+      observationModel?: string;
+      reflectionModel?: string;
+    };
+  };
+}
+
+// ============================================================================
+// Vector & Embedder Types
+// ============================================================================
+
+/**
+ * Response for listing available vector stores
+ */
+export interface ListVectorsResponse {
+  vectors: Array<{
+    name: string;
+    id: string;
+    type: string;
+  }>;
+}
+
+/**
+ * Response for listing available embedding models
+ */
+export interface ListEmbeddersResponse {
+  embedders: Array<{
+    id: string;
+    provider: string;
+    name: string;
+    description: string;
+    dimensions: number;
+    maxInputTokens: number;
+  }>;
 }
 
 // ============================================================================

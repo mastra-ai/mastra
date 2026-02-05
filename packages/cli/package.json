@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -23,7 +23,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts && pnpx tsx ../../scripts/generate-package-docs.ts packages/cli",
+    "build:lib": "tsup --silent --config tsup.config.ts && pnpx tsx ../../scripts/generate-package-docs.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "clean": "rm -rf dist && rm -rf node_modules",

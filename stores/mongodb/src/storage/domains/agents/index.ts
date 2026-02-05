@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -13,6 +15,8 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
+  StorageListAgentsResolvedOutput,
+  StorageResolvedAgentType,
 } from '@mastra/core/storage';
 import type {
   AgentVersion,
@@ -184,7 +188,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
 
       // Create version 1 from the config
-      const versionId = crypto.randomUUID();
+      const versionId = randomUUID();
       await this.createVersion({
         id: versionId,
         agentId: agent.id,
@@ -194,11 +198,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         changeMessage: 'Initial version',
       });
 
-      // Set the active version and mark as published
-      newAgent.activeVersionId = versionId;
-      newAgent.status = 'published';
-      await collection.updateOne({ id: agent.id }, { $set: { activeVersionId: versionId, status: 'published' } });
-
+      // Return the thin agent record (activeVersionId remains undefined, status remains 'draft')
       return newAgent;
     } catch (error) {
       if (error instanceof MastraError) {
@@ -235,17 +235,63 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         updatedAt: new Date(),
       };
 
-      // Only handle metadata-level fields on the thin agent record
-      if (updates.authorId !== undefined) updateDoc.authorId = updates.authorId;
-      if (updates.activeVersionId !== undefined) {
-        updateDoc.activeVersionId = updates.activeVersionId;
-        updateDoc.status = 'published';
+      // Separate metadata-level fields from config fields
+      const metadataFields = {
+        authorId: updates.authorId,
+        activeVersionId: updates.activeVersionId,
+        metadata: updates.metadata,
+      };
+
+      // Extract config fields (anything that's part of StorageAgentSnapshotType)
+      const configFields: Record<string, any> = {};
+      for (const field of SNAPSHOT_FIELDS) {
+        if ((updates as any)[field] !== undefined) {
+          configFields[field] = (updates as any)[field];
+        }
       }
 
-      // Merge metadata if provided
-      if (updates.metadata !== undefined) {
+      // If we have config updates, create a new version
+      if (Object.keys(configFields).length > 0) {
+        // Get the latest version number
+        const latestVersion = await this.getLatestVersion(id);
+        const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+        // If we have a latest version, start from its config, otherwise error
+        if (!latestVersion) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'UPDATE_AGENT', 'NO_VERSION'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Cannot update config fields for agent ${id} - no versions exist`,
+            details: { id },
+          });
+        }
+
+        // Create new version with the config updates
+        const versionInput: CreateVersionInput = {
+          id: randomUUID(),
+          agentId: id,
+          versionNumber: nextVersionNumber,
+          ...this.extractSnapshotFields(latestVersion), // Start from latest version
+          ...configFields, // Apply updates
+          changedFields: Object.keys(configFields),
+          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
+        } as CreateVersionInput;
+
+        await this.createVersion(versionInput);
+      }
+
+      // Handle metadata-level updates (these go to the agent record)
+      if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
+      if (metadataFields.activeVersionId !== undefined) {
+        updateDoc.activeVersionId = metadataFields.activeVersionId;
+        // Do NOT automatically set status='published' when activeVersionId is updated
+      }
+
+      // Merge metadata if provided (MongoDB adapter uses merge semantics)
+      if (metadataFields.metadata !== undefined) {
         const existingMetadata = existingAgent.metadata || {};
-        updateDoc.metadata = { ...existingMetadata, ...updates.metadata };
+        updateDoc.metadata = { ...existingMetadata, ...metadataFields.metadata };
       }
 
       await collection.updateOne({ id }, { $set: updateDoc });
@@ -361,6 +407,151 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'LIST_AGENTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async listAgentsResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsResolvedOutput> {
+    try {
+      const { page = 0, perPage: perPageInput, orderBy } = args || {};
+      const { field, direction } = this.parseOrderBy(orderBy);
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: createStorageErrorId('MONGODB', 'LIST_AGENTS_RESOLVED', 'INVALID_PAGE'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      const agentsCollection = await this.getCollection(TABLE_AGENTS);
+      const total = await agentsCollection.countDocuments({});
+
+      if (total === 0 || perPage === 0) {
+        return {
+          agents: [],
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // MongoDB sort: 1 = ASC, -1 = DESC
+      const sortOrder = direction === 'ASC' ? 1 : -1;
+
+      // Use aggregation to join agents with their versions
+      const pipeline: any[] = [
+        // Sort agents
+        { $sort: { [field]: sortOrder } },
+
+        // Paginate
+        { $skip: offset },
+      ];
+
+      if (perPageInput !== false) {
+        pipeline.push({ $limit: perPage });
+      }
+
+      // Lookup active version
+      pipeline.push({
+        $lookup: {
+          from: TABLE_AGENT_VERSIONS,
+          localField: 'activeVersionId',
+          foreignField: 'id',
+          as: 'activeVersion',
+        },
+      });
+
+      // If no active version, lookup latest version
+      pipeline.push({
+        $lookup: {
+          from: TABLE_AGENT_VERSIONS,
+          let: { agentId: '$id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$agentId', '$$agentId'] } } },
+            { $sort: { versionNumber: -1 } },
+            { $limit: 1 },
+          ],
+          as: 'latestVersion',
+        },
+      });
+
+      // Add computed field for the version to use
+      pipeline.push({
+        $addFields: {
+          version: {
+            $cond: {
+              if: { $gt: [{ $size: '$activeVersion' }, 0] },
+              then: { $arrayElemAt: ['$activeVersion', 0] },
+              else: { $arrayElemAt: ['$latestVersion', 0] },
+            },
+          },
+        },
+      });
+
+      // Remove helper fields
+      pipeline.push({
+        $project: {
+          activeVersion: 0,
+          latestVersion: 0,
+        },
+      });
+
+      const results = await agentsCollection.aggregate(pipeline).toArray();
+
+      // Transform results
+      const resolvedAgents = results.map((doc: any) => {
+        const agent = this.transformAgent(doc);
+
+        // If we have version data, merge it with agent
+        if (doc.version) {
+          const version = this.transformVersion(doc.version);
+          const {
+            id: _versionId,
+            agentId: _agentId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshotConfig
+          } = version;
+
+          return {
+            ...agent,
+            ...snapshotConfig,
+          } as StorageResolvedAgentType;
+        }
+
+        // No versions exist - return thin record cast as resolved
+        return agent as StorageResolvedAgentType;
+      });
+
+      return {
+        agents: resolvedAgents,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput !== false && offset + perPage < total,
+      };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_AGENTS_RESOLVED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -640,6 +831,19 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   // ==========================================================================
   // Private Helper Methods
   // ==========================================================================
+
+  /**
+   * Extracts just the snapshot config fields from a version.
+   */
+  private extractSnapshotFields(version: AgentVersion): Record<string, any> {
+    const result: Record<string, any> = {};
+    for (const field of SNAPSHOT_FIELDS) {
+      if ((version as any)[field] !== undefined) {
+        result[field] = (version as any)[field];
+      }
+    }
+    return result;
+  }
 
   /**
    * Transforms a raw MongoDB version document into an AgentVersion.
