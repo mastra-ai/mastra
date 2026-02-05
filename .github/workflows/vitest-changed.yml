@@ -128,4 +128,4 @@ jobs:
           merge-multiple: true
 
       - name: Merge reports
-        run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions
+        run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests
