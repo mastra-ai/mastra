@@ -17,7 +17,7 @@ import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptio
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfig } from '../memory';
-import type { IModelSpanTracker } from '../observability';
+import type { IModelSpanTracker, ObservabilityContext } from '../observability';
 import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
@@ -141,7 +141,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * Keyed by processor ID.
    */
   processorStates?: Map<string, ProcessorState>;
-};
+} & Partial<ObservabilityContext>;
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopOptions<Tools, OUTPUT> & {
   messageId: string;

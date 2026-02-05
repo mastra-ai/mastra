@@ -4,8 +4,14 @@ import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '..
 import type { MastraScorers } from '../../evals';
 import { runScorer } from '../../evals/hooks';
 import type { PubSub } from '../../events/pubsub';
-import { EntityType, SpanType, wrapMastra } from '../../observability';
-import type { TracingContext, Span } from '../../observability';
+import {
+  EntityType,
+  SpanType,
+  wrapMastra,
+  createObservabilityContext,
+  resolveObservabilityContext,
+} from '../../observability';
+import type { ObservabilityContext, Span } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -31,7 +37,7 @@ import {
   validateStepRequestContext,
 } from '../utils';
 
-export interface ExecuteStepParams {
+export interface ExecuteStepParams extends ObservabilityContext {
   workflowId: string;
   runId: string;
   resourceId?: string;
@@ -54,7 +60,6 @@ export interface ExecuteStepParams {
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
-  tracingContext: TracingContext;
   iterationCount?: number;
   perStep?: boolean;
 }
@@ -81,10 +86,11 @@ export async function executeStep(
     outputWriter,
     disableScorers,
     serializedStepGraph,
-    tracingContext,
     iterationCount,
     perStep,
+    ...rest
   } = params;
+  const observabilityContext = resolveObservabilityContext(rest);
 
   const stepCallId = randomUUID();
 
@@ -146,7 +152,7 @@ export async function executeStep(
   executionContext.activeStepsPath[step.id] = executionContext.executionPath;
 
   const stepSpan = await engine.createStepSpan({
-    parentSpan: tracingContext.currentSpan,
+    parentSpan: observabilityContext.tracingContext.currentSpan,
     stepId: step.id,
     operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.start`,
     options: {
@@ -200,7 +206,7 @@ export async function executeStep(
       startedAt: startTime ?? Date.now(),
       abortController,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       outputWriter,
       stepSpan: stepSpan as Span<SpanType.WORKFLOW_STEP> | undefined,
       perStep,
@@ -327,7 +333,7 @@ export async function executeStep(
         retryCount,
         resumeData: resumeDataToUse,
         suspendData: suspendDataToUse,
-        tracingContext: { currentSpan: stepSpan },
+        ...createObservabilityContext({ currentSpan: stepSpan }),
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(null, stepResults),
         suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<void> => {
@@ -457,7 +463,7 @@ export async function executeStep(
         stepId: step.id,
         requestContext,
         disableScorers,
-        tracingContext: { currentSpan: stepSpan },
+        ...createObservabilityContext({ currentSpan: stepSpan }),
       });
     }
 
@@ -520,7 +526,7 @@ export async function executeStep(
   };
 }
 
-export interface RunScorersParams {
+export interface RunScorersParams extends ObservabilityContext {
   engine: DefaultExecutionEngine;
   scorers: DynamicArgument<MastraScorers>;
   runId: string;
@@ -530,12 +536,11 @@ export interface RunScorersParams {
   workflowId: string;
   stepId: string;
   disableScorers?: boolean;
-  tracingContext: TracingContext;
 }
 
 export async function runScorersForStep(params: RunScorersParams): Promise<void> {
-  const { engine, scorers, runId, input, output, workflowId, stepId, requestContext, disableScorers, tracingContext } =
-    params;
+  const { engine, scorers, runId, input, output, workflowId, stepId, requestContext, disableScorers, ...rest } = params;
+  const observabilityContext = resolveObservabilityContext(rest);
 
   let scorersToUse = scorers;
   if (typeof scorersToUse === 'function') {
@@ -579,7 +584,7 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
         structuredOutput: true,
         source: 'LIVE',
         entityType: 'WORKFLOW',
-        tracingContext,
+        ...observabilityContext,
       });
     }
   }
