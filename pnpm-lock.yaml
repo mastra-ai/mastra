@@ -175,7 +175,7 @@ importers:
         version: 9.39.2(jiti@2.6.1)
       hono:
         specifier: ^4.11.3
-        version: 4.11.4
+        version: 4.11.7
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.56.0(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
@@ -929,8 +929,8 @@ importers:
   e2e-tests/client-js/_test-utils:
     dependencies:
       '@hono/node-server':
-        specifier: ^1.14.3
-        version: 1.19.6(hono@4.11.4)
+        specifier: ^1.19.9
+        version: 1.19.9(hono@4.11.7)
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../../client-sdks/client-js
@@ -950,8 +950,8 @@ importers:
         specifier: ^7.1.0
         version: 7.1.0
       hono:
-        specifier: ^4.6.0
-        version: 4.11.4
+        specifier: ^4.11.7
+        version: 4.11.7
       vitest:
         specifier: 'catalog:'
         version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
@@ -995,7 +995,7 @@ importers:
   e2e-tests/workspace-compat:
     devDependencies:
       execa:
-        specifier: ^9.6.0
+        specifier: ^9.6.1
         version: 9.6.1
       get-port:
         specifier: ^7.1.0
@@ -1007,8 +1007,8 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
       verdaccio:
-        specifier: ^6.2.0
-        version: 6.2.4(encoding@0.1.13)(typanion@3.14.0)
+        specifier: ^6.2.5
+        version: 6.2.5(encoding@0.1.13)(typanion@3.14.0)
       verdaccio-auth-memory:
         specifier: ^10.3.1
         version: 10.3.1
@@ -2120,7 +2120,7 @@ importers:
     dependencies:
       jsonwebtoken:
         specifier: ^9.0.2
-        version: 9.0.2
+        version: 9.0.3
       jwks-rsa:
         specifier: ^3.2.0
         version: 3.2.0
@@ -2372,10 +2372,10 @@ importers:
         version: 4.0.3
       hono:
         specifier: ^4.11.3
-        version: 4.11.4
+        version: 4.11.7
       hono-openapi:
         specifier: ^1.1.1
-        version: 1.1.1(@hono/standard-validator@0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.4))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-schema/spec@1.1.0)(arktype@2.1.29)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@3.25.76))(@types/json-schema@7.0.15)(hono@4.11.4)(openapi-types@12.1.3)
+        version: 1.1.1(@hono/standard-validator@0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.7))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-schema/spec@1.1.0)(arktype@2.1.29)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@3.25.76))(@types/json-schema@7.0.15)(hono@4.11.7)(openapi-types@12.1.3)
       js-tiktoken:
         specifier: ^1.0.21
         version: 1.0.21
@@ -2629,7 +2629,7 @@ importers:
         version: 11.3.3
       hono:
         specifier: ^4.11.3
-        version: 4.11.4
+        version: 4.11.7
       local-pkg:
         specifier: ^1.1.2
         version: 1.1.2
@@ -2657,13 +2657,13 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.6
-        version: 1.19.6(hono@4.11.4)
+        version: 1.19.9(hono@4.11.7)
       '@hono/standard-validator':
         specifier: ^0.2.1
-        version: 0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.4)
+        version: 0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.7)
       '@hono/swagger-ui':
         specifier: ^0.5.2
-        version: 0.5.2(hono@4.11.4)
+        version: 0.5.2(hono@4.11.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2702,7 +2702,7 @@ importers:
         version: 2.1.0
       hono-openapi:
         specifier: ^1.1.1
-        version: 1.1.1(@hono/standard-validator@0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.4))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-schema/spec@1.1.0)(arktype@2.1.29)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@3.25.76))(@types/json-schema@7.0.15)(hono@4.11.4)(openapi-types@12.1.3)
+        version: 1.1.1(@hono/standard-validator@0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.7))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-schema/spec@1.1.0)(arktype@2.1.29)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@3.25.76))(@types/json-schema@7.0.15)(hono@4.11.7)(openapi-types@12.1.3)
       stacktrace-parser:
         specifier: ^0.1.11
         version: 0.1.11
@@ -2926,7 +2926,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.6
-        version: 1.19.6(hono@4.11.4)
+        version: 1.19.9(hono@4.11.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2956,10 +2956,10 @@ importers:
         version: 9.39.2(jiti@2.6.1)
       hono:
         specifier: ^4.11.3
-        version: 4.11.4
+        version: 4.11.7
       hono-mcp-server-sse-transport:
         specifier: 0.0.7
-        version: 0.0.7(@modelcontextprotocol/sdk@1.20.1)(hono@4.11.4)
+        version: 0.0.7(@modelcontextprotocol/sdk@1.20.1)(hono@4.11.7)
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.56.0(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
@@ -3002,7 +3002,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.6
-        version: 1.19.6(hono@4.11.4)
+        version: 1.19.9(hono@4.11.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3032,7 +3032,7 @@ importers:
         version: 9.39.2(jiti@2.6.1)
       hono:
         specifier: ^4.11.3
-        version: 4.11.4
+        version: 4.11.7
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.56.0(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
@@ -3063,7 +3063,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.6
-        version: 1.19.6(hono@4.11.4)
+        version: 1.19.9(hono@4.11.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3096,7 +3096,7 @@ importers:
         version: 9.39.2(jiti@2.6.1)
       hono:
         specifier: ^4.11.3
-        version: 4.11.4
+        version: 4.11.7
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.56.0(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
@@ -3701,7 +3701,7 @@ importers:
     dependencies:
       hono:
         specifier: ^4.11.3
-        version: 4.11.4
+        version: 4.11.7
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
@@ -3759,13 +3759,13 @@ importers:
         version: 5.2.2
       '@inngest/realtime':
         specifier: ^0.4.5
-        version: 0.4.5(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.4)(koa@3.1.1)(react@19.2.3)(typescript@5.9.3)
+        version: 0.4.5(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.7)(koa@3.1.1)(react@19.2.3)(typescript@5.9.3)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
         specifier: ^3.44.2
-        version: 3.44.3(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.4)(koa@3.1.1)(typescript@5.9.3)(zod@3.25.76)
+        version: 3.44.3(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.7)(koa@3.1.1)(typescript@5.9.3)(zod@3.25.76)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -3992,10 +3992,10 @@ importers:
         version: 2.0.72(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.19.6
-        version: 1.19.6(hono@4.11.4)
+        version: 1.19.9(hono@4.11.7)
       '@hono/swagger-ui':
         specifier: ^0.5.2
-        version: 0.5.2(hono@4.11.4)
+        version: 0.5.2(hono@4.11.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -4028,7 +4028,7 @@ importers:
         version: 9.39.2(jiti@2.6.1)
       hono:
         specifier: ^4.11.3
-        version: 4.11.4
+        version: 4.11.7
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.56.0(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
@@ -5620,13 +5620,13 @@ importers:
     dependencies:
       '@inngest/realtime':
         specifier: ^0.4.5
-        version: 0.4.5(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.4)(koa@3.1.1)(react@19.2.3)(typescript@5.9.3)
+        version: 0.4.5(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.7)(koa@3.1.1)(react@19.2.3)(typescript@5.9.3)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
         specifier: ^3.44.3
-        version: 3.44.3(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.4)(koa@3.1.1)(typescript@5.9.3)(zod@3.25.76)
+        version: 3.44.3(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.7)(koa@3.1.1)(typescript@5.9.3)(zod@3.25.76)
       zod:
         specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
@@ -5636,7 +5636,7 @@ importers:
         version: 1.3.24(zod@3.25.76)
       '@hono/node-server':
         specifier: ^1.19.6
-        version: 1.19.6(hono@4.11.4)
+        version: 1.19.9(hono@4.11.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -5696,7 +5696,7 @@ importers:
         version: 7.1.0
       hono:
         specifier: ^4.11.3
-        version: 4.11.4
+        version: 4.11.7
       inngest-cli:
         specifier: ^1.12.1
         version: 1.12.1(encoding@0.1.13)
@@ -9054,8 +9054,8 @@ packages:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
 
-  '@hono/node-server@1.19.6':
-    resolution: {integrity: sha512-Shz/KjlIeAhfiuE93NDKVdZ7HdBVLQAfdbaXEaoAVO3ic9ibRSLGIQGkcBbFyuLr+7/1D5ZCINM8B+6IvXeMtw==}
+  '@hono/node-server@1.19.9':
+    resolution: {integrity: sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -13384,20 +13384,20 @@ packages:
     resolution: {integrity: sha512-Fw28YZpRnA3cAHHDlkt7xQHiJ0fcL+NRcIqsocZQUSmbzeIKRpwttJjik5ZGanXP+vlA4SbTg+AbA3bP363l+w==}
     engines: {node: '>= 20'}
 
-  '@verdaccio/auth@8.0.0-next-8.28':
-    resolution: {integrity: sha512-tM0URyKFq1dGFaoBN0whT1SDur1lBKG+pkQwxgJIXgH04DmefLCH63pn/K1iDDfLwqyxMewpmvMTBS390SSR+A==}
+  '@verdaccio/auth@8.0.0-next-8.29':
+    resolution: {integrity: sha512-lEIqneZ7LYYkF07/P9cJhOYVZTIIARGRVE66j666VR58T/fY/pC4hxEfuyqlfd3BhS3hM65aIrPZu+s03hyg+w==}
     engines: {node: '>=18'}
 
-  '@verdaccio/config@8.0.0-next-8.28':
-    resolution: {integrity: sha512-yl7lcSOzT9y7EgUald4bZXIKxhZdAPRvtDZwmsPL433bc+CInyriqYCo6L4fZgFxYAdj9iDzvZIJtCtsFc+8NA==}
+  '@verdaccio/config@8.0.0-next-8.29':
+    resolution: {integrity: sha512-7kEZ6tv3NsJFPcKQrxELMkvJFI9Hmy1s8IPjuXjz9gobDV3NyF9VhPsh6l18Tm+nsqXb6ZTWiRup9V8Lkg0p0g==}
     engines: {node: '>=18'}
 
   '@verdaccio/core@8.0.0-next-8.21':
     resolution: {integrity: sha512-n3Y8cqf84cwXxUUdTTfEJc8fV55PONPKijCt2YaC0jilb5qp1ieB3d4brqTOdCdXuwkmnG2uLCiGpUd/RuSW0Q==}
     engines: {node: '>=18'}
 
-  '@verdaccio/core@8.0.0-next-8.28':
-    resolution: {integrity: sha512-W/wBvgF53CLr7m2zDV4QnHGYh0M/D3HTm5OuTxIjeclwDZGH2UHSdiI2BFFhvW7zt6MQVjfTQdgtcH4cmLGXhQ==}
+  '@verdaccio/core@8.0.0-next-8.29':
+    resolution: {integrity: sha512-ztsNbnHMGqpOJlC3x/Jz7+0Xzrul+UIQQAFsTFHO3pET8nyZWkh/1TH50olz0pZ/OS87O/+7mk04TK9hHD/eFQ==}
     engines: {node: '>=18'}
 
   '@verdaccio/file-locking@10.3.1':
@@ -13408,59 +13408,59 @@ packages:
     resolution: {integrity: sha512-F6xQWvsZnEyGjugrYfe+D/ChSVudXmBFWi8xuTIX6PAdp7dk9x9biOGQFW8O3GSAK8UhJ6WlRisQKJeYRa6vWQ==}
     engines: {node: '>=18'}
 
-  '@verdaccio/hooks@8.0.0-next-8.28':
-    resolution: {integrity: sha512-K+Cu9Pls8G2Wvu6pOYuelCTNBLpSOpmodJaPbUVv/kkhsTphgRiRENhOZGbiPhfVKehQeUCj9WiF8C7xzTf2Vg==}
+  '@verdaccio/hooks@8.0.0-next-8.29':
+    resolution: {integrity: sha512-KRuTN6iYg9ntFXmrH+fY+dNCFpNBMcEwOVLOJXk/fA3I3ki188FpRZz9rKToyj1XYZzPDqGUWv82ekswX5wrYw==}
     engines: {node: '>=18'}
 
-  '@verdaccio/loaders@8.0.0-next-8.18':
-    resolution: {integrity: sha512-p8o/DST+TPLz1pTqnduYKMggNxYO5ET+3a4UXLArVDWbhqNnYFRmZVyIW8r0JFOuRwUKdpcJMkXefufMRm8B8g==}
+  '@verdaccio/loaders@8.0.0-next-8.19':
+    resolution: {integrity: sha512-+mQuEZNLRZ4EEjzfROHrVeZXVHNFhQTpI98KCpcbU1NEC7ZAl5m7OBD2XPVtvNTia2ZT83q4H0JPi/bAomnIRA==}
     engines: {node: '>=18'}
 
   '@verdaccio/local-storage-legacy@11.1.1':
     resolution: {integrity: sha512-P6ahH2W6/KqfJFKP+Eid7P134FHDLNvHa+i8KVgRVBeo2/IXb6FEANpM1mCVNvPANu0LCAmNJBOXweoUKViaoA==}
     engines: {node: '>=18'}
 
-  '@verdaccio/logger-commons@8.0.0-next-8.28':
-    resolution: {integrity: sha512-GlIpSCKC6uKR4D9BZFbCiiJHeAaZ/n8izYqMKqFV5RKOrdMaMmYKjVFLvjGDpd22AFnCvSUfgrKCX1FXe8ZFqw==}
+  '@verdaccio/logger-commons@8.0.0-next-8.29':
+    resolution: {integrity: sha512-CVeLv+U0cL9wtNJVwtzjj7wtUFYxMDmynWoXtepP+AthVoNj6G6rU2P2tGLX/uqH40EwqaHJy5Vo0uZ3ex2qhQ==}
     engines: {node: '>=18'}
 
   '@verdaccio/logger-prettify@8.0.0-next-8.4':
     resolution: {integrity: sha512-gjI/JW29fyalutn/X1PQ0iNuGvzeVWKXRmnLa7gXVKhdi4p37l/j7YZ7n44XVbbiLIKAK0pbavEg9Yr66QrYaA==}
     engines: {node: '>=18'}
 
-  '@verdaccio/logger@8.0.0-next-8.28':
-    resolution: {integrity: sha512-Iss+5mUJSvkDIwOWv6lk9OZjHl9PKHXf4FwM/YI5a77B06r5LYvdpppKVwGxBFn8jFcyGBl97zz8uqz6uD/rhQ==}
+  '@verdaccio/logger@8.0.0-next-8.29':
+    resolution: {integrity: sha512-AF6hBAkgsRjDFGLjFWO9hzUWM47Jt15v90I6Wk0TotzsrWxgBYbslfJyTgwmTpGjhPe7al2dnFwT7hxKa6fr/w==}
     engines: {node: '>=18'}
 
-  '@verdaccio/middleware@8.0.0-next-8.28':
-    resolution: {integrity: sha512-L2PL4JJQ6dKipNrA/weWTEw47ZUgiJrvKb7g/z3yuDR5O/C7AJ+mOxqsWww0kgq0cvQm+kOXMVY9Oq1g9a+Agw==}
+  '@verdaccio/middleware@8.0.0-next-8.29':
+    resolution: {integrity: sha512-ANsQ8qjyNslH6BfGZnNkBvK1acTlnFgedXen6BnbN9nF+AWzHUea6knh529J5Clm3zrWggbRnGCrp1SSlbOqSA==}
     engines: {node: '>=18'}
 
   '@verdaccio/search-indexer@8.0.0-next-8.5':
     resolution: {integrity: sha512-0GC2tJKstbPg/W2PZl2yE+hoAxffD2ZWilEnEYSEo2e9UQpNIy2zg7KE/uMUq2P72Vf5EVfVzb8jdaH4KV4QeA==}
     engines: {node: '>=18'}
 
-  '@verdaccio/signature@8.0.0-next-8.20':
-    resolution: {integrity: sha512-1kwO+l7cLiDjXUwqVTvaKXvcI4C23u4cZCVnGGKXRcahrbVm7Hdh12wSIX5V9gV6O3VlWH458JxoimpPAo4Oxw==}
+  '@verdaccio/signature@8.0.0-next-8.21':
+    resolution: {integrity: sha512-5TuGPRT4c5B3k6svxJ6Q5l31UBZTODo3iAJxmuAAC0iZBLNnivdvJlqUVdpZtYfrhwvuP5vuo7lucHQk6DsSmw==}
     engines: {node: '>=18'}
 
   '@verdaccio/streams@10.2.1':
     resolution: {integrity: sha512-OojIG/f7UYKxC4dYX8x5ax8QhRx1b8OYUAMz82rUottCuzrssX/4nn5QE7Ank0DUSX3C9l/HPthc4d9uKRJqJQ==}
     engines: {node: '>=12', npm: '>=5'}
 
-  '@verdaccio/tarball@13.0.0-next-8.28':
-    resolution: {integrity: sha512-89FHelT4xsrBeAk6WYhhUR6cgpky1IAgBiN3VtWs2b3KA8XesZeG7G0UDygTVEe2O0etXYtrz9vlqZ9nYEaAGA==}
+  '@verdaccio/tarball@13.0.0-next-8.29':
+    resolution: {integrity: sha512-4hTQMXYF1olwwydaVfb6ab1TTImM42rAxLmw3VnJUI5ttbmfB9h095/TYsCssy5vqGQMp3l8YW/JxVTPcVtGYA==}
     engines: {node: '>=18'}
 
-  '@verdaccio/ui-theme@8.0.0-next-8.28':
-    resolution: {integrity: sha512-TzhdphchcvsI38UPP5hdNJh+LAFvRhYlfrtBuqlZy0BHeGM2i2MNioGl2il2NLVteqXAK9MqnuC5WGxCFXoDYw==}
+  '@verdaccio/ui-theme@8.0.0-next-8.29':
+    resolution: {integrity: sha512-kSg69so1LHOL2SA1qLJikFxkx8FEOFQJV+Nde0lN3XMkp0RST8DgLx/hiVbgYzPz54S8LuvYR/DQAulyRulMcg==}
 
-  '@verdaccio/url@13.0.0-next-8.28':
-    resolution: {integrity: sha512-42wA5LkXWpY42pONEHQhAC5h8nFXdDHChP22swOitTp1xzvAs+PmwUlrol7kMXMWO04skDCSSW1Q54eNkTx/rA==}
+  '@verdaccio/url@13.0.0-next-8.29':
+    resolution: {integrity: sha512-ucJ6MhLfY0g8uU0zjcJypSkCa1mXSLmrqdiILyj16Lo0y4w/gEvddMrfab8QUmgvvuzbCgSqCZHJmbZn7DFxQg==}
     engines: {node: '>=18'}
 
-  '@verdaccio/utils@8.1.0-next-8.28':
-    resolution: {integrity: sha512-/AYNGafG9T90NPGsq6eDMuXx+41tlWfiYsCchgwz074GWEitZ2nAZQWWNvYvFVB2hXzord52muEVTWjgaZPOdQ==}
+  '@verdaccio/utils@8.1.0-next-8.29':
+    resolution: {integrity: sha512-EgyazlL0VejvZqWZ6KL3ig27Yl8RXcwhz1hayuqeAIxaqbsnmSmogL2zKXgGnm9y/A6QkPfZH1BcQoUh1STvtQ==}
     engines: {node: '>=18'}
 
   '@vitejs/plugin-react@5.1.2':
@@ -15822,10 +15822,6 @@ packages:
     peerDependencies:
       express: '>= 4.11'
 
-  express@4.21.2:
-    resolution: {integrity: sha512-28HqgMZAmih1Czt9ny7qr6ek2qddF4FclbMzwhCREB6OFfH+rXAnuNCwo1/wFvrtbgsQDb4kSbX9de9lFbrXnA==}
-    engines: {node: '>= 0.10.0'}
-
   express@4.22.1:
     resolution: {integrity: sha512-F2X8g9P1X7uCPZMA3MVf9wcTqlyNp7IhH5qPCI0izhaOIYXaW9L535tGA3qmjRzpH+bZczqq7hVKxTR4NWnu+g==}
     engines: {node: '>= 0.10.0'}
@@ -16542,8 +16538,8 @@ packages:
       hono:
         optional: true
 
-  hono@4.11.4:
-    resolution: {integrity: sha512-U7tt8JsyrxSRKspfhtLET79pU8K+tInj5QZXs1jSugO1Vq5dFj3kmZsRldo29mTBfcjDRVRXrEZ6LS63Cog9ZA==}
+  hono@4.11.7:
+    resolution: {integrity: sha512-l7qMiNee7t82bH3SeyUCt9UF15EVmaBvsppY2zQtrbIhl/yzBTny+YUxsVjSjQ6gaqaeVtZmGocom8TzBlA4Yw==}
     engines: {node: '>=16.9.0'}
 
   hpack.js@2.1.6:
@@ -17360,8 +17356,8 @@ packages:
   jsonschema@1.2.7:
     resolution: {integrity: sha512-3dFMg9hmI9LdHag/BRIhMefCfbq1hicvYMy8YhZQorAdzOzWz7NjniSpn39yjpzUAMIWtGyyZuH2KNBloH7ZLw==}
 
-  jsonwebtoken@9.0.2:
-    resolution: {integrity: sha512-PRp66vJ865SSqOlgqS8hujT5U4AOgMfhrwYIuIhfKaoSCZcirrmASQr8CX7cUg+RMih+hgznrjp99o+W4pJLHQ==}
+  jsonwebtoken@9.0.3:
+    resolution: {integrity: sha512-MT/xP0CrubFRNLNKvxJ2BYfy53Zkm++5bX9dtuPbqAeQpTVe0MQTFhao8+Cp//EmJp244xt6Drw/GVEGCUj40g==}
     engines: {node: '>=12', npm: '>=6'}
 
   jsprim@2.0.2:
@@ -21600,8 +21596,8 @@ packages:
       typescript:
         optional: true
 
-  validator@13.15.23:
-    resolution: {integrity: sha512-4yoz1kEWqUjzi5zsPbAS/903QXSYp0UOtHsPpp7p9rHAw/W+dkInskAE386Fat3oKRROwO98d9ZB0G4cObgUyw==}
+  validator@13.15.26:
+    resolution: {integrity: sha512-spH26xU080ydGggxRyR1Yhcbgx+j3y5jbNXk/8L+iRvdIEQ4uTRH2Sgf2dokud6Q4oAtsbNvJ1Ft+9xmm6IZcA==}
     engines: {node: '>= 0.10'}
 
   value-equal@1.0.1:
@@ -21611,20 +21607,20 @@ packages:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
 
-  verdaccio-audit@13.0.0-next-8.28:
-    resolution: {integrity: sha512-vcl+V4R43QFSrch0QggG92hEd+aGh7fGBqkA1pcF/m4eJ2JQw7+/8JD5VJ/qCnt7Udnz9Jmey6SvgFgxsB6ODA==}
+  verdaccio-audit@13.0.0-next-8.29:
+    resolution: {integrity: sha512-ZUNONewbFocBq3oWXrwAL8IX4ZovPU70yj0nuYStSVJ9+Vrb74Duc+eI+IIS+jLfyysZe5L0ZAODGN8ny1Lu6w==}
     engines: {node: '>=18'}
 
   verdaccio-auth-memory@10.3.1:
     resolution: {integrity: sha512-3m4VH5lD3qdRkDvcvVzHP6YftcsRXgu3WZuspcrH0/76+ugI2wkVezgBDbu4WRwJqRvG0MEf8Zxoup9zVK5SVw==}
     engines: {node: '>=18'}
 
-  verdaccio-htpasswd@13.0.0-next-8.28:
-    resolution: {integrity: sha512-iAkhusaNUEvBeq+7Xn8YUqq4hXoVuAteZPrG4dwsqSjVliS7YQGdysQKYG89QnN9iMKAEvuSzhb+GP0c5dbL0g==}
+  verdaccio-htpasswd@13.0.0-next-8.29:
+    resolution: {integrity: sha512-JBYCaSTQSUws/EXOqNrh7iOyWPrGLTYSeufCS3Y6BOCJbfDiy2Nh8PbstoZn/L9ZbzUesjPPiIZ4Ou3eUaK0Mw==}
     engines: {node: '>=18'}
 
-  verdaccio@6.2.4:
-    resolution: {integrity: sha512-1riItDS5ZmkLVclEOI4ibmJPCTfg1f8iEbdZWo7mgaEDHs1KS2JJnGq+dnoDlbo4efJ5mCyy1g7p32k/xx2+wg==}
+  verdaccio@6.2.5:
+    resolution: {integrity: sha512-sIek+ZF0a1aaRwHo9I5vbONGXzcAgbf5psEmbGVMG9M/MslblIae2wdehG6a2lSxsk4B9c8Ar0j/ZmliTjiStA==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -23556,7 +23552,7 @@ snapshots:
   '@azure/msal-node@3.8.0':
     dependencies:
       '@azure/msal-common': 15.13.0
-      jsonwebtoken: 9.0.2
+      jsonwebtoken: 9.0.3
       uuid: 8.3.2
 
   '@babel/code-frame@7.29.0':
@@ -26972,18 +26968,18 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
-  '@hono/node-server@1.19.6(hono@4.11.4)':
+  '@hono/node-server@1.19.9(hono@4.11.7)':
     dependencies:
-      hono: 4.11.4
+      hono: 4.11.7
 
-  '@hono/standard-validator@0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.4)':
+  '@hono/standard-validator@0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.7)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      hono: 4.11.4
+      hono: 4.11.7
 
-  '@hono/swagger-ui@0.5.2(hono@4.11.4)':
+  '@hono/swagger-ui@0.5.2(hono@4.11.7)':
     dependencies:
-      hono: 4.11.4
+      hono: 4.11.7
 
   '@hookform/resolvers@3.10.0(react-hook-form@7.65.0(react@19.2.3))':
     dependencies:
@@ -27091,11 +27087,11 @@ snapshots:
       '@types/node': 22.19.7
       typescript: 5.9.3
 
-  '@inngest/realtime@0.4.5(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.4)(koa@3.1.1)(react@19.2.3)(typescript@5.9.3)':
+  '@inngest/realtime@0.4.5(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.7)(koa@3.1.1)(react@19.2.3)(typescript@5.9.3)':
     dependencies:
       '@standard-schema/spec': 1.1.0
       debug: 4.4.3
-      inngest: 3.44.3(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.4)(koa@3.1.1)(typescript@5.9.3)(zod@3.25.76)
+      inngest: 3.44.3(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.7)(koa@3.1.1)(typescript@5.9.3)(zod@3.25.76)
       react: 19.2.3
       zod: 3.25.76
     transitivePeerDependencies:
@@ -32264,21 +32260,21 @@ snapshots:
 
   '@vercel/oidc@3.1.0': {}
 
-  '@verdaccio/auth@8.0.0-next-8.28':
+  '@verdaccio/auth@8.0.0-next-8.29':
     dependencies:
-      '@verdaccio/config': 8.0.0-next-8.28
-      '@verdaccio/core': 8.0.0-next-8.28
-      '@verdaccio/loaders': 8.0.0-next-8.18
-      '@verdaccio/signature': 8.0.0-next-8.20
+      '@verdaccio/config': 8.0.0-next-8.29
+      '@verdaccio/core': 8.0.0-next-8.29
+      '@verdaccio/loaders': 8.0.0-next-8.19
+      '@verdaccio/signature': 8.0.0-next-8.21
       debug: 4.4.3
       lodash: 4.17.21
-      verdaccio-htpasswd: 13.0.0-next-8.28
+      verdaccio-htpasswd: 13.0.0-next-8.29
     transitivePeerDependencies:
       - supports-color
 
-  '@verdaccio/config@8.0.0-next-8.28':
+  '@verdaccio/config@8.0.0-next-8.29':
     dependencies:
-      '@verdaccio/core': 8.0.0-next-8.28
+      '@verdaccio/core': 8.0.0-next-8.29
       debug: 4.4.3
       js-yaml: 3.14.2
       lodash: 4.17.21
@@ -32294,7 +32290,7 @@ snapshots:
       process-warning: 1.0.0
       semver: 7.7.2
 
-  '@verdaccio/core@8.0.0-next-8.28':
+  '@verdaccio/core@8.0.0-next-8.29':
     dependencies:
       ajv: 8.17.1
       http-errors: 2.0.0
@@ -32311,19 +32307,19 @@ snapshots:
     dependencies:
       lockfile: 1.0.4
 
-  '@verdaccio/hooks@8.0.0-next-8.28':
+  '@verdaccio/hooks@8.0.0-next-8.29':
     dependencies:
-      '@verdaccio/core': 8.0.0-next-8.28
-      '@verdaccio/logger': 8.0.0-next-8.28
+      '@verdaccio/core': 8.0.0-next-8.29
+      '@verdaccio/logger': 8.0.0-next-8.29
       debug: 4.4.3
       got-cjs: 12.5.4
       handlebars: 4.7.8
     transitivePeerDependencies:
       - supports-color
 
-  '@verdaccio/loaders@8.0.0-next-8.18':
+  '@verdaccio/loaders@8.0.0-next-8.19':
     dependencies:
-      '@verdaccio/core': 8.0.0-next-8.28
+      '@verdaccio/core': 8.0.0-next-8.29
       debug: 4.4.3
       lodash: 4.17.21
     transitivePeerDependencies:
@@ -32342,9 +32338,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@verdaccio/logger-commons@8.0.0-next-8.28':
+  '@verdaccio/logger-commons@8.0.0-next-8.29':
     dependencies:
-      '@verdaccio/core': 8.0.0-next-8.28
+      '@verdaccio/core': 8.0.0-next-8.29
       '@verdaccio/logger-prettify': 8.0.0-next-8.4
       colorette: 2.0.20
       debug: 4.4.3
@@ -32360,20 +32356,20 @@ snapshots:
       pino-abstract-transport: 1.2.0
       sonic-boom: 3.8.1
 
-  '@verdaccio/logger@8.0.0-next-8.28':
+  '@verdaccio/logger@8.0.0-next-8.29':
     dependencies:
-      '@verdaccio/logger-commons': 8.0.0-next-8.28
+      '@verdaccio/logger-commons': 8.0.0-next-8.29
       pino: 9.14.0
     transitivePeerDependencies:
       - supports-color
 
-  '@verdaccio/middleware@8.0.0-next-8.28':
+  '@verdaccio/middleware@8.0.0-next-8.29':
     dependencies:
-      '@verdaccio/config': 8.0.0-next-8.28
-      '@verdaccio/core': 8.0.0-next-8.28
-      '@verdaccio/url': 13.0.0-next-8.28
+      '@verdaccio/config': 8.0.0-next-8.29
+      '@verdaccio/core': 8.0.0-next-8.29
+      '@verdaccio/url': 13.0.0-next-8.29
       debug: 4.4.3
-      express: 4.21.2
+      express: 4.22.1
       express-rate-limit: 5.5.1
       lodash: 4.17.21
       lru-cache: 7.18.3
@@ -32382,21 +32378,21 @@ snapshots:
 
   '@verdaccio/search-indexer@8.0.0-next-8.5': {}
 
-  '@verdaccio/signature@8.0.0-next-8.20':
+  '@verdaccio/signature@8.0.0-next-8.21':
     dependencies:
-      '@verdaccio/config': 8.0.0-next-8.28
-      '@verdaccio/core': 8.0.0-next-8.28
+      '@verdaccio/config': 8.0.0-next-8.29
+      '@verdaccio/core': 8.0.0-next-8.29
       debug: 4.4.3
-      jsonwebtoken: 9.0.2
+      jsonwebtoken: 9.0.3
     transitivePeerDependencies:
       - supports-color
 
   '@verdaccio/streams@10.2.1': {}
 
-  '@verdaccio/tarball@13.0.0-next-8.28':
+  '@verdaccio/tarball@13.0.0-next-8.29':
     dependencies:
-      '@verdaccio/core': 8.0.0-next-8.28
-      '@verdaccio/url': 13.0.0-next-8.28
+      '@verdaccio/core': 8.0.0-next-8.29
+      '@verdaccio/url': 13.0.0-next-8.29
       debug: 4.4.3
       gunzip-maybe: 1.4.2
       tar-stream: 3.1.7
@@ -32405,19 +32401,19 @@ snapshots:
       - react-native-b4a
       - supports-color
 
-  '@verdaccio/ui-theme@8.0.0-next-8.28': {}
+  '@verdaccio/ui-theme@8.0.0-next-8.29': {}
 
-  '@verdaccio/url@13.0.0-next-8.28':
+  '@verdaccio/url@13.0.0-next-8.29':
     dependencies:
-      '@verdaccio/core': 8.0.0-next-8.28
+      '@verdaccio/core': 8.0.0-next-8.29
       debug: 4.4.3
-      validator: 13.15.23
+      validator: 13.15.26
     transitivePeerDependencies:
       - supports-color
 
-  '@verdaccio/utils@8.1.0-next-8.28':
+  '@verdaccio/utils@8.1.0-next-8.29':
     dependencies:
-      '@verdaccio/core': 8.0.0-next-8.28
+      '@verdaccio/core': 8.0.0-next-8.29
       lodash: 4.17.21
       minimatch: 7.4.6
 
@@ -35290,42 +35286,6 @@ snapshots:
     dependencies:
       express: 5.1.0
 
-  express@4.21.2:
-    dependencies:
-      accepts: 1.3.8
-      array-flatten: 1.1.1
-      body-parser: 1.20.3
-      content-disposition: 0.5.4
-      content-type: 1.0.5
-      cookie: 1.1.1
-      cookie-signature: 1.0.6
-      debug: 2.6.9
-      depd: 2.0.0
-      encodeurl: 2.0.0
-      escape-html: 1.0.3
-      etag: 1.8.1
-      finalhandler: 1.3.1
-      fresh: 0.5.2
-      http-errors: 2.0.0
-      merge-descriptors: 1.0.3
-      methods: 1.1.2
-      on-finished: 2.4.1
-      parseurl: 1.3.3
-      path-to-regexp: 0.1.12
-      proxy-addr: 2.0.7
-      qs: 6.13.0
-      range-parser: 1.2.1
-      safe-buffer: 5.2.1
-      send: 0.19.0
-      serve-static: 1.16.2
-      setprototypeof: 1.2.0
-      statuses: 2.0.1
-      type-is: 1.6.18
-      utils-merge: 1.0.1
-      vary: 1.1.2
-    transitivePeerDependencies:
-      - supports-color
-
   express@4.22.1:
     dependencies:
       accepts: 1.3.8
@@ -35636,7 +35596,7 @@ snapshots:
       farmhash-modern: 1.1.0
       fast-deep-equal: 3.1.3
       google-auth-library: 9.15.1(encoding@0.1.13)
-      jsonwebtoken: 9.0.2
+      jsonwebtoken: 9.0.3
       jwks-rsa: 3.2.0
       node-forge: 1.3.2
       uuid: 11.1.0
@@ -36373,22 +36333,22 @@ snapshots:
     dependencies:
       react-is: 16.13.1
 
-  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.20.1)(hono@4.11.4):
+  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.20.1)(hono@4.11.7):
     dependencies:
       '@modelcontextprotocol/sdk': 1.20.1
-      hono: 4.11.4
+      hono: 4.11.7
 
-  hono-openapi@1.1.1(@hono/standard-validator@0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.4))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-schema/spec@1.1.0)(arktype@2.1.29)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@3.25.76))(@types/json-schema@7.0.15)(hono@4.11.4)(openapi-types@12.1.3):
+  hono-openapi@1.1.1(@hono/standard-validator@0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.7))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-schema/spec@1.1.0)(arktype@2.1.29)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@3.25.76))(@types/json-schema@7.0.15)(hono@4.11.7)(openapi-types@12.1.3):
     dependencies:
       '@standard-community/standard-json': 0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76)
       '@standard-community/standard-openapi': 0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.1.29)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76))(@standard-schema/spec@1.1.0)(arktype@2.1.29)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@3.25.76)
       '@types/json-schema': 7.0.15
       openapi-types: 12.1.3
     optionalDependencies:
-      '@hono/standard-validator': 0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.4)
-      hono: 4.11.4
+      '@hono/standard-validator': 0.2.1(@standard-schema/spec@1.1.0)(hono@4.11.7)
+      hono: 4.11.7
 
-  hono@4.11.4: {}
+  hono@4.11.7: {}
 
   hpack.js@2.1.6:
     dependencies:
@@ -36651,7 +36611,7 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@3.44.3(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.4)(koa@3.1.1)(typescript@5.9.3)(zod@3.25.76):
+  inngest@3.44.3(encoding@0.1.13)(express@5.1.0)(fastify@5.6.2)(hono@4.11.7)(koa@3.1.1)(typescript@5.9.3)(zod@3.25.76):
     dependencies:
       '@bufbuild/protobuf': 2.10.0
       '@inngest/ai': 0.1.7
@@ -36679,7 +36639,7 @@ snapshots:
     optionalDependencies:
       express: 5.1.0
       fastify: 5.6.2
-      hono: 4.11.4
+      hono: 4.11.7
       koa: 3.1.1
       typescript: 5.9.3
     transitivePeerDependencies:
@@ -37192,7 +37152,7 @@ snapshots:
 
   jsonschema@1.2.7: {}
 
-  jsonwebtoken@9.0.2:
+  jsonwebtoken@9.0.3:
     dependencies:
       jws: 4.0.1
       lodash.includes: 4.3.0
@@ -42403,17 +42363,17 @@ snapshots:
     optionalDependencies:
       typescript: 5.9.3
 
-  validator@13.15.23: {}
+  validator@13.15.26: {}
 
   value-equal@1.0.1: {}
 
   vary@1.1.2: {}
 
-  verdaccio-audit@13.0.0-next-8.28(encoding@0.1.13):
+  verdaccio-audit@13.0.0-next-8.29(encoding@0.1.13):
     dependencies:
-      '@verdaccio/config': 8.0.0-next-8.28
-      '@verdaccio/core': 8.0.0-next-8.28
-      express: 4.21.2
+      '@verdaccio/config': 8.0.0-next-8.29
+      '@verdaccio/core': 8.0.0-next-8.29
+      express: 4.22.1
       https-proxy-agent: 5.0.1
       node-fetch: 2.6.7(encoding@0.1.13)
     transitivePeerDependencies:
@@ -42427,9 +42387,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  verdaccio-htpasswd@13.0.0-next-8.28:
+  verdaccio-htpasswd@13.0.0-next-8.29:
     dependencies:
-      '@verdaccio/core': 8.0.0-next-8.28
+      '@verdaccio/core': 8.0.0-next-8.29
       '@verdaccio/file-locking': 13.0.0-next-8.6
       apache-md5: 1.1.8
       bcryptjs: 2.4.3
@@ -42439,24 +42399,24 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  verdaccio@6.2.4(encoding@0.1.13)(typanion@3.14.0):
+  verdaccio@6.2.5(encoding@0.1.13)(typanion@3.14.0):
     dependencies:
       '@cypress/request': 3.0.9
-      '@verdaccio/auth': 8.0.0-next-8.28
-      '@verdaccio/config': 8.0.0-next-8.28
-      '@verdaccio/core': 8.0.0-next-8.28
-      '@verdaccio/hooks': 8.0.0-next-8.28
-      '@verdaccio/loaders': 8.0.0-next-8.18
+      '@verdaccio/auth': 8.0.0-next-8.29
+      '@verdaccio/config': 8.0.0-next-8.29
+      '@verdaccio/core': 8.0.0-next-8.29
+      '@verdaccio/hooks': 8.0.0-next-8.29
+      '@verdaccio/loaders': 8.0.0-next-8.19
       '@verdaccio/local-storage-legacy': 11.1.1
-      '@verdaccio/logger': 8.0.0-next-8.28
-      '@verdaccio/middleware': 8.0.0-next-8.28
+      '@verdaccio/logger': 8.0.0-next-8.29
+      '@verdaccio/middleware': 8.0.0-next-8.29
       '@verdaccio/search-indexer': 8.0.0-next-8.5
-      '@verdaccio/signature': 8.0.0-next-8.20
+      '@verdaccio/signature': 8.0.0-next-8.21
       '@verdaccio/streams': 10.2.1
-      '@verdaccio/tarball': 13.0.0-next-8.28
-      '@verdaccio/ui-theme': 8.0.0-next-8.28
-      '@verdaccio/url': 13.0.0-next-8.28
-      '@verdaccio/utils': 8.1.0-next-8.28
+      '@verdaccio/tarball': 13.0.0-next-8.29
+      '@verdaccio/ui-theme': 8.0.0-next-8.29
+      '@verdaccio/url': 13.0.0-next-8.29
+      '@verdaccio/utils': 8.1.0-next-8.29
       JSONStream: 1.3.5
       async: 3.2.6
       clipanion: 4.0.0-rc.4(typanion@3.14.0)
@@ -42464,13 +42424,13 @@ snapshots:
       cors: 2.8.5
       debug: 4.4.3
       envinfo: 7.15.0
-      express: 4.21.2
+      express: 4.22.1
       lodash: 4.17.21
       lru-cache: 7.18.3
       mime: 3.0.0
       semver: 7.7.3
-      verdaccio-audit: 13.0.0-next-8.28(encoding@0.1.13)
-      verdaccio-htpasswd: 13.0.0-next-8.28
+      verdaccio-audit: 13.0.0-next-8.29(encoding@0.1.13)
+      verdaccio-htpasswd: 13.0.0-next-8.29
     transitivePeerDependencies:
       - bare-abort-controller
       - encoding
