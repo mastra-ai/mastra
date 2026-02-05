@@ -4,6 +4,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
+import { resolveObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
@@ -62,7 +63,8 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
     id: 'prepare-memory-step',
     inputSchema: z.object({}),
     outputSchema: prepareMemoryStepOutputSchema,
-    execute: async ({ tracingContext }) => {
+    execute: async ({ ...rest }) => {
+      const observabilityContext = resolveObservabilityContext(rest);
       const thread = threadFromArgs;
       const messageList = new MessageList({
         threadId: thread?.id,
@@ -88,7 +90,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         messageList.add(options.messages, 'input');
         const { tripwire } = await capabilities.runInputProcessors({
           requestContext,
-          tracingContext,
+          ...observabilityContext,
           messageList,
           inputProcessorOverrides: options.inputProcessors,
           processorStates,
@@ -172,7 +174,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       const { tripwire } = await capabilities.runInputProcessors({
         requestContext,
-        tracingContext,
+        ...observabilityContext,
         messageList,
         inputProcessorOverrides: options.inputProcessors,
         processorStates,
