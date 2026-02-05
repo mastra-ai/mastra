@@ -76,7 +76,7 @@ The main event bus for all observability signals. Routes events to appropriate e
 
 ```typescript
 import {
-  TracingEvent, MetricEvent, LogEvent, ScoreEvent, FeedbackEvent,
+  TracingEvent, TracingEventType, MetricEvent, LogEvent, ScoreEvent, FeedbackEvent,
   ObservabilityExporter
 } from '@mastra/core';
 import { BaseObservabilityEventBus } from './base';
@@ -108,10 +108,10 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
 
   private routeToHandler(exporter: ObservabilityExporter, event: ObservabilityEvent): void {
     switch (event.type) {
-      case 'span.started':
-      case 'span.updated':
-      case 'span.ended':
-      case 'span.error':
+      // TracingEvent uses TracingEventType enum (snake_case values)
+      case TracingEventType.SPAN_STARTED:
+      case TracingEventType.SPAN_UPDATED:
+      case TracingEventType.SPAN_ENDED:
         exporter.onTracingEvent?.(event);
         break;
       case 'metric':

@@ -1,13 +1,14 @@
-# PR 3.3: Scores & Feedback Implementation
+# PR 3.4: Scores & Feedback Implementation
 
 **Package:** `observability/mastra`
 **Scope:** Span/Trace score/feedback APIs, historical spans, exporter updates
+**Prerequisites:** PR 3.3 (Auto-Extracted Metrics)
 
 **Note:** The `ObservabilityBus` was created in Phase 1 and already handles ScoreEvent and FeedbackEvent types.
 
 ---
 
-## 3.3.1 Update Span Implementation
+## 3.4.1 Update Span Implementation
 
 **File:** `observability/mastra/src/spans/span.ts` (modify)
 
@@ -77,7 +78,7 @@ export class SpanImpl implements Span {
 
 ---
 
-## 3.3.2 Update NoOp Span
+## 3.4.2 Update NoOp Span
 
 **File:** `observability/mastra/src/spans/no-op.ts` (modify)
 
@@ -100,7 +101,7 @@ export const noOpSpan: Span = {
 
 ---
 
-## 3.3.3 Implement Trace Class
+## 3.4.3 Implement Trace Class
 
 **File:** `observability/mastra/src/traces/trace.ts` (new)
 
@@ -187,7 +188,7 @@ export class TraceImpl implements Trace {
 
 ---
 
-## 3.3.4 Implement Mastra.getTrace()
+## 3.4.4 Implement Mastra.getTrace()
 
 **File:** `observability/mastra/src/instances/base.ts` (modify)
 
@@ -223,7 +224,7 @@ async getTrace(traceId: string): Promise<Trace | null> {
 
 ---
 
-## 3.3.5 Historical Span Implementation
+## 3.4.5 Historical Span Implementation
 
 **File:** `observability/mastra/src/spans/historical.ts` (new)
 
@@ -234,8 +235,23 @@ import { ObservabilityBus } from '../bus/observability';
 /**
  * A span loaded from storage that can still receive scores/feedback
  * but cannot be modified (already ended).
+ *
+ * Use the `readonly` flag for type guards instead of throwing errors.
  */
 export class HistoricalSpanImpl implements Span {
+  /**
+   * Indicates this span is historical and cannot be modified.
+   * Use this flag for type guards instead of try/catch.
+   *
+   * @example
+   * if (span.readonly) {
+   *   // Historical span - can only add scores/feedback
+   * } else {
+   *   // Active span - can modify
+   * }
+   */
+  readonly readonly = true;
+
   constructor(
     private record: SpanRecord,
     private bus: ObservabilityBus,
@@ -247,20 +263,27 @@ export class HistoricalSpanImpl implements Span {
   get metadata(): Record<string, unknown> | undefined { return this.record.metadata; }
   get isRootSpan(): boolean { return !this.record.parentSpanId; }
 
+  // Modification methods are no-ops for historical spans
+  // Check `readonly` flag before calling if you need to know
+
   setStatus(): void {
-    throw new Error('Cannot modify historical span');
+    // No-op for historical spans
   }
 
   setAttribute(): void {
-    throw new Error('Cannot modify historical span');
+    // No-op for historical spans
   }
 
   addEvent(): void {
-    throw new Error('Cannot modify historical span');
+    // No-op for historical spans
   }
 
   end(): void {
-    throw new Error('Historical span already ended');
+    // No-op for historical spans (already ended)
+  }
+
+  update(): void {
+    // No-op for historical spans
   }
 
   addScore(score: ScoreInput): void {
@@ -303,17 +326,30 @@ export class HistoricalSpanImpl implements Span {
     this.bus.emit(event);
   }
 }
+
+/**
+ * Type guard to check if a span is historical (readonly).
+ */
+export function isHistoricalSpan(span: Span): span is HistoricalSpanImpl {
+  return 'readonly' in span && span.readonly === true;
+}
 ```
 
+**Notes:**
+- Uses `readonly` flag instead of throwing errors for better type guards
+- Modification methods are no-ops instead of throwing
+- `isHistoricalSpan()` type guard for runtime checks
+
 **Tasks:**
-- [ ] Implement HistoricalSpanImpl
-- [ ] Throw on modification methods
+- [ ] Implement HistoricalSpanImpl with `readonly` flag
+- [ ] Make modification methods no-ops (not throwing)
+- [ ] Add `isHistoricalSpan()` type guard
 - [ ] Allow addScore/addFeedback
 - [ ] Use record's existing metadata
 
 ---
 
-## 3.3.6 Update DefaultExporter
+## 3.4.6 Update DefaultExporter
 
 **File:** `observability/mastra/src/exporters/default.ts` (modify)
 
@@ -363,7 +399,7 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
 
 ---
 
-## 3.3.7 Update JsonExporter
+## 3.4.7 Update JsonExporter
 
 **File:** `observability/mastra/src/exporters/json.ts` (modify)
 
@@ -383,7 +419,7 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
 
 ---
 
-## 3.3.8 Update CloudExporter
+## 3.4.8 Update CloudExporter
 
 **File:** `observability/cloud/src/exporter.ts` (if exists)
 
@@ -394,7 +430,7 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
 
 ---
 
-## PR 3.3 Testing
+## PR 3.4 Testing
 
 **Tasks:**
 - [ ] Test span.addScore() includes span's metadata in event
@@ -404,8 +440,10 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
 - [ ] Test mastra.getTrace() returns Trace with spans
 - [ ] Test historical span has metadata from stored record
 - [ ] Test historical span allows scores/feedback
-- [ ] Test historical span throws on modification
+- [ ] Test historical span has `readonly === true`
+- [ ] Test historical span modification methods are no-ops
+- [ ] Test `isHistoricalSpan()` type guard
 - [ ] Test DefaultExporter writes scores
 - [ ] Test DefaultExporter writes feedback
-- [ ] Test auto-extracted metrics for scores (in PR 3.2)
-- [ ] Test auto-extracted metrics for feedback (in PR 3.2)
+
+**Note:** Auto-extracted metrics for scores/feedback are in PR 3.5.

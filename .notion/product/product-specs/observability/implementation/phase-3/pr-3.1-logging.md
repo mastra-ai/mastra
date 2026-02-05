@@ -1,7 +1,7 @@
 # PR 3.1: Logging Implementation
 
 **Package:** `observability/mastra`
-**Scope:** LoggerContext implementation, log event emission
+**Scope:** LoggerContext implementation, log event emission, mastra.logger direct API
 
 ---
 
@@ -149,6 +149,43 @@ createLoggerContext(tracingContext: TracingContext): LoggerContext {
 
 ---
 
+## 3.1.3b Direct Logger API (mastra.logger)
+
+**File:** `observability/mastra/src/instances/base.ts` (modify)
+
+Add `mastra.logger` direct API for use outside trace context:
+
+```typescript
+// In BaseObservabilityInstance or DefaultObservabilityInstance
+createDirectLoggerContext(): LoggerContext {
+  if (!this.observabilityBus) {
+    return noOpLoggerContext;
+  }
+
+  // No currentSpan - direct API without trace correlation
+  return new LoggerContextImpl({
+    currentSpan: undefined,
+    observabilityBus: this.observabilityBus,
+    minLevel: this.config.logLevel,
+  });
+}
+```
+
+**Usage:**
+
+```typescript
+// Startup logs (no trace context)
+mastra.logger.info("Application started", { version: "1.0.0" });
+mastra.logger.warn("Config missing, using defaults");
+mastra.logger.error("Background job failed", { jobId: "123" });
+```
+
+**Tasks:**
+- [ ] Add createDirectLoggerContext() method
+- [ ] Wire to mastra.logger property
+
+---
+
 ## 3.1.4 Update DefaultExporter
 
 **File:** `observability/mastra/src/exporters/default.ts` (modify)
@@ -236,6 +273,8 @@ export class JsonExporter extends BaseExporter {
 - [ ] Test traceId and spanId are extracted from current span
 - [ ] Test span's metadata is passed through to log
 - [ ] Test minimum log level filtering
+- [ ] Test mastra.logger direct API works without trace context
+- [ ] Test mastra.logger logs have no traceId/spanId
 - [ ] Test DefaultExporter writes logs
 - [ ] Test JsonExporter outputs logs
 - [ ] Integration test: logs within a span inherit the span's metadata

@@ -13,7 +13,9 @@ Phase 9 implements the MomentExporter for Mastra Pulse - an internal event store
 - MomentExporter implementation
 - ClickHouse pulse_moments table
 
-**Philosophy:** Rather than combining events into aggregated records, we capture individual events (span.started, span.ended, log.added, etc.) as moments with correlation IDs that enable graph-based analysis.
+**Philosophy:** Rather than combining events into aggregated records, we capture individual events (span_started, span_ended, log_added, etc.) as moments with correlation IDs that enable graph-based analysis.
+
+**Note:** MomentKind uses underscore notation (`span_started`, `span_ended`, etc.) to match the TracingEventType pattern used elsewhere in the codebase.
 
 ---
 
@@ -46,23 +48,23 @@ import { z } from 'zod';
  */
 export const momentKindSchema = z.enum([
   // Span lifecycle
-  'span.started',
-  'span.ended',
-  'span.updated',
-  'span.error',
+  'span_started',
+  'span_ended',
+  'span_updated',
+  'span_error',
 
   // Scores and feedback
-  'score.added',
-  'feedback.added',
+  'score_added',
+  'feedback_added',
 
   // Logs
-  'log.added',
+  'log_added',
 
   // Future extensibility (examples)
-  // 'deploy.completed',
-  // 'config.changed',
-  // 'experiment.started',
-  // 'experiment.ended',
+  // 'deploy_completed',
+  // 'config_changed',
+  // 'experiment_started',
+  // 'experiment_ended',
 ]);
 
 export type MomentKind = z.infer<typeof momentKindSchema>;
@@ -287,12 +289,12 @@ export class MomentExporter extends BaseExporter {
   }
 
   async onLogEvent(event: LogEvent): Promise<void> {
-    if (!this.isKindEnabled('log.added')) return;
+    if (!this.isKindEnabled('log_added')) return;
 
     const moment: Moment = {
       id: generateId(),
       timestamp: new Date(event.log.timestamp),
-      kind: 'log.added',
+      kind: 'log_added',
       traceId: event.log.traceId,
       spanId: event.log.spanId,
       runId: event.log.runId,
@@ -319,12 +321,12 @@ export class MomentExporter extends BaseExporter {
   }
 
   async onScoreEvent(event: ScoreEvent): Promise<void> {
-    if (!this.isKindEnabled('score.added')) return;
+    if (!this.isKindEnabled('score_added')) return;
 
     const moment: Moment = {
       id: generateId(),
       timestamp: new Date(event.score.timestamp),
-      kind: 'score.added',
+      kind: 'score_added',
       traceId: event.score.traceId,
       spanId: event.score.spanId,
       organizationId: this.config.organizationId,
@@ -343,12 +345,12 @@ export class MomentExporter extends BaseExporter {
   }
 
   async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
-    if (!this.isKindEnabled('feedback.added')) return;
+    if (!this.isKindEnabled('feedback_added')) return;
 
     const moment: Moment = {
       id: generateId(),
       timestamp: new Date(event.feedback.timestamp),
-      kind: 'feedback.added',
+      kind: 'feedback_added',
       traceId: event.feedback.traceId,
       spanId: event.feedback.spanId,
       userId: event.feedback.userId,
@@ -370,14 +372,14 @@ export class MomentExporter extends BaseExporter {
 
   private tracingEventToMoment(event: TracingEvent): Moment | null {
     switch (event.type) {
-      case 'span.started':
-        return this.spanToMoment(event.span, 'span.started');
-      case 'span.ended':
-        return this.spanToMoment(event.span, 'span.ended');
-      case 'span.updated':
-        return this.spanToMoment(event.span, 'span.updated');
-      case 'span.error':
-        return this.spanToMoment(event.span, 'span.error', {
+      case 'span_started':
+        return this.spanToMoment(event.span, 'span_started');
+      case 'span_ended':
+        return this.spanToMoment(event.span, 'span_ended');
+      case 'span_updated':
+        return this.spanToMoment(event.span, 'span_updated');
+      case 'span_error':
+        return this.spanToMoment(event.span, 'span_error', {
           error: event.error,
         });
       default:
@@ -392,7 +394,7 @@ export class MomentExporter extends BaseExporter {
   ): Moment {
     return {
       id: generateId(),
-      timestamp: kind === 'span.ended' ? new Date(span.endedAt ?? Date.now()) : new Date(span.startedAt ?? Date.now()),
+      timestamp: kind === 'span_ended' ? new Date(span.endedAt ?? Date.now()) : new Date(span.startedAt ?? Date.now()),
       kind,
       traceId: span.traceId,
       spanId: span.id,
@@ -486,11 +488,11 @@ export type { MomentExporterConfig } from './types';
 ### PR 9.2 Testing
 
 **Tasks:**
-- [ ] Test span.started moment creation
-- [ ] Test span.ended moment creation
-- [ ] Test score.added moment creation
-- [ ] Test feedback.added moment creation
-- [ ] Test log.added moment creation
+- [ ] Test span_started moment creation
+- [ ] Test span_ended moment creation
+- [ ] Test score_added moment creation
+- [ ] Test feedback_added moment creation
+- [ ] Test log_added moment creation
 - [ ] Test batching and flushing
 - [ ] Test enabledKinds filtering
 
@@ -609,7 +611,7 @@ ORDER BY Timestamp ASC
 ```sql
 SELECT * FROM pulse_moments
 WHERE SpanId = 'span456'
-  AND Kind IN ('span.started', 'span.ended', 'span.error')
+  AND Kind IN ('span_started', 'span_ended', 'span_error')
 ORDER BY Timestamp ASC
 ```
 
@@ -618,7 +620,7 @@ ORDER BY Timestamp ASC
 ```sql
 SELECT * FROM pulse_moments
 WHERE SpanId = 'span456'
-  AND Kind = 'log.added'
+  AND Kind = 'log_added'
 ORDER BY Timestamp ASC
 ```
 
@@ -627,7 +629,7 @@ ORDER BY Timestamp ASC
 ```sql
 SELECT * FROM pulse_moments
 WHERE TraceId = 'abc123'
-  AND Kind = 'score.added'
+  AND Kind = 'score_added'
 ```
 
 ### Build span hierarchy
@@ -635,7 +637,7 @@ WHERE TraceId = 'abc123'
 ```sql
 -- Get root spans
 SELECT * FROM pulse_moments
-WHERE Kind = 'span.started'
+WHERE Kind = 'span_started'
   AND ParentSpanId = ''
   AND OrganizationId = 'org1'
   AND Timestamp >= now() - INTERVAL 1 HOUR
@@ -666,7 +668,7 @@ Simply add a new kind and emit it - no schema migration needed:
 const deployMoment: Moment = {
   id: generateId(),
   timestamp: new Date(),
-  kind: 'deploy.completed',  // New kind
+  kind: 'deploy_completed',  // New kind
   organizationId: 'org1',
   payload: JSON.stringify({
     version: '1.2.3',
@@ -677,9 +679,9 @@ const deployMoment: Moment = {
 
 ### Potential Future Kinds
 
-- `deploy.started`, `deploy.completed`, `deploy.failed`
-- `config.changed`
-- `experiment.started`, `experiment.ended`
+- `deploy_started`, `deploy_completed`, `deploy_failed`
+- `config_changed`
+- `experiment_started`, `experiment_ended`
 - `alert.triggered`
 - `user.action` (for product analytics)
 
@@ -690,10 +692,10 @@ const deployMoment: Moment = {
 After all PRs merged:
 
 **Tasks:**
-- [ ] E2E test: Agent run creates span.started → span.ended moments
+- [ ] E2E test: Agent run creates span_started → span_ended moments
 - [ ] E2E test: Tool call creates nested moments with correct parentSpanId
-- [ ] E2E test: Score added creates score.added moment
-- [ ] E2E test: Log creates log.added moment with correct spanId
+- [ ] E2E test: Score added creates score_added moment
+- [ ] E2E test: Log creates log_added moment with correct spanId
 - [ ] E2E test: Graph query returns full trace timeline
 - [ ] E2E test: Session query returns all moments in session
 

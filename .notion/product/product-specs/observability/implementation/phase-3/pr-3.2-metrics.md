@@ -1,7 +1,9 @@
-# PR 3.2: Metrics Implementation
+# PR 3.2: Metrics Context Implementation
 
 **Package:** `observability/mastra`
-**Scope:** MetricsContext implementation, cardinality filter, auto-extracted metrics
+**Scope:** MetricsContext implementation, cardinality filter, mastra.metrics direct API
+
+**Note:** Auto-extracted metrics from TracingEvents are in PR 3.3 (separate PR for cleaner review).
 
 ---
 
@@ -135,216 +137,36 @@ export class MetricsContextImpl implements MetricsContext {
 
 ---
 
-## 3.2.3 Auto-Extracted Metrics
+## 3.2.3 Direct Metrics API (mastra.metrics)
 
-**File:** `observability/mastra/src/metrics/auto-extract.ts` (new)
+**File:** `observability/mastra/src/instances/base.ts` (modify)
+
+Add `mastra.metrics` direct API for use outside trace context:
 
 ```typescript
-import type { TracingEvent, ExportedMetric, MetricEvent, AnyExportedSpan, ScoreEvent, FeedbackEvent } from '@mastra/core';
-import { ObservabilityBus } from '../bus/observability';
-
-export class AutoExtractedMetrics {
-  constructor(private observabilityBus: ObservabilityBus) {}
-
-  processTracingEvent(event: TracingEvent): void {
-    switch (event.type) {
-      case 'span_started':
-        this.onSpanStarted(event.exportedSpan);
-        break;
-      case 'span_ended':
-        this.onSpanEnded(event.exportedSpan);
-        break;
-    }
+// In BaseObservabilityInstance or DefaultObservabilityInstance
+createDirectMetricsContext(): MetricsContext {
+  if (!this.observabilityBus) {
+    return noOpMetricsContext;
   }
 
-  processScoreEvent(event: ScoreEvent): void {
-    const labels: Record<string, string> = {
-      scorer: event.score.scorerName,
-    };
-    if (event.score.experiment) {
-      labels.experiment = event.score.experiment;
-    }
-    this.emit('mastra_scores_total', 'counter', 1, labels);
-  }
-
-  processFeedbackEvent(event: FeedbackEvent): void {
-    const labels: Record<string, string> = {
-      feedback_type: event.feedback.feedbackType,
-      source: event.feedback.source,
-    };
-    if (event.feedback.experiment) {
-      labels.experiment = event.feedback.experiment;
-    }
-    this.emit('mastra_feedback_total', 'counter', 1, labels);
-  }
-
-  private onSpanStarted(span: AnyExportedSpan): void {
-    const labels = this.extractLabels(span);
-    const metricName = this.getStartedMetricName(span);
-    if (metricName) {
-      this.emit(metricName, 'counter', 1, labels);
-    }
-  }
-
-  private onSpanEnded(span: AnyExportedSpan): void {
-    const labels = this.extractLabels(span);
-
-    const endedMetricName = this.getEndedMetricName(span);
-    if (endedMetricName) {
-      this.emit(endedMetricName, 'counter', 1, labels);
-    }
-
-    const durationMetricName = this.getDurationMetricName(span);
-    if (durationMetricName && span.startTime && span.endTime) {
-      const durationMs = span.endTime.getTime() - span.startTime.getTime();
-      this.emit(durationMetricName, 'histogram', durationMs, labels);
-    }
-
-    if (span.type === 'model_generation') {
-      this.extractTokenMetrics(span, labels);
-    }
-  }
-
-  private extractLabels(span: AnyExportedSpan): Record<string, string> {
-    const labels: Record<string, string> = {};
-    if (span.entityType) labels.entity_type = span.entityType;
-    if (span.entityName) labels.entity_name = span.entityName;
-
-    switch (span.type) {
-      case 'agent_run':
-        labels.agent = span.entityName ?? 'unknown';
-        break;
-      case 'tool_call':
-        labels.tool = span.entityName ?? 'unknown';
-        break;
-      case 'workflow_run':
-        labels.workflow = span.entityName ?? 'unknown';
-        break;
-      case 'model_generation':
-        if (span.attributes?.model) labels.model = String(span.attributes.model);
-        if (span.attributes?.provider) labels.provider = String(span.attributes.provider);
-        break;
-    }
-    return labels;
-  }
-
-  private extractTokenMetrics(span: AnyExportedSpan, labels: Record<string, string>): void {
-    const usage = span.attributes?.usage;
-    if (!usage) return;
-
-    if (usage.inputTokens !== undefined) {
-      this.emit('mastra_model_input_tokens', 'counter', Number(usage.inputTokens), labels);
-    }
-    if (usage.outputTokens !== undefined) {
-      this.emit('mastra_model_output_tokens', 'counter', Number(usage.outputTokens), labels);
-    }
-    if (usage.inputDetails?.cacheRead !== undefined) {
-      this.emit('mastra_model_cache_read_tokens', 'counter', Number(usage.inputDetails.cacheRead), labels);
-    }
-    if (usage.inputDetails?.cacheWrite !== undefined) {
-      this.emit('mastra_model_cache_write_tokens', 'counter', Number(usage.inputDetails.cacheWrite), labels);
-    }
-  }
-
-  private getStartedMetricName(span: AnyExportedSpan): string | null {
-    switch (span.type) {
-      case 'agent_run': return 'mastra_agent_runs_started';
-      case 'tool_call': return 'mastra_tool_calls_started';
-      case 'workflow_run': return 'mastra_workflow_runs_started';
-      case 'model_generation': return 'mastra_model_requests_started';
-      default: return null;
-    }
-  }
-
-  private getEndedMetricName(span: AnyExportedSpan): string | null {
-    switch (span.type) {
-      case 'agent_run': return 'mastra_agent_runs_ended';
-      case 'tool_call': return 'mastra_tool_calls_ended';
-      case 'workflow_run': return 'mastra_workflow_runs_ended';
-      case 'model_generation': return 'mastra_model_requests_ended';
-      default: return null;
-    }
-  }
-
-  private getDurationMetricName(span: AnyExportedSpan): string | null {
-    switch (span.type) {
-      case 'agent_run': return 'mastra_agent_duration_ms';
-      case 'tool_call': return 'mastra_tool_duration_ms';
-      case 'workflow_run': return 'mastra_workflow_duration_ms';
-      case 'model_generation': return 'mastra_model_duration_ms';
-      default: return null;
-    }
-  }
-
-  private emit(
-    name: string,
-    metricType: 'counter' | 'gauge' | 'histogram',
-    value: number,
-    labels: Record<string, string>,
-  ): void {
-    const exportedMetric: ExportedMetric = {
-      timestamp: new Date(),
-      name,
-      metricType,
-      value,
-      labels,
-    };
-
-    const event: MetricEvent = { type: 'metric', metric: exportedMetric };
-    this.observabilityBus.emit(event);
-  }
+  // No baseLabels or entity context - direct API
+  return new MetricsContextImpl({
+    baseLabels: {},
+    observabilityBus: this.observabilityBus,
+    cardinalityFilter: this.cardinalityFilter,
+    context: {
+      organizationId: this.config.organizationId,
+      environment: this.config.environment,
+      serviceName: this.config.serviceName,
+    },
+  });
 }
 ```
 
 **Tasks:**
-- [ ] Implement AutoExtractedMetrics class
-- [ ] Extract agent/tool/workflow/model metrics from spans
-- [ ] Extract token usage metrics from LLM spans
-- [ ] Extract score/feedback metrics
-
----
-
-## 3.2.4 Update ObservabilityBus for Auto-Extraction
-
-**File:** `observability/mastra/src/bus/observability.ts` (modify)
-
-```typescript
-export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEvent> {
-  private exporters: ObservabilityExporter[] = [];
-  private autoExtractor?: AutoExtractedMetrics;
-
-  enableAutoExtractedMetrics(): void {
-    this.autoExtractor = new AutoExtractedMetrics(this);
-  }
-
-  emit(event: ObservabilityEvent): void {
-    for (const exporter of this.exporters) {
-      this.routeToHandler(exporter, event);
-    }
-
-    if (this.autoExtractor && isTracingEvent(event)) {
-      this.autoExtractor.processTracingEvent(event);
-    }
-
-    if (this.autoExtractor && event.type === 'score') {
-      this.autoExtractor.processScoreEvent(event);
-    }
-
-    if (this.autoExtractor && event.type === 'feedback') {
-      this.autoExtractor.processFeedbackEvent(event);
-    }
-  }
-}
-
-function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
-  return event.type === 'span_started' || event.type === 'span_updated' || event.type === 'span_ended';
-}
-```
-
-**Tasks:**
-- [ ] Add enableAutoExtractedMetrics() to ObservabilityBus
-- [ ] Add cross-emission for TracingEvent → MetricEvent
-- [ ] Add cross-emission for ScoreEvent/FeedbackEvent → MetricEvent
+- [ ] Add createDirectMetricsContext() method
+- [ ] Wire to mastra.metrics property
 
 ---
 
@@ -358,10 +180,7 @@ private cardinalityFilter: CardinalityFilter;
 constructor(config: ObservabilityConfig) {
   // ... existing setup
   this.cardinalityFilter = new CardinalityFilter(config.metrics?.cardinality);
-
-  if (config.metrics?.enabled !== false) {
-    this.observabilityBus.enableAutoExtractedMetrics();
-  }
+  // Note: Auto-extracted metrics enabled in PR 3.2b
 }
 
 createMetricsContext(
@@ -391,8 +210,8 @@ createMetricsContext(
 
 **Tasks:**
 - [ ] Initialize CardinalityFilter
-- [ ] Enable auto-extracted metrics on ObservabilityBus
 - [ ] Add createMetricsContext method
+- [ ] Add createDirectMetricsContext method (for mastra.metrics)
 
 ---
 
@@ -455,8 +274,9 @@ async onMetricEvent(event: MetricEvent): Promise<void> {
 - [ ] Test MetricsContextImpl emits to bus
 - [ ] Test cardinality filter blocks high-cardinality labels
 - [ ] Test cardinality filter blocks UUIDs
-- [ ] Test auto-extracted metrics from span events
-- [ ] Test token metrics extraction
 - [ ] Test environment fields go in metadata (not labels)
+- [ ] Test mastra.metrics direct API works without trace context
 - [ ] Test DefaultExporter writes metrics
 - [ ] Test JsonExporter outputs metrics
+
+**Note:** Auto-extracted metrics tests are in PR 3.3.

@@ -85,13 +85,20 @@ execute: async (input, { observability: obs }) => {
 
 ### Direct APIs (Outside Trace Context)
 
+For startup logs, background jobs, or other scenarios outside trace context:
+
 ```typescript
 // Logging without trace correlation
 mastra.logger.info("Application started", { version: "1.0.0" });
+mastra.logger.warn("Config missing, using defaults");
+mastra.logger.error("Background job failed", { jobId: "123" });
 
 // Metrics without auto-labels
 mastra.metrics.counter('background_jobs_total').add(1, { job_type: 'cleanup' });
+mastra.metrics.gauge('queue_depth').set(42, { queue: 'high_priority' });
 ```
+
+These APIs emit events through the ObservabilityBus but without trace correlation fields (no traceId/spanId) and without span-derived auto-labels.
 
 ### Signal Type Architecture
 
@@ -168,6 +175,22 @@ A single `ObservabilityBus` handles all event types and routes to appropriate ex
 - Cross-emission: TracingEvents generate MetricEvents (for built-in metric extraction)
 - Cross-emission: ScoreEvents/FeedbackEvents generate MetricEvents (for score distribution)
 - All event payloads use Exported types (serializable)
+
+**TracingEvent format (existing codebase):**
+```typescript
+enum TracingEventType {
+  SPAN_STARTED = 'span_started',
+  SPAN_UPDATED = 'span_updated',
+  SPAN_ENDED = 'span_ended',
+}
+
+type TracingEvent =
+  | { type: TracingEventType.SPAN_STARTED; exportedSpan: AnyExportedSpan }
+  | { type: TracingEventType.SPAN_UPDATED; exportedSpan: AnyExportedSpan }
+  | { type: TracingEventType.SPAN_ENDED; exportedSpan: AnyExportedSpan };
+```
+
+**Note:** TracingEvent uses an enum with snake_case values (`span_started`) and the field is `exportedSpan` (not `span`).
 
 **Auto-extracted metrics from scores/feedback:**
 

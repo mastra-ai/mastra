@@ -380,12 +380,14 @@ Scores are added directly on trace or span objects via `.addScore()`:
 ```typescript
 interface ScoreInput {
   scorerName: string;        // e.g., 'relevance', 'hallucination', 'factuality'
-  score: number;             // Numeric value within defined range
-  range: { min: number; max: number };  // Score range for this scorer
+  score: number;             // Numeric value (range defined by scorer, not here)
   reason?: string;           // Explanation from scorer
+  experiment?: string;       // Experiment identifier for A/B testing
   metadata?: Record<string, unknown>;
 }
 ```
+
+**Note:** The score range is defined on the scorer itself, not on each score event. This avoids redundancy and ensures consistency.
 
 **Usage:**
 
@@ -396,7 +398,6 @@ const result = await agent.generate("What's our refund policy?");
 result.trace.addScore({
   scorerName: "relevance",
   score: 0.85,
-  range: { min: 0, max: 1 },
   reason: "Response was relevant and well-structured",
 });
 
@@ -404,8 +405,7 @@ result.trace.addScore({
 const modelSpan = result.trace.getSpan(modelSpanId);
 modelSpan.addScore({
   scorerName: "factuality",
-  score: 92,
-  range: { min: 0, max: 100 },
+  score: 0.92,
   reason: "92% of claims verified against sources",
 });
 
@@ -414,7 +414,7 @@ const trace = await mastra.getTrace(traceId);
 trace.addScore({
   scorerName: "hallucination",
   score: 0.12,
-  range: { min: 0, max: 1 },
+  experiment: "prompt-v2",
 });
 ```
 
@@ -424,15 +424,17 @@ Feedback from end users or reviewers is added via `.addFeedback()`:
 
 ```typescript
 interface FeedbackInput {
-  source: 'USER' | 'REVIEWER';
-  feedbackType: 'thumbs' | 'rating' | 'comment';
+  source: string;            // e.g., 'user', 'reviewer', 'admin'
+  feedbackType: string;      // e.g., 'thumbs', 'rating', 'comment'
   value: number | string;    // Numeric for thumbs/rating, text for comment
-  range?: { min: number; max: number };  // Required for numeric feedback
   comment?: string;          // Optional additional context
   userId?: string;           // Who submitted the feedback
+  experiment?: string;       // Experiment identifier for A/B testing
   metadata?: Record<string, unknown>;
 }
 ```
+
+**Note:** The range for numeric feedback types is defined by the feedback type itself (e.g., thumbs is always -1/0/1, star ratings are always 1-5), not on each feedback event.
 
 **Usage:**
 
@@ -440,19 +442,17 @@ interface FeedbackInput {
 // User thumbs up/down (from client app)
 const trace = await mastra.getTrace(traceId);
 trace.addFeedback({
-  source: 'USER',
+  source: 'user',
   feedbackType: "thumbs",
   value: 1,
-  range: { min: -1, max: 1 },
   userId: "user_456",
 });
 
 // User star rating (1-5)
 trace.addFeedback({
-  source: 'USER',
+  source: 'user',
   feedbackType: "rating",
   value: 4,
-  range: { min: 1, max: 5 },
   comment: "Good but could be more concise",
   userId: "user_456",
 });
@@ -460,7 +460,7 @@ trace.addFeedback({
 // Reviewer feedback on a specific span (from review UI)
 const span = trace.getSpan(toolSpanId);
 span.addFeedback({
-  source: 'REVIEWER',
+  source: 'reviewer',
   feedbackType: "comment",
   value: "This tool call was unnecessary",
   userId: "reviewer_789",
@@ -468,40 +468,58 @@ span.addFeedback({
 ```
 
 **Feedback types:**
-- **Thumbs up/down** — Binary quality signal (range: -1 to 1)
-- **Star ratings** — Granular quality (range: 1-5, 1-10, etc.)
-- **Comments** — Qualitative feedback (text, no range)
+- **Thumbs up/down** — Binary quality signal (-1, 0, or 1)
+- **Star ratings** — Granular quality (1-5, 1-10, etc.)
+- **Comments** — Qualitative feedback (text value)
 - **Implicit signals** — Copy action, retry, time on page (future)
 
 ### Internal Event Types
 
-When scores or feedback are added, they emit events through the tracing pipeline:
+When scores or feedback are added, they emit events through the ObservabilityBus as separate signal types (not part of TracingEvent):
 
 ```typescript
-export enum TracingEventType {
-  SPAN_STARTED = 'span_started',
-  SPAN_UPDATED = 'span_updated',
-  SPAN_ENDED = 'span_ended',
-  SCORE_ADDED = 'score_added',
-  FEEDBACK_ADDED = 'feedback_added',
-}
+// Scores and feedback are separate event types, not TracingEvent subtypes
+type ScoreEvent = { type: 'score'; score: ExportedScore };
+type FeedbackEvent = { type: 'feedback'; feedback: ExportedFeedback };
+
+// TracingEvent uses existing enum (see @mastra/core)
+// TracingEventType.SPAN_STARTED = 'span_started'
+// TracingEventType.SPAN_UPDATED = 'span_updated'
+// TracingEventType.SPAN_ENDED = 'span_ended'
+
+// All observability events flow through a unified bus
+type ObservabilityEvent =
+  | TracingEvent      // span_started, span_updated, span_ended (via TracingEventType enum)
+  | LogEvent          // log
+  | MetricEvent       // metric
+  | ScoreEvent        // score
+  | FeedbackEvent;    // feedback
 ```
 
-The internal event payloads include `traceId` and `spanId` (derived from the object):
+The exported payloads include `traceId` and `spanId` (derived from the span/trace):
 
 ```typescript
-// Internal payload for SCORE_ADDED event
-interface ScoreEventPayload extends ScoreInput {
-  traceId: string;
-  spanId?: string;
+interface ExportedScore {
   timestamp: Date;
+  traceId: string;
+  spanId?: string;      // undefined = trace-level score
+  scorerName: string;
+  score: number;
+  reason?: string;
+  experiment?: string;
+  metadata?: Record<string, unknown>;  // inherited from span/trace
 }
 
-// Internal payload for FEEDBACK_ADDED event
-interface FeedbackEventPayload extends FeedbackInput {
-  traceId: string;
-  spanId?: string;
+interface ExportedFeedback {
   timestamp: Date;
+  traceId: string;
+  spanId?: string;      // undefined = trace-level feedback
+  source: string;
+  feedbackType: string;
+  value: number | string;
+  comment?: string;
+  experiment?: string;
+  metadata?: Record<string, unknown>;  // inherited from span/trace
 }
 ```
 
@@ -518,16 +536,15 @@ interface FeedbackEventPayload extends FeedbackInput {
 │             │                                    │                  │
 │             ▼                                    ▼                  │
 │  ┌──────────────────────┐          ┌──────────────────────────┐     │
-│  │  ScoreEventPayload   │          │  FeedbackEventPayload    │     │
+│  │     ScoreEvent       │          │     FeedbackEvent        │     │
+│  │  { type: 'score' }   │          │  { type: 'feedback' }    │     │
 │  └──────────┬───────────┘          └──────────────┬───────────┘     │
 │             │                                     │                 │
-│             ▼                                     ▼                 │
-│        SCORE_ADDED                         FEEDBACK_ADDED           │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-                               │
+└─────────────┼─────────────────────────────────────┼─────────────────┘
+              │                                     │
+              └────────────────┬────────────────────┘
                                ▼
-                         TracingBus
+                        ObservabilityBus
                                │
                                ▼
                     Exporters (that support scores/feedback)
@@ -535,19 +552,16 @@ interface FeedbackEventPayload extends FeedbackInput {
 
 ### Exporter Handling
 
-Exporters receive both event types and handle them separately:
+Exporters implement separate handlers for each signal type. Handler presence indicates support:
 
 ```typescript
-async exportTracingEvent(event: TracingEvent): Promise<void> {
-  switch (event.type) {
-    case TracingEventType.SCORE_ADDED:
-      await this.handleScore(event.score);
-      break;
-    case TracingEventType.FEEDBACK_ADDED:
-      await this.handleFeedback(event.feedback);
-      break;
-    // ... other event types
-  }
+interface ObservabilityExporter {
+  // Signal handlers - implement the ones you support
+  onTracingEvent?(event: TracingEvent): void | Promise<void>;
+  onLogEvent?(event: LogEvent): void | Promise<void>;
+  onMetricEvent?(event: MetricEvent): void | Promise<void>;
+  onScoreEvent?(event: ScoreEvent): void | Promise<void>;
+  onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>;
 }
 ```
 

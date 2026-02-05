@@ -24,11 +24,15 @@ Phase 3 implements all signal context implementations in `@mastra/observability`
 
 | PR | Package | Scope | File |
 |----|---------|-------|------|
-| PR 3.1 | `@mastra/observability` | LoggerContext implementation | [pr-3.1-logging.md](./pr-3.1-logging.md) |
-| PR 3.2 | `@mastra/observability` | MetricsContext, cardinality, auto-extraction | [pr-3.2-metrics.md](./pr-3.2-metrics.md) |
-| PR 3.3 | `@mastra/observability` | Score/Feedback APIs, Trace class | [pr-3.3-scores-feedback.md](./pr-3.3-scores-feedback.md) |
+| PR 3.1 | `@mastra/observability` | LoggerContext implementation, mastra.logger | [pr-3.1-logging.md](./pr-3.1-logging.md) |
+| PR 3.2 | `@mastra/observability` | MetricsContext, cardinality, mastra.metrics | [pr-3.2-metrics.md](./pr-3.2-metrics.md) |
+| PR 3.3 | `@mastra/observability` | TracingEvent → MetricEvent auto-extraction | [pr-3.3-auto-extract.md](./pr-3.3-auto-extract.md) |
+| PR 3.4 | `@mastra/observability` | Score/Feedback APIs, Trace class | [pr-3.4-scores-feedback.md](./pr-3.4-scores-feedback.md) |
+| PR 3.5 | `@mastra/observability` | Score/Feedback metric auto-extraction | [pr-3.5-score-feedback-metrics.md](./pr-3.5-score-feedback-metrics.md) |
 
-**Merge order:** 3.1 → 3.2 → 3.3 (3.2 includes auto-extraction for scores/feedback from 3.3)
+**Merge order:** 3.1 → 3.2 → 3.3 → 3.4 → 3.5
+
+**Changeset:** One changeset per PR
 
 ---
 
@@ -71,8 +75,8 @@ Reference table for auto-extracted metrics:
 ### Score/Feedback Metrics
 | Metric | Type | Labels |
 |--------|------|--------|
-| `mastra_scores_total` | counter | scorer, experiment |
-| `mastra_feedback_total` | counter | feedback_type, source, experiment |
+| `mastra_scores_total` | counter | scorer, entity_type, experiment |
+| `mastra_feedback_total` | counter | feedback_type, source, entity_type, experiment |
 
 ---
 

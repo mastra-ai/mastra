@@ -520,24 +520,27 @@ export interface FeedbackEvent {
 
 **File:** `packages/core/src/observability/types/tracing.ts` (modify)
 
-Add TracingEvent type, update Span interface, and add Trace interface:
+**Note:** TracingEvent and TracingEventType already exist in the codebase. We only need to add Score/Feedback methods to Span interface and add the Trace interface.
 
 ```typescript
 import type { ScoreInput } from './scores';
 import type { FeedbackInput } from './feedback';
 
 // ============================================================================
-// TracingEvent (Event Bus Event)
+// TracingEvent (EXISTING - DO NOT MODIFY)
 // ============================================================================
 
-/**
- * TracingEvent - Event bus payload for span lifecycle events
- */
-export type TracingEvent =
-  | { type: 'span.started'; span: AnyExportedSpan }
-  | { type: 'span.updated'; span: AnyExportedSpan }
-  | { type: 'span.ended'; span: AnyExportedSpan }
-  | { type: 'span.error'; span: AnyExportedSpan; error: SpanErrorInfo };
+// These already exist in the codebase:
+// enum TracingEventType {
+//   SPAN_STARTED = 'span_started',
+//   SPAN_UPDATED = 'span_updated',
+//   SPAN_ENDED = 'span_ended',
+// }
+//
+// type TracingEvent =
+//   | { type: TracingEventType.SPAN_STARTED; exportedSpan: AnyExportedSpan }
+//   | { type: TracingEventType.SPAN_UPDATED; exportedSpan: AnyExportedSpan }
+//   | { type: TracingEventType.SPAN_ENDED; exportedSpan: AnyExportedSpan };
 
 // ============================================================================
 // Span Interface (update existing)
@@ -590,16 +593,15 @@ export interface Trace {
 ```
 
 **Notes:**
-- Span.metadata and Span.isRootSpan are needed for score/feedback context inheritance
+- Span.metadata and Span.isRootSpan already exist in the codebase
+- TracingEvent and TracingEventType already exist - no changes needed
+- We only add `addScore()`, `addFeedback()` methods to Span interface
 - Trace-level scores/feedback use root span's metadata for context
 
 **Tasks:**
-- [ ] Add TracingEvent type to tracing.ts
-- [ ] Verify AnyExportedSpan and SpanErrorInfo are exported
-- [ ] Add `metadata` readonly property to Span interface
-- [ ] Add `isRootSpan` readonly property to Span interface
-- [ ] Add `addScore()` to Span interface
-- [ ] Add `addFeedback()` to Span interface
+- [ ] Verify TracingEvent, TracingEventType, AnyExportedSpan already exported (no changes needed)
+- [ ] Add `addScore(score: ScoreInput): void` to Span interface
+- [ ] Add `addFeedback(feedback: FeedbackInput): void` to Span interface
 - [ ] Add Trace interface
 - [ ] Export Trace from types index
 
@@ -938,6 +940,54 @@ export interface Mastra {
 **Tasks:**
 - [ ] Add `getTrace()` to Mastra interface
 - [ ] Import Trace type
+
+---
+
+## 1.1.16 Add Mastra Direct Logger/Metrics APIs
+
+**File:** `packages/core/src/mastra/types.ts` (modify)
+
+Add direct APIs for logging and metrics outside of trace context:
+
+```typescript
+import type { LoggerContext } from '../observability/types/logging';
+import type { MetricsContext } from '../observability/types/metrics';
+
+export interface Mastra {
+  // Existing...
+
+  /**
+   * Direct logger for use outside trace context.
+   * Logs emitted via this API will not have trace correlation.
+   * Use for startup logs, background jobs, or other non-traced scenarios.
+   */
+  readonly logger: LoggerContext;
+
+  /**
+   * Direct metrics API for use outside trace context.
+   * Metrics emitted via this API will not have auto-labels from spans.
+   * Use for background jobs, startup metrics, or other non-traced scenarios.
+   */
+  readonly metrics: MetricsContext;
+}
+```
+
+**Usage:**
+
+```typescript
+// Startup logs (no trace context)
+mastra.logger.info("Application started", { version: "1.0.0" });
+mastra.logger.warn("Config missing, using defaults");
+
+// Background job metrics (no trace context)
+mastra.metrics.counter('background_jobs_total').add(1, { job_type: 'cleanup' });
+mastra.metrics.gauge('queue_depth').set(42, { queue: 'high_priority' });
+```
+
+**Tasks:**
+- [ ] Add `logger: LoggerContext` readonly property to Mastra interface
+- [ ] Add `metrics: MetricsContext` readonly property to Mastra interface
+- [ ] Import LoggerContext and MetricsContext types
 
 ---
 

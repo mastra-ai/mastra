@@ -155,15 +155,23 @@ interface FeedbackRecord { ... }
 
 ## Event Types
 
-Events use the Exported types for transport:
+Events use the Exported types for transport. **Note:** TracingEvent uses the existing `TracingEventType` enum with snake_case values and the `exportedSpan` field name (matching the current codebase).
 
 ```typescript
-type TracingEvent =
-  | { type: 'span.started'; span: AnyExportedSpan }
-  | { type: 'span.updated'; span: AnyExportedSpan }
-  | { type: 'span.ended'; span: AnyExportedSpan }
-  | { type: 'span.error'; span: AnyExportedSpan; error: SpanErrorInfo };
+// Existing enum in @mastra/core (DO NOT CHANGE)
+enum TracingEventType {
+  SPAN_STARTED = 'span_started',
+  SPAN_UPDATED = 'span_updated',
+  SPAN_ENDED = 'span_ended',
+}
 
+// Existing type in @mastra/core (DO NOT CHANGE)
+type TracingEvent =
+  | { type: TracingEventType.SPAN_STARTED; exportedSpan: AnyExportedSpan }
+  | { type: TracingEventType.SPAN_UPDATED; exportedSpan: AnyExportedSpan }
+  | { type: TracingEventType.SPAN_ENDED; exportedSpan: AnyExportedSpan };
+
+// NEW event types
 type LogEvent = { type: 'log'; log: ExportedLog };
 type MetricEvent = { type: 'metric'; metric: ExportedMetric };
 type ScoreEvent = { type: 'score'; score: ExportedScore };
@@ -176,6 +184,8 @@ type ObservabilityEvent =
   | ScoreEvent
   | FeedbackEvent;
 ```
+
+**Note:** Error handling uses `span.error()` method which ends the span with error info - there is no separate `span.error` event type.
 
 ---
 
@@ -238,6 +248,23 @@ interface ObservabilityContextMixin {
   tracingContext: TracingContext;
 }
 ```
+
+### Direct APIs (Outside Trace Context)
+
+For startup logs, background jobs, or other scenarios outside trace context:
+
+```typescript
+// Direct logging without trace correlation
+mastra.logger.info("Application started", { version: "1.0.0" });
+mastra.logger.warn("Config missing, using defaults");
+mastra.logger.error("Background job failed", { jobId: "123" });
+
+// Direct metrics without auto-labels
+mastra.metrics.counter('background_jobs_total').add(1, { job_type: 'cleanup' });
+mastra.metrics.gauge('queue_depth').set(42, { queue: 'high_priority' });
+```
+
+These APIs emit events through the ObservabilityBus but without trace correlation fields.
 
 ---
 
@@ -311,36 +338,40 @@ Build exporters for ALL signals early to validate interfaces and provide develop
 - [ ] GrafanaCloudExporter: handlers for T/M/L/S/F (Tempo/Loki/Mimir)
 - [ ] Validate Exported type serialization works correctly
 
-### Phase 3: Logging
-LoggerContext implementation - no exporter work (Phase 2 exporters already handle LogEvent).
+### Phase 3: Logging, Metrics & Scores/Feedback
+All signal context implementations in `@mastra/observability` - no exporter work (Phase 2 exporters already handle events).
 
+**PR 3.1: Logging**
 - [ ] LoggerContext implementation with auto-correlation
-- [ ] ExportedLog type finalization
-- [ ] LogRecord schema (for storage in Phase 6)
+- [ ] `mastra.logger` direct API (outside trace context)
 - [ ] LogEvent emission to ObservabilityBus
+- [ ] Exporter updates for LogEvent
 
-### Phase 4: Metrics
-MetricsContext implementation - no exporter work.
-
+**PR 3.2: Metrics Context**
 - [ ] MetricsContext implementation with auto-labels
+- [ ] `mastra.metrics` direct API (outside trace context)
 - [ ] Cardinality protection (blocked labels, UUID detection)
-- [ ] ExportedMetric type finalization
-- [ ] MetricRecord schema (for storage in Phase 6)
 - [ ] MetricEvent emission to ObservabilityBus
+- [ ] Exporter updates for MetricEvent
+
+**PR 3.3: Auto-Extracted Metrics**
 - [ ] TracingEvent → MetricEvent cross-emission (auto-extracted metrics)
-- [ ] Built-in metrics catalog
+- [ ] Token usage metrics from MODEL_GENERATION spans
+- [ ] Duration metrics from span lifecycle
 
-### Phase 5: Scores & Feedback
-Score/Feedback APIs - no exporter work.
-
+**PR 3.4: Scores & Feedback**
 - [ ] `span.addScore()` / `span.addFeedback()` APIs
 - [ ] `trace.addScore()` / `trace.addFeedback()` APIs
 - [ ] `mastra.getTrace(traceId)` for post-hoc attachment
-- [ ] ExportedScore / ExportedFeedback type finalization
-- [ ] ScoreRecord / FeedbackRecord schemas (for storage in Phase 6)
+- [ ] TraceImpl and HistoricalSpanImpl classes (with `readonly` flag)
 - [ ] ScoreEvent / FeedbackEvent emission to ObservabilityBus
+- [ ] Exporter updates for ScoreEvent/FeedbackEvent
 
-### Phase 6: Stores & DefaultExporter
+**PR 3.5: Score/Feedback Metrics**
+- [ ] ScoreEvent → MetricEvent cross-emission (`mastra_scores_total`)
+- [ ] FeedbackEvent → MetricEvent cross-emission (`mastra_feedback_total`)
+
+### Phase 4: Stores & DefaultExporter
 Storage adapters and the DefaultExporter that writes to storage.
 
 - [ ] DefaultExporter: Exported → Record conversion, writes to storage
@@ -348,15 +379,16 @@ Storage adapters and the DefaultExporter that writes to storage.
 - [ ] ClickHouse adapter: spans, logs, metrics, scores, feedback tables
 - [ ] Storage strategy getters for each signal
 - [ ] Batch write optimizations
+- [ ] Record types (LogRecord, MetricRecord, ScoreRecord, FeedbackRecord) as Zod schemas
 
-### Phase 7: Server & Client APIs
+### Phase 5: Server & Client APIs
 HTTP APIs and client SDK for accessing stored data.
 
 - [ ] Server routes for traces, logs, metrics, scores, feedback
 - [ ] client-js SDK updates
 - [ ] CloudExporter (writes to Mastra Cloud API)
 
-### Phase 8: Third-Party Exporters
+### Phase 6: Third-Party Exporters
 Expand third-party integrations to support additional signals.
 
 - [ ] OtelExporter: logs, metrics support
@@ -367,7 +399,7 @@ Expand third-party integrations to support additional signals.
 - [ ] ArizeExporter: traces, scores support
 - [ ] Other exporters: audit and expand
 
-### Phase 9: MomentExporter
+### Phase 7: MomentExporter
 Internal event store for advanced use cases.
 
 - [ ] Moment schema (event store approach)
@@ -383,25 +415,30 @@ Phase 1 (Foundation)
     ↓
 Phase 2 (Debug Exporters) ← validates interfaces early
     ↓
-Phase 3 (Logging) ──────┐
-    ↓                   │
-Phase 4 (Metrics) ──────┼── can run in parallel
-    ↓                   │
-Phase 5 (Scores/Feedback)┘
+Phase 3 (Logging, Metrics, Scores/Feedback)
+    │   PR 3.1 → PR 3.2 → PR 3.3 → PR 3.4 → PR 3.5
     ↓
-Phase 6 (Stores & DefaultExporter)
+Phase 4 (Stores & DefaultExporter)
     ↓
-Phase 7 (Server & Client) ← depends on storage
+Phase 5 (Server & Client) ← depends on storage
     ↓
-Phase 8 (3rd-Party Exporters) ← can start after Phase 2
+Phase 6 (3rd-Party Exporters) ← can start after Phase 2
     ↓
-Phase 9 (MomentExporter)
+Phase 7 (MomentExporter)
 ```
 
 **Notes:**
-- Phases 3, 4, 5 can run in parallel after Phase 2
-- Phase 8 can start after Phase 2 (exporters just need Exported types)
-- Phase 6, 7, 9 must be sequential
+- Phase 3 PRs are sequential: 3.1 → 3.2 → 3.3 → 3.4 → 3.5
+- Phase 6 (3rd-party exporters) can start after Phase 2 (just need Exported types)
+- Phase 4, 5, 7 must be sequential
+
+## Changeset Strategy
+
+**One changeset per PR.** Each PR should include its own changeset file describing the changes. This allows:
+- Fine-grained version control
+- Clear attribution of changes
+- Easier rollback if needed
+- Better changelog generation
 
 ---
 
@@ -468,13 +505,11 @@ Auto-extracted from span lifecycle events (Phase 4).
 |-------|----------|-------|
 | Phase 1 | [phase-1/](./phase-1/) | Foundation, event bus, config |
 | Phase 2 | [phase-2/](./phase-2/) | Debug exporters (Json, GrafanaCloud) |
-| Phase 3 | [phase-3/](./phase-3/) | LoggerContext implementation |
-| Phase 4 | [phase-4/](./phase-4/) | MetricsContext, auto-extraction |
-| Phase 5 | [phase-5/](./phase-5/) | Score/Feedback APIs |
-| Phase 6 | [phase-6/](./phase-6/) | Stores & DefaultExporter |
-| Phase 7 | [phase-7/](./phase-7/) | Server & client-js |
-| Phase 8 | [phase-8/](./phase-8/) | Third-party exporters |
-| Phase 9 | [phase-9/](./phase-9/) | MomentExporter |
+| Phase 3 | [phase-3/](./phase-3/) | Logging, Metrics, Scores/Feedback |
+| Phase 4 | [phase-4/](./phase-4/) | Stores & DefaultExporter |
+| Phase 5 | [phase-5/](./phase-5/) | Server & client-js |
+| Phase 6 | [phase-6/](./phase-6/) | Third-party exporters |
+| Phase 7 | [phase-7/](./phase-7/) | MomentExporter |
 
 ---
 
@@ -483,5 +518,5 @@ Auto-extracted from span lifecycle events (Phase 4).
 - [ ] Verify scores table alignment with existing evals scores schema
 - [ ] Revisit table name `mastra_ai_trace_feedback`
 - [ ] Reference existing NoOp tracing implementation
-- [ ] Decide on changeset strategy (per-PR or per-phase)
+- [x] ~~Decide on changeset strategy (per-PR or per-phase)~~ → **Per-PR**
 - [ ] Create migration guide for deprecated `tracingContext`
