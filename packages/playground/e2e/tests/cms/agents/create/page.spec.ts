@@ -527,8 +527,14 @@ test.describe('Form Reset After Creation', () => {
 });
 
 test.describe('Full Agent Creation Flow', () => {
-  // Behavior: Complete flow with all capabilities creates fully configured agent
-  test('creates agent with all capabilities configured', async ({ page }) => {
+  /**
+   * FEATURE: Agent Creation with All Capabilities
+   * USER STORY: As a user, I want to create an agent with tools, workflows, sub-agents,
+   *             scorers, and memory so that the agent has all capabilities configured.
+   * BEHAVIOR UNDER TEST: All configured capabilities are persisted and displayed in the
+   *                      agent overview side panel after creation.
+   */
+  test('creates agent with all capabilities and verifies them in overview side panel', async ({ page }) => {
     await page.goto('/cms/agents/create');
 
     const agentName = uniqueAgentName('Full Flow Test');
@@ -587,15 +593,43 @@ test.describe('Full Agent Creation Flow', () => {
     // Verify success toast
     await expect(page.getByText('Agent created successfully')).toBeVisible();
 
-    // Verify agent name is visible
+    // Verify agent name is visible in the overview header
     await expect(page.getByRole('heading', { name: agentName })).toBeVisible({ timeout: 10000 });
 
-    // Verify Memory tab is visible (indicates memory was enabled)
+    // Verify Overview tab is selected (default tab)
+    await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+
+    // ========================================
+    // VERIFY ALL CAPABILITIES IN OVERVIEW SIDE PANEL
+    // ========================================
+
+    // 1. Memory: Badge should show "On" when memory is enabled
+    const memorySection = page.locator('h3:has-text("Memory")').locator('..');
+    await expect(memorySection.getByText('On')).toBeVisible({ timeout: 10000 });
+
+    // 2. Memory tab should be visible (additional verification)
     await expect(page.getByRole('tab', { name: 'Memory' })).toBeVisible();
 
-    // Verify capabilities in Overview
-    await expect(page.getByText('weatherInfo')).toBeVisible();
-    await expect(page.getByText('lessComplexWorkflow')).toBeVisible();
-    await expect(page.getByText('Weather Agent')).toBeVisible();
+    // 3. Tools: weatherInfo should be visible in the Tools section
+    const toolsSection = page.locator('h3:has-text("Tools")').locator('..');
+    await expect(toolsSection.getByText('weatherInfo')).toBeVisible({ timeout: 10000 });
+
+    // 4. Workflows: lessComplexWorkflow should be visible in the Workflows section
+    const workflowsSection = page.locator('h3:has-text("Workflows")').locator('..');
+    await expect(workflowsSection.getByText('lessComplexWorkflow')).toBeVisible({ timeout: 10000 });
+
+    // 5. Agents (Sub-Agents): Weather Agent should be visible in the Agents section
+    const agentsSection = page.locator('h3:has-text("Agents")').locator('..');
+    await expect(agentsSection.getByText('Weather Agent')).toBeVisible({ timeout: 10000 });
+
+    // 6. Scorers: Response Quality Scorer should be visible in the Scorers section
+    const scorersSection = page.locator('h3:has-text("Scorers")').locator('..');
+    await expect(scorersSection.getByText(/Response Quality/i)).toBeVisible({ timeout: 10000 });
+
+    // 7. System Prompt: Verify the instructions are displayed
+    const systemPromptSection = page.locator('h3:has-text("System Prompt")').locator('..');
+    await expect(systemPromptSection.getByText('You are a comprehensive test assistant')).toBeVisible({
+      timeout: 10000,
+    });
   });
 });
