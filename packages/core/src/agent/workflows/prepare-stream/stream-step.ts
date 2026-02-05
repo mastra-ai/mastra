@@ -3,6 +3,7 @@ import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-f
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
+import { resolveObservabilityContext } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import { createStep } from '../../../workflows';
@@ -55,7 +56,7 @@ export function createStreamStep<OUTPUT = undefined>({
     id: 'stream-text-step',
     inputSchema: z.any(), // tried to type this in various ways but it's too complex
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
-    execute: async ({ inputData, tracingContext }) => {
+    execute: async ({ inputData, ...observabilityContext }) => {
       // Instead of validating inputData with zod, we just cast it to the type we know it should be
       const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
 
@@ -79,7 +80,7 @@ export function createStreamStep<OUTPUT = undefined>({
         ...validatedInputData,
         outputProcessors: processors,
         returnScorerData,
-        tracingContext,
+        ...resolveObservabilityContext(observabilityContext),
         requireToolApproval,
         toolCallConcurrency,
         resumeContext,
@@ -99,7 +100,7 @@ export function createStreamStep<OUTPUT = undefined>({
         workspace,
       });
 
-      return streamResult;
+      return streamResult as unknown as MastraModelOutput<OUTPUT>;
     },
   });
 }

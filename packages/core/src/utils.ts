@@ -9,7 +9,7 @@ import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
-import type { TracingContext, TracingPolicy } from './observability';
+import type { ObservabilityContext, TracingPolicy } from './observability';
 import type { RequestContext } from './request-context';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { Tool } from './tools/tool';
@@ -267,7 +267,7 @@ export function resolveSerializedZodOutput(schema: string): z.ZodType {
   return Function('z', `"use strict";return (${schema});`)(z);
 }
 
-export interface ToolOptions {
+export interface ToolOptions extends Partial<ObservabilityContext> {
   name: string;
   runId?: string;
   threadId?: string;
@@ -276,8 +276,6 @@ export interface ToolOptions {
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   requestContext: RequestContext;
-  /** Build-time tracing context (fallback for Legacy methods that can't pass request context) */
-  tracingContext?: TracingContext;
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;

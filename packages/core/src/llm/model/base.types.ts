@@ -21,19 +21,18 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent/types';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
-import type { TracingContext, TracingProperties } from '../../observability';
+import type { ObservabilityContext, TracingProperties } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
 export type { ToolSet } from '@internal/ai-sdk-v4';
 
-type MastraCustomLLMOptions = {
+type MastraCustomLLMOptions = ObservabilityContext & {
   tools?: Record<string, Tool>;
   threadId?: string;
   resourceId?: string;
   requestContext: RequestContext;
-  tracingContext: TracingContext;
   runId?: string;
   outputProcessors?: OutputProcessorOrWorkflow[];
 };

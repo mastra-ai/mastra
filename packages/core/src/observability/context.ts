@@ -10,6 +10,7 @@ import type { MastraPrimitives } from '../action';
 import type { Agent } from '../agent';
 import type { Mastra } from '../mastra';
 import type { Workflow } from '../workflows';
+import { createObservabilityContext } from './context-factory';
 import type { TracingContext, AnySpan } from './types';
 
 const AGENT_GETTERS = ['getAgent', 'getAgentById'];
@@ -108,7 +109,7 @@ function wrapAgent<T extends Agent>(agent: T, tracingContext: TracingContext): T
             return (input: any, options: any = {}) => {
               return (target as any)[prop](input, {
                 ...options,
-                tracingContext,
+                ...createObservabilityContext(tracingContext),
               });
             };
           }
@@ -157,7 +158,7 @@ function wrapWorkflow<T extends Workflow>(workflow: T, tracingContext: TracingCo
             return (input: any, options: any = {}) => {
               return (target as any)[prop](input, {
                 ...options,
-                tracingContext,
+                ...createObservabilityContext(tracingContext),
               });
             };
           }
@@ -196,7 +197,7 @@ function wrapRun<T extends object>(run: T, tracingContext: TracingContext): T {
             return (startOptions: any = {}) => {
               return (target as any).start({
                 ...startOptions,
-                tracingContext: startOptions.tracingContext ?? tracingContext,
+                ...createObservabilityContext(startOptions.tracingContext ?? tracingContext),
               });
             };
           }

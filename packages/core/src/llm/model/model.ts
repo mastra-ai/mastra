@@ -22,7 +22,7 @@ import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
-import { SpanType } from '../../observability';
+import { SpanType, resolveObservabilityContext } from '../../observability';
 import { executeWithContext, executeWithContextSync } from '../../observability/utils';
 import { convertV4Usage } from '../../stream/aisdk/v4/usage';
 import { delay, isZodType } from '../../utils';
@@ -128,10 +128,10 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     ...rest
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
     const model = this.#model;
+    const observabilityContext = resolveObservabilityContext(rest);
 
     this.logger.debug(`[LLM] - Generating text`, {
       runId,
@@ -163,7 +163,7 @@ export class MastraLLMV1 extends MastraBase {
       }
     }
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -304,14 +304,14 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     ...rest
   }: GenerateObjectWithMessagesArgs<Z>): Promise<GenerateObjectResult<Z>> {
     const model = this.#model;
+    const observabilityContext = resolveObservabilityContext(rest);
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -437,10 +437,11 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     ...rest
   }: StreamTextWithMessagesArgs<Tools, Z>): StreamTextResult<Tools, Z> {
     const model = this.#model;
+    const observabilityContext = resolveObservabilityContext(rest);
+
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
       threadId,
@@ -465,7 +466,7 @@ export class MastraLLMV1 extends MastraBase {
       }
     }
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -638,16 +639,17 @@ export class MastraLLMV1 extends MastraBase {
     resourceId,
     onFinish,
     structuredOutput,
-    tracingContext,
     ...rest
   }: StreamObjectWithMessagesArgs<T>): StreamObjectResult<T> {
     const model = this.#model;
+    const observabilityContext = resolveObservabilityContext(rest);
+
     this.logger.debug(`[LLM] - Streaming structured output`, {
       runId,
       messages,
     });
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {

@@ -25,7 +25,7 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
-import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
+import type { ObservabilityContext, Span, SpanType, TracingOptions, TracingPolicy } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
@@ -331,34 +331,33 @@ export type AgentGenerateOptions<
    * If not set, no retries are performed.
    */
   maxProcessorRetries?: number;
-  /** tracing context for span hierarchy and metadata */
-  tracingContext?: TracingContext;
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
-} & (
-  | {
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      resourceId?: undefined;
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      threadId?: undefined;
-    }
-  | {
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      resourceId: string;
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      threadId: string;
-    }
-) &
+} & Partial<ObservabilityContext> &
+  (
+    | {
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        resourceId?: undefined;
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        threadId?: undefined;
+      }
+    | {
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        resourceId: string;
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        threadId: string;
+      }
+  ) &
   (OUTPUT extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
 /**
@@ -408,36 +407,35 @@ export type AgentStreamOptions<
   savePerStep?: boolean;
   /** Input processors to use for this generation call (overrides agent's default) */
   inputProcessors?: InputProcessorOrWorkflow[];
-  /** tracing context for span hierarchy and metadata */
-  tracingContext?: TracingContext;
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
-} & (
-  | {
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      resourceId?: undefined;
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      threadId?: undefined;
-    }
-  | {
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      resourceId: string;
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      threadId: string;
-    }
-) &
+} & Partial<ObservabilityContext> &
+  (
+    | {
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        resourceId?: undefined;
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        threadId?: undefined;
+      }
+    | {
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        resourceId: string;
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        threadId: string;
+      }
+  ) &
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
 
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
