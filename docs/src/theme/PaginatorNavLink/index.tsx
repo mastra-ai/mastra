@@ -5,7 +5,6 @@ import { type ReactNode } from 'react'
 
 export default function PaginatorNavLink(props: Props): ReactNode {
   const { permalink, title, subLabel, isNext } = props
-  console.log({ props })
   return (
     <Link
       className={cn(
