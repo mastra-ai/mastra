@@ -120,7 +120,7 @@
     "typescript-paths": "^1.5.1"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.6",
+    "@hono/node-server": "^1.19.9",
     "@hono/standard-validator": "^0.2.1",
     "@hono/swagger-ui": "^0.5.2",
     "@internal/lint": "workspace:*",
