@@ -18,10 +18,9 @@ import { GCSFilesystem } from './index';
 
 /**
  * Check if we have GCS credentials (cloud) or emulator endpoint (docker).
- * The Google Cloud library uses STORAGE_EMULATOR_HOST to detect emulators.
  */
 const hasGCSCloudCredentials = !!(process.env.GCS_SERVICE_ACCOUNT_KEY && process.env.TEST_GCS_BUCKET);
-const hasGCSEmulator = !!(process.env.STORAGE_EMULATOR_HOST && process.env.TEST_GCS_BUCKET);
+const hasGCSEmulator = !!(process.env.GCS_ENDPOINT && process.env.TEST_GCS_BUCKET);
 const canRunGCSTests = hasGCSCloudCredentials || hasGCSEmulator;
 
 describe.skipIf(!canRunGCSTests)('GCSFilesystem Integration', () => {
@@ -33,7 +32,7 @@ describe.skipIf(!canRunGCSTests)('GCSFilesystem Integration', () => {
     testPrefix = `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     // For cloud, use service account credentials
-    // For emulator, credentials are not needed (STORAGE_EMULATOR_HOST is set)
+    // For emulator, credentials are not needed but endpoint must be set
     const credentials = process.env.GCS_SERVICE_ACCOUNT_KEY
       ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY)
       : undefined;
@@ -42,6 +41,7 @@ describe.skipIf(!canRunGCSTests)('GCSFilesystem Integration', () => {
       bucket: testBucket,
       credentials,
       prefix: testPrefix,
+      endpoint: process.env.GCS_ENDPOINT,
     });
   });
 
@@ -153,6 +153,7 @@ if (canRunGCSTests) {
         bucket: process.env.TEST_GCS_BUCKET!,
         credentials,
         prefix: testPrefix,
+        endpoint: process.env.GCS_ENDPOINT,
       });
     },
     cleanupFilesystem: async (fs) => {

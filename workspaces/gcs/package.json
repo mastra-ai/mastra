@@ -25,7 +25,7 @@
     "test": "vitest run --exclude '**/*.integration.test.ts'",
     "test:watch": "vitest watch",
     "test:integration": "vitest run ./src/**/*.integration.test.ts",
-    "test:integration:docker": "docker compose up -d && sleep 3 && STORAGE_EMULATOR_HOST=http://localhost:4443 TEST_GCS_BUCKET=test-bucket pnpm test:integration; docker compose down",
+    "test:integration:docker": "docker compose up -d && sleep 3 && GCS_ENDPOINT=http://localhost:4443 TEST_GCS_BUCKET=test-bucket pnpm test:integration; docker compose down",
     "test:integration:cloud": "pnpm test:integration",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",

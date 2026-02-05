@@ -112,6 +112,11 @@ export interface GCSFilesystemOptions {
   prefix?: string;
   /** Mount as read-only (blocks write operations, mounts read-only in sandboxes) */
   readOnly?: boolean;
+  /**
+   * Custom API endpoint URL.
+   * Used for local development with emulators like fake-gcs-server.
+   */
+  endpoint?: string;
 }
 
 /**
@@ -177,6 +182,7 @@ export class GCSFilesystem extends MastraFilesystem {
   private readonly projectId?: string;
   private readonly credentials?: object | string;
   private readonly prefix: string;
+  private readonly endpoint?: string;
 
   private _storage: Storage | null = null;
   private _bucket: Bucket | null = null;
@@ -189,6 +195,7 @@ export class GCSFilesystem extends MastraFilesystem {
     this.credentials = options.credentials;
     // Trim leading/trailing slashes from prefix (split to avoid polynomial regex)
     this.prefix = options.prefix ? options.prefix.replace(/^\/+/, '').replace(/\/+$/, '') + '/' : '';
+    this.endpoint = options.endpoint;
 
     // Display metadata
     this.displayName = options.displayName ?? 'Google Cloud Storage';
@@ -227,7 +234,7 @@ export class GCSFilesystem extends MastraFilesystem {
   private getStorage(): Storage {
     if (this._storage) return this._storage;
 
-    const options: { projectId?: string; credentials?: object; keyFilename?: string } = {};
+    const options: { projectId?: string; credentials?: object; keyFilename?: string; apiEndpoint?: string } = {};
 
     if (this.projectId) {
       options.projectId = this.projectId;
@@ -241,6 +248,10 @@ export class GCSFilesystem extends MastraFilesystem {
         // Credentials object
         options.credentials = this.credentials;
       }
+    }
+
+    if (this.endpoint) {
+      options.apiEndpoint = this.endpoint;
     }
 
     this._storage = new Storage(options);
