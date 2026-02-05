@@ -370,7 +370,7 @@ export class S3Filesystem extends MastraFilesystem {
    * Uses base class ensureReady() for status management, then returns client.
    */
   private async getReadyClient(): Promise<S3Client> {
-    await this.getReadyClient();
+    await this.ensureReady();
     return this.getClient();
   }
 

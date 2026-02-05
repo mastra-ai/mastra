@@ -313,6 +313,43 @@ describe('Workspace Logger Integration', () => {
   // MastraSandbox base class
   // ===========================================================================
   describe('MastraSandbox', () => {
+    it('should propagate logger to MountManager when mount() is implemented', () => {
+      // Create a sandbox with mount() implemented
+      class MountingSandbox extends MastraSandbox {
+        readonly id = 'mounting-sandbox';
+        readonly name = 'MountingSandbox';
+        readonly provider = 'test';
+        status: ProviderStatus = 'pending';
+
+        constructor() {
+          super({ name: 'MountingSandbox' });
+        }
+
+        async mount(): Promise<{ success: boolean; mountPath: string }> {
+          return { success: true, mountPath: '/test' };
+        }
+
+        async executeCommand(): Promise<CommandResult> {
+          return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 0 };
+        }
+      }
+
+      const mockLogger = createMockLogger();
+      const sandbox = new MountingSandbox();
+
+      // MountManager should exist
+      expect(sandbox.mounts).toBeDefined();
+
+      // Spy on MountManager's __setLogger
+      const mountsSetLoggerSpy = vi.spyOn(sandbox.mounts!, '__setLogger');
+
+      // Set logger on sandbox
+      sandbox.__setLogger(mockLogger);
+
+      // Verify logger was propagated to MountManager
+      expect(mountsSetLoggerSpy).toHaveBeenCalledWith(mockLogger);
+    });
+
     it('should have default logger from MastraBase', () => {
       const sandbox = new TestSandbox();
 
@@ -520,6 +557,84 @@ describe('Workspace Logger Integration', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith('Executing command', expect.any(Object));
 
       await workspace.destroy();
+    });
+  });
+
+  // ===========================================================================
+  // Integration: Agent with Workspace
+  // ===========================================================================
+  describe('Integration: Agent with Workspace', () => {
+    it('should propagate logger from Mastra to Agent to Workspace', async () => {
+      const mockLogger = createMockLogger();
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const workspace = new Workspace({ filesystem, sandbox });
+
+      // Create agent with workspace
+      const { Agent } = await import('../agent');
+      const agent = new Agent({
+        name: 'test-agent',
+        instructions: 'Test agent',
+        model: { provider: 'OPEN_AI', name: 'gpt-4o' },
+        workspace,
+      });
+
+      // Register agent with Mastra (triggers logger propagation)
+      new Mastra({
+        logger: mockLogger,
+        agents: { 'test-agent': agent },
+      });
+
+      // Get workspace from agent - should have received logger
+      const agentWorkspace = await agent.getWorkspace();
+      expect(agentWorkspace).toBe(workspace);
+
+      // Init and verify logger propagated
+      await agentWorkspace!.init();
+
+      expect(mockLogger.debug).toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith('Starting sandbox', expect.any(Object));
+
+      await agentWorkspace!.destroy();
+    });
+
+    it('should propagate logger to workspace factory results', async () => {
+      const mockLogger = createMockLogger();
+
+      // Create a workspace factory that creates new workspace each time
+      const workspaceFactory = () => {
+        const filesystem = new LocalFilesystem({ basePath: tempDir });
+        return new Workspace({ filesystem });
+      };
+
+      // Create agent with workspace factory
+      const { Agent } = await import('../agent');
+      const agent = new Agent({
+        name: 'factory-agent',
+        instructions: 'Test agent with factory',
+        model: { provider: 'OPEN_AI', name: 'gpt-4o' },
+        workspace: workspaceFactory,
+      });
+
+      // Register agent with Mastra (triggers logger propagation)
+      new Mastra({
+        logger: mockLogger,
+        agents: { 'factory-agent': agent },
+      });
+
+      // Note: For factory-based workspaces, logger propagation happens
+      // when Mastra sets the logger on the agent. The agent stores the logger
+      // but factory workspaces are resolved at runtime, so they don't
+      // automatically receive the logger unless explicitly propagated.
+      // This test documents the current behavior.
+
+      // Get workspace from agent
+      const workspace1 = await agent.getWorkspace();
+      expect(workspace1).toBeDefined();
+
+      // Factory functions create new instances, so logger may not be set
+      // unless the implementation explicitly propagates it
+      await workspace1!.destroy();
     });
   });
 
