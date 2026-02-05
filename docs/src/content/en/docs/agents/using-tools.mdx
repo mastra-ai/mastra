@@ -90,9 +90,9 @@ tools: { "my-custom-name": weatherTool }
 
 This lets you specify how tools are identified in the stream. If you want the `toolName` to match the tool's `id`, use the tool's `id` as the object key.
 
-### Sub-agents and workflows as tools
+### Subagents and workflows as tools
 
-Sub-agents and workflows follow the same pattern. They are converted to tools with a prefix followed by your object key:
+Subagents and workflows follow the same pattern. They are converted to tools with a prefix followed by your object key:
 
 | Property | Prefix | Example key | `toolName` |
 |----------|--------|-------------|------------|
@@ -101,7 +101,6 @@ Sub-agents and workflows follow the same pattern. They are converted to tools wi
 
 ```typescript
 const orchestrator = new Agent({
-  // ...
   agents: {
     weather: weatherAgent,  // toolName: "agent-weather"
   },
@@ -111,9 +110,9 @@ const orchestrator = new Agent({
 });
 ```
 
-Note that for sub-agents, you'll see two different identifiers in stream responses:
+Note that for subagents, you'll see two different identifiers in stream responses:
 - `toolName: "agent-weather"` in tool call events — the generated tool wrapper name
-- `id: "weather-agent"` in `data-tool-agent` chunks — the sub-agent's actual `id` property
+- `id: "weather-agent"` in `data-tool-agent` chunks — the subagent's actual `id` property
 
 ## Calling an agent
 
