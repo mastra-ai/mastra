@@ -141,7 +141,7 @@ describe('Storage Operations', () => {
   // Note: markMessagesAsBuffering was removed - async buffering now uses updateBufferedObservations with bufferedMessageIds
 
   describe('updateBufferedObservations', () => {
-    it('should store buffered observations', async () => {
+    it('should store buffered observations as chunks', async () => {
       const initial = await storage.initializeObservationalMemory({
         threadId,
         resourceId,
@@ -151,16 +151,21 @@ describe('Storage Operations', () => {
 
       await storage.updateBufferedObservations({
         id: initial.id,
-        observations: '- 🔴 Buffered observation',
-        tokenCount: 50,
+        chunk: {
+          observations: '- 🔴 Buffered observation',
+          tokenCount: 50,
+          messageIds: ['msg-1'],
+        },
       });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
-      expect(record?.bufferedObservations).toBe('- 🔴 Buffered observation');
-      expect(record?.bufferedObservationTokens).toBe(50);
+      expect(record?.bufferedObservationChunks).toHaveLength(1);
+      expect(record?.bufferedObservationChunks?.[0]?.observations).toBe('- 🔴 Buffered observation');
+      expect(record?.bufferedObservationChunks?.[0]?.tokenCount).toBe(50);
+      expect(record?.bufferedObservationChunks?.[0]?.messageIds).toEqual(['msg-1']);
     });
 
-    it('should append buffered observations on subsequent updates', async () => {
+    it('should append buffered observations as separate chunks', async () => {
       const initial = await storage.initializeObservationalMemory({
         threadId,
         resourceId,
@@ -170,25 +175,33 @@ describe('Storage Operations', () => {
 
       await storage.updateBufferedObservations({
         id: initial.id,
-        observations: '- 🔴 First buffered',
-        tokenCount: 30,
+        chunk: {
+          observations: '- 🔴 First buffered',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+        },
       });
 
       await storage.updateBufferedObservations({
         id: initial.id,
-        observations: '- 🔴 Second buffered',
-        tokenCount: 20,
+        chunk: {
+          observations: '- 🔴 Second buffered',
+          tokenCount: 20,
+          messageIds: ['msg-2'],
+        },
       });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
-      expect(record?.bufferedObservations).toContain('- 🔴 First buffered');
-      expect(record?.bufferedObservations).toContain('- 🔴 Second buffered');
-      expect(record?.bufferedObservationTokens).toBe(50);
+      expect(record?.bufferedObservationChunks).toHaveLength(2);
+      expect(record?.bufferedObservationChunks?.[0]?.observations).toBe('- 🔴 First buffered');
+      expect(record?.bufferedObservationChunks?.[0]?.tokenCount).toBe(30);
+      expect(record?.bufferedObservationChunks?.[1]?.observations).toBe('- 🔴 Second buffered');
+      expect(record?.bufferedObservationChunks?.[1]?.tokenCount).toBe(20);
     });
   });
 
   describe('swapBufferedToActive', () => {
-    it('should append buffered to active and clear buffered', async () => {
+    it('should append buffered chunks to active and clear buffered', async () => {
       const initial = await storage.initializeObservationalMemory({
         threadId,
         resourceId,
@@ -204,23 +217,26 @@ describe('Storage Operations', () => {
         lastObservedAt: new Date(),
       });
 
-      // Add buffered observations
+      // Add buffered observations as a chunk
       await storage.updateBufferedObservations({
         id: initial.id,
-        observations: '- 🟡 Buffered observation',
-        tokenCount: 40,
+        chunk: {
+          observations: '- 🟡 Buffered observation',
+          tokenCount: 40,
+          messageIds: ['msg-1'],
+        },
       });
 
       await storage.swapBufferedToActive({
         id: initial.id,
-        activationRatio: 100,
+        activationRatio: 1, // 100% as 0-1 float
         lastObservedAt: new Date(),
       });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.activeObservations).toContain('- 🔴 Active observation');
       expect(record?.activeObservations).toContain('- 🟡 Buffered observation');
-      expect(record?.bufferedObservations).toBeUndefined();
+      expect(record?.bufferedObservationChunks).toBeUndefined();
     });
 
     it('should update lastObservedAt when swapping buffered to active', async () => {
@@ -234,17 +250,20 @@ describe('Storage Operations', () => {
       // Initially, lastObservedAt is undefined (all messages are unobserved)
       expect(initial.lastObservedAt).toBeUndefined();
 
-      // Add buffered observations
+      // Add buffered observations as a chunk
       await storage.updateBufferedObservations({
         id: initial.id,
-        observations: '- 🟡 Buffered observation',
-        tokenCount: 40,
+        chunk: {
+          observations: '- 🟡 Buffered observation',
+          tokenCount: 40,
+          messageIds: ['msg-1'],
+        },
       });
 
       const beforeSwap = new Date();
       await storage.swapBufferedToActive({
         id: initial.id,
-        activationRatio: 100,
+        activationRatio: 1, // 100% as 0-1 float
         lastObservedAt: beforeSwap,
       });
 
@@ -1779,7 +1798,7 @@ describe('Scenario: Basic Observation Flow', () => {
 });
 
 describe('Scenario: Buffering Flow', () => {
-  it('should support async buffering workflow', async () => {
+  it('should support async buffering workflow with chunks', async () => {
     const storage = createInMemoryStorage();
 
     const record = await storage.initializeObservationalMemory({
@@ -1789,18 +1808,21 @@ describe('Scenario: Buffering Flow', () => {
       config: {},
     });
 
-    // Step 1: Store buffered observations (async observation in progress)
+    // Step 1: Store buffered observations as a chunk (async observation in progress)
     await storage.updateBufferedObservations({
       id: record.id,
-      observations: '- 🟡 Buffered observation',
-      tokenCount: 50,
-      bufferedMessageIds: ['msg-1', 'msg-2'],
+      chunk: {
+        observations: '- 🟡 Buffered observation',
+        tokenCount: 50,
+        messageIds: ['msg-1', 'msg-2'],
+      },
     });
 
     let current = await storage.getObservationalMemory('thread-1', 'resource-1');
-    expect(current?.bufferedObservations).toBe('- 🟡 Buffered observation');
-    expect(current?.bufferedObservationTokens).toBe(50);
-    expect(current?.bufferedMessageIds).toEqual(['msg-1', 'msg-2']);
+    expect(current?.bufferedObservationChunks).toHaveLength(1);
+    expect(current?.bufferedObservationChunks?.[0]?.observations).toBe('- 🟡 Buffered observation');
+    expect(current?.bufferedObservationChunks?.[0]?.tokenCount).toBe(50);
+    expect(current?.bufferedObservationChunks?.[0]?.messageIds).toEqual(['msg-1', 'msg-2']);
 
     // Buffered observations should NOT be in active yet
     expect(current?.activeObservations).toBe('');
@@ -1809,14 +1831,17 @@ describe('Scenario: Buffering Flow', () => {
     const swapTime = new Date();
     await storage.swapBufferedToActive({
       id: record.id,
-      activationRatio: 100,
+      activationRatio: 1, // 100% as 0-1 float
       lastObservedAt: swapTime,
     });
 
     current = await storage.getObservationalMemory('thread-1', 'resource-1');
     expect(current?.activeObservations).toContain('Buffered observation');
-    expect(current?.bufferedObservations).toBeUndefined();
-    expect(current?.observedMessageIds).toEqual(['msg-1', 'msg-2']);
+    expect(current?.bufferedObservationChunks).toBeUndefined();
+    // NOTE: observedMessageIds is NOT updated during buffered activation
+    // because buffered chunks represent observations of messages as they were at buffering time.
+    // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
+    expect(current?.observedMessageIds).toBeUndefined();
     expect(current?.lastObservedAt).toEqual(swapTime);
   });
 });

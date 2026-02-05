@@ -143,6 +143,13 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   isReflecting: { type: 'boolean', nullable: false },
   observedMessageIds: { type: 'jsonb', nullable: true }, // JSON array of message IDs already observed
   observedTimezone: { type: 'text', nullable: true }, // Timezone used for Observer date formatting (e.g., "America/Los_Angeles")
+  // Async buffering columns
+  bufferedObservations: { type: 'text', nullable: true }, // JSON string of buffered observation content
+  bufferedObservationTokens: { type: 'integer', nullable: true }, // Token count of buffered observations
+  bufferedMessageIds: { type: 'jsonb', nullable: true }, // JSON array of message IDs in the buffer
+  bufferedReflection: { type: 'text', nullable: true }, // JSON string of buffered reflection content
+  bufferedReflectionTokens: { type: 'integer', nullable: true }, // Token count of buffered reflection
+  bufferedObservationChunks: { type: 'jsonb', nullable: true }, // JSON array of BufferedObservationChunk objects
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };

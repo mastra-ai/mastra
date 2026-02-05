@@ -193,7 +193,7 @@ function findPreviousBadge(badges: HTMLElement[], currentIndex: number, omType: 
 interface HighlightPosition {
   cycleId: string;
   omType: OmType;
-  state: 'loading' | 'complete' | 'failed' | 'disconnected' | 'buffering' | 'buffering-complete' | 'buffering-failed';
+  state: 'loading' | 'complete' | 'failed' | 'disconnected' | 'buffering' | 'buffering-complete' | 'buffering-failed' | 'activated';
   /** Top position relative to the container (in px) */
   top: number;
   /** Height of the highlight block (in px) */
@@ -235,6 +235,9 @@ function getStateColor(state: HighlightPosition['state']): string {
       return 'rgba(168, 85, 247, 0.4)';
     case 'buffering-failed':
       return 'rgba(239, 68, 68, 0.4)';
+    // Activation state uses cyan color
+    case 'activated':
+      return 'rgba(6, 182, 212, 0.4)';
     default:
       return 'rgba(34, 197, 94, 0.4)';
   }

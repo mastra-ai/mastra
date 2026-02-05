@@ -509,6 +509,51 @@ export type ObservationalMemoryScope = 'thread' | 'resource';
 export type ObservationalMemoryOriginType = 'initial' | 'reflection';
 
 /**
+ * A chunk of buffered observations from a single observation cycle.
+ * Multiple chunks can accumulate before being activated together.
+ */
+export interface BufferedObservationChunk {
+  /** Unique identifier for this chunk */
+  id: string;
+  /** The observation text content */
+  observations: string;
+  /** Token count of this chunk's observations */
+  tokenCount: number;
+  /** Message IDs that were observed in this chunk */
+  messageIds: string[];
+  /** Token count of the messages that were observed (for activation calculation) */
+  messageTokens: number;
+  /** When the messages were last observed */
+  lastObservedAt: Date;
+  /** When this chunk was created */
+  createdAt: Date;
+  /** Optional suggested continuation from the observer */
+  suggestedContinuation?: string;
+  /** Optional current task context */
+  currentTask?: string;
+}
+
+/**
+ * Input for creating a new buffered observation chunk.
+ */
+export interface BufferedObservationChunkInput {
+  /** The observation text content */
+  observations: string;
+  /** Token count of this chunk's observations */
+  tokenCount: number;
+  /** Message IDs that were observed in this chunk */
+  messageIds: string[];
+  /** Token count of the messages that were observed (for activation calculation) */
+  messageTokens: number;
+  /** When the messages were observed */
+  lastObservedAt: Date;
+  /** Optional suggested continuation from the observer */
+  suggestedContinuation?: string;
+  /** Optional current task context */
+  currentTask?: string;
+}
+
+/**
  * Core database record for observational memory
  *
  * For resource scope: One active record per resource, containing observations from ALL threads.
@@ -554,11 +599,26 @@ export interface ObservationalMemoryRecord {
    * For thread scope: Plain observation text.
    */
   activeObservations: string;
-  /** Observations waiting to be activated (async buffering) */
+  /**
+   * Array of buffered observation chunks waiting to be activated.
+   * Each chunk represents observations from a single observation cycle.
+   * Multiple chunks can accumulate before being activated together.
+   */
+  bufferedObservationChunks?: BufferedObservationChunk[];
+  /**
+   * @deprecated Use bufferedObservationChunks instead. Legacy field for backwards compatibility.
+   * Observations waiting to be activated (async buffering)
+   */
   bufferedObservations?: string;
-  /** Token count of buffered observations */
+  /**
+   * @deprecated Use bufferedObservationChunks instead. Legacy field for backwards compatibility.
+   * Token count of buffered observations
+   */
   bufferedObservationTokens?: number;
-  /** Message IDs being processed in async buffering */
+  /**
+   * @deprecated Use bufferedObservationChunks instead. Legacy field for backwards compatibility.
+   * Message IDs being processed in async buffering
+   */
   bufferedMessageIds?: string[];
   /** Reflection waiting to be swapped in (async buffering) */
   bufferedReflection?: string;
@@ -640,16 +700,12 @@ export interface UpdateActiveObservationsInput {
 /**
  * Input for updating buffered observations.
  * Used when async buffering is enabled via `bufferEvery` config.
+ * Adds a new chunk to the bufferedObservationChunks array.
  */
 export interface UpdateBufferedObservationsInput {
   id: string;
-  observations: string;
-  /** Token count of the buffered observations */
-  tokenCount: number;
-  /** Message IDs that were buffered */
-  bufferedMessageIds?: string[];
-  suggestedContinuation?: string;
-  currentTask?: string;
+  /** The observation chunk to add to the buffer */
+  chunk: BufferedObservationChunkInput;
 }
 
 /**
@@ -659,13 +715,17 @@ export interface UpdateBufferedObservationsInput {
 export interface SwapBufferedToActiveInput {
   id: string;
   /**
-   * Percentage of buffered observations to activate (0-100).
-   * If set to 100, all buffered observations are moved to active.
-   * If less than 100, only that percentage is activated, the rest stays buffered.
+   * Ratio of buffered observations to activate (0-1 float).
+   * If set to 1, all buffered observations are moved to active.
+   * If less than 1, only that ratio is activated, the rest stays buffered.
+   * The storage adapter uses this to select chunks by boundary, biased under.
    */
   activationRatio: number;
-  /** Timestamp to use as lastObservedAt after swap */
-  lastObservedAt: Date;
+  /**
+   * Optional timestamp to use as lastObservedAt after swap.
+   * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
+   */
+  lastObservedAt?: Date;
 }
 
 /**
@@ -686,9 +746,9 @@ export interface UpdateBufferedReflectionInput {
 export interface SwapBufferedReflectionToActiveInput {
   currentRecord: ObservationalMemoryRecord;
   /**
-   * Percentage of buffered reflection to activate (0-100).
-   * If set to 100, all buffered reflection is used.
-   * If less than 100, only that percentage is used, the rest stays buffered.
+   * Ratio of buffered reflection to activate (0-1 float).
+   * If set to 1, all buffered reflection is used.
+   * If less than 1, only that ratio is used, the rest stays buffered.
    */
   activationRatio: number;
 }

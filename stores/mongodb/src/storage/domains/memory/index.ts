@@ -29,6 +29,7 @@ import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
   ObservationalMemoryRecord,
+  BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
@@ -1133,9 +1134,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       originType: doc.originType || 'initial',
       generationCount: Number(doc.generationCount || 0),
       activeObservations: doc.activeObservations || '',
+      // Handle new chunk-based structure
+      bufferedObservationChunks: doc.bufferedObservationChunks || undefined,
+      // Deprecated fields (for backward compatibility)
       bufferedObservations: doc.activeObservationsPendingUpdate || undefined,
       bufferedObservationTokens: doc.bufferedObservationTokens ? Number(doc.bufferedObservationTokens) : undefined,
-      bufferedMessageIds: doc.bufferedMessageIds || undefined,
+      bufferedMessageIds: undefined, // Use bufferedObservationChunks instead
       bufferedReflection: doc.bufferedReflection || undefined,
       bufferedReflectionTokens: doc.bufferedReflectionTokens ? Number(doc.bufferedReflectionTokens) : undefined,
       totalTokensObserved: Number(doc.totalTokensObserved || 0),
@@ -1504,36 +1508,25 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     try {
       const collection = await this.getCollection(OM_TABLE);
 
-      // First get current record to merge buffered content
-      const doc = await collection.findOne({ id: input.id });
-      if (!doc) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'UPDATE_BUFFERED_OBSERVATIONS', 'NOT_FOUND'),
-          text: `Observational memory record not found: ${input.id}`,
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { id: input.id },
-        });
-      }
+      // Create new chunk with ID and timestamp
+      const newChunk: BufferedObservationChunk = {
+        id: `ombuf-${randomUUID()}`,
+        observations: input.chunk.observations,
+        tokenCount: input.chunk.tokenCount,
+        messageIds: input.chunk.messageIds,
+        messageTokens: input.chunk.messageTokens,
+        lastObservedAt: input.chunk.lastObservedAt,
+        createdAt: new Date(),
+        suggestedContinuation: input.chunk.suggestedContinuation,
+        currentTask: input.chunk.currentTask,
+      };
 
-      const existingContent = (doc.activeObservationsPendingUpdate as string) || '';
-      const existingTokens = Number(doc.bufferedObservationTokens || 0);
-      const existingMessageIds: string[] = doc.bufferedMessageIds || [];
-
-      // Merge content
-      const newContent = existingContent ? `${existingContent}\n\n${input.observations}` : input.observations;
-      const newTokens = existingTokens + input.tokenCount;
-      const newMessageIds = [...existingMessageIds, ...(input.bufferedMessageIds || [])];
-
+      // Use $push to append chunk to array atomically
       const result = await collection.updateOne(
         { id: input.id },
         {
-          $set: {
-            activeObservationsPendingUpdate: newContent,
-            bufferedObservationTokens: newTokens,
-            bufferedMessageIds: newMessageIds,
-            updatedAt: new Date(),
-          },
+          $push: { bufferedObservationChunks: newChunk as any },
+          $set: { updatedAt: new Date() },
         },
       );
 
@@ -1578,43 +1571,70 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         });
       }
 
-      const bufferedContent = (doc.activeObservationsPendingUpdate as string) || '';
-      const bufferedTokens = Number(doc.bufferedObservationTokens || 0);
-      const bufferedMessageIds: string[] = doc.bufferedMessageIds || [];
+      // Parse buffered chunks safely
+      const chunks: BufferedObservationChunk[] = Array.isArray(doc.bufferedObservationChunks)
+        ? doc.bufferedObservationChunks
+        : [];
 
-      if (!bufferedContent) {
+      if (chunks.length === 0) {
         return; // Nothing to swap
       }
 
-      // Split by lines for partial activation
-      const lines = bufferedContent.split('\n');
-      const totalLines = lines.length;
-      const linesToActivate = Math.ceil((totalLines * input.activationRatio) / 100);
+      // Calculate total buffered tokens across all chunks
+      const totalBufferedTokens = chunks.reduce((sum, chunk) => sum + chunk.tokenCount, 0);
+      const targetTokens = totalBufferedTokens * input.activationRatio;
 
-      const activatedLines = lines.slice(0, linesToActivate);
-      const remainingLines = lines.slice(linesToActivate);
+      // Find the closest chunk boundary to the target, biased under
+      let cumulativeTokens = 0;
+      let bestBoundary = 0;
+      let bestBoundaryTokens = 0;
 
-      const activatedContent = activatedLines.join('\n');
-      const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : null;
+      for (let i = 0; i < chunks.length; i++) {
+        cumulativeTokens += chunks[i]!.tokenCount;
+        const boundary = i + 1;
 
-      // Calculate approximate token split
-      const activatedTokens = Math.ceil((bufferedTokens * input.activationRatio) / 100);
-      const remainingTokens = bufferedTokens - activatedTokens;
+        // Check if this boundary is closer to target than the previous best
+        const distanceFromTarget = Math.abs(cumulativeTokens - targetTokens);
+        const bestDistance = Math.abs(bestBoundaryTokens - targetTokens);
 
-      // Split message IDs proportionally
-      const idsToActivate = Math.ceil((bufferedMessageIds.length * input.activationRatio) / 100);
-      const activatedMessageIds = bufferedMessageIds.slice(0, idsToActivate);
-      const remainingMessageIds = bufferedMessageIds.slice(idsToActivate);
+        if (bestBoundary === 0 || distanceFromTarget < bestDistance) {
+          // Prefer this boundary if it's closer
+          bestBoundary = boundary;
+          bestBoundaryTokens = cumulativeTokens;
+        } else if (distanceFromTarget === bestDistance && cumulativeTokens < targetTokens) {
+          // If tied, prefer the under boundary
+          bestBoundary = boundary;
+          bestBoundaryTokens = cumulativeTokens;
+        }
+      }
+
+      const chunksToActivate = bestBoundary;
+
+      // Split chunks
+      const activatedChunks = chunks.slice(0, chunksToActivate);
+      const remainingChunks = chunks.slice(chunksToActivate);
+
+      // Combine activated observations
+      const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
+      const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
+
+      // Derive lastObservedAt from the latest activated chunk, or use provided value
+      const latestChunk = activatedChunks[activatedChunks.length - 1];
+      const lastObservedAt =
+        input.lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
 
       // Get existing values
       const existingActive = (doc.activeObservations as string) || '';
       const existingTokenCount = Number(doc.observationTokenCount || 0);
-      const existingObservedIds: string[] = doc.observedMessageIds || [];
 
       // Calculate new values
       const newActive = existingActive ? `${existingActive}\n\n${activatedContent}` : activatedContent;
       const newTokenCount = existingTokenCount + activatedTokens;
-      const newObservedIds = [...existingObservedIds, ...activatedMessageIds];
+
+      // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.
+      // Buffered chunks represent observations of messages as they were at buffering time.
+      // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
+      // New content after lastObservedAt will be picked up in subsequent observations.
 
       await collection.updateOne(
         { id: input.id },
@@ -1622,12 +1642,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           $set: {
             activeObservations: newActive,
             observationTokenCount: newTokenCount,
-            activeObservationsPendingUpdate: remainingContent,
-            bufferedObservationTokens: remainingContent ? remainingTokens : null,
-            bufferedMessageIds: remainingMessageIds.length > 0 ? remainingMessageIds : null,
-            observedMessageIds: newObservedIds,
-            lastObservedAt: input.lastObservedAt,
-            pendingMessageTokens: 0,
+            bufferedObservationChunks: remainingChunks.length > 0 ? remainingChunks : null,
+            lastObservedAt,
             updatedAt: new Date(),
           },
         },

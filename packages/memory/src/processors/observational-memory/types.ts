@@ -458,6 +458,45 @@ export interface DataOmBufferingFailedPart {
 export type DataOmBufferingPart = DataOmBufferingStartPart | DataOmBufferingEndPart | DataOmBufferingFailedPart;
 
 /**
+ * Marker inserted when buffered observations are activated (moved to active context).
+ * This is an instant operation that happens when the main threshold is reached.
+ */
+export interface DataOmActivationPart {
+  type: 'data-om-activation';
+  data: {
+    /** Unique ID for this activation event */
+    cycleId: string;
+
+    /** Type of operation: 'observation' or 'reflection' */
+    operationType: OmOperationType;
+
+    /** When activation occurred */
+    activatedAt: string;
+
+    /** Number of buffered chunks that were activated */
+    chunksActivated: number;
+
+    /** Total tokens from messages that were activated */
+    tokensActivated: number;
+
+    /** Resulting observation tokens after activation */
+    observationTokens: number;
+
+    /** Number of messages that were observed via activation */
+    messagesActivated: number;
+
+    /** The OM record ID */
+    recordId: string;
+
+    /** This thread's ID */
+    threadId: string;
+
+    /** Snapshot of config at activation time */
+    config: ObservationMarkerConfig;
+  };
+}
+
+/**
  * Union of all observation marker types.
  */
 export type DataOmObservationPart =
@@ -467,9 +506,9 @@ export type DataOmObservationPart =
   | DataOmProgressPart;
 
 /**
- * Union of all OM data parts (observation, buffering, progress).
+ * Union of all OM data parts (observation, buffering, progress, activation).
  */
-export type DataOmPart = DataOmObservationPart | DataOmBufferingPart;
+export type DataOmPart = DataOmObservationPart | DataOmBufferingPart | DataOmActivationPart;
 
 /**
  * @deprecated Use DataOmObservationStartPart and DataOmObservationEndPart instead.

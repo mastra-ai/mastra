@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Client, InValue } from '@libsql/client';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
@@ -14,6 +15,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
@@ -80,7 +82,16 @@ export class MemoryLibSQL extends MemoryStorage {
       await this.#db.alterTable({
         tableName: OM_TABLE as any,
         schema: omSchema,
-        ifNotExists: ['observedMessageIds', 'observedTimezone'],
+        ifNotExists: [
+          'observedMessageIds',
+          'observedTimezone',
+          'bufferedObservations',
+          'bufferedObservationTokens',
+          'bufferedMessageIds',
+          'bufferedReflection',
+          'bufferedReflectionTokens',
+          'bufferedObservationChunks',
+        ],
       });
     }
     // Add resourceId column for backwards compatibility
@@ -1378,9 +1389,16 @@ export class MemoryLibSQL extends MemoryStorage {
       originType: row.originType || 'initial',
       generationCount: Number(row.generationCount || 0),
       activeObservations: row.activeObservations || '',
+      // Handle new chunk-based structure
+      bufferedObservationChunks: row.bufferedObservationChunks
+        ? typeof row.bufferedObservationChunks === 'string'
+          ? JSON.parse(row.bufferedObservationChunks)
+          : row.bufferedObservationChunks
+        : undefined,
+      // Deprecated fields (for backward compatibility)
       bufferedObservations: row.activeObservationsPendingUpdate || undefined,
       bufferedObservationTokens: row.bufferedObservationTokens ? Number(row.bufferedObservationTokens) : undefined,
-      bufferedMessageIds: row.bufferedMessageIds ? JSON.parse(row.bufferedMessageIds) : undefined,
+      bufferedMessageIds: undefined, // Use bufferedObservationChunks instead
       bufferedReflection: row.bufferedReflection || undefined,
       bufferedReflectionTokens: row.bufferedReflectionTokens ? Number(row.bufferedReflectionTokens) : undefined,
       totalTokensObserved: Number(row.totalTokensObserved || 0),
@@ -1768,9 +1786,9 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
-      // First get current record to merge buffered content
+      // First get current record to get existing chunks
       const current = await this.#client.execute({
-        sql: `SELECT "activeObservationsPendingUpdate", "bufferedObservationTokens", "bufferedMessageIds" FROM "${OM_TABLE}" WHERE id = ?`,
+        sql: `SELECT "bufferedObservationChunks" FROM "${OM_TABLE}" WHERE id = ?`,
         args: [input.id],
       });
 
@@ -1785,23 +1803,40 @@ export class MemoryLibSQL extends MemoryStorage {
       }
 
       const row = current.rows[0]!;
-      const existingContent = (row.activeObservationsPendingUpdate as string) || '';
-      const existingTokens = Number(row.bufferedObservationTokens || 0);
-      const existingMessageIds: string[] = row.bufferedMessageIds ? JSON.parse(row.bufferedMessageIds as string) : [];
+      let existingChunks: BufferedObservationChunk[] = [];
+      if (row.bufferedObservationChunks) {
+        try {
+          const parsed =
+            typeof row.bufferedObservationChunks === 'string'
+              ? JSON.parse(row.bufferedObservationChunks)
+              : row.bufferedObservationChunks;
+          existingChunks = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          existingChunks = [];
+        }
+      }
 
-      // Merge content
-      const newContent = existingContent ? `${existingContent}\n\n${input.observations}` : input.observations;
-      const newTokens = existingTokens + input.tokenCount;
-      const newMessageIds = [...existingMessageIds, ...(input.bufferedMessageIds || [])];
+      // Create new chunk with ID and timestamp
+      const newChunk: BufferedObservationChunk = {
+        id: `ombuf-${randomUUID()}`,
+        observations: input.chunk.observations,
+        tokenCount: input.chunk.tokenCount,
+        messageIds: input.chunk.messageIds,
+        messageTokens: input.chunk.messageTokens,
+        lastObservedAt: input.chunk.lastObservedAt,
+        createdAt: new Date(),
+        suggestedContinuation: input.chunk.suggestedContinuation,
+        currentTask: input.chunk.currentTask,
+      };
+
+      const newChunks = [...existingChunks, newChunk];
 
       const result = await this.#client.execute({
         sql: `UPDATE "${OM_TABLE}" SET
-          "activeObservationsPendingUpdate" = ?,
-          "bufferedObservationTokens" = ?,
-          "bufferedMessageIds" = ?,
+          "bufferedObservationChunks" = ?,
           "updatedAt" = ?
         WHERE id = ?`,
-        args: [newContent, newTokens, JSON.stringify(newMessageIds), nowStr, input.id],
+        args: [JSON.stringify(newChunks), nowStr, input.id],
       });
 
       if (result.rowsAffected === 0) {
@@ -1832,7 +1867,6 @@ export class MemoryLibSQL extends MemoryStorage {
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<void> {
     try {
       const nowStr = new Date().toISOString();
-      const lastObservedAtStr = input.lastObservedAt.toISOString();
 
       // Get current record
       const current = await this.#client.execute({
@@ -1851,63 +1885,93 @@ export class MemoryLibSQL extends MemoryStorage {
       }
 
       const row = current.rows[0]!;
-      const bufferedContent = (row.activeObservationsPendingUpdate as string) || '';
-      const bufferedTokens = Number(row.bufferedObservationTokens || 0);
-      const bufferedMessageIds: string[] = row.bufferedMessageIds ? JSON.parse(row.bufferedMessageIds as string) : [];
 
-      if (!bufferedContent) {
+      // Parse buffered chunks
+      let chunks: BufferedObservationChunk[] = [];
+      if (row.bufferedObservationChunks) {
+        try {
+          const parsed =
+            typeof row.bufferedObservationChunks === 'string'
+              ? JSON.parse(row.bufferedObservationChunks)
+              : row.bufferedObservationChunks;
+          chunks = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          chunks = [];
+        }
+      }
+
+      if (chunks.length === 0) {
         return; // Nothing to swap
       }
 
-      // Split by lines for partial activation
-      const lines = bufferedContent.split('\n');
-      const totalLines = lines.length;
-      const linesToActivate = Math.ceil((totalLines * input.activationRatio) / 100);
+      // Calculate total buffered tokens across all chunks
+      const totalBufferedTokens = chunks.reduce((sum, chunk) => sum + chunk.tokenCount, 0);
+      const targetTokens = totalBufferedTokens * input.activationRatio;
 
-      const activatedLines = lines.slice(0, linesToActivate);
-      const remainingLines = lines.slice(linesToActivate);
+      // Find the closest chunk boundary to the target, biased under
+      let cumulativeTokens = 0;
+      let bestBoundary = 0;
+      let bestBoundaryTokens = 0;
 
-      const activatedContent = activatedLines.join('\n');
-      const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : null;
+      for (let i = 0; i < chunks.length; i++) {
+        cumulativeTokens += chunks[i]!.tokenCount;
+        const boundary = i + 1;
 
-      // Calculate approximate token split
-      const activatedTokens = Math.ceil((bufferedTokens * input.activationRatio) / 100);
-      const remainingTokens = bufferedTokens - activatedTokens;
+        // Check if this boundary is closer to target than the previous best
+        const distanceFromTarget = Math.abs(cumulativeTokens - targetTokens);
+        const bestDistance = Math.abs(bestBoundaryTokens - targetTokens);
 
-      // Split message IDs proportionally
-      const idsToActivate = Math.ceil((bufferedMessageIds.length * input.activationRatio) / 100);
-      const activatedMessageIds = bufferedMessageIds.slice(0, idsToActivate);
-      const remainingMessageIds = bufferedMessageIds.slice(idsToActivate);
+        if (bestBoundary === 0 || distanceFromTarget < bestDistance) {
+          // Prefer this boundary if it's closer
+          bestBoundary = boundary;
+          bestBoundaryTokens = cumulativeTokens;
+        } else if (distanceFromTarget === bestDistance && cumulativeTokens < targetTokens) {
+          // If tied, prefer the under boundary
+          bestBoundary = boundary;
+          bestBoundaryTokens = cumulativeTokens;
+        }
+      }
+
+      const chunksToActivate = bestBoundary;
+
+      // Split chunks
+      const activatedChunks = chunks.slice(0, chunksToActivate);
+      const remainingChunks = chunks.slice(chunksToActivate);
+
+      // Combine activated observations
+      const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
+      const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
+
+      // Derive lastObservedAt from the latest activated chunk, or use provided value
+      const latestChunk = activatedChunks[activatedChunks.length - 1];
+      const lastObservedAt =
+        input.lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
+      const lastObservedAtStr = lastObservedAt.toISOString();
 
       // Get existing values
       const existingActive = (row.activeObservations as string) || '';
       const existingTokenCount = Number(row.observationTokenCount || 0);
-      const existingObservedIds: string[] = row.observedMessageIds ? JSON.parse(row.observedMessageIds as string) : [];
 
       // Calculate new values
       const newActive = existingActive ? `${existingActive}\n\n${activatedContent}` : activatedContent;
       const newTokenCount = existingTokenCount + activatedTokens;
-      const newObservedIds = [...existingObservedIds, ...activatedMessageIds];
+      // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.
+      // Buffered chunks represent observations of messages as they were at buffering time.
+      // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
+      // New content after lastObservedAt will be picked up in subsequent observations.
 
       await this.#client.execute({
         sql: `UPDATE "${OM_TABLE}" SET
           "activeObservations" = ?,
           "observationTokenCount" = ?,
-          "activeObservationsPendingUpdate" = ?,
-          "bufferedObservationTokens" = ?,
-          "bufferedMessageIds" = ?,
-          "observedMessageIds" = ?,
+          "bufferedObservationChunks" = ?,
           "lastObservedAt" = ?,
-          "pendingMessageTokens" = 0,
           "updatedAt" = ?
         WHERE id = ?`,
         args: [
           newActive,
           newTokenCount,
-          remainingContent,
-          remainingContent ? remainingTokens : null,
-          remainingMessageIds.length > 0 ? JSON.stringify(remainingMessageIds) : null,
-          JSON.stringify(newObservedIds),
+          remainingChunks.length > 0 ? JSON.stringify(remainingChunks) : null,
           lastObservedAtStr,
           nowStr,
           input.id,

@@ -30,6 +30,8 @@ export type {
   DataOmBufferingEndPart,
   DataOmBufferingFailedPart,
   DataOmBufferingPart,
+  // Activation data part
+  DataOmActivationPart,
   DataOmPart,
 } from './types';
 

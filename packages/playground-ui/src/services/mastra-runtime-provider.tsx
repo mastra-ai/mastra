@@ -99,10 +99,10 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
   }
 
   // First pass: collect all OM parts grouped by cycleId
-  // Supports both blocking observation/reflection parts and async buffering parts
+  // Supports both blocking observation/reflection parts, async buffering parts, and activation parts
   const omPartsByCycleId = new Map<
     string,
-    { start?: any; end?: any; failed?: any; bufferingStart?: any; bufferingEnd?: any; bufferingFailed?: any }
+    { start?: any; end?: any; failed?: any; bufferingStart?: any; bufferingEnd?: any; bufferingFailed?: any; activation?: any }
   >();
 
   for (const part of message.parts) {
@@ -149,6 +149,15 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
       if (cycleId) {
         const existing = omPartsByCycleId.get(cycleId) || {};
         existing.bufferingFailed = part;
+        omPartsByCycleId.set(cycleId, existing);
+      }
+    }
+    // Activation markers (single marker, no start/end pair)
+    else if (part.type === 'data-om-activation') {
+      const cycleId = part.data?.cycleId;
+      if (cycleId) {
+        const existing = omPartsByCycleId.get(cycleId) || {};
+        existing.activation = part;
         omPartsByCycleId.set(cycleId, existing);
       }
     }
@@ -291,6 +300,33 @@ const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessag
           input: mergedData,
           output: {
             status: isFailed ? 'buffering-failed' : 'buffering-complete',
+            omData: mergedData,
+          },
+          state: 'output-available',
+        });
+
+        processedCycleIds.add(cycleId);
+      }
+      continue;
+    }
+    // Handle activation markers (single marker, instant state)
+    else if (part.type === 'data-om-activation' && cycleId && !processedCycleIds.has(cycleId)) {
+      const parts = omPartsByCycleId.get(cycleId);
+      if (parts?.activation) {
+        const activationData = parts.activation.data || {};
+
+        const mergedData = {
+          ...activationData,
+          _state: 'activated',
+        };
+
+        convertedParts.push({
+          type: 'dynamic-tool',
+          toolCallId: `om-activation-${cycleId}`,
+          toolName: OM_TOOL_NAME,
+          input: mergedData,
+          output: {
+            status: 'activated',
             omData: mergedData,
           },
           state: 'output-available',

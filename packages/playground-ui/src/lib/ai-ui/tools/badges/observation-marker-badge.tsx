@@ -21,12 +21,20 @@ export interface OmMarkerData {
   threadId?: string;
   threadIds?: string[];
   operationType?: 'observation' | 'reflection';
-  _state?: 'loading' | 'complete' | 'failed' | 'buffering' | 'buffering-complete' | 'buffering-failed';
+  _state?: 'loading' | 'complete' | 'failed' | 'buffering' | 'buffering-complete' | 'buffering-failed' | 'activated';
+  // Activation-specific fields
+  chunksActivated?: number;
+  tokensActivated?: number;
+  messagesActivated?: number;
   config?: {
     scope?: string;
     messageTokens?: number;
     observationTokens?: number;
   };
+  // Buffering-specific fields
+  tokensToBuffer?: number;
+  tokensBuffered?: number;
+  bufferedTokens?: number;
 }
 
 export interface ObservationMarkerBadgeProps {
@@ -77,6 +85,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const isBuffering = state === 'buffering';
   const isBufferingComplete = state === 'buffering-complete';
   const isBufferingFailed = state === 'buffering-failed';
+  const isActivated = state === 'activated';
   const isReflection = omData.operationType === 'reflection';
 
   // Failed reflections should be expanded by default to draw attention to the error
@@ -310,7 +319,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
 
   // Async buffering states - non-blocking background observation/reflection
   if (isBuffering) {
-    const tokensToObserve = omData.tokensToObserve;
+    const tokensToBuffer = omData.tokensToBuffer;
     const bufferingLabel = isReflection ? 'Buffering reflection' : 'Buffering observations';
     return (
       <div
@@ -326,7 +335,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           <CloudCog className="w-3 h-3" />
           <span>
             {bufferingLabel}
-            {tokensToObserve ? ` ~${formatTokens(tokensToObserve)} tokens` : '...'}
+            {tokensToBuffer ? ` ~${formatTokens(tokensToBuffer)} tokens` : '...'}
           </span>
         </div>
       </div>
@@ -334,12 +343,12 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   }
 
   if (isBufferingComplete) {
-    const tokensObserved = omData.tokensObserved;
-    const observationTokens = omData.observationTokens;
+    const tokensBuffered = omData.tokensBuffered;
+    const bufferedTokens = omData.bufferedTokens;
     const bufferedLabel = isReflection ? 'Buffered reflection' : 'Buffered observations';
     const compressionRatio =
-      tokensObserved && observationTokens && observationTokens > 0
-        ? Math.round(tokensObserved / observationTokens)
+      tokensBuffered && bufferedTokens && bufferedTokens > 0
+        ? Math.round(tokensBuffered / bufferedTokens)
         : null;
 
     return (
@@ -355,8 +364,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           >
             <CloudCog className="w-3 h-3" />
             <span>
-              {bufferedLabel} {tokensObserved ? formatTokens(tokensObserved) : '?'}→
-              {observationTokens ? formatTokens(observationTokens) : '?'} tokens
+              {bufferedLabel} {tokensBuffered ? formatTokens(tokensBuffered) : '?'}→
+              {bufferedTokens ? formatTokens(bufferedTokens) : '?'} tokens
               {compressionRatio ? ` (-${compressionRatio}x)` : ''}
             </span>
           </div>
@@ -390,6 +399,35 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
               <span className="font-medium">Error:</span> {error}
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // Activation state - buffered observations have been activated into active observations
+  if (isActivated) {
+    const chunksActivated = omData.chunksActivated ?? 0;
+    const tokensActivated = omData.tokensActivated ?? 0;
+    const messagesActivated = omData.messagesActivated ?? 0;
+    const observationTokens = omData.observationTokens ?? 0;
+    const activatedLabel = isReflection ? 'Activated reflection' : 'Activated observations';
+
+    return (
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+      >
+        <div className="my-1">
+          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-cyan-500/10 text-cyan-600 text-xs font-medium">
+            <Brain className="w-3 h-3" />
+            <span>
+              {activatedLabel}: {chunksActivated} chunk{chunksActivated !== 1 ? 's' : ''},{' '}
+              {messagesActivated} msg{messagesActivated !== 1 ? 's' : ''} →{' '}
+              {formatTokens(observationTokens)} tokens
+            </span>
+          </div>
         </div>
       </div>
     );

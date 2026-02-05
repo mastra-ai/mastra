@@ -15,6 +15,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
@@ -872,34 +873,28 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
-    const { id, observations, tokenCount, bufferedMessageIds, suggestedContinuation, currentTask } = input;
+    const { id, chunk } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
-    // Append to existing buffered observations if present
-    if (record.bufferedObservations) {
-      record.bufferedObservations = `${record.bufferedObservations}\n\n${observations}`;
-    } else {
-      record.bufferedObservations = observations;
-    }
+    // Create a new chunk with generated id and timestamp
+    const newChunk: BufferedObservationChunk = {
+      id: `ombuf-${crypto.randomUUID()}`,
+      observations: chunk.observations,
+      tokenCount: chunk.tokenCount,
+      messageIds: chunk.messageIds,
+      messageTokens: chunk.messageTokens,
+      lastObservedAt: chunk.lastObservedAt,
+      createdAt: new Date(),
+      suggestedContinuation: chunk.suggestedContinuation,
+      currentTask: chunk.currentTask,
+    };
 
-    // Track buffered token count (cumulative)
-    record.bufferedObservationTokens = (record.bufferedObservationTokens ?? 0) + tokenCount;
-
-    // Track buffered message IDs
-    if (bufferedMessageIds) {
-      record.bufferedMessageIds = [...(record.bufferedMessageIds ?? []), ...bufferedMessageIds];
-    }
-
-    // Store suggested continuation and current task for later activation
-    if (suggestedContinuation !== undefined) {
-      record.metadata = { ...record.metadata, bufferedSuggestedContinuation: suggestedContinuation };
-    }
-    if (currentTask !== undefined) {
-      record.metadata = { ...record.metadata, bufferedCurrentTask: currentTask };
-    }
+    // Add chunk to the array
+    const existingChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+    record.bufferedObservationChunks = [...existingChunks, newChunk];
 
     record.updatedAt = new Date();
   }
@@ -911,35 +906,51 @@ export class InMemoryMemory extends MemoryStorage {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
-    if (!record.bufferedObservations) {
+    const chunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+    if (chunks.length === 0) {
       return; // Nothing to swap
     }
 
-    // Calculate how much of the buffered content to activate
-    const bufferedContent = record.bufferedObservations;
-    const bufferedTokens = record.bufferedObservationTokens ?? 0;
-    const bufferedMessageIds = record.bufferedMessageIds ?? [];
+    // Calculate total buffered tokens across all chunks
+    const totalBufferedTokens = chunks.reduce((sum, chunk) => sum + chunk.tokenCount, 0);
+    const targetTokens = totalBufferedTokens * activationRatio;
 
-    // For simplicity in InMemory, we split by observation blocks (lines starting with "* ")
-    // In a production implementation, you might want more sophisticated splitting
-    const lines = bufferedContent.split('\n');
-    const totalLines = lines.length;
-    const linesToActivate = Math.ceil((totalLines * activationRatio) / 100);
+    // Find the closest chunk boundary to the target, biased under
+    let cumulativeTokens = 0;
+    let bestBoundary = 0;
+    let bestBoundaryTokens = 0;
 
-    const activatedLines = lines.slice(0, linesToActivate);
-    const remainingLines = lines.slice(linesToActivate);
+    for (let i = 0; i < chunks.length; i++) {
+      cumulativeTokens += chunks[i]!.tokenCount;
+      const boundary = i + 1;
 
-    const activatedContent = activatedLines.join('\n');
-    const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : undefined;
+      // Check if this boundary is closer to target than the previous best
+      const distanceFromTarget = Math.abs(cumulativeTokens - targetTokens);
+      const bestDistance = Math.abs(bestBoundaryTokens - targetTokens);
 
-    // Calculate approximate token split
-    const activatedTokens = Math.ceil((bufferedTokens * activationRatio) / 100);
-    const remainingTokens = bufferedTokens - activatedTokens;
+      if (bestBoundary === 0 || distanceFromTarget < bestDistance) {
+        // Prefer this boundary if it's closer
+        bestBoundary = boundary;
+        bestBoundaryTokens = cumulativeTokens;
+      } else if (distanceFromTarget === bestDistance && cumulativeTokens < targetTokens) {
+        // If tied, prefer the under boundary
+        bestBoundary = boundary;
+        bestBoundaryTokens = cumulativeTokens;
+      }
+    }
 
-    // Split message IDs proportionally
-    const idsToActivate = Math.ceil((bufferedMessageIds.length * activationRatio) / 100);
-    const activatedMessageIds = bufferedMessageIds.slice(0, idsToActivate);
-    const remainingMessageIds = bufferedMessageIds.slice(idsToActivate);
+    const chunksToActivate = bestBoundary;
+    const activatedChunks = chunks.slice(0, chunksToActivate);
+    const remainingChunks = chunks.slice(chunksToActivate);
+
+    // Combine activated chunks into content
+    const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
+    const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
+
+    // Derive lastObservedAt from the latest activated chunk, or use provided value
+    const latestChunk = activatedChunks[activatedChunks.length - 1];
+    const derivedLastObservedAt =
+      lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
 
     // Append activated content to active observations
     if (record.activeObservations) {
@@ -951,20 +962,17 @@ export class InMemoryMemory extends MemoryStorage {
     // Update observation token count
     record.observationTokenCount = (record.observationTokenCount ?? 0) + activatedTokens;
 
-    // Move activated message IDs to observed
-    record.observedMessageIds = [...(record.observedMessageIds ?? []), ...activatedMessageIds];
+    // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.
+    // Buffered chunks represent observations of messages as they were at buffering time.
+    // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
+    // New content after lastObservedAt will be picked up in subsequent observations.
 
-    // Update buffered state with remaining content
-    record.bufferedObservations = remainingContent;
-    record.bufferedObservationTokens = remainingContent ? remainingTokens : undefined;
-    record.bufferedMessageIds = remainingMessageIds.length > 0 ? remainingMessageIds : undefined;
+    // Update buffered state with remaining chunks
+    record.bufferedObservationChunks = remainingChunks.length > 0 ? remainingChunks : undefined;
 
     // Update timestamps
-    record.lastObservedAt = lastObservedAt;
+    record.lastObservedAt = derivedLastObservedAt;
     record.updatedAt = new Date();
-
-    // Reset pending tokens
-    record.pendingMessageTokens = 0;
   }
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
