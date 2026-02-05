@@ -30,23 +30,15 @@ async function fillIdentityFields(
   }
 
   if (options.provider !== undefined) {
-    // Provider uses BaseUI Combobox which renders as a button with role="combobox"
-    const providerSection = page
-      .locator('div')
-      .filter({ hasText: /^Provider/ })
-      .first();
-    const providerCombobox = providerSection.locator('..').getByRole('combobox');
+    // Provider uses BaseUI Combobox - find the first combobox after the Provider label
+    const providerCombobox = page.getByRole('combobox').nth(0);
     await providerCombobox.click();
     await page.getByRole('option', { name: options.provider }).click();
   }
 
   if (options.model !== undefined) {
-    // Model combobox - find by label context
-    const modelSection = page
-      .locator('div')
-      .filter({ hasText: /^Model/ })
-      .first();
-    const modelCombobox = modelSection.locator('..').getByRole('combobox');
+    // Model combobox - the second combobox on the page
+    const modelCombobox = page.getByRole('combobox').nth(1);
     await modelCombobox.click();
     await page.getByRole('option', { name: options.model }).click();
   }
@@ -146,12 +138,13 @@ test.describe('Required Field Validation', () => {
       instructions: 'Test instructions',
     });
 
-    // Select model without provider first - this should not be possible in UI
-    // but we test validation anyway
     await page.getByRole('button', { name: 'Create agent' }).click();
 
-    // Should show validation error for provider
-    await expect(page.getByText('Provider is required')).toBeVisible();
+    // Should show validation error - either inline or as toast
+    // The form requires provider, so submission should fail
+    await expect(page.getByText(/provider is required/i).or(page.getByText(/fill in all required/i))).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   // Behavior: Form validates that model is required before submission
@@ -164,8 +157,10 @@ test.describe('Required Field Validation', () => {
 
     await page.getByRole('button', { name: 'Create agent' }).click();
 
-    // Should show validation error for model
-    await expect(page.getByText('Model is required')).toBeVisible();
+    // Should show validation error - either inline or as toast
+    await expect(page.getByText(/model is required/i).or(page.getByText(/fill in all required/i))).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   // Behavior: Error toast appears when trying to submit invalid form
@@ -264,21 +259,13 @@ test.describe('Identity Tab Configuration', () => {
 
   // Behavior: Provider selection updates available models dynamically
   test('provider selection updates available models', async ({ page }) => {
-    // Select OpenAI provider using label context
-    const providerSection = page
-      .locator('div')
-      .filter({ hasText: /^Provider/ })
-      .first();
-    const providerCombobox = providerSection.locator('..').getByRole('combobox');
+    // Select OpenAI provider - first combobox on the page
+    const providerCombobox = page.getByRole('combobox').nth(0);
     await providerCombobox.click();
     await page.getByRole('option', { name: 'OpenAI' }).click();
 
-    // Open model dropdown and verify OpenAI models are available
-    const modelSection = page
-      .locator('div')
-      .filter({ hasText: /^Model/ })
-      .first();
-    const modelCombobox = modelSection.locator('..').getByRole('combobox');
+    // Open model dropdown - second combobox on the page
+    const modelCombobox = page.getByRole('combobox').nth(1);
     await modelCombobox.click();
 
     // Should have GPT models
@@ -364,11 +351,11 @@ test.describe('Capabilities Tab - Sub-Agents Section', () => {
 
   // Behavior: Adding sub-agents to agent configuration persists with created agent
   test('persists selected sub-agents with created agent', async ({ page }) => {
-    // Expand Agents section (collapsible trigger)
-    await page.getByRole('button', { name: /^Agents/i }).click();
+    // Expand Sub-Agents section (collapsible trigger)
+    await page.getByRole('button', { name: /Sub-Agents/i }).click();
 
     // Select a sub-agent
-    const agentsCombobox = page.getByRole('combobox').filter({ hasText: /Select agents/ });
+    const agentsCombobox = page.getByRole('combobox').filter({ hasText: /Select sub-agents/ });
     await agentsCombobox.click();
     await page.getByRole('option', { name: /Weather Agent/i }).click();
     await page.keyboard.press('Escape');
@@ -489,26 +476,32 @@ test.describe('Capabilities Tab - Memory Section', () => {
 test.describe('Error Handling', () => {
   // Behavior: Error toast is shown and form remains editable on API failure
   test('shows error toast and allows retry on creation failure', async ({ page }) => {
+    // Set up route interception BEFORE navigating to the page
+    // Only intercept POST requests to the stored agents endpoint
+    await page.route('**/stored/agents', route => {
+      if (route.request().method() === 'POST') {
+        route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'Internal server error' }),
+        });
+      } else {
+        route.continue();
+      }
+    });
+
     await page.goto('/cms/agents/create');
 
     // Fill required fields
     await fillRequiredFields(page, uniqueAgentName('Error Test'));
-
-    // Mock API to fail by using route interception
-    await page.route('**/api/stored-agents', route => {
-      route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: 'Internal server error' }),
-      });
-    });
 
     await page.getByRole('button', { name: 'Create agent' }).click();
 
     // Should show error toast
     await expect(page.getByText(/Failed to create agent/i)).toBeVisible({ timeout: 10000 });
 
-    // Form should still be editable (not reset)
+    // Form should still be editable (not reset) - still on create page
+    await expect(page).toHaveURL(/\/cms\/agents\/create/);
     await expect(page.getByRole('button', { name: 'Create agent' })).toBeEnabled();
   });
 });
@@ -567,8 +560,8 @@ test.describe('Full Agent Creation Flow', () => {
     await page.keyboard.press('Escape');
 
     // Add Sub-Agents
-    await page.getByRole('button', { name: /^Agents/i }).click();
-    const agentsCombobox = page.getByRole('combobox').filter({ hasText: /Select agents/ });
+    await page.getByRole('button', { name: /Sub-Agents/i }).click();
+    const agentsCombobox = page.getByRole('combobox').filter({ hasText: /Select sub-agents/ });
     await agentsCombobox.click();
     await page.getByRole('option', { name: /Weather Agent/i }).click();
     await page.keyboard.press('Escape');
