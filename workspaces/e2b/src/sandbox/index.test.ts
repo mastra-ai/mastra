@@ -537,3 +537,326 @@ describe('E2BSandbox Mounting', () => {
     });
   });
 });
+
+/**
+ * Additional unit tests for race conditions and edge cases
+ */
+describe('E2BSandbox Race Conditions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('start() clears _startPromise after completion', async () => {
+    const sandbox = new E2BSandbox();
+
+    // Start and complete
+    await sandbox.start();
+
+    // Access private _startPromise via any
+    const sandboxAny = sandbox as any;
+    expect(sandboxAny._startPromise).toBeUndefined();
+  });
+
+  it('start() clears _startPromise after error', async () => {
+    const { Sandbox } = await import('e2b');
+    (Sandbox.betaCreate as any).mockRejectedValueOnce(new Error('Creation failed'));
+
+    const sandbox = new E2BSandbox();
+
+    await expect(sandbox.start()).rejects.toThrow('Creation failed');
+
+    // _startPromise should be cleared even on error
+    const sandboxAny = sandbox as any;
+    expect(sandboxAny._startPromise).toBeUndefined();
+  });
+});
+
+/**
+ * Template handling edge cases
+ */
+describe('E2BSandbox Template Handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('rebuilds template on 404 error', async () => {
+    const { Sandbox, Template } = await import('e2b');
+
+    // Template.exists returns true initially (cached)
+    (Template.exists as any).mockResolvedValue(true);
+
+    // First call fails with 404 error (matching the implementation check), second succeeds
+    let callCount = 0;
+    (Sandbox.betaCreate as any).mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        // Error message must include both '404' and 'not found' to trigger rebuild
+        return Promise.reject(new Error('404 template not found'));
+      }
+      return Promise.resolve(mockSandbox);
+    });
+
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    // Template.build should be called to rebuild after 404
+    expect(Template.build).toHaveBeenCalled();
+    // And betaCreate should be called twice (retry after rebuild)
+    expect(callCount).toBe(2);
+  });
+
+  it('custom template builder is built', async () => {
+    const { Template } = await import('e2b');
+
+    // Create a mock template builder
+    const mockBuilder = {
+      templateId: 'builder-template-id',
+      aptInstall: vi.fn().mockReturnThis(),
+    };
+
+    const sandbox = new E2BSandbox({ template: mockBuilder as any });
+    await sandbox.start();
+
+    // Template.build should be called with the builder (and possibly a name)
+    expect(Template.build).toHaveBeenCalledWith(
+      mockBuilder,
+      expect.any(String), // template name
+    );
+  });
+
+  it('template function customizes base template', async () => {
+    const { Template } = await import('e2b');
+
+    // Template function that adds custom packages
+    const templateFn = (base: any) => {
+      base.aptInstall(['curl', 'wget']);
+      return base;
+    };
+
+    const sandbox = new E2BSandbox({ template: templateFn });
+    await sandbox.start();
+
+    // Template.build should be called (function creates customized builder)
+    expect(Template.build).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Mount configuration unit tests
+ */
+describe('E2BSandbox Mount Configuration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Mock s3fs as installed
+    mockSandbox.commands.run.mockImplementation((cmd: string) => {
+      if (cmd.includes('which s3fs')) {
+        return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/s3fs', stderr: '' });
+      }
+      if (cmd.includes('id -u')) {
+        return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '' });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+    });
+  });
+
+  it('S3 endpoint mount includes url and path style options', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    // Mock filesystem with endpoint (S3-compatible like R2/MinIO)
+    const mockFilesystem = {
+      id: 'test-s3',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'auto',
+        endpoint: 'https://account.r2.cloudflarestorage.com',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3');
+
+    // Verify s3fs command includes endpoint options
+    const calls = mockSandbox.commands.run.mock.calls;
+    // Find the actual s3fs mount command (not 'which s3fs')
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3') && !call[0].includes('which'),
+    );
+
+    expect(s3fsMountCall).toBeDefined();
+    if (s3fsMountCall) {
+      expect(s3fsMountCall[0]).toContain('url=');
+      expect(s3fsMountCall[0]).toContain('use_path_request_style');
+    }
+  });
+
+  it('S3 readOnly includes ro option in mount command', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    const mockFilesystem = {
+      id: 'test-s3-ro',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+        readOnly: true,
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-ro');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    // Find the actual s3fs mount command (not 'which s3fs')
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-ro') && !call[0].includes('which'),
+    );
+
+    expect(s3fsMountCall).toBeDefined();
+    if (s3fsMountCall) {
+      expect(s3fsMountCall[0]).toMatch(/\bro\b/);
+    }
+  });
+});
+
+/**
+ * Error handling unit tests
+ */
+describe('E2BSandbox Error Handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('SandboxNotReadyError thrown if instance accessed before start', () => {
+    const sandbox = new E2BSandbox();
+
+    // Accessing instance directly before start throws SandboxNotReadyError
+    expect(() => sandbox.instance).toThrow(/not started|not ready|Sandbox/i);
+  });
+
+  it('executeCommand auto-starts sandbox if not running', async () => {
+    const sandbox = new E2BSandbox();
+
+    // executeCommand should auto-start the sandbox
+    const result = await sandbox.executeCommand('echo', ['test']);
+
+    // Should succeed (auto-started)
+    expect(result.success).toBe(true);
+  });
+
+  it('clear error for S3-compatible without credentials', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    const mockFilesystem = {
+      id: 'test-s3-compat',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'auto',
+        endpoint: 'https://account.r2.cloudflarestorage.com',
+        // No credentials
+      }),
+    } as any;
+
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-compat');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('credentials');
+    expect(result.error).toContain('endpoint');
+  });
+});
+
+/**
+ * Reconcile mounts unit tests
+ */
+describe('E2BSandbox Reconcile Mounts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+  });
+
+  it('reconcileMounts is called on reconnect', async () => {
+    const { Sandbox } = await import('e2b');
+
+    // Mock finding existing sandbox
+    (Sandbox.list as any).mockReturnValue({
+      nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox', state: 'running' }]),
+    });
+
+    const sandbox = new E2BSandbox({ id: 'existing-id' });
+
+    // Spy on reconcileMounts
+    const reconcileSpy = vi.spyOn(sandbox, 'reconcileMounts');
+
+    await sandbox.start();
+
+    // reconcileMounts should be called during reconnect
+    expect(reconcileSpy).toHaveBeenCalled();
+
+    // Reset mock
+    (Sandbox.list as any).mockReturnValue({
+      nextItems: vi.fn().mockResolvedValue([]),
+    });
+  });
+});
+
+/**
+ * Stop behavior unit tests
+ */
+describe('E2BSandbox Stop Behavior', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+  });
+
+  it('stop() unmounts all filesystems', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    // Add mock mounts to the manager
+    const mockFilesystem1 = {
+      id: 'fs1',
+      name: 'FS1',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({ type: 's3', bucket: 'b1', region: 'us-east-1', accessKeyId: 'k', secretAccessKey: 's' }),
+    } as any;
+
+    const mockFilesystem2 = {
+      id: 'fs2',
+      name: 'FS2',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({ type: 's3', bucket: 'b2', region: 'us-east-1', accessKeyId: 'k', secretAccessKey: 's' }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem1, '/data/mount1');
+    await sandbox.mount(mockFilesystem2, '/data/mount2');
+
+    // Reset mock to track stop calls
+    mockSandbox.commands.run.mockClear();
+
+    await sandbox.stop();
+
+    // fusermount -u should be called for each mount
+    const fusermountCalls = mockSandbox.commands.run.mock.calls.filter((call: any[]) =>
+      call[0].includes('fusermount'),
+    );
+
+    expect(fusermountCalls.length).toBeGreaterThanOrEqual(2);
+  });
+});

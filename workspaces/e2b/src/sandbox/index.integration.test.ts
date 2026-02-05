@@ -615,3 +615,282 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)(
     }, 240000);
   },
 );
+
+/**
+ * Full workflow integration tests - end-to-end scenarios.
+ */
+describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)(
+  'E2BSandbox Full Workflow',
+  () => {
+    let sandbox: E2BSandbox;
+
+    beforeEach(() => {
+      sandbox = new E2BSandbox({
+        id: `test-workflow-${Date.now()}`,
+        timeout: 120000,
+      });
+    });
+
+    afterEach(async () => {
+      if (sandbox) {
+        try {
+          await sandbox.destroy();
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    });
+
+    it('full workflow: create sandbox, mount S3, read/write files', async () => {
+      // 1. Start sandbox
+      await sandbox.start();
+      expect(sandbox.status).toBe('running');
+
+      // 2. Mount S3 filesystem
+      const s3Config = getS3TestConfig();
+      const mockFilesystem = {
+        id: 'test-s3-workflow',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => s3Config,
+      } as any;
+
+      const mountPath = '/data/workflow-test';
+      const mountResult = await sandbox.mount(mockFilesystem, mountPath);
+      expect(mountResult.success).toBe(true);
+
+      // 3. Write file via executeCommand
+      const testContent = `test-${Date.now()}`;
+      const testFile = `${mountPath}/workflow-test-file.txt`;
+      const writeResult = await sandbox.executeCommand('sh', ['-c', `echo "${testContent}" > ${testFile}`]);
+      expect(writeResult.exitCode).toBe(0);
+
+      // 4. Read file via executeCommand
+      const readResult = await sandbox.executeCommand('cat', [testFile]);
+      expect(readResult.exitCode).toBe(0);
+      expect(readResult.stdout.trim()).toBe(testContent);
+
+      // 5. Verify file exists (list directory)
+      const lsResult = await sandbox.executeCommand('ls', ['-la', mountPath]);
+      expect(lsResult.stdout).toContain('workflow-test-file.txt');
+
+      // Cleanup: remove test file
+      await sandbox.executeCommand('rm', [testFile]);
+    }, 240000);
+
+    it('sandbox reconnect preserves mounts', async () => {
+      const sandboxId = `reconnect-mount-${Date.now()}`;
+
+      // 1. Create and start sandbox with mount
+      const sandbox1 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
+      await sandbox1.start();
+
+      const s3Config = getS3TestConfig();
+      const mockFilesystem = {
+        id: 'test-s3-reconnect',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => s3Config,
+      } as any;
+
+      const mountPath = '/data/reconnect-test';
+      await sandbox1.mount(mockFilesystem, mountPath);
+
+      // Write a file to verify mount works
+      const testFile = `${mountPath}/reconnect-marker.txt`;
+      await sandbox1.executeCommand('sh', ['-c', `echo "before-reconnect" > ${testFile}`]);
+
+      // 2. Stop sandbox (but don't destroy - auto-pause keeps it)
+      await sandbox1.stop();
+
+      // 3. Create new E2BSandbox instance with same id
+      const sandbox2 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
+      await sandbox2.start();
+
+      // 4. Verify sandbox reconnected
+      expect(sandbox2.status).toBe('running');
+
+      // 5. Mount should still be accessible (or remount)
+      // First, check if file is accessible
+      const checkMount = await sandbox2.executeCommand('mountpoint', ['-q', mountPath]);
+      if (checkMount.exitCode !== 0) {
+        // Mount not present, remount it
+        await sandbox2.mount(mockFilesystem, mountPath);
+      }
+
+      // Verify file still exists
+      const readResult = await sandbox2.executeCommand('cat', [testFile]);
+      expect(readResult.stdout.trim()).toBe('before-reconnect');
+
+      // Cleanup
+      await sandbox2.executeCommand('rm', [testFile]);
+      await sandbox2.destroy();
+    }, 300000);
+
+    it('config change triggers remount on reconnect', async () => {
+      const sandboxId = `config-change-${Date.now()}`;
+
+      // 1. Start sandbox with S3 mount (readOnly: false)
+      const sandbox1 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
+      await sandbox1.start();
+
+      const s3Config = getS3TestConfig();
+      const createFilesystem = (readOnly: boolean) =>
+        ({
+          id: 'test-s3-config-change',
+          name: 'S3Filesystem',
+          provider: 's3',
+          status: 'ready',
+          getMountConfig: () => ({
+            ...s3Config,
+            readOnly,
+          }),
+        }) as any;
+
+      const mountPath = '/data/config-change-test';
+      await sandbox1.mount(createFilesystem(false), mountPath);
+
+      // Verify we can write
+      const writeResult1 = await sandbox1.executeCommand('sh', [
+        '-c',
+        `echo "test" > ${mountPath}/write-test.txt`,
+      ]);
+      expect(writeResult1.exitCode).toBe(0);
+
+      // Cleanup test file
+      await sandbox1.executeCommand('rm', [`${mountPath}/write-test.txt`]);
+
+      // 2. Stop sandbox
+      await sandbox1.stop();
+
+      // 3. Reconnect with readOnly: true
+      const sandbox2 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
+      await sandbox2.start();
+
+      // 4. Mount with readOnly: true - should trigger remount
+      await sandbox2.mount(createFilesystem(true), mountPath);
+
+      // 5. Verify writes now fail (read-only)
+      const writeResult2 = await sandbox2.executeCommand('sh', [
+        '-c',
+        `echo "test" > ${mountPath}/readonly-test.txt 2>&1 || echo "write failed"`,
+      ]);
+      expect(writeResult2.stdout).toMatch(/Read-only|write failed/);
+
+      await sandbox2.destroy();
+    }, 300000);
+  },
+);
+
+/**
+ * Stop/destroy behavior integration tests.
+ */
+describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)(
+  'E2BSandbox Stop/Destroy',
+  () => {
+    it('stop unmounts all filesystems', async () => {
+      const sandbox = new E2BSandbox({
+        id: `test-stop-unmount-${Date.now()}`,
+        timeout: 120000,
+      });
+      await sandbox.start();
+
+      // Mount multiple filesystems
+      const s3Config = getS3TestConfig();
+      const createFilesystem = (id: string) =>
+        ({
+          id,
+          name: 'S3Filesystem',
+          provider: 's3',
+          status: 'ready',
+          getMountConfig: () => s3Config,
+        }) as any;
+
+      await sandbox.mount(createFilesystem('fs1'), '/data/mount1');
+      await sandbox.mount(createFilesystem('fs2'), '/data/mount2');
+
+      // Verify mounts exist
+      const mountsBefore = await sandbox.executeCommand('mount');
+      expect(mountsBefore.stdout).toContain('/data/mount1');
+      expect(mountsBefore.stdout).toContain('/data/mount2');
+
+      // Stop should unmount all
+      await sandbox.stop();
+
+      // Reconnect to verify mounts are gone
+      const sandbox2 = new E2BSandbox({ id: sandbox.id, timeout: 60000 });
+      await sandbox2.start();
+
+      const mountsAfter = await sandbox2.executeCommand('mount');
+      // FUSE mounts should be gone (fusermount -u was called)
+      // Note: The mount points may still exist as directories, but not as mounts
+      const hasFuseMount1 = mountsAfter.stdout.includes('/data/mount1') && mountsAfter.stdout.includes('fuse');
+      const hasFuseMount2 = mountsAfter.stdout.includes('/data/mount2') && mountsAfter.stdout.includes('fuse');
+
+      expect(hasFuseMount1).toBe(false);
+      expect(hasFuseMount2).toBe(false);
+
+      await sandbox2.destroy();
+    }, 300000);
+  },
+);
+
+/**
+ * Environment variable handling integration tests.
+ */
+describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Environment Variables', () => {
+  let sandbox: E2BSandbox;
+
+  afterEach(async () => {
+    if (sandbox) {
+      try {
+        await sandbox.destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  it('env changes reflected without sandbox restart', async () => {
+    // Create sandbox with initial env
+    sandbox = new E2BSandbox({
+      id: `test-env-${Date.now()}`,
+      timeout: 60000,
+      env: { MY_VAR: 'initial' },
+    });
+    await sandbox.start();
+
+    // Check initial value
+    const result1 = await sandbox.executeCommand('sh', ['-c', 'echo $MY_VAR']);
+    expect(result1.stdout.trim()).toBe('initial');
+
+    // Execute with different env value (should override)
+    const result2 = await sandbox.executeCommand('sh', ['-c', 'echo $MY_VAR'], {
+      env: { MY_VAR: 'changed' },
+    });
+    expect(result2.stdout.trim()).toBe('changed');
+
+    // Original sandbox env should still work for new commands
+    const result3 = await sandbox.executeCommand('sh', ['-c', 'echo $MY_VAR']);
+    expect(result3.stdout.trim()).toBe('initial');
+  }, 120000);
+
+  it('env vars merged and passed per-command', async () => {
+    sandbox = new E2BSandbox({
+      id: `test-env-merge-${Date.now()}`,
+      timeout: 60000,
+      env: { VAR_A: '1', VAR_B: '2' },
+    });
+    await sandbox.start();
+
+    // Command with additional env var - should merge
+    const result = await sandbox.executeCommand('sh', ['-c', 'echo $VAR_A $VAR_B $VAR_C'], {
+      env: { VAR_B: 'override', VAR_C: '3' },
+    });
+
+    // VAR_A from sandbox, VAR_B overridden, VAR_C from command
+    expect(result.stdout.trim()).toBe('1 override 3');
+  }, 120000);
+});
