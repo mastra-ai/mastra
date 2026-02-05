@@ -890,7 +890,7 @@ export interface AddDatasetItemInput {
   datasetId: string;
   input: unknown;
   expectedOutput?: unknown;
-  context?: unknown;
+  context?: Record<string, unknown>;
 }
 
 export interface UpdateDatasetItemInput {
@@ -898,7 +898,7 @@ export interface UpdateDatasetItemInput {
   datasetId: string;
   input?: unknown;
   expectedOutput?: unknown;
-  context?: unknown;
+  context?: Record<string, unknown>;
 }
 
 export interface ListDatasetsInput {
@@ -960,7 +960,7 @@ export interface BulkAddItemsInput {
   items: Array<{
     input: unknown;
     expectedOutput?: unknown;
-    context?: unknown;
+    context?: Record<string, unknown>;
   }>;
 }
 
