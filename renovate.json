@@ -19,7 +19,7 @@
   "major": {
     "dependencyDashboardApproval": true
   },
-  "ignorePaths": ["docs/**", "explorations/**", ".github/scripts"],
+  "ignorePaths": ["docs/**", "explorations/**", ".github/scripts", "templates/**", "**/examples/**", "**/_examples/**"],
   "packageRules": [
     {
       "matchDepTypes": ["engines"],
@@ -28,14 +28,6 @@
     {
       "matchDatasources": ["npm"],
       "minimumReleaseAge": "3 days"
-    },
-    {
-      "groupName": "examples",
-      "commitMessageTopic": "examples",
-      "groupSlug": "examples-minor",
-      "matchFileNames": ["examples/**"],
-      "schedule": "before 7am on Monday",
-      "matchUpdateTypes": ["patch", "minor"]
     },
     {
       "matchPackageNames": ["@types/node"],
