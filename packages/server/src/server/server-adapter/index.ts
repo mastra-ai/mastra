@@ -310,7 +310,15 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return { status: 403, error: 'Access denied' };
     }
 
-    // Check default rules
+    // No explicit authorization configured (authorizeUser, authorize, or rules)
+    // Check if RBAC is configured - if not, allow authenticated users through
+    // (auth-only mode = authenticated users get full access)
+    const rbacProvider = this.mastra.getServer()?.rbac;
+    if (!rbacProvider) {
+      return null;
+    }
+
+    // RBAC is configured, fall back to default rules
     if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
       const isAuthorized = await checkRules(defaultAuthConfig.rules, context.path, context.method, user);
       if (isAuthorized) {
@@ -338,6 +346,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     userPermissions: string[] | undefined,
     hasPermissionFn: (userPerms: string[], required: string) => boolean,
   ): { status: number; error: string; message: string } | null {
+    // If RBAC is not configured, skip permission checks entirely
+    // Auth-only mode = authenticated users get full access
+    const rbacProvider = this.mastra.getServer()?.rbac;
+    if (!rbacProvider) {
+      return null;
+    }
+
     // Get the effective permission (explicit or derived)
     const requiredPermission = getEffectivePermission(route);
 

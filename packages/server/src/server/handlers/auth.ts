@@ -152,11 +152,10 @@ export const GET_CURRENT_USER_ROUTE = createPublicRoute({
 export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
   method: 'GET',
   path: '/auth/sso/login',
-  responseType: 'json',
+  responseType: 'datastream-response',
   queryParamSchema: ssoLoginQuerySchema,
-  responseSchema: ssoLoginResponseSchema,
   summary: 'Initiate SSO login',
-  description: 'Returns the SSO login URL. Client should redirect to this URL to start the auth flow.',
+  description: 'Returns the SSO login URL and sets PKCE cookies if needed.',
   tags: ['Auth'],
   handler: async ctx => {
     try {
@@ -179,7 +178,21 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
 
       const loginUrl = auth.getLoginUrl(oauthCallbackUri, state);
 
-      return { url: loginUrl };
+      // Build response with optional PKCE cookies
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+
+      // Check for PKCE cookies (e.g., MastraCloudAuthProvider)
+      if (implementsInterface<ISSOProvider>(auth, 'getLoginCookies') && auth.getLoginCookies) {
+        const cookies = auth.getLoginCookies(oauthCallbackUri, state);
+        if (cookies?.length) {
+          console.log('[auth-handler] setting PKCE cookies', cookies.map(c => c.split('=')[0]));
+          for (const cookie of cookies) {
+            headers.append('Set-Cookie', cookie);
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ url: loginUrl }), { status: 200, headers });
     } catch (error) {
       return handleError(error, 'Error initiating SSO login');
     }
@@ -199,7 +212,11 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
   description: 'Handles the OAuth callback, exchanges code for session, and redirects to the app.',
   tags: ['Auth'],
   handler: async ctx => {
-    const { mastra, code, state } = ctx as any;
+    const { mastra, code, state, request } = ctx as any;
+
+    // Build base URL for redirects (Response.redirect requires absolute URL)
+    const requestUrl = new URL(request.url);
+    const baseUrl = requestUrl.origin;
 
     // Extract post-login redirect from state (format: uuid|encodedRedirect)
     let redirectTo = '/';
@@ -214,22 +231,35 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
       }
     }
 
+    // Build absolute redirect URL
+    const absoluteRedirect = redirectTo.startsWith('http') ? redirectTo : `${baseUrl}${redirectTo}`;
+
     try {
       const auth = getAuthProvider(mastra);
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'handleCallback')) {
-        return Response.redirect(redirectTo + '?error=sso_not_configured', 302);
+        return Response.redirect(`${absoluteRedirect}?error=sso_not_configured`, 302);
+      }
+
+      // Pass cookie header to provider for PKCE validation (if supported)
+      const reqCookieHeader = request.headers.get('cookie');
+      console.log('[auth-handler] callback received', { hasCode: !!code, stateId, hasCookie: !!reqCookieHeader });
+      if (typeof (auth as any).setCallbackCookieHeader === 'function') {
+        console.log('[auth-handler] setting callback cookie header');
+        (auth as any).setCallbackCookieHeader(reqCookieHeader);
       }
 
       const result = (await auth.handleCallback(code, stateId)) as SSOCallbackResult<EEUser>;
+      console.log('[auth-handler] handleCallback result', { userId: result.user?.id, cookieCount: result.cookies?.length });
       const user = result.user as EEUser;
 
       // Build response headers (session cookies, etc.)
       const headers = new Headers();
-      headers.set('Location', redirectTo);
+      headers.set('Location', absoluteRedirect);
 
       // Set session cookies from the SSO result
       if (result.cookies?.length) {
+        console.log('[auth-handler] setting cookies', result.cookies.map(c => c.split('=')[0]));
         for (const cookie of result.cookies) {
           headers.append('Set-Cookie', cookie);
         }
@@ -252,9 +282,9 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
         headers,
       });
     } catch (error) {
-      // Redirect with error
+      // Redirect with error (use absolute URL)
       const errorMessage = encodeURIComponent(error instanceof Error ? error.message : 'Unknown error');
-      return Response.redirect(redirectTo + `?error=${errorMessage}`, 302);
+      return Response.redirect(`${absoluteRedirect}?error=${errorMessage}`, 302);
     }
   },
 });

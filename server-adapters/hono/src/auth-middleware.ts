@@ -170,7 +170,15 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
     return c.json({ error: 'Access denied' }, 403);
   }
 
-  // Default rule-based authorization
+  // No explicit authorization configured (authorizeUser, authorize, or rules)
+  // Check if RBAC is configured - if not, allow authenticated users through
+  // (auth-only mode = authenticated users get full access)
+  const rbacProvider = mastra.getServer()?.rbac;
+  if (!rbacProvider) {
+    return next();
+  }
+
+  // RBAC is configured, fall back to default rules
   if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
     const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
 
