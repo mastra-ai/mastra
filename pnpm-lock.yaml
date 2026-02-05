@@ -1799,8 +1799,8 @@ importers:
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.3)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.101(zod@3.25.76)
       eslint:
         specifier: ^9.36.0
         version: 9.39.2(jiti@2.6.1)
@@ -1879,8 +1879,8 @@ importers:
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.3)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.101(zod@3.25.76)
       eslint:
         specifier: ^9.36.0
         version: 9.39.2(jiti@2.6.1)
@@ -3606,8 +3606,8 @@ importers:
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.3)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.101(zod@3.25.76)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -3795,8 +3795,8 @@ importers:
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)
       ai:
-        specifier: ^4.3.16
-        version: 4.3.19(react@19.2.3)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.101(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -5323,7 +5323,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.39.0
+        version: 1.40.0
       google-auth-library:
         specifier: ^10.2.1
         version: 10.5.0
@@ -5677,8 +5677,8 @@ importers:
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.3)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.101(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -9000,8 +9000,8 @@ packages:
     resolution: {integrity: sha512-gAcNqVL6E6V+d7yZbv5pQAPh5ZTE66UB0n2AZB3QaVaQDo9H8yalja3u2v3NE4QTVt03DkpoIuyvzs4i3w/b7A==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.39.0':
-    resolution: {integrity: sha512-Vz7AQsOdBeiIcxmXIQNy/hzDvyAOE1lSpWA10itUQza7h3aQFF6QSGaQ7o1GYsjMD3XslK4Ee/Ol0eLhRXb7gA==}
+  '@google/genai@1.40.0':
+    resolution: {integrity: sha512-fhIww8smT0QYRX78qWOiz/nIQhHMF5wXOrlXvj33HBrz3vKDBb+wibLcEmTA+L9dmPD4KmfNr7UF3LDQVTXNjA==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.25.2
@@ -26904,7 +26904,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.39.0':
+  '@google/genai@1.40.0':
     dependencies:
       google-auth-library: 10.5.0
       protobufjs: 7.5.4
