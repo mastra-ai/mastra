@@ -22,9 +22,7 @@ const pnpmSpecificEnvVars = new Set([
  * @returns {NodeJS.ProcessEnv}
  */
 function getFilteredEnv() {
-  return Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !pnpmSpecificEnvVars.has(key)),
-  );
+  return Object.fromEntries(Object.entries(process.env).filter(([key]) => !pnpmSpecificEnvVars.has(key)));
 }
 
 // @see https://blog.devgenius.io/compiling-from-typescript-with-js-extension-e2b6de3e6baf
