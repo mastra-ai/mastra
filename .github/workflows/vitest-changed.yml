@@ -32,6 +32,13 @@ jobs:
       contents: read
 
     steps:
+      # Then checkout the PR code for the actual work
+      - name: Checkout PR code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
       # First checkout the base branch to get trusted composite actions
       - name: Checkout trusted actions from base branch
         uses: actions/checkout@v5
@@ -39,13 +46,6 @@ jobs:
           ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
           sparse-checkout: .github/actions
           path: trusted-actions
-
-      # Then checkout the PR code for the actual work
-      - name: Checkout PR code
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       # Copy trusted actions into the workspace
       - name: Use trusted actions
