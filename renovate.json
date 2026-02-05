@@ -10,6 +10,7 @@
     ":ignoreModulesAndTests",
     "replacements:all",
     "workarounds:typesNodeVersioning",
+    "group:monorepos",
     "group:recommended",
     ":prConcurrentLimit20"
   ],
