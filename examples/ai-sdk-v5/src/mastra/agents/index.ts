@@ -1,23 +1,8 @@
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-
-import { weatherTool } from "../tools";
 import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
+import { weatherTool } from "../tools";
+import { getCurrentTimeTool } from "../tools/client";
 
-export const memory = new Memory({
-  storage: new LibSQLStore({
-    id: "ai-sdk-v5-storage",
-    url: `file:./mastra.db`,
-  }),
-  options: {
-    semanticRecall: false,
-    workingMemory: {
-      enabled: false,
-    },
-    lastMessages: 5,
-  },
-});
 
 export const weatherAgent = new Agent({
   id: "weather-agent",
@@ -32,11 +17,12 @@ export const weatherAgent = new Agent({
       - Keep responses concise but informative
 
       Use the weatherTool to fetch current weather data.
-
+      When the user asks about the time, date, or anything time-related, use the getCurrentTimeTool to get their local time from the browser.
 `,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o-mini",
   tools: {
     weatherTool,
+    getCurrentTimeTool,
   },
-  memory,
+  memory: new Memory(),
 });
