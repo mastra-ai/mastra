@@ -749,7 +749,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         datasetId: input.datasetId,
         versionNumber: input.versionNumber,
         datasetVersion: input.datasetVersion,
-        snapshot: input.snapshot,
+        snapshot: input.snapshot ?? {},
         isDeleted: input.isDeleted ?? false,
         createdAt: now,
       };
