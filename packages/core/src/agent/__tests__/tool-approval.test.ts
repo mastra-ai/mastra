@@ -144,6 +144,68 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(name).toBe('Dero Israel');
       }, 500000);
 
+      it('should call findUserTool with requireToolApproval on sub-agent', async () => {
+        const findUserTool = createTool({
+          id: 'Find user tool',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          execute: async input => {
+            return mockFindUser(input) as Promise<Record<string, any>>;
+          },
+        });
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserTool.',
+          model: openaiModel,
+          tools: { findUserTool },
+          defaultOptions: {
+            requireToolApproval: true,
+          },
+        });
+
+        const parentAgent = new Agent({
+          id: 'parent-agent',
+          name: 'Parent Agent',
+          instructions: 'You are an agent that can get list of users.',
+          model: openaiModel,
+          agents: { userAgent },
+        });
+
+        const mastra = new Mastra({
+          agents: { parentAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('parentAgent');
+
+        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+        let toolCallId = '';
+        for await (const _chunk of stream.fullStream) {
+          if (_chunk.type === 'tool-call-approval') {
+            toolCallId = _chunk.payload.toolCallId;
+          }
+        }
+        if (toolCallId) {
+          const resumeStream = await agentOne.approveToolCall({ runId: stream.runId, toolCallId });
+          for await (const _chunk of resumeStream.fullStream) {
+          }
+
+          const toolResults = await resumeStream.toolResults;
+
+          const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'agent-userAgent')?.payload;
+
+          const text = (toolCall?.result as any)?.text;
+
+          expect(mockFindUser).toHaveBeenCalled();
+          expect(text).toContain('Dero Israel');
+        }
+      }, 500000);
+
       it('should call findUserTool with requireToolApproval on tool', async () => {
         const findUserTool = createTool({
           id: 'Find user tool',
@@ -584,6 +646,74 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(email).toBe('test@test.com');
       }, 15000);
 
+      it('should call findUserTool on a subAgent with suspend and resume', async () => {
+        const findUserTool = createTool({
+          id: 'Find user tool',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          suspendSchema: z.object({
+            message: z.string(),
+          }),
+          resumeSchema: z.object({
+            name: z.string(),
+          }),
+          execute: async (inputData, context) => {
+            if (!context?.agent?.resumeData) {
+              return await context?.agent?.suspend({ message: 'Please provide the name of the user' });
+            }
+
+            return {
+              name: context?.agent?.resumeData?.name,
+              email: 'test@test.com',
+            };
+          },
+        });
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserTool.',
+          model: openaiModel,
+          tools: { findUserTool },
+        });
+
+        const parentAgent = new Agent({
+          id: 'parent-agent',
+          name: 'Parent Agent',
+          instructions: 'You are an agent that can get list of users.',
+          model: openaiModel,
+          agents: { userAgent },
+        });
+
+        const mastra = new Mastra({
+          agents: { parentAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('parentAgent');
+
+        let toolCall;
+        const stream = await agentOne.stream('Find the user with name - Dero Israel');
+        for await (const _chunk of stream.fullStream) {
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const resumeStream = await agentOne.resumeStream({ name: 'Dero Israel' }, { runId: stream.runId });
+        for await (const _chunk of resumeStream.fullStream) {
+        }
+
+        const toolResults = await resumeStream.toolResults;
+
+        toolCall = toolResults?.find((result: any) => result.payload.toolName === 'agent-userAgent')?.payload;
+
+        const text = toolCall?.result?.text;
+
+        expect(text).toContain('Dero Israel');
+        expect(text).toContain('test@test.com');
+      }, 15000);
+
       it('should call findUserTool with suspend and resume via generate', async () => {
         const findUserTool = createTool({
           id: 'Find user tool',
@@ -752,6 +882,113 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(suspendData.suspendedToolName).toBe('findUserTool');
         expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
       }, 15000);
+
+      it('should call findUserTool on a subAgent with suspend and resume via stream when autoResumeSuspendedTools is true', async () => {
+        const findUserTool = createTool({
+          id: 'Find user tool',
+          description: 'This is a test tool that returns the name and email',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          suspendSchema: z.object({
+            message: z.string(),
+          }),
+          resumeSchema: z.object({
+            age: z.number(),
+          }),
+          execute: async (inputData, context) => {
+            if (!context?.agent?.resumeData) {
+              return await context?.agent?.suspend({ message: 'Please provide the age of the user' });
+            }
+
+            return {
+              name: inputData.name,
+              age: context?.agent?.resumeData?.age,
+              email: 'test@test.com',
+            };
+          },
+        });
+
+        const findUserProfessionTool = createTool({
+          id: 'Find user profession tool',
+          description: 'This is a test tool that returns the profession of the user',
+          inputSchema: z.object({
+            name: z.string(),
+          }),
+          execute: async () => {
+            return {
+              profession: 'Software Engineer',
+            };
+          },
+        });
+
+        const userAgent = new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'You are an agent that can get list of users using findUserTool.',
+          model: openaiModel,
+          tools: { findUserTool, findUserProfessionTool },
+        });
+
+        const parentAgent = new Agent({
+          id: 'parent-agent',
+          name: 'Parent Agent',
+          instructions: 'You are an agent that can get list of users.',
+          model: openaiModel,
+          agents: { userAgent },
+          memory: new MockMemory(),
+          defaultOptions: {
+            autoResumeSuspendedTools: true,
+          },
+        });
+
+        const mastra = new Mastra({
+          agents: { parentAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('parentAgent');
+
+        const suspendData = {
+          suspendPayload: null,
+          suspendedToolName: '',
+        };
+        const memory = {
+          thread: randomUUID(),
+          resource: randomUUID(),
+        };
+        const stream = await agentOne.stream('Find the name, age and profession of the user - Dero Israel', {
+          memory,
+        });
+        for await (const _chunk of stream.fullStream) {
+          if (_chunk.type === 'tool-call-suspended') {
+            suspendData.suspendPayload = _chunk.payload.suspendPayload;
+            suspendData.suspendedToolName = _chunk.payload.toolName;
+          }
+        }
+        if (suspendData.suspendPayload) {
+          const resumeStream = await agentOne.stream('He is 25 years old', {
+            memory,
+          });
+          for await (const _chunk of resumeStream.fullStream) {
+          }
+
+          const toolResults = await resumeStream.toolResults;
+
+          const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'agent-userAgent')?.payload;
+
+          const text = (toolCall?.result as any)?.text;
+
+          expect(text).toContain('Dero Israel');
+          expect(text).toContain('test@test.com');
+          expect(text).toContain('25');
+        }
+
+        expect(suspendData.suspendPayload).toBeDefined();
+        expect(suspendData.suspendedToolName).toBe('agent-userAgent');
+        expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
+      }, 25000);
 
       it('should call findUserTool with suspend and resume via generate when autoResumeSuspendedTools is true', async () => {
         const findUserTool = createTool({

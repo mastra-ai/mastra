@@ -213,7 +213,7 @@ export class ModelsDevGateway extends MastraModelGateway {
       case 'mistral':
         return createMistral({ apiKey })(modelId);
       case 'openrouter':
-        return createOpenRouter({ apiKey, headers })(modelId);
+        return createOpenRouter({ apiKey, headers })(modelId) as any;
       case 'xai':
         return createXai({
           apiKey,
