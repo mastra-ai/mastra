@@ -528,24 +528,40 @@ export const TRIGGER_RUN_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Runs storage not configured' });
       }
 
-      // Check if dataset exists and get item count
+      // Check if dataset exists
       const dataset = await datasetsStore.getDatasetById({ id: datasetId });
       if (!dataset) {
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
 
-      // Resolve dataset version
-      const datasetVersion = version instanceof Date ? version : dataset.version;
+      // Get items differently based on whether version is specified
+      // - No version: use current items from live table
+      // - Version specified: use historical snapshot
+      let items: Awaited<ReturnType<typeof datasetsStore.getItemsByVersion>>;
+      let datasetVersion: Date;
 
-      // Get items to count total
-      const items = await datasetsStore.getItemsByVersion({
-        datasetId,
-        version: datasetVersion,
-      });
+      if (version instanceof Date) {
+        // Historical version - fetch from version snapshots
+        datasetVersion = version;
+        items = await datasetsStore.getItemsByVersion({
+          datasetId,
+          version: datasetVersion,
+        });
+      } else {
+        // Latest version - fetch current items from live table
+        datasetVersion = dataset.version;
+        const result = await datasetsStore.listItems({
+          datasetId,
+          pagination: { page: 0, perPage: false }, // Get all items
+        });
+        items = result.items;
+      }
 
       if (items.length === 0) {
         throw new HTTPException(400, {
-          message: `No items in dataset ${datasetId} at version ${datasetVersion.toISOString()}`,
+          message: version
+            ? `No items in dataset ${datasetId} at version ${datasetVersion.toISOString()}`
+            : `No items in dataset ${datasetId}`,
         });
       }
 
@@ -571,7 +587,8 @@ export const TRIGGER_RUN_ROUTE = createRoute({
             targetType,
             targetId,
             scorers: scorerIds,
-            version: datasetVersion,
+            // Only pass version for historical runs - latest uses current items
+            version: version instanceof Date ? version : undefined,
             maxConcurrency,
             runId, // Pass pre-created runId to avoid duplicate creation
           });
