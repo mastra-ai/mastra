@@ -6,7 +6,7 @@ import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
+import type { AnySpan, ObservabilityContext, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
 import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
@@ -888,7 +888,6 @@ export type RegularStepExecutionParams = {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
-  tracingContext?: TracingContext;
   writableStream?: WritableStream<ChunkType>;
   startedAt: number;
   resumeDataToUse?: any;
@@ -898,7 +897,7 @@ export type RegularStepExecutionParams = {
   serializedStepGraph: SerializedStepFlowEntry[];
   resourceId?: string;
   disableScorers?: boolean;
-};
+} & Partial<ObservabilityContext>;
 
 /**
  * Result from step execution core logic

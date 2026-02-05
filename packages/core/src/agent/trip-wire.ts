@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
+import { resolveObservabilityContext } from '../observability';
 import { ChunkFrom, MastraModelOutput } from '../stream';
 import type { ChunkType } from '../stream/types';
 import type { InnerAgentExecutionOptions } from './agent.types';
@@ -56,18 +57,18 @@ export interface TripwireData<TMetadata = unknown> {
 export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = unknown>({
   tripwire,
   runId,
-  tracingContext,
   options,
   model,
   messageList,
+  ...rest
 }: {
   tripwire: TripwireData<TMetadata>;
   runId: string;
-  tracingContext: TracingContext;
   options: InnerAgentExecutionOptions<OUTPUT>;
   model: MastraLanguageModel;
   messageList: MessageList;
-}) => {
+} & ObservabilityContext) => {
+  const observabilityContext = resolveObservabilityContext(rest);
   const tripwireStream = new ReadableStream<ChunkType<OUTPUT>>({
     start(controller) {
       controller.enqueue({
@@ -96,7 +97,7 @@ export const getModelOutputForTripwire = async <OUTPUT = undefined, TMetadata = 
     options: {
       runId,
       structuredOutput: options.structuredOutput,
-      tracingContext,
+      ...observabilityContext,
       onFinish: options.onFinish as any, // Fix these types after the types PR is merged
       onStepFinish: options.onStepFinish as any,
       returnScorerData: options.returnScorerData,

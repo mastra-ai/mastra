@@ -5,7 +5,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { CompletionConfig } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
-import type { TracingContext, TracingOptions } from '../observability';
+import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { OutputWriter } from '../workflows/types';
@@ -59,9 +59,6 @@ export type NetworkOptions<OUTPUT = undefined> = {
 
   /** Maximum number of iterations to run */
   maxSteps?: number;
-
-  /** Tracing context for span hierarchy and metadata */
-  tracingContext?: TracingContext;
 
   /** Model-specific settings like temperature, maxTokens, topP, etc. */
   modelSettings?: LoopOptions['modelSettings'];
@@ -141,7 +138,7 @@ export type NetworkOptions<OUTPUT = undefined> = {
    * Signal to abort the streaming operation
    */
   abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
-};
+} & Partial<ObservabilityContext>;
 
 /**
  * @deprecated Use NetworkOptions instead
@@ -222,8 +219,6 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return detailed scoring data in the response */
   returnScorerData?: boolean;
-  /** tracing context for span hierarchy and metadata */
-  tracingContext?: TracingContext;
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
 
@@ -241,7 +236,7 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to include raw chunks in the stream output (not available on all model providers) */
   includeRawChunks?: boolean;
-};
+} & Partial<ObservabilityContext>;
 
 export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
   (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });

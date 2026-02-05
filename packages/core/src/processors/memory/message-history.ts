@@ -2,7 +2,7 @@ import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
 import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
@@ -61,13 +61,14 @@ export class MessageHistory implements Processor {
     return null;
   }
 
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    messageList: MessageList;
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-  }): Promise<MessageList | MastraDBMessage[]> {
+  async processInput(
+    args: {
+      messages: MastraDBMessage[];
+      messageList: MessageList;
+      abort: (reason?: string) => never;
+      requestContext?: RequestContext;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MessageList | MastraDBMessage[]> {
     const { messageList, requestContext } = args;
 
     // Get memory context from RequestContext or MessageList
@@ -176,13 +177,14 @@ export class MessageHistory implements Processor {
       .filter((m): m is NonNullable<typeof m> => Boolean(m));
   }
 
-  async processOutputResult(args: {
-    messages: MastraDBMessage[];
-    messageList: MessageList;
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-  }): Promise<MessageList> {
+  async processOutputResult(
+    args: {
+      messages: MastraDBMessage[];
+      messageList: MessageList;
+      abort: (reason?: string) => never;
+      requestContext?: RequestContext;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MessageList> {
     const { messageList, requestContext } = args;
 
     // Get memory context from RequestContext or MessageList
