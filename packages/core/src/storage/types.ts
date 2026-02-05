@@ -851,7 +851,7 @@ export interface DatasetItemVersion {
   datasetId: string;
   versionNumber: number;
   datasetVersion: Date;
-  snapshot?: {
+  snapshot: {
     input?: unknown;
     expectedOutput?: unknown;
     context?: Record<string, unknown>;
