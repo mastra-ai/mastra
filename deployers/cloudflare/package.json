@@ -45,7 +45,7 @@
     "@babel/core": "^7.28.6",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "3.0.2",
-    "cloudflare": "^4.5.0",
+    "cloudflare": "^5.2.0",
     "rollup": "~4.55.1",
     "rollup-plugin-esbuild": "^6.2.1"
   },
