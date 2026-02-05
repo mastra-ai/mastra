@@ -195,7 +195,7 @@ function generateTableSQL({
   // Sanitize schema name before using it in constraint names to ensure valid SQL identifiers
   const parsedSchemaName = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
   const workflowSnapshotConstraint = buildConstraintName({
-    baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
+    baseName: 'mastra_wf_snapshot_wf_name_run_id_key',
     schemaName: parsedSchemaName || undefined,
   });
   const spansPrimaryKeyConstraint = buildConstraintName({
