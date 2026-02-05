@@ -20,7 +20,6 @@ import { withLangsmithMetadata } from '@mastra/langsmith';
 const tracingOptions = buildTracingOptions(
   withLangsmithMetadata({
     projectName: 'enterprise-traces',
-    tags: ['production'],
     sessionId: 'user-123',
   }),
 );

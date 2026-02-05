@@ -270,12 +270,9 @@ export class LangSmithExporter extends TrackingExporter<
       payload.metadata.session_name = vendorMetadata.sessionName;
     }
 
-    // Merge tags from span and vendor metadata for root spans
-    const spanTags = span.isRootSpan && span.tags?.length ? span.tags : [];
-    const vendorTags = vendorMetadata?.tags ?? [];
-    const allTags = [...spanTags, ...vendorTags].filter((tag, index, arr) => arr.indexOf(tag) === index);
-    if (allTags.length > 0) {
-      payload.tags = allTags;
+    // Add tags for root spans
+    if (span.isRootSpan && span.tags?.length) {
+      payload.tags = span.tags;
     }
 
     // Core span data

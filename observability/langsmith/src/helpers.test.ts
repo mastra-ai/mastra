@@ -10,7 +10,6 @@ describe('LangSmith Helpers', () => {
     it('should add all metadata fields', () => {
       const updater = withLangsmithMetadata({
         projectName: 'my-project',
-        tags: ['tag1', 'tag2'],
         sessionId: 'session-123',
         sessionName: 'My Session',
       });
@@ -19,7 +18,6 @@ describe('LangSmith Helpers', () => {
       expect(result.metadata).toEqual({
         langsmith: {
           projectName: 'my-project',
-          tags: ['tag1', 'tag2'],
           sessionId: 'session-123',
           sessionName: 'My Session',
         },

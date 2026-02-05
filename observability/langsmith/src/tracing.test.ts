@@ -1321,60 +1321,6 @@ describe('TestLangSmithExporter', () => {
       );
     });
 
-    it('should merge vendor metadata tags with span tags', async () => {
-      const span = createMockSpan({
-        id: 'span-with-tags',
-        name: 'test-span',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: {},
-        tags: ['span-tag-1', 'span-tag-2'],
-        metadata: {
-          langsmith: {
-            tags: ['vendor-tag-1', 'vendor-tag-2'],
-          },
-        },
-      });
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: span,
-      });
-
-      expect(MockRunTreeClass).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tags: expect.arrayContaining(['span-tag-1', 'span-tag-2', 'vendor-tag-1', 'vendor-tag-2']),
-        }),
-      );
-    });
-
-    it('should deduplicate tags when merging span and vendor tags', async () => {
-      const span = createMockSpan({
-        id: 'span-with-duplicate-tags',
-        name: 'test-span',
-        type: SpanType.AGENT_RUN,
-        isRoot: true,
-        attributes: {},
-        tags: ['common-tag', 'span-only'],
-        metadata: {
-          langsmith: {
-            tags: ['common-tag', 'vendor-only'],
-          },
-        },
-      });
-
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: span,
-      });
-
-      const call = MockRunTreeClass.mock.calls[0][0];
-      expect(call.tags).toHaveLength(3);
-      expect(call.tags).toContain('common-tag');
-      expect(call.tags).toContain('span-only');
-      expect(call.tags).toContain('vendor-only');
-    });
-
     it('should omit langsmith key from final metadata', async () => {
       const span = createMockSpan({
         id: 'span-clean-metadata',
@@ -1426,7 +1372,6 @@ describe('TestLangSmithExporter', () => {
           userField: 'user-value',
           langsmith: {
             projectName: 'custom-project',
-            tags: ['vendor-tag'],
             sessionId: 'session-456',
             sessionName: 'Full Test Session',
           },
@@ -1441,7 +1386,7 @@ describe('TestLangSmithExporter', () => {
       expect(MockRunTreeClass).toHaveBeenCalledWith(
         expect.objectContaining({
           project_name: 'custom-project',
-          tags: expect.arrayContaining(['span-tag', 'vendor-tag']),
+          tags: ['span-tag'],
           metadata: expect.objectContaining({
             userField: 'user-value',
             session_id: 'session-456',

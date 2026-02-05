@@ -33,10 +33,6 @@ export interface LangSmithMetadataInput {
    */
   projectName?: string;
   /**
-   * Additional tags to add to this span in LangSmith.
-   */
-  tags?: string[];
-  /**
    * Session ID for grouping related traces in LangSmith.
    */
   sessionId?: string;
@@ -51,7 +47,6 @@ export interface LangSmithMetadataInput {
  *
  * The metadata is added under `metadata.langsmith` and allows you to:
  * - Route traces to different LangSmith projects via `projectName`
- * - Add tags to spans via `tags`
  * - Group traces by session via `sessionId` and `sessionName`
  *
  * @param metadata - The LangSmith metadata to add
@@ -71,7 +66,6 @@ export interface LangSmithMetadataInput {
  * const tracingOptions = buildTracingOptions(
  *   withLangsmithMetadata({
  *     projectName: 'my-project',
- *     tags: ['production', 'customer-facing'],
  *     sessionId: 'session-123',
  *   }),
  * );

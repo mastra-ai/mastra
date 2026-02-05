@@ -165,7 +165,6 @@ export const supportAgent = new Agent({
           projectName: userTier === "enterprise"
             ? "enterprise-traces"
             : "standard-traces",
-          tags: [userTier],
           sessionId: userId,
         }),
       ),
@@ -181,7 +180,6 @@ The `withLangsmithMetadata` helper accepts these fields:
 | Field | Type | Description |
 |-------|------|-------------|
 | `projectName` | string | Override the project for this trace |
-| `tags` | string[] | Additional tags (merged with span tags) |
 | `sessionId` | string | Group related traces by session |
 | `sessionName` | string | Display name for the session |
 

@@ -159,12 +159,6 @@ function withLangsmithMetadata(metadata: LangSmithMetadataInput): TracingOptions
       required: false,
     },
     {
-      name: "tags",
-      type: "string[]",
-      description: "Additional tags to add (merged with span tags)",
-      required: false,
-    },
-    {
       name: "sessionId",
       type: "string",
       description: "Session ID for grouping related traces",
@@ -194,7 +188,6 @@ const tracingOptions = buildTracingOptions(
 const tracingOptions = buildTracingOptions(
   withLangsmithMetadata({
     projectName: "my-project",
-    tags: ["production"],
     sessionId: "user-123",
   }),
 );
