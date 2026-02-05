@@ -48,7 +48,7 @@ export function AgentEditMainContentBlocks({ form, readOnly: _readOnly = false }
         <InstructionsPreviewDialog
           open={isPreviewDialogOpen}
           onOpenChange={setIsPreviewDialogOpen}
-          instructions={blocks.map(b => b.content).join('\n')}
+          blocks={blocks}
           variablesSchema={schema}
         />
       </div>

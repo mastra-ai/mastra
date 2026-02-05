@@ -3,20 +3,23 @@ import { useEffect, useMemo, useState } from 'react';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import type { JsonSchema } from '@/lib/json-schema';
+import { isEligible } from '@/lib/rule-engine';
 import { generateDefaultValues, interpolateTemplate } from '@/lib/template';
 import { cn } from '@/lib/utils';
+
+import type { InstructionBlock } from './utils/form-validation';
 
 interface InstructionsPreviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  instructions: string;
+  blocks: InstructionBlock[];
   variablesSchema?: JsonSchema;
 }
 
 export function InstructionsPreviewDialog({
   open,
   onOpenChange,
-  instructions,
+  blocks,
   variablesSchema,
 }: InstructionsPreviewDialogProps) {
   const defaultValues = useMemo(() => generateDefaultValues(variablesSchema), [variablesSchema]);
@@ -33,17 +36,25 @@ export function InstructionsPreviewDialog({
   const { compiledInstructions, parseError } = useMemo(() => {
     try {
       const variables = JSON.parse(variablesJson || '{}') as Record<string, unknown>;
+
+      // Filter blocks by eligibility based on their rules
+      const eligibleBlocks = blocks.filter(block => isEligible(block.rules, variables));
+
+      // Join eligible block contents
+      const joinedInstructions = eligibleBlocks.map(b => b.content).join('\n\n');
+
       return {
-        compiledInstructions: interpolateTemplate(instructions, variables),
+        compiledInstructions: interpolateTemplate(joinedInstructions, variables),
         parseError: null,
       };
     } catch {
+      // Fallback: show all blocks without filtering when JSON is invalid
       return {
-        compiledInstructions: instructions,
+        compiledInstructions: blocks.map(b => b.content).join('\n\n'),
         parseError: 'Invalid JSON',
       };
     }
-  }, [instructions, variablesJson]);
+  }, [blocks, variablesJson]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
