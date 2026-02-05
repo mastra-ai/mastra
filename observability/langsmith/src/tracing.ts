@@ -235,7 +235,7 @@ export class LangSmithExporter extends TrackingExporter<
     // Merge from ancestors to current span (parent values first, child values override)
     const merged: LangSmithMetadataInput = {};
     for (let i = metadataChain.length - 1; i >= 0; i--) {
-      const meta = metadataChain[i];
+      const meta = metadataChain[i]!;
       if (meta.projectName !== undefined) merged.projectName = meta.projectName;
       if (meta.sessionId !== undefined) merged.sessionId = meta.sessionId;
       if (meta.sessionName !== undefined) merged.sessionName = meta.sessionName;
