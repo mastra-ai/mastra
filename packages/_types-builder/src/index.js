@@ -7,6 +7,26 @@ import { replaceTypes } from './replace-types.js';
 
 const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
 
+// pnpm-specific environment variables that npm doesn't recognize
+// These cause "Unknown env config" warnings when passed to npx/npm
+const pnpmSpecificEnvVars = new Set([
+  'npm_config_catalog',
+  'npm_config_verify-deps-before-run',
+  'npm_config_npm-globalconfig',
+  'npm_config__jsr-registry',
+  'npm_config_patched-dependencies',
+]);
+
+/**
+ * Get a filtered copy of process.env without pnpm-specific npm_config_* variables
+ * @returns {NodeJS.ProcessEnv}
+ */
+function getFilteredEnv() {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !pnpmSpecificEnvVars.has(key)),
+  );
+}
+
 // @see https://blog.devgenius.io/compiling-from-typescript-with-js-extension-e2b6de3e6baf
 /**
  * Generate types for the given root directory and bundled packages.
@@ -23,6 +43,7 @@ export async function generateTypes(rootDir, bundledPackages = new Set()) {
       cwd: rootDir,
       stdio: 'inherit',
       shell: true,
+      env: getFilteredEnv(),
     });
 
     await new Promise((resolve, reject) => {
