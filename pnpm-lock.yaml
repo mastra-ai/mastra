@@ -3191,6 +3191,15 @@ importers:
 
   packages/opencode-observational-memory:
     dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../core
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@opencode-ai/plugin':
         specifier: ^1.1.51
         version: 1.1.51

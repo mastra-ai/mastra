@@ -24,61 +24,58 @@ description: Initialize Observational Memory with comprehensive codebase knowled
 
 You are initializing persistent memory for this codebase using Mastra's Observational Memory system.
 
-## Understanding Context
+## How It Works
 
-Mastra's Observational Memory automatically compresses your conversation history into structured observations. This helps maintain context across long coding sessions and multiple conversations.
+Mastra's Observational Memory runs **locally** in the plugin - no external server needed. It uses:
+- **Local SQLite database** for storage (~/.opencode/observational-memory.db)
+- **Observer agent** to extract observations when conversation grows long
+- **Reflector agent** to condense observations when they grow too large
 
-## What Gets Remembered
+## What Gets Captured
 
-The Observational Memory system automatically captures:
-1. **Code patterns** - Architectures, conventions, and styles used in the codebase
-2. **Decisions** - Technical decisions and their reasoning
+The system automatically observes:
+1. **Code patterns** - Architectures, conventions, and styles
+2. **Decisions** - Technical decisions and their reasoning  
 3. **Workflows** - Build, test, and deployment procedures
 4. **Preferences** - User and project preferences
 
-## Memory Scopes
+## Research the Codebase
 
-**Resource-scoped** (default):
-- Observations are shared across all threads for a resource (user)
-- Ideal for capturing cross-project knowledge
+To help the system build good initial observations, explore:
 
-**Thread-scoped**:
-- Observations are specific to a single conversation thread
-- Useful for isolated contexts
-
-## How to Research the Codebase
-
-### File-based Research
+### File-based
 - README.md, CONTRIBUTING.md, AGENTS.md, CLAUDE.md
-- Package manifests (package.json, Cargo.toml, pyproject.toml, go.mod)
+- Package manifests (package.json, Cargo.toml, etc.)
 - Config files (.eslintrc, tsconfig.json, .prettierrc)
 - CI/CD configs (.github/workflows/)
 
-### Git-based Research
-- \`git log --oneline -20\` - Recent history
-- \`git branch -a\` - Branching strategy
-- \`git log --format="%s" -50\` - Commit conventions
-- \`git shortlog -sn --all | head -10\` - Main contributors
+### Git-based
+\`\`\`bash
+git log --oneline -20        # Recent history
+git branch -a                # Branching strategy
+git log --format="%s" -50    # Commit conventions
+\`\`\`
 
 ## Using the Memory Tool
 
-You can use the \`observational-memory\` tool to:
-
+Check status:
 \`\`\`
-observational-memory(mode: "status")              // Check memory status
-observational-memory(mode: "get-observations")   // View current observations
-observational-memory(mode: "search", query: "...") // Search memories
-observational-memory(mode: "list-threads")       // List conversation threads
+observational-memory(mode: "status")
+\`\`\`
+
+View observations:
+\`\`\`
+observational-memory(mode: "get-observations")
 \`\`\`
 
 ## Your Task
 
-1. Ask the user about any specific rules or preferences
-2. Research the codebase structure
+1. Ask about specific rules or preferences
+2. Explore the codebase structure
 3. Note important patterns and conventions
-4. The system will automatically create observations from your conversation
+4. The system will automatically capture observations from this conversation
 
-After exploration, summarize what you've learned about the codebase.
+After exploration, summarize what you've learned.
 `;
 
 const OM_STATUS_COMMAND = `---
@@ -87,28 +84,19 @@ description: Check Observational Memory status and view current observations
 
 # Observational Memory Status
 
-Run this command to check the status of your Observational Memory:
-
+Check the status:
 \`\`\`
 observational-memory(mode: "status")
 \`\`\`
 
-This will show:
-- Whether memory is enabled
-- Current observation count
-- Token usage
-- Observation/reflection status
-
-To view the actual observations:
-
+View observations:
 \`\`\`
 observational-memory(mode: "get-observations")
 \`\`\`
 
-To search through memories:
-
+List conversation threads:
 \`\`\`
-observational-memory(mode: "search", query: "your search query")
+observational-memory(mode: "list-threads")
 \`\`\`
 `;
 
@@ -227,33 +215,25 @@ function createCommands(): boolean {
   return true;
 }
 
-function createPluginConfig(mastraUrl: string, agentId: string, apiKey?: string): boolean {
+function createPluginConfig(model: string): boolean {
   const configPath = join(OPENCODE_CONFIG_DIR, 'observational-memory.jsonc');
 
-  const config: Record<string, unknown> = {
-    mastraUrl,
-    agentId,
-  };
-
-  if (apiKey) {
-    config.apiKey = apiKey;
-  }
-
   const content = `{
-  // Mastra server URL
-  "mastraUrl": "${mastraUrl}",
+  // Model for Observer and Reflector agents
+  // Supports any model ID like "openai/gpt-4o", "anthropic/claude-3-sonnet", etc.
+  "model": "${model}",
 
-  // Agent ID for memory operations
-  "agentId": "${agentId}"${apiKey ? `,
+  // Scope for observational memory
+  // "resource" = shared across all threads for a user (default)
+  // "thread" = specific to each conversation
+  "scope": "resource",
 
-  // API key for authentication (optional)
-  "apiKey": "${apiKey}"` : ''}
+  // Token thresholds for triggering observation/reflection
+  // "messageTokenThreshold": 30000,
+  // "observationTokenThreshold": 40000,
 
-  // Uncomment to customize:
-  // "maxObservations": 5,
-  // "maxSearchResults": 10,
-  // "injectWorkingMemory": true,
-  // "injectObservations": true
+  // Database path (default: ~/.opencode/observational-memory.db)
+  // "dbPath": "~/.opencode/observational-memory.db"
 }
 `;
 
@@ -264,13 +244,13 @@ function createPluginConfig(mastraUrl: string, agentId: string, apiKey?: string)
 
 interface InstallOptions {
   tui: boolean;
-  mastraUrl?: string;
-  agentId?: string;
-  apiKey?: string;
+  model?: string;
 }
 
 async function install(options: InstallOptions): Promise<number> {
   console.log('\n🧠 opencode-observational-memory installer\n');
+  console.log('This plugin provides persistent memory using Mastra\'s');
+  console.log('Observational Memory system with local SQLite storage.\n');
 
   const rl = options.tui ? createReadline() : null;
 
@@ -315,68 +295,61 @@ async function install(options: InstallOptions): Promise<number> {
     createCommands();
   }
 
-  // Step 3: Configure Mastra connection
-  console.log('\nStep 3: Configure Mastra connection');
+  // Step 3: Configure model
+  console.log('\nStep 3: Configure model for Observer/Reflector agents');
 
-  let mastraUrl = options.mastraUrl || process.env.MASTRA_URL;
-  let agentId = options.agentId || process.env.MASTRA_AGENT_ID;
-  let apiKey = options.apiKey || process.env.MASTRA_API_KEY;
+  let model = options.model || process.env.OM_MODEL;
 
-  if (options.tui) {
-    if (!mastraUrl) {
-      mastraUrl = await prompt(rl!, 'Mastra server URL (e.g., http://localhost:3000): ');
+  if (options.tui && !model) {
+    console.log('\nThe Observer and Reflector agents need a model to run.');
+    console.log('Examples: google/gemini-2.0-flash, openai/gpt-4o, anthropic/claude-3-sonnet');
+    model = await prompt(rl!, 'Model ID (default: google/gemini-2.0-flash): ');
+    if (!model) {
+      model = 'google/gemini-2.0-flash';
     }
-    if (!agentId) {
-      agentId = await prompt(rl!, 'Agent ID: ');
-    }
-    if (!apiKey) {
-      const needsKey = await confirm(rl!, 'Does your Mastra server require an API key?');
-      if (needsKey) {
-        apiKey = await prompt(rl!, 'API key: ');
-      }
-    }
-
-    if (mastraUrl && agentId) {
-      createPluginConfig(mastraUrl, agentId, apiKey);
-    } else {
-      console.log('Skipped config creation - missing required values');
-    }
-  } else if (mastraUrl && agentId) {
-    createPluginConfig(mastraUrl, agentId, apiKey);
-  } else {
-    console.log('Skipped config creation - set MASTRA_URL and MASTRA_AGENT_ID environment variables');
   }
+
+  if (!model) {
+    model = 'google/gemini-2.0-flash';
+  }
+
+  createPluginConfig(model);
 
   if (rl) rl.close();
 
   console.log('\n' + '─'.repeat(50));
-  console.log('\n✓ Setup complete! Restart OpenCode to activate.\n');
-
-  if (!mastraUrl || !agentId) {
-    console.log('Environment variables required:');
-    console.log('  export MASTRA_URL="http://your-mastra-server:3000"');
-    console.log('  export MASTRA_AGENT_ID="your-agent-id"');
-    console.log('  export MASTRA_API_KEY="your-api-key"  # optional');
-    console.log('');
-  }
+  console.log('\n✓ Setup complete!\n');
+  console.log('Next steps:');
+  console.log('1. Restart OpenCode');
+  console.log('2. Run /om-init to explore your codebase');
+  console.log('3. The system will automatically build observations\n');
+  console.log('Data is stored locally at ~/.opencode/observational-memory.db');
+  console.log('');
 
   return 0;
 }
 
 function printHelp(): void {
   console.log(`
-opencode-observational-memory - Persistent memory for OpenCode agents using Mastra
+opencode-observational-memory - Persistent memory for OpenCode using Mastra
+
+This plugin runs LOCALLY - no external server needed. Uses SQLite for storage.
 
 Commands:
   install    Install and configure the plugin
-    --no-tui           Non-interactive mode (for LLM agents)
-    --mastra-url URL   Mastra server URL
-    --agent-id ID      Agent ID for memory operations
-    --api-key KEY      API key for authentication (optional)
+    --no-tui           Non-interactive mode
+    --model MODEL      Model ID for Observer/Reflector (default: google/gemini-2.0-flash)
+
+Environment Variables:
+  OM_MODEL             Model for Observer/Reflector agents
+  OM_OBSERVER_MODEL    Override model for Observer only
+  OM_REFLECTOR_MODEL   Override model for Reflector only
+  OM_DB_PATH           Custom database path
 
 Examples:
   npx opencode-observational-memory install
-  npx opencode-observational-memory install --no-tui --mastra-url http://localhost:3000 --agent-id my-agent
+  npx opencode-observational-memory install --model openai/gpt-4o
+  npx opencode-observational-memory install --no-tui --model anthropic/claude-3-sonnet
 `);
 }
 
@@ -391,22 +364,14 @@ if (args.length === 0 || args[0] === 'help' || args[0] === '--help' || args[0] =
 if (args[0] === 'install') {
   const noTui = args.includes('--no-tui');
 
-  // Parse optional arguments
-  let mastraUrl: string | undefined;
-  let agentId: string | undefined;
-  let apiKey: string | undefined;
-
-  for (let i = 1; i < args.length; i++) {
-    if (args[i] === '--mastra-url' && args[i + 1]) {
-      mastraUrl = args[++i];
-    } else if (args[i] === '--agent-id' && args[i + 1]) {
-      agentId = args[++i];
-    } else if (args[i] === '--api-key' && args[i + 1]) {
-      apiKey = args[++i];
-    }
+  // Parse model argument
+  let model: string | undefined;
+  const modelIndex = args.indexOf('--model');
+  if (modelIndex !== -1 && args[modelIndex + 1]) {
+    model = args[modelIndex + 1];
   }
 
-  install({ tui: !noTui, mastraUrl, agentId, apiKey }).then(code => process.exit(code));
+  install({ tui: !noTui, model }).then(code => process.exit(code));
 } else {
   console.error(`Unknown command: ${args[0]}`);
   printHelp();

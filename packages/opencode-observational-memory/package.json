@@ -29,6 +29,9 @@
     "url": "https://github.com/mastra-ai/mastra"
   },
   "dependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@mastra/libsql": "workspace:*",
     "@opencode-ai/plugin": "^1.1.51",
     "@opencode-ai/sdk": "^1.1.51"
   },
@@ -41,7 +44,8 @@
     "type": "plugin",
     "hooks": [
       "chat.message",
-      "event"
+      "event",
+      "experimental.session.compacting"
     ]
   },
   "files": [

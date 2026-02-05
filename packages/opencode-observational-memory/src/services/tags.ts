@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { CONFIG, MASTRA_RESOURCE_ID } from '../config.js';
+import { CONFIG } from '../config.js';
 
 /**
  * Get the git user email, or a fallback value
@@ -29,7 +29,7 @@ export interface Tags {
   user: string;
   /** Project tag for project-specific memories */
   project: string;
-  /** Resource ID for Mastra API */
+  /** Resource ID for Mastra memory */
   resourceId: string;
 }
 
@@ -42,8 +42,8 @@ export function getTags(directory: string): Tags {
   const userHash = hashString(userEmail);
   const projectHash = hashString(directory);
 
-  // Use configured resourceId or derive from git email
-  const resourceId = MASTRA_RESOURCE_ID || `${prefix}_user_${userHash}`;
+  // Resource ID is derived from git email for consistency
+  const resourceId = `${prefix}_user_${userHash}`;
 
   return {
     user: `${prefix}_user_${userHash}`,

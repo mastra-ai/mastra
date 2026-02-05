@@ -9,6 +9,9 @@ const CONFIG_FILES = [
   join(CONFIG_DIR, 'observational-memory.json'),
 ];
 
+// Default database location
+const DEFAULT_DB_PATH = join(homedir(), '.opencode', 'observational-memory.db');
+
 /**
  * Strip JSONC comments from a string
  */
@@ -39,10 +42,16 @@ const DEFAULT_KEYWORD_PATTERNS = [
   'always\\s+remember',
 ];
 
-const DEFAULTS: Required<Omit<ObservationalMemoryPluginConfig, 'mastraUrl' | 'apiKey' | 'agentId' | 'resourceId'>> = {
-  maxObservations: 5,
-  maxSearchResults: 10,
-  injectWorkingMemory: true,
+const DEFAULTS: Required<
+  Omit<ObservationalMemoryPluginConfig, 'model' | 'observerModel' | 'reflectorModel'>
+> & {
+  model: string;
+} = {
+  dbPath: DEFAULT_DB_PATH,
+  model: 'google/gemini-2.0-flash',
+  scope: 'resource',
+  messageTokenThreshold: 30000,
+  observationTokenThreshold: 40000,
   injectObservations: true,
   containerTagPrefix: 'opencode',
   keywordPatterns: [],
@@ -83,39 +92,34 @@ function loadConfig(): ObservationalMemoryPluginConfig {
 
 const fileConfig = loadConfig();
 
-function getMastraUrl(): string | undefined {
-  // Priority: env var > config file
-  if (process.env.MASTRA_URL) return process.env.MASTRA_URL;
-  return fileConfig.mastraUrl;
+function getDbPath(): string {
+  if (process.env.OM_DB_PATH) return process.env.OM_DB_PATH;
+  return fileConfig.dbPath ?? DEFAULTS.dbPath;
 }
 
-function getApiKey(): string | undefined {
-  // Priority: env var > config file
-  if (process.env.MASTRA_API_KEY) return process.env.MASTRA_API_KEY;
-  return fileConfig.apiKey;
+function getModel(): string {
+  if (process.env.OM_MODEL) return process.env.OM_MODEL;
+  return fileConfig.model ?? DEFAULTS.model;
 }
 
-function getAgentId(): string | undefined {
-  // Priority: env var > config file
-  if (process.env.MASTRA_AGENT_ID) return process.env.MASTRA_AGENT_ID;
-  return fileConfig.agentId;
+function getObserverModel(): string | undefined {
+  if (process.env.OM_OBSERVER_MODEL) return process.env.OM_OBSERVER_MODEL;
+  return fileConfig.observerModel;
 }
 
-function getResourceId(): string | undefined {
-  // Priority: env var > config file
-  if (process.env.MASTRA_RESOURCE_ID) return process.env.MASTRA_RESOURCE_ID;
-  return fileConfig.resourceId;
+function getReflectorModel(): string | undefined {
+  if (process.env.OM_REFLECTOR_MODEL) return process.env.OM_REFLECTOR_MODEL;
+  return fileConfig.reflectorModel;
 }
-
-export const MASTRA_URL = getMastraUrl();
-export const MASTRA_API_KEY = getApiKey();
-export const MASTRA_AGENT_ID = getAgentId();
-export const MASTRA_RESOURCE_ID = getResourceId();
 
 export const CONFIG = {
-  maxObservations: fileConfig.maxObservations ?? DEFAULTS.maxObservations,
-  maxSearchResults: fileConfig.maxSearchResults ?? DEFAULTS.maxSearchResults,
-  injectWorkingMemory: fileConfig.injectWorkingMemory ?? DEFAULTS.injectWorkingMemory,
+  dbPath: getDbPath(),
+  model: getModel(),
+  observerModel: getObserverModel(),
+  reflectorModel: getReflectorModel(),
+  scope: (fileConfig.scope ?? DEFAULTS.scope) as 'thread' | 'resource',
+  messageTokenThreshold: fileConfig.messageTokenThreshold ?? DEFAULTS.messageTokenThreshold,
+  observationTokenThreshold: fileConfig.observationTokenThreshold ?? DEFAULTS.observationTokenThreshold,
   injectObservations: fileConfig.injectObservations ?? DEFAULTS.injectObservations,
   containerTagPrefix: fileConfig.containerTagPrefix ?? DEFAULTS.containerTagPrefix,
   keywordPatterns: [
@@ -126,7 +130,9 @@ export const CONFIG = {
 };
 
 export function isConfigured(): boolean {
-  return !!(MASTRA_URL && MASTRA_AGENT_ID);
+  // The plugin is always "configured" since we use local storage
+  // We just need the model to be available
+  return !!CONFIG.model;
 }
 
-export { CONFIG_DIR };
+export { CONFIG_DIR, DEFAULT_DB_PATH };

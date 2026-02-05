@@ -1,11 +1,10 @@
-import type { ObservationalMemoryRecord, WorkingMemoryResponse } from '../types/index.js';
 import { CONFIG } from '../config.js';
 
 /**
- * Format observational memory for injection into the prompt
+ * Format observations for injection into the prompt
  */
-export function formatObservationsForPrompt(record: ObservationalMemoryRecord | null): string | null {
-  if (!record || !record.activeObservations) {
+export function formatObservationsForPrompt(observations: string | null): string | null {
+  if (!observations || !observations.trim()) {
     return null;
   }
 
@@ -13,14 +12,7 @@ export function formatObservationsForPrompt(record: ObservationalMemoryRecord | 
   lines.push('');
   lines.push('The following observations were extracted from previous conversations:');
   lines.push('');
-  lines.push(record.activeObservations);
-
-  if (record.bufferedObservations) {
-    lines.push('');
-    lines.push('### Recent Observations (pending consolidation)');
-    lines.push('');
-    lines.push(record.bufferedObservations);
-  }
+  lines.push(observations);
 
   return lines.join('\n');
 }
@@ -28,25 +20,14 @@ export function formatObservationsForPrompt(record: ObservationalMemoryRecord | 
 /**
  * Format working memory for injection into the prompt
  */
-export function formatWorkingMemoryForPrompt(workingMemory: WorkingMemoryResponse | null): string | null {
-  if (!workingMemory || !workingMemory.workingMemory) {
-    return null;
-  }
-
-  const content =
-    typeof workingMemory.workingMemory === 'string'
-      ? workingMemory.workingMemory
-      : JSON.stringify(workingMemory.workingMemory, null, 2);
-
-  if (!content.trim()) {
+export function formatWorkingMemoryForPrompt(workingMemory: string | null): string | null {
+  if (!workingMemory || !workingMemory.trim()) {
     return null;
   }
 
   const lines: string[] = ['## Working Memory'];
   lines.push('');
-  lines.push(`Source: ${workingMemory.source}`);
-  lines.push('');
-  lines.push(content);
+  lines.push(workingMemory);
 
   return lines.join('\n');
 }
@@ -55,8 +36,8 @@ export function formatWorkingMemoryForPrompt(workingMemory: WorkingMemoryRespons
  * Format full context for prompt injection
  */
 export function formatContextForPrompt(
-  observations: ObservationalMemoryRecord | null,
-  workingMemory: WorkingMemoryResponse | null,
+  observations: string | null,
+  workingMemory: string | null,
 ): string | null {
   const sections: string[] = [];
 
@@ -67,16 +48,38 @@ export function formatContextForPrompt(
     }
   }
 
-  if (CONFIG.injectWorkingMemory) {
-    const workingMemoryContext = formatWorkingMemoryForPrompt(workingMemory);
-    if (workingMemoryContext) {
-      sections.push(workingMemoryContext);
-    }
+  const workingMemoryContext = formatWorkingMemoryForPrompt(workingMemory);
+  if (workingMemoryContext) {
+    sections.push(workingMemoryContext);
   }
 
   if (sections.length === 0) {
     return null;
   }
 
-  return `[MASTRA OBSERVATIONAL MEMORY]\n\n${sections.join('\n\n---\n\n')}\n\n[/MASTRA OBSERVATIONAL MEMORY]`;
+  return `[MASTRA OBSERVATIONAL MEMORY]
+
+${sections.join('\n\n---\n\n')}
+
+[/MASTRA OBSERVATIONAL MEMORY]`;
+}
+
+/**
+ * Format observations for compaction context
+ * This is injected during session compaction to preserve important context
+ */
+export function formatObservationsForCompaction(observations: string | null): string {
+  if (!observations || !observations.trim()) {
+    return '';
+  }
+
+  return `
+## Observational Memory (from Mastra)
+
+The following observations should be preserved and referenced in the summary:
+
+${observations}
+
+These observations represent important context from previous conversations that should inform the compacted summary.
+`;
 }
