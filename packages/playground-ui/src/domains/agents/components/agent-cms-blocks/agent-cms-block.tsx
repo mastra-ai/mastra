@@ -47,8 +47,10 @@ const AgentCMSBlockContent = ({
     onBlockChange({ ...block, rules });
   };
 
+  const hasVariablesSet = Object.keys(schema?.properties ?? {}).length > 0;
+
   return (
-    <div className="h-full min-h-[300px] ">
+    <div className="h-full min-h-[300px] grid grid-rows-[auto_1fr]">
       {/* Drag handle - always visible, top-left */}
 
       <div className="bg-surface2 px-2 py-1 flex items-center justify-between gap-2">
@@ -66,7 +68,7 @@ const AgentCMSBlockContent = ({
 
           {/* Action bar - hover-visible, top-right */}
 
-          {schema && (
+          {schema && hasVariablesSet ? (
             <Popover>
               <PopoverTrigger asChild>
                 <IconButton variant="ghost" size="sm" tooltip="Display conditions">
@@ -77,7 +79,7 @@ const AgentCMSBlockContent = ({
                 <RuleBuilder schema={schema} rules={block.rules} onChange={handleRulesChange} />
               </PopoverContent>
             </Popover>
-          )}
+          ) : null}
         </div>
 
         {onDelete && (

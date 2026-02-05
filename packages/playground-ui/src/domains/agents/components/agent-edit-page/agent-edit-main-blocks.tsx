@@ -1,5 +1,5 @@
 import { UseFormReturn, Controller } from 'react-hook-form';
-import { Blocks, Eye } from 'lucide-react';
+import { Blocks, Play } from 'lucide-react';
 import { useState } from 'react';
 
 import { SectionHeader } from '@/domains/cms';
@@ -22,11 +22,11 @@ export function AgentEditMainContentBlocks({ form, readOnly: _readOnly = false }
   return (
     <div className="grid grid-rows-[auto_1fr] gap-6 h-full px-4 pb-4">
       <div className="flex items-center justify-between">
-        <SectionHeader title="Blocks" subtitle="Add instruction blocks to your agent." icon={<Blocks />} />
+        <SectionHeader title="Instruction blocks" subtitle="Add instruction blocks to your agent." icon={<Blocks />} />
 
         <Button type="button" variant="outline" size="sm" onClick={() => setIsPreviewDialogOpen(true)}>
-          <Eye className="h-4 w-4" />
-          Visualize instructions
+          <Play className="h-4 w-4" />
+          Visualize compiled instructions
         </Button>
       </div>
 
