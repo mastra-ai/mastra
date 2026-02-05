@@ -5743,6 +5743,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@internal/workspace-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -5783,6 +5786,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@internal/workspace-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -5820,6 +5826,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@internal/workspace-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core

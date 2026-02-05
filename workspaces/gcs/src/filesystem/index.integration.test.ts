@@ -1,32 +1,43 @@
 /**
  * GCS Filesystem Integration Tests
  *
- * These tests require real GCS credentials and run against
- * actual Google Cloud Storage.
+ * These tests run against either:
+ * 1. Real GCS (cloud) - requires GCS_SERVICE_ACCOUNT_KEY and TEST_GCS_BUCKET
+ * 2. Fake GCS emulator (docker) - requires GCS_ENDPOINT and TEST_GCS_BUCKET
  *
- * Required environment variables:
- * - GCS_SERVICE_ACCOUNT_KEY: JSON service account key (single-quoted in env file)
- * - TEST_GCS_BUCKET: Bucket name
+ * Environment variables:
+ * - TEST_GCS_BUCKET: Bucket name (required)
+ * - GCS_SERVICE_ACCOUNT_KEY: JSON service account key for cloud (optional)
+ * - GCS_ENDPOINT: Endpoint URL for fake-gcs emulator (optional)
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
 
 import { GCSFilesystem } from './index';
 
 /**
- * Check if we have GCS credentials.
+ * Check if we have GCS credentials (cloud) or emulator endpoint (docker).
+ * The Google Cloud library uses STORAGE_EMULATOR_HOST to detect emulators.
  */
-const hasGCSCredentials = !!(process.env.GCS_SERVICE_ACCOUNT_KEY && process.env.TEST_GCS_BUCKET);
+const hasGCSCloudCredentials = !!(process.env.GCS_SERVICE_ACCOUNT_KEY && process.env.TEST_GCS_BUCKET);
+const hasGCSEmulator = !!(process.env.STORAGE_EMULATOR_HOST && process.env.TEST_GCS_BUCKET);
+const canRunGCSTests = hasGCSCloudCredentials || hasGCSEmulator;
 
-describe.skipIf(!hasGCSCredentials)('GCSFilesystem Integration', () => {
+describe.skipIf(!canRunGCSTests)('GCSFilesystem Integration', () => {
   const testBucket = process.env.TEST_GCS_BUCKET!;
-  let credentials: object;
   let fs: GCSFilesystem;
   let testPrefix: string;
 
   beforeEach(() => {
-    credentials = JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!);
     testPrefix = `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // For cloud, use service account credentials
+    // For emulator, credentials are not needed (STORAGE_EMULATOR_HOST is set)
+    const credentials = process.env.GCS_SERVICE_ACCOUNT_KEY
+      ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY)
+      : undefined;
+
     fs = new GCSFilesystem({
       bucket: testBucket,
       credentials,
@@ -123,3 +134,50 @@ describe.skipIf(!hasGCSCredentials)('GCSFilesystem Integration', () => {
     expect(stat.size).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Shared Filesystem Conformance Tests
+ *
+ * These tests verify GCSFilesystem conforms to the WorkspaceFilesystem interface.
+ * They use the shared test suite from @internal/workspace-test-utils.
+ */
+if (canRunGCSTests) {
+  createFilesystemTestSuite({
+    suiteName: 'GCSFilesystem Conformance',
+    createFilesystem: () => {
+      const credentials = process.env.GCS_SERVICE_ACCOUNT_KEY
+        ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY)
+        : undefined;
+      const testPrefix = `conformance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      return new GCSFilesystem({
+        bucket: process.env.TEST_GCS_BUCKET!,
+        credentials,
+        prefix: testPrefix,
+      });
+    },
+    cleanupFilesystem: async (fs) => {
+      // Cleanup test files
+      try {
+        const files = await fs.readdir('/');
+        for (const file of files) {
+          if (file.type === 'file') {
+            await fs.deleteFile(`/${file.name}`, { force: true });
+          } else if (file.type === 'directory') {
+            await fs.rmdir(`/${file.name}`, { recursive: true });
+          }
+        }
+      } catch {
+        // Ignore cleanup errors
+      }
+    },
+    capabilities: {
+      supportsAppend: true, // GCS simulates append via read-modify-write
+      supportsBinaryFiles: true,
+      supportsMounting: true,
+      supportsForceDelete: true,
+      supportsOverwrite: true,
+      supportsConcurrency: true,
+    },
+    testTimeout: 30000, // GCS operations can be slow
+  });
+}

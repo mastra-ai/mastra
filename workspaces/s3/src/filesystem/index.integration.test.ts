@@ -13,6 +13,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
 
 import { S3Filesystem } from './index';
 
@@ -152,3 +153,47 @@ describe.skipIf(!hasS3Credentials)('S3Filesystem Integration', () => {
     expect(stat.size).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Shared Filesystem Conformance Tests
+ *
+ * These tests verify S3Filesystem conforms to the WorkspaceFilesystem interface.
+ * They use the shared test suite from @internal/workspace-test-utils.
+ */
+if (hasS3Credentials) {
+  createFilesystemTestSuite({
+    suiteName: 'S3Filesystem Conformance',
+    createFilesystem: () => {
+      const config = getS3TestConfig();
+      const testPrefix = `conformance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      return new S3Filesystem({
+        ...config,
+        prefix: testPrefix,
+      });
+    },
+    cleanupFilesystem: async (fs) => {
+      // Cleanup test files
+      try {
+        const files = await fs.readdir('/');
+        for (const file of files) {
+          if (file.type === 'file') {
+            await fs.deleteFile(`/${file.name}`, { force: true });
+          } else if (file.type === 'directory') {
+            await fs.rmdir(`/${file.name}`, { recursive: true });
+          }
+        }
+      } catch {
+        // Ignore cleanup errors
+      }
+    },
+    capabilities: {
+      supportsAppend: true, // S3 simulates append via read-modify-write
+      supportsBinaryFiles: true,
+      supportsMounting: true,
+      supportsForceDelete: true,
+      supportsOverwrite: true,
+      supportsConcurrency: true,
+    },
+    testTimeout: 30000, // S3 operations can be slow
+  });
+}

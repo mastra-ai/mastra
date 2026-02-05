@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createSandboxTestSuite } from '@internal/workspace-test-utils';
 
 import { E2BSandbox } from './index';
 
@@ -894,3 +895,38 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Environment Variables', ()
     expect(result.stdout.trim()).toBe('1 override 3');
   }, 120000);
 });
+
+/**
+ * Shared Sandbox Conformance Tests
+ *
+ * These tests verify E2BSandbox conforms to the WorkspaceSandbox interface.
+ * They use the shared test suite from @internal/workspace-test-utils.
+ */
+if (process.env.E2B_API_KEY) {
+  createSandboxTestSuite({
+    suiteName: 'E2BSandbox Conformance',
+    createSandbox: () => {
+      return new E2BSandbox({
+        id: `conformance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        timeout: 120000,
+      });
+    },
+    cleanupSandbox: async (sandbox) => {
+      try {
+        await sandbox.destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+    },
+    capabilities: {
+      supportsMounting: true,
+      supportsReconnection: true,
+      supportsConcurrency: true,
+      supportsEnvVars: true,
+      supportsWorkingDirectory: true,
+      supportsTimeout: true,
+      defaultCommandTimeout: 30000,
+    },
+    testTimeout: 60000, // E2B commands can take time
+  });
+}
