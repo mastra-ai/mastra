@@ -73,7 +73,7 @@ export function toAISdkV5Stream<
   TState extends ZodObject<any>,
 >(
   stream: MastraWorkflowStream<TState, TInput, TOutput, TSteps>,
-  options: { from: 'workflow'; includeTextStreamParts?: boolean },
+  options: { from: 'workflow'; includeTextStreamParts?: boolean; sendReasoning?: boolean; sendSources?: boolean },
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
 export function toAISdkV5Stream<
   TOutput extends ZodType<any>,
@@ -82,7 +82,7 @@ export function toAISdkV5Stream<
   TState extends ZodObject<any>,
 >(
   stream: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>,
-  options: { from: 'workflow'; includeTextStreamParts?: boolean },
+  options: { from: 'workflow'; includeTextStreamParts?: boolean; sendReasoning?: boolean; sendSources?: boolean },
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
 export function toAISdkV5Stream<OUTPUT = undefined>(
   stream: MastraAgentNetworkStream<OUTPUT>,
@@ -129,7 +129,11 @@ export function toAISdkV5Stream(
     const includeTextStreamParts = options?.includeTextStreamParts ?? true;
 
     return (stream as ReadableStream<ChunkType<any>>).pipeThrough(
-      WorkflowStreamToAISDKTransformer({ includeTextStreamParts }),
+      WorkflowStreamToAISDKTransformer({
+        includeTextStreamParts,
+        sendReasoning: options?.sendReasoning,
+        sendSources: options?.sendSources,
+      }),
     ) as ReadableStream<InferUIMessageChunk<UIMessage>>;
   }
 
