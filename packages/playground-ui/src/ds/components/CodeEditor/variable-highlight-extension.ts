@@ -1,15 +1,13 @@
 import { Decoration, DecorationSet, EditorView, MatchDecorator, ViewPlugin, ViewUpdate } from '@codemirror/view';
 
 /**
- * Regex pattern to match variable placeholders like {{variableName}}
- * Matches: {{ followed by a valid identifier (letter/underscore, then alphanumeric/underscore), then }}
+ * Regex pattern to match variable placeholders like {{variableName}} or {{user.name}}
+ * Matches: {{ followed by a valid identifier path (with optional dot notation), then }}
  */
-export const VARIABLE_PATTERN = /\{\{([a-zA-Z_][a-zA-Z0-9_]*)\}\}/g;
+export const VARIABLE_PATTERN = /\{\{([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\}\}/g;
 
 const variableDecoration = Decoration.mark({
-  attributes: {
-    style: 'color: #F59E0B !important; font-weight: 500 !important;',
-  },
+  class: 'cm-variable-highlight',
 });
 
 const variableMatcher = new MatchDecorator({

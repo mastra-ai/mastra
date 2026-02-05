@@ -4,8 +4,8 @@
   "tasks": {
     "prepare-docs": {
       "cache": false,
-      "outputs": [".docs/**"],
-      "dependsOn": ["build:cli"]
+      "dependsOn": ["mastra-docs#build"],
+      "outputs": [".docs/**"]
     },
     "build": {
       "dependsOn": ["build:cli", "prepare-docs"]
