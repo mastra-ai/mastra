@@ -156,30 +156,47 @@ export abstract class AgentsStorage extends StorageDomain {
       return null;
     }
 
-    // If an active version is set, resolve config from that version
-    if (agent.activeVersionId) {
-      const activeVersion = await this.getVersion(agent.activeVersionId);
-      if (activeVersion) {
-        // Extract snapshot config fields from the version
-        const {
-          id: _versionId,
-          agentId: _agentId,
-          versionNumber: _versionNumber,
-          changedFields: _changedFields,
-          changeMessage: _changeMessage,
-          createdAt: _createdAt,
-          ...snapshotConfig
-        } = activeVersion;
+    // Try to get the version to merge with
+    let version: AgentVersion | null = null;
 
-        // Return merged agent metadata + version config
-        return {
-          ...agent,
-          ...snapshotConfig,
-        };
+    // If an active version is set, use that
+    if (agent.activeVersionId) {
+      version = await this.getVersion(agent.activeVersionId);
+
+      // Warn if activeVersionId points to a non-existent version
+      if (!version) {
+        console.warn(
+          `[AgentsStorage] Agent ${agent.id} has activeVersionId ${agent.activeVersionId} but version not found. Falling back to latest version.`,
+        );
       }
     }
 
-    // No active version - return thin record cast as resolved (config fields will be undefined)
+    // If no active version or it wasn't found, fall back to latest version
+    if (!version) {
+      version = await this.getLatestVersion(agent.id);
+    }
+
+    // If we have a version, merge its config with agent metadata
+    if (version) {
+      // Extract snapshot config fields from the version
+      const {
+        id: _versionId,
+        agentId: _agentId,
+        versionNumber: _versionNumber,
+        changedFields: _changedFields,
+        changeMessage: _changeMessage,
+        createdAt: _createdAt,
+        ...snapshotConfig
+      } = version;
+
+      // Return merged agent metadata + version config
+      return {
+        ...agent,
+        ...snapshotConfig,
+      };
+    }
+
+    // No versions exist - return thin record cast as resolved (config fields will be undefined)
     return agent as StorageResolvedAgentType;
   }
 
@@ -193,28 +210,41 @@ export abstract class AgentsStorage extends StorageDomain {
   async listAgentsResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsResolvedOutput> {
     const result = await this.listAgents(args);
 
-    // Resolve each agent's active version
+    // Resolve each agent's active version or latest version
     const resolvedAgents = await Promise.all(
       result.agents.map(async agent => {
-        if (agent.activeVersionId) {
-          const activeVersion = await this.getVersion(agent.activeVersionId);
-          if (activeVersion) {
-            const {
-              id: _versionId,
-              agentId: _agentId,
-              versionNumber: _versionNumber,
-              changedFields: _changedFields,
-              changeMessage: _changeMessage,
-              createdAt: _createdAt,
-              ...snapshotConfig
-            } = activeVersion;
+        // Try to get the version to merge with
+        let version: AgentVersion | null = null;
 
-            return {
-              ...agent,
-              ...snapshotConfig,
-            } as StorageResolvedAgentType;
-          }
+        // If an active version is set, use that
+        if (agent.activeVersionId) {
+          version = await this.getVersion(agent.activeVersionId);
         }
+
+        // If no active version or it wasn't found, fall back to latest version
+        if (!version) {
+          version = await this.getLatestVersion(agent.id);
+        }
+
+        // If we have a version, merge its config with agent metadata
+        if (version) {
+          const {
+            id: _versionId,
+            agentId: _agentId,
+            versionNumber: _versionNumber,
+            changedFields: _changedFields,
+            changeMessage: _changeMessage,
+            createdAt: _createdAt,
+            ...snapshotConfig
+          } = version;
+
+          return {
+            ...agent,
+            ...snapshotConfig,
+          } as StorageResolvedAgentType;
+        }
+
+        // No versions exist - return thin record cast as resolved
         return agent as StorageResolvedAgentType;
       }),
     );

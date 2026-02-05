@@ -97,7 +97,7 @@ export const RuleValueInput: React.FC<RuleValueInputProps> = ({
       value={displayValue}
       onChange={handleChange}
       placeholder={placeholder || defaultPlaceholder}
-      className={cn('min-w-[160px]', className)}
+      className={cn('min-w-[160px] bg-surface4', className)}
       size="sm"
     />
   );

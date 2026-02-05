@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { EntityHeader } from '@/ds/components/EntityHeader';
 import { Badge } from '@/ds/components/Badge';
 import { CopyIcon, Pencil } from 'lucide-react';
@@ -6,8 +5,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/c
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useAgent } from '../hooks/use-agent';
-import { useExperimentalFeatures } from '@/lib/experimental-features';
-import { EditAgentDialog } from './create-agent/edit-agent-dialog';
+import { useLinkComponent } from '@/lib/framework';
+import { Truncate } from '@/ds/components/Truncate';
+import { AgentSourceIcon } from './agent-source-icon';
+import { useIsCmsAvailable } from '@/domains/cms';
 
 export interface AgentEntityHeaderProps {
   agentId: string;
@@ -16,38 +17,47 @@ export interface AgentEntityHeaderProps {
 export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { handleCopy } = useCopyToClipboard({ text: agentId });
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const { isCmsAvailable } = useIsCmsAvailable();
+  const { navigate } = useLinkComponent();
   const agentName = agent?.name || '';
   const isStoredAgent = agent?.source === 'stored';
 
+  const showStoredAgentBadge = isCmsAvailable && isStoredAgent;
+
   return (
     <TooltipProvider>
-      <EntityHeader icon={<AgentIcon />} title={agentName} isLoading={isLoading}>
+      <EntityHeader
+        icon={isCmsAvailable ? <AgentSourceIcon source={agent?.source} /> : <AgentIcon />}
+        title={agentName}
+        isLoading={isLoading}
+      >
         <Tooltip>
           <TooltipTrigger asChild>
             <button onClick={handleCopy} className="h-badge-default shrink-0">
               <Badge icon={<CopyIcon />} variant="default">
-                {agentId}
+                {showStoredAgentBadge ? (
+                  <Truncate untilChar="-" withTooltip={false}>
+                    {agentId}
+                  </Truncate>
+                ) : (
+                  agentId
+                )}
               </Badge>
             </button>
           </TooltipTrigger>
           <TooltipContent>Copy Agent ID for use in code</TooltipContent>
         </Tooltip>
-        {experimentalFeaturesEnabled && isStoredAgent && (
-          <>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button onClick={() => setIsEditDialogOpen(true)} className="h-badge-default shrink-0">
-                  <Badge icon={<Pencil />} variant="default">
-                    Edit
-                  </Badge>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Edit agent configuration</TooltipContent>
-            </Tooltip>
-            <EditAgentDialog agentId={agentId} open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen} />
-          </>
+        {showStoredAgentBadge && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button onClick={() => navigate(`/cms/agents/${agentId}/edit`)} className="h-badge-default shrink-0 ml-2">
+                <Badge icon={<Pencil />} variant="default">
+                  Edit
+                </Badge>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Edit agent configuration</TooltipContent>
+          </Tooltip>
         )}
       </EntityHeader>
     </TooltipProvider>
