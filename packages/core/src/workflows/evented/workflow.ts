@@ -1187,7 +1187,8 @@ export class EventedWorkflow<
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
 
-    if (workflowsStore && !workflowsStore?.supportsConcurrentUpdates()) {
+    const supportsConcurrentUpdates = workflowsStore?.supportsConcurrentUpdates?.() ?? false;
+    if (workflowsStore && !supportsConcurrentUpdates) {
       throw new MastraError({
         id: 'ATOMIC_STORAGE_OPERATIONS_NOT_SUPPORTED',
         domain: ErrorDomain.MASTRA,
