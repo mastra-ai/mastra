@@ -8,7 +8,6 @@ import {
   TABLE_SCHEMAS,
   getSqlType,
   getDefaultValue,
-  buildConstraintName,
 } from '@mastra/core/storage';
 import type {
   StorageColumn,
@@ -21,6 +20,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
 import type { DbClient } from '../client';
 import { PoolAdapter } from '../client';
+import { buildConstraintName } from './constraint-utils';
 
 // Re-export DbClient for external use
 export type { DbClient } from '../client';

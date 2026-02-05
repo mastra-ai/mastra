@@ -13,8 +13,6 @@ export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
 export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
 
-export const POSTGRES_IDENTIFIER_MAX_LENGTH = 63;
-
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
   | typeof TABLE_MESSAGES
