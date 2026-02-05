@@ -17,7 +17,7 @@ importers:
   .:
     devDependencies:
       '@hono/otel':
-        specifier: ^1.0.1
+        specifier: ^1.1.0
         version: 1.1.0(hono@4.11.4)
       '@types/node':
         specifier: ^20.19.30
@@ -53,7 +53,7 @@ importers:
         specifier: 3.0.0
         version: 3.0.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))
       '@hono/otel':
-        specifier: ^1.0.1
+        specifier: ^1.1.0
         version: 1.1.0(hono@4.11.4)
       '@opentelemetry/api':
         specifier: ^1.9.0
@@ -120,7 +120,7 @@ importers:
         specifier: ^1.19.9
         version: 1.19.9(hono@4.11.4)
       '@hono/otel':
-        specifier: ^1.0.1
+        specifier: ^1.1.0
         version: 1.1.0(hono@4.11.4)
       '@hono/swagger-ui':
         specifier: ^0.5.2
@@ -181,7 +181,7 @@ importers:
         specifier: ^1.19.9
         version: 1.19.9(hono@4.11.4)
       '@hono/otel':
-        specifier: ^1.0.1
+        specifier: ^1.1.0
         version: 1.1.0(hono@4.11.4)
       '@mastra/hono-multi-instrumentation':
         specifier: workspace:*
@@ -215,7 +215,7 @@ importers:
         specifier: ^1.19.9
         version: 1.19.9(hono@4.11.4)
       '@hono/otel':
-        specifier: ^1.0.1
+        specifier: ^1.1.0
         version: 1.1.0(hono@4.11.4)
       '@mastra/hono-multi-instrumentation':
         specifier: workspace:*
