@@ -208,6 +208,9 @@ export class LangSmithExporter extends TrackingExporter<
   /**
    * Find LangSmith vendor metadata by walking up the span hierarchy.
    * This allows setting metadata on a parent span and having it apply to children.
+   *
+   * TODO(2.0): Extract shared `findVendorMetadata()` to base TrackingExporter class
+   * and reuse here and in LangfuseExporter.findLangfusePrompt()
    */
   private findLangsmithMetadata(
     traceData: LangSmithTraceData,
