@@ -20,7 +20,7 @@ export function AgentEditMainContentBlocks({ form, readOnly: _readOnly = false }
   const blocks = form.watch('instructionBlocks') ?? [];
 
   return (
-    <div className="flex flex-col gap-6 h-full p-4">
+    <div className="grid grid-rows-[auto_1fr] gap-6 h-full px-4 pb-4">
       <div className="flex items-center justify-between">
         <SectionHeader title="Blocks" subtitle="Add instruction blocks to your agent." icon={<Blocks />} />
 
@@ -30,26 +30,28 @@ export function AgentEditMainContentBlocks({ form, readOnly: _readOnly = false }
         </Button>
       </div>
 
-      <Controller
-        name="instructionBlocks"
-        control={form.control}
-        defaultValue={[]}
-        render={({ field }) => (
-          <AgentCMSBlocks
-            items={field.value ?? []}
-            onChange={field.onChange}
-            placeholder="Enter content..."
-            schema={schema}
-          />
-        )}
-      />
+      <div className="h-full overflow-y-auto">
+        <Controller
+          name="instructionBlocks"
+          control={form.control}
+          defaultValue={[]}
+          render={({ field }) => (
+            <AgentCMSBlocks
+              items={field.value ?? []}
+              onChange={field.onChange}
+              placeholder="Enter content..."
+              schema={schema}
+            />
+          )}
+        />
 
-      <InstructionsPreviewDialog
-        open={isPreviewDialogOpen}
-        onOpenChange={setIsPreviewDialogOpen}
-        instructions={blocks.map(b => b.content).join('\n')}
-        variablesSchema={schema}
-      />
+        <InstructionsPreviewDialog
+          open={isPreviewDialogOpen}
+          onOpenChange={setIsPreviewDialogOpen}
+          instructions={blocks.map(b => b.content).join('\n')}
+          variablesSchema={schema}
+        />
+      </div>
     </div>
   );
 }

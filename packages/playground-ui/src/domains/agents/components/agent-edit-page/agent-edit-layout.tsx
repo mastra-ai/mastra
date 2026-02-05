@@ -11,7 +11,10 @@ export const AgentEditLayout = ({ children, leftSlot, rightSlot }: AgentEditLayo
 
   return (
     <div
-      className={cn('grid overflow-y-auto h-full', hasRightSlot ? 'grid-cols-[1fr_2fr_1fr]' : 'grid-cols-[1fr_2fr]')}
+      className={cn(
+        'grid overflow-y-auto h-full bg-surface1',
+        hasRightSlot ? 'grid-cols-[1fr_2fr_1fr]' : 'grid-cols-[1fr_2fr]',
+      )}
     >
       <div className="overflow-y-auto h-full border-r border-border1">{leftSlot}</div>
       <div className="overflow-y-auto h-full py-4">{children}</div>
