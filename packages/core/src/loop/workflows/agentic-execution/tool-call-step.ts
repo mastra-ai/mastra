@@ -476,7 +476,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           for (const message of assistantMessages) {
             const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
               message.content.metadata?.pendingToolApprovals) as Record<string, any>;
-            if (pendingOrSuspendedTools[inputData.toolName]) {
+            if (pendingOrSuspendedTools && pendingOrSuspendedTools[inputData.toolName]) {
               suspendedToolRunId = pendingOrSuspendedTools[inputData.toolName].runId;
               break;
             }
