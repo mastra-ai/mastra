@@ -22,6 +22,8 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT = unde
   agentId: string;
   params: ChatStreamHandlerParams<UI_MESSAGE, OUTPUT>;
   defaultOptions?: AgentExecutionOptions<OUTPUT>;
+  /** Provider-specific options (e.g. openai.reasoningEffort) forwarded to agent.stream() / agent.resumeStream(). Overrides params.providerOptions when both are set. */
+  providerOptions?: AgentExecutionOptions<OUTPUT>['providerOptions'];
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
@@ -55,6 +57,7 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = un
   agentId,
   params,
   defaultOptions,
+  providerOptions: topLevelProviderOptions,
   sendStart = true,
   sendFinish = true,
   sendReasoning = false,
@@ -96,6 +99,7 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = un
     ...defaultOptions,
     ...rest,
     ...(runId && { runId }),
+    ...(topLevelProviderOptions !== undefined && { providerOptions: topLevelProviderOptions }),
     requestContext: requestContext || defaultOptions?.requestContext,
   };
 
