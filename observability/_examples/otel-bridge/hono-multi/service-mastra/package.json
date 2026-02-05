@@ -11,7 +11,7 @@
     "lint:fix": "prettier --write '**/*.{js,ts}'"
   },
   "dependencies": {
-    "@hono/node-server": "^1.15.1",
+    "@hono/node-server": "^1.19.9",
     "@hono/otel": "^1.0.1",
     "@hono/swagger-ui": "^0.5.2",
     "@mastra/core": "latest",
