@@ -74,7 +74,9 @@ jobs:
           pnpm vitest run \
             --changed origin/${{ steps.pr-info.outputs.base_ref }} \
             --reporter=blob \
-            --shard=${{ matrix.shard }}/4
+            --outputFile.blob=.vitest-reports/blob-${{ matrix.shard }}.json \
+            --shard=${{ matrix.shard }}/4 \
+            --passWithNoTests
         env:
           NODE_OPTIONS: '--max_old_space_size=6144'
 
