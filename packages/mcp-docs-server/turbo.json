@@ -2,17 +2,13 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
-    "build:docs": {
-      "outputs": ["../../docs/build/**"],
-      "outputLogs": "errors-only"
-    },
     "prepare-docs": {
       "cache": false,
-      "dependsOn": ["build:docs"],
+      "dependsOn": ["mastra-docs#build"],
       "outputs": [".docs/**"]
     },
     "build": {
-      "dependsOn": ["build:cli", "build:docs", "prepare-docs"]
+      "dependsOn": ["build:cli", "prepare-docs"]
     },
     "build:cli": {
       "outputs": ["dist/**", "!dist/docs/**"],

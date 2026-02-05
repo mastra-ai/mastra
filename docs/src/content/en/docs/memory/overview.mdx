@@ -1,6 +1,6 @@
 ---
 title: "Memory overview | Memory"
-description: "Learn how Mastra's memory system works with working memory, message history, and semantic recall."
+description: "Learn how Mastra's memory system works with working memory, message history, semantic recall, and observational memory."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -11,11 +11,12 @@ packages:
 
 Memory enables your agent to remember user messages, agent replies, and tool results across interactions, giving it the context it needs to stay consistent, maintain conversation flow, and produce better answers over time.
 
-Mastra supports three complementary memory types:
+Mastra supports four complementary memory types:
 
 - [**Message history**](/docs/memory/message-history) - keeps recent messages from the current conversation so they can be rendered in the UI and used to maintain short-term continuity within the exchange.
 - [**Working memory**](/docs/memory/working-memory) - stores persistent, structured user data such as names, preferences, and goals.
 - [**Semantic recall**](/docs/memory/semantic-recall) - retrieves relevant messages from older conversations based on semantic meaning rather than exact keywords, mirroring how humans recall information by association. Requires a [vector database](/docs/memory/semantic-recall#storage-configuration) and an [embedding model](/docs/memory/semantic-recall#embedder-configuration).
+- [**Observational memory**](/docs/memory/observational-memory) - uses background Observer and Reflector agents to maintain a dense observation log that replaces raw message history as it grows, keeping the context window small while preserving long-term memory across conversations.
 
 If the combined memory exceeds the model's context limit, [memory processors](/docs/memory/memory-processors) can filter, trim, or prioritize content so the most relevant information is preserved.
 
@@ -26,6 +27,7 @@ Choose a memory option to get started:
 - [Message history](/docs/memory/message-history)
 - [Working memory](/docs/memory/working-memory)
 - [Semantic recall](/docs/memory/semantic-recall)
+- [Observational memory](/docs/memory/observational-memory)
 
 ## Storage
 
@@ -48,5 +50,5 @@ This visibility helps you understand why an agent made specific decisions and ve
 ## Next steps
 
 - Learn more about [Storage](/docs/memory/storage) providers and configuration options
-- Add [Message history](/docs/memory/message-history), [Working memory](/docs/memory/working-memory), or [Semantic recall](/docs/memory/semantic-recall)
+- Add [Message history](/docs/memory/message-history), [Working memory](/docs/memory/working-memory), [Semantic recall](/docs/memory/semantic-recall), or [Observational memory](/docs/memory/observational-memory)
 - Visit [Memory configuration reference](/reference/memory/memory-class) for all available options
