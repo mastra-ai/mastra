@@ -481,9 +481,9 @@ export class MastraEditor implements IMastraEditor {
    * Applies description overrides from per-tool config when present.
    */
   private resolveStoredTools(
-    storedTools?: Record<string, StorageToolConfig>,
+    storedTools?: Record<string, StorageToolConfig> | string[],
   ): Record<string, ToolAction<any, any, any, any, any, any>> {
-    if (!storedTools || Object.keys(storedTools).length === 0) {
+    if (!storedTools || (Array.isArray(storedTools) ? storedTools.length === 0 : Object.keys(storedTools).length === 0)) {
       return {};
     }
 
@@ -491,9 +491,14 @@ export class MastraEditor implements IMastraEditor {
       return {};
     }
 
+    // Normalize legacy string[] format to Record
+    const normalized: Record<string, StorageToolConfig> = Array.isArray(storedTools)
+      ? Object.fromEntries(storedTools.map(key => [key, {}]))
+      : storedTools;
+
     const resolvedTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
 
-    for (const [toolKey, toolConfig] of Object.entries(storedTools)) {
+    for (const [toolKey, toolConfig] of Object.entries(normalized)) {
       try {
         const tool = this.mastra.getToolById(toolKey);
 

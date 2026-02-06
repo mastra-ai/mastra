@@ -45,7 +45,7 @@ const normalizeToolsToRecord = (
 ): Record<string, { description?: string }> => {
   if (!tools) return {};
   if (Array.isArray(tools)) return arrayToRecord(tools);
-  return tools;
+  return { ...tools };
 };
 
 interface CmsAgentsEditFormProps {
