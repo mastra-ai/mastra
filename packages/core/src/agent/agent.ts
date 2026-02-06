@@ -50,6 +50,7 @@ import type {
   StorageDefaultOptions,
   StorageModelConfig,
   StorageResolvedAgentType,
+  StorageScorerConfig,
 } from '../storage/types';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
@@ -1602,7 +1603,40 @@ export class Agent<
     const memory = await this.getMemory({ requestContext });
     const memoryConfig = memory?.getConfig();
 
-    // 9. Extract default options (serializable parts only)
+    // 9. Extract input/output processor keys (resolve dynamic processors with requestContext)
+    let inputProcessorKeys: string[] | undefined;
+    if (this.#inputProcessors) {
+      const configuredInputProcessors =
+        typeof this.#inputProcessors === 'function'
+          ? await this.#inputProcessors({ requestContext })
+          : this.#inputProcessors;
+      const ids = configuredInputProcessors.map(p => p.id).filter(Boolean);
+      if (ids.length > 0) inputProcessorKeys = ids;
+    }
+
+    let outputProcessorKeys: string[] | undefined;
+    if (this.#outputProcessors) {
+      const configuredOutputProcessors =
+        typeof this.#outputProcessors === 'function'
+          ? await this.#outputProcessors({ requestContext })
+          : this.#outputProcessors;
+      const ids = configuredOutputProcessors.map(p => p.id).filter(Boolean);
+      if (ids.length > 0) outputProcessorKeys = ids;
+    }
+
+    // 10. Extract scorer keys with sampling config (resolve dynamic scorers with requestContext)
+    let storedScorers: Record<string, StorageScorerConfig> | undefined;
+    const resolvedScorers = await this.listScorers({ requestContext });
+    if (resolvedScorers && Object.keys(resolvedScorers).length > 0) {
+      storedScorers = {};
+      for (const [key, entry] of Object.entries(resolvedScorers)) {
+        storedScorers[key] = {
+          ...(entry.sampling && { sampling: entry.sampling }),
+        };
+      }
+    }
+
+    // 11. Extract default options (serializable parts only)
     const storageDefaultOptions: StorageDefaultOptions | undefined = defaultOptions
       ? {
           maxSteps: (defaultOptions as Record<string, any>)?.maxSteps,
@@ -1620,7 +1654,7 @@ export class Agent<
         }
       : undefined;
 
-    // 10. Create the stored agent
+    // 12. Create the stored agent
     const createInput: StorageCreateAgentInput = {
       id: options.newId,
       name: options.newName || `${this.name} (Clone)`,
@@ -1631,6 +1665,9 @@ export class Agent<
       workflows: workflowKeys.length > 0 ? workflowKeys : undefined,
       agents: agentKeys.length > 0 ? agentKeys : undefined,
       memory: memoryConfig,
+      inputProcessors: inputProcessorKeys,
+      outputProcessors: outputProcessorKeys,
+      scorers: storedScorers,
       defaultOptions: storageDefaultOptions,
       metadata: options.metadata,
       authorId: options.authorId,
