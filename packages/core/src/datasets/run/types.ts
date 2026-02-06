@@ -27,6 +27,11 @@ export interface RunConfig {
   maxRetries?: number;
   /** Base delay between retries in ms. Actual delay: retryDelay * 2^attempt + jitter. Default: 1000. */
   retryDelay?: number;
+  /** Called after each item completes execution, scoring, and persistence.
+   *  Callback errors are logged but do not stop the run.
+   *  If the callback returns a Promise, it is awaited before proceeding.
+   *  When provided, retainResults defaults to false (zero memory accumulation). */
+  onItemComplete?: (result: ItemWithScores, index: number) => void | Promise<void>;
   /** Pre-created run ID (for async trigger - skips run creation) */
   runId?: string;
 }

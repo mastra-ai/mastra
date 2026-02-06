@@ -591,6 +591,7 @@ export const TRIGGER_RUN_ROUTE = createRoute({
             version: version instanceof Date ? version : undefined,
             maxConcurrency,
             runId, // Pass pre-created runId to avoid duplicate creation
+            retainResults: false, // Results fetched via listResults API
           });
         } catch (err) {
           // Log error and update run status to failed

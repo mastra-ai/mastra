@@ -26,92 +26,60 @@ Combined analysis from two independent audits of the run executor (`packages/cor
 
 ## ISSUES FOUND
 
-### P0 — HIGH SEVERITY
+### P0 — HIGH SEVERITY ✅ FIXED (PR #12789)
 
-#### 1. No per-item timeout
+#### 1. ~~No per-item timeout~~ → FIXED
 
-A hanging `agent.generate()` or `workflow.start()` blocks a concurrency slot indefinitely. The only escape is the caller-provided `AbortSignal`, which requires external setup.
+Added `itemTimeout` to `RunConfig`. Composes `AbortSignal.timeout()` with run-level signal via `AbortSignal.any()`. `raceWithSignal` in `executor.ts` ensures timeout is honored even if the target ignores the signal.
 
-- **Location:** `index.ts:129` (`executeTarget` call)
-- **Impact:** A single hung target can stall the entire run
+#### 2. ~~AbortSignal not forwarded to targets~~ → FIXED
 
-#### 2. AbortSignal not forwarded to targets
+Signal is now forwarded to `agent.generate()` as `abortSignal`. Workflow limitation remains — `workflow.start()` does not accept a signal (see Follow-Up Work).
 
-The signal check at `index.ts:121` only prevents _starting_ new items. It cannot interrupt in-flight LLM calls. Signal is not passed to `agent.generate()` or `workflow.createRun()`.
+#### 3. ~~`addResult` failure kills entire run~~ → FIXED
 
-- **Location:** `index.ts:121-123`, `executor.ts:107`, `executor.ts:136`
-- **Impact:** Abort is cooperative-only — long-running targets ignore it
+`runsStore.addResult()` is now wrapped in try/catch with `console.warn`. Storage failures are non-fatal.
 
-#### 3. `addResult` failure kills entire run
+#### 4. ~~`generateLegacy` silent false success~~ → FIXED
 
-`runsStore.addResult()` at `index.ts:170` is inside the p-map callback but has no try/catch. If storage throws, the error propagates to p-map, which aborts the entire run. A storage hiccup kills all remaining items.
-
-- **Location:** `index.ts:170-184`
-- **Impact:** Storage transient failure = total run failure, even though target execution succeeded
-
-#### 4. `generateLegacy` silent false success
-
-When `isSupportedLanguageModel()` returns `false` and `generateLegacy` is `undefined`, the optional chain `agent.generateLegacy?.()` returns `undefined`. This flows back as `{ output: undefined, error: null }` — a false success with no output.
-
-- **Location:** `executor.ts:111-114`
-- **Impact:** Items silently marked as succeeded with `undefined` output
+Added explicit null check after `generateLegacy?.()` call. Missing method now throws with a descriptive error message.
 
 ---
 
 ### P1 — MEDIUM SEVERITY
 
-#### 5. Abort loses partial results
+#### 5. ~~Abort loses partial results~~ → FIXED (PR #12789, P0 round)
 
-When abort fires mid-run, the catch block (`index.ts:194-213`) updates the run status to `failed` in storage, then re-throws the `AbortError`. The caller receives an exception — not a `RunSummary`. Items that completed successfully before the abort are persisted individually via `addResult`, but the function returns nothing useful to the caller.
+Abort now returns a partial `RunSummary` with `status: 'failed'` instead of throwing. Callers check `result.status` instead of catching `AbortError`.
 
-- **Location:** `index.ts:194-213`
-- **Impact:** Caller gets no partial summary. Must reconstruct from storage.
+#### 6. ~~Memory accumulation at scale~~ → PARTIALLY FIXED (PR #12797 + streaming PR)
 
-#### 6. Memory accumulation at scale
+- P1: Added `retainResults?: boolean` to `RunConfig` (default `true`). Server handler uses `retainResults: false`.
+- Streaming: Added `onItemComplete` callback. When provided, `retainResults` auto-defaults to `false` (zero memory accumulation).
 
-`results: ItemWithScores[]` at `index.ts:112` grows unboundedly. All outputs are held in RAM until the function returns. Agent/workflow outputs can be large (full LLM responses with metadata).
+#### 7. ~~No retry for transient failures~~ → FIXED (PR #12797)
 
-- **Location:** `index.ts:112`, `index.ts:187-190`
-- **Impact:** At 1000+ items with large outputs, significant heap pressure. At 10k+, risk of OOM.
+Added `maxRetries` and `retryDelay` to `RunConfig`. Exponential backoff with jitter. `isTransientError` string-pattern heuristic determines retryability.
 
-#### 7. No retry for transient failures
+#### 8. ~~Sequential scorers per item~~ → FIXED (PR #12797)
 
-`retryCount` is hardcoded to `0` at `index.ts:152`. The field exists in `ItemResult` but is never used. A transient LLM API error (rate limit, timeout, 503) permanently fails the item.
+Replaced `for` loop with `Promise.allSettled` in `runScorersForItem`. Scorers now run in parallel per item.
 
-- **Location:** `index.ts:152`, `types.ts:49`
-- **Impact:** Transient errors are treated as permanent. No recovery.
+#### 9. ~~Run status logic — no partial failure~~ → FIXED (PR #12797)
 
-#### 8. Sequential scorers per item
+Added `completedWithErrors: boolean` to `RunSummary` (true when `failedCount > 0 && succeededCount > 0`). `RunStatus` enum unchanged — no storage migration needed.
 
-Scorers run serially in a `for` loop at `scorer.ts:53`. Each scorer (often an LLM call) must complete before the next starts. With N scorers, each p-map slot is occupied N× longer than necessary.
+#### 10. ~~In-flight counter accuracy on abort~~ → FIXED (PR #12797)
 
-- **Location:** `scorer.ts:53-86`
-- **Impact:** 5 scorers × 100ms each = 500ms holding a concurrency slot. Effective throughput reduced by scorer count.
-
-#### 9. Run status logic — no partial failure
-
-`status = failedCount === items.length ? 'failed' : 'completed'` at `index.ts:217`. A run where 999/1000 items fail is marked `completed`.
-
-- **Location:** `index.ts:217`
-- **Impact:** Callers cannot distinguish clean success from nearly-total failure without inspecting individual results.
-
-#### 10. In-flight counter accuracy on abort
-
-When abort fires, items currently in-flight within p-map won't have incremented `succeededCount`/`failedCount`. The counts stored in the run record may be less than the actual completed items.
-
-- **Location:** `index.ts:136-139`, `index.ts:198-206`
-- **Impact:** Run record has inaccurate counts after abort.
+Added `skippedCount` to `RunSummary`, computed as `items.length - succeededCount - failedCount`. Not stored — derived at return time.
 
 ---
 
 ### P2 — LOW SEVERITY
 
-#### 11. Results order is non-deterministic
+#### 11. ~~Results order is non-deterministic~~ → FIXED (PR #12797)
 
-`results.push()` at `index.ts:187` appends in completion order, not input order. With concurrent execution, faster items appear first.
-
-- **Location:** `index.ts:187`
-- **Impact:** Consumers expecting input-order results will get wrong ordering.
+Results are now stored in a pre-allocated array indexed by item position. Output order matches input order.
 
 #### 12. Dynamic import of p-map on every call
 
@@ -131,111 +99,27 @@ When abort fires, items currently in-flight within p-map won't have incremented 
 
 ---
 
-## TEST PLAN
+## TEST COVERAGE
 
-All tests use mock targets (no LLM calls). Mock agents/workflows/scorers with configurable delay, output size, and failure rate.
+56 tests across 5 files. All use mock agents/workflows — no LLM calls.
 
-### Mock Infrastructure
-
-| Component       | Mock                                                                   |
-| --------------- | ---------------------------------------------------------------------- |
-| `Mastra`        | `getStorage()`, `getAgentById()`, `getScorerById()`                    |
-| `Agent`         | `generate()` — configurable delay/response/failure                     |
-| `Workflow`      | `createRun()` returning mock run with `start()`                        |
-| `MastraScorer`  | `run()` — configurable delay/score/failure                             |
-| `runsStore`     | `createRun`, `updateRun`, `addResult` — spy-able, configurable failure |
-| `datasetsStore` | `getDatasetById`, `getItemsByVersion` — returns canned items           |
-
-### Tests by Issue
-
-#### T1 — Per-item timeout (Issue #1)
-
-- Mock target: hangs forever (never resolves)
-- 5 items, `maxConcurrency: 5`
-- No `AbortSignal` provided
-- **Expected:** run never completes (proves no timeout exists)
-- Use `Promise.race` with a test-level timeout to avoid hanging the test suite
-
-#### T2 — AbortSignal not forwarded (Issue #2)
-
-- Mock target: takes 5 seconds, checks no signal internally
-- 1 item
-- Abort after 100ms
-- **Expected:** item is NOT interrupted. Abort only checked before next item starts.
-- Verify `executeTarget` completes its full 5s despite abort
-
-#### T3 — `addResult` failure kills run (Issue #3)
-
-- Mock target: always succeeds
-- Mock `runsStore.addResult`: throws on 3rd call
-- 10 items, `maxConcurrency: 1` (sequential for determinism)
-- **Expected:** run fails after item 3. Items 4-10 never execute.
-- Verify `updateRun` called with `status: 'failed'`
-
-#### T4 — `generateLegacy` silent undefined (Issue #4)
-
-- Mock agent: `isSupportedLanguageModel()` returns false, no `generateLegacy` method
-- Call `executeTarget(agent, 'agent', item)`
-- **Expected:** `{ output: undefined, error: null }` — false success
-
-#### T5 — Abort loses partial results (Issue #5)
-
-- Mock target: 100ms per item
-- 20 items, `maxConcurrency: 5`
-- Abort after 250ms
-- **Expected:** function throws `AbortError`. No `RunSummary` returned.
-- Verify `addResult` was called for completed items (data exists in storage)
-- Verify caller gets zero usable data from the thrown error
-
-#### T6 — Memory accumulation (Issue #6)
-
-- Mock target: returns 1MB string per item
-- 500 items, `maxConcurrency: 50`
-- Snapshot `process.memoryUsage().heapUsed` before and after
-- **Expected:** heap delta > 500MB (all outputs held simultaneously)
-
-#### T7 — No retry (Issue #7)
-
-- Mock target: fails on first call per item, succeeds on retry
-- Track call count per item via `Map`
-- 10 items
-- **Expected:** all 10 fail. Each item called exactly once. `retryCount` is 0.
-
-#### T8 — Sequential scorers bottleneck (Issue #8)
-
-- Mock target: 0ms
-- 3 mock scorers: 100ms each
-- 20 items, `maxConcurrency: 20`
-- Measure wall clock with scorers vs without
-- **Expected:** ~300ms with scorers (serial), ~0ms without. Ratio proves bottleneck.
-
-#### T9 — Status logic (Issue #9)
-
-- Mock target: fails 99 out of 100 items
-- **Expected:** `status === 'completed'` despite 99% failure rate
-
-#### T10 — Results ordering (Issue #11)
-
-- Mock target: item 0 = 200ms, item 1 = 50ms, item 2 = 10ms
-- `maxConcurrency: 3`
-- **Expected:** `results[0].itemId` is item 2 (fastest), not item 0
-
-#### T11 — Backpressure from slow storage (Issue #3 related)
-
-- Mock target: 10ms
-- Mock `addResult`: 500ms
-- 50 items, `maxConcurrency: 10`
-- **Expected:** wall clock ~2500ms (dominated by storage, not execution)
-- Compare against 0ms storage: ~50ms. Ratio ~50x proves storage is in hot path.
+| File                           | Tests | Covers                                                                                                                    |
+| ------------------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------- |
+| `p0-regression.test.ts`        | 5     | Abort partial summary, generateLegacy null check, per-item timeout, signal forwarding, addResult resilience               |
+| `p1-regression.test.ts`        | 13    | Parallel scorers, error isolation, completedWithErrors, skippedCount, results ordering, retainResults, retry with backoff |
+| `streaming-regression.test.ts` | 7     | onItemComplete callback, smart retainResults default, success+failure items, throw resilience, async await, abort         |
+| `runDataset.test.ts`           | 18    | Core orchestration, scorer isolation, concurrency, workflows, abort                                                       |
+| `executor.test.ts`             | 13    | Agent/workflow/scorer dispatch, v1 agent, NaN scores                                                                      |
 
 ---
 
 ## FOLLOW-UP WORK
 
-| Item                      | Description                                                                                                                       | Where                          |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| UI: `completedWithErrors` | Display partial failure badge/indicator in Playground run details                                                                 | `packages/playground-ui`       |
-| UI: `skippedCount`        | Show skipped item count in run summary view when abort occurs                                                                     | `packages/playground-ui`       |
-| Workflow abort            | `workflow.start()` does not accept `AbortSignal` — per-item timeout works but in-flight workflow runs to completion in background | `packages/core/src/workflows/` |
-| Memory: streaming results | `retainResults: false` is a workaround; true fix is streaming/paginated result delivery                                           | `index.ts`                     |
-| Dynamic p-map import      | `p-map` is dynamically imported on every `runDataset` call (P2)                                                                   | `index.ts:115`                 |
+| Item                      | Status | Description                                                                                                                       | Where                          |
+| ------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| UI: `completedWithErrors` | TODO   | Display partial failure badge/indicator in Playground run details                                                                 | `packages/playground-ui`       |
+| UI: `skippedCount`        | TODO   | Show skipped item count in run summary view when abort occurs                                                                     | `packages/playground-ui`       |
+| Workflow abort            | TODO   | `workflow.start()` does not accept `AbortSignal` — per-item timeout works but in-flight workflow runs to completion in background | `packages/core/src/workflows/` |
+| Memory: `onItemComplete`  | DONE   | `onItemComplete` callback + smart `retainResults` default enables zero-memory streaming                                           | `types.ts`, `index.ts`         |
+| Memory: streaming results | DONE   | Server handler uses `retainResults: false` since it's fire-and-forget                                                             | `datasets.ts` (server)         |
+| Dynamic p-map import      | TODO   | `p-map` is dynamically imported on every `runDataset` call (P2)                                                                   | `index.ts:115`                 |

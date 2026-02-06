@@ -45,7 +45,8 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
     maxConcurrency = 5,
     signal,
     itemTimeout,
-    retainResults = true,
+    onItemComplete,
+    retainResults = onItemComplete ? false : true,
     maxRetries = 0,
     retryDelay = 1000,
     runId: providedRunId,
@@ -215,11 +216,21 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
           }
         }
 
+        const itemWithScores: ItemWithScores = {
+          ...itemResult,
+          scores: itemScores,
+        };
+
         if (retainResults) {
-          results[index] = {
-            ...itemResult,
-            scores: itemScores,
-          };
+          results[index] = itemWithScores;
+        }
+
+        if (onItemComplete) {
+          try {
+            await onItemComplete(itemWithScores, index);
+          } catch (callbackError) {
+            console.warn(`onItemComplete callback error for item ${item.id}:`, callbackError);
+          }
         }
       },
       { concurrency: maxConcurrency },
