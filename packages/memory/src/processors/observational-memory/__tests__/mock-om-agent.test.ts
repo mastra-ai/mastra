@@ -448,7 +448,7 @@ describe('Mock OM Agent Integration', () => {
     // OM processor MUST emit progress, start, and end markers
     expect(omParts.length).toBeGreaterThan(0);
 
-    const hasProgress = omParts.some(p => p.type === 'data-om-progress');
+    const hasProgress = omParts.some(p => p.type === 'data-om-status');
     expect(hasProgress).toBe(true);
 
     // Observation MUST be triggered (threshold is 50 tokens, response is ~100 tokens)

@@ -626,8 +626,10 @@ export interface ObservationalMemoryRecord {
   bufferedMessageIds?: string[];
   /** Reflection waiting to be swapped in (async buffering) */
   bufferedReflection?: string;
-  /** Token count of buffered reflection */
+  /** Token count of buffered reflection (post-compression output) */
   bufferedReflectionTokens?: number;
+  /** Observation tokens that were fed into the reflector (pre-compression input) */
+  bufferedReflectionInputTokens?: number;
   /**
    * The number of lines in activeObservations that were reflected on
    * when the buffered reflection was created. Used at activation time
@@ -774,8 +776,10 @@ export interface SwapBufferedToActiveResult {
 export interface UpdateBufferedReflectionInput {
   id: string;
   reflection: string;
-  /** Token count of the buffered reflection */
+  /** Token count of the buffered reflection (post-compression output) */
   tokenCount: number;
+  /** Observation tokens that were fed into the reflector (pre-compression input) */
+  inputTokenCount: number;
   /**
    * The number of lines in activeObservations at the time of reflection.
    * Used at activation time to know which observations were already reflected on.

@@ -345,52 +345,92 @@ export interface DataOmObservationFailedPart {
 }
 
 /**
- * Progress marker streamed during agent execution to provide real-time
- * token progress updates for UI feedback.
+ * Status update streamed during agent execution to provide real-time
+ * observational memory state for UI feedback.
+ *
+ * Clients can calculate percentages from tokens/threshold pairs.
+ *
+ * @example
+ * ```ts
+ * // Message window usage
+ * const msgPercent = status.windows.active.messages.tokens / status.windows.active.messages.threshold;
+ *
+ * // Post-activation estimate for message window
+ * const postActivation = status.windows.active.messages.tokens - status.windows.buffered.observations.messageTokens;
+ * ```
+ */
+export interface DataOmStatusPart {
+  type: 'data-om-status';
+  data: {
+    windows: {
+      /** Active context windows — current token usage and thresholds */
+      active: {
+        /** Message window: unobserved message tokens vs threshold that triggers observation */
+        messages: {
+          tokens: number;
+          threshold: number;
+        };
+        /** Observation window: observation tokens vs threshold that triggers reflection */
+        observations: {
+          tokens: number;
+          threshold: number;
+        };
+      };
+      /** Buffered content waiting to be activated */
+      buffered: {
+        /** Buffered observation chunks staged for activation */
+        observations: {
+          /** Number of chunks staged */
+          chunks: number;
+          /** Message tokens that will be cleared from context on activation */
+          messageTokens: number;
+          /** Observation tokens that will be added on activation */
+          observationTokens: number;
+          /** Current state of observation buffering */
+          status: 'idle' | 'running' | 'complete';
+        };
+        /** Buffered reflection waiting to be activated */
+        reflection: {
+          /** Observation tokens that were fed into the reflector (pre-compression) */
+          inputObservationTokens: number;
+          /** Observation tokens the reflection will produce on activation (post-compression) */
+          observationTokens: number;
+          /** Current state of reflection buffering */
+          status: 'idle' | 'running' | 'complete';
+        };
+      };
+    };
+    /** The OM record ID */
+    recordId: string;
+    /** Thread ID */
+    threadId: string;
+    /** Step number in the agent loop */
+    stepNumber: number;
+    /** Current reflection generation count */
+    generationCount: number;
+  };
+}
+
+/**
+ * @deprecated Use DataOmStatusPart instead. Clients consuming this type will not
+ * receive updates — migrate to `data-om-status` for progress tracking.
  */
 export interface DataOmProgressPart {
   type: 'data-om-progress';
   data: {
-    /** Current pending tokens (unobserved message tokens) */
     pendingTokens: number;
-
-    /** Current message token threshold that triggers observation */
     messageTokens: number;
-
-    /** Percentage of message token threshold reached */
     messageTokensPercent: number;
-
-    /** Current observation tokens (for reflection progress) */
     observationTokens: number;
-
-    /** Observation token threshold that triggers reflection */
     observationTokensThreshold: number;
-
-    /** Percentage of observation token threshold reached */
     observationTokensPercent: number;
-
-    /** Whether observation will trigger */
     willObserve: boolean;
-
-    /** The OM record ID */
     recordId: string;
-
-    /** Thread ID */
     threadId: string;
-
-    /** Step number in the agent loop */
     stepNumber: number;
-
-    /** Number of buffered observation chunks waiting to be activated */
     bufferedChunksCount: number;
-
-    /** Total tokens of messages that have been buffered but not yet activated */
     bufferedMessageTokens: number;
-
-    /** Total tokens of observations from buffered chunks */
     bufferedObservationTokens: number;
-
-    /** Whether there are buffered chunks ready for activation */
     hasBufferedChunks: boolean;
   };
 }
@@ -554,10 +594,10 @@ export type DataOmObservationPart =
   | DataOmObservationStartPart
   | DataOmObservationEndPart
   | DataOmObservationFailedPart
-  | DataOmProgressPart;
+  | DataOmStatusPart;
 
 /**
- * Union of all OM data parts (observation, buffering, progress, activation).
+ * Union of all OM data parts (observation, buffering, status, activation).
  */
 export type DataOmPart = DataOmObservationPart | DataOmBufferingPart | DataOmActivationPart;
 

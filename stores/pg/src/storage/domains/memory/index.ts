@@ -128,6 +128,7 @@ export class MemoryPG extends MemoryStorage {
           'bufferedMessageIds',
           'bufferedReflection',
           'bufferedReflectionTokens',
+          'bufferedReflectionInputTokens',
           'bufferedObservationChunks',
           'isBufferingObservation',
           'isBufferingReflection',
@@ -1585,6 +1586,9 @@ export class MemoryPG extends MemoryStorage {
       bufferedMessageIds: undefined, // Use bufferedObservationChunks instead
       bufferedReflection: row.bufferedReflection || undefined,
       bufferedReflectionTokens: row.bufferedReflectionTokens ? Number(row.bufferedReflectionTokens) : undefined,
+      bufferedReflectionInputTokens: row.bufferedReflectionInputTokens
+        ? Number(row.bufferedReflectionInputTokens)
+        : undefined,
       reflectedObservationLineCount: row.reflectedObservationLineCount
         ? Number(row.reflectedObservationLineCount)
         : undefined,
@@ -2366,10 +2370,11 @@ export class MemoryPG extends MemoryStorage {
             ELSE $1
           END,
           "bufferedReflectionTokens" = COALESCE("bufferedReflectionTokens", 0) + $2,
-          "updatedAt" = $3,
-          "updatedAtZ" = $4
-        WHERE id = $5`,
-        [input.reflection, input.tokenCount, nowStr, nowStr, input.id],
+          "bufferedReflectionInputTokens" = $3,
+          "updatedAt" = $4,
+          "updatedAtZ" = $5
+        WHERE id = $6`,
+        [input.reflection, input.tokenCount, input.inputTokenCount, nowStr, nowStr, input.id],
       );
 
       if (result.rowCount === 0) {
@@ -2458,6 +2463,7 @@ export class MemoryPG extends MemoryStorage {
         `UPDATE ${tableName} SET
           "bufferedReflection" = NULL,
           "bufferedReflectionTokens" = NULL,
+          "bufferedReflectionInputTokens" = NULL,
           "reflectedObservationLineCount" = NULL,
           "updatedAt" = $1,
           "updatedAtZ" = $2

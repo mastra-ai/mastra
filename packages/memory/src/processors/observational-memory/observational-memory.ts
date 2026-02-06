@@ -105,7 +105,7 @@ import type {
   DataOmObservationStartPart,
   DataOmObservationEndPart,
   DataOmObservationFailedPart,
-  DataOmProgressPart,
+  DataOmStatusPart,
   ObservationMarkerConfig,
   DataOmBufferingStartPart,
   DataOmBufferingEndPart,
@@ -2253,7 +2253,6 @@ ${suggestedResponse}
     totalPendingTokens: number;
     threshold: number;
     effectiveObservationTokensThreshold: number;
-    observationTokensPercent: number;
     isSharedBudget: boolean;
   } {
     // For threshold checking, we use UNOBSERVED messages only.
@@ -2274,13 +2273,10 @@ ${suggestedResponse}
     const effectiveObservationTokensThreshold = isSharedBudget
       ? Math.max(totalBudget - threshold, 1000)
       : baseReflectionThreshold;
-    const observationTokensPercent = Math.round((currentObservationTokens / effectiveObservationTokensThreshold) * 100);
-
     return {
       totalPendingTokens,
       threshold,
       effectiveObservationTokensThreshold,
-      observationTokensPercent,
       isSharedBudget,
     };
   }
@@ -2298,11 +2294,10 @@ ${suggestedResponse}
       totalPendingTokens: number;
       threshold: number;
       effectiveObservationTokensThreshold: number;
-      observationTokensPercent: number;
     },
     currentObservationTokens: number,
   ): Promise<void> {
-    const { totalPendingTokens, threshold, effectiveObservationTokensThreshold, observationTokensPercent } = thresholds;
+    const { totalPendingTokens, threshold, effectiveObservationTokensThreshold } = thresholds;
 
     this.emitDebugEvent({
       type: 'step_progress',
@@ -2324,26 +2319,57 @@ ${suggestedResponse}
       const bufferedMessageTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
       const bufferedObservationTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.tokenCount ?? 0), 0);
 
-      const progressPart: DataOmProgressPart = {
-        type: 'data-om-progress',
+      // Determine observation buffering status
+      let obsBufferStatus: 'idle' | 'running' | 'complete' = 'idle';
+      if (record.isBufferingObservation) {
+        obsBufferStatus = 'running';
+      } else if (bufferedChunks.length > 0) {
+        obsBufferStatus = 'complete';
+      }
+
+      // Determine reflection buffering status
+      let refBufferStatus: 'idle' | 'running' | 'complete' = 'idle';
+      if (record.isBufferingReflection) {
+        refBufferStatus = 'running';
+      } else if (record.bufferedReflection && record.bufferedReflection.length > 0) {
+        refBufferStatus = 'complete';
+      }
+
+      const statusPart: DataOmStatusPart = {
+        type: 'data-om-status',
         data: {
-          pendingTokens: totalPendingTokens,
-          messageTokens: threshold,
-          messageTokensPercent: Math.round((totalPendingTokens / threshold) * 100),
-          observationTokens: currentObservationTokens,
-          observationTokensThreshold: effectiveObservationTokensThreshold,
-          observationTokensPercent: observationTokensPercent,
-          willObserve: totalPendingTokens >= threshold,
+          windows: {
+            active: {
+              messages: {
+                tokens: totalPendingTokens,
+                threshold,
+              },
+              observations: {
+                tokens: currentObservationTokens,
+                threshold: effectiveObservationTokensThreshold,
+              },
+            },
+            buffered: {
+              observations: {
+                chunks: bufferedChunks.length,
+                messageTokens: bufferedMessageTokens,
+                observationTokens: bufferedObservationTokens,
+                status: obsBufferStatus,
+              },
+              reflection: {
+                inputObservationTokens: record.bufferedReflectionInputTokens ?? 0,
+                observationTokens: record.bufferedReflectionTokens ?? 0,
+                status: refBufferStatus,
+              },
+            },
+          },
           recordId: record.id,
           threadId,
           stepNumber,
-          bufferedChunksCount: bufferedChunks.length,
-          bufferedMessageTokens,
-          bufferedObservationTokens,
-          hasBufferedChunks: bufferedChunks.length > 0,
+          generationCount: record.generationCount,
         },
       };
-      await writer.custom(progressPart).catch(() => {
+      await writer.custom(statusPart).catch(() => {
         // Ignore errors if stream is closed
       });
     }
@@ -4019,6 +4045,7 @@ ${formattedMessages}
       id: record.id,
       reflection: reflectResult.observations,
       tokenCount: reflectionTokenCount,
+      inputTokenCount: observationTokens,
       reflectedObservationLineCount,
     });
     omDebug(

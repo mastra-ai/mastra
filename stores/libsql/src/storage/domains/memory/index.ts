@@ -91,6 +91,7 @@ export class MemoryLibSQL extends MemoryStorage {
           'bufferedMessageIds',
           'bufferedReflection',
           'bufferedReflectionTokens',
+          'bufferedReflectionInputTokens',
           'reflectedObservationLineCount',
           'bufferedObservationChunks',
           'isBufferingObservation',
@@ -1406,6 +1407,9 @@ export class MemoryLibSQL extends MemoryStorage {
       bufferedMessageIds: undefined, // Use bufferedObservationChunks instead
       bufferedReflection: row.bufferedReflection || undefined,
       bufferedReflectionTokens: row.bufferedReflectionTokens ? Number(row.bufferedReflectionTokens) : undefined,
+      bufferedReflectionInputTokens: row.bufferedReflectionInputTokens
+        ? Number(row.bufferedReflectionInputTokens)
+        : undefined,
       reflectedObservationLineCount: row.reflectedObservationLineCount
         ? Number(row.reflectedObservationLineCount)
         : undefined,
@@ -2142,10 +2146,18 @@ export class MemoryLibSQL extends MemoryStorage {
         sql: `UPDATE "${OM_TABLE}" SET
           "bufferedReflection" = ?,
           "bufferedReflectionTokens" = ?,
+          "bufferedReflectionInputTokens" = ?,
           "reflectedObservationLineCount" = ?,
           "updatedAt" = ?
         WHERE id = ?`,
-        args: [input.reflection, input.tokenCount, input.reflectedObservationLineCount, nowStr, input.id],
+        args: [
+          input.reflection,
+          input.tokenCount,
+          input.inputTokenCount,
+          input.reflectedObservationLineCount,
+          nowStr,
+          input.id,
+        ],
       });
 
       if (result.rowsAffected === 0) {
@@ -2232,6 +2244,7 @@ export class MemoryLibSQL extends MemoryStorage {
         sql: `UPDATE "${OM_TABLE}" SET
           "bufferedReflection" = NULL,
           "bufferedReflectionTokens" = NULL,
+          "bufferedReflectionInputTokens" = NULL,
           "reflectedObservationLineCount" = NULL,
           "updatedAt" = ?
         WHERE id = ?`,

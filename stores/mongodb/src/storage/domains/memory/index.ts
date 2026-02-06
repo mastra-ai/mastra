@@ -1143,6 +1143,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       bufferedMessageIds: undefined, // Use bufferedObservationChunks instead
       bufferedReflection: doc.bufferedReflection || undefined,
       bufferedReflectionTokens: doc.bufferedReflectionTokens ? Number(doc.bufferedReflectionTokens) : undefined,
+      bufferedReflectionInputTokens: doc.bufferedReflectionInputTokens
+        ? Number(doc.bufferedReflectionInputTokens)
+        : undefined,
       reflectedObservationLineCount: doc.reflectedObservationLineCount
         ? Number(doc.reflectedObservationLineCount)
         : undefined,
@@ -1822,6 +1825,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           $set: {
             bufferedReflection: newContent,
             bufferedReflectionTokens: newTokens,
+            bufferedReflectionInputTokens: input.inputTokenCount,
             updatedAt: new Date(),
           },
         },
