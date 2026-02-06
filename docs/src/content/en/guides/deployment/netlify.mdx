@@ -81,7 +81,7 @@ Since the [Mastra server](/docs/server/mastra-server) prefixes every API endpoin
 
 :::info
 
-Netlify functions are typically deployed at `https://<random-slug>.netlify.app/.netlify/functions/api`. The `NetlifyDeployer` redirects any request to `/.netlify/functions/api/:splat` to the root `/*`.
+Netlify functions are typically deployed at `https://<random-slug>.netlify.app/.netlify/functions/api`. The `NetlifyDeployer` redirects any request from `/*` to `/.netlify/functions/api/:splat`, so you don't need to include the `.netlify/functions` prefix in your URLs.
 
 :::
 
