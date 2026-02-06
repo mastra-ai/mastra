@@ -40,17 +40,19 @@ export function RunResultDetailPanel({ result, onPrevious, onNext, onClose }: Ru
         {/* Left side: Navigation */}
         <div className="flex items-center gap-[2px]">
           <Button
-            variant="outline"
-            size="md"
+            variant="secondary"
+            size="default"
             onClick={onPrevious}
             disabled={!onPrevious}
             aria-label="Previous result"
+            hasRightSibling={true}
           >
             <ArrowUpIcon /> Previous
           </Button>
           <Button
-            variant="outline"
-            size="md"
+            variant="secondary"
+            hasLeftSibling={true}
+            size="default"
             onClick={onNext}
             disabled={!onNext}
             aria-label="Next result"
@@ -60,7 +62,7 @@ export function RunResultDetailPanel({ result, onPrevious, onNext, onClose }: Ru
         </div>
 
         {/* Right side: Close */}
-        <Button variant="outline" size="md" onClick={onClose} aria-label="Close detail panel">
+        <Button variant="secondary" size="default" onClick={onClose} aria-label="Close detail panel">
           <XIcon />
         </Button>
       </div>

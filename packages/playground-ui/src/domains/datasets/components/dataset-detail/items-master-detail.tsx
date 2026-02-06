@@ -12,7 +12,7 @@ import { ItemDetailPanel } from './item-detail-panel';
 import { DatasetVersionsPanel } from '../versions';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { ArrowRightToLineIcon } from 'lucide-react';
-import { Columns } from '@/ds/components/Columns/columns';
+import { ListAndDetails } from '@/ds/components/ListAndDetails/list-and-details';
 export interface ItemsMasterDetailProps {
   datasetId: string;
   items: DatasetItem[];
@@ -88,7 +88,7 @@ export function ItemsMasterDetail({
   const isSidePanelActive = Boolean(isVersionsPanelOpen || selectedItem);
 
   return (
-    <Columns isSideColumnVisible={isSidePanelActive}>
+    <ListAndDetails isDetailsActive={isSidePanelActive}>
       {/* List column - always visible */}
       <div className={cn('flex flex-col h-full overflow-hidden gap-4')}>
         {isViewingOldVersion && activeDatasetVersion && (
@@ -121,32 +121,35 @@ export function ItemsMasterDetail({
 
       {/* Detail column - shows versions panel or item detail */}
       {isSidePanelActive && (
-        <div
-          className={cn('flex flex-col h-full overflow-hidden', {
-            'w-[12rem]': isVersionsPanelOpen && !selectedItem,
-            'w-[20rem] xl:w-[30rem] 2xl:w-[40rem]': selectedItem,
-          })}
-        >
-          {selectedItem ? (
-            <ItemDetailPanel
-              datasetId={datasetId}
-              item={selectedItem}
-              items={items}
-              onItemChange={onItemSelect}
-              onClose={onItemClose}
-            />
-          ) : (
-            isVersionsPanelOpen && (
-              <DatasetVersionsPanel
+        <>
+          <ListAndDetails.Separator />
+          <div
+            className={cn('flex flex-col h-full overflow-hidden', {
+              'w-[12rem]': isVersionsPanelOpen && !selectedItem,
+              'w-[20rem] xl:w-[30rem] 2xl:w-[40rem]': selectedItem,
+            })}
+          >
+            {selectedItem ? (
+              <ItemDetailPanel
                 datasetId={datasetId}
-                onClose={handleVersionsPanelClose}
-                onVersionSelect={onVersionSelect}
-                activeVersion={activeDatasetVersion}
+                item={selectedItem}
+                items={items}
+                onItemChange={onItemSelect}
+                onClose={onItemClose}
               />
-            )
-          )}
-        </div>
+            ) : (
+              isVersionsPanelOpen && (
+                <DatasetVersionsPanel
+                  datasetId={datasetId}
+                  onClose={handleVersionsPanelClose}
+                  onVersionSelect={onVersionSelect}
+                  activeVersion={activeDatasetVersion}
+                />
+              )
+            )}
+          </div>
+        </>
       )}
-    </Columns>
+    </ListAndDetails>
   );
 }

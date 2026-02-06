@@ -3,7 +3,7 @@
 import { format } from 'date-fns';
 import { XIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
-import { EntryList } from '@/ds/components/EntryList';
+import { ItemList } from '@/ds/components/ItemList';
 import { useDatasetVersions, type DatasetVersion } from '../../hooks/use-dataset-versions';
 
 export interface DatasetVersionsPanelProps {
@@ -43,7 +43,7 @@ export function DatasetVersionsPanel({
     <div className="grid grid-rows-[auto_auto_1fr] h-full gap-4">
       {/* Toolbar */}
       <div className="flex items-center justify-end">
-        <Button variant="outline" size="md" onClick={onClose}>
+        <Button variant="secondary" size="default" onClick={onClose}>
           <XIcon />
           Hide Versions History
         </Button>
@@ -54,11 +54,16 @@ export function DatasetVersionsPanel({
         {isLoading ? (
           <DatasetVersionsListSkeleton />
         ) : (
-          <EntryList>
-            <EntryList.Trim>
-              <EntryList.Header columns={versionsListColumns} />
-              <EntryList.Entries>
-                {versions?.map((item: DatasetVersion, index: number) => {
+          <ItemList>
+            <ItemList.Header columns={versionsListColumns}>
+              {versionsListColumns.map(col => (
+                <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
+              ))}
+            </ItemList.Header>
+
+            <ItemList.Scroller>
+              <ItemList.Items>
+                {versions?.map((item, index) => {
                   const versionDate = typeof item.version === 'string' ? new Date(item.version) : item.version;
 
                   const entry = {
@@ -68,20 +73,21 @@ export function DatasetVersionsPanel({
                   };
 
                   return (
-                    <EntryList.Entry
-                      key={entry.id}
-                      entry={entry}
-                      columns={versionsListColumns}
-                      isSelected={isVersionSelected(item)}
-                      onClick={() => handleVersionClick(item)}
-                    >
-                      <EntryList.EntryText>{entry.version}</EntryList.EntryText>
-                    </EntryList.Entry>
+                    <ItemList.Row key={entry.id} isSelected={isVersionSelected(item)}>
+                      <ItemList.RowButton
+                        entry={entry}
+                        columns={versionsListColumns}
+                        isSelected={isVersionSelected(item)}
+                        onClick={() => handleVersionClick(item)}
+                      >
+                        <ItemList.ItemText>{entry.version}</ItemList.ItemText>
+                      </ItemList.RowButton>
+                    </ItemList.Row>
                   );
                 })}
-              </EntryList.Entries>
-            </EntryList.Trim>
-          </EntryList>
+              </ItemList.Items>
+            </ItemList.Scroller>
+          </ItemList>
         )}
       </div>
     </div>
@@ -90,21 +96,21 @@ export function DatasetVersionsPanel({
 
 function DatasetVersionsListSkeleton() {
   return (
-    <EntryList>
-      <EntryList.Trim>
-        <EntryList.Header columns={versionsListColumns} />
-        <EntryList.Entries>
-          {Array.from({ length: 3 }).map((_: unknown, index: number) => (
-            <EntryList.Entry key={index} columns={versionsListColumns}>
-              {versionsListColumns.map((_col: { name: string; label: string; size: string }, colIndex: number) => (
-                <EntryList.EntryText key={colIndex} isLoading>
+    <ItemList>
+      <ItemList.Header columns={versionsListColumns} />
+      <ItemList.Items>
+        {Array.from({ length: 3 }).map((_, index) => (
+          <ItemList.Row key={index}>
+            <ItemList.RowButton columns={versionsListColumns}>
+              {versionsListColumns.map((col, colIndex) => (
+                <ItemList.ItemText key={colIndex} isLoading>
                   Loading...
-                </EntryList.EntryText>
+                </ItemList.ItemText>
               ))}
-            </EntryList.Entry>
-          ))}
-        </EntryList.Entries>
-      </EntryList.Trim>
-    </EntryList>
+            </ItemList.RowButton>
+          </ItemList.Row>
+        ))}
+      </ItemList.Items>
+    </ItemList>
   );
 }

@@ -2,8 +2,7 @@
 
 import { Button } from '@/ds/components/Button';
 import { Pencil, Trash2, Copy, ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, XIcon, History } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
-import { useState } from 'react';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ItemDetailToolbarProps {
@@ -28,24 +27,24 @@ export function ItemDetailToolbar({
   isEditing = false,
 }: ItemDetailToolbarProps) {
   const { Link } = useLinkComponent();
-  const [open, setOpen] = useState(false);
-
   return (
     <div className="flex items-center justify-between">
       {/* Left side: Navigation */}
       <div className="flex items-center gap-[2px]">
         <Button
-          variant="outline"
-          size="md"
+          variant="secondary"
+          size="default"
           onClick={onPrevious}
           disabled={!onPrevious}
           aria-label="Previous item"
+          hasRightSibling={true}
         >
           <ArrowUpIcon /> Previous
         </Button>
         <Button
-          variant="outline"
-          size="md"
+          variant="secondary"
+          hasLeftSibling={true}
+          size="default"
           onClick={onNext}
           disabled={!onNext}
           aria-label="Next item"
@@ -58,50 +57,39 @@ export function ItemDetailToolbar({
       <div className="flex items-center gap-2">
         {!isEditing && (
           <>
-            <Button variant="outline" size="md" href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
+            <Button variant="secondary" size="default" href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
               <History />
               History
             </Button>
 
             <div className="flex items-center gap-[2px]">
-              <Button variant="outline" size="md" onClick={onEdit}>
+              <Button variant="secondary" hasRightSibling={true} size="default" onClick={onEdit}>
                 <Pencil />
                 Edit
               </Button>
 
-              <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="md" aria-label="Actions menu">
+              <DropdownMenu>
+                <DropdownMenu.Trigger asChild>
+                  <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Actions menu">
                     <ChevronDownIcon />
                   </Button>
-                </PopoverTrigger>
-
-                <PopoverContent align="end" className="w-48 p-1 bg-surface4 ">
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-start gap-2 text-red-500 hover:text-red-400"
-                      onClick={() => {
-                        setOpen(false);
-                        onDelete();
-                      }}
-                    >
-                      <Trash2 />
-                      Delete Item
-                    </Button>
-                    <Button variant="ghost" size="sm" className="w-full justify-start gap-2" disabled>
-                      <Copy />
-                      Duplicate Item (Coming Soon)
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end" className="w-48">
+                  <DropdownMenu.Item onSelect={onDelete} className="text-red-500 focus:text-red-400">
+                    <Trash2 />
+                    <span>Delete Item</span>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item disabled>
+                    <Copy />
+                    <span>Duplicate Item (Coming Soon)</span>
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu>
             </div>
           </>
         )}
 
-        <Button variant="outline" size="md" onClick={onClose} aria-label="Close detail panel">
+        <Button variant="secondary" size="default" onClick={onClose} aria-label="Close detail panel">
           <XIcon />
         </Button>
       </div>
