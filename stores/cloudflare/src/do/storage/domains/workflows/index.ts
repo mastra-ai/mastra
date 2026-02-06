@@ -101,7 +101,7 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
           workflow_name: workflowName,
           run_id: runId,
           resourceId,
-          snapshot: snapshot as Record<string, unknown>,
+          snapshot: JSON.stringify(snapshot),
           createdAt: createdAt ? createdAt.toISOString() : now,
           updatedAt: updatedAt ? updatedAt.toISOString() : now,
         };
@@ -178,11 +178,11 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     }
   }
 
-  private parseWorkflowRun(row: Record<string, unknown>): WorkflowRun {
-    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot;
     if (typeof parsedSnapshot === 'string') {
       try {
-        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+        parsedSnapshot = JSON.parse(row.snapshot) as WorkflowRunState;
       } catch (e) {
         // If parsing fails, return the raw snapshot string
         this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
@@ -190,12 +190,12 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     }
 
     return {
-      workflowName: row.workflow_name as string,
-      runId: row.run_id as string,
+      workflowName: row.workflow_name,
+      runId: row.run_id,
       snapshot: parsedSnapshot,
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
-      resourceId: row.resourceId as string | undefined,
+      resourceId: row.resourceId,
     };
   }
 
