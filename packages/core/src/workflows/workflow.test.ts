@@ -2876,6 +2876,159 @@ describe('Workflow', () => {
       expect(onChunkSpy).toHaveBeenCalled();
     }, 10000);
 
+    it('should stream tool calls from agent as step', async () => {
+      // Create a tool for the agent to use
+      const weatherTool = createTool({
+        id: 'get-weather',
+        description: 'Get the weather for a location',
+        inputSchema: z.object({
+          location: z.string(),
+        }),
+        outputSchema: z.object({
+          temperature: z.number(),
+          condition: z.string(),
+        }),
+        execute: async () => {
+          return {
+            temperature: 72,
+            condition: 'sunny',
+          };
+        },
+      });
+
+      // Track doStream calls
+      let doStreamCallCount = 0;
+
+      const agent = new Agent({
+        id: 'weather-agent',
+        name: 'weather-agent',
+        instructions: 'You are a weather assistant. Use the get-weather tool to get weather information.',
+        model: new MockLanguageModelV2({
+          doStream: async () => {
+            doStreamCallCount++;
+
+            // First call: agent makes a tool call
+            if (doStreamCallCount === 1) {
+              return {
+                stream: simulateReadableStream({
+                  chunks: [
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'call-1',
+                      toolName: 'get-weather',
+                      input: JSON.stringify({ location: 'San Francisco' }),
+                    },
+                    {
+                      type: 'finish',
+                      finishReason: 'tool-calls',
+                      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                    },
+                  ],
+                }),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+              };
+            }
+
+            // Second call: agent responds with text after tool result
+            return {
+              stream: simulateReadableStream({
+                chunks: [
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'The weather in San Francisco is 72°F and sunny.' },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
+                  },
+                ],
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+            };
+          },
+        }),
+        tools: { 'get-weather': weatherTool },
+      });
+
+      const workflow = createWorkflow({
+        id: 'tool-call-workflow',
+        inputSchema: z.object({
+          prompt: z.string(),
+        }),
+        outputSchema: z.object({
+          text: z.string(),
+        }),
+        options: {
+          validateInputs: false,
+        },
+      });
+
+      new Mastra({
+        workflows: { 'tool-call-workflow': workflow },
+        agents: { 'weather-agent': agent },
+        idGenerator: () => randomUUID(),
+      });
+
+      const agentStep = createStep(agent);
+
+      workflow
+        .map({ prompt: { value: 'What is the weather in San Francisco?', schema: z.string() } })
+        .then(agentStep)
+        .commit();
+
+      const run = await workflow.createRun({
+        runId: 'tool-call-test-run',
+      });
+
+      const streamResult = run.stream({
+        inputData: {
+          prompt: 'What is the weather in San Francisco?',
+        },
+      });
+
+      const allEvents: ChunkType[] = [];
+      for await (const event of streamResult.fullStream) {
+        allEvents.push(event);
+      }
+
+      // Filter for workflow-step-output events (agent's internal streaming events)
+      const agentOutputEvents = allEvents.filter(e => e.type === 'workflow-step-output');
+      const agentOutputTypes = agentOutputEvents.map(e => e?.payload?.output?.type);
+
+      console.dir({ agentOutputTypes, agentOutputEvents }, { depth: null });
+
+      // Verify tool-call and tool-result events are visible in the stream
+      expect(agentOutputTypes).toContain('tool-call');
+      expect(agentOutputTypes).toContain('tool-result');
+
+      // Verify the tool call details are correct
+      const toolCallEvent = agentOutputEvents.find(e => e?.payload?.output?.type === 'tool-call');
+      console.dir({ toolCallEvent }, { depth: null });
+      expect(toolCallEvent?.payload?.output?.payload?.toolName).toBe('get-weather');
+      expect(toolCallEvent?.payload?.output?.payload?.toolCallId).toBe('call-1');
+
+      // Verify the tool result is present
+      const toolResultEvent = agentOutputEvents.find(e => e?.payload?.output?.type === 'tool-result');
+      console.dir({ toolResultEvent }, { depth: null });
+      expect(toolResultEvent?.payload?.output?.payload?.toolName).toBe('get-weather');
+      expect(toolResultEvent?.payload?.output?.payload?.toolCallId).toBe('call-1');
+      expect(toolResultEvent?.payload?.output?.payload?.result).toEqual({
+        temperature: 72,
+        condition: 'sunny',
+      });
+
+      // Verify text events are also present
+      expect(agentOutputTypes).toContain('text-delta');
+
+      // Verify the workflow completed successfully
+      const result = await streamResult.result;
+      console.dir({ result }, { depth: null });
+      expect(result.status).toBe('success');
+      if (result.status === 'success') {
+        expect(result.result.text).toContain('72');
+      }
+    }, 30000);
+
     it('should handle sleep waiting flow', async () => {
       const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
