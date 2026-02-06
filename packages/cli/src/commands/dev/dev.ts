@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -185,29 +186,36 @@ const startServer = async (
         devLogger.watching();
 
         await restartAllActiveWorkflowRuns({ host, port });
+        let refreshId = randomBytes(16).toString('hex');
 
-        // Send refresh signal
-        try {
-          await fetch(`http://${host}:${port}${studioBasePath}/__refresh`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
-        } catch {
-          // Retry after another second
-          await new Promise(resolve => setTimeout(resolve, 1500));
+        const sendRefreshSignal = async (refreshId: string) => {
+          // Send refresh signal
           try {
             await fetch(`http://${host}:${port}${studioBasePath}/__refresh`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
+              body: JSON.stringify({ refreshId: refreshId }),
             });
           } catch {
-            // Ignore retry errors
+            // Retry after another second
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            try {
+              await fetch(`http://${host}:${port}${studioBasePath}/__refresh`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ refreshId: refreshId }),
+              });
+            } catch {
+              // Ignore retry errors
+            }
           }
-        }
+        };
+
+        await sendRefreshSignal(refreshId);
       }
     });
   } catch (err) {

@@ -37,10 +37,26 @@ export const AgentPromptExperimentProvider = ({
   const [prompt, setPrompt] = useState('');
 
   useEffect(() => {
-    const storedPrompt = localStorage.getItem(`agent-prompt-experiment-${agentId}`);
+    let storedPrompt = localStorage.getItem(`agent-prompt-experiment-${agentId}`);
+
+    const lastPromtOriginal = getPrompt('original');
+
+    //reflect the prompt from code change , overrides browser saved data
+    if (lastPromtOriginal != initialPromptText) {
+      storePrompt('original', initialPromptText);
+      storePrompt('local', initialPromptText);
+      storedPrompt = initialPromptText;
+    }
 
     setPrompt(storedPrompt ?? initialPromptText);
   }, [agentId, initialPromptText]);
+
+  const storePrompt = (type: 'original' | 'local', prompt: string) => {
+    return localStorage.setItem(`agent-prompt-${type === 'original' ? 'original-' : ''}experiment-${agentId}`, prompt);
+  };
+  const getPrompt = (type: 'original' | 'local') => {
+    return localStorage.getItem(`agent-prompt-${type === 'original' ? 'original-' : ''}experiment-${agentId}`);
+  };
 
   useEffect(() => {
     if (!prompt) return;

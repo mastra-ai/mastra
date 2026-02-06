@@ -25,6 +25,14 @@
           if (event.data === 'refresh') {
             window.location.reload();
           }
+          if (typeof event.data == 'string' && event.data.startsWith('refresh-')) {
+            let refreshId = event.data.substring(8);
+            let lastRefreshId = sessionStorage.getItem('refreshId');
+            if (lastRefreshId !== refreshId) {
+              sessionStorage.setItem('refreshId', refreshId);
+              window.location.reload();
+            }
+          }
         };
 
         events.onerror = () => {
