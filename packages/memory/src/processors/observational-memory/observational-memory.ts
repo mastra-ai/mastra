@@ -1,4 +1,4 @@
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
@@ -73,7 +73,9 @@ function isOpActiveInProcess(
 if (OM_DEBUG_LOG) {
   const _origConsoleError = console.error;
   console.error = (...args: unknown[]) => {
-    omDebug(`[console.error] ${args.map(a => (a instanceof Error ? (a.stack ?? a.message) : String(a))).join(' ')}`);
+    omDebug(
+      `[console.error] ${args.map(a => (a instanceof Error ? (a.stack ?? a.message) : typeof a === 'object' && a !== null ? JSON.stringify(a) : String(a))).join(' ')}`,
+    );
     _origConsoleError.apply(console, args);
   };
 }
@@ -1928,35 +1930,73 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     omDebug(
       `[OM:callReflector] starting first attempt: originalTokens=${originalTokens}, targetThreshold=${targetThreshold}, promptLen=${prompt.length}, skipContinuationHints=${skipContinuationHints}`,
     );
+
+    // Dump fixture for debugging hanging reflector calls
+    if (OM_DEBUG_LOG) {
+      try {
+        const fixture = {
+          timestamp: new Date().toISOString(),
+          prompt,
+          systemPrompt: buildReflectorSystemPrompt(),
+          modelConfig: this.reflectionConfig.model,
+          modelSettings: this.reflectionConfig.modelSettings,
+          providerOptions: this.reflectionConfig.providerOptions,
+          meta: {
+            originalTokens,
+            targetThreshold,
+            promptLen: prompt.length,
+            skipContinuationHints,
+            compressionLevel: firstLevel,
+          },
+        };
+        const fixturePath = join(process.cwd(), 'om-reflector-fixture.json');
+        writeFileSync(fixturePath, JSON.stringify(fixture, null, 2));
+        omDebug(`[OM:callReflector] fixture written to ${fixturePath}`);
+      } catch (e) {
+        omDebug(`[OM:callReflector] failed to write fixture: ${e}`);
+      }
+    }
+
     let chunkCount = 0;
-    let result = await this.withAbortCheck(
-      () =>
-        agent.generate(prompt, {
-          modelSettings: {
-            ...this.reflectionConfig.modelSettings,
-          },
-          providerOptions: this.reflectionConfig.providerOptions as any,
-          ...(abortSignal ? { abortSignal } : {}),
-          onChunk(chunk) {
-            chunkCount++;
-            if (chunkCount === 1 || chunkCount % 50 === 0) {
-              omDebug(`c${chunkCount}:${chunk.type}`);
-            }
-          },
-          onFinish(event) {
-            omDebug(
-              `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-            );
-          },
-          onAbort(event) {
-            omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
-          },
-          onError({ error }) {
-            omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-          },
-        }),
-      abortSignal,
-    );
+    const generatePromise = agent.generate(prompt, {
+      modelSettings: {
+        ...this.reflectionConfig.modelSettings,
+      },
+      providerOptions: this.reflectionConfig.providerOptions as any,
+      ...(abortSignal ? { abortSignal } : {}),
+      onChunk(chunk) {
+        chunkCount++;
+        if (chunkCount === 1 || chunkCount % 50 === 0) {
+          omDebug(`c${chunkCount}:${chunk.type}`);
+        }
+      },
+      onFinish(event) {
+        omDebug(
+          `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+        );
+      },
+      onAbort(event) {
+        omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
+      },
+      onError({ error }) {
+        omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+      },
+    });
+
+    // Heartbeat timer — pings every 5s to confirm the promise is still pending
+    const heartbeatStart = Date.now();
+    const heartbeat = setInterval(() => {
+      const elapsed = Math.round((Date.now() - heartbeatStart) / 1000);
+      omDebug(`[OM:callReflector] heartbeat: ${elapsed}s elapsed, chunks=${chunkCount}, promptLen=${prompt.length}`);
+    }, 5_000);
+
+    let result = await this.withAbortCheck(async () => {
+      try {
+        return await generatePromise;
+      } finally {
+        clearInterval(heartbeat);
+      }
+    }, abortSignal);
 
     omDebug(
       `[OM:callReflector] first attempt returned: textLen=${result.text?.length}, inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
@@ -2811,11 +2851,12 @@ NOTE: Any messages following this system reminder are newer than your memories.
             record,
           );
 
+        const step0ActivationThreshold = this.observationConfig.blockAfter ?? step0Threshold;
         omDebug(
-          `[OM:step0-activation] pendingTokens=${step0PendingTokens}, threshold=${step0Threshold}, shouldActivate=${step0PendingTokens >= step0Threshold}, allMsgs=${allMsgsForCheck.length}, unobserved=${unobservedForCheck.length}`,
+          `[OM:step0-activation] pendingTokens=${step0PendingTokens}, threshold=${step0Threshold}, blockAfter=${this.observationConfig.blockAfter}, activationThreshold=${step0ActivationThreshold}, shouldActivate=${step0PendingTokens >= step0ActivationThreshold}, allMsgs=${allMsgsForCheck.length}, unobserved=${unobservedForCheck.length}`,
         );
 
-        if (step0PendingTokens >= step0Threshold) {
+        if (step0PendingTokens >= step0ActivationThreshold) {
           const activationResult = await this.tryActivateBufferedObservations(record, lockKey, writer);
 
           if (activationResult.success && activationResult.updatedRecord) {
