@@ -158,7 +158,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
     if (exception instanceof Error) {
       return {
         status: HttpStatus.INTERNAL_SERVER_ERROR,
-        error: exception.message,
+        error: 'An internal error occurred',
         code: 'INTERNAL_ERROR',
       };
     }

@@ -14,7 +14,7 @@ export function getMastraRoutePath(path: string, prefix?: string): string {
 
   // Remove prefix from path for matching
   let routePath = path;
-  if (normalizedPrefix && path.startsWith(normalizedPrefix)) {
+  if (normalizedPrefix && (path === normalizedPrefix || path.startsWith(normalizedPrefix + '/'))) {
     routePath = path.slice(normalizedPrefix.length);
     // Ensure routePath starts with / if not empty
     if (routePath && !routePath.startsWith('/')) {

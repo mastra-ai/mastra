@@ -93,7 +93,7 @@ export class AuthService {
       if (error instanceof UnauthorizedException || error instanceof ForbiddenException) {
         throw error;
       }
-      this.logger.error('Authentication error:', error);
+      this.logger.error('Authentication error:', error instanceof Error ? error.message : 'Unknown error');
       throw new UnauthorizedException('Authentication failed');
     }
   }

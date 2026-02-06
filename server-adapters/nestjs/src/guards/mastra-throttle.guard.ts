@@ -33,6 +33,7 @@ export class MastraThrottleGuard implements CanActivate, OnModuleDestroy {
     @Inject(Reflector) private readonly reflector: Reflector,
   ) {
     this.cleanupInterval = setInterval(() => this.cleanupExpiredEntries(), 60000);
+    this.cleanupInterval.unref();
   }
 
   /**
