@@ -10,7 +10,7 @@
       "gateway": "models.dev"
     },
     "moonshotai-cn": {
-      "url": "https://api.moonshot.cn/v1",
+      "url": "https://api.moonshot.cn/anthropic/v1",
       "apiKeyEnvVar": "MOONSHOT_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Moonshot AI (China)",
@@ -23,7 +23,8 @@
         "kimi-k2.5"
       ],
       "docUrl": "https://platform.moonshot.cn/docs/api/chat",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "firmware": {
       "url": "https://app.firmware.ai/api/v1",
@@ -77,7 +78,7 @@
       "gateway": "models.dev"
     },
     "moonshotai": {
-      "url": "https://api.moonshot.ai/v1",
+      "url": "https://api.moonshot.ai/anthropic/v1",
       "apiKeyEnvVar": "MOONSHOT_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Moonshot AI",
@@ -90,7 +91,8 @@
         "kimi-k2.5"
       ],
       "docUrl": "https://platform.moonshot.ai/docs/api/chat",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "302ai": {
       "url": "https://api.302.ai/v1",
