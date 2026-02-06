@@ -22,6 +22,7 @@ export interface AgentCMSBlockProps {
   placeholder?: string;
   className?: string;
   schema?: JsonSchema;
+  autoFocus?: boolean;
 }
 
 interface AgentCMSBlockContentProps {
@@ -31,6 +32,7 @@ interface AgentCMSBlockContentProps {
   dragHandleProps?: DraggableProvidedDragHandleProps | null;
   onDelete?: () => void;
   schema?: JsonSchema;
+  autoFocus?: boolean;
 }
 
 const AgentCMSBlockContent = ({
@@ -40,6 +42,7 @@ const AgentCMSBlockContent = ({
   dragHandleProps,
   onDelete,
   schema,
+  autoFocus = false,
 }: AgentCMSBlockContentProps) => {
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const hasVariablesSet = Object.keys(schema?.properties ?? {}).length > 0;
@@ -49,8 +52,10 @@ const AgentCMSBlockContent = ({
   const [isRulesOpen, setIsRulesOpen] = useState(ruleCount > 0);
 
   useEffect(() => {
-    editorRef.current?.editor?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, []);
+    if (autoFocus) {
+      editorRef.current?.editor?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [autoFocus]);
 
   const handleContentChange = (content: string) => {
     onBlockChange({ ...block, content });
@@ -94,7 +99,7 @@ const AgentCMSBlockContent = ({
           highlightVariables
           showCopyButton={false}
           schema={schema}
-          autoFocus
+          autoFocus={autoFocus}
         />
 
         {/* Rules disclosure section */}
@@ -136,6 +141,7 @@ export const AgentCMSBlock = ({
   placeholder,
   className,
   schema,
+  autoFocus,
 }: AgentCMSBlockProps) => {
   return (
     <ContentBlock
@@ -151,6 +157,7 @@ export const AgentCMSBlock = ({
           dragHandleProps={dragHandleProps}
           onDelete={onDelete ? () => onDelete(index) : undefined}
           schema={schema}
+          autoFocus={autoFocus}
         />
       )}
     </ContentBlock>
