@@ -47,6 +47,8 @@ import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
+import { toSlug } from '../utils';
+
 import { handleError } from './error';
 import {
   sanitizeBody,
@@ -832,7 +834,7 @@ export const CLONE_AGENT_ROUTE = createRoute({
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
 
-      const cloneId = newId || `${agentId}-clone`;
+      const cloneId = toSlug(newId || `${agentId}-clone`);
 
       const result = await agent.cloneAgent({
         newId: cloneId,
