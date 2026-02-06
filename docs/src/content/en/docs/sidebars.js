@@ -38,13 +38,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'getting-started/mcp-docs-server',
-          label: 'MCP Docs Server',
+          id: 'getting-started/manual-install',
+          label: 'Manual Install',
         },
         {
           type: 'doc',
-          id: 'getting-started/manual-install',
-          label: 'Manual Install',
+          id: 'getting-started/build-with-ai',
+          label: 'Build with AI',
         },
       ],
     },
@@ -276,7 +276,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Workspace',
+      label: 'Workspaces',
       customProps: {
         tags: ['new'],
       },
@@ -642,6 +642,23 @@ const sidebars = {
           type: 'doc',
           id: 'voice/speech-to-speech',
           label: 'Speech to Speech',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Build with AI',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'build-with-ai/skills',
+          label: 'Skills',
+        },
+        {
+          type: 'doc',
+          id: 'build-with-ai/mcp-docs-server',
+          label: 'MCP Docs Server',
         },
       ],
     },
