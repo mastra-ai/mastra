@@ -1,5 +1,5 @@
-import { UseFormReturn } from 'react-hook-form';
-import { Blocks, Eye } from 'lucide-react';
+import { UseFormReturn, Controller } from 'react-hook-form';
+import { Blocks, Play } from 'lucide-react';
 import { useState } from 'react';
 
 import { SectionHeader } from '@/domains/cms';
@@ -15,29 +15,43 @@ interface AgentEditMainProps {
 }
 
 export function AgentEditMainContentBlocks({ form, readOnly: _readOnly = false }: AgentEditMainProps) {
-  const [items, setItems] = useState<Array<string>>([]);
   const schema = form.watch('variables');
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
+  const blocks = form.watch('instructionBlocks') ?? [];
 
   return (
-    <div className="flex flex-col gap-6 h-full p-4">
+    <div className="grid grid-rows-[auto_1fr] gap-6 h-full px-4 pb-4">
       <div className="flex items-center justify-between">
-        <SectionHeader title="Blocks" subtitle="Add instruction blocks to your agent." icon={<Blocks />} />
+        <SectionHeader title="Instruction blocks" subtitle="Add instruction blocks to your agent." icon={<Blocks />} />
 
         <Button type="button" variant="outline" size="sm" onClick={() => setIsPreviewDialogOpen(true)}>
-          <Eye className="h-4 w-4" />
-          Visualize instructions
+          <Play className="h-4 w-4" />
+          Visualize compiled instructions
         </Button>
       </div>
 
-      <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." schema={schema} />
+      <div className="h-full overflow-y-auto">
+        <Controller
+          name="instructionBlocks"
+          control={form.control}
+          defaultValue={[]}
+          render={({ field }) => (
+            <AgentCMSBlocks
+              items={field.value ?? []}
+              onChange={field.onChange}
+              placeholder="Enter content..."
+              schema={schema}
+            />
+          )}
+        />
 
-      <InstructionsPreviewDialog
-        open={isPreviewDialogOpen}
-        onOpenChange={setIsPreviewDialogOpen}
-        instructions={items.join('\n')}
-        variablesSchema={schema}
-      />
+        <InstructionsPreviewDialog
+          open={isPreviewDialogOpen}
+          onOpenChange={setIsPreviewDialogOpen}
+          blocks={blocks}
+          variablesSchema={schema}
+        />
+      </div>
     </div>
   );
 }
