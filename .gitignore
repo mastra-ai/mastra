@@ -51,3 +51,4 @@ storybook-static
 test-output.log
 
 .playwright-mcp
+om-debug.log
