@@ -1585,6 +1585,9 @@ export class MemoryPG extends MemoryStorage {
       bufferedMessageIds: undefined, // Use bufferedObservationChunks instead
       bufferedReflection: row.bufferedReflection || undefined,
       bufferedReflectionTokens: row.bufferedReflectionTokens ? Number(row.bufferedReflectionTokens) : undefined,
+      reflectedObservationLineCount: row.reflectedObservationLineCount
+        ? Number(row.reflectedObservationLineCount)
+        : undefined,
       totalTokensObserved: Number(row.totalTokensObserved || 0),
       observationTokenCount: Number(row.observationTokenCount || 0),
       pendingMessageTokens: Number(row.pendingMessageTokens || 0),

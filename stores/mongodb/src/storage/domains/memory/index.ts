@@ -1143,6 +1143,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       bufferedMessageIds: undefined, // Use bufferedObservationChunks instead
       bufferedReflection: doc.bufferedReflection || undefined,
       bufferedReflectionTokens: doc.bufferedReflectionTokens ? Number(doc.bufferedReflectionTokens) : undefined,
+      reflectedObservationLineCount: doc.reflectedObservationLineCount
+        ? Number(doc.reflectedObservationLineCount)
+        : undefined,
       totalTokensObserved: Number(doc.totalTokensObserved || 0),
       observationTokenCount: Number(doc.observationTokenCount || 0),
       pendingMessageTokens: Number(doc.pendingMessageTokens || 0),
