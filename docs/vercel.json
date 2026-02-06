@@ -447,7 +447,7 @@
     },
     {
       "source": "/docs/deployment/cloud-providers/netlify-deployer",
-      "destination": "/guides/deployment/netlify-deployer",
+      "destination": "/guides/deployment/netlify",
       "permanent": true
     },
     {
