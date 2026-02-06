@@ -29,8 +29,8 @@ type ToAISDKFrom = 'agent' | 'network' | 'workflow';
  * @param {string} [options.lastMessageId] - (Agent only) The ID of the last message in the conversation
  * @param {boolean} [options.sendStart=true] - (Agent only) Whether to send start events. Defaults to true
  * @param {boolean} [options.sendFinish=true] - (Agent only) Whether to send finish events. Defaults to true
- * @param {boolean} [options.sendReasoning] - (Agent only) Whether to include reasoning in the output
- * @param {boolean} [options.sendSources] - (Agent only) Whether to include sources in the output
+ * @param {boolean} [options.sendReasoning] - (Agent and Workflow) Whether to include reasoning in the output
+ * @param {boolean} [options.sendSources] - (Agent and Workflow) Whether to include sources in the output
  * @param {Function} [options.messageMetadata] - (Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks
  * @param {Function} [options.onError] - (Agent only) A function to handle errors during stream conversion. Receives the error and should return a string representation
  *
