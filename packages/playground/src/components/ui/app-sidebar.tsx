@@ -73,6 +73,7 @@ const mainNavigation: NavSection[] = [
         name: 'Workspaces',
         url: '/workspaces',
         icon: <FolderIcon />,
+        isOnMastraPlatform: true,
       },
       {
         name: 'Request Context',
@@ -125,12 +126,6 @@ const secondNavigation: NavSection = {
   key: 'others',
   title: 'Other links',
   links: [
-    {
-      name: 'Mastra APIs',
-      url: '/swagger-ui',
-      icon: <EarthIcon />,
-      isOnMastraPlatform: false,
-    },
     {
       name: 'Documentation',
       url: 'https://mastra.ai/en/docs',
@@ -215,6 +210,17 @@ export function AppSidebar() {
           <MainSidebar.NavSection>
             <MainSidebar.NavSeparator />
             <MainSidebar.NavList>
+              <MainSidebar.NavLink
+                link={{
+                  name: 'Mastra APIs',
+                  url: '/swagger-ui',
+                  icon: <EarthIcon />,
+                  isOnMastraPlatform: false,
+                }}
+                target="_blank"
+                state={state}
+              />
+
               {secondNavigation.links.filter(filterPlatformLink).map(link => {
                 return <MainSidebar.NavLink key={link.name} link={link} state={state} />;
               })}
