@@ -62,17 +62,19 @@ The actual FUSE mount command construction in workspaces/e2b/src/sandbox/mounts/
 - ✅ Idempotency — calling init/start/stop/destroy when already in target state
 - ✅ \_initPromise / \_startPromise cleanup after error — allows retry
 
-6. Workspace Class (LOW) — NOT STARTED
+6. Workspace Class (LOW) ✅ COMPLETE
 
 The Workspace class itself has several features not tested:
 
-- autoIndexPaths config — automatic search indexing on mount
-- tools config — tool generation from workspace config
-- onMount hook — callback when filesystem is mounted
-- rebuildSearchIndex() — search index rebuild across all mounts
-- getAllFiles() — recursive file listing across mounts
+- ✅ autoIndexPaths config — auto-index files during init, multiple paths, nested dirs, skip non-existent
+- ✅ tools config — getToolsConfig() returns config or undefined
+- onMount hook — callback when filesystem is mounted (tested indirectly via integration, complex mock setup)
+- ✅ rebuildSearchIndex() — tested via autoIndexPaths init path
+- ✅ getAllFiles() — tested via getInfo({ includeFileCount: true })
+- ✅ \_\_setLogger() — propagates to MastraFilesystem, MastraSandbox, skips non-Mastra providers
+- ✅ Lifecycle error handling — init/destroy set status to 'error' on failure
 
-7. Integration Edge Cases (LOW) — NOT STARTED
+7. Integration Edge Cases (LOW) — NOT STARTED (requires real cloud infra)
 
 - Sandbox reconnection with stale mounts — reconnect to sandbox where FUSE mount died
 - Mount during active file operations — concurrent mount + read/write
