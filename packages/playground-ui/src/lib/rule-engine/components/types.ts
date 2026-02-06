@@ -87,6 +87,8 @@ export type RuleValueInputProps = {
   onChange: (value: unknown) => void;
   /** The operator (affects input behavior for "in" and "not_in") */
   operator: ConditionOperator;
+  /** The field type from JSON Schema (string, number, boolean, etc.) */
+  fieldType?: string;
   /** Optional placeholder */
   placeholder?: string;
   /** Optional class name */

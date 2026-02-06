@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Trash2 } from 'lucide-react';
+import { X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { ConditionOperator } from '../types';
@@ -7,15 +7,24 @@ import type { ConditionOperator } from '../types';
 import { RuleFieldSelect } from './rule-field-select';
 import { RuleOperatorSelect } from './rule-operator-select';
 import { RuleValueInput } from './rule-value-input';
+import { getFieldOptionAtPath } from './schema-utils';
 import type { RuleRowProps } from './types';
+
 import { IconButton } from '@/ds/components/IconButton';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons';
+
+const PRIMITIVE_TYPES = new Set(['string', 'number', 'boolean', 'integer']);
 
 /**
  * A single rule row with field selector, operator selector, and value input
  */
 export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemove, className }) => {
+  const fieldType = React.useMemo(() => {
+    return getFieldOptionAtPath(schema, rule.field)?.type;
+  }, [schema, rule.field]);
+
+  // Show value input only for primitive types, hide for object/array or when no field selected
+  const showValueInput = fieldType !== undefined && PRIMITIVE_TYPES.has(fieldType);
+
   const handleFieldChange = React.useCallback(
     (field: string) => {
       onChange({ ...rule, field });
@@ -51,19 +60,27 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
   );
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-2', className)}>
-      <RuleFieldSelect schema={schema} value={rule.field} onChange={handleFieldChange} />
+    <div>
+      <IconButton type="button" onClick={onRemove} tooltip="Remove rule" size="sm" variant="ghost">
+        <X />
+      </IconButton>
 
-      <RuleOperatorSelect value={rule.operator} onChange={handleOperatorChange} />
+      <div className={cn('flex flex-wrap items-center gap-2 pt-2', className)}>
+        <RuleFieldSelect schema={schema} value={rule.field} onChange={handleFieldChange} />
 
-      <RuleValueInput value={rule.value} onChange={handleValueChange} operator={rule.operator} />
+        {showValueInput && (
+          <>
+            <RuleOperatorSelect value={rule.operator} onChange={handleOperatorChange} />
 
-      <Button type="button" onClick={onRemove} variant="ghost" size="sm">
-        <Icon>
-          <Trash2 />
-        </Icon>
-        Remove rule
-      </Button>
+            <RuleValueInput
+              value={rule.value}
+              onChange={handleValueChange}
+              operator={rule.operator}
+              fieldType={fieldType}
+            />
+          </>
+        )}
+      </div>
     </div>
   );
 };
