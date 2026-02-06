@@ -91,6 +91,7 @@ export class MemoryLibSQL extends MemoryStorage {
           'bufferedMessageIds',
           'bufferedReflection',
           'bufferedReflectionTokens',
+          'reflectedObservationLineCount',
           'bufferedObservationChunks',
         ],
       });
@@ -1402,6 +1403,9 @@ export class MemoryLibSQL extends MemoryStorage {
       bufferedMessageIds: undefined, // Use bufferedObservationChunks instead
       bufferedReflection: row.bufferedReflection || undefined,
       bufferedReflectionTokens: row.bufferedReflectionTokens ? Number(row.bufferedReflectionTokens) : undefined,
+      reflectedObservationLineCount: row.reflectedObservationLineCount
+        ? Number(row.reflectedObservationLineCount)
+        : undefined,
       totalTokensObserved: Number(row.totalTokensObserved || 0),
       observationTokenCount: Number(row.observationTokenCount || 0),
       pendingMessageTokens: Number(row.pendingMessageTokens || 0),
@@ -2033,37 +2037,14 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
-      // First get current record to merge buffered content
-      const current = await this.#client.execute({
-        sql: `SELECT "bufferedReflection", "bufferedReflectionTokens" FROM "${OM_TABLE}" WHERE id = ?`,
-        args: [input.id],
-      });
-
-      if (!current.rows || current.rows.length === 0) {
-        throw new MastraError({
-          id: createStorageErrorId('LIBSQL', 'UPDATE_BUFFERED_REFLECTION', 'NOT_FOUND'),
-          text: `Observational memory record not found: ${input.id}`,
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { id: input.id },
-        });
-      }
-
-      const row = current.rows[0]!;
-      const existingContent = (row.bufferedReflection as string) || '';
-      const existingTokens = Number(row.bufferedReflectionTokens || 0);
-
-      // Merge content
-      const newContent = existingContent ? `${existingContent}\n\n${input.reflection}` : input.reflection;
-      const newTokens = existingTokens + input.tokenCount;
-
       const result = await this.#client.execute({
         sql: `UPDATE "${OM_TABLE}" SET
           "bufferedReflection" = ?,
           "bufferedReflectionTokens" = ?,
+          "reflectedObservationLineCount" = ?,
           "updatedAt" = ?
         WHERE id = ?`,
-        args: [newContent, newTokens, nowStr, input.id],
+        args: [input.reflection, input.tokenCount, input.reflectedObservationLineCount, nowStr, input.id],
       });
 
       if (result.rowsAffected === 0) {
@@ -2110,10 +2091,10 @@ export class MemoryLibSQL extends MemoryStorage {
       }
 
       const row = current.rows[0]!;
-      const bufferedContent = (row.bufferedReflection as string) || '';
-      const bufferedTokens = Number(row.bufferedReflectionTokens || 0);
+      const bufferedReflection = (row.bufferedReflection as string) || '';
+      const reflectedLineCount = Number(row.reflectedObservationLineCount || 0);
 
-      if (!bufferedContent) {
+      if (!bufferedReflection) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
           text: 'No buffered reflection to swap',
@@ -2123,38 +2104,37 @@ export class MemoryLibSQL extends MemoryStorage {
         });
       }
 
-      // Split by lines for partial activation
-      // activationRatio is a 0-1 float (e.g., 0.5 = 50%)
-      const lines = bufferedContent.split('\n');
-      const totalLines = lines.length;
-      const linesToActivate = Math.ceil(totalLines * input.activationRatio);
+      // Split current activeObservations by the recorded boundary.
+      // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
+      // Lines after reflectedLineCount were added after reflection started → kept as-is.
+      const currentObservations = (row.activeObservations as string) || '';
+      const allLines = currentObservations.split('\n');
+      const unreflectedLines = allLines.slice(reflectedLineCount);
+      const unreflectedContent = unreflectedLines.join('\n').trim();
 
-      const activatedLines = lines.slice(0, linesToActivate);
-      const remainingLines = lines.slice(linesToActivate);
+      // New activeObservations = bufferedReflection + unreflected observations
+      const newObservations = unreflectedContent
+        ? `${bufferedReflection}\n\n${unreflectedContent}`
+        : bufferedReflection;
 
-      const activatedContent = activatedLines.join('\n');
-      const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : null;
-
-      // Calculate approximate token split
-      const activatedTokens = Math.ceil(bufferedTokens * input.activationRatio);
-      const remainingTokens = bufferedTokens - activatedTokens;
-
-      // Create new generation with activated reflection
+      // Create new generation with the merged content.
+      // tokenCount is computed by the processor using its token counter on the combined content.
       const newRecord = await this.createReflectionGeneration({
         currentRecord: input.currentRecord,
-        reflection: activatedContent,
-        tokenCount: activatedTokens,
+        reflection: newObservations,
+        tokenCount: input.tokenCount,
       });
 
-      // Update old record's buffered state with remaining content
+      // Clear buffered state on old record
       const nowStr = new Date().toISOString();
       await this.#client.execute({
         sql: `UPDATE "${OM_TABLE}" SET
-          "bufferedReflection" = ?,
-          "bufferedReflectionTokens" = ?,
+          "bufferedReflection" = NULL,
+          "bufferedReflectionTokens" = NULL,
+          "reflectedObservationLineCount" = NULL,
           "updatedAt" = ?
         WHERE id = ?`,
-        args: [remainingContent, remainingContent ? remainingTokens : null, nowStr, input.currentRecord.id],
+        args: [nowStr, input.currentRecord.id],
       });
 
       return newRecord;

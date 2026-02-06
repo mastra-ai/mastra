@@ -251,8 +251,8 @@ export abstract class MemoryStorage extends StorageDomain {
 
   /**
    * Swap buffered reflection to active observations.
-   * Creates a new generation using the buffered reflection.
-   * Supports partial activation via `activationRatio`.
+   * Creates a new generation where activeObservations = bufferedReflection + unreflected observations.
+   * The `tokenCount` in input is the processor-computed token count for the combined content.
    */
   async swapBufferedReflectionToActive(
     _input: SwapBufferedReflectionToActiveInput,

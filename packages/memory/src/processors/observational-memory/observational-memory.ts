@@ -1,3 +1,5 @@
+import { appendFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -13,6 +15,15 @@ import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
+
+const OM_DEBUG_LOG = join(process.cwd(), 'om-debug.log');
+function omDebug(msg: string) {
+  try {
+    appendFileSync(OM_DEBUG_LOG, `[${new Date().toISOString()}] ${msg}\n`);
+  } catch {
+    // ignore write errors
+  }
+}
 
 import {
   buildObserverSystemPrompt,
@@ -635,13 +646,20 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Triggers once when observation tokens reach `threshold * asyncActivation`.
    * Only allows one buffered reflection at a time.
    */
-  private shouldTriggerAsyncReflection(currentObservationTokens: number, lockKey: string): boolean {
+  private shouldTriggerAsyncReflection(
+    currentObservationTokens: number,
+    lockKey: string,
+    record: ObservationalMemoryRecord,
+  ): boolean {
     if (!this.isAsyncReflectionEnabled()) return false;
 
     const bufferKey = this.getReflectionBufferKey(lockKey);
 
     // Only trigger once - if we've already started buffering, don't trigger again
     if (this.lastBufferedBoundary.has(bufferKey)) return false;
+
+    // Don't re-trigger if the record already has a buffered reflection
+    if (record.bufferedReflection) return false;
 
     // Check if we've crossed the activation threshold
     const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
@@ -2565,6 +2583,9 @@ NOTE: Any messages following this system reminder are newer than your memories.
 
     // Fetch fresh record
     let record = await this.getOrCreateRecord(threadId, resourceId);
+    omDebug(
+      `[OM:step] processInputStep step=${stepNumber}: recordId=${record.id}, genCount=${record.generationCount}, obsTokens=${record.observationTokenCount}, bufferedReflection=${record.bufferedReflection ? 'present (' + record.bufferedReflection.length + ' chars)' : 'empty'}, activeObsLen=${record.activeObservations?.length}`,
+    );
 
     // ════════════════════════════════════════════════════════════════════════
     // STEP 1: LOAD HISTORICAL MESSAGES (step 0 only)
@@ -3633,7 +3654,12 @@ ${formattedMessages}
     _bufferKey: string,
     writer?: ProcessorStreamWriter,
   ): Promise<void> {
-    const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    const fullReflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    // Use asyncActivation * threshold as the compression target.
+    // At ~50% of threshold, observations are already below the full threshold,
+    // so we need a tighter target to ensure actual compression happens.
+    const asyncActivation = this.reflectionConfig.asyncActivation ?? 1;
+    const compressionTarget = Math.ceil(fullReflectThreshold * asyncActivation);
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const observationTokens = record.observationTokenCount ?? 0;
@@ -3654,24 +3680,41 @@ ${formattedMessages}
       void writer.custom(startMarker).catch(() => {});
     }
 
-    // Call reflector (skip continuation hints for async buffering)
+    // Record the line count of activeObservations at the time of reflection.
+    // At activation time, lines 0..lineCount are replaced by the reflection,
+    // and any lines added after are appended as unreflected observations.
+    const activeObservations = record.activeObservations ?? '';
+    const reflectedObservationLineCount = activeObservations.split('\n').length;
+
+    omDebug(
+      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${record.id}, observationTokens=${observationTokens}, compressionTarget=${compressionTarget} (${asyncActivation} * ${fullReflectThreshold}), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
+    );
+
+    // Call reflector with the tighter compression target (asyncActivation * threshold)
     const reflectResult = await this.callReflector(
-      record.activeObservations,
+      activeObservations,
+      undefined, // No manual prompt
       undefined, // No stream context for background ops
-      undefined, // No stream context
-      reflectThreshold,
+      compressionTarget,
       undefined, // No abort signal for background ops
       true, // Skip continuation hints for async buffering
     );
 
     const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
+    omDebug(
+      `[OM:reflect] doAsyncBufferedReflection: reflector returned ${reflectionTokenCount} tokens (${reflectResult.observations?.length} chars), saving to recordId=${record.id}`,
+    );
 
-    // Store to bufferedReflection
+    // Store to bufferedReflection along with the line boundary
     await this.storage.updateBufferedReflection({
       id: record.id,
       reflection: reflectResult.observations,
       tokenCount: reflectionTokenCount,
+      reflectedObservationLineCount,
     });
+    omDebug(
+      `[OM:reflect] doAsyncBufferedReflection: bufferedReflection saved with lineCount=${reflectedObservationLineCount}`,
+    );
 
     // Emit buffering end marker
     if (writer) {
@@ -3701,8 +3744,13 @@ ${formattedMessages}
     lockKey: string,
     writer?: ProcessorStreamWriter,
   ): Promise<boolean> {
+    omDebug(
+      `[OM:reflect] tryActivateBufferedReflection: recordId=${record.id}, hasBufferedReflection=${!!record.bufferedReflection}, bufferedReflectionLen=${record.bufferedReflection?.length ?? 0}`,
+    );
+
     // Check if there's buffered content to activate
     if (!record.bufferedReflection) {
+      omDebug(`[OM:reflect] tryActivateBufferedReflection: no buffered reflection, returning false`);
       return false;
     }
 
@@ -3712,6 +3760,7 @@ ${formattedMessages}
     // Use 60s timeout - reflection can take a while for large observation batches
     const asyncOp = this.asyncBufferingOps.get(bufferKey);
     if (asyncOp) {
+      omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
       try {
         await Promise.race([
           asyncOp,
@@ -3724,25 +3773,51 @@ ${formattedMessages}
 
     // Re-fetch record to get latest buffered content
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    omDebug(
+      `[OM:reflect] tryActivateBufferedReflection: freshRecord.id=${freshRecord?.id}, freshBufferedReflection=${freshRecord?.bufferedReflection ? 'present (' + freshRecord.bufferedReflection.length + ' chars)' : 'empty'}, freshObsTokens=${freshRecord?.observationTokenCount}`,
+    );
+
     if (!freshRecord?.bufferedReflection) {
+      omDebug(`[OM:reflect] tryActivateBufferedReflection: no buffered reflection after re-fetch, returning false`);
       return false;
     }
 
     const beforeTokens = freshRecord.observationTokenCount ?? 0;
 
-    // Perform partial swap with asyncActivation ratio
+    // Compute the combined token count for the new activeObservations.
+    // Replicate the merge logic: bufferedReflection + unreflected lines after the boundary.
+    const reflectedLineCount = freshRecord.reflectedObservationLineCount ?? 0;
+    const currentObservations = freshRecord.activeObservations ?? '';
+    const allLines = currentObservations.split('\n');
+    const unreflectedLines = allLines.slice(reflectedLineCount);
+    const unreflectedContent = unreflectedLines.join('\n').trim();
+    const combinedObservations = unreflectedContent
+      ? `${freshRecord.bufferedReflection}\n\n${unreflectedContent}`
+      : freshRecord.bufferedReflection!;
+    const combinedTokenCount = this.tokenCounter.countObservations(combinedObservations);
+
+    // Swap buffered reflection to active. The storage adapter uses the stored
+    // reflectedObservationLineCount to split: reflected lines → replaced by bufferedReflection,
+    // unreflected lines (added after reflection) → appended as-is.
+    omDebug(
+      `[OM:reflect] tryActivateBufferedReflection: activating, beforeTokens=${beforeTokens}, combinedTokenCount=${combinedTokenCount}, reflectedLineCount=${reflectedLineCount}, unreflectedLines=${unreflectedLines.length}`,
+    );
     await this.storage.swapBufferedReflectionToActive({
       currentRecord: freshRecord,
-      activationRatio: this.reflectionConfig.asyncActivation ?? 1,
+      tokenCount: combinedTokenCount,
     });
 
     // Reset lastBufferedBoundary so new reflection buffering can start fresh
     this.lastBufferedBoundary.delete(bufferKey);
 
     // Emit activation marker using the original buffering cycleId so the UI can match it
+    const afterRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    const afterTokens = afterRecord?.observationTokenCount ?? 0;
+    omDebug(
+      `[OM:reflect] tryActivateBufferedReflection: activation complete! beforeTokens=${beforeTokens}, afterTokens=${afterTokens}, newRecordId=${afterRecord?.id}, newGenCount=${afterRecord?.generationCount}`,
+    );
+
     if (writer) {
-      const afterRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
-      const afterTokens = afterRecord?.observationTokenCount ?? 0;
       const originalCycleId = this.reflectionBufferCycleIds.get(bufferKey);
       const activationMarker = this.createActivationMarker({
         cycleId: originalCycleId ?? `reflect-act-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
@@ -4272,23 +4347,35 @@ ${formattedMessages}
     const lockKey = this.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
 
+    omDebug(
+      `[OM:reflect] maybeAsyncReflect: observationTokens=${observationTokens}, reflectThreshold=${reflectThreshold}, isReflecting=${record.isReflecting}, bufferedReflection=${record.bufferedReflection ? 'present (' + record.bufferedReflection.length + ' chars)' : 'empty'}, recordId=${record.id}, genCount=${record.generationCount}`,
+    );
+
     // Below threshold: trigger background buffering if at the right interval
     if (observationTokens < reflectThreshold) {
-      if (this.shouldTriggerAsyncReflection(observationTokens, lockKey)) {
+      const shouldTrigger = this.shouldTriggerAsyncReflection(observationTokens, lockKey, record);
+      omDebug(`[OM:reflect] below threshold: shouldTrigger=${shouldTrigger}`);
+      if (shouldTrigger) {
         this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer);
       }
       return;
     }
 
     // At/above threshold: try to activate buffered reflection
-    if (record.isReflecting) return;
+    if (record.isReflecting) {
+      omDebug(`[OM:reflect] skipping - already reflecting`);
+      return;
+    }
 
+    omDebug(`[OM:reflect] at/above threshold, trying activation...`);
     const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer);
+    omDebug(`[OM:reflect] activationSuccess=${activationSuccess}`);
     if (activationSuccess) return;
 
     // No buffered reflection available — start one now in the background.
     // This can happen when observations jump past the threshold via activation
     // without any background reflection having been triggered beforehand.
+    omDebug(`[OM:reflect] no buffered reflection, starting background reflection...`);
     this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer);
   }
 
@@ -4314,7 +4401,7 @@ ${formattedMessages}
     // ════════════════════════════════════════════════════════════════════════
     if (this.isAsyncReflectionEnabled() && observationTokens < reflectThreshold) {
       // Check if we've crossed the asyncActivation threshold
-      if (this.shouldTriggerAsyncReflection(observationTokens, lockKey)) {
+      if (this.shouldTriggerAsyncReflection(observationTokens, lockKey, record)) {
         // Start background reflection (fire-and-forget)
         this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer);
       }

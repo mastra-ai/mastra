@@ -628,6 +628,12 @@ export interface ObservationalMemoryRecord {
   bufferedReflection?: string;
   /** Token count of buffered reflection */
   bufferedReflectionTokens?: number;
+  /**
+   * The number of lines in activeObservations that were reflected on
+   * when the buffered reflection was created. Used at activation time
+   * to separate reflected vs unreflected observations.
+   */
+  reflectedObservationLineCount?: number;
 
   /**
    * Message IDs observed in the current generation.
@@ -760,20 +766,26 @@ export interface UpdateBufferedReflectionInput {
   reflection: string;
   /** Token count of the buffered reflection */
   tokenCount: number;
+  /**
+   * The number of lines in activeObservations at the time of reflection.
+   * Used at activation time to know which observations were already reflected on.
+   */
+  reflectedObservationLineCount: number;
 }
 
 /**
  * Input for swapping buffered reflection to active (creates new generation).
- * Supports partial activation via `activationRatio`.
+ * Uses the stored `reflectedObservationLineCount` to determine which observations
+ * were already reflected on, replaces those with the buffered reflection,
+ * and appends any unreflected observations that were added after the reflection started.
  */
 export interface SwapBufferedReflectionToActiveInput {
   currentRecord: ObservationalMemoryRecord;
   /**
-   * Ratio of buffered reflection to activate (0-1 float).
-   * If set to 1, all buffered reflection is used.
-   * If less than 1, only that ratio is used, the rest stays buffered.
+   * Token count for the combined new activeObservations (bufferedReflection + unreflected).
+   * Computed by the processor using its token counter before calling the adapter.
    */
-  activationRatio: number;
+  tokenCount: number;
 }
 
 /**

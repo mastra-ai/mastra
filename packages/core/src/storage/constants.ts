@@ -149,6 +149,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   bufferedMessageIds: { type: 'jsonb', nullable: true }, // JSON array of message IDs in the buffer
   bufferedReflection: { type: 'text', nullable: true }, // JSON string of buffered reflection content
   bufferedReflectionTokens: { type: 'integer', nullable: true }, // Token count of buffered reflection
+  reflectedObservationLineCount: { type: 'integer', nullable: true }, // Number of observation lines that were reflected on during async buffering
   bufferedObservationChunks: { type: 'jsonb', nullable: true }, // JSON array of BufferedObservationChunk objects
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },

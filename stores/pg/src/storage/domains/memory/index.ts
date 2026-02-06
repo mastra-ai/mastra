@@ -2309,10 +2309,10 @@ export class MemoryPG extends MemoryStorage {
         });
       }
 
-      const bufferedContent = record.bufferedReflection || '';
-      const bufferedTokens = record.bufferedReflectionTokens || 0;
+      const bufferedReflection = record.bufferedReflection || '';
+      const reflectedLineCount = Number(record.reflectedObservationLineCount || 0);
 
-      if (!bufferedContent) {
+      if (!bufferedReflection) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
           text: 'No buffered reflection to swap',
@@ -2322,39 +2322,38 @@ export class MemoryPG extends MemoryStorage {
         });
       }
 
-      // Split by lines for partial activation
-      const lines = bufferedContent.split('\n');
-      const totalLines = lines.length;
-      // activationRatio is a 0-1 float (e.g., 0.5 = 50%)
-      const linesToActivate = Math.ceil(totalLines * input.activationRatio);
+      // Split current activeObservations by the recorded boundary.
+      // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
+      // Lines after reflectedLineCount were added after reflection started → kept as-is.
+      const currentObservations = (record.activeObservations as string) || '';
+      const allLines = currentObservations.split('\n');
+      const unreflectedLines = allLines.slice(reflectedLineCount);
+      const unreflectedContent = unreflectedLines.join('\n').trim();
 
-      const activatedLines = lines.slice(0, linesToActivate);
-      const remainingLines = lines.slice(linesToActivate);
+      // New activeObservations = bufferedReflection + unreflected observations
+      const newObservations = unreflectedContent
+        ? `${bufferedReflection}\n\n${unreflectedContent}`
+        : bufferedReflection;
 
-      const activatedContent = activatedLines.join('\n');
-      const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : null;
-
-      // Calculate approximate token split
-      const activatedTokens = Math.ceil(bufferedTokens * input.activationRatio);
-      const remainingTokens = bufferedTokens - activatedTokens;
-
-      // Create new generation with activated reflection
+      // Create new generation with the merged content.
+      // tokenCount is computed by the processor using its token counter on the combined content.
       const newRecord = await this.createReflectionGeneration({
         currentRecord: input.currentRecord,
-        reflection: activatedContent,
-        tokenCount: activatedTokens,
+        reflection: newObservations,
+        tokenCount: input.tokenCount,
       });
 
-      // Update old record's buffered state with remaining content
+      // Clear buffered state on old record
       const nowStr = new Date().toISOString();
       await this.#db.client.query(
         `UPDATE ${tableName} SET
-          "bufferedReflection" = $1,
-          "bufferedReflectionTokens" = $2,
-          "updatedAt" = $3,
-          "updatedAtZ" = $4
-        WHERE id = $5`,
-        [remainingContent, remainingContent ? remainingTokens : null, nowStr, nowStr, input.currentRecord.id],
+          "bufferedReflection" = NULL,
+          "bufferedReflectionTokens" = NULL,
+          "reflectedObservationLineCount" = NULL,
+          "updatedAt" = $1,
+          "updatedAtZ" = $2
+        WHERE id = $3`,
+        [nowStr, nowStr, input.currentRecord.id],
       );
 
       return newRecord;

@@ -1048,26 +1048,20 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
-    const { id, reflection, tokenCount } = input;
+    const { id, reflection, tokenCount, reflectedObservationLineCount } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
-    // Append to existing buffered reflection if present
-    if (record.bufferedReflection) {
-      record.bufferedReflection = `${record.bufferedReflection}\n\n${reflection}`;
-    } else {
-      record.bufferedReflection = reflection;
-    }
-
-    // Track buffered reflection token count (cumulative)
-    record.bufferedReflectionTokens = (record.bufferedReflectionTokens ?? 0) + tokenCount;
+    record.bufferedReflection = reflection;
+    record.bufferedReflectionTokens = tokenCount;
+    record.reflectedObservationLineCount = reflectedObservationLineCount;
     record.updatedAt = new Date();
   }
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
-    const { currentRecord, activationRatio } = input;
+    const { currentRecord } = input;
     const record = this.findObservationalMemoryRecordById(currentRecord.id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${currentRecord.id}`);
@@ -1077,34 +1071,32 @@ export class InMemoryMemory extends MemoryStorage {
       throw new Error('No buffered reflection to swap');
     }
 
-    const bufferedContent = record.bufferedReflection;
-    const bufferedTokens = record.bufferedReflectionTokens ?? 0;
+    const bufferedReflection = record.bufferedReflection;
+    const reflectedLineCount = record.reflectedObservationLineCount ?? 0;
 
-    // For simplicity in InMemory, we split by lines
-    const lines = bufferedContent.split('\n');
-    const totalLines = lines.length;
-    const linesToActivate = Math.ceil((totalLines * activationRatio) / 100);
+    // Split current activeObservations by the boundary line count.
+    // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
+    // Lines after reflectedLineCount were added after reflection started → kept as-is.
+    const currentObservations = record.activeObservations ?? '';
+    const allLines = currentObservations.split('\n');
+    const unreflectedLines = allLines.slice(reflectedLineCount);
+    const unreflectedContent = unreflectedLines.join('\n').trim();
 
-    const activatedLines = lines.slice(0, linesToActivate);
-    const remainingLines = lines.slice(linesToActivate);
+    // New activeObservations = bufferedReflection + unreflected observations
+    const newObservations = unreflectedContent ? `${bufferedReflection}\n\n${unreflectedContent}` : bufferedReflection;
 
-    const activatedContent = activatedLines.join('\n');
-    const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : undefined;
-
-    // Calculate approximate token split
-    const activatedTokens = Math.ceil((bufferedTokens * activationRatio) / 100);
-    const remainingTokens = bufferedTokens - activatedTokens;
-
-    // Create a new generation with the activated reflection content
+    // Create a new generation with the merged content.
+    // tokenCount is computed by the processor using its token counter on the combined content.
     const newRecord = await this.createReflectionGeneration({
       currentRecord: record,
-      reflection: activatedContent,
-      tokenCount: activatedTokens,
+      reflection: newObservations,
+      tokenCount: input.tokenCount,
     });
 
-    // Update the old record's buffered state with remaining content
-    record.bufferedReflection = remainingContent;
-    record.bufferedReflectionTokens = remainingContent ? remainingTokens : undefined;
+    // Clear buffered state on old record
+    record.bufferedReflection = undefined;
+    record.bufferedReflectionTokens = undefined;
+    record.reflectedObservationLineCount = undefined;
 
     return newRecord;
   }

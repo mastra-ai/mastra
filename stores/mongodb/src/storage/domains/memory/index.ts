@@ -1775,10 +1775,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         });
       }
 
-      const bufferedContent = (doc.bufferedReflection as string) || '';
-      const bufferedTokens = Number(doc.bufferedReflectionTokens || 0);
+      const bufferedReflection = (doc.bufferedReflection as string) || '';
+      const reflectedLineCount = Number(doc.reflectedObservationLineCount || 0);
 
-      if (!bufferedContent) {
+      if (!bufferedReflection) {
         throw new MastraError({
           id: createStorageErrorId('MONGODB', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
           text: 'No buffered reflection to swap',
@@ -1788,36 +1788,35 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         });
       }
 
-      // Split by lines for partial activation
-      const lines = bufferedContent.split('\n');
-      const totalLines = lines.length;
-      // activationRatio is a 0-1 float (e.g., 0.5 = 50%)
-      const linesToActivate = Math.ceil(totalLines * input.activationRatio);
+      // Split current activeObservations by the recorded boundary.
+      // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
+      // Lines after reflectedLineCount were added after reflection started → kept as-is.
+      const currentObservations = (doc.activeObservations as string) || '';
+      const allLines = currentObservations.split('\n');
+      const unreflectedLines = allLines.slice(reflectedLineCount);
+      const unreflectedContent = unreflectedLines.join('\n').trim();
 
-      const activatedLines = lines.slice(0, linesToActivate);
-      const remainingLines = lines.slice(linesToActivate);
+      // New activeObservations = bufferedReflection + unreflected observations
+      const newObservations = unreflectedContent
+        ? `${bufferedReflection}\n\n${unreflectedContent}`
+        : bufferedReflection;
 
-      const activatedContent = activatedLines.join('\n');
-      const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : null;
-
-      // Calculate approximate token split
-      const activatedTokens = Math.ceil(bufferedTokens * input.activationRatio);
-      const remainingTokens = bufferedTokens - activatedTokens;
-
-      // Create new generation with activated reflection
+      // Create new generation with the merged content.
+      // tokenCount is computed by the processor using its token counter on the combined content.
       const newRecord = await this.createReflectionGeneration({
         currentRecord: input.currentRecord,
-        reflection: activatedContent,
-        tokenCount: activatedTokens,
+        reflection: newObservations,
+        tokenCount: input.tokenCount,
       });
 
-      // Update old record's buffered state with remaining content
+      // Clear buffered state on old record
       await collection.updateOne(
         { id: input.currentRecord.id },
         {
           $set: {
-            bufferedReflection: remainingContent,
-            bufferedReflectionTokens: remainingContent ? remainingTokens : null,
+            bufferedReflection: null,
+            bufferedReflectionTokens: null,
+            reflectedObservationLineCount: null,
             updatedAt: new Date(),
           },
         },

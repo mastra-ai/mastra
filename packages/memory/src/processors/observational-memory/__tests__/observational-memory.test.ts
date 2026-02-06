@@ -3275,7 +3275,7 @@ describe('Async Buffering Storage Operations', () => {
   });
 
   describe('buffered reflection', () => {
-    it('should store buffered reflection content', async () => {
+    it('should store buffered reflection content and line count', async () => {
       const initial = await storage.initializeObservationalMemory({
         threadId,
         resourceId,
@@ -3287,14 +3287,16 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         reflection: '- 🔴 Reflected: User prefers TypeScript',
         tokenCount: 30,
+        reflectedObservationLineCount: 5,
       });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.bufferedReflection).toBe('- 🔴 Reflected: User prefers TypeScript');
       expect(record?.bufferedReflectionTokens).toBe(30);
+      expect(record?.reflectedObservationLineCount).toBe(5);
     });
 
-    it('should activate buffered reflection into new generation', async () => {
+    it('should activate buffered reflection and keep unreflected observations', async () => {
       const initial = await storage.initializeObservationalMemory({
         threadId,
         resourceId,
@@ -3302,7 +3304,7 @@ describe('Async Buffering Storage Operations', () => {
         config: {},
       });
 
-      // Set active observations
+      // Set active observations (3 lines)
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Observation 1\n- 🟡 Observation 2\n- 🟡 Observation 3',
@@ -3310,23 +3312,154 @@ describe('Async Buffering Storage Operations', () => {
         lastObservedAt: new Date(),
       });
 
-      // Buffer reflection
+      // Buffer reflection that covers the first 2 lines
       await storage.updateBufferedReflection({
         id: initial.id,
-        reflection: '- 🔴 Condensed reflection',
+        reflection: '- 🔴 Condensed reflection of obs 1 and 2',
         tokenCount: 50,
+        reflectedObservationLineCount: 2,
       });
 
       // Activate buffered reflection
       await storage.swapBufferedReflectionToActive({
         currentRecord: (await storage.getObservationalMemory(threadId, resourceId))!,
-        activationRatio: 1,
+        tokenCount: 100, // Combined token count for reflection + unreflected
       });
 
-      // New generation should exist with reflected content
+      // New generation should have reflection + unreflected line 3
       const current = await storage.getObservationalMemory(threadId, resourceId);
-      expect(current?.activeObservations).toBe('- 🔴 Condensed reflection');
       expect(current?.originType).toBe('reflection');
+      expect(current?.activeObservations).toContain('Condensed reflection of obs 1 and 2');
+      expect(current?.activeObservations).toContain('Observation 3');
+      // Line 1 and 2 should NOT appear (they were reflected)
+      expect(current?.activeObservations).not.toContain('Observation 1');
+      expect(current?.activeObservations).not.toContain('Observation 2');
+    });
+
+    it('should activate all observations when reflectedObservationLineCount covers all lines', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      const observations = '- 🔴 Observation 1\n- 🟡 Observation 2\n- 🟡 Observation 3';
+      const lineCount = observations.split('\n').length; // 3
+
+      // Set active observations
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations,
+        tokenCount: 300,
+        lastObservedAt: new Date(),
+      });
+
+      // Buffer reflection covering ALL lines
+      await storage.updateBufferedReflection({
+        id: initial.id,
+        reflection: '- 🔴 Full condensed reflection',
+        tokenCount: 50,
+        reflectedObservationLineCount: lineCount,
+      });
+
+      // Activate
+      await storage.swapBufferedReflectionToActive({
+        currentRecord: (await storage.getObservationalMemory(threadId, resourceId))!,
+        tokenCount: 50, // Combined token count (all lines reflected, no unreflected)
+      });
+
+      const current = await storage.getObservationalMemory(threadId, resourceId);
+      expect(current?.activeObservations).toBe('- 🔴 Full condensed reflection');
+      expect(current?.originType).toBe('reflection');
+    });
+
+    it('should handle observations added after reflection started', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Start with 3 lines of observations
+      const originalObs = '- 🔴 Original 1\n- 🟡 Original 2\n- 🟡 Original 3';
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: originalObs,
+        tokenCount: 300,
+        lastObservedAt: new Date(),
+      });
+
+      // Reflection runs on those 3 lines (reflectedObservationLineCount=3)
+      await storage.updateBufferedReflection({
+        id: initial.id,
+        reflection: '- 🔴 Reflected summary of originals',
+        tokenCount: 50,
+        reflectedObservationLineCount: 3,
+      });
+
+      // BETWEEN reflection and activation, new observations were added (lines 4 and 5)
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: originalObs + '\n- 🟢 New obs after reflection\n- 🟢 Another new obs',
+        tokenCount: 500,
+        lastObservedAt: new Date(),
+      });
+
+      // Now activate - should merge reflection + new unreflected observations
+      const recordBeforeSwap = await storage.getObservationalMemory(threadId, resourceId);
+      await storage.swapBufferedReflectionToActive({
+        currentRecord: recordBeforeSwap!,
+        tokenCount: 200, // Combined token count for reflection + unreflected new obs
+      });
+
+      const current = await storage.getObservationalMemory(threadId, resourceId);
+      expect(current?.originType).toBe('reflection');
+      // Should contain the reflection
+      expect(current?.activeObservations).toContain('Reflected summary of originals');
+      // Should contain new observations added after reflection
+      expect(current?.activeObservations).toContain('New obs after reflection');
+      expect(current?.activeObservations).toContain('Another new obs');
+      // Should NOT contain the original observations (they were reflected)
+      expect(current?.activeObservations).not.toContain('Original 1');
+      expect(current?.activeObservations).not.toContain('Original 2');
+      expect(current?.activeObservations).not.toContain('Original 3');
+    });
+
+    it('should clear buffered state on old record after activation', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Obs 1\n- 🟡 Obs 2',
+        tokenCount: 200,
+        lastObservedAt: new Date(),
+      });
+
+      await storage.updateBufferedReflection({
+        id: initial.id,
+        reflection: '- 🔴 Condensed',
+        tokenCount: 30,
+        reflectedObservationLineCount: 2,
+      });
+
+      await storage.swapBufferedReflectionToActive({
+        currentRecord: (await storage.getObservationalMemory(threadId, resourceId))!,
+        tokenCount: 30, // Combined token count (all lines reflected)
+      });
+
+      // The OLD record (initial) should have cleared buffered state
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 10);
+      const oldRecord = history.find(r => r.id === initial.id);
+      expect(oldRecord?.bufferedReflection).toBeUndefined();
+      expect(oldRecord?.bufferedReflectionTokens).toBeUndefined();
+      expect(oldRecord?.reflectedObservationLineCount).toBeUndefined();
     });
   });
 });
@@ -3795,6 +3928,8 @@ describe('Async Buffering Processor Logic', () => {
   });
 
   describe('shouldTriggerAsyncReflection', () => {
+    const mockRecord = { bufferedReflection: undefined } as any;
+
     it('should return false when async reflection is not enabled', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
@@ -3804,7 +3939,7 @@ describe('Async Buffering Processor Logic', () => {
         reflection: { observationTokens: 20000 }, // No asyncActivation
       });
 
-      expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test')).toBe(false);
+      expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', mockRecord)).toBe(false);
     });
 
     it('should trigger when observation tokens reach threshold * asyncActivation', () => {
@@ -3824,10 +3959,30 @@ describe('Async Buffering Processor Logic', () => {
       });
 
       // Below activation point
-      expect((om as any).shouldTriggerAsyncReflection(5000, 'thread:test')).toBe(false);
+      expect((om as any).shouldTriggerAsyncReflection(5000, 'thread:test', mockRecord)).toBe(false);
 
       // At activation point (20000 * 0.5 = 10000)
-      expect((om as any).shouldTriggerAsyncReflection(10000, 'thread:test')).toBe(true);
+      expect((om as any).shouldTriggerAsyncReflection(10000, 'thread:test', mockRecord)).toBe(true);
+    });
+
+    it('should not trigger when record already has bufferedReflection', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferEvery: 10000,
+          asyncActivation: 0.7,
+        },
+        reflection: {
+          observationTokens: 20000,
+          asyncActivation: 0.5,
+        },
+      });
+
+      const recordWithBuffer = { bufferedReflection: 'some existing reflection' } as any;
+      expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', recordWithBuffer)).toBe(false);
     });
 
     it('should only trigger once per buffer key', () => {
@@ -3850,13 +4005,13 @@ describe('Async Buffering Processor Logic', () => {
       const reflectionKey = (om as any).getReflectionBufferKey(lockKey);
 
       // First trigger
-      expect((om as any).shouldTriggerAsyncReflection(15000, lockKey)).toBe(true);
+      expect((om as any).shouldTriggerAsyncReflection(15000, lockKey, mockRecord)).toBe(true);
 
       // Simulate that reflection was started (sets lastBufferedBoundary)
       (om as any).lastBufferedBoundary.set(reflectionKey, 15000);
 
       // Should not trigger again
-      expect((om as any).shouldTriggerAsyncReflection(18000, lockKey)).toBe(false);
+      expect((om as any).shouldTriggerAsyncReflection(18000, lockKey, mockRecord)).toBe(false);
     });
   });
 
