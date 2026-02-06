@@ -558,6 +558,11 @@ const sidebars = {
                 },
                 {
                   type: 'doc',
+                  id: 'observability/tracing/exporters/langwatch',
+                  label: 'LangWatch',
+                },
+                {
+                  type: 'doc',
                   id: 'observability/tracing/exporters/langsmith',
                   label: 'LangSmith',
                 },

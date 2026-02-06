@@ -1,0 +1,152 @@
+---
+title: "LangWatch Exporter | Tracing | Observability"
+description: "Send traces to LangWatch for LLM monitoring, evaluations, and analytics"
+packages:
+  - "@mastra/langwatch"
+  - "@mastra/observability"
+---
+
+# LangWatch Exporter
+
+[LangWatch](https://langwatch.ai) is an LLM observability platform for monitoring, evaluating, and improving AI applications. The LangWatch exporter sends your traces via OTLP, providing insights into model performance, token usage, and tool executions.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/langwatch@beta
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **LangWatch Account**: Sign up at [langwatch.ai](https://langwatch.ai)
+2. **API Key**: Get your API key from your LangWatch project settings
+3. **Environment Variables**: Set your configuration
+
+```bash title=".env"
+LANGWATCH_API_KEY=your-api-key
+```
+
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LangwatchExporter } from "@mastra/langwatch";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langwatch: {
+        serviceName: "my-service",
+        exporters: [new LangwatchExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LangwatchExporter } from "@mastra/langwatch";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langwatch: {
+        serviceName: "my-service",
+        exporters: [
+          new LangwatchExporter({
+            apiKey: process.env.LANGWATCH_API_KEY!,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## Configuration Options
+
+### Complete Configuration
+
+```typescript
+new LangwatchExporter({
+  // Required settings
+  apiKey: process.env.LANGWATCH_API_KEY!, // LangWatch API key
+
+  // Optional settings
+  endpoint: "https://app.langwatch.ai/api/otel/v1/traces", // Custom endpoint for self-hosted instances
+
+  // Diagnostic logging
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+## Self-Hosted Instances
+
+If you are running a self-hosted LangWatch instance, override the endpoint:
+
+```typescript
+new LangwatchExporter({
+  apiKey: process.env.LANGWATCH_API_KEY!,
+  endpoint: "https://your-langwatch-instance.example.com/api/otel/v1/traces",
+});
+```
+
+Or via environment variable:
+
+```bash title=".env"
+LANGWATCH_API_KEY=your-api-key
+LANGWATCH_ENDPOINT=https://your-langwatch-instance.example.com/api/otel/v1/traces
+```
+
+## How It Works
+
+The LangWatch exporter extends the [OpenTelemetry exporter](/docs/observability/tracing/exporters/otel) with pre-configured settings for LangWatch:
+
+- **Protocol**: OTLP/HTTP (protobuf)
+- **Endpoint**: `https://app.langwatch.ai/api/otel/v1/traces`
+- **Authentication**: Bearer token via `Authorization` header
+
+All Mastra span types (agent runs, LLM generations, tool calls, workflow steps) are automatically captured and sent to LangWatch using standard OpenTelemetry semantic conventions.
+
+## Migrating from Manual OtelExporter
+
+If you were previously using the manual OtelExporter configuration for LangWatch:
+
+```typescript
+// Before (manual)
+import { OtelExporter } from "@mastra/otel-exporter";
+
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: "https://app.langwatch.ai/api/otel/v1/traces",
+      protocol: "http/protobuf",
+      headers: {
+        Authorization: `Bearer ${process.env.LANGWATCH_API_KEY}`,
+      },
+    },
+  },
+});
+
+// After (dedicated exporter)
+import { LangwatchExporter } from "@mastra/langwatch";
+
+new LangwatchExporter();
+```
+
+## Related
+
+- [Tracing Overview](/docs/observability/tracing/overview)
+- [LangWatch Documentation](https://langwatch.ai/docs)
+- [OpenTelemetry Exporter](/docs/observability/tracing/exporters/otel)
