@@ -34,7 +34,11 @@ export function createErrorHandlingTests(getContext: () => TestContext): void {
       });
 
       it('throws FileNotFoundError when deleting non-existent file without force', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
+
+        // S3's DeleteObject is idempotent - it succeeds for non-existent keys
+        if (!capabilities.deleteThrowsOnMissing) return;
+
         const path = `${getTestPath()}/does-not-exist.txt`;
 
         await expect(fs.deleteFile(path)).rejects.toThrow(FileNotFoundError);
@@ -110,6 +114,7 @@ export function createErrorHandlingTests(getContext: () => TestContext): void {
         const { fs, getTestPath } = getContext();
         const path = `${getTestPath()}/non-empty`;
 
+        // Create directory with a file so it exists on object stores
         await fs.mkdir(path);
         await fs.writeFile(`${path}/file.txt`, 'content');
 
@@ -117,7 +122,11 @@ export function createErrorHandlingTests(getContext: () => TestContext): void {
       });
 
       it('throws when reading directory as file', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
+
+        // Object stores don't support empty directories
+        if (!capabilities.supportsEmptyDirectories) return;
+
         const path = `${getTestPath()}/a-directory`;
 
         await fs.mkdir(path);

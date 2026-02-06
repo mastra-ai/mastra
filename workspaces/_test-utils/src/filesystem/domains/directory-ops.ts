@@ -38,7 +38,11 @@ export function createDirectoryOpsTests(getContext: () => TestContext): void {
 
     describe('mkdir', () => {
       it('creates a directory', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
+
+        // Object stores don't support empty directories - mkdir is a no-op
+        if (!capabilities.supportsEmptyDirectories) return;
+
         const path = `${getTestPath()}/new-dir`;
 
         await fs.mkdir(path);
@@ -48,7 +52,11 @@ export function createDirectoryOpsTests(getContext: () => TestContext): void {
       });
 
       it('creates nested directories with recursive option', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
+
+        // Object stores don't support empty directories
+        if (!capabilities.supportsEmptyDirectories) return;
+
         const path = `${getTestPath()}/a/b/c/d`;
 
         await fs.mkdir(path, { recursive: true });
@@ -58,7 +66,11 @@ export function createDirectoryOpsTests(getContext: () => TestContext): void {
       });
 
       it('does not throw if directory already exists with recursive', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
+
+        // Object stores don't support empty directories
+        if (!capabilities.supportsEmptyDirectories) return;
+
         const path = `${getTestPath()}/existing-dir`;
 
         await fs.mkdir(path, { recursive: true });
@@ -72,7 +84,11 @@ export function createDirectoryOpsTests(getContext: () => TestContext): void {
 
     describe('rmdir', () => {
       it('removes empty directory', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
+
+        // Object stores don't support empty directories
+        if (!capabilities.supportsEmptyDirectories) return;
+
         const path = `${getTestPath()}/empty-dir`;
 
         await fs.mkdir(path);
@@ -86,6 +102,7 @@ export function createDirectoryOpsTests(getContext: () => TestContext): void {
         const { fs, getTestPath } = getContext();
         const path = `${getTestPath()}/dir-with-contents`;
 
+        // Create directory with files (works on object stores because files exist)
         await fs.mkdir(path);
         await fs.writeFile(`${path}/file1.txt`, 'content1');
         await fs.writeFile(`${path}/file2.txt`, 'content2');
@@ -101,13 +118,19 @@ export function createDirectoryOpsTests(getContext: () => TestContext): void {
 
     describe('readdir', () => {
       it('lists directory contents', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
         const path = getTestPath();
 
         await fs.mkdir(path);
         await fs.writeFile(`${path}/file1.txt`, 'content1');
         await fs.writeFile(`${path}/file2.txt`, 'content2');
-        await fs.mkdir(`${path}/subdir`);
+
+        // For object stores, create a file inside subdir so it "exists"
+        if (!capabilities.supportsEmptyDirectories) {
+          await fs.writeFile(`${path}/subdir/.gitkeep`, '');
+        } else {
+          await fs.mkdir(`${path}/subdir`);
+        }
 
         const entries = await fs.readdir(path);
 
@@ -118,12 +141,18 @@ export function createDirectoryOpsTests(getContext: () => TestContext): void {
       });
 
       it('returns file type for entries', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
         const path = getTestPath();
 
         await fs.mkdir(path);
         await fs.writeFile(`${path}/file.txt`, 'content');
-        await fs.mkdir(`${path}/dir`);
+
+        // For object stores, create a file inside the dir so it "exists"
+        if (!capabilities.supportsEmptyDirectories) {
+          await fs.writeFile(`${path}/dir/.gitkeep`, '');
+        } else {
+          await fs.mkdir(`${path}/dir`);
+        }
 
         const entries = await fs.readdir(path);
 
@@ -135,7 +164,11 @@ export function createDirectoryOpsTests(getContext: () => TestContext): void {
       });
 
       it('returns empty array for empty directory', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
+
+        // Object stores don't support empty directories
+        if (!capabilities.supportsEmptyDirectories) return;
+
         const path = `${getTestPath()}/empty`;
 
         await fs.mkdir(path);

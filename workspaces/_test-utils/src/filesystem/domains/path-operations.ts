@@ -60,7 +60,11 @@ export function createPathOperationsTests(getContext: () => TestContext): void {
       });
 
       it('returns true for existing directory', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
+
+        // Object stores don't support empty directories
+        if (!capabilities.supportsEmptyDirectories) return;
+
         const path = `${getTestPath()}/exists-dir`;
 
         await fs.mkdir(path);
@@ -94,7 +98,11 @@ export function createPathOperationsTests(getContext: () => TestContext): void {
       });
 
       it('returns directory stats', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
+
+        // Object stores don't support empty directories
+        if (!capabilities.supportsEmptyDirectories) return;
+
         const path = `${getTestPath()}/stat-dir`;
 
         await fs.mkdir(path);
@@ -132,7 +140,11 @@ export function createPathOperationsTests(getContext: () => TestContext): void {
       });
 
       it('can determine if path is a directory', async () => {
-        const { fs, getTestPath } = getContext();
+        const { fs, getTestPath, capabilities } = getContext();
+
+        // Object stores don't support empty directories
+        if (!capabilities.supportsEmptyDirectories) return;
+
         const path = `${getTestPath()}/is-dir`;
 
         await fs.mkdir(path);

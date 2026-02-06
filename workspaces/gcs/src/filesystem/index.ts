@@ -410,7 +410,6 @@ export class GCSFilesystem extends MastraFilesystem {
 
     const [files] = await bucket.getFiles({
       prefix: searchPrefix,
-      delimiter: options?.recursive ? undefined : '/',
       autoPaginate: true,
     });
 

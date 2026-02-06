@@ -178,6 +178,9 @@ if (canRunGCSTests) {
       supportsForceDelete: true,
       supportsOverwrite: true,
       supportsConcurrency: true,
+      // Object store limitations
+      supportsEmptyDirectories: false, // GCS directories only exist when they contain files
+      deleteThrowsOnMissing: true, // GCS throws 404 for missing files
     },
     testTimeout: 30000, // GCS operations can be slow
   });

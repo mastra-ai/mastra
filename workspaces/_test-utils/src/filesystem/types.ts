@@ -64,6 +64,20 @@ export interface FilesystemCapabilities {
 
   /** Supports overwrite option on copy (default: true) */
   supportsOverwrite?: boolean;
+
+  /**
+   * Supports empty directories (default: true).
+   * Object stores (S3, GCS) don't support this - directories only exist
+   * when they contain files. Set to false for object stores.
+   */
+  supportsEmptyDirectories?: boolean;
+
+  /**
+   * deleteFile throws FileNotFoundError for missing files (default: true).
+   * S3's DeleteObject is idempotent - it succeeds for non-existent keys.
+   * Set to false for S3-compatible stores.
+   */
+  deleteThrowsOnMissing?: boolean;
 }
 
 /**

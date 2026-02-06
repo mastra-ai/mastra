@@ -193,6 +193,9 @@ if (hasS3Credentials) {
       supportsForceDelete: true,
       supportsOverwrite: true,
       supportsConcurrency: true,
+      // Object store limitations
+      supportsEmptyDirectories: false, // S3 directories only exist when they contain files
+      deleteThrowsOnMissing: false, // S3 DeleteObject is idempotent
     },
     testTimeout: 30000, // S3 operations can be slow
   });

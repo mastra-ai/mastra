@@ -31,6 +31,8 @@ const DEFAULT_CAPABILITIES: Required<FilesystemCapabilities> = {
   maxTestFileSize: 10 * 1024 * 1024, // 10MB
   supportsForceDelete: true,
   supportsOverwrite: true,
+  supportsEmptyDirectories: true,
+  deleteThrowsOnMissing: true,
 };
 
 /**

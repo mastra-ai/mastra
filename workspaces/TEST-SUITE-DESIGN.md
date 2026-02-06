@@ -1,23 +1,22 @@
-# Workspace Test Suite - Known Issues
+# Workspace Test Suite - Design Notes
 
 **Full Test Plan:** [Notion - Workspace Filesystem & Sandbox Test Plan](https://www.notion.so/kepler-inc/Workspace-Filesystem-Sandbox-Test-Plan-from-claude-mounts-context-2fdebffbc9f880f5a7e0e9535286fd02)
 
 ---
 
-## Expected Failures (Not Bugs)
+## Object Store Capability Flags
 
-S3 and GCS are object stores that simulate directories via key prefixes. Empty directories don't truly exist, causing predictable test failures:
+S3 and GCS are object stores that simulate directories via key prefixes. Empty directories don't truly exist. Rather than treating these as test failures, we use capability flags to skip inapplicable tests:
 
-| Provider | Failures | Tests |
-|----------|----------|-------|
-| S3 (MinIO) | 9/69 | 3 mkdir, 2 readdir, 3 stat/exists, 1 deleteFile |
-| GCS (fake-gcs) | 8/67 | 3 mkdir, 2 readdir, 3 stat/exists |
+| Capability | S3 | GCS | Real FS | Why |
+|------------|-----|-----|---------|-----|
+| `supportsEmptyDirectories` | ❌ | ❌ | ✅ | Object stores only have "directories" when files exist inside |
+| `deleteThrowsOnMissing` | ❌ | ✅ | ✅ | S3's DeleteObject is idempotent (succeeds for missing keys) |
 
-These fail because:
-- `mkdir()` without files creates nothing durable
-- `readdir()` can't list empty "directories"
-- `stat()` on empty directory paths returns "not found"
-- S3 `deleteFile()` is idempotent (doesn't throw for missing files)
+Tests that rely on empty directories are automatically skipped when `supportsEmptyDirectories: false`:
+- `mkdir()` then checking directory exists
+- `readdir()` on empty directory
+- `stat()` on empty directory paths
 
 ---
 
