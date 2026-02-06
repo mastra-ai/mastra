@@ -18,8 +18,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 
 import { DODB } from '../../db';
@@ -237,21 +237,36 @@ export class MemoryStorageDO extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = normalizePerPage(perPageInput, 100);
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
-    if (page < 0) {
+    try {
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('CLOUDFLARE_DO', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
+          id: createStorageErrorId('CLOUDFLARE_DO', 'LIST_THREADS', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { page },
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
         },
-        new Error('page must be >= 0'),
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_DO', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
       );
     }
 
@@ -259,31 +274,70 @@ export class MemoryStorageDO extends MemoryStorage {
     const { field, direction } = this.parseOrderBy(orderBy);
     const fullTableName = this.#db.getTableName(TABLE_THREADS);
 
-    const mapRowToStorageThreadType = (row: Record<string, unknown>): StorageThreadType => ({
-      ...(row as unknown as StorageThreadType),
+    const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
+      ...row,
       createdAt: ensureDate(row.createdAt) as Date,
       updatedAt: ensureDate(row.updatedAt) as Date,
       metadata:
         typeof row.metadata === 'string'
           ? (JSON.parse(row.metadata || '{}') as Record<string, unknown>)
-          : (row.metadata as Record<string, unknown>) || {},
+          : row.metadata || {},
     });
 
     try {
-      const countQuery = createSqlBuilder().count().from(fullTableName).where('resourceId = ?', resourceId);
+      let countQuery = createSqlBuilder().count().from(fullTableName);
+      let selectQuery = createSqlBuilder().select('*').from(fullTableName);
+
+      if (filter?.resourceId) {
+        countQuery = countQuery.whereAnd('resourceId = ?', filter.resourceId);
+        selectQuery = selectQuery.whereAnd('resourceId = ?', filter.resourceId);
+      }
+
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError(
+              {
+                id: createStorageErrorId('CLOUDFLARE_DO', 'LIST_THREADS', 'INVALID_METADATA_VALUE'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+                details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+              },
+              new Error('Invalid metadata filter value type'),
+            );
+          }
+
+          if (value === null) {
+            const condition = `json_extract(metadata, '$.${key}') IS NULL`;
+            countQuery = countQuery.whereAnd(condition);
+            selectQuery = selectQuery.whereAnd(condition);
+          } else {
+            const condition = `json_extract(metadata, '$.${key}') = ?`;
+            const filterValue = value as string | number | boolean;
+            countQuery = countQuery.whereAnd(condition, filterValue);
+            selectQuery = selectQuery.whereAnd(condition, filterValue);
+          }
+        }
+      }
+
       const countResult = (await this.#db.executeQuery(countQuery.build())) as {
         count: number;
       }[];
       const total = Number(countResult?.[0]?.count ?? 0);
 
+      if (total === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       const limitValue = perPageInput === false ? total : perPage;
-      const selectQuery = createSqlBuilder()
-        .select('*')
-        .from(fullTableName)
-        .where('resourceId = ?', resourceId)
-        .orderBy(field, direction)
-        .limit(limitValue)
-        .offset(offset);
+      selectQuery = selectQuery.orderBy(field, direction).limit(limitValue).offset(offset);
 
       const results = (await this.#db.executeQuery(selectQuery.build())) as Record<string, unknown>[];
       const threads = results.map(mapRowToStorageThreadType);
@@ -296,15 +350,19 @@ export class MemoryStorageDO extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('CLOUDFLARE_DO', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('CLOUDFLARE_DO', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Error getting threads by resourceId ${resourceId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          details: { resourceId },
+          text: `Error listing threads: ${error instanceof Error ? error.message : String(error)}`,
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+          },
         },
         error,
       );
@@ -482,7 +540,7 @@ export class MemoryStorageDO extends MemoryStorage {
       }
 
       // Batch validate thread existence to avoid N+1 queries
-      const uniqueThreadIds = [...new Set(messages.map(m => m.threadId))];
+      const uniqueThreadIds = [...new Set(messages.map(m => m.threadId!))];
       const threads = await Promise.all(uniqueThreadIds.map(id => this.getThreadById({ threadId: id })));
       const missingThreadId = uniqueThreadIds.find((id, i) => !threads[i]);
       if (missingThreadId) {
@@ -494,7 +552,7 @@ export class MemoryStorageDO extends MemoryStorage {
         const createdAt = message.createdAt ? new Date(message.createdAt) : now;
         return {
           id: message.id,
-          thread_id: message.threadId,
+          thread_id: message.threadId!,
           content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
           createdAt: createdAt.toISOString(),
           role: message.role,
@@ -912,10 +970,7 @@ export class MemoryStorageDO extends MemoryStorage {
       // Get existing messages
       const placeholders = messageIds.map(() => '?').join(',');
       const selectQuery = `SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId FROM ${fullTableName} WHERE id IN (${placeholders})`;
-      const existingMessages = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as Record<
-        string,
-        unknown
-      >[];
+      const existingMessages = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
 
       if (existingMessages.length === 0) {
         return [];
@@ -938,7 +993,7 @@ export class MemoryStorageDO extends MemoryStorage {
       const existingMessagesMap = new Map(parsedExistingMessages.map(msg => [msg.id, msg]));
 
       // Merge updates with existing messages
-      const updatedMessages: Record<string, unknown>[] = [];
+      const updatedMessages: any[] = [];
       const now = new Date().toISOString();
 
       for (const update of messages) {
@@ -950,10 +1005,10 @@ export class MemoryStorageDO extends MemoryStorage {
         if (update.content) {
           if (typeof mergedContent === 'object' && mergedContent !== null) {
             mergedContent = {
-              ...(mergedContent as Record<string, unknown>),
+              ...mergedContent,
               ...update.content,
               metadata: {
-                ...((mergedContent as Record<string, unknown>).metadata as Record<string, unknown> | undefined),
+                ...mergedContent.metadata,
                 ...update.content.metadata,
               },
             };
@@ -974,14 +1029,14 @@ export class MemoryStorageDO extends MemoryStorage {
         const contentStr = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
         const updateQuery = createSqlBuilder()
           .update(fullTableName, ['content', 'role', 'type'], [contentStr, msg.role as string, msg.type as string])
-          .where('id = ?', msg.id as string);
+          .where('id = ?', msg.id);
 
         const { sql, params } = updateQuery.build();
         await this.#db.executeQuery({ sql, params });
       }
 
       // Update thread's updatedAt timestamp
-      const threadIds = [...new Set(updatedMessages.map(m => m.threadId as string))];
+      const threadIds = [...new Set(updatedMessages.map(m => m.threadId))];
       for (const tid of threadIds) {
         await this.#db.executeQuery({
           sql: `UPDATE ${threadsTableName} SET updatedAt = ? WHERE id = ?`,
@@ -990,7 +1045,7 @@ export class MemoryStorageDO extends MemoryStorage {
       }
 
       // Return updated messages in the expected format
-      const list = new MessageList().add(updatedMessages as MastraMessageV1[] | MastraDBMessage[], 'memory');
+      const list = new MessageList().add(updatedMessages, 'memory');
       return list.get.all.db();
     } catch (error) {
       throw new MastraError(
@@ -1006,7 +1061,7 @@ export class MemoryStorageDO extends MemoryStorage {
     }
   }
 
-  async deleteMessages({ messageIds }: { messageIds: string[] }): Promise<void> {
+  async deleteMessages(messageIds: string[]): Promise<void> {
     if (messageIds.length === 0) return;
 
     const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
