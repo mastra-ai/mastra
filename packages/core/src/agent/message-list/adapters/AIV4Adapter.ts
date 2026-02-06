@@ -239,7 +239,7 @@ export class AIV4Adapter {
     messageSource: MessageSource,
   ): MastraDBMessage {
     // Filter out empty text parts to prevent Anthropic API errors
-    const filteredParts = message.parts ? filterEmptyTextParts(message.parts) : undefined;
+    const filteredParts = message.parts ? filterEmptyTextParts(message.parts) : [];
 
     const content: MastraMessageContentV2 = {
       format: 2,

@@ -545,8 +545,6 @@ export class AIV5Adapter {
     const reasoningParts: string[] = [];
     const experimental_attachments: NonNullable<MastraDBMessage['content']['experimental_attachments']> = [];
 
-    let lastPartWasToolResult = false;
-
     for (const part of content) {
       if (part.type === 'text') {
         const textPart: MastraDBMessage['content']['parts'][number] = {
@@ -557,7 +555,6 @@ export class AIV5Adapter {
           textPart.providerMetadata = part.providerOptions;
         }
         mastraDBParts.push(textPart);
-        lastPartWasToolResult = false;
       } else if (part.type === 'tool-call') {
         const toolCallPart = part as AIV5Type.ToolCallPart;
         const toolInvocationPart: MastraDBMessage['content']['parts'][number] = {
@@ -579,7 +576,6 @@ export class AIV5Adapter {
           args: toolCallPart.input,
           state: 'call',
         });
-        lastPartWasToolResult = false;
       } else if (part.type === 'tool-result') {
         const toolResultPart = part;
         const matchingCall = toolInvocations.find(inv => inv.toolCallId === toolResultPart.toolCallId);
@@ -627,7 +623,6 @@ export class AIV5Adapter {
           updateMatchingCallInvocationResult(toolResultPart, toolInvocationPart.toolInvocation);
           mastraDBParts.push(toolInvocationPart);
         }
-        lastPartWasToolResult = true;
       } else if (part.type === 'reasoning') {
         const v2ReasoningPart: MastraDBMessage['content']['parts'][number] = {
           type: 'reasoning',
@@ -639,7 +634,6 @@ export class AIV5Adapter {
         }
         mastraDBParts.push(v2ReasoningPart);
         reasoningParts.push(part.text);
-        lastPartWasToolResult = false;
       } else if (part.type === 'image') {
         const imagePart = part;
         const mimeType = imagePart.mediaType || 'image/jpeg';
@@ -658,7 +652,6 @@ export class AIV5Adapter {
           url: imageData,
           contentType: mimeType,
         });
-        lastPartWasToolResult = false;
       } else if (part.type === 'file') {
         const filePart = part;
         const mimeType = filePart.mediaType || 'application/octet-stream';
@@ -677,7 +670,6 @@ export class AIV5Adapter {
           url: fileData,
           contentType: mimeType,
         });
-        lastPartWasToolResult = false;
       }
     }
 
