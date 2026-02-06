@@ -369,10 +369,8 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       }
 
       if (metadata && Object.keys(metadata).length > 0) {
-        for (const [key, value] of Object.entries(metadata)) {
-          conditions.push(`metadata->>'${key}' = $${paramIdx++}`);
-          queryParams.push(typeof value === 'string' ? value : JSON.stringify(value));
-        }
+        conditions.push(`metadata @> $${paramIdx++}::jsonb`);
+        queryParams.push(JSON.stringify(metadata));
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

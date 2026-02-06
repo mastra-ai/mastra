@@ -248,6 +248,16 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         for (const [key, value] of Object.entries(metadata)) {
+          // Sanitize key to prevent SQL injection via json_extract path
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'LIST_PROMPT_BLOCKS', 'INVALID_METADATA_KEY'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Invalid metadata key: ${key}. Keys must be alphanumeric with underscores.`,
+              details: { key },
+            });
+          }
           conditions.push(`json_extract(metadata, '$.${key}') = ?`);
           queryParams.push(typeof value === 'string' ? value : JSON.stringify(value));
         }
