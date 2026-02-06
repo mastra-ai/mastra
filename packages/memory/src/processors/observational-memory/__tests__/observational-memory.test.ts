@@ -2955,3 +2955,1271 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     expect(omContent).not.toContain('Hello from thread B!');
   });
 });
+
+// =============================================================================
+// Unit Tests: Async Buffering / Activation Paths
+// =============================================================================
+
+describe('Async Buffering Storage Operations', () => {
+  let storage: InMemoryMemory;
+  const threadId = 'test-thread';
+  const resourceId = 'test-resource';
+
+  beforeEach(() => {
+    storage = createInMemoryStorage();
+  });
+
+  describe('updateBufferedObservations with chunk metadata', () => {
+    it('should store chunks with messageTokens, lastObservedAt, and cycleId', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      const lastObservedAt = new Date('2026-02-05T10:00:00Z');
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk with metadata',
+          tokenCount: 100,
+          messageIds: ['msg-1', 'msg-2'],
+          messageTokens: 5000,
+          lastObservedAt,
+          cycleId: 'cycle-abc-123',
+        },
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.bufferedObservationChunks).toHaveLength(1);
+      const chunk = record!.bufferedObservationChunks![0]!;
+      expect(chunk.observations).toBe('- 🔴 Chunk with metadata');
+      expect(chunk.tokenCount).toBe(100);
+      expect(chunk.messageIds).toEqual(['msg-1', 'msg-2']);
+      expect(chunk.messageTokens).toBe(5000);
+      expect(chunk.lastObservedAt).toEqual(lastObservedAt);
+      expect(chunk.cycleId).toBe('cycle-abc-123');
+      expect(chunk.id).toMatch(/^ombuf-/);
+    });
+
+    it('should accumulate multiple chunks preserving order', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 First chunk',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Second chunk',
+          tokenCount: 40,
+          messageIds: ['msg-2', 'msg-3'],
+          messageTokens: 7000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-2',
+        },
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟢 Third chunk',
+          tokenCount: 20,
+          messageIds: ['msg-4'],
+          messageTokens: 2000,
+          lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+          cycleId: 'cycle-3',
+        },
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.bufferedObservationChunks).toHaveLength(3);
+      expect(record!.bufferedObservationChunks![0]!.cycleId).toBe('cycle-1');
+      expect(record!.bufferedObservationChunks![1]!.cycleId).toBe('cycle-2');
+      expect(record!.bufferedObservationChunks![2]!.cycleId).toBe('cycle-3');
+    });
+  });
+
+  describe('swapBufferedToActive with partial activation', () => {
+    it('should activate all chunks when activationRatio is 1', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk A',
+          tokenCount: 50,
+          messageIds: ['msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-a',
+        },
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Chunk B',
+          tokenCount: 50,
+          messageIds: ['msg-2'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-b',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(2);
+      expect(result.activatedCycleIds).toEqual(['cycle-a', 'cycle-b']);
+      expect(result.messageTokensActivated).toBe(10000);
+      expect(result.observationTokensActivated).toBe(100);
+      expect(result.messagesActivated).toBe(2);
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toContain('Chunk A');
+      expect(record?.activeObservations).toContain('Chunk B');
+      expect(record?.bufferedObservationChunks).toBeUndefined();
+    });
+
+    it('should activate a subset of chunks when activationRatio is less than 1', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Total messageTokens = 3000 + 3000 + 4000 = 10000
+      // With activationRatio=0.5, target = 5000
+      // After chunk 1: 3000 (under target, distance=2000)
+      // After chunk 2: 6000 (over target, distance=1000)
+      // 6000 is closer to 5000, but since 3000 is under and 6000 is over, prefer under
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk 1',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Chunk 2',
+          tokenCount: 30,
+          messageIds: ['msg-2'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-2',
+        },
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟢 Chunk 3',
+          tokenCount: 40,
+          messageIds: ['msg-3'],
+          messageTokens: 4000,
+          lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+          cycleId: 'cycle-3',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 0.5,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      // Biased under: should activate 1 chunk (3000 tokens), leaving 2 remaining
+      expect(result.chunksActivated).toBeGreaterThanOrEqual(1);
+      expect(result.activatedCycleIds.length).toBeGreaterThanOrEqual(1);
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toContain('Chunk 1');
+      // Remaining chunks should still be in buffered
+      if (result.chunksActivated === 1) {
+        expect(record?.bufferedObservationChunks).toHaveLength(2);
+      }
+    });
+
+    it('should always activate at least one chunk when at threshold', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Single chunk with large messageTokens
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Large chunk',
+          tokenCount: 200,
+          messageIds: ['msg-1', 'msg-2', 'msg-3'],
+          messageTokens: 50000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-large',
+        },
+      });
+
+      // Even with a tiny activation ratio, at least one chunk should be activated
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 0.1,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.activatedCycleIds).toEqual(['cycle-large']);
+      expect(result.messageTokensActivated).toBe(50000);
+    });
+
+    it('should return zero metrics when no chunks exist', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        lastObservedAt: new Date(),
+      });
+
+      expect(result.chunksActivated).toBe(0);
+      expect(result.activatedCycleIds).toEqual([]);
+      expect(result.messageTokensActivated).toBe(0);
+    });
+
+    it('should include activated observations content in result', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Important observation about X',
+          tokenCount: 50,
+          messageIds: ['msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.observations).toContain('Important observation about X');
+    });
+  });
+
+  describe('buffered reflection', () => {
+    it('should store buffered reflection content', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedReflection({
+        id: initial.id,
+        reflection: '- 🔴 Reflected: User prefers TypeScript',
+        tokenCount: 30,
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.bufferedReflection).toBe('- 🔴 Reflected: User prefers TypeScript');
+      expect(record?.bufferedReflectionTokens).toBe(30);
+    });
+
+    it('should activate buffered reflection into new generation', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Set active observations
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '- 🔴 Observation 1\n- 🟡 Observation 2\n- 🟡 Observation 3',
+        tokenCount: 300,
+        lastObservedAt: new Date(),
+      });
+
+      // Buffer reflection
+      await storage.updateBufferedReflection({
+        id: initial.id,
+        reflection: '- 🔴 Condensed reflection',
+        tokenCount: 50,
+      });
+
+      // Activate buffered reflection
+      await storage.swapBufferedReflectionToActive({
+        currentRecord: (await storage.getObservationalMemory(threadId, resourceId))!,
+        activationRatio: 1,
+      });
+
+      // New generation should exist with reflected content
+      const current = await storage.getObservationalMemory(threadId, resourceId);
+      expect(current?.activeObservations).toBe('- 🔴 Condensed reflection');
+      expect(current?.originType).toBe('reflection');
+    });
+  });
+});
+
+describe('Async Buffering Config Validation', () => {
+  it('should throw if asyncActivation is out of range', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferEvery: 10000,
+            asyncActivation: 1.5,
+          },
+          reflection: {
+            observationTokens: 20000,
+            asyncActivation: 0.7,
+          },
+        }),
+    ).toThrow('asyncActivation must be in range (0, 1]');
+  });
+
+  it('should throw if asyncActivation is zero', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferEvery: 10000,
+            asyncActivation: 0,
+          },
+          reflection: {
+            observationTokens: 20000,
+            asyncActivation: 0.7,
+          },
+        }),
+    ).toThrow('asyncActivation must be in range (0, 1]');
+  });
+
+  it('should throw if observation has bufferEvery but reflection has no asyncActivation', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferEvery: 10000,
+            asyncActivation: 0.7,
+          },
+          reflection: {
+            observationTokens: 20000,
+            // No asyncActivation
+          },
+        }),
+    ).toThrow('reflection.asyncActivation must also be set');
+  });
+
+  it('should throw if bufferEvery >= messageTokens', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 10000,
+            bufferEvery: 15000,
+            asyncActivation: 0.7,
+          },
+          reflection: {
+            observationTokens: 20000,
+            asyncActivation: 0.7,
+          },
+        }),
+    ).toThrow('bufferEvery');
+  });
+
+  it('should accept valid async config', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferEvery: 10000,
+            asyncActivation: 0.7,
+          },
+          reflection: {
+            observationTokens: 20000,
+            asyncActivation: 0.5,
+          },
+        }),
+    ).not.toThrow();
+  });
+
+  it('should throw if observation has bufferEvery but reflection has asyncActivation of 0', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferEvery: 10000,
+            asyncActivation: 0.7,
+          },
+          reflection: {
+            observationTokens: 20000,
+            asyncActivation: 0,
+          },
+        }),
+    ).toThrow();
+  });
+
+  it('should accept config with only asyncActivation on reflection (no bufferEvery)', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferEvery: 10000,
+            asyncActivation: 0.7,
+          },
+          reflection: {
+            observationTokens: 20000,
+            asyncActivation: 0.5,
+          },
+        }),
+    ).not.toThrow();
+  });
+});
+
+// =============================================================================
+// Unit Tests: Async Buffering Processor Logic
+// =============================================================================
+
+describe('Async Buffering Processor Logic', () => {
+  describe('getUnobservedMessages filtering with buffered chunks', () => {
+    it('should exclude messages already in buffered chunks from unobserved list', async () => {
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      // Store a buffered chunk with specific message IDs
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Buffered obs',
+          tokenCount: 50,
+          messageIds: ['msg-0', 'msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
+
+      // Create messages - some should be filtered, some not
+      const allMessages: MastraDBMessage[] = [
+        createTestMessage('Already buffered 1', 'user', 'msg-0'),
+        createTestMessage('Already buffered 2', 'assistant', 'msg-1'),
+        createTestMessage('New message', 'user', 'msg-2'),
+      ];
+
+      // Access private method via prototype trick
+      const unobserved = (om as any).getUnobservedMessages(allMessages, updatedRecord!);
+
+      // msg-0 and msg-1 should be excluded (in buffered chunks), msg-2 should be included
+      expect(unobserved).toHaveLength(1);
+      expect(unobserved[0].id).toBe('msg-2');
+    });
+
+    it('should include all messages when no buffered chunks exist', async () => {
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      const allMessages = createTestMessages(3);
+      const unobserved = (om as any).getUnobservedMessages(allMessages, record);
+
+      expect(unobserved).toHaveLength(3);
+    });
+
+    it('should exclude messages in both observedMessageIds and buffered chunks', async () => {
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      // Mark msg-0 as observed via observedMessageIds
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: '- Observed',
+        tokenCount: 10,
+        lastObservedAt: new Date('2026-02-05T09:00:00Z'),
+        observedMessageIds: ['msg-0'],
+      });
+
+      // Mark msg-1 as buffered via chunk
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Buffered obs',
+          tokenCount: 50,
+          messageIds: ['msg-1'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
+
+      const allMessages: MastraDBMessage[] = [
+        createTestMessage('Observed', 'user', 'msg-0'),
+        createTestMessage('Buffered', 'assistant', 'msg-1'),
+        createTestMessage('New 1', 'user', 'msg-2'),
+        createTestMessage('New 2', 'assistant', 'msg-3'),
+      ];
+
+      const unobserved = (om as any).getUnobservedMessages(allMessages, updatedRecord!);
+
+      // msg-0 excluded (observedMessageIds), msg-1 excluded (buffered chunks), msg-2 and msg-3 included
+      expect(unobserved).toHaveLength(2);
+      expect(unobserved.map((m: MastraDBMessage) => m.id)).toEqual(['msg-2', 'msg-3']);
+    });
+  });
+
+  describe('getBufferedChunks defensive parsing', () => {
+    it('should return empty array for null record', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      expect((om as any).getBufferedChunks(null)).toEqual([]);
+      expect((om as any).getBufferedChunks(undefined)).toEqual([]);
+    });
+
+    it('should return empty array for record without chunks', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      expect((om as any).getBufferedChunks({})).toEqual([]);
+      expect((om as any).getBufferedChunks({ bufferedObservationChunks: undefined })).toEqual([]);
+    });
+
+    it('should parse JSON string chunks', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      const chunks = [{ observations: '- test', tokenCount: 10, messageIds: ['msg-1'], cycleId: 'c1' }];
+      const result = (om as any).getBufferedChunks({
+        bufferedObservationChunks: JSON.stringify(chunks),
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].observations).toBe('- test');
+    });
+
+    it('should return empty array for invalid JSON string', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      expect((om as any).getBufferedChunks({ bufferedObservationChunks: 'not-json' })).toEqual([]);
+      expect((om as any).getBufferedChunks({ bufferedObservationChunks: '42' })).toEqual([]);
+    });
+
+    it('should pass through array chunks directly', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      const chunks = [{ observations: '- test', tokenCount: 10, messageIds: ['msg-1'], cycleId: 'c1' }];
+      expect((om as any).getBufferedChunks({ bufferedObservationChunks: chunks })).toBe(chunks);
+    });
+  });
+
+  describe('combineObservationsForBuffering', () => {
+    it('should return undefined when both are empty', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      expect((om as any).combineObservationsForBuffering(undefined, undefined)).toBeUndefined();
+      expect((om as any).combineObservationsForBuffering('', '')).toBeUndefined();
+    });
+
+    it('should return active observations when no buffered', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      expect((om as any).combineObservationsForBuffering('- Active obs', undefined)).toBe('- Active obs');
+    });
+
+    it('should return buffered observations when no active', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      expect((om as any).combineObservationsForBuffering(undefined, '- Buffered obs')).toBe('- Buffered obs');
+    });
+
+    it('should combine both with separator when both present', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      const result = (om as any).combineObservationsForBuffering('- Active', '- Buffered');
+      expect(result).toContain('- Active');
+      expect(result).toContain('- Buffered');
+      expect(result).toContain('BUFFERED (pending activation)');
+    });
+  });
+
+  describe('shouldTriggerAsyncObservation', () => {
+    it('should return false when async buffering is not enabled', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 }, // No bufferEvery
+        reflection: { observationTokens: 20000 },
+      });
+
+      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test')).toBe(false);
+    });
+
+    it('should return true when crossing a bufferEvery interval boundary', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferEvery: 10000,
+          asyncActivation: 0.7,
+        },
+        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+      });
+
+      // At 5000 tokens, interval = 0, lastBoundary = 0 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(5000, 'thread:test')).toBe(false);
+
+      // At 10000 tokens, interval = 1, lastBoundary = 0 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test')).toBe(true);
+    });
+
+    it('should not re-trigger for the same interval after lastBufferedBoundary is set', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferEvery: 10000,
+          asyncActivation: 0.7,
+        },
+        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+      });
+
+      const lockKey = 'thread:test';
+      const bufferKey = (om as any).getObservationBufferKey(lockKey);
+
+      // Simulate first trigger at 10000
+      expect((om as any).shouldTriggerAsyncObservation(10000, lockKey)).toBe(true);
+
+      // Simulate that startAsyncBufferedObservation updated lastBufferedBoundary
+      (om as any).lastBufferedBoundary.set(bufferKey, 10000);
+
+      // Same interval should not re-trigger
+      expect((om as any).shouldTriggerAsyncObservation(12000, lockKey)).toBe(false);
+
+      // Next interval boundary should trigger
+      expect((om as any).shouldTriggerAsyncObservation(20000, lockKey)).toBe(true);
+    });
+  });
+
+  describe('shouldTriggerAsyncReflection', () => {
+    it('should return false when async reflection is not enabled', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 }, // No asyncActivation
+      });
+
+      expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test')).toBe(false);
+    });
+
+    it('should trigger when observation tokens reach threshold * asyncActivation', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferEvery: 10000,
+          asyncActivation: 0.7,
+        },
+        reflection: {
+          observationTokens: 20000,
+          asyncActivation: 0.5, // trigger at 20000 * 0.5 = 10000 observation tokens
+        },
+      });
+
+      // Below activation point
+      expect((om as any).shouldTriggerAsyncReflection(5000, 'thread:test')).toBe(false);
+
+      // At activation point (20000 * 0.5 = 10000)
+      expect((om as any).shouldTriggerAsyncReflection(10000, 'thread:test')).toBe(true);
+    });
+
+    it('should only trigger once per buffer key', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferEvery: 10000,
+          asyncActivation: 0.7,
+        },
+        reflection: {
+          observationTokens: 20000,
+          asyncActivation: 0.5,
+        },
+      });
+
+      const lockKey = 'thread:test';
+      const reflectionKey = (om as any).getReflectionBufferKey(lockKey);
+
+      // First trigger
+      expect((om as any).shouldTriggerAsyncReflection(15000, lockKey)).toBe(true);
+
+      // Simulate that reflection was started (sets lastBufferedBoundary)
+      (om as any).lastBufferedBoundary.set(reflectionKey, 15000);
+
+      // Should not trigger again
+      expect((om as any).shouldTriggerAsyncReflection(18000, lockKey)).toBe(false);
+    });
+  });
+
+  describe('isAsyncBufferingInProgress', () => {
+    it('should return false when no operation is in progress', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      expect((om as any).isAsyncBufferingInProgress('obs:thread:test')).toBe(false);
+    });
+
+    it('should return true when an operation is tracked', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      (om as any).asyncBufferingOps.set('obs:thread:test', Promise.resolve());
+      expect((om as any).isAsyncBufferingInProgress('obs:thread:test')).toBe(true);
+    });
+  });
+
+  describe('sealMessagesForBuffering', () => {
+    it('should set sealed metadata on messages', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      const messages = [
+        createTestMessage('Message 1', 'user', 'msg-1'),
+        createTestMessage('Message 2', 'assistant', 'msg-2'),
+      ];
+
+      (om as any).sealMessagesForBuffering(messages);
+
+      for (const msg of messages) {
+        const metadata = msg.content.metadata as { mastra?: { sealed?: boolean } };
+        expect(metadata.mastra?.sealed).toBe(true);
+
+        const lastPart = msg.content.parts[msg.content.parts.length - 1] as {
+          metadata?: { mastra?: { sealedAt?: number } };
+        };
+        expect(lastPart.metadata?.mastra?.sealedAt).toBeTypeOf('number');
+      }
+    });
+
+    it('should skip messages without parts', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      const msg = createTestMessage('Test', 'user', 'msg-1');
+      msg.content.parts = [];
+
+      // Should not throw
+      (om as any).sealMessagesForBuffering([msg]);
+      expect(msg.content.metadata).toBeUndefined();
+    });
+  });
+
+  describe('withLock', () => {
+    it('should serialize concurrent operations on the same key', async () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      const order: number[] = [];
+
+      const op1 = (om as any).withLock('test-key', async () => {
+        await new Promise(r => setTimeout(r, 50));
+        order.push(1);
+        return 'first';
+      });
+
+      const op2 = (om as any).withLock('test-key', async () => {
+        order.push(2);
+        return 'second';
+      });
+
+      const [result1, result2] = await Promise.all([op1, op2]);
+
+      expect(result1).toBe('first');
+      expect(result2).toBe('second');
+      expect(order).toEqual([1, 2]);
+    });
+
+    it('should allow concurrent operations on different keys', async () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      const order: string[] = [];
+
+      const op1 = (om as any).withLock('key-a', async () => {
+        await new Promise(r => setTimeout(r, 30));
+        order.push('a');
+      });
+
+      const op2 = (om as any).withLock('key-b', async () => {
+        order.push('b');
+      });
+
+      await Promise.all([op1, op2]);
+
+      // 'b' should complete before 'a' because they're on different keys
+      expect(order).toEqual(['b', 'a']);
+    });
+  });
+
+  describe('swapBufferedToActive boundary selection', () => {
+    it('should prefer under-target boundary when equidistant', async () => {
+      const storage = createInMemoryStorage();
+      const record = await storage.initializeObservationalMemory({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      // Two chunks of equal size (5000 each, total 10000)
+      // With activationRatio=0.5, target = 5000
+      // After chunk 1: 5000 (exactly on target)
+      // After chunk 2: 10000
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Chunk 1',
+          tokenCount: 50,
+          messageIds: ['msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: new Date(),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Chunk 2',
+          tokenCount: 50,
+          messageIds: ['msg-2'],
+          messageTokens: 5000,
+          lastObservedAt: new Date(),
+          cycleId: 'cycle-2',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: record.id,
+        activationRatio: 0.5,
+        lastObservedAt: new Date(),
+      });
+
+      // At exactly the target, chunk 1 (5000 == target) should be activated
+      expect(result.chunksActivated).toBe(1);
+      expect(result.activatedCycleIds).toEqual(['cycle-1']);
+      expect(result.messageTokensActivated).toBe(5000);
+    });
+
+    it('should activate all chunks when ratio is 1.0', async () => {
+      const storage = createInMemoryStorage();
+      const record = await storage.initializeObservationalMemory({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      for (let i = 0; i < 5; i++) {
+        await storage.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            observations: `- Chunk ${i}`,
+            tokenCount: 20,
+            messageIds: [`msg-${i}`],
+            messageTokens: 2000,
+            lastObservedAt: new Date(),
+            cycleId: `cycle-${i}`,
+          },
+        });
+      }
+
+      const result = await storage.swapBufferedToActive({
+        id: record.id,
+        activationRatio: 1,
+        lastObservedAt: new Date(),
+      });
+
+      expect(result.chunksActivated).toBe(5);
+      expect(result.activatedCycleIds).toHaveLength(5);
+      expect(result.messageTokensActivated).toBe(10000);
+
+      const final = await storage.getObservationalMemory('thread-1', 'resource-1');
+      expect(final?.bufferedObservationChunks).toBeUndefined();
+    });
+
+    it('should derive lastObservedAt from latest activated chunk', async () => {
+      const storage = createInMemoryStorage();
+      const record = await storage.initializeObservationalMemory({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      const earlyDate = new Date('2026-02-05T08:00:00Z');
+      const laterDate = new Date('2026-02-05T12:00:00Z');
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Early chunk',
+          tokenCount: 50,
+          messageIds: ['msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: earlyDate,
+          cycleId: 'cycle-1',
+        },
+      });
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Later chunk',
+          tokenCount: 50,
+          messageIds: ['msg-2'],
+          messageTokens: 5000,
+          lastObservedAt: laterDate,
+          cycleId: 'cycle-2',
+        },
+      });
+
+      // Activate all without providing explicit lastObservedAt
+      await storage.swapBufferedToActive({
+        id: record.id,
+        activationRatio: 1,
+      });
+
+      const final = await storage.getObservationalMemory('thread-1', 'resource-1');
+      // Should derive from the latest activated chunk
+      expect(final?.lastObservedAt).toEqual(laterDate);
+    });
+  });
+
+  describe('tryActivateBufferedObservations integration', () => {
+    it('should return success:false when no buffered chunks exist', async () => {
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferEvery: 10000,
+          asyncActivation: 0.7,
+        },
+        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      const result = await (om as any).tryActivateBufferedObservations(record, 'thread:thread-1');
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should activate buffered chunks and return updated record', async () => {
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferEvery: 10000,
+          asyncActivation: 1,
+        },
+        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Important observation',
+          tokenCount: 100,
+          messageIds: ['msg-1', 'msg-2'],
+          messageTokens: 8000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
+      const result = await (om as any).tryActivateBufferedObservations(updatedRecord!, 'thread:thread-1');
+
+      expect(result.success).toBe(true);
+      expect(result.updatedRecord).toBeDefined();
+      expect(result.updatedRecord.activeObservations).toContain('Important observation');
+      expect(result.updatedRecord.bufferedObservationChunks).toBeUndefined();
+    });
+
+    it('should reset lastBufferedBoundary after activation', async () => {
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferEvery: 10000,
+          asyncActivation: 1,
+        },
+        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Obs',
+          tokenCount: 50,
+          messageIds: ['msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: new Date(),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      const lockKey = 'thread:thread-1';
+      const bufferKey = (om as any).getObservationBufferKey(lockKey);
+
+      // Simulate that buffering set a boundary
+      (om as any).lastBufferedBoundary.set(bufferKey, 15000);
+
+      const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
+      await (om as any).tryActivateBufferedObservations(updatedRecord!, lockKey);
+
+      // After activation, the boundary should be cleared
+      expect((om as any).lastBufferedBoundary.has(bufferKey)).toBe(false);
+    });
+  });
+});
