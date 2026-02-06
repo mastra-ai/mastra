@@ -3865,6 +3865,8 @@ describe('Async Buffering Processor Logic', () => {
   });
 
   describe('shouldTriggerAsyncObservation', () => {
+    const mockRecord = { isBufferingObservation: false, lastBufferedAtTokens: 0 } as any;
+
     it('should return false when async buffering is not enabled', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
@@ -3874,7 +3876,7 @@ describe('Async Buffering Processor Logic', () => {
         reflection: { observationTokens: 20000 },
       });
 
-      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test')).toBe(false);
+      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(false);
     });
 
     it('should return true when crossing a bufferEvery interval boundary', () => {
@@ -3891,13 +3893,58 @@ describe('Async Buffering Processor Logic', () => {
       });
 
       // At 5000 tokens, interval = 0, lastBoundary = 0 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(5000, 'thread:test')).toBe(false);
+      expect((om as any).shouldTriggerAsyncObservation(5000, 'thread:test', mockRecord)).toBe(false);
 
       // At 10000 tokens, interval = 1, lastBoundary = 0 → trigger
-      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test')).toBe(true);
+      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(true);
     });
 
-    it('should not re-trigger for the same interval after lastBufferedBoundary is set', () => {
+    it('should not re-trigger when record.isBufferingObservation is true', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferEvery: 10000,
+          asyncActivation: 0.7,
+        },
+        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+      });
+
+      const bufferingRecord = { isBufferingObservation: true, lastBufferedAtTokens: 0 } as any;
+      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', bufferingRecord)).toBe(false);
+    });
+
+    it('should not re-trigger for the same interval using record.lastBufferedAtTokens', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferEvery: 10000,
+          asyncActivation: 0.7,
+        },
+        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+      });
+
+      const lockKey = 'thread:test';
+
+      // Simulate first trigger at 10000 — record shows lastBufferedAtTokens=0
+      expect((om as any).shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
+
+      // Simulate that buffering completed and persisted lastBufferedAtTokens=10000
+      const afterBufferRecord = { isBufferingObservation: false, lastBufferedAtTokens: 10000 } as any;
+
+      // Same interval should not re-trigger (using DB state, not in-memory)
+      expect((om as any).shouldTriggerAsyncObservation(12000, lockKey, afterBufferRecord)).toBe(false);
+
+      // Next interval boundary should trigger
+      expect((om as any).shouldTriggerAsyncObservation(20000, lockKey, afterBufferRecord)).toBe(true);
+    });
+
+    it('should not re-trigger for the same interval after lastBufferedBoundary is set (in-memory fallback)', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -3914,21 +3961,21 @@ describe('Async Buffering Processor Logic', () => {
       const bufferKey = (om as any).getObservationBufferKey(lockKey);
 
       // Simulate first trigger at 10000
-      expect((om as any).shouldTriggerAsyncObservation(10000, lockKey)).toBe(true);
+      expect((om as any).shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
 
-      // Simulate that startAsyncBufferedObservation updated lastBufferedBoundary
+      // Simulate that startAsyncBufferedObservation updated lastBufferedBoundary (in-memory)
       (om as any).lastBufferedBoundary.set(bufferKey, 10000);
 
       // Same interval should not re-trigger
-      expect((om as any).shouldTriggerAsyncObservation(12000, lockKey)).toBe(false);
+      expect((om as any).shouldTriggerAsyncObservation(12000, lockKey, mockRecord)).toBe(false);
 
       // Next interval boundary should trigger
-      expect((om as any).shouldTriggerAsyncObservation(20000, lockKey)).toBe(true);
+      expect((om as any).shouldTriggerAsyncObservation(20000, lockKey, mockRecord)).toBe(true);
     });
   });
 
   describe('shouldTriggerAsyncReflection', () => {
-    const mockRecord = { bufferedReflection: undefined } as any;
+    const mockRecord = { bufferedReflection: undefined, isBufferingReflection: false } as any;
 
     it('should return false when async reflection is not enabled', () => {
       const om = new ObservationalMemory({
@@ -3981,11 +4028,31 @@ describe('Async Buffering Processor Logic', () => {
         },
       });
 
-      const recordWithBuffer = { bufferedReflection: 'some existing reflection' } as any;
+      const recordWithBuffer = { bufferedReflection: 'some existing reflection', isBufferingReflection: false } as any;
       expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', recordWithBuffer)).toBe(false);
     });
 
-    it('should only trigger once per buffer key', () => {
+    it('should not trigger when record.isBufferingReflection is true', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferEvery: 10000,
+          asyncActivation: 0.7,
+        },
+        reflection: {
+          observationTokens: 20000,
+          asyncActivation: 0.5,
+        },
+      });
+
+      const bufferingRecord = { bufferedReflection: undefined, isBufferingReflection: true } as any;
+      expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', bufferingRecord)).toBe(false);
+    });
+
+    it('should only trigger once per buffer key (in-memory fallback)', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -5108,6 +5175,382 @@ describe('Full Async Buffering Flow', () => {
 
     // If buffering completed despite writer issues, observer was still called
     expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
+  describe('Full Async Reflection Flow', () => {
+    /**
+     * Helper that directly exercises storage-level buffering and activation
+     * to verify the reflectedObservationLineCount boundary merge logic
+     * independently of the async timing in processInputStep.
+     */
+    it('should merge bufferedReflection with unreflected observations correctly', async () => {
+      const storage = createInMemoryStorage();
+      const threadId = 'reflect-merge-thread';
+      const resourceId = 'reflect-merge-resource';
+
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Reflection Merge Test',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Simulate 6 lines of active observations
+      const observations = [
+        '* 🔴 User prefers dark mode',
+        '* 🟡 User uses TypeScript',
+        '* User asked about React hooks',
+        '* 🔴 User dislikes verbose code',
+        '* User mentioned using Vim',
+        '* 🟡 User wants fast feedback loops',
+      ].join('\n');
+
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations,
+        tokenCount: 100,
+        lastObservedAt: new Date(),
+      });
+
+      // Buffer a reflection that covers the first 4 lines
+      await storage.updateBufferedReflection({
+        id: initial.id,
+        reflection: '* 🔴 User prefers dark mode, TypeScript, React hooks, concise code',
+        tokenCount: 30,
+        reflectedObservationLineCount: 4,
+      });
+
+      // Verify the buffered state
+      let record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.bufferedReflection).toBe('* 🔴 User prefers dark mode, TypeScript, React hooks, concise code');
+      expect(record?.reflectedObservationLineCount).toBe(4);
+
+      // Activate buffered reflection
+      await storage.swapBufferedReflectionToActive({
+        currentRecord: record!,
+        tokenCount: 50,
+      });
+
+      // Verify the new generation
+      record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record).toBeDefined();
+      expect(record!.originType).toBe('reflection');
+      expect(record!.generationCount).toBe(1);
+      expect(record!.observationTokenCount).toBe(50);
+
+      // Should contain the condensed reflection
+      expect(record!.activeObservations).toContain('User prefers dark mode, TypeScript, React hooks, concise code');
+      // Should contain the unreflected lines (lines 5 and 6)
+      expect(record!.activeObservations).toContain('User mentioned using Vim');
+      expect(record!.activeObservations).toContain('User wants fast feedback loops');
+      // Should NOT contain the original reflected lines
+      expect(record!.activeObservations).not.toContain('User uses TypeScript\n');
+      expect(record!.activeObservations).not.toContain('User asked about React hooks');
+      expect(record!.activeObservations).not.toContain('User dislikes verbose code');
+
+      // Old record should have cleared buffered state
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 10);
+      expect(history).toBeDefined();
+      expect(history!.length).toBe(2); // new generation + original
+      const oldRecord = history!.find(h => h.generationCount === 0);
+      expect(oldRecord?.bufferedReflection).toBeUndefined();
+      expect(oldRecord?.bufferedReflectionTokens).toBeUndefined();
+      expect(oldRecord?.reflectedObservationLineCount).toBeUndefined();
+    });
+
+    it('should handle reflection covering ALL lines (no unreflected content)', async () => {
+      const storage = createInMemoryStorage();
+      const threadId = 'reflect-all-thread';
+      const resourceId = 'reflect-all-resource';
+
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Full Reflection Test',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      const observations = '* Line 1\n* Line 2\n* Line 3';
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations,
+        tokenCount: 60,
+        lastObservedAt: new Date(),
+      });
+
+      // Reflection covers all 3 lines
+      await storage.updateBufferedReflection({
+        id: initial.id,
+        reflection: '* Condensed all three lines',
+        tokenCount: 10,
+        reflectedObservationLineCount: 3,
+      });
+
+      await storage.swapBufferedReflectionToActive({
+        currentRecord: (await storage.getObservationalMemory(threadId, resourceId))!,
+        tokenCount: 10,
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      // Should only contain the condensed reflection, no unreflected content
+      expect(record!.activeObservations).toBe('* Condensed all three lines');
+      expect(record!.observationTokenCount).toBe(10);
+    });
+
+    it('should handle observations added DURING reflection (new lines after boundary)', async () => {
+      const storage = createInMemoryStorage();
+      const threadId = 'reflect-during-thread';
+      const resourceId = 'reflect-during-resource';
+
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Reflection During Activity Test',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Start with 3 lines
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '* Line A\n* Line B\n* Line C',
+        tokenCount: 50,
+        lastObservedAt: new Date(),
+      });
+
+      // Start async reflection on all 3 lines
+      await storage.updateBufferedReflection({
+        id: initial.id,
+        reflection: '* Summary of A, B, C',
+        tokenCount: 15,
+        reflectedObservationLineCount: 3,
+      });
+
+      // Simulate new observations added WHILE reflection was running
+      // (sync observation ran and appended new lines)
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations:
+          '* Line A\n* Line B\n* Line C\n* Line D (added during reflection)\n* Line E (added during reflection)',
+        tokenCount: 80,
+        lastObservedAt: new Date(),
+      });
+
+      // Now activate - should keep lines D and E
+      await storage.swapBufferedReflectionToActive({
+        currentRecord: (await storage.getObservationalMemory(threadId, resourceId))!,
+        tokenCount: 40,
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record!.activeObservations).toContain('Summary of A, B, C');
+      expect(record!.activeObservations).toContain('Line D (added during reflection)');
+      expect(record!.activeObservations).toContain('Line E (added during reflection)');
+      // Original reflected lines should not be present
+      expect(record!.activeObservations).not.toContain('* Line A\n');
+      expect(record!.activeObservations).not.toContain('* Line B\n');
+      expect(record!.activeObservations).not.toMatch(/\* Line C\n/);
+    });
+
+    it('should trigger async reflection via processInputStep when observation tokens cross asyncActivation threshold', async () => {
+      // Setup: Low reflection threshold so reflection triggers quickly.
+      // asyncActivation=0.5 means reflection starts at 50% of reflectionObservationTokens.
+      // Observer returns ~10 tokens of observation per call.
+      // reflectionObservationTokens=20 → activation point = 10 tokens.
+      const { storage, threadId, resourceId, step, waitForAsyncOps, reflectorCalls, observerCalls } =
+        await setupAsyncBufferingScenario({
+          messageTokens: 3000,
+          bufferEvery: 500,
+          asyncActivation: 1.0,
+          reflectionObservationTokens: 20, // Very low threshold
+          reflectionAsyncActivation: 0.5, // Trigger reflection at 50% = 10 tokens
+          messageCount: 8, // ~1600 tokens, below message threshold
+        });
+
+      // Step 0: below message threshold, triggers async observation buffering
+      await step(0);
+      await waitForAsyncOps();
+
+      expect(observerCalls.length).toBeGreaterThan(0);
+
+      // Verify buffered chunks exist
+      let record = await storage.getObservationalMemory(threadId, resourceId);
+      const chunks =
+        typeof record?.bufferedObservationChunks === 'string'
+          ? JSON.parse(record.bufferedObservationChunks)
+          : (record?.bufferedObservationChunks ?? []);
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Add more messages to push past observation threshold
+      const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+      for (let i = 8; i < 25; i++) {
+        await storage.saveMessages({
+          messages: [
+            {
+              id: `msg-${i}`,
+              role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+              content: {
+                format: 2 as const,
+                parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+              },
+              type: 'text',
+              createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+              threadId,
+              resourceId,
+            },
+          ],
+        });
+      }
+
+      // New turn step 0: activates buffered observation chunks → observation tokens jump above
+      // reflection threshold (20) → maybeAsyncReflect should trigger
+      await step(0, { freshState: true });
+      await waitForAsyncOps();
+
+      // Run a few more steps to allow reflection to complete and activate
+      for (let i = 1; i < 4; i++) {
+        await step(i);
+        await waitForAsyncOps();
+      }
+
+      record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record).toBeDefined();
+
+      // The reflector should have been called at least once
+      expect(reflectorCalls.length).toBeGreaterThan(0);
+
+      // If reflection activated, we should have a new generation
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 10);
+      if (history && history.length > 1) {
+        // New generation was created
+        expect(record!.originType).toBe('reflection');
+        expect(record!.generationCount).toBeGreaterThan(0);
+        expect(record!.activeObservations).toBeTruthy();
+        // The reflected content should contain our mock reflector's output
+        expect(record!.activeObservations).toContain('Reflected observation summary');
+      }
+    });
+
+    it('should not re-trigger async reflection when bufferedReflection already exists', async () => {
+      const storage = createInMemoryStorage();
+      const threadId = 'no-retrigger-thread';
+      const resourceId = 'no-retrigger-resource';
+
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'No Re-trigger Test',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+
+      let _reflectorCallCount = 0;
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          const promptText = JSON.stringify(prompt);
+          const isReflection = promptText.includes('consolidat') || promptText.includes('reflect');
+          if (isReflection) {
+            _reflectorCallCount++;
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+            content: [
+              {
+                type: 'text' as const,
+                text: isReflection
+                  ? '<reflection>\nDate: Jan 1, 2025\n* Reflected content\n</reflection>'
+                  : '<observations>\nDate: Jan 1, 2025\n* 🔴 Observation\n</observations>',
+              },
+            ],
+            warnings: [],
+          };
+        },
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        model: mockModel as any,
+        observation: {
+          messageTokens: 10000,
+          bufferEvery: 500,
+          asyncActivation: 1.0,
+        },
+        reflection: {
+          observationTokens: 100,
+          asyncActivation: 0.5,
+        },
+      });
+
+      // Initialize and set up observations that are above 50% of reflection threshold
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Set active observations with token count above the activation point (50 = 100 * 0.5)
+      await storage.updateActiveObservations({
+        id: initial.id,
+        observations: '* Observation 1\n* Observation 2\n* Observation 3',
+        tokenCount: 60,
+        lastObservedAt: new Date(),
+      });
+
+      // Also set a bufferedReflection to simulate one already in progress/completed
+      await storage.updateBufferedReflection({
+        id: initial.id,
+        reflection: '* Already buffered reflection',
+        tokenCount: 20,
+        reflectedObservationLineCount: 3,
+      });
+
+      // shouldTriggerAsyncReflection should return false because bufferedReflection exists
+      const shouldTrigger = (om as any).shouldTriggerAsyncReflection(
+        60,
+        `thread:${threadId}`,
+        await storage.getObservationalMemory(threadId, resourceId),
+      );
+      expect(shouldTrigger).toBe(false);
+    });
   });
 
   it('should not activate more chunks than asyncActivation ratio allows', async () => {

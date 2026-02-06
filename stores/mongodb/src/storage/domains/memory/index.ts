@@ -1148,6 +1148,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       pendingMessageTokens: Number(doc.pendingMessageTokens || 0),
       isReflecting: Boolean(doc.isReflecting),
       isObserving: Boolean(doc.isObserving),
+      isBufferingObservation: Boolean(doc.isBufferingObservation),
+      isBufferingReflection: Boolean(doc.isBufferingReflection),
+      lastBufferedAtTokens:
+        typeof doc.lastBufferedAtTokens === 'number'
+          ? doc.lastBufferedAtTokens
+          : parseInt(String(doc.lastBufferedAtTokens ?? '0'), 10) || 0,
       config: doc.config || {},
       metadata: doc.metadata || undefined,
       observedMessageIds: doc.observedMessageIds || undefined,
@@ -1220,6 +1226,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         pendingMessageTokens: 0,
         isReflecting: false,
         isObserving: false,
+        isBufferingObservation: false,
+        isBufferingReflection: false,
+        lastBufferedAtTokens: 0,
         config: input.config,
         observedTimezone: input.observedTimezone,
       };
@@ -1243,6 +1252,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         observationTokenCount: 0,
         isObserving: false,
         isReflecting: false,
+        isBufferingObservation: false,
+        isBufferingReflection: false,
+        lastBufferedAtTokens: 0,
         observedTimezone: input.observedTimezone || null,
         createdAt: now,
         updatedAt: now,
@@ -1332,6 +1344,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         pendingMessageTokens: 0,
         isReflecting: false,
         isObserving: false,
+        isBufferingObservation: false,
+        isBufferingReflection: false,
+        lastBufferedAtTokens: 0,
         config: input.currentRecord.config,
         metadata: input.currentRecord.metadata,
         observedTimezone: input.currentRecord.observedTimezone,
@@ -1356,6 +1371,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         observationTokenCount: record.observationTokenCount,
         isObserving: false,
         isReflecting: false,
+        isBufferingObservation: false,
+        isBufferingReflection: false,
+        lastBufferedAtTokens: 0,
         observedTimezone: record.observedTimezone || null,
         createdAt: now,
         updatedAt: now,
@@ -1430,6 +1448,78 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, isObserving },
+        },
+        error,
+      );
+    }
+  }
+
+  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      const updateDoc: any = {
+        isBufferingObservation: isBuffering,
+        updatedAt: new Date(),
+      };
+
+      if (lastBufferedAtTokens !== undefined) {
+        updateDoc.lastBufferedAtTokens = lastBufferedAtTokens;
+      }
+
+      const result = await collection.updateOne({ id }, { $set: updateDoc });
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SET_BUFFERING_OBSERVATION_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering, lastBufferedAtTokens: lastBufferedAtTokens ?? null },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SET_BUFFERING_OBSERVATION_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering, lastBufferedAtTokens: lastBufferedAtTokens ?? null },
+        },
+        error,
+      );
+    }
+  }
+
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+      const result = await collection.updateOne(
+        { id },
+        { $set: { isBufferingReflection: isBuffering, updatedAt: new Date() } },
+      );
+
+      if (result.matchedCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'SET_BUFFERING_REFLECTION_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'SET_BUFFERING_REFLECTION_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isBuffering },
         },
         error,
       );

@@ -835,6 +835,9 @@ export class InMemoryMemory extends MemoryStorage {
       // State flags
       isReflecting: false,
       isObserving: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
       // Configuration
       config,
       // Timezone used for observation date formatting
@@ -1034,6 +1037,9 @@ export class InMemoryMemory extends MemoryStorage {
       pendingMessageTokens: 0,
       isReflecting: false,
       isObserving: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
       // Timezone used for observation date formatting
       observedTimezone: currentRecord.observedTimezone,
       // Extensible metadata (optional)
@@ -1118,6 +1124,29 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     record.isObserving = isObserving;
+    record.updatedAt = new Date();
+  }
+
+  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.isBufferingObservation = isBuffering;
+    if (lastBufferedAtTokens !== undefined) {
+      record.lastBufferedAtTokens = lastBufferedAtTokens;
+    }
+    record.updatedAt = new Date();
+  }
+
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.isBufferingReflection = isBuffering;
     record.updatedAt = new Date();
   }
 

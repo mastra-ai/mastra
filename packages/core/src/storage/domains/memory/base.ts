@@ -275,6 +275,25 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
+   * Set the isBufferingObservation flag and update lastBufferedAtTokens.
+   * Called when async observation buffering starts (true) or ends/fails (false).
+   * @param id - Record ID
+   * @param isBuffering - Whether buffering is in progress
+   * @param lastBufferedAtTokens - The pending token count at which this buffer was triggered (only set when isBuffering=true)
+   */
+  async setBufferingObservationFlag(_id: string, _isBuffering: boolean, _lastBufferedAtTokens?: number): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Set the isBufferingReflection flag.
+   * Called when async reflection buffering starts (true) or ends/fails (false).
+   */
+  async setBufferingReflectionFlag(_id: string, _isBuffering: boolean): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
    * Clear all observational memory for a thread/resource.
    * Removes all records and history.
    */

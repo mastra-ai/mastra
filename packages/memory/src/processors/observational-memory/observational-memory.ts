@@ -624,12 +624,27 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Check if we've crossed a new bufferEvery interval boundary.
    * Returns true if async buffering should be triggered.
    */
-  private shouldTriggerAsyncObservation(currentTokens: number, lockKey: string): boolean {
+  private shouldTriggerAsyncObservation(
+    currentTokens: number,
+    lockKey: string,
+    record: ObservationalMemoryRecord,
+  ): boolean {
     if (!this.isAsyncObservationEnabled()) return false;
 
-    const bufferEvery = this.observationConfig.bufferEvery!;
+    // Don't start a new buffer if one is already in progress (persisted flag survives instance recreation)
+    if (record.isBufferingObservation) return false;
+
+    // Also check in-memory state for the current instance (protects within a single request)
     const bufferKey = this.getObservationBufferKey(lockKey);
-    const lastBoundary = this.lastBufferedBoundary.get(bufferKey) ?? 0;
+    if (this.isAsyncBufferingInProgress(bufferKey)) return false;
+
+    const bufferEvery = this.observationConfig.bufferEvery!;
+    // Use the higher of persisted DB value or in-memory value.
+    // DB value survives instance recreation; in-memory value is set immediately
+    // when buffering starts (before the DB write completes).
+    const dbBoundary = record.lastBufferedAtTokens ?? 0;
+    const memBoundary = this.lastBufferedBoundary.get(bufferKey) ?? 0;
+    const lastBoundary = Math.max(dbBoundary, memBoundary);
 
     // Calculate which interval we're in
     const currentInterval = Math.floor(currentTokens / bufferEvery);
@@ -653,9 +668,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   ): boolean {
     if (!this.isAsyncReflectionEnabled()) return false;
 
-    const bufferKey = this.getReflectionBufferKey(lockKey);
+    // Don't re-trigger if buffering is already in progress (persisted flag survives instance recreation)
+    if (record.isBufferingReflection) return false;
 
-    // Only trigger once - if we've already started buffering, don't trigger again
+    // Also check in-memory state for the current instance
+    const bufferKey = this.getReflectionBufferKey(lockKey);
+    if (this.isAsyncBufferingInProgress(bufferKey)) return false;
     if (this.lastBufferedBoundary.has(bufferKey)) return false;
 
     // Don't re-trigger if the record already has a buffered reflection
@@ -2671,7 +2689,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
       // ════════════════════════════════════════════════════════════════════════
 
       if (this.isAsyncObservationEnabled() && totalPendingTokens < threshold) {
-        const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey);
+        const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record);
         if (shouldTrigger) {
           this.startAsyncBufferedObservation(record, threadId, unobservedMessages, lockKey, writer);
         }
@@ -3296,15 +3314,27 @@ ${formattedMessages}
   ): void {
     const bufferKey = this.getObservationBufferKey(lockKey);
 
-    // Update the last buffered boundary
+    // Update the last buffered boundary (in-memory for current instance)
     const currentTokens = this.tokenCounter.countMessages(unobservedMessages) + (record.pendingMessageTokens ?? 0);
     this.lastBufferedBoundary.set(bufferKey, currentTokens);
+
+    // Set persistent flag so new instances (created per request) know buffering is in progress
+    this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
+      console.error(`[OM] Failed to set buffering observation flag:`, err instanceof Error ? err.message : String(err));
+    });
 
     // Start the async operation - waits for any existing op to complete first
     const asyncOp = this.runAsyncBufferedObservation(record, threadId, unobservedMessages, bufferKey, writer).finally(
       () => {
         // Clean up the operation tracking
         this.asyncBufferingOps.delete(bufferKey);
+        // Clear persistent flag
+        this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
+          console.error(
+            `[OM] Failed to clear buffering observation flag:`,
+            err instanceof Error ? err.message : String(err),
+          );
+        });
       },
     );
 
@@ -3567,6 +3597,8 @@ ${formattedMessages}
 
     // Reset lastBufferedBoundary so new buffering can start fresh after activation
     this.lastBufferedBoundary.delete(bufferKey);
+    // Reset persistent lastBufferedAtTokens to 0 so interval tracking restarts
+    await this.storage.setBufferingObservationFlag(freshRecord.id, false, 0);
 
     // Fetch updated record
     const updatedRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
@@ -3615,8 +3647,13 @@ ${formattedMessages}
       return;
     }
 
-    // Update the last buffered boundary
+    // Update the last buffered boundary (in-memory for current instance)
     this.lastBufferedBoundary.set(bufferKey, observationTokens);
+
+    // Set persistent flag so new instances know buffering is in progress
+    this.storage.setBufferingReflectionFlag(record.id, true).catch(err => {
+      console.error(`[OM] Failed to set buffering reflection flag:`, err instanceof Error ? err.message : String(err));
+    });
 
     // Start the async operation
     const asyncOp = this.doAsyncBufferedReflection(record, bufferKey, writer)
@@ -3640,6 +3677,13 @@ ${formattedMessages}
       .finally(() => {
         // Clean up the operation tracking
         this.asyncBufferingOps.delete(bufferKey);
+        // Clear persistent flag
+        this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
+          console.error(
+            `[OM] Failed to clear buffering reflection flag:`,
+            err instanceof Error ? err.message : String(err),
+          );
+        });
       });
 
     this.asyncBufferingOps.set(bufferKey, asyncOp);

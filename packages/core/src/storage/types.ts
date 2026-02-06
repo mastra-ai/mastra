@@ -662,6 +662,16 @@ export interface ObservationalMemoryRecord {
   isReflecting: boolean;
   /** Is observation currently in progress? */
   isObserving: boolean;
+  /** Is async observation buffering currently in progress? */
+  isBufferingObservation: boolean;
+  /** Is async reflection buffering currently in progress? */
+  isBufferingReflection: boolean;
+  /**
+   * The pending message token count at which the last async observation buffer was triggered.
+   * Used to determine when the next bufferEvery interval is crossed.
+   * Persisted so new instances (created per request) can pick up where the last left off.
+   */
+  lastBufferedAtTokens: number;
 
   // Configuration
   /** Current configuration (stored as JSON) */
