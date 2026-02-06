@@ -334,7 +334,13 @@ describe('S3Filesystem', () => {
       expect(config.endpoint).toBe('http://minio:9000');
     });
 
-    it('reuses client for subsequent operations', async () => {
+    it('creates client lazily on first operation', async () => {
+      const { S3Client } = await import('@aws-sdk/client-s3');
+      const MockS3Client = vi.mocked(S3Client);
+
+      // Clear any calls from previous tests
+      MockS3Client.mockClear();
+
       const fs = new S3Filesystem({
         bucket: 'test',
         region: 'us-east-1',
@@ -342,10 +348,18 @@ describe('S3Filesystem', () => {
         secretAccessKey: 'test',
       });
 
-      // Multiple calls should use the same client instance
-      // This is tested implicitly - if the client wasn't reused,
-      // we'd see multiple S3Client constructor calls
-      expect(fs.provider).toBe('s3');
+      // Constructor should NOT create the S3 client
+      expect(MockS3Client).not.toHaveBeenCalled();
+
+      // Trigger an operation that uses the client
+      try {
+        await fs.readFile('test.txt');
+      } catch {
+        // Expected to fail (mock doesn't return data), but client should be created
+      }
+
+      // Now the client should have been created
+      expect(MockS3Client).toHaveBeenCalled();
     });
 
     it('uses anonymous credentials for public buckets', () => {

@@ -199,16 +199,17 @@ describe('GCSFilesystem', () => {
   });
 
   describe('getInfo()', () => {
-    it('returns FilesystemInfo with gcs icon', () => {
+    it('returns FilesystemInfo with gcs icon when implemented', () => {
       const fs = new GCSFilesystem({ id: 'test-id', bucket: 'my-bucket' });
 
       const info = fs.getInfo?.();
 
-      // GCSFilesystem may not implement getInfo yet
+      // getInfo is optional on the Lifecycle interface
       if (info) {
         expect(info.id).toBe('test-id');
         expect(info.name).toBe('GCSFilesystem');
         expect(info.provider).toBe('gcs');
+        expect(info.status).toBe('pending');
         expect(info.icon).toBe('gcs');
       }
     });
@@ -238,6 +239,34 @@ describe('GCSFilesystem', () => {
       const instructions = fs.getInstructions();
 
       expect(instructions).toContain('Persistent');
+    });
+  });
+
+  describe('GCS Client Configuration', () => {
+    it('creates client lazily on first operation', async () => {
+      const { Storage } = await import('@google-cloud/storage');
+      const MockStorage = vi.mocked(Storage);
+
+      // Clear any calls from previous tests
+      MockStorage.mockClear();
+
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        projectId: 'my-project',
+      });
+
+      // Constructor should NOT create the Storage client
+      expect(MockStorage).not.toHaveBeenCalled();
+
+      // Trigger a method that uses the client (readFile calls getReadyBucket -> getStorage)
+      try {
+        await fs.readFile('test.txt');
+      } catch {
+        // Expected to fail (mock doesn't return proper data), but client should be created
+      }
+
+      // Now the Storage client should have been created
+      expect(MockStorage).toHaveBeenCalled();
     });
   });
 

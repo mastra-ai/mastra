@@ -273,6 +273,53 @@ describe.skipIf(!process.env.E2B_API_KEY || !process.env.GCS_SERVICE_ACCOUNT_KEY
       }
     }, 180000);
 
+    it('full workflow: mount GCS and verify FUSE mount', async () => {
+      // 1. Start sandbox
+      await sandbox.start();
+      expect(sandbox.status).toBe('running');
+
+      // 2. Mount GCS filesystem
+      const bucket = process.env.TEST_GCS_BUCKET!;
+      const mockFilesystem = {
+        id: 'test-gcs-workflow',
+        name: 'GCSFilesystem',
+        provider: 'gcs',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 'gcs',
+          bucket,
+          serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
+        }),
+      } as any;
+
+      const mountPath = '/data/gcs-workflow-test';
+      const mountResult = await sandbox.mount(mockFilesystem, mountPath);
+      expect(mountResult.success).toBe(true);
+
+      // 3. Verify the FUSE mount was created
+      const mountsResult = await sandbox.executeCommand('mount');
+      const hasFuseMount = mountsResult.stdout.includes(mountPath) && mountsResult.stdout.includes('fuse.gcsfuse');
+      expect(hasFuseMount).toBe(true);
+
+      // 4. Try file operations (may fail depending on bucket permissions)
+      const lsResult = await sandbox.executeCommand('ls', [mountPath]);
+      if (lsResult.exitCode === 0) {
+        // Bucket is accessible - try write/read cycle
+        const testContent = `gcs-test-${Date.now()}`;
+        const testFile = `${mountPath}/workflow-test-file.txt`;
+        const writeResult = await sandbox.executeCommand('sh', ['-c', `echo "${testContent}" > ${testFile}`]);
+
+        if (writeResult.exitCode === 0) {
+          const readResult = await sandbox.executeCommand('cat', [testFile]);
+          expect(readResult.exitCode).toBe(0);
+          expect(readResult.stdout.trim()).toBe(testContent);
+          await sandbox.executeCommand('rm', [testFile]);
+        }
+      } else {
+        console.log(`[GCS TEST] Note: ls failed (bucket may have access restrictions): ${lsResult.stderr}`);
+      }
+    }, 240000);
+
     it('GCS public bucket mounts with anonymous access', async () => {
       await sandbox.start();
 
