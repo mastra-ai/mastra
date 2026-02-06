@@ -11,7 +11,7 @@
  * Based on the Workspace Filesystem & Sandbox Test Plan.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { S3Filesystem } from './index';
 
@@ -545,6 +545,504 @@ describe('S3Filesystem', () => {
 });
 
 /**
- * Integration tests are in index.integration.test.ts
- * They are separated to avoid conflicts with the mocked AWS SDK above.
+ * SDK Operation Unit Tests
+ *
+ * These verify the correct AWS SDK commands are called with the right parameters,
+ * error mapping (NoSuchKey → FileNotFoundError), prefix handling, MIME types, and pagination.
+ *
+ * Integration tests (real S3) are in index.integration.test.ts.
  */
+describe('S3Filesystem SDK Operations', () => {
+  let fs: S3Filesystem;
+  let mockSend: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fs = new S3Filesystem({
+      bucket: 'test-bucket',
+      region: 'us-east-1',
+      accessKeyId: 'test-key',
+      secretAccessKey: 'test-secret',
+    });
+    // Set up mock client directly (avoids S3Client constructor issues with vi.mock)
+    mockSend = vi.fn();
+    (fs as any)._client = { send: mockSend };
+    (fs as any).status = 'ready';
+  });
+
+  describe('readFile()', () => {
+    it('returns Buffer by default', async () => {
+      mockSend.mockResolvedValueOnce({
+        Body: { transformToByteArray: () => Promise.resolve(new Uint8Array([104, 101, 108, 108, 111])) },
+      });
+
+      const result = await fs.readFile('/test.txt');
+
+      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(result.toString()).toBe('hello');
+    });
+
+    it('returns string when encoding specified', async () => {
+      mockSend.mockResolvedValueOnce({
+        Body: { transformToByteArray: () => Promise.resolve(new Uint8Array([104, 105])) },
+      });
+
+      const result = await fs.readFile('/test.txt', { encoding: 'utf-8' });
+
+      expect(typeof result).toBe('string');
+      expect(result).toBe('hi');
+    });
+
+    it('throws FileNotFoundError on NoSuchKey', async () => {
+      const error = new Error('NoSuchKey');
+      (error as any).name = 'NoSuchKey';
+      mockSend.mockRejectedValueOnce(error);
+
+      await expect(fs.readFile('/missing.txt')).rejects.toThrow(/missing\.txt/);
+    });
+
+    it('throws FileNotFoundError when Body is empty', async () => {
+      mockSend.mockResolvedValueOnce({ Body: null });
+
+      await expect(fs.readFile('/empty.txt')).rejects.toThrow(/empty\.txt/);
+    });
+
+    it('applies prefix to key', async () => {
+      const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+      const prefixFs = new S3Filesystem({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'k',
+        secretAccessKey: 's',
+        prefix: 'my-prefix',
+      });
+      const prefixSend = vi.fn();
+      (prefixFs as any)._client = { send: prefixSend };
+      (prefixFs as any).status = 'ready';
+      prefixSend.mockResolvedValueOnce({
+        Body: { transformToByteArray: () => Promise.resolve(new Uint8Array([1])) },
+      });
+
+      await prefixFs.readFile('/file.txt');
+
+      expect(GetObjectCommand).toHaveBeenCalledWith({
+        Bucket: 'test-bucket',
+        Key: 'my-prefix/file.txt',
+      });
+    });
+
+    it('re-throws non-NoSuchKey errors', async () => {
+      mockSend.mockRejectedValueOnce(new Error('AccessDenied'));
+
+      await expect(fs.readFile('/test.txt')).rejects.toThrow('AccessDenied');
+    });
+  });
+
+  describe('writeFile()', () => {
+    it('sends PutObjectCommand with string content', async () => {
+      const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+      mockSend.mockResolvedValueOnce({});
+
+      await fs.writeFile('/test.txt', 'hello world');
+
+      expect(PutObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Bucket: 'test-bucket',
+          Key: 'test.txt',
+          Body: Buffer.from('hello world', 'utf-8'),
+          ContentType: 'text/plain',
+        }),
+      );
+    });
+
+    it('sends PutObjectCommand with Buffer content', async () => {
+      mockSend.mockResolvedValueOnce({});
+
+      const buf = Buffer.from([1, 2, 3]);
+      await fs.writeFile('/data.bin', buf);
+
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('detects MIME type from extension', async () => {
+      const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+
+      mockSend.mockResolvedValueOnce({});
+      await fs.writeFile('/page.html', '<html>');
+      expect(PutObjectCommand).toHaveBeenCalledWith(expect.objectContaining({ ContentType: 'text/html' }));
+
+      vi.mocked(PutObjectCommand).mockClear();
+      mockSend.mockResolvedValueOnce({});
+      await fs.writeFile('/data.json', '{}');
+      expect(PutObjectCommand).toHaveBeenCalledWith(expect.objectContaining({ ContentType: 'application/json' }));
+
+      vi.mocked(PutObjectCommand).mockClear();
+      mockSend.mockResolvedValueOnce({});
+      await fs.writeFile('/unknown.xyz', 'data');
+      expect(PutObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ ContentType: 'application/octet-stream' }),
+      );
+    });
+
+    it('applies prefix to key', async () => {
+      const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+      const prefixFs = new S3Filesystem({
+        bucket: 'b',
+        region: 'us-east-1',
+        accessKeyId: 'k',
+        secretAccessKey: 's',
+        prefix: 'pfx',
+      });
+      const pfxSend = vi.fn().mockResolvedValueOnce({});
+      (prefixFs as any)._client = { send: pfxSend };
+      (prefixFs as any).status = 'ready';
+
+      await prefixFs.writeFile('/file.txt', 'data');
+
+      expect(PutObjectCommand).toHaveBeenCalledWith(expect.objectContaining({ Key: 'pfx/file.txt' }));
+    });
+  });
+
+  describe('appendFile()', () => {
+    it('reads existing content then writes concatenated result', async () => {
+      // First send: GetObjectCommand (read existing)
+      mockSend.mockResolvedValueOnce({
+        Body: { transformToByteArray: () => Promise.resolve(Buffer.from('hello ')) },
+      });
+      // Second send: PutObjectCommand (write result)
+      mockSend.mockResolvedValueOnce({});
+
+      await fs.appendFile('/test.txt', 'world');
+
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it('creates file if it does not exist', async () => {
+      // First send: GetObjectCommand fails (file doesn't exist)
+      const error = new Error('NoSuchKey');
+      (error as any).name = 'NoSuchKey';
+      mockSend.mockRejectedValueOnce(error);
+      // Second send: PutObjectCommand (write new content)
+      mockSend.mockResolvedValueOnce({});
+
+      await fs.appendFile('/new.txt', 'content');
+
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('deleteFile()', () => {
+    it('sends DeleteObjectCommand for files', async () => {
+      const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+
+      // First send: ListObjectsV2 for isDirectory check → not a directory
+      mockSend.mockResolvedValueOnce({ Contents: [] });
+      // Second send: DeleteObjectCommand
+      mockSend.mockResolvedValueOnce({});
+
+      await fs.deleteFile('/test.txt');
+
+      expect(DeleteObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Bucket: 'test-bucket',
+          Key: 'test.txt',
+        }),
+      );
+    });
+
+    it('delegates to rmdir for directories', async () => {
+      // isDirectory check → has contents (is directory)
+      mockSend.mockResolvedValueOnce({ Contents: [{ Key: 'dir/file.txt' }] });
+      // rmdir recursive: ListObjectsV2
+      mockSend.mockResolvedValueOnce({ Contents: [{ Key: 'dir/file.txt' }] });
+      // rmdir recursive: DeleteObjectsCommand
+      mockSend.mockResolvedValueOnce({});
+
+      await fs.deleteFile('/dir');
+
+      expect(mockSend).toHaveBeenCalledTimes(3);
+    });
+
+    it('swallows errors with force option', async () => {
+      // isDirectory check → not a directory
+      mockSend.mockResolvedValueOnce({ Contents: [] });
+      // DeleteObjectCommand fails
+      mockSend.mockRejectedValueOnce(new Error('delete failed'));
+
+      // Should not throw with force: true
+      await expect(fs.deleteFile('/test.txt', { force: true })).resolves.not.toThrow();
+    });
+
+    it('throws on error without force option', async () => {
+      // isDirectory check → not a directory
+      mockSend.mockResolvedValueOnce({ Contents: [] });
+      // DeleteObjectCommand fails
+      mockSend.mockRejectedValueOnce(new Error('delete failed'));
+
+      await expect(fs.deleteFile('/test.txt')).rejects.toThrow(/test\.txt/);
+    });
+  });
+
+  describe('copyFile()', () => {
+    it('sends CopyObjectCommand with correct CopySource', async () => {
+      const { CopyObjectCommand } = await import('@aws-sdk/client-s3');
+      mockSend.mockResolvedValueOnce({});
+
+      await fs.copyFile('/src.txt', '/dest.txt');
+
+      expect(CopyObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Bucket: 'test-bucket',
+          CopySource: 'test-bucket/src.txt',
+          Key: 'dest.txt',
+        }),
+      );
+    });
+
+    it('throws FileNotFoundError when source missing', async () => {
+      mockSend.mockRejectedValueOnce(new Error('NoSuchKey'));
+
+      await expect(fs.copyFile('/missing.txt', '/dest.txt')).rejects.toThrow(/missing\.txt/);
+    });
+  });
+
+  describe('moveFile()', () => {
+    it('copies then deletes source', async () => {
+      // CopyObjectCommand
+      mockSend.mockResolvedValueOnce({});
+      // isDirectory check for deleteFile
+      mockSend.mockResolvedValueOnce({ Contents: [] });
+      // DeleteObjectCommand (with force: true, so no throw on error)
+      mockSend.mockResolvedValueOnce({});
+
+      await fs.moveFile('/src.txt', '/dest.txt');
+
+      expect(mockSend).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('mkdir()', () => {
+    it('is a no-op (S3 has no real directories)', async () => {
+      await fs.mkdir('/new-dir');
+
+      // No SDK calls should be made
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('rmdir()', () => {
+    it('throws if non-recursive and directory is not empty', async () => {
+      // readdir: ListObjectsV2 returns files
+      mockSend.mockResolvedValueOnce({
+        Contents: [{ Key: 'dir/file.txt', Size: 100 }],
+        CommonPrefixes: [],
+      });
+
+      await expect(fs.rmdir('/dir')).rejects.toThrow('Directory not empty');
+    });
+
+    it('recursive deletes all objects with prefix', async () => {
+      const { DeleteObjectsCommand } = await import('@aws-sdk/client-s3');
+
+      // ListObjectsV2 returns objects
+      mockSend.mockResolvedValueOnce({
+        Contents: [{ Key: 'dir/a.txt' }, { Key: 'dir/b.txt' }],
+      });
+      // DeleteObjectsCommand
+      mockSend.mockResolvedValueOnce({});
+
+      await fs.rmdir('/dir', { recursive: true });
+
+      expect(DeleteObjectsCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Bucket: 'test-bucket',
+          Delete: {
+            Objects: [{ Key: 'dir/a.txt' }, { Key: 'dir/b.txt' }],
+          },
+        }),
+      );
+    });
+
+    it('handles pagination during recursive delete', async () => {
+      // First page
+      mockSend.mockResolvedValueOnce({
+        Contents: [{ Key: 'dir/a.txt' }],
+        NextContinuationToken: 'token1',
+      });
+      mockSend.mockResolvedValueOnce({}); // DeleteObjectsCommand
+      // Second page
+      mockSend.mockResolvedValueOnce({
+        Contents: [{ Key: 'dir/b.txt' }],
+      });
+      mockSend.mockResolvedValueOnce({}); // DeleteObjectsCommand
+
+      await fs.rmdir('/dir', { recursive: true });
+
+      // 4 calls: list + delete + list + delete
+      expect(mockSend).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  describe('readdir()', () => {
+    it('returns files from Contents', async () => {
+      mockSend.mockResolvedValueOnce({
+        Contents: [
+          { Key: 'file1.txt', Size: 100 },
+          { Key: 'file2.js', Size: 200 },
+        ],
+        CommonPrefixes: [],
+      });
+
+      const entries = await fs.readdir('/');
+
+      expect(entries).toEqual([
+        { name: 'file1.txt', type: 'file', size: 100 },
+        { name: 'file2.js', type: 'file', size: 200 },
+      ]);
+    });
+
+    it('returns directories from CommonPrefixes', async () => {
+      mockSend.mockResolvedValueOnce({
+        Contents: [],
+        CommonPrefixes: [{ Prefix: 'subdir/' }],
+      });
+
+      const entries = await fs.readdir('/');
+
+      expect(entries).toEqual([{ name: 'subdir', type: 'directory' }]);
+    });
+
+    it('handles pagination with ContinuationToken', async () => {
+      mockSend.mockResolvedValueOnce({
+        Contents: [{ Key: 'a.txt', Size: 1 }],
+        NextContinuationToken: 'token1',
+      });
+      mockSend.mockResolvedValueOnce({
+        Contents: [{ Key: 'b.txt', Size: 2 }],
+      });
+
+      const entries = await fs.readdir('/');
+
+      expect(entries).toHaveLength(2);
+      expect(entries[0]!.name).toBe('a.txt');
+      expect(entries[1]!.name).toBe('b.txt');
+    });
+
+    it('filters by extension', async () => {
+      mockSend.mockResolvedValueOnce({
+        Contents: [
+          { Key: 'file.txt', Size: 1 },
+          { Key: 'file.js', Size: 2 },
+          { Key: 'file.ts', Size: 3 },
+        ],
+      });
+
+      const entries = await fs.readdir('/', { extension: '.ts' });
+
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.name).toBe('file.ts');
+    });
+
+    it('recognizes directory markers (trailing slash)', async () => {
+      mockSend.mockResolvedValueOnce({
+        Contents: [
+          { Key: 'mydir/', Size: 0 },
+          { Key: 'file.txt', Size: 100 },
+        ],
+      });
+
+      const entries = await fs.readdir('/');
+
+      expect(entries).toContainEqual({ name: 'mydir', type: 'directory' });
+      expect(entries).toContainEqual({ name: 'file.txt', type: 'file', size: 100 });
+    });
+
+    it('skips empty relative paths and searchPrefix itself', async () => {
+      mockSend.mockResolvedValueOnce({
+        Contents: [
+          { Key: 'dir/', Size: 0 }, // The searchPrefix itself
+          { Key: 'dir/real-file.txt', Size: 50 },
+        ],
+      });
+
+      const entries = await fs.readdir('/dir');
+
+      // Should only have the real file, not the directory marker that equals searchPrefix
+      expect(entries).toEqual([{ name: 'real-file.txt', type: 'file', size: 50 }]);
+    });
+  });
+
+  describe('exists()', () => {
+    it('returns true when file exists (HeadObject succeeds)', async () => {
+      mockSend.mockResolvedValueOnce({}); // HeadObjectCommand succeeds
+
+      const result = await fs.exists('/test.txt');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns true when directory exists (ListObjects has contents)', async () => {
+      // HeadObject fails (not a file)
+      mockSend.mockRejectedValueOnce(new Error('NotFound'));
+      // ListObjectsV2 finds contents (is a directory)
+      mockSend.mockResolvedValueOnce({ Contents: [{ Key: 'dir/file.txt' }] });
+
+      const result = await fs.exists('/dir');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false when nothing exists', async () => {
+      // HeadObject fails
+      mockSend.mockRejectedValueOnce(new Error('NotFound'));
+      // ListObjectsV2 finds nothing
+      mockSend.mockResolvedValueOnce({ Contents: [] });
+
+      const result = await fs.exists('/missing');
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('stat()', () => {
+    it('returns file stat from HeadObject', async () => {
+      const lastMod = new Date('2024-01-15T10:30:00Z');
+      mockSend.mockResolvedValueOnce({
+        ContentLength: 1024,
+        LastModified: lastMod,
+      });
+
+      const stat = await fs.stat('/docs/readme.txt');
+
+      expect(stat).toEqual({
+        name: 'readme.txt',
+        path: '/docs/readme.txt',
+        type: 'file',
+        size: 1024,
+        createdAt: lastMod,
+        modifiedAt: lastMod,
+      });
+    });
+
+    it('returns directory stat when file not found but prefix exists', async () => {
+      // HeadObject fails
+      mockSend.mockRejectedValueOnce(new Error('NotFound'));
+      // isDirectory: ListObjectsV2 finds contents
+      mockSend.mockResolvedValueOnce({ Contents: [{ Key: 'mydir/file.txt' }] });
+
+      const stat = await fs.stat('/mydir');
+
+      expect(stat.type).toBe('directory');
+      expect(stat.name).toBe('mydir');
+      expect(stat.size).toBe(0);
+    });
+
+    it('throws FileNotFoundError when nothing exists', async () => {
+      // HeadObject fails
+      mockSend.mockRejectedValueOnce(new Error('NotFound'));
+      // isDirectory: ListObjectsV2 finds nothing
+      mockSend.mockResolvedValueOnce({ Contents: [] });
+
+      await expect(fs.stat('/missing')).rejects.toThrow(/missing/);
+    });
+  });
+});

@@ -243,6 +243,63 @@ describe('MastraFilesystem Base Class', () => {
       expect(fs.status).toBe('destroyed');
     });
 
+    it('init() sets status to error when _doInit throws', async () => {
+      const fs = new TestFilesystem();
+
+      // Override _doInit to throw
+      (fs as any)._doInit = async () => {
+        throw new Error('Init failed');
+      };
+
+      await expect(fs.init()).rejects.toThrow('Init failed');
+
+      expect(fs.status).toBe('error');
+    });
+
+    it('ensureReady() propagates init error when _doInit fails', async () => {
+      const fs = new TestFilesystem();
+
+      // Override _doInit to throw
+      (fs as any)._doInit = async () => {
+        throw new Error('Init failed');
+      };
+
+      // ensureReady checks status !== 'ready', calls init() which throws
+      await expect((fs as any).ensureReady()).rejects.toThrow('Init failed');
+      expect(fs.status).toBe('error');
+    });
+
+    it('_initPromise is cleared after error so retry is possible', async () => {
+      const fs = new TestFilesystem();
+      let shouldFail = true;
+
+      (fs as any)._doInit = async () => {
+        if (shouldFail) throw new Error('Init failed');
+      };
+
+      // First init fails
+      await expect(fs.init()).rejects.toThrow('Init failed');
+      expect(fs.status).toBe('error');
+
+      // Fix the issue and retry
+      shouldFail = false;
+      await fs.init();
+      expect(fs.status).toBe('ready');
+    });
+
+    it('destroy() sets status to error when _doDestroy throws', async () => {
+      const fs = new TestFilesystem();
+      await fs.init();
+
+      (fs as any)._doDestroy = async () => {
+        throw new Error('Destroy failed');
+      };
+
+      await expect(fs.destroy()).rejects.toThrow('Destroy failed');
+
+      expect(fs.status).toBe('error');
+    });
+
     it('init() after destroy() re-initializes', async () => {
       const fs = new TestFilesystem();
 

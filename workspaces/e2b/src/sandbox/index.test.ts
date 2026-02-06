@@ -876,10 +876,7 @@ describe('E2BSandbox Error Handling', () => {
     // Should mention public_bucket only works for AWS S3
     expect(result.error).toContain('public_bucket');
     // Should log the error
-    expect(loggerErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Error mounting'),
-      expect.any(Error),
-    );
+    expect(loggerErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Error mounting'), expect.any(Error));
 
     loggerErrorSpy.mockRestore();
   });
@@ -1232,6 +1229,176 @@ describe('E2BSandbox Runtime Installation', () => {
       // apt-get install should NOT be called
       const installCommand = commandsRun.find(cmd => cmd.includes('apt-get install'));
       expect(installCommand).toBeUndefined();
+    });
+  });
+});
+
+/**
+ * Internal method tests
+ *
+ * Tests for private/internal methods that handle error detection,
+ * state management, and retry logic.
+ */
+describe('E2BSandbox Internal Methods', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('isSandboxDeadError()', () => {
+    it('returns true for "sandbox was not found"', () => {
+      const sandbox = new E2BSandbox();
+      expect((sandbox as any).isSandboxDeadError(new Error('sandbox was not found'))).toBe(true);
+    });
+
+    it('returns true for "Sandbox is probably not running"', () => {
+      const sandbox = new E2BSandbox();
+      expect((sandbox as any).isSandboxDeadError(new Error('Sandbox is probably not running'))).toBe(true);
+    });
+
+    it('returns true for "Sandbox not found"', () => {
+      const sandbox = new E2BSandbox();
+      expect((sandbox as any).isSandboxDeadError(new Error('Sandbox not found'))).toBe(true);
+    });
+
+    it('returns true for "sandbox has been killed"', () => {
+      const sandbox = new E2BSandbox();
+      expect((sandbox as any).isSandboxDeadError(new Error('sandbox has been killed'))).toBe(true);
+    });
+
+    it('returns false for regular errors', () => {
+      const sandbox = new E2BSandbox();
+      expect((sandbox as any).isSandboxDeadError(new Error('timeout'))).toBe(false);
+      expect((sandbox as any).isSandboxDeadError(new Error('command failed'))).toBe(false);
+      expect((sandbox as any).isSandboxDeadError(new Error('port is not open'))).toBe(false);
+    });
+
+    it('returns false for null/undefined', () => {
+      const sandbox = new E2BSandbox();
+      expect((sandbox as any).isSandboxDeadError(null)).toBe(false);
+      expect((sandbox as any).isSandboxDeadError(undefined)).toBe(false);
+    });
+  });
+
+  describe('handleSandboxTimeout()', () => {
+    it('clears sandbox instance and sets status to stopped', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox.start();
+
+      expect(sandbox.status).toBe('running');
+      expect((sandbox as any)._sandbox).not.toBeNull();
+
+      (sandbox as any).handleSandboxTimeout();
+
+      expect((sandbox as any)._sandbox).toBeNull();
+      expect(sandbox.status).toBe('stopped');
+    });
+  });
+
+  describe('executeCommand retry on dead sandbox', () => {
+    it('retries once when sandbox is dead', async () => {
+      const { Sandbox } = await import('e2b');
+      const sandbox = new E2BSandbox();
+      await sandbox.start();
+
+      let callCount = 0;
+      mockSandbox.commands.run.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('sandbox was not found');
+        }
+        return Promise.resolve({ exitCode: 0, stdout: 'ok', stderr: '' });
+      });
+
+      const result = await sandbox.executeCommand('echo', ['test']);
+
+      // Should succeed on retry (auto-restarts sandbox)
+      expect(result.success).toBe(true);
+      // betaCreate called once in initial start(), once in retry start()
+      expect(Sandbox.betaCreate).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not retry infinitely (only once)', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox.start();
+
+      // Always throw dead sandbox error
+      mockSandbox.commands.run.mockImplementation(() => {
+        throw new Error('sandbox was not found');
+      });
+
+      // Second attempt also fails, should return error result (not throw forever)
+      const result = await sandbox.executeCommand('echo', ['test']);
+
+      expect(result.success).toBe(false);
+      expect(result.stderr).toContain('sandbox was not found');
+    });
+
+    it('extracts result from E2B error object', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox.start();
+
+      // Simulate E2B error with embedded result
+      const e2bError = Object.assign(new Error('Command failed'), {
+        result: { exitCode: 127, stdout: '', stderr: 'command not found' },
+      });
+      mockSandbox.commands.run.mockRejectedValueOnce(e2bError);
+
+      const result = await sandbox.executeCommand('nonexistent');
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(127);
+      expect(result.stderr).toBe('command not found');
+    });
+  });
+
+  describe('mount() unsupported type', () => {
+    it('returns failure for unsupported mount config type', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox.start();
+
+      const mockFilesystem = {
+        id: 'test-unknown',
+        name: 'UnknownFS',
+        provider: 'unknown',
+        status: 'ready',
+        getMountConfig: () => ({ type: 'ftp', bucket: 'test' }),
+      } as any;
+
+      mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: 'ok', stderr: '' });
+
+      const result = await sandbox.mount(mockFilesystem, '/data/ftp');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Unsupported mount type');
+      expect(result.error).toContain('ftp');
+    });
+  });
+
+  describe('mount() non-empty directory safety check', () => {
+    it('rejects mounting to non-empty directory', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox.start();
+
+      mockSandbox.commands.run.mockImplementation((cmd: string) => {
+        // Safety check: directory exists and is non-empty
+        if (cmd.includes('ls -A')) {
+          return Promise.resolve({ exitCode: 0, stdout: 'non-empty', stderr: '' });
+        }
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      });
+
+      const mockFilesystem = {
+        id: 'fs',
+        name: 'FS',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => ({ type: 's3', bucket: 'b', region: 'r', accessKeyId: 'k', secretAccessKey: 's' }),
+      } as any;
+
+      const result = await sandbox.mount(mockFilesystem, '/data/existing');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('not empty');
     });
   });
 });

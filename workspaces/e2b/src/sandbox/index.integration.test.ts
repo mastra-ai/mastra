@@ -445,10 +445,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
       expect(checkDir.exitCode).toBe(0);
 
       // Verify directory is owned by the current user (sudo chown was used)
-      const ownerCheck = await sandbox.executeCommand('sh', [
-        '-c',
-        'stat -c "%u" /opt/test-mount',
-      ]);
+      const ownerCheck = await sandbox.executeCommand('sh', ['-c', 'stat -c "%u" /opt/test-mount']);
       const currentUid = await sandbox.executeCommand('id', ['-u']);
       expect(ownerCheck.stdout.trim()).toBe(currentUid.stdout.trim());
     },

@@ -10,7 +10,7 @@
  * Based on the Workspace Filesystem & Sandbox Test Plan.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { GCSFilesystem } from './index';
 
@@ -339,6 +339,468 @@ describe('GCSFilesystem', () => {
 });
 
 /**
- * Integration tests are in index.integration.test.ts
- * They are separated to avoid conflicts with the mocked GCS SDK above.
+ * SDK Operation Unit Tests
+ *
+ * These verify the correct GCS SDK methods are called with the right parameters,
+ * error mapping (code 404 → FileNotFoundError), prefix handling, MIME types, and readdir logic.
+ *
+ * Integration tests (real GCS) are in index.integration.test.ts.
  */
+describe('GCSFilesystem SDK Operations', () => {
+  let fs: GCSFilesystem;
+  let mockBucket: any;
+  let mockFile: any;
+
+  /**
+   * Helper: configure mock file methods for a test.
+   */
+  function configureMockFile(overrides: Record<string, any> = {}) {
+    for (const [key, value] of Object.entries(overrides)) {
+      mockFile[key].mockReset();
+      if (value instanceof Error) {
+        mockFile[key].mockRejectedValueOnce(value);
+      } else {
+        mockFile[key].mockResolvedValueOnce(value);
+      }
+    }
+    return mockFile;
+  }
+
+  beforeEach(() => {
+    // Create mock file with all needed methods
+    mockFile = {
+      download: vi.fn(),
+      save: vi.fn(),
+      delete: vi.fn(),
+      copy: vi.fn(),
+      exists: vi.fn(),
+      getMetadata: vi.fn(),
+      name: '',
+    };
+
+    // Create mock bucket
+    mockBucket = {
+      file: vi.fn().mockReturnValue(mockFile),
+      getFiles: vi.fn().mockResolvedValue([[]]),
+      deleteFiles: vi.fn().mockResolvedValue(undefined),
+    };
+
+    fs = new GCSFilesystem({
+      bucket: 'test-bucket',
+      credentials: { type: 'service_account', project_id: 'test' },
+    });
+    // Set up mock bucket directly (avoids Storage constructor issues with vi.mock)
+    (fs as any)._storage = {};
+    (fs as any)._bucket = mockBucket;
+    (fs as any).status = 'ready';
+  });
+
+  describe('readFile()', () => {
+    it('returns Buffer by default', async () => {
+      configureMockFile({ download: [Buffer.from('hello')] });
+
+      const result = await fs.readFile('/test.txt');
+
+      expect(Buffer.isBuffer(result)).toBe(true);
+      expect(result.toString()).toBe('hello');
+    });
+
+    it('returns string when encoding specified', async () => {
+      configureMockFile({ download: [Buffer.from('hi')] });
+
+      const result = await fs.readFile('/test.txt', { encoding: 'utf-8' });
+
+      expect(typeof result).toBe('string');
+      expect(result).toBe('hi');
+    });
+
+    it('throws FileNotFoundError on 404', async () => {
+      const error = Object.assign(new Error('Not Found'), { code: 404 });
+      configureMockFile({ download: error });
+
+      await expect(fs.readFile('/missing.txt')).rejects.toThrow(/missing\.txt/);
+    });
+
+    it('re-throws non-404 errors', async () => {
+      const error = Object.assign(new Error('Forbidden'), { code: 403 });
+      configureMockFile({ download: error });
+
+      await expect(fs.readFile('/test.txt')).rejects.toThrow('Forbidden');
+    });
+
+    it('applies prefix to key', async () => {
+      const prefixMockFile = {
+        download: vi.fn().mockResolvedValue([Buffer.from('data')]),
+        save: vi.fn(),
+        delete: vi.fn(),
+        copy: vi.fn(),
+        exists: vi.fn().mockResolvedValue([false]),
+        getMetadata: vi.fn(),
+        name: '',
+      };
+      const prefixMockBucket = {
+        file: vi.fn().mockReturnValue(prefixMockFile),
+        getFiles: vi.fn().mockResolvedValue([[]]),
+        deleteFiles: vi.fn().mockResolvedValue(undefined),
+      };
+      const prefixFs = new GCSFilesystem({
+        bucket: 'test-bucket',
+        credentials: { type: 'service_account' },
+        prefix: 'my-prefix',
+      });
+      (prefixFs as any)._storage = {};
+      (prefixFs as any)._bucket = prefixMockBucket;
+      (prefixFs as any).status = 'ready';
+
+      await prefixFs.readFile('/file.txt');
+
+      expect(prefixMockBucket.file).toHaveBeenCalledWith('my-prefix/file.txt');
+    });
+  });
+
+  describe('writeFile()', () => {
+    it('calls file.save with string content as Buffer', async () => {
+      const mockFile = configureMockFile({ save: undefined });
+
+      await fs.writeFile('/test.txt', 'hello world');
+
+      expect(mockFile.save).toHaveBeenCalledWith(
+        Buffer.from('hello world', 'utf-8'),
+        expect.objectContaining({
+          contentType: 'text/plain',
+          resumable: false,
+        }),
+      );
+    });
+
+    it('detects MIME type from extension', async () => {
+      const mockFile = mockBucket.file();
+
+      mockFile.save.mockResolvedValueOnce(undefined);
+      await fs.writeFile('/page.html', '<html>');
+      expect(mockFile.save).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        expect.objectContaining({ contentType: 'text/html' }),
+      );
+
+      mockFile.save.mockResolvedValueOnce(undefined);
+      await fs.writeFile('/data.json', '{}');
+      expect(mockFile.save).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        expect.objectContaining({ contentType: 'application/json' }),
+      );
+    });
+
+    it('applies prefix to key', async () => {
+      const prefixMockFile = {
+        download: vi.fn(),
+        save: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn(),
+        copy: vi.fn(),
+        exists: vi.fn().mockResolvedValue([false]),
+        getMetadata: vi.fn(),
+        name: '',
+      };
+      const prefixMockBucket = {
+        file: vi.fn().mockReturnValue(prefixMockFile),
+        getFiles: vi.fn().mockResolvedValue([[]]),
+        deleteFiles: vi.fn().mockResolvedValue(undefined),
+      };
+      const prefixFs = new GCSFilesystem({
+        bucket: 'b',
+        credentials: { type: 'service_account' },
+        prefix: 'pfx',
+      });
+      (prefixFs as any)._storage = {};
+      (prefixFs as any)._bucket = prefixMockBucket;
+      (prefixFs as any).status = 'ready';
+
+      await prefixFs.writeFile('/file.txt', 'data');
+
+      expect(prefixMockBucket.file).toHaveBeenCalledWith('pfx/file.txt');
+    });
+  });
+
+  describe('appendFile()', () => {
+    it('reads existing content then writes concatenated result', async () => {
+      const mockFile = mockBucket.file();
+      // read existing
+      mockFile.download.mockResolvedValueOnce([Buffer.from('hello ')]);
+      // write result
+      mockFile.save.mockResolvedValueOnce(undefined);
+
+      await fs.appendFile('/test.txt', 'world');
+
+      expect(mockFile.save).toHaveBeenCalledWith(Buffer.from('hello world', 'utf-8'), expect.any(Object));
+    });
+
+    it('creates file if it does not exist', async () => {
+      const mockFile = mockBucket.file();
+      // read fails (file doesn't exist)
+      mockFile.download.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { code: 404 }));
+      // write new content
+      mockFile.save.mockResolvedValueOnce(undefined);
+
+      await fs.appendFile('/new.txt', 'content');
+
+      expect(mockFile.save).toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteFile()', () => {
+    it('calls file.delete() for files', async () => {
+      const mockFile = mockBucket.file();
+      // isDirectory: getFiles returns empty (not a directory)
+      mockBucket.getFiles.mockResolvedValueOnce([[]]);
+      // file.delete succeeds
+      mockFile.delete.mockResolvedValueOnce(undefined);
+
+      await fs.deleteFile('/test.txt');
+
+      expect(mockFile.delete).toHaveBeenCalled();
+    });
+
+    it('throws FileNotFoundError on 404 without force', async () => {
+      const mockFile = mockBucket.file();
+      mockBucket.getFiles.mockResolvedValueOnce([[]]);
+      mockFile.delete.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { code: 404 }));
+
+      await expect(fs.deleteFile('/missing.txt')).rejects.toThrow(/missing\.txt/);
+    });
+
+    it('swallows errors with force option', async () => {
+      const mockFile = mockBucket.file();
+      mockBucket.getFiles.mockResolvedValueOnce([[]]);
+      mockFile.delete.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { code: 404 }));
+
+      await expect(fs.deleteFile('/missing.txt', { force: true })).resolves.not.toThrow();
+    });
+
+    it('delegates to rmdir for directories', async () => {
+      // isDirectory: getFiles returns files (is a directory)
+      mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'dir/file.txt' }]]);
+      // rmdir: deleteFiles
+      mockBucket.deleteFiles.mockResolvedValueOnce(undefined);
+
+      await fs.deleteFile('/dir');
+
+      expect(mockBucket.deleteFiles).toHaveBeenCalledWith(expect.objectContaining({ prefix: 'dir/' }));
+    });
+  });
+
+  describe('copyFile()', () => {
+    it('calls srcFile.copy(destFile)', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.copy.mockResolvedValueOnce(undefined);
+
+      await fs.copyFile('/src.txt', '/dest.txt');
+
+      expect(mockBucket.file).toHaveBeenCalledWith('src.txt');
+      expect(mockBucket.file).toHaveBeenCalledWith('dest.txt');
+      expect(mockFile.copy).toHaveBeenCalled();
+    });
+
+    it('throws FileNotFoundError on 404', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.copy.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { code: 404 }));
+
+      await expect(fs.copyFile('/missing.txt', '/dest.txt')).rejects.toThrow(/missing\.txt/);
+    });
+  });
+
+  describe('moveFile()', () => {
+    it('copies then deletes source', async () => {
+      const mockFile = mockBucket.file();
+      // copy
+      mockFile.copy.mockResolvedValueOnce(undefined);
+      // deleteFile → isDirectory check
+      mockBucket.getFiles.mockResolvedValueOnce([[]]);
+      // deleteFile → file.delete (with force: true)
+      mockFile.delete.mockResolvedValueOnce(undefined);
+
+      await fs.moveFile('/src.txt', '/dest.txt');
+
+      expect(mockFile.copy).toHaveBeenCalled();
+      expect(mockFile.delete).toHaveBeenCalled();
+    });
+  });
+
+  describe('mkdir()', () => {
+    it('is a no-op (GCS has no real directories)', async () => {
+      await fs.mkdir('/new-dir');
+
+      // No SDK calls should be made
+      expect(mockBucket.file).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('rmdir()', () => {
+    it('throws if non-recursive and directory is not empty', async () => {
+      // readdir returns files
+      mockBucket.getFiles.mockResolvedValueOnce([
+        [{ name: 'dir/file.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 100 }]) }],
+      ]);
+
+      await expect(fs.rmdir('/dir')).rejects.toThrow('Directory not empty');
+    });
+
+    it('recursive calls bucket.deleteFiles with prefix', async () => {
+      mockBucket.deleteFiles.mockResolvedValueOnce(undefined);
+
+      await fs.rmdir('/dir', { recursive: true });
+
+      expect(mockBucket.deleteFiles).toHaveBeenCalledWith({ prefix: 'dir/' });
+    });
+  });
+
+  describe('readdir()', () => {
+    it('returns files with metadata', async () => {
+      mockBucket.getFiles.mockResolvedValueOnce([
+        [
+          { name: 'file1.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 100 }]) },
+          { name: 'file2.js', getMetadata: vi.fn().mockResolvedValue([{ size: 200 }]) },
+        ],
+      ]);
+
+      const entries = await fs.readdir('/');
+
+      expect(entries).toEqual([
+        { name: 'file1.txt', type: 'file', size: 100 },
+        { name: 'file2.js', type: 'file', size: 200 },
+      ]);
+    });
+
+    it('infers directories from nested paths in non-recursive mode', async () => {
+      mockBucket.getFiles.mockResolvedValueOnce([
+        [
+          { name: 'subdir/file.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 50 }]) },
+          { name: 'top.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 10 }]) },
+        ],
+      ]);
+
+      const entries = await fs.readdir('/');
+
+      expect(entries).toContainEqual({ name: 'subdir', type: 'directory' });
+      expect(entries).toContainEqual({ name: 'top.txt', type: 'file', size: 10 });
+    });
+
+    it('recognizes directory markers (trailing slash)', async () => {
+      mockBucket.getFiles.mockResolvedValueOnce([
+        [
+          { name: 'mydir/', getMetadata: vi.fn().mockResolvedValue([{ size: 0 }]) },
+          { name: 'file.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 50 }]) },
+        ],
+      ]);
+
+      const entries = await fs.readdir('/');
+
+      expect(entries).toContainEqual({ name: 'mydir', type: 'directory' });
+      expect(entries).toContainEqual({ name: 'file.txt', type: 'file', size: 50 });
+    });
+
+    it('filters by extension', async () => {
+      mockBucket.getFiles.mockResolvedValueOnce([
+        [
+          { name: 'a.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 1 }]) },
+          { name: 'b.ts', getMetadata: vi.fn().mockResolvedValue([{ size: 2 }]) },
+        ],
+      ]);
+
+      const entries = await fs.readdir('/', { extension: '.ts' });
+
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.name).toBe('b.ts');
+    });
+
+    it('deduplicates directory entries', async () => {
+      mockBucket.getFiles.mockResolvedValueOnce([
+        [
+          { name: 'dir/a.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 1 }]) },
+          { name: 'dir/b.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 2 }]) },
+        ],
+      ]);
+
+      const entries = await fs.readdir('/');
+
+      const dirEntries = entries.filter(e => e.name === 'dir');
+      expect(dirEntries).toHaveLength(1);
+    });
+  });
+
+  describe('exists()', () => {
+    it('returns true when file exists', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.exists.mockResolvedValueOnce([true]);
+
+      const result = await fs.exists('/test.txt');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns true when directory exists', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.exists.mockResolvedValueOnce([false]); // not a file
+      mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'dir/file.txt' }]]); // has contents
+
+      const result = await fs.exists('/dir');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false when nothing exists', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.exists.mockResolvedValueOnce([false]);
+      mockBucket.getFiles.mockResolvedValueOnce([[]]);
+
+      const result = await fs.exists('/missing');
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('stat()', () => {
+    it('returns file stat from metadata', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.exists.mockResolvedValueOnce([true]);
+      mockFile.getMetadata.mockResolvedValueOnce([
+        {
+          size: 1024,
+          timeCreated: '2024-01-15T10:30:00Z',
+          updated: '2024-01-16T12:00:00Z',
+        },
+      ]);
+
+      const stat = await fs.stat('/docs/readme.txt');
+
+      expect(stat).toEqual({
+        name: 'readme.txt',
+        path: '/docs/readme.txt',
+        type: 'file',
+        size: 1024,
+        createdAt: new Date('2024-01-15T10:30:00Z'),
+        modifiedAt: new Date('2024-01-16T12:00:00Z'),
+      });
+    });
+
+    it('returns directory stat when file not found but prefix exists', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.exists.mockResolvedValueOnce([false]);
+      // isDirectory: has contents
+      mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'mydir/file.txt' }]]);
+
+      const stat = await fs.stat('/mydir');
+
+      expect(stat.type).toBe('directory');
+      expect(stat.name).toBe('mydir');
+      expect(stat.size).toBe(0);
+    });
+
+    it('throws FileNotFoundError when nothing exists', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.exists.mockResolvedValueOnce([false]);
+      mockBucket.getFiles.mockResolvedValueOnce([[]]);
+
+      await expect(fs.stat('/missing')).rejects.toThrow(/missing/);
+    });
+  });
+});
