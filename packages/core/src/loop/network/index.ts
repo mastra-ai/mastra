@@ -2409,10 +2409,11 @@ export async function networkLoop<OUTPUT = undefined>({
         });
       }
 
+      // Format feedback (needed for return value even if not persisted)
+      const feedback = formatCompletionFeedback(completionResult, !!maxIterationReached);
+
       // Not complete - inject feedback for next iteration (unless suppressed)
       if (!validation?.suppressFeedback) {
-        const feedback = formatCompletionFeedback(completionResult, !!maxIterationReached);
-
         // Save feedback to memory so the next iteration can see it
         const memoryInstance = await routingAgent.getMemory({ requestContext });
         await saveMessagesWithProcessors(
