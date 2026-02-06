@@ -1,178 +1,118 @@
 ---
-title: "VercelDeployer | Deployment"
-description: "Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer"
+title: "Deploy Mastra to Vercel | Deployment"
+description: "Learn how to deploy a Mastra application to Vercel"
 ---
 
-# VercelDeployer
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
 
-The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/) class with Vercel specific functionality.
+# Deploy Mastra to Vercel
 
-:::warning
-Vercel Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/reference/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+Use `@mastra/deployer-vercel` to deploy your Mastra server as serverless functions on Vercel. The deployer bundles your code and generates a `.vercel/output` directory conforming to Vercel's [Build Output API](https://vercel.com/docs/build-output-api/v3), ready to deploy with no additional configuration.
+
+:::info
+
+If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
+
 :::
 
+## Before you begin
+
+You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Vercel](https://vercel.com/) account.
+
+Vercel Functions use an ephemeral filesystem, so any storage you configure (including observability storage) must be hosted externally. If you're using [LibSQLStore](/reference/storage/libsql) with a file URL, switch to a remotely hosted database.
+
 ## Installation
+
+Add the `@mastra/deployer-vercel` package to your project:
 
 ```bash npm2yarn
 npm install @mastra/deployer-vercel@latest
 ```
 
-## Usage example
+Import [`VercelDeployer`](/reference/deployer/vercel) and set it as the deployer in your Mastra configuration:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
+// highlight-next-line
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
+  // highlight-next-line
   deployer: new VercelDeployer(),
 });
 ```
 
-> See the [VercelDeployer](/reference/deployer/vercel) API reference for all available configuration options.
+## Usage
 
-### Optional overrides
+<Steps>
+<StepItem>
 
-The Vercel deployer can write a few high‑value settings into the Vercel Output API function config (`.vc-config.json`):
+Push your project to a remote Git provider (e.g. GitHub) and connect your repository to Vercel.
 
-- `maxDuration?: number` — Function execution timeout (seconds)
-- `memory?: number` — Function memory allocation (MB)
-- `regions?: string[]` — Regions (e.g. `['sfo1','iad1']`)
+By default, Vercel runs `npm run build`, which triggers `mastra build`. If you don't have a build script, add `"build": "mastra build"` to your `package.json`.
 
-Example:
+:::note
 
-```ts title="src/mastra/index.ts"
-deployer: new VercelDeployer({
-  maxDuration: 600,
-  memory: 1536,
-  regions: ["sfo1", "iad1"],
-});
-```
+Remember to set your environment variables needed to run your application (e.g. your [model provider](/models/providers) API key).
 
-## Continuous integration
+:::
 
-After connecting your Mastra project’s Git repository to Vercel, update the project settings. In the Vercel dashboard, go to **Settings** > **Build and Deployment**, and under **Framework settings**, set the following:
+</StepItem>
+<StepItem>
 
-- **Build command**: `npm run build` (optional)
+Once you're ready, click **Deploy** and wait for the first deployment to complete.
 
-### Environment variables
+</StepItem>
+<StepItem>
 
-Before your first deployment, make sure to add any environment variables used by your application. For example, if you're using OpenAI as the LLM, you'll need to set `OPENAI_API_KEY` in your Vercel project settings.
+Verify your deployment at `https://<your-project>.vercel.app/api/agents`, which should return a JSON list of your agents.
 
-> See [Environment variables](https://vercel.com/docs/environment-variables) for more details.
+Since the Mastra server prefixes every endpoint with `/api`, you have to add it to your URLs when making requests.
 
-Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
+</StepItem>
+<StepItem>
 
-## Manual deployment
+You can now call your Mastra endpoints over HTTP.
 
-Manual deployments are also possible using the [Vercel CLI](https://vercel.com/docs/cli). With the Vercel CLI installed run the following from your project root to deploy your application.
+:::note
+Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+:::
 
-```bash
-npm run build && vercel --prod --prebuilt --archive=tgz
-```
+</StepItem>
+</Steps>
 
-> You can also run `vercel dev` from your project root to test your Mastra application locally.
+## Optional overrides
 
-## Build output
-
-The build output for Mastra applications using the `VercelDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Vercel.
-
-```
-.vercel/
-├── output/
-│   ├── functions/
-│   │   └── index.func/
-│   │       └── index.mjs
-│   └── config.json
-└── package.json
-```
-
-The `VercelDeployer` automatically generates a `config.json` configuration file in `.vercel/output` with the following settings:
-
-```json
-{
-  "version": 3,
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/"
-    }
-  ]
-}
-```
+The Vercel deployer supports configuration options that are written to the Vercel Output API function config. See the [`VercelDeployer` reference](/reference/deployer/vercel#constructor-options) for available options like `maxDuration`, `memory`, and `regions`.
 
 ## Observability
 
-To enable observability on Vercel, configure external storage (since Vercel's ephemeral filesystem doesn't support local file storage) and set up your preferred exporter(s).
+Serverless functions can terminate immediately after returning a response. Any pending async work - like sending telemetry - may get killed before completing. Awaiting `flush()` ensures all traces are sent before the function exits.
 
-### Storage configuration
+```typescript title="api/chat.ts"
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { mastra } from "../src/mastra";
 
-Use a PostgreSQL provider like [Neon](https://neon.tech) or [Supabase](https://supabase.com) for persistent storage:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { PinoLogger } from "@mastra/loggers";
-import { PostgresStore } from "@mastra/pg";
-import { Observability, DefaultExporter, CloudExporter } from "@mastra/observability";
-
-export const mastra = new Mastra({
-  logger: new PinoLogger(),
-  storage: new PostgresStore({
-    connectionString: process.env.DATABASE_URL!,
-  }),
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: "my-mastra-app",
-        exporters: [
-          // Choose based on your observability platform:
-          new DefaultExporter(), // Your storage → Mastra Studio
-          new CloudExporter(),   // Mastra Cloud
-          // new ArizeExporter(),   // Arize
-          // new LaminarExporter(), // Laminar
-          // etc.
-        ],
-      },
-    },
-  }),
-  // ... agents, tools, workflows
-});
-```
-
-See the [Tracing documentation](/docs/observability/tracing/overview#exporters) for all available exporters.
-
-### Environment variables
-
-Add these to your Vercel project settings based on your configuration:
-
-| Variable | Description |
-| --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string (required for storage) |
-| `MASTRA_CLOUD_ACCESS_TOKEN` | Required if using CloudExporter |
-| `OPENAI_API_KEY` | Your LLM provider API key |
-
-### Flushing traces
-
-In serverless environments, call `flush()` to ensure traces are exported before the function completes:
-
-```typescript title="app/api/chat/route.ts"
-import { mastra } from "@/mastra";
-
-export async function POST(req: Request) {
-  const { message } = await req.json();
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const { message } = req.body;
   const agent = mastra.getAgent("myAgent");
-
   const result = await agent.generate([{ role: "user", content: message }]);
 
-  // Flush traces before the serverless function completes
   const observability = mastra.getObservability();
-  await observability.flush();
+  await observability?.flush();
 
-  return Response.json(result);
+  return res.json(result);
 }
 ```
 
-For more details on tracing configuration, see the [Tracing documentation](/docs/observability/tracing/overview).
+:::warning
+The Vercel deployer doesn't include `flush` calls. If you need this, you'll need to wrap the handler yourself to add the logic before returning the response. Alternatively, deploy to a long-running server like a [virtual machine](/guides/deployment/digital-ocean) where this isn't an issue.
+:::
 
-## Next steps
+## Related
 
-- [Mastra Client SDK](/reference/client-js/mastra-client)
+- [VercelDeployer reference](/reference/deployer/vercel)
+- [Deployment overview](/docs/deployment/overview)
+- [Server adapters](/docs/server/server-adapters)
+- [Web framework integration](/docs/deployment/web-framework)
