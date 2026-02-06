@@ -350,6 +350,14 @@ describe('Workspace Logger Integration', () => {
       expect(mountsSetLoggerSpy).toHaveBeenCalledWith(mockLogger);
     });
 
+    it('should not create MountManager if mount() not implemented', () => {
+      // TestSandbox does not implement mount()
+      const sandbox = new TestSandbox();
+
+      // MountManager should NOT exist
+      expect(sandbox.mounts).toBeUndefined();
+    });
+
     it('should have default logger from MastraBase', () => {
       const sandbox = new TestSandbox();
 
