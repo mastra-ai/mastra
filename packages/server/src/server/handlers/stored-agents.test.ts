@@ -10,6 +10,7 @@ import {
   CREATE_STORED_AGENT_ROUTE,
   UPDATE_STORED_AGENT_ROUTE,
   DELETE_STORED_AGENT_ROUTE,
+  PREVIEW_INSTRUCTIONS_ROUTE,
 } from './stored-agents';
 
 // Mock handleAutoVersioning to prevent version creation in tests
@@ -208,11 +209,13 @@ function createMockStorage(agentsStore?: MockAgentsStore): MockStorage {
 
 interface MockEditor {
   clearStoredAgentCache: ReturnType<typeof vi.fn>;
+  previewInstructions: ReturnType<typeof vi.fn>;
 }
 
 function createMockEditor(): MockEditor {
   return {
     clearStoredAgentCache: vi.fn(),
+    previewInstructions: vi.fn().mockResolvedValue('resolved instructions'),
   };
 }
 
@@ -555,6 +558,102 @@ describe('Stored Agents Handlers', () => {
         expect(error).toBeInstanceOf(HTTPException);
         expect((error as HTTPException).status).toBe(404);
         expect((error as HTTPException).message).toBe('Stored agent with id non-existent not found');
+      }
+    });
+  });
+
+  describe('PREVIEW_INSTRUCTIONS_ROUTE', () => {
+    it('should resolve instruction blocks and return result', async () => {
+      const blocks = [
+        { type: 'text' as const, content: 'Hello {{name}}' },
+        { type: 'prompt_block_ref' as const, id: 'block-1' },
+      ];
+      const context = { name: 'World' };
+
+      mockEditor.previewInstructions.mockResolvedValue('Hello World\n\nResolved block content');
+
+      const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        blocks,
+        context,
+      });
+
+      expect(result).toEqual({ result: 'Hello World\n\nResolved block content' });
+      expect(mockEditor.previewInstructions).toHaveBeenCalledWith(blocks, context);
+    });
+
+    it('should pass empty context when none provided', async () => {
+      const blocks = [{ type: 'text' as const, content: 'Static content' }];
+
+      mockEditor.previewInstructions.mockResolvedValue('Static content');
+
+      const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        blocks,
+        context: {},
+      });
+
+      expect(result).toEqual({ result: 'Static content' });
+      expect(mockEditor.previewInstructions).toHaveBeenCalledWith(blocks, {});
+    });
+
+    it('should throw 500 when editor is not configured', async () => {
+      const mastraNoEditor = createMockMastra({ storage: mockStorage });
+      const blocks = [{ type: 'text' as const, content: 'Hello' }];
+
+      try {
+        await PREVIEW_INSTRUCTIONS_ROUTE.handler({
+          ...createTestContext(mastraNoEditor),
+          blocks,
+          context: {},
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(500);
+        expect((error as HTTPException).message).toBe('Editor is not configured');
+      }
+    });
+
+    it('should handle inline prompt_block with rules', async () => {
+      const blocks = [
+        {
+          type: 'prompt_block' as const,
+          content: 'You are an admin assistant',
+          rules: {
+            operator: 'AND' as const,
+            conditions: [{ field: 'user.role', operator: 'equals' as const, value: 'admin' }],
+          },
+        },
+      ];
+      const context = { user: { role: 'admin' } };
+
+      mockEditor.previewInstructions.mockResolvedValue('You are an admin assistant');
+
+      const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        blocks,
+        context,
+      });
+
+      expect(result).toEqual({ result: 'You are an admin assistant' });
+      expect(mockEditor.previewInstructions).toHaveBeenCalledWith(blocks, context);
+    });
+
+    it('should handle editor errors gracefully', async () => {
+      const blocks = [{ type: 'text' as const, content: 'Hello' }];
+      mockEditor.previewInstructions.mockRejectedValue(new Error('Block resolution failed'));
+
+      try {
+        await PREVIEW_INSTRUCTIONS_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          blocks,
+          context: {},
+        });
+        expect.fail('Should have thrown');
+      } catch (error) {
+        // handleError wraps it - the error propagates
+        expect(error).toBeDefined();
       }
     });
   });

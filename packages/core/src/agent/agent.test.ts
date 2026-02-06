@@ -495,6 +495,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         toolCall = response.toolResults.find((result: any) => result.toolName === 'noSchemaTool');
       } else {
         response = await agent.generate('Use the noSchemaTool to get test data');
+        console.log('response', JSON.stringify(response, null, 2));
         toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'noSchemaTool')?.payload;
       }
 

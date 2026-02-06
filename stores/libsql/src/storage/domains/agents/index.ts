@@ -22,6 +22,7 @@ import type {
   CreateVersionInput,
   ListVersionsInput,
   ListVersionsOutput,
+  AgentInstructionBlock,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
@@ -137,7 +138,7 @@ export class AgentsLibSQL extends AgentsStorage {
           versionNumber: 1,
           name: (row.name as string) ?? agentId,
           description: row.description ?? null,
-          instructions: (row.instructions as string) ?? '',
+          instructions: this.serializeInstructions((row.instructions as string) ?? ''),
           model: row.model ?? '{}',
           tools: row.tools ?? null,
           defaultOptions: row.defaultOptions ?? null,
@@ -661,7 +662,7 @@ export class AgentsLibSQL extends AgentsStorage {
           versionNumber: input.versionNumber,
           name: input.name ?? null,
           description: input.description ?? null,
-          instructions: input.instructions,
+          instructions: this.serializeInstructions(input.instructions),
           model: input.model,
           tools: input.tools ?? null,
           defaultOptions: input.defaultOptions ?? null,
@@ -931,6 +932,21 @@ export class AgentsLibSQL extends AgentsStorage {
   // Private Helper Methods
   // ==========================================================================
 
+  private serializeInstructions(instructions: string | AgentInstructionBlock[]): string {
+    return Array.isArray(instructions) ? JSON.stringify(instructions) : instructions;
+  }
+
+  private deserializeInstructions(raw: string): string | AgentInstructionBlock[] {
+    if (!raw) return raw;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as AgentInstructionBlock[];
+    } catch {
+      // Not JSON — plain string
+    }
+    return raw;
+  }
+
   private parseVersionRow(row: any): AgentVersion {
     return {
       id: row.id as string,
@@ -938,7 +954,7 @@ export class AgentsLibSQL extends AgentsStorage {
       versionNumber: row.versionNumber as number,
       name: row.name as string,
       description: row.description as string | undefined,
-      instructions: row.instructions as string,
+      instructions: this.deserializeInstructions(row.instructions as string),
       model: this.parseJson(row.model, 'model'),
       tools: this.parseJson(row.tools, 'tools'),
       defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
