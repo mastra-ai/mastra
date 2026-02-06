@@ -110,8 +110,8 @@ export class ModelsDevGateway extends MastraModelGateway {
           .map(([modelId]) => modelId)
           .sort();
 
-        // Get the API URL from the provider info or overrides
-        const url = providerInfo.api || OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.url;
+        // Get the API URL - overrides take priority over models.dev data
+        const url = OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.url || providerInfo.api;
 
         // Skip if we don't have a URL
         if (!hasInstalledPackage && !url) {
@@ -136,12 +136,14 @@ export class ModelsDevGateway extends MastraModelGateway {
           docUrl: providerInfo.doc, // Include documentation URL if available
           gateway: `models.dev`,
           // Only store npm when it's a non-default SDK (not openai-compatible/gateway) to keep the registry small
+          // Overrides take priority (e.g., moonshotai uses @ai-sdk/anthropic, not the openai-compatible listed in models.dev)
           npm:
-            providerInfo.npm &&
+            OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.npm ||
+            (providerInfo.npm &&
             providerInfo.npm !== '@ai-sdk/openai-compatible' &&
             providerInfo.npm !== '@ai-sdk/gateway'
               ? providerInfo.npm
-              : undefined,
+              : undefined),
         };
       }
     }
