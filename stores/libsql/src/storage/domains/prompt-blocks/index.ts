@@ -44,6 +44,11 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_PROMPT_BLOCKS, schema: PROMPT_BLOCKS_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_PROMPT_BLOCK_VERSIONS, schema: PROMPT_BLOCK_VERSIONS_SCHEMA });
+
+    // Unique constraint on (blockId, versionNumber) to prevent duplicate versions from concurrent updates
+    await this.#client.execute(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_block_versions_block_version ON "${TABLE_PROMPT_BLOCK_VERSIONS}" ("blockId", "versionNumber")`,
+    );
   }
 
   async dangerouslyClearAll(): Promise<void> {
