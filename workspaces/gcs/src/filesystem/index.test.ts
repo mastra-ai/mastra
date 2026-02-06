@@ -199,19 +199,54 @@ describe('GCSFilesystem', () => {
   });
 
   describe('getInfo()', () => {
-    it('returns FilesystemInfo with gcs icon when implemented', () => {
+    it('returns FilesystemInfo with all fields', () => {
       const fs = new GCSFilesystem({ id: 'test-id', bucket: 'my-bucket' });
 
-      const info = fs.getInfo?.();
+      const info = fs.getInfo();
 
-      // getInfo is optional on the Lifecycle interface
-      if (info) {
-        expect(info.id).toBe('test-id');
-        expect(info.name).toBe('GCSFilesystem');
-        expect(info.provider).toBe('gcs');
-        expect(info.status).toBe('pending');
-        expect(info.icon).toBe('gcs');
-      }
+      expect(info.id).toBe('test-id');
+      expect(info.name).toBe('GCSFilesystem');
+      expect(info.provider).toBe('gcs');
+      expect(info.status).toBe('pending');
+      expect(info.icon).toBe('gcs');
+    });
+
+    it('metadata includes bucket', () => {
+      const fs = new GCSFilesystem({ bucket: 'my-bucket' });
+
+      const info = fs.getInfo();
+
+      expect(info.metadata?.bucket).toBe('my-bucket');
+    });
+
+    it('metadata includes endpoint if set', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        endpoint: 'http://localhost:4443',
+      });
+
+      const info = fs.getInfo();
+
+      expect(info.metadata?.endpoint).toBe('http://localhost:4443');
+    });
+
+    it('metadata excludes endpoint if not set', () => {
+      const fs = new GCSFilesystem({ bucket: 'test' });
+
+      const info = fs.getInfo();
+
+      expect(info.metadata?.endpoint).toBeUndefined();
+    });
+
+    it('metadata includes prefix if set', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        prefix: 'workspace/data',
+      });
+
+      const info = fs.getInfo();
+
+      expect(info.metadata?.prefix).toBe('workspace/data/');
     });
   });
 
@@ -277,8 +312,8 @@ describe('GCSFilesystem', () => {
         prefix: '/foo/bar',
       });
 
-      // Can verify via getMountConfig or internal state
-      expect(fs.provider).toBe('gcs');
+      const info = fs.getInfo();
+      expect(info.metadata?.prefix).toBe('foo/bar/');
     });
 
     it('normalizes prefix - removes trailing slashes', () => {
@@ -287,7 +322,18 @@ describe('GCSFilesystem', () => {
         prefix: 'foo/bar/',
       });
 
-      expect(fs.provider).toBe('gcs');
+      const info = fs.getInfo();
+      expect(info.metadata?.prefix).toBe('foo/bar/');
+    });
+
+    it('normalizes prefix - handles both leading and trailing', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        prefix: '//foo/bar//',
+      });
+
+      const info = fs.getInfo();
+      expect(info.metadata?.prefix).toBe('foo/bar/');
     });
   });
 });

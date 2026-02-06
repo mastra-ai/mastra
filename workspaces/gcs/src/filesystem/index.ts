@@ -16,6 +16,7 @@ import type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
+  FilesystemInfo,
   FilesystemMountConfig,
   FilesystemIcon,
   ProviderStatus,
@@ -220,6 +221,24 @@ export class GCSFilesystem extends MastraFilesystem {
     }
 
     return config;
+  }
+
+  /**
+   * Get filesystem info for status reporting.
+   */
+  getInfo(): FilesystemInfo {
+    return {
+      id: this.id,
+      name: this.name,
+      provider: this.provider,
+      status: this.status,
+      icon: this.icon,
+      metadata: {
+        bucket: this.bucketName,
+        ...(this.endpoint && { endpoint: this.endpoint }),
+        ...(this.prefix && { prefix: this.prefix }),
+      },
+    };
   }
 
   /**

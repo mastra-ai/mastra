@@ -220,5 +220,41 @@ describe('MastraFilesystem Base Class', () => {
 
       expect(fs.status).toBe('destroyed');
     });
+
+    it('concurrent destroy() calls return same promise', async () => {
+      const fs = new TestFilesystem();
+      let destroyCount = 0;
+
+      // Override _doDestroy to count calls
+      (fs as any)._doDestroy = async () => {
+        destroyCount++;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      };
+
+      await fs.init();
+
+      // Start multiple concurrent destroy calls
+      const promises = [fs.destroy(), fs.destroy(), fs.destroy()];
+
+      await Promise.all(promises);
+
+      // Should only destroy once
+      expect(destroyCount).toBe(1);
+      expect(fs.status).toBe('destroyed');
+    });
+
+    it('init() after destroy() re-initializes', async () => {
+      const fs = new TestFilesystem();
+
+      await fs.init();
+      expect(fs.status).toBe('ready');
+
+      await fs.destroy();
+      expect(fs.status).toBe('destroyed');
+
+      // Re-init should work since _initPromise was cleared and status is not 'ready'
+      await fs.init();
+      expect(fs.status).toBe('ready');
+    });
   });
 });
