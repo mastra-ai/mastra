@@ -35,6 +35,149 @@ const sampleStoredAgent2 = {
   model: { provider: 'anthropic', name: 'claude-3' },
 };
 
+describe('clearStoredAgentCache', () => {
+  it('should clear agent from Editor cache and Mastra registry when agentId is provided', async () => {
+    const storage = new InMemoryStore();
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.createAgent({
+      agent: {
+        id: 'cache-test-agent',
+        name: 'Cache Test Agent',
+        instructions: 'Test',
+        model: { provider: 'openai', name: 'gpt-4' },
+      },
+    });
+
+    const debugSpy = vi.fn();
+    const editor = new MastraEditor({
+      logger: {
+        warn: vi.fn(),
+        info: vi.fn(),
+        debug: debugSpy,
+        error: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+        trackException: vi.fn(),
+      } as any,
+    });
+    const mastra = new Mastra({
+      storage,
+      editor,
+    });
+
+    // Load agent - this caches it and registers with Mastra
+    const agent = await editor.getStoredAgentById('cache-test-agent');
+    expect(agent).toBeInstanceOf(Agent);
+
+    // Verify agent is in Mastra registry
+    expect(mastra.getAgentById('cache-test-agent')).toBeDefined();
+
+    // Clear the cache for this specific agent
+    editor.clearStoredAgentCache('cache-test-agent');
+
+    // Verify agent was removed from Mastra registry
+    expect(() => mastra.getAgentById('cache-test-agent')).toThrow();
+
+    // Debug log should indicate cache and registry were cleared
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('Cleared cache and registry for agent'));
+  });
+
+  it('should clear all agents from Editor cache but not Mastra registry when no agentId', async () => {
+    const storage = new InMemoryStore();
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.createAgent({
+      agent: {
+        id: 'cache-test-agent-1',
+        name: 'Cache Test Agent 1',
+        instructions: 'Test',
+        model: { provider: 'openai', name: 'gpt-4' },
+      },
+    });
+
+    const debugSpy = vi.fn();
+    const editor = new MastraEditor({
+      logger: {
+        warn: vi.fn(),
+        info: vi.fn(),
+        debug: debugSpy,
+        error: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+        trackException: vi.fn(),
+      } as any,
+    });
+
+    // Register a code-defined agent
+    const codeAgent = new Agent({
+      id: 'code-agent',
+      name: 'Code Agent',
+      instructions: 'A code-defined agent',
+      model: 'openai/gpt-4o',
+    });
+
+    const mastra = new Mastra({
+      storage,
+      editor,
+      agents: { codeAgent },
+    });
+
+    // Load stored agent - this caches it
+    await editor.getStoredAgentById('cache-test-agent-1');
+
+    // Clear all from cache
+    editor.clearStoredAgentCache();
+
+    // Code-defined agent should still exist in Mastra registry
+    expect(mastra.getAgent('codeAgent')).toBeDefined();
+
+    // Debug log should indicate all cached agents were cleared
+    expect(debugSpy).toHaveBeenCalledWith('[clearStoredAgentCache] Cleared all cached agents');
+  });
+
+  it('should do nothing if editor is not registered with Mastra', () => {
+    const editor = new MastraEditor();
+
+    // Should not throw
+    expect(() => editor.clearStoredAgentCache('some-id')).not.toThrow();
+    expect(() => editor.clearStoredAgentCache()).not.toThrow();
+  });
+
+  it('should allow re-registering agent with Mastra after cache clear', async () => {
+    const storage = new InMemoryStore();
+    const agentsStore = await storage.getStore('agents');
+
+    // Create agent
+    await agentsStore?.createAgent({
+      agent: {
+        id: 'reloadable-agent',
+        name: 'Test Agent',
+        instructions: 'Test instructions',
+        model: { provider: 'openai', name: 'gpt-4' },
+      },
+    });
+
+    const editor = new MastraEditor();
+    const mastra = new Mastra({ storage, editor });
+
+    // Load agent first time - this registers it with Mastra
+    const agent1 = await editor.getStoredAgentById('reloadable-agent');
+    expect(agent1?.name).toBe('Test Agent');
+    expect(mastra.getAgentById('reloadable-agent')).toBeDefined();
+
+    // Clear cache - this removes from both cache and Mastra registry
+    editor.clearStoredAgentCache('reloadable-agent');
+
+    // Agent should no longer be in Mastra registry
+    expect(() => mastra.getAgentById('reloadable-agent')).toThrow();
+
+    // Load agent again - should successfully re-register with Mastra
+    const agent2 = await editor.getStoredAgentById('reloadable-agent');
+    expect(agent2).toBeInstanceOf(Agent);
+    expect(agent2?.name).toBe('Test Agent');
+
+    // Agent should be back in Mastra registry
+    expect(mastra.getAgentById('reloadable-agent')).toBeDefined();
+  });
+});
+
 describe('Stored Agents via MastraEditor', () => {
   describe('getStoredAgentById', () => {
     it('should throw error when editor is not registered with Mastra', async () => {

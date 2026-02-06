@@ -769,6 +769,22 @@ article p {
   font-size: 14px;
 }
 
+/* Hide second item in doc footer so that edit page + llms.txt is full width */
+.theme-doc-footer-edit-meta-row > :nth-child(2) {
+  display: none;
+}
+
+.pagination-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* If pagination only has one <a> item (that has the data-is-next="true" tag), it should align it to the right */
+.pagination-nav:has(a[data-is-next='true']:only-child) {
+  justify-content: flex-end;
+}
+
 @media (min-width: 62.25rem) {
   #doc-item-container {
     gap: 2rem;
@@ -816,14 +832,6 @@ article p {
     .markdown h3 {
       border-bottom-color: var(--border);
     }
-  }
-
-  /* ==================== PAGINATION ==================== */
-
-  .pagination-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
   }
 
   /* Highlighted lines in code blocks */

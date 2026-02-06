@@ -76,8 +76,12 @@ function Agent() {
     };
   }, [agent]);
 
-  if (isAgentLoading) {
+  if (isAgentLoading || !agent) {
     return null;
+  }
+
+  if (!agent) {
+    return <div className="text-center py-4">Agent not found</div>;
   }
 
   const handleRefreshThreadList = () => {
