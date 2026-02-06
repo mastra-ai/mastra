@@ -2540,7 +2540,7 @@ export class Agent<
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
           // @ts-expect-error - zod types mismatch between v3 and v4
-          inputData: workflow.inputSchema,
+          inputData: workflow.inputSchema ?? z.object({}).passthrough(),
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });
 
