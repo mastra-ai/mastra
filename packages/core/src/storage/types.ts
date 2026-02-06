@@ -344,8 +344,8 @@ export interface StorageAgentSnapshotType {
   name: string;
   /** Purpose description */
   description?: string;
-  /** System instructions/prompt */
-  instructions: string;
+  /** System instructions/prompt — plain string for backward compatibility, or array of instruction blocks */
+  instructions: string | AgentInstructionBlock[];
   /** Model configuration (provider, name, etc.) */
   model: StorageModelConfig;
   /** Array of tool keys to resolve from Mastra's tool registry */
@@ -455,6 +455,137 @@ export type StorageListAgentsOutput = PaginationInfo & {
 
 export type StorageListAgentsResolvedOutput = PaginationInfo & {
   agents: StorageResolvedAgentType[];
+};
+
+// ============================================
+// Prompt Block Storage Types
+// ============================================
+
+/** Instruction block discriminated union, stored in agent snapshots */
+export type AgentInstructionBlock =
+  | { type: 'text'; content: string }
+  | { type: 'prompt_block_ref'; id: string }
+  | { type: 'prompt_block'; content: string; rules?: RuleGroup };
+
+/** Condition operators for rule evaluation */
+export type ConditionOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'greater_than'
+  | 'less_than'
+  | 'greater_than_or_equal'
+  | 'less_than_or_equal'
+  | 'in'
+  | 'not_in'
+  | 'exists'
+  | 'not_exists';
+
+/** Leaf rule: evaluates a single condition against a context field */
+export interface Rule {
+  field: string;
+  operator: ConditionOperator;
+  value?: unknown;
+}
+
+/** Recursive rule group for AND/OR logic */
+export interface RuleGroup {
+  operator: 'AND' | 'OR';
+  conditions: (Rule | RuleGroup)[];
+}
+
+/**
+ * Thin prompt block record (metadata only).
+ * All configuration lives in version snapshots (StoragePromptBlockSnapshotType).
+ */
+export interface StoragePromptBlockType {
+  /** Unique identifier */
+  id: string;
+  /** Block status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to prompt_block_versions.id — the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Prompt block version snapshot containing the content fields.
+ * These fields live exclusively in version snapshot rows.
+ */
+export interface StoragePromptBlockSnapshotType {
+  /** Display name of the prompt block */
+  name: string;
+  /** Purpose description */
+  description?: string;
+  /** Template content with {{variable}} interpolation */
+  content: string;
+  /** Rules for conditional inclusion */
+  rules?: RuleGroup;
+}
+
+/** Resolved prompt block: thin record merged with active version snapshot */
+export type StorageResolvedPromptBlockType = StoragePromptBlockType & StoragePromptBlockSnapshotType;
+
+/** Input for creating a new prompt block */
+export type StorageCreatePromptBlockInput = {
+  /** Unique identifier for the prompt block */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+} & StoragePromptBlockSnapshotType;
+
+/** Input for updating a prompt block */
+export type StorageUpdatePromptBlockInput = {
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+  /** FK to prompt_block_versions.id — the currently active version */
+  activeVersionId?: string;
+  /** Block status */
+  status?: string;
+} & Partial<StoragePromptBlockSnapshotType>;
+
+export type StorageListPromptBlocksInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter prompt blocks by author identifier.
+   */
+  authorId?: string;
+  /**
+   * Filter prompt blocks by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+};
+
+/** Paginated list output for thin prompt block records */
+export type StorageListPromptBlocksOutput = PaginationInfo & {
+  promptBlocks: StoragePromptBlockType[];
+};
+
+/** Paginated list output for resolved prompt blocks */
+export type StorageListPromptBlocksResolvedOutput = PaginationInfo & {
+  promptBlocks: StorageResolvedPromptBlockType[];
 };
 
 // Basic Index Management Types

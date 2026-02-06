@@ -1,7 +1,7 @@
 import type { Agent } from '../agent';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { StorageResolvedAgentType } from '../storage/types';
+import type { AgentInstructionBlock, StorageResolvedAgentType } from '../storage/types';
 
 export interface MastraEditorConfig {
   logger?: IMastraLogger;
@@ -65,4 +65,10 @@ export interface IMastraEditor {
    * Clear the stored agent cache for a specific agent ID, or all cached agents.
    */
   clearStoredAgentCache(agentId?: string): void;
+
+  /**
+   * Preview the resolved instructions for a given set of instruction blocks and context.
+   * Resolves prompt_block_ref references, evaluates rules, and renders template variables.
+   */
+  previewInstructions(blocks: AgentInstructionBlock[], context: Record<string, unknown>): Promise<string>;
 }
