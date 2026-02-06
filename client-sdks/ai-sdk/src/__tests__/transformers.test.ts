@@ -739,20 +739,32 @@ describe('WorkflowStreamToAISDKTransformer', () => {
       expect(textDeltaChunks[0].delta).toBe('Here is my answer');
     });
 
-    it('should filter reasoning-delta chunks when sendReasoning is false or not set', async () => {
+    it('should filter reasoning-delta chunks when sendReasoning is not set', async () => {
       const mockStream = new ReadableStream<ChunkType>({
         async start(controller) {
-          // Workflow starts
           controller.enqueue({
             type: 'workflow-start',
             runId: 'test-run-id',
             from: ChunkFrom.WORKFLOW,
+            payload: { workflowId: 'test-workflow' },
+          });
+
+          // Reasoning start
+          controller.enqueue({
+            type: 'workflow-step-output',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
             payload: {
-              workflowId: 'test-workflow',
+              output: {
+                type: 'reasoning-start',
+                from: ChunkFrom.USER,
+                runId: 'agent-run-id',
+                payload: { id: 'reasoning-1' },
+              },
             },
           });
 
-          // Reasoning delta chunk
+          // Reasoning delta
           controller.enqueue({
             type: 'workflow-step-output',
             runId: 'test-run-id',
@@ -762,10 +774,22 @@ describe('WorkflowStreamToAISDKTransformer', () => {
                 type: 'reasoning-delta',
                 from: ChunkFrom.USER,
                 runId: 'agent-run-id',
-                payload: {
-                  id: 'reasoning-1',
-                  text: 'Let me think about this...',
-                },
+                payload: { id: 'reasoning-1', text: 'Let me think about this...' },
+              },
+            },
+          });
+
+          // Reasoning end
+          controller.enqueue({
+            type: 'workflow-step-output',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              output: {
+                type: 'reasoning-end',
+                from: ChunkFrom.USER,
+                runId: 'agent-run-id',
+                payload: { id: 'reasoning-1' },
               },
             },
           });
@@ -780,15 +804,11 @@ describe('WorkflowStreamToAISDKTransformer', () => {
                 type: 'text-delta',
                 from: ChunkFrom.USER,
                 runId: 'agent-run-id',
-                payload: {
-                  id: 'msg-1',
-                  text: 'Here is my answer',
-                },
+                payload: { id: 'msg-1', text: 'Here is my answer' },
               },
             },
           });
 
-          // Workflow finish
           controller.enqueue({
             type: 'workflow-finish',
             runId: 'test-run-id',
@@ -818,9 +838,65 @@ describe('WorkflowStreamToAISDKTransformer', () => {
       const reasoningDeltaChunks = chunks.filter(chunk => chunk.type === 'reasoning-delta');
       expect(reasoningDeltaChunks.length).toBe(0);
 
+      // reasoning-start and reasoning-end still pass through (matching agent stream behavior)
+      expect(chunks.find(chunk => chunk.type === 'reasoning-start')).toBeDefined();
+      expect(chunks.find(chunk => chunk.type === 'reasoning-end')).toBeDefined();
+
       // Text should still come through
       const textDeltaChunks = chunks.filter(chunk => chunk.type === 'text-delta');
       expect(textDeltaChunks.length).toBe(1);
+    });
+
+    it('should filter reasoning-delta chunks when sendReasoning is explicitly false', async () => {
+      const mockStream = new ReadableStream<ChunkType>({
+        async start(controller) {
+          controller.enqueue({
+            type: 'workflow-start',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: { workflowId: 'test-workflow' },
+          });
+
+          controller.enqueue({
+            type: 'workflow-step-output',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              output: {
+                type: 'reasoning-delta',
+                from: ChunkFrom.USER,
+                runId: 'agent-run-id',
+                payload: { id: 'reasoning-1', text: 'Thinking...' },
+              },
+            },
+          });
+
+          controller.enqueue({
+            type: 'workflow-finish',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              metadata: {},
+              workflowStatus: 'success',
+              output: { usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const transformedStream = mockStream.pipeThrough(
+        WorkflowStreamToAISDKTransformer({ includeTextStreamParts: true, sendReasoning: false }),
+      );
+
+      const chunks: any[] = [];
+      for await (const chunk of transformedStream) {
+        chunks.push(chunk);
+      }
+
+      const reasoningDeltaChunks = chunks.filter(chunk => chunk.type === 'reasoning-delta');
+      expect(reasoningDeltaChunks.length).toBe(0);
     });
   });
 
@@ -888,6 +964,64 @@ describe('WorkflowStreamToAISDKTransformer', () => {
       expect(sourceChunk).toBeDefined();
       expect(sourceChunk.url).toBe('https://example.com');
       expect(sourceChunk.title).toBe('Example Source');
+    });
+
+    it('should filter source chunks when sendSources is not set', async () => {
+      const mockStream = new ReadableStream<ChunkType>({
+        async start(controller) {
+          controller.enqueue({
+            type: 'workflow-start',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: { workflowId: 'test-workflow' },
+          });
+
+          controller.enqueue({
+            type: 'workflow-step-output',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              output: {
+                type: 'source',
+                from: ChunkFrom.USER,
+                runId: 'agent-run-id',
+                payload: {
+                  id: 'source-1',
+                  sourceType: 'url',
+                  url: 'https://example.com',
+                  title: 'Example Source',
+                },
+              },
+            },
+          });
+
+          controller.enqueue({
+            type: 'workflow-finish',
+            runId: 'test-run-id',
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              metadata: {},
+              workflowStatus: 'success',
+              output: { usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      // No sendSources option — should filter source chunks
+      const transformedStream = mockStream.pipeThrough(
+        WorkflowStreamToAISDKTransformer({ includeTextStreamParts: true }),
+      );
+
+      const chunks: any[] = [];
+      for await (const chunk of transformedStream) {
+        chunks.push(chunk);
+      }
+
+      const sourceChunks = chunks.filter(chunk => chunk.type === 'source-url' || chunk.type === 'source-document');
+      expect(sourceChunks.length).toBe(0);
     });
   });
 });
