@@ -77,7 +77,7 @@ function ActionsMenu({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="md" aria-label="Actions menu">
+        <Button variant="secondary" size="default" aria-label="Actions menu">
           <ArrowRightIcon /> Select and ...
         </Button>
       </PopoverTrigger>
@@ -190,14 +190,14 @@ export function ItemsToolbar({
             <MoveRightIcon />
           </div>
           <ButtonsGroup>
-            <Button variant="default" size="md" disabled={selectedCount === 0} onClick={onExecuteAction}>
+            <Button variant="standard" size="default" disabled={selectedCount === 0} onClick={onExecuteAction}>
               {selectionMode === 'export' && 'Export Items as CSV'}
               {selectionMode === 'export-json' && 'Export Items as JSON'}
               {selectionMode === 'create-dataset' && 'Create a new Dataset with Items'}
               {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
               {selectionMode === 'delete' && 'Delete Items'}
             </Button>
-            <Button variant="outline" size="md" onClick={onCancelSelection}>
+            <Button variant="secondary" size="default" onClick={onCancelSelection}>
               Cancel
             </Button>
           </ButtonsGroup>
@@ -223,14 +223,14 @@ export function ItemsToolbar({
 
       <div className="flex justify-end gap-3">
         <div className="flex items-center gap-[.1rem]">
-          <Button variant="outline" size="md" onClick={onAddClick}>
+          <Button variant="secondary" size="default" hasRightSibling={true} onClick={onAddClick}>
             <Plus />
             New Item
           </Button>
 
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="md" aria-label="Dataset actions menu">
+              <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Dataset actions menu">
                 <ChevronDownIcon />
               </Button>
             </PopoverTrigger>
@@ -279,7 +279,7 @@ export function ItemsToolbar({
         )}
 
         {!hideVersionsButton && (
-          <Button variant="outline" size="md" onClick={onVersionsClick} aria-label="View versions">
+          <Button variant="secondary" size="default" onClick={onVersionsClick} aria-label="View versions">
             <History className="w-4 h-4" />
             Versions
           </Button>

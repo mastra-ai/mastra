@@ -251,7 +251,6 @@ function DatasetItemPage() {
                   <FileCodeIcon />
                   {itemId} <CopyButton content={itemId} />
                 </MainHeader.Title>
-                <MainHeader.Description></MainHeader.Description>
                 <MainHeader.Description>
                   <TextAndIcon>
                     Item of <DatabaseIcon /> {dataset?.name}

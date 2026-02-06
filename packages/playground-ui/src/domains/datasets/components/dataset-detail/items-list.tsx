@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { DatasetItem } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { EntryList } from '@/ds/components/EntryList';
+import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Icon } from '@/ds/icons/Icon';
 import { Plus, Upload, FileJson } from 'lucide-react';
@@ -195,14 +195,31 @@ export function DatasetItemList({
       {isLoading ? (
         <DatasetItemListSkeleton />
       ) : (
-        <EntryList>
-          <EntryList.Trim>
-            <EntryList.Header columns={columns} />
-            <EntryList.Entries>
+        <ItemList>
+          <ItemList.Header columns={columns}>
+            {columns?.map(col => (
+              <>
+                {col.name === 'checkbox' ? (
+                  <ItemList.HeaderCol key={col.name} className="flex items-center justify-center">
+                    <Checkbox
+                      checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                      onCheckedChange={handleSelectAllToggle}
+                      aria-label="Select all items"
+                    />
+                  </ItemList.HeaderCol>
+                ) : (
+                  <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
+                )}
+              </>
+            ))}
+          </ItemList.Header>
+
+          <ItemList.Scroller>
+            <ItemList.Items>
               {items.length === 0 && searchQuery ? (
                 <div className="flex items-center justify-center py-12 text-neutral4">No items match your search</div>
               ) : (
-                items.map((item: DatasetItem) => {
+                items.map(item => {
                   const createdAtDate = new Date(item.createdAt);
                   const isTodayDate = isToday(createdAtDate);
 
@@ -210,49 +227,51 @@ export function DatasetItemList({
                     id: item.id,
                     input: truncateValue(item.input, 60),
                     expectedOutput: item.expectedOutput ? truncateValue(item.expectedOutput, 40) : '-',
-                    metadata: item.context ? Object.keys(item.context as Record<string, unknown>).length + ' keys' : '-',
+                    metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
                     date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
                   };
 
                   return (
-                    <EntryList.Entry
-                      key={item.id}
-                      entry={entry}
-                      isSelected={featuredItemId === item.id}
-                      columns={columns}
-                      onClick={handleEntryClick}
-                    >
-                      {isSelectionActive && (
-                        <div className="flex items-center justify-center" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                          <Checkbox
-                            checked={selection.selectedIds.has(item.id)}
-                            onCheckedChange={() => {}}
-                            onClick={(e: React.MouseEvent) => {
-                              e.stopPropagation();
-                              selection.toggle(item.id, e.shiftKey, allIds);
-                            }}
-                            aria-label={`Select item ${item.id}`}
-                          />
-                        </div>
-                      )}
-                      <EntryList.EntryText>{entry.input}</EntryList.EntryText>
-                      <EntryList.EntryText>{entry.expectedOutput}</EntryList.EntryText>
-                      <EntryList.EntryText>{entry.metadata}</EntryList.EntryText>
-                      <EntryList.EntryText>{entry.date}</EntryList.EntryText>
-                    </EntryList.Entry>
+                    <ItemList.Row key={item.id} isSelected={featuredItemId === item.id}>
+                      <ItemList.RowButton
+                        entry={entry}
+                        isSelected={featuredItemId === item.id}
+                        columns={columns}
+                        onClick={handleEntryClick}
+                      >
+                        {isSelectionActive && (
+                          <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selection.selectedIds.has(item.id)}
+                              onCheckedChange={() => {}}
+                              onClick={e => {
+                                e.stopPropagation();
+                                selection.toggle(item.id, e.shiftKey, allIds);
+                              }}
+                              aria-label={`Select item ${item.id}`}
+                            />
+                          </div>
+                        )}
+                        <ItemList.ItemText>{entry.input}</ItemList.ItemText>
+                        <ItemList.ItemText>{entry.expectedOutput}</ItemList.ItemText>
+                        <ItemList.ItemText>{entry.metadata}</ItemList.ItemText>
+                        <ItemList.ItemText>{entry.date}</ItemList.ItemText>
+                      </ItemList.RowButton>
+                    </ItemList.Row>
                   );
                 })
               )}
-            </EntryList.Entries>
-          </EntryList.Trim>
-          <EntryList.NextPageLoading
-            setEndOfListElement={setEndOfListElement}
-            loadingText="Loading more items..."
-            noMoreDataText="All items loaded"
-            isLoading={isFetchingNextPage}
-            hasMore={hasNextPage}
-          />
-        </EntryList>
+            </ItemList.Items>
+
+            <ItemList.NextPageLoading
+              setEndOfListElement={setEndOfListElement}
+              loadingText="Loading more items..."
+              noMoreDataText="All items loaded"
+              isLoading={isFetchingNextPage}
+              hasMore={hasNextPage}
+            />
+          </ItemList.Scroller>
+        </ItemList>
       )}
     </div>
   );
@@ -260,22 +279,22 @@ export function DatasetItemList({
 
 function DatasetItemListSkeleton() {
   return (
-    <EntryList>
-      <EntryList.Trim>
-        <EntryList.Header columns={itemsListColumns} />
-        <EntryList.Entries>
-          {Array.from({ length: 5 }).map((_: unknown, index: number) => (
-            <EntryList.Entry key={index} columns={itemsListColumns}>
-              {itemsListColumns.map((_col: { name: string; label: string; size: string }, colIndex: number) => (
-                <EntryList.EntryText key={colIndex} isLoading>
+    <ItemList>
+      <ItemList.Header columns={itemsListColumns} />
+      <ItemList.Items>
+        {Array.from({ length: 5 }).map((_, index) => (
+          <ItemList.Row key={index}>
+            <ItemList.RowButton columns={itemsListColumns}>
+              {itemsListColumns.map((col, colIndex) => (
+                <ItemList.ItemText key={colIndex} isLoading>
                   Loading...
-                </EntryList.EntryText>
+                </ItemList.ItemText>
               ))}
-            </EntryList.Entry>
-          ))}
-        </EntryList.Entries>
-      </EntryList.Trim>
-    </EntryList>
+            </ItemList.RowButton>
+          </ItemList.Row>
+        ))}
+      </ItemList.Items>
+    </ItemList>
   );
 }
 

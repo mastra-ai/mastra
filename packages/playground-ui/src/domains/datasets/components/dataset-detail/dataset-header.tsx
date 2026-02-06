@@ -45,7 +45,7 @@ function HeaderActionsMenu({ onEditClick, onDuplicateClick, onDeleteClick }: Hea
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="md" aria-label="Dataset actions menu">
+        <Button variant="secondary" size="default" aria-label="Dataset actions menu">
           <MoreVertical />
         </Button>
       </PopoverTrigger>
