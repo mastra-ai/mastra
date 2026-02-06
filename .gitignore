@@ -52,3 +52,4 @@ test-output.log
 
 .playwright-mcp
 om-debug.log
+om-reflector-fixture.json
