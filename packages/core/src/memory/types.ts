@@ -439,7 +439,10 @@ export interface ObservationalMemoryObservationConfig {
    * storing results in a buffer. When the main `messageTokens` threshold is reached,
    * buffered observations are activated instantly (no blocking LLM call).
    *
-   * Must be less than `messageTokens`.
+   * Can be an absolute token count (e.g. `5_000`) or a fraction of `messageTokens`
+   * (e.g. `0.25` means buffer every 25% of the threshold).
+   *
+   * Must resolve to less than `messageTokens`.
    * If not set, async buffering is disabled and observations run synchronously.
    *
    * @example
@@ -448,6 +451,11 @@ export interface ObservationalMemoryObservationConfig {
    * observation: {
    *   messageTokens: 20_000,
    *   bufferEvery: 5_000,
+   * }
+   * // Or equivalently, using a fraction:
+   * observation: {
+   *   messageTokens: 20_000,
+   *   bufferEvery: 0.25,
    * }
    * ```
    */

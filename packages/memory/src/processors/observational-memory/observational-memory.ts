@@ -392,7 +392,7 @@ interface ResolvedObservationConfig {
   modelSettings: ModelSettings;
   providerOptions: ProviderOptions;
   maxTokensPerBatch: number;
-  /** Token interval for async background observation buffering */
+  /** Token interval for async background observation buffering (resolved from config) */
   bufferEvery?: number;
   /** Ratio of buffered observations to activate (0-1 float) */
   asyncActivation?: number;
@@ -746,7 +746,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       providerOptions: config.observation?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.providerOptions,
       maxTokensPerBatch:
         config.observation?.maxTokensPerBatch ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.maxTokensPerBatch,
-      bufferEvery: config.observation?.bufferEvery ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferEvery,
+      bufferEvery: this.resolveBufferEvery(
+        config.observation?.bufferEvery,
+        config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
+      ),
       asyncActivation: config.observation?.asyncActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.asyncActivation,
       blockAfter: config.observation?.blockAfter,
     };
@@ -934,6 +937,22 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           `Got observation.bufferEvery=${this.observationConfig.bufferEvery}, reflection.asyncActivation=${this.reflectionConfig.asyncActivation}.`,
       );
     }
+  }
+
+  /**
+   * Resolve bufferEvery: if it's a fraction (0 < value < 1), multiply by messageTokens threshold.
+   * Otherwise return the absolute token count.
+   */
+  private resolveBufferEvery(
+    bufferEvery: number | undefined,
+    messageTokens: number | ThresholdRange,
+  ): number | undefined {
+    if (bufferEvery === undefined) return undefined;
+    if (bufferEvery > 0 && bufferEvery < 1) {
+      const threshold = typeof messageTokens === 'number' ? messageTokens : messageTokens.max;
+      return Math.round(threshold * bufferEvery);
+    }
+    return bufferEvery;
   }
 
   /**
