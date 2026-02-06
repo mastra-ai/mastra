@@ -407,9 +407,7 @@ interface ResolvedReflectionConfig {
   /** Model settings - merged with user config and defaults */
   modelSettings: ModelSettings;
   providerOptions: ProviderOptions;
-  /** Token interval for async background reflection buffering */
-  bufferEvery?: number;
-  /** Ratio of buffered reflection to activate (0-1 float) */
+  /** Ratio (0-1) controlling when async reflection buffering starts */
   asyncActivation?: number;
 }
 
@@ -450,9 +448,8 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
         },
       },
     },
-    // Async buffering defaults (undefined = disabled, preserves current sync behavior)
-    bufferEvery: undefined as number | undefined,
-    asyncActivation: undefined as number | undefined, // Ratio of buffered content to activate (0-1)
+    // Async reflection buffering (undefined = disabled, preserves current sync behavior)
+    asyncActivation: undefined as number | undefined, // Ratio: start buffering at threshold * asyncActivation
   },
 } as const;
 
@@ -564,9 +561,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /**
    * Check if async buffering is enabled for reflections.
+   * Reflection buffering is enabled when asyncActivation is set (triggers at threshold * asyncActivation).
    */
   private isAsyncReflectionEnabled(): boolean {
-    return this.reflectionConfig.bufferEvery !== undefined && this.reflectionConfig.bufferEvery > 0;
+    return this.reflectionConfig.asyncActivation !== undefined && this.reflectionConfig.asyncActivation > 0;
   }
 
   /**
@@ -623,22 +621,23 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
-   * Check if we've crossed a new bufferEvery interval boundary for reflection.
-   * Returns true if async reflection buffering should be triggered.
+   * Check if async reflection buffering should be triggered.
+   * Triggers once when observation tokens reach `threshold * asyncActivation`.
+   * Only allows one buffered reflection at a time.
    */
   private shouldTriggerAsyncReflection(currentObservationTokens: number, lockKey: string): boolean {
     if (!this.isAsyncReflectionEnabled()) return false;
 
-    const bufferEvery = this.reflectionConfig.bufferEvery!;
     const bufferKey = this.getReflectionBufferKey(lockKey);
-    const lastBoundary = this.lastBufferedBoundary.get(bufferKey) ?? 0;
 
-    // Calculate which interval we're in
-    const currentInterval = Math.floor(currentObservationTokens / bufferEvery);
-    const lastInterval = Math.floor(lastBoundary / bufferEvery);
+    // Only trigger once - if we've already started buffering, don't trigger again
+    if (this.lastBufferedBoundary.has(bufferKey)) return false;
 
-    // Trigger if we've crossed into a new interval
-    return currentInterval > lastInterval;
+    // Check if we've crossed the activation threshold
+    const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    const activationPoint = reflectThreshold * this.reflectionConfig.asyncActivation!;
+
+    return currentObservationTokens >= activationPoint;
   }
 
   /**
@@ -755,8 +754,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens,
       },
       providerOptions: config.reflection?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.providerOptions,
-      bufferEvery: config.reflection?.bufferEvery ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferEvery,
-      asyncActivation: config.reflection?.asyncActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.asyncActivation,
+      asyncActivation: config?.reflection?.asyncActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.asyncActivation,
     };
 
     this.tokenCounter = new TokenCounter();
@@ -892,19 +890,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
     }
 
-    // Validate reflection bufferEvery
-    const reflectionThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
-    if (this.reflectionConfig.bufferEvery !== undefined) {
-      if (this.reflectionConfig.bufferEvery <= 0) {
-        throw new Error(`reflection.bufferEvery must be > 0, got ${this.reflectionConfig.bufferEvery}`);
-      }
-      if (this.reflectionConfig.bufferEvery >= reflectionThreshold) {
-        throw new Error(
-          `reflection.bufferEvery (${this.reflectionConfig.bufferEvery}) must be less than observationTokens (${reflectionThreshold})`,
-        );
-      }
-    }
-
     // Validate reflection asyncActivation (0-1 float range)
     if (this.reflectionConfig.asyncActivation !== undefined) {
       if (this.reflectionConfig.asyncActivation <= 0 || this.reflectionConfig.asyncActivation > 1) {
@@ -912,6 +897,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           `reflection.asyncActivation must be in range (0, 1], got ${this.reflectionConfig.asyncActivation}`,
         );
       }
+    }
+
+    // Enforce: if observation has async buffering, reflection must have asyncActivation too
+    const obsHasAsync = this.observationConfig.bufferEvery !== undefined;
+    const refHasAsync =
+      this.reflectionConfig.asyncActivation !== undefined && this.reflectionConfig.asyncActivation > 0;
+    if (obsHasAsync && !refHasAsync) {
+      throw new Error(
+        `When observation.bufferEvery is set, reflection.asyncActivation must also be set. ` +
+          `Got observation.bufferEvery=${this.observationConfig.bufferEvery}, reflection.asyncActivation=${this.reflectionConfig.asyncActivation}.`,
+      );
     }
   }
 
@@ -1257,6 +1253,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     messagesActivated: number;
     recordId: string;
     threadId: string;
+    observations?: string;
   }): DataOmActivationPart {
     return {
       type: 'data-om-activation',
@@ -1271,6 +1268,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         recordId: params.recordId,
         threadId: params.threadId,
         config: this.getObservationMarkerConfig(),
+        observations: params.observations,
       },
     };
   }
@@ -1541,6 +1539,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     messagesToObserve: MastraDBMessage[],
     abortSignal?: AbortSignal,
+    options?: { skipContinuationHints?: boolean },
   ): Promise<{
     observations: string;
     currentTask?: string;
@@ -1549,7 +1548,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }> {
     const agent = this.getObserverAgent();
 
-    const prompt = buildObserverPrompt(existingObservations, messagesToObserve);
+    const prompt = buildObserverPrompt(existingObservations, messagesToObserve, options);
 
     const result = await this.withAbortCheck(
       () =>
@@ -1696,6 +1695,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     },
     observationTokensThreshold?: number,
     abortSignal?: AbortSignal,
+    skipContinuationHints?: boolean,
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
@@ -1712,7 +1712,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     // First attempt
-    let prompt = buildReflectorPrompt(observations, manualPrompt, false);
+    let prompt = buildReflectorPrompt(observations, manualPrompt, false, skipContinuationHints);
     let result = await this.withAbortCheck(
       () =>
         agent.generate(prompt, {
@@ -1769,7 +1769,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
 
       // Retry with compression prompt
-      prompt = buildReflectorPrompt(observations, manualPrompt, true);
+      prompt = buildReflectorPrompt(observations, manualPrompt, true, skipContinuationHints);
       result = await this.withAbortCheck(
         () =>
           agent.generate(prompt, {
@@ -2132,6 +2132,11 @@ ${suggestedResponse}
           // The activated chunks have already been moved to activeObservations.
           observationSucceeded = true;
           updatedRecord = activationResult.updatedRecord ?? recordAfterWait;
+
+          // Trigger reflection after activation (async buffering is enforced to be paired,
+          // so this will use async reflection path via maybeReflect)
+          const activatedObsTokens = updatedRecord.observationTokenCount ?? 0;
+          await this.maybeReflect(updatedRecord, activatedObsTokens, threadId, writer);
           return;
         }
       }
@@ -2364,7 +2369,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
    * Filter out already-observed messages from message list (step 0 only).
    * Historical messages loaded from DB may contain observation markers from previous sessions.
    */
-  private filterAlreadyObservedMessages(messageList: MessageList): void {
+  private filterAlreadyObservedMessages(messageList: MessageList, record?: ObservationalMemoryRecord): void {
     const allMessages = messageList.get.all.db();
 
     // Find the message with the last observation end marker
@@ -2402,6 +2407,47 @@ NOTE: Any messages following this system reminder are newer than your memories.
         }
       } else if (unobservedParts.length < (markerMessage.content?.parts?.length ?? 0)) {
         markerMessage.content.parts = unobservedParts;
+      }
+    } else if (record) {
+      // No observation markers found (e.g., after buffered activation).
+      // Fall back to record-based filtering: remove messages that are already
+      // captured in observations (via lastObservedAt timestamp or observedMessageIds).
+      // This prevents context overflow on session resume after buffered activation.
+      const observedIds = new Set<string>(Array.isArray(record.observedMessageIds) ? record.observedMessageIds : []);
+      // Also include message IDs from any remaining buffered chunks
+      const bufferedChunks = this.getBufferedChunks(record);
+      for (const chunk of bufferedChunks) {
+        if (Array.isArray(chunk.messageIds)) {
+          for (const id of chunk.messageIds) {
+            observedIds.add(id);
+          }
+        }
+      }
+
+      const lastObservedAt = record.lastObservedAt;
+      const messagesToRemove: string[] = [];
+
+      for (const msg of allMessages) {
+        if (!msg?.id || msg.id === 'om-continuation') continue;
+
+        // Remove if explicitly tracked in observedMessageIds or buffered chunks
+        if (observedIds.has(msg.id)) {
+          messagesToRemove.push(msg.id);
+          continue;
+        }
+
+        // Remove if created before lastObservedAt (these messages' content is
+        // already captured in activeObservations via buffered activation)
+        if (lastObservedAt && msg.createdAt) {
+          const msgDate = new Date(msg.createdAt);
+          if (msgDate <= lastObservedAt) {
+            messagesToRemove.push(msg.id);
+          }
+        }
+      }
+
+      if (messagesToRemove.length > 0) {
+        messageList.removeByIds(messagesToRemove);
       }
     }
   }
@@ -2569,7 +2615,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
     // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES (step 0 only)
     // ════════════════════════════════════════════════════════════════════════
     if (stepNumber === 0) {
-      this.filterAlreadyObservedMessages(messageList);
+      this.filterAlreadyObservedMessages(messageList, record);
     }
 
     return messageList;
@@ -3230,7 +3276,7 @@ ${formattedMessages}
         threadId,
         threadIds: [threadId],
       });
-      void writer.custom(startMarker);
+      void writer.custom(startMarker).catch(() => {});
     }
 
     try {
@@ -3247,7 +3293,7 @@ ${formattedMessages}
           recordId: freshRecord.id,
           threadId,
         });
-        void writer.custom(failedMarker);
+        void writer.custom(failedMarker).catch(() => {});
       }
       console.error(`[OM] Async buffered observation failed:`, error instanceof Error ? error.stack : String(error));
     }
@@ -3273,11 +3319,12 @@ ${formattedMessages}
     const bufferedChunksText = bufferedChunks.map(c => c.observations).join('\n\n');
     const combinedObservations = this.combineObservationsForBuffering(record.activeObservations, bufferedChunksText);
 
-    // Call observer with combined context
+    // Call observer with combined context (skip continuation hints for async buffering)
     const result = await this.callObserver(
       combinedObservations,
       messagesToBuffer,
       undefined, // No abort signal for background ops
+      { skipContinuationHints: true },
     );
 
     // Get the new observations to buffer (just the new content, not merged)
@@ -3329,7 +3376,7 @@ ${formattedMessages}
         recordId: record.id,
         threadId,
       });
-      void writer.custom(endMarker);
+      void writer.custom(endMarker).catch(() => {});
     }
   }
 
@@ -3425,8 +3472,9 @@ ${formattedMessages}
           messagesActivated: activationResult.messagesActivated,
           recordId: updatedRecord.id,
           threadId: updatedRecord.threadId ?? record.threadId ?? '',
+          observations: activationResult.observations,
         });
-        void writer.custom(activationMarker);
+        void writer.custom(activationMarker).catch(() => {});
       }
     }
 
@@ -3478,13 +3526,14 @@ ${formattedMessages}
   private async doAsyncBufferedReflection(record: ObservationalMemoryRecord, _bufferKey: string): Promise<void> {
     const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
 
-    // Call reflector
+    // Call reflector (skip continuation hints for async buffering)
     const reflectResult = await this.callReflector(
       record.activeObservations,
       undefined, // No stream context for background ops
       undefined, // No stream context
       reflectThreshold,
       undefined, // No abort signal for background ops
+      true, // Skip continuation hints for async buffering
     );
 
     const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
@@ -4051,11 +4100,11 @@ ${formattedMessages}
     const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
 
     // ════════════════════════════════════════════════════════════════════════
-    // ASYNC BUFFERING: Trigger background reflection at bufferEvery intervals
+    // ASYNC BUFFERING: Trigger background reflection at asyncActivation ratio
     // This runs in the background and stores results to bufferedReflection.
     // ════════════════════════════════════════════════════════════════════════
     if (this.isAsyncReflectionEnabled() && observationTokens < reflectThreshold) {
-      // Check if we've crossed a bufferEvery boundary
+      // Check if we've crossed the asyncActivation threshold
       if (this.shouldTriggerAsyncReflection(observationTokens, lockKey)) {
         // Start background reflection (fire-and-forget)
         this.startAsyncBufferedReflection(record, observationTokens, lockKey);

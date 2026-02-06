@@ -501,6 +501,10 @@ export function MastraRuntimeProvider({
       recordId: data.recordId,
       threadId: data.threadId,
       stepNumber: data.stepNumber,
+      bufferedChunksCount: data.bufferedChunksCount,
+      bufferedMessageTokens: data.bufferedMessageTokens,
+      bufferedObservationTokens: data.bufferedObservationTokens,
+      hasBufferedChunks: data.hasBufferedChunks,
     });
   };
 
@@ -528,20 +532,16 @@ export function MastraRuntimeProvider({
 
   // Helper to mark in-progress OM markers as disconnected in messages
   const markOmMarkersAsDisconnected = (msgs: any[]) => {
-    console.log('[OM DEBUG] markOmMarkersAsDisconnected called with', msgs.length, 'messages');
-    return msgs.map((msg, msgIdx) => {
+    return msgs.map(msg => {
       if (msg.role !== 'assistant') return msg;
 
       // Handle both 'parts' (v2/v3) and 'content' (legacy) message formats
       const partsKey = msg.parts ? 'parts' : msg.content ? 'content' : null;
       if (!partsKey || !Array.isArray(msg[partsKey])) return msg;
 
-      let foundOmMarker = false;
       const updatedParts = msg[partsKey].map((part: any) => {
         // Check for raw data-om-observation-start parts (before conversion to tool-call)
         if (part.type === 'data-om-observation-start') {
-          foundOmMarker = true;
-          console.log('[OM DEBUG] Found data-om-observation-start, marking as disconnected');
           // Convert to a disconnected end marker
           return {
             type: 'data-om-observation-end',
@@ -557,8 +557,6 @@ export function MastraRuntimeProvider({
           const omData = part.metadata?.omData || part.args;
           // If it's in loading state (no completedAt, failedAt, or disconnectedAt), mark as disconnected
           if (!omData?.completedAt && !omData?.failedAt && !omData?.disconnectedAt) {
-            foundOmMarker = true;
-            console.log('[OM DEBUG] Found tool-call OM marker, marking as disconnected');
             return {
               ...part,
               metadata: {
@@ -575,9 +573,6 @@ export function MastraRuntimeProvider({
         return part;
       });
 
-      if (foundOmMarker) {
-        console.log('[OM DEBUG] Returning updated message with', updatedParts.length, 'parts');
-      }
       return { ...msg, [partsKey]: updatedParts };
     });
   };
@@ -585,7 +580,6 @@ export function MastraRuntimeProvider({
   // Helper to reset OM streaming state when stream is interrupted
   // (user cancel, network error, process exit, etc.)
   const resetObservationalMemoryStreamState = () => {
-    console.log('[OM DEBUG] resetObservationalMemoryStreamState called');
     setIsObservingFromStream(false);
     setIsReflectingFromStream(false);
     setStreamProgress(null);
@@ -679,12 +673,6 @@ export function MastraRuntimeProvider({
     });
 
     try {
-      console.log(
-        '[OM DEBUG] try block started, isSupportedModel:',
-        isSupportedModel,
-        'chatWithNetwork:',
-        chatWithNetwork,
-      );
       if (isSupportedModel) {
         if (chatWithNetwork) {
           await sendMessage({
@@ -1159,13 +1147,11 @@ export function MastraRuntimeProvider({
         refreshThreadList?.();
       }, 500);
     } catch (error: any) {
-      console.log('[OM DEBUG] catch block entered, error:', error?.name, error?.message);
       console.error('Error occurred in MastraRuntimeProvider', error);
       setIsLegacyRunning(false);
 
       // Handle cancellation gracefully
       if (error.name === 'AbortError') {
-        console.log('[OM DEBUG] AbortError detected, returning early');
         // Don't add an error message for user-initiated cancellation
         return;
       }
@@ -1182,7 +1168,6 @@ export function MastraRuntimeProvider({
         ]);
       }
     } finally {
-      console.log('[OM DEBUG] finally block entered');
       // Clean up the abort controller reference
       abortControllerRef.current = null;
       // Reset OM streaming state in case stream was interrupted mid-observation

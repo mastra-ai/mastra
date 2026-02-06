@@ -142,7 +142,12 @@ Your current detail level was a 10/10, lets aim for a 8/10 detail level.
 /**
  * Build the prompt for the Reflector agent
  */
-export function buildReflectorPrompt(observations: string, manualPrompt?: string, compressionRetry?: boolean): string {
+export function buildReflectorPrompt(
+  observations: string,
+  manualPrompt?: string,
+  compressionRetry?: boolean,
+  skipContinuationHints?: boolean,
+): string {
   let prompt = `## OBSERVATIONS TO REFLECT ON
 
 ${observations}
@@ -163,6 +168,10 @@ ${manualPrompt}`;
     prompt += `
 
 ${COMPRESSION_RETRY_PROMPT}`;
+  }
+
+  if (skipContinuationHints) {
+    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>.`;
   }
 
   return prompt;

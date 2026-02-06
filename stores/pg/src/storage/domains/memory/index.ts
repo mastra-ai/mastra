@@ -2222,6 +2222,7 @@ export class MemoryPG extends MemoryStorage {
         observationTokensActivated: activatedTokens,
         messagesActivated: activatedMessageCount,
         activatedCycleIds,
+        observations: activatedContent,
       };
     } catch (error) {
       if (error instanceof MastraError) {

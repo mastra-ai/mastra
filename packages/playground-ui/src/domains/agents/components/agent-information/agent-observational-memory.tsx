@@ -482,6 +482,18 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
             totalBudget={totalBudget}
           />
         </div>
+
+        {/* Buffered chunks info - show when there are buffered observations */}
+        {streamProgress?.hasBufferedChunks && streamProgress.bufferedChunksCount && streamProgress.bufferedChunksCount > 0 && (
+          <div className="text-[10px] text-cyan-600 flex items-center gap-1.5 mt-1">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
+            <span>
+              {streamProgress.bufferedChunksCount} buffered chunk{streamProgress.bufferedChunksCount !== 1 ? 's' : ''} (
+              {formatTokens(streamProgress.bufferedMessageTokens ?? 0)} msg tokens →{' '}
+              {formatTokens(streamProgress.bufferedObservationTokens ?? 0)} obs tokens)
+            </span>
+          </div>
+        )}
       </TooltipProvider>
 
       {/* Observations Content */}

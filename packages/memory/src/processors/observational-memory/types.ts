@@ -150,21 +150,13 @@ export interface ReflectionConfig {
   providerOptions?: ProviderOptions;
 
   /**
-   * Token interval for async background reflection buffering.
-   * When set, reflection runs asynchronously in the background at this interval,
-   * storing the result in a buffer. When the main `observationTokens` threshold is reached,
-   * the buffered reflection is activated instantly (no blocking LLM call).
+   * Ratio (0-1) controlling when async reflection buffering starts.
+   * When observation tokens reach `observationTokens * asyncActivation`,
+   * reflection runs in the background. On activation at the full threshold,
+   * the buffered reflection replaces the line range it covers, preserving
+   * any new observations appended after that range.
    *
-   * Must be less than `observationTokens`.
-   * If not set, async buffering is disabled and reflection runs synchronously.
-   */
-  bufferEvery?: number;
-
-  /**
-   * Percentage of buffered reflection to activate when threshold is reached (0-100).
-   * Setting this below 100 keeps some content in reserve for continuity.
-   *
-   * @default 100 (activate all buffered reflection)
+   * Requires `observation.bufferEvery` to also be set.
    */
   asyncActivation?: number;
 }
@@ -505,6 +497,9 @@ export interface DataOmActivationPart {
 
     /** Snapshot of config at activation time */
     config: ObservationMarkerConfig;
+
+    /** The actual observations from activated chunks (for UI display) */
+    observations?: string;
   };
 }
 

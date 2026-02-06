@@ -516,35 +516,23 @@ export interface ObservationalMemoryReflectionConfig {
   providerOptions?: Record<string, Record<string, unknown> | undefined>;
 
   /**
-   * Token interval for async background reflection buffering.
-   * When set, reflection runs asynchronously in the background at this interval,
-   * storing the result in a buffer. When the main `observationTokens` threshold is reached,
-   * the buffered reflection is activated instantly (no blocking LLM call).
+   * Ratio (0-1) controlling when async reflection buffering starts.
+   * When observation tokens reach `observationTokens * asyncActivation`,
+   * reflection runs asynchronously in the background. When the full
+   * `observationTokens` threshold is reached, the buffered reflection
+   * is spliced into the observation content instantly (no blocking LLM call).
    *
-   * Must be less than `observationTokens`.
-   * If not set, async buffering is disabled and reflection runs synchronously.
+   * Only one buffered reflection is maintained at a time. On activation,
+   * the buffered reflection replaces the line range it was generated from,
+   * and any new observations appended after that range are preserved.
+   *
+   * Requires `observation.bufferEvery` to also be set (async observation).
    *
    * @example
    * ```ts
-   * // Buffer every 10k tokens, activate at 40k
    * reflection: {
-   *   observationTokens: 40_000,
-   *   bufferEvery: 10_000,
-   * }
-   * ```
-   */
-  bufferEvery?: number;
-
-  /**
-   * Percentage of buffered reflection to activate when threshold is reached (0-100).
-   * Setting this below 100 keeps some content in reserve for continuity.
-   *
-   * @default 100 (activate all buffered reflection)
-   * @example
-   * ```ts
-   * // Activate 75% of buffered reflection, keep 25% in reserve
-   * reflection: {
-   *   asyncActivation: 75,
+   *   observationTokens: 30_000,
+   *   asyncActivation: 0.5, // Start buffering at 15k tokens
    * }
    * ```
    */

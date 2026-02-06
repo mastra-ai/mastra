@@ -12,6 +12,14 @@ export interface OmProgressData {
   recordId: string;
   threadId: string;
   stepNumber: number;
+  /** Number of buffered observation chunks */
+  bufferedChunksCount?: number;
+  /** Total message tokens in buffered chunks */
+  bufferedMessageTokens?: number;
+  /** Total observation tokens in buffered chunks */
+  bufferedObservationTokens?: number;
+  /** Whether there are any buffered chunks */
+  hasBufferedChunks?: boolean;
 }
 
 interface ObservationalMemoryContextValue {

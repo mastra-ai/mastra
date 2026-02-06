@@ -747,6 +747,8 @@ export interface SwapBufferedToActiveResult {
   messagesActivated: number;
   /** CycleIds of the activated chunks (for linking UI markers) */
   activatedCycleIds: string[];
+  /** Concatenated observations from activated chunks (for UI display) */
+  observations?: string;
 }
 
 /**

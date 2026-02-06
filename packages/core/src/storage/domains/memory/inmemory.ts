@@ -1007,6 +1007,7 @@ export class InMemoryMemory extends MemoryStorage {
       observationTokensActivated: activatedTokens,
       messagesActivated: activatedMessageCount,
       activatedCycleIds,
+      observations: activatedContent,
     };
   }
 

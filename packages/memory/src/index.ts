@@ -1684,7 +1684,6 @@ Notes:
             observationTokens: omConfig.reflection.observationTokens,
             modelSettings: omConfig.reflection.modelSettings,
             providerOptions: omConfig.reflection.providerOptions,
-            bufferEvery: omConfig.reflection.bufferEvery,
             asyncActivation: omConfig.reflection.asyncActivation,
           }
         : undefined,

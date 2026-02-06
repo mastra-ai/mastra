@@ -1682,6 +1682,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         observationTokensActivated: activatedTokens,
         messagesActivated: activatedMessageCount,
         activatedCycleIds,
+        observations: activatedContent,
       };
     } catch (error) {
       if (error instanceof MastraError) {

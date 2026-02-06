@@ -411,6 +411,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
     const chunksActivated = omData.chunksActivated ?? 0;
     const tokensActivated = omData.tokensActivated ?? 0; // Message tokens cleared from context
     const messagesActivated = omData.messagesActivated ?? 0;
+    const { observations } = omData;
     const activatedLabel = isReflection ? 'Activated reflection' : 'Activated observations';
 
     return (
@@ -422,14 +423,23 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         data-om-no-highlight="true"
       >
         <div className="my-1">
-          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-cyan-500/10 text-cyan-600 text-xs font-medium">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 text-xs font-medium transition-colors cursor-pointer"
+          >
+            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             <Brain className="w-3 h-3" />
             <span>
               {activatedLabel}: {chunksActivated} chunk{chunksActivated !== 1 ? 's' : ''},{' '}
               {messagesActivated} msg{messagesActivated !== 1 ? 's' : ''},{' '}
               {formatTokens(tokensActivated)} context tokens
             </span>
-          </div>
+          </button>
+          {isExpanded && observations && (
+            <div className="mt-1 ml-6 p-2 rounded-md bg-cyan-500/5 text-xs space-y-1.5 border border-cyan-500/10">
+              <ObservationRenderer observations={observations} maxHeight="500px" />
+            </div>
+          )}
         </div>
       </div>
     );
