@@ -104,5 +104,16 @@
     "@mastra/voice-speechify": "0.12.0",
     "@mastra/inngest": "1.0.2"
   },
-  "changesets": []
+  "changesets": [
+    "clean-kits-use",
+    "eighty-crabs-wait",
+    "fix-client-types",
+    "fix-core-memory-config",
+    "fix-editor-memory",
+    "fix-playground-ui-memory",
+    "fix-server-versioning",
+    "funny-stamps-unite",
+    "sweet-trams-roll",
+    "tender-aliens-brush"
+  ]
 }

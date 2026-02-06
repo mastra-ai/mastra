@@ -613,7 +613,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Workspace',
+      label: 'Workspaces',
       collapsed: true,
       customProps: {
         tags: ['new'],

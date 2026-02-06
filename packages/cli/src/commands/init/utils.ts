@@ -787,9 +787,9 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
 
           // Show popular agents first with "Show all" option
           const initialSelection = await p.multiselect({
-            message: 'Select agent(s) to install skills for:',
+            message: `Select agent(s) to install skills for ${color.dim('(use arrow keys / space bar)')}`,
             options: [...POPULAR_AGENTS, { value: '__show_all__', label: '+ Show all agents (29 more)' }],
-            initialValues: ['claude-code', 'codex', 'opencode', 'cursor'],
+            initialValues: ['claude-code', 'cursor'],
             required: true,
           });
 
@@ -805,7 +805,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             const preSelected = selectedAgents.filter(a => a !== '__show_all__');
 
             const fullSelection = await p.multiselect({
-              message: 'Select agent(s) to install skills for:',
+              message: `Select agent(s) to install skills for ${color.dim('(use arrow keys / space bar)')}`,
               options: ALL_AGENTS,
               initialValues: preSelected,
               required: true,

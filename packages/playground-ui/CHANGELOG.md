@@ -1,5 +1,28 @@
 # @mastra/playground-ui
 
+## 9.1.0-alpha.0
+
+### Minor Changes
+
+- Added new agent creation page with CMS-style layout featuring Identity, Capabilities, and Revisions tabs. The page includes a prompt editor with Handlebars template support, partials management, and instruction diff viewing for revisions. ([#12569](https://github.com/mastra-ai/mastra/pull/12569))
+
+### Patch Changes
+
+- Fix memory configuration in agent forms: ([#12704](https://github.com/mastra-ai/mastra/pull/12704))
+  - Fixed memory configuration in agent forms to use `SerializedMemoryConfig` object instead of string
+  - Added `MemoryConfigurator` component for proper memory settings UI
+  - Fixed scorer sampling configuration to remove unsupported 'count' option
+  - Added `useVectors` and `useEmbedders` hooks to fetch available options from API
+  - Fixed agent creation flow to use the server-returned agent ID for navigation
+  - Fixed form validation schema to properly handle memory configuration object
+
+- Fixed skills search dialog to correctly identify individual skills. Selection now highlights only the clicked skill, and the Installed badge only shows for the exact skill that was installed (matching by source repository + name). Gracefully handles older server versions without source info by falling back to name-only matching. ([#12678](https://github.com/mastra-ai/mastra/pull/12678))
+
+- Updated dependencies [[`90f7894`](https://github.com/mastra-ai/mastra/commit/90f7894568dc9481f40a4d29672234fae23090bb), [`8109aee`](https://github.com/mastra-ai/mastra/commit/8109aeeab758e16cd4255a6c36f044b70eefc6a6), [`8109aee`](https://github.com/mastra-ai/mastra/commit/8109aeeab758e16cd4255a6c36f044b70eefc6a6)]:
+  - @mastra/core@1.2.1-alpha.0
+  - @mastra/client-js@1.2.1-alpha.0
+  - @mastra/react@0.2.2-alpha.0
+
 ## 9.0.0
 
 ### Minor Changes

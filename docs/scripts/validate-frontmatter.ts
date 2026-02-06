@@ -16,7 +16,15 @@ interface ValidationConfig {
 
 const DEFAULT_CONFIG: ValidationConfig = {
   sourceDir: 'src/content/en',
-  skipPaths: ['guides/', 'docs/community/', 'docs/getting-started/', 'docs/mastra-cloud/', 'docs/index.mdx', 'models/'],
+  skipPaths: [
+    'guides/',
+    'docs/community/',
+    'docs/getting-started/',
+    'docs/mastra-cloud/',
+    'docs/index.mdx',
+    'models/',
+    'docs/build-with-ai/skills.mdx',
+  ],
   packagePattern: /^@mastra\/[\w-]+$/,
   concurrency: 50,
 }
