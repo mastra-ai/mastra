@@ -853,6 +853,9 @@ export class Agent<
           this.logger.error(mastraError.toString());
           throw mastraError;
         }
+
+        // Propagate logger to factory-resolved workspace
+        resolvedWorkspace.__setLogger(this.logger);
       }
 
       return resolvedWorkspace;

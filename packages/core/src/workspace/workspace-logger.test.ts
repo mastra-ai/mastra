@@ -622,18 +622,19 @@ describe('Workspace Logger Integration', () => {
         agents: { 'factory-agent': agent },
       });
 
-      // Note: For factory-based workspaces, logger propagation happens
-      // when Mastra sets the logger on the agent. The agent stores the logger
-      // but factory workspaces are resolved at runtime, so they don't
-      // automatically receive the logger unless explicitly propagated.
-      // This test documents the current behavior.
-
-      // Get workspace from agent
+      // Get workspace from agent - factory workspaces receive logger at resolve time
       const workspace1 = await agent.getWorkspace();
       expect(workspace1).toBeDefined();
 
-      // Factory functions create new instances, so logger may not be set
-      // unless the implementation explicitly propagates it
+      // Logger should be propagated to the factory-resolved workspace
+      const fs = workspace1!.filesystem;
+      if (fs && '__setLogger' in fs) {
+        // The filesystem should have received the logger via workspace.__setLogger
+        // Trigger a log to verify propagation
+        (fs as any).logger?.debug?.('factory-logger-test');
+        expect(mockLogger.debug).toHaveBeenCalledWith('factory-logger-test');
+      }
+
       await workspace1!.destroy();
     });
   });

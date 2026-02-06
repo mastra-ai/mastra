@@ -661,6 +661,50 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Exist
     ]);
     expect(writeResult.stdout).toMatch(/Read-only|write failed/);
   }, 240000);
+
+  it('readOnly change triggers remount with ro flag', async () => {
+    await sandbox.start();
+
+    const s3Config = getS3TestConfig();
+    const mountPath = '/data/readonly-remount';
+
+    // Mount writable first
+    const writableFs = {
+      id: 'test-s3-rw',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({ ...s3Config, readOnly: false }),
+    } as any;
+
+    await sandbox.mount(writableFs, mountPath);
+
+    // Verify writable - write should succeed
+    const writeOk = await sandbox.executeCommand('sh', [
+      '-c',
+      `echo "hello" > ${mountPath}/rw-test.txt && echo "write ok"`,
+    ]);
+    expect(writeOk.stdout).toContain('write ok');
+
+    // Remount as read-only
+    const readOnlyFs = {
+      id: 'test-s3-rw',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({ ...s3Config, readOnly: true }),
+    } as any;
+
+    const result = await sandbox.mount(readOnlyFs, mountPath);
+    expect(result.success).toBe(true);
+
+    // Verify read-only - write should fail
+    const writeFail = await sandbox.executeCommand('sh', [
+      '-c',
+      `echo "test" > ${mountPath}/ro-test.txt 2>&1 || echo "write failed"`,
+    ]);
+    expect(writeFail.stdout).toMatch(/Read-only|write failed/);
+  }, 240000);
 });
 
 /**
