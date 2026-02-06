@@ -405,14 +405,17 @@ describe('S3Filesystem', () => {
 
       const fsAny = fs as any;
 
-      // Manually set _client to simulate a created client
+      // Simulate first operation creating the client
       const fakeClient = { send: vi.fn() };
       fsAny._client = fakeClient;
 
-      // getClient() should return the cached _client, not create a new one
-      const result = fsAny.getClient();
+      // Subsequent getClient() calls should return the cached instance
+      const client1 = fsAny.getClient();
+      const client2 = fsAny.getClient();
 
-      expect(result).toBe(fakeClient);
+      expect(client1).toBe(fakeClient);
+      expect(client2).toBe(fakeClient);
+      expect(client1).toBe(client2);
     });
 
     it('uses anonymous credentials for public buckets', async () => {

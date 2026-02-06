@@ -389,8 +389,9 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
 
     const result = await sandbox.mount(mockFilesystem, testDir);
     expect(result.success).toBe(false);
-    expect(result.error).toContain('not empty');
+    expect(result.error).toContain(`Cannot mount at ${testDir}: directory exists and is not empty`);
     expect(result.error).toContain('Mounting would hide existing files');
+    expect(result.error).toContain('Use a different path or empty the directory first');
   }, 120000);
 
   it('mount succeeds if directory exists but is empty', async () => {
@@ -442,6 +443,14 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
       // Verify directory was created (mount succeeded)
       const checkDir = await sandbox.executeCommand('test', ['-d', '/opt/test-mount']);
       expect(checkDir.exitCode).toBe(0);
+
+      // Verify directory is owned by the current user (sudo chown was used)
+      const ownerCheck = await sandbox.executeCommand('sh', [
+        '-c',
+        'stat -c "%u" /opt/test-mount',
+      ]);
+      const currentUid = await sandbox.executeCommand('id', ['-u']);
+      expect(ownerCheck.stdout.trim()).toBe(currentUid.stdout.trim());
     },
     120000,
   );
@@ -648,9 +657,22 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Exist
     const result1 = await sandbox.mount(mockFilesystem, mountPath);
     expect(result1.success).toBe(true);
 
-    // Mount again with same config - should skip
+    // Record the marker file content before second mount
+    const markerBefore = await sandbox.executeCommand('sh', [
+      '-c',
+      `cat /tmp/.mastra-mounts/${sandbox.mounts.markerFilename(mountPath)} 2>/dev/null || echo "none"`,
+    ]);
+
+    // Mount again with same config - should skip (not remount)
     const result2 = await sandbox.mount(mockFilesystem, mountPath);
     expect(result2.success).toBe(true);
+
+    // Marker file should be identical (mount was skipped, not re-executed)
+    const markerAfter = await sandbox.executeCommand('sh', [
+      '-c',
+      `cat /tmp/.mastra-mounts/${sandbox.mounts.markerFilename(mountPath)} 2>/dev/null || echo "none"`,
+    ]);
+    expect(markerAfter.stdout).toBe(markerBefore.stdout);
   }, 180000);
 
   it('mount unmounts and remounts if config changed', async () => {
@@ -674,9 +696,17 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Exist
     // Mount with readOnly: false
     await sandbox.mount(createFilesystem(false), mountPath);
 
-    // Mount again with readOnly: true - should remount
+    // Record marker content (contains configHash)
+    const markerFile = `/tmp/.mastra-mounts/${sandbox.mounts.markerFilename(mountPath)}`;
+    const markerBefore = await sandbox.executeCommand('cat', [markerFile]);
+
+    // Mount again with readOnly: true - should unmount and remount
     const result = await sandbox.mount(createFilesystem(true), mountPath);
     expect(result.success).toBe(true);
+
+    // Marker should have changed (different configHash proves remount happened)
+    const markerAfter = await sandbox.executeCommand('cat', [markerFile]);
+    expect(markerAfter.stdout).not.toBe(markerBefore.stdout);
 
     // Verify it's now read-only
     const writeResult = await sandbox.executeCommand('sh', [
@@ -703,6 +733,10 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Exist
 
     await sandbox.mount(writableFs, mountPath);
 
+    // Record marker content before remount
+    const markerFile = `/tmp/.mastra-mounts/${sandbox.mounts.markerFilename(mountPath)}`;
+    const markerBefore = await sandbox.executeCommand('cat', [markerFile]);
+
     // Verify writable - write should succeed
     const writeOk = await sandbox.executeCommand('sh', [
       '-c',
@@ -721,6 +755,10 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Exist
 
     const result = await sandbox.mount(readOnlyFs, mountPath);
     expect(result.success).toBe(true);
+
+    // Marker should have changed (unmount + remount with new config)
+    const markerAfter = await sandbox.executeCommand('cat', [markerFile]);
+    expect(markerAfter.stdout).not.toBe(markerBefore.stdout);
 
     // Verify read-only - write should fail
     const writeFail = await sandbox.executeCommand('sh', [

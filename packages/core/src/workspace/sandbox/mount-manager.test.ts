@@ -457,7 +457,7 @@ describe('MountManager', () => {
 
       expect(mockLogger.debug).toHaveBeenCalledWith(
         expect.stringContaining('Adding 2 pending mount(s)'),
-        expect.any(Object),
+        expect.objectContaining({ paths: ['/path1', '/path2'] }),
       );
     });
 

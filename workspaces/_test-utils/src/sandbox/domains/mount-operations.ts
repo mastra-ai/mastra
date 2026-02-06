@@ -127,6 +127,11 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
 
           // Then unmount - should not throw
           await expect(sandbox.unmount(mountPath)).resolves.not.toThrow();
+
+          // Verify mount was actually removed from tracking
+          if (sandbox.mounts) {
+            expect(sandbox.mounts.has(mountPath)).toBe(false);
+          }
         },
         getContext().testTimeout,
       );

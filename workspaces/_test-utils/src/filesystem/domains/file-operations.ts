@@ -47,7 +47,7 @@ export function createFileOperationsTests(getContext: () => TestContext): void {
         await fs.writeFile(path, content);
 
         const result = await fs.readFile(path);
-        expect(typeof result !== 'string').toBe(true); // Should be Buffer/Uint8Array
+        expect(result).toBeInstanceOf(Buffer);
         expect(Buffer.from(result as Buffer).equals(content)).toBe(true);
       });
 
@@ -154,7 +154,7 @@ export function createFileOperationsTests(getContext: () => TestContext): void {
         await fs.writeFile(path, content);
 
         const result = await fs.readFile(path);
-        expect(typeof result !== 'string').toBe(true); // Should be Buffer/Uint8Array
+        expect(result).toBeInstanceOf(Buffer);
       });
     });
 

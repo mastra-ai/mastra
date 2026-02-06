@@ -851,6 +851,9 @@ describe('E2BSandbox Error Handling', () => {
     const sandbox = new E2BSandbox();
     await sandbox.start();
 
+    // Spy on the logger to verify error is logged
+    const loggerErrorSpy = vi.spyOn((sandbox as any).logger, 'error');
+
     const mockFilesystem = {
       id: 'test-s3-compat',
       name: 'S3Filesystem',
@@ -872,6 +875,13 @@ describe('E2BSandbox Error Handling', () => {
     expect(result.error).toContain('endpoint');
     // Should mention public_bucket only works for AWS S3
     expect(result.error).toContain('public_bucket');
+    // Should log the error
+    expect(loggerErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Error mounting'),
+      expect.any(Error),
+    );
+
+    loggerErrorSpy.mockRestore();
   });
 });
 
@@ -884,7 +894,7 @@ describe('E2BSandbox Reconcile Mounts', () => {
     mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
   });
 
-  it('reconcileMounts is called on reconnect', async () => {
+  it('reconcileMounts is called on reconnect before processPending', async () => {
     const { Sandbox } = await import('e2b');
 
     // Mock finding existing sandbox
@@ -894,13 +904,24 @@ describe('E2BSandbox Reconcile Mounts', () => {
 
     const sandbox = new E2BSandbox({ id: 'existing-id' });
 
-    // Spy on reconcileMounts
-    const reconcileSpy = vi.spyOn(sandbox, 'reconcileMounts');
+    // Track call order
+    const callOrder: string[] = [];
+    const reconcileSpy = vi.spyOn(sandbox, 'reconcileMounts').mockImplementation(async () => {
+      callOrder.push('reconcile');
+    });
+    const processPendingSpy = vi.spyOn(sandbox.mounts, 'processPending').mockImplementation(async () => {
+      callOrder.push('processPending');
+    });
 
     await sandbox.start();
 
     // reconcileMounts should be called during reconnect
     expect(reconcileSpy).toHaveBeenCalled();
+    // reconcileMounts must run before processPending
+    expect(callOrder.indexOf('reconcile')).toBeLessThan(callOrder.indexOf('processPending'));
+
+    reconcileSpy.mockRestore();
+    processPendingSpy.mockRestore();
 
     // Reset mock
     (Sandbox.list as any).mockReturnValue({
@@ -998,6 +1019,10 @@ describe('E2BSandbox Runtime Installation', () => {
       const sandbox = new E2BSandbox();
       await sandbox.start();
 
+      // Spy on logger to verify startup warning
+      const loggerWarnSpy = vi.spyOn((sandbox as any).logger, 'warn');
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
       const mockFilesystem = {
         id: 'test-s3',
         name: 'S3Filesystem',
@@ -1017,6 +1042,13 @@ describe('E2BSandbox Runtime Installation', () => {
       // Verify apt-get install was called for s3fs
       const installCommand = commandsRun.find(cmd => cmd.includes('apt-get install') && cmd.includes('s3fs'));
       expect(installCommand).toBeDefined();
+
+      // Verify warning about runtime installation and startup tip
+      expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('s3fs not found'));
+      expect(loggerInfoSpy).toHaveBeenCalledWith(expect.stringContaining('createMountableTemplate'));
+
+      loggerWarnSpy.mockRestore();
+      loggerInfoSpy.mockRestore();
     });
 
     it('gives helpful error if s3fs installation fails', async () => {
