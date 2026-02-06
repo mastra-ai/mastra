@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed stale agent data in CMS pages by adding removeAgent method to Mastra and updating clearStoredAgentCache to clear both Editor cache and Mastra registry when stored agents are updated or deleted ([#12693](https://github.com/mastra-ai/mastra/pull/12693))
+
+- Update memory config and exports: ([#12704](https://github.com/mastra-ai/mastra/pull/12704))
+  - Updated `SerializedMemoryConfig` to allow `embedder?: EmbeddingModelId | string` for flexibility
+  - Exported `EMBEDDING_MODELS` and `EmbeddingModelInfo` for use in server endpoints
+
 ## 1.2.0
 
 ### Minor Changes

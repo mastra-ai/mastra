@@ -3,7 +3,7 @@ import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
-import { getZodTypeName } from '../utils/zod-utils';
+import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
 export type StoragePagination = {
@@ -668,83 +668,21 @@ export interface UpdateWorkflowStateOptions {
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
 }
 
-/**
- * Get the inner type from a wrapper schema (nullable, optional, default, effects, branded).
- * Compatible with both Zod 3 and Zod 4.
- */
-function getInnerType(schema: z.ZodTypeAny, typeName: string): z.ZodTypeAny | undefined {
-  const schemaAny = schema as any;
-
-  // For nullable, optional, default - the inner type is at _def.innerType
-  if (typeName === 'ZodNullable' || typeName === 'ZodOptional' || typeName === 'ZodDefault') {
-    return schemaAny._zod?.def?.innerType ?? schemaAny._def?.innerType;
-  }
-
-  // For effects - the inner type is at _def.schema
-  if (typeName === 'ZodEffects') {
-    return schemaAny._zod?.def?.schema ?? schemaAny._def?.schema;
-  }
-
-  // For branded - the inner type is at _def.type
-  if (typeName === 'ZodBranded') {
-    return schemaAny._zod?.def?.type ?? schemaAny._def?.type;
-  }
-
-  return undefined;
-}
-
 function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {
   let current = schema;
   let nullable = false;
 
   while (true) {
     const typeName = getZodTypeName(current);
+    if (!typeName) break;
 
-    if (typeName === 'ZodNullable') {
+    if (typeName === 'ZodNullable' || typeName === 'ZodOptional') {
       nullable = true;
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
     }
 
-    if (typeName === 'ZodOptional') {
-      // For DB purposes, we usually treat "optional" as "nullable"
-      nullable = true;
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    if (typeName === 'ZodDefault') {
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    if (typeName === 'ZodEffects') {
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    if (typeName === 'ZodBranded') {
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    // If you ever use ZodCatch/ZodPipeline, you can unwrap them here too.
-    break;
+    const inner = getZodInnerType(current, typeName);
+    if (!inner) break;
+    current = inner;
   }
 
   return { base: current, nullable };
