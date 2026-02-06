@@ -46,8 +46,12 @@ describe('NestJS MCP Transport Routes Integration', () => {
         throw new Error('Failed to get server address');
       }
 
-      // Attach NestJS app to server for cleanup
-      (server as any).nestApp = nestApp;
+      // Wrap server.close to also shut down the NestJS app
+      const originalClose = server.close.bind(server);
+      server.close = ((cb?: (err?: Error) => void) => {
+        nestApp.close().finally(() => originalClose(cb));
+        return server;
+      }) as typeof server.close;
 
       return {
         server,

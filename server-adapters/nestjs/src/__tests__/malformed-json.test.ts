@@ -77,7 +77,7 @@ describe('Malformed JSON Body Handling', () => {
         body: {},
       });
 
-      // Express returns 400 for empty body with application/json
+      // Empty JSON object — should not cause a 5xx crash
       expect(response.status).toBeLessThan(500);
     });
 

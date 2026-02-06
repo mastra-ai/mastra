@@ -117,10 +117,7 @@ export class MastraThrottleGuard implements CanActivate, OnModuleDestroy {
   /**
    * Get rate limit settings for this request.
    */
-  private getRateLimitSettings(
-    request: Request,
-    decoratorOptions?: ThrottleOptions,
-  ): { limit: number; windowMs: number } {
+  getRateLimitSettings(request: Request, decoratorOptions?: ThrottleOptions): { limit: number; windowMs: number } {
     if (decoratorOptions && !('skip' in decoratorOptions)) {
       return {
         limit: decoratorOptions.limit,
