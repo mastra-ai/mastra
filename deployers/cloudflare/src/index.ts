@@ -41,6 +41,12 @@ export class CloudflareDeployer extends Deployer {
   ) {
     super({ name: 'CLOUDFLARE' });
 
+    // Use 'browser' platform for Workers-compatible module resolution.
+    // This ensures packages with conditional exports (like the Cloudflare SDK)
+    // resolve to browser/worker implementations instead of Node.js-specific code
+    // that depends on unavailable modules like 'https'.
+    this.platform = 'browser';
+
     this.userConfig = { ...userConfig };
 
     if (userConfig.workerNamespace) {
