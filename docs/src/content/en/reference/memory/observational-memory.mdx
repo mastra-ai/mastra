@@ -123,6 +123,29 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
       isOptional: true,
       defaultValue: "{ temperature: 0.3, maxOutputTokens: 100_000 }",
     },
+    {
+      name: "bufferEvery",
+      type: "number",
+      description:
+        "Token interval for async background observation buffering. Can be an absolute token count (e.g. `5000`) or a fraction of `messageTokens` (e.g. `0.25` = buffer every 25% of threshold). When set, observations run in the background at this interval, storing results in a buffer. When the main `messageTokens` threshold is reached, buffered observations activate instantly without a blocking LLM call. Must resolve to less than `messageTokens`. If not set, async buffering is disabled and observations run synchronously.",
+      isOptional: true,
+    },
+    {
+      name: "asyncActivation",
+      type: "number",
+      description:
+        "Ratio (0-1) of buffered observations to activate when threshold is reached. Setting this below 1 keeps some observations in reserve for continuity. Requires `bufferEvery` to also be set.",
+      isOptional: true,
+      defaultValue: "1",
+    },
+    {
+      name: "blockAfter",
+      type: "number",
+      description:
+        "Token threshold above which synchronous (blocking) observation is forced. Between `messageTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous observation runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `messageTokens`) or an absolute token count (≥ 2, must be greater than `messageTokens`). Only relevant when `bufferEvery` is set. Defaults to `1.2` when async buffering is enabled.",
+      isOptional: true,
+      defaultValue: "1.2 (when bufferEvery is set)",
+    },
   ]}
 />
 
@@ -153,6 +176,21 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
         "Model settings for the Reflector agent.",
       isOptional: true,
       defaultValue: "{ temperature: 0, maxOutputTokens: 100_000 }",
+    },
+    {
+      name: "asyncActivation",
+      type: "number",
+      description:
+        "Ratio (0-1) controlling when async reflection buffering starts. When observation tokens reach `observationTokens * asyncActivation`, reflection runs in the background. On activation at the full threshold, the buffered reflection replaces the observations it covers, preserving any new observations appended after that range. Requires `observation.bufferEvery` to also be set.",
+      isOptional: true,
+    },
+    {
+      name: "blockAfter",
+      type: "number",
+      description:
+        "Token threshold above which synchronous (blocking) reflection is forced. Between `observationTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous reflection runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `observationTokens`) or an absolute token count (≥ 2, must be greater than `observationTokens`). Only relevant when `asyncActivation` is set. Defaults to `1.2` when async reflection is enabled.",
+      isOptional: true,
+      defaultValue: "1.2 (when asyncActivation is set)",
     },
   ]}
 />
@@ -280,6 +318,240 @@ export const agent = new Agent({
   }),
 });
 ```
+
+### Async buffering
+
+Async buffering pre-computes observations in the background before the main threshold is reached, enabling instant activation with no blocking LLM call. The `bufferEvery` option triggers background observations at regular token intervals, and `asyncActivation` controls what fraction of buffered content is activated at threshold.
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          messageTokens: 30_000,
+          // Buffer every 5k tokens (runs in background)
+          bufferEvery: 5_000,
+          // Activate 70% of buffered chunks at threshold
+          asyncActivation: 0.7,
+          // Force synchronous observation at 1.5x threshold
+          blockAfter: 1.5,
+        },
+        reflection: {
+          observationTokens: 60_000,
+          // Start background reflection at 50% of threshold
+          asyncActivation: 0.5,
+          // Force synchronous reflection at 1.2x threshold
+          blockAfter: 1.2,
+        },
+      },
+    },
+  }),
+});
+```
+
+When `bufferEvery` is set, observation buffering begins at that token interval. At 30k tokens (the `messageTokens` threshold), 70% of the buffered chunks activate instantly. If tokens exceed 45k (`blockAfter: 1.5 × 30k`), a synchronous observation runs as a fallback.
+
+For reflection, `asyncActivation: 0.5` begins background reflection when observation tokens reach 30k (50% of the 60k threshold). At 60k, the buffered reflection activates. Above 72k (`blockAfter: 1.2 × 60k`), synchronous reflection runs.
+
+## Streaming data parts
+
+Observational Memory emits typed data parts during agent execution that clients can use for real-time UI feedback. These are streamed alongside the agent's response.
+
+### `data-om-status`
+
+Emitted once per agent loop step. Provides a snapshot of the current memory state, including token usage for both the message and observation windows, and the state of any async buffered content.
+
+```typescript
+interface DataOmStatusPart {
+  type: 'data-om-status';
+  data: {
+    windows: {
+      active: {
+        /** Unobserved message tokens and the threshold that triggers observation */
+        messages: { tokens: number; threshold: number };
+        /** Observation tokens and the threshold that triggers reflection */
+        observations: { tokens: number; threshold: number };
+      };
+      buffered: {
+        /** Observation chunks staged for activation */
+        observations: {
+          chunks: number;
+          messageTokens: number;
+          observationTokens: number;
+          status: 'idle' | 'running' | 'complete';
+        };
+        /** Reflection waiting to be activated */
+        reflection: {
+          inputObservationTokens: number;
+          observationTokens: number;
+          status: 'idle' | 'running' | 'complete';
+        };
+      };
+    };
+    recordId: string;
+    threadId: string;
+    stepNumber: number;
+    generationCount: number;
+  };
+}
+```
+
+Clients can derive percentages and post-activation estimates from the raw values:
+
+```typescript
+// Message window usage %
+const msgPercent = status.windows.active.messages.tokens
+  / status.windows.active.messages.threshold;
+
+// Observation window usage %
+const obsPercent = status.windows.active.observations.tokens
+  / status.windows.active.observations.threshold;
+
+// Estimated message tokens after buffered observations activate
+const postActivation = status.windows.active.messages.tokens
+  - status.windows.buffered.observations.messageTokens;
+
+// Reflection compression ratio (when buffered reflection exists)
+const { inputObservationTokens, observationTokens } = status.windows.buffered.reflection;
+if (inputObservationTokens > 0) {
+  const compressionRatio = observationTokens / inputObservationTokens;
+}
+```
+
+### `data-om-observation-start`
+
+Emitted when the Observer or Reflector agent begins processing.
+
+<PropertiesTable
+  content={[
+    { name: "cycleId", type: "string", description: "Unique ID for this cycle — shared between start/end/failed markers." },
+    { name: "operationType", type: "'observation' | 'reflection'", description: "Whether this is an observation or reflection operation." },
+    { name: "startedAt", type: "string", description: "ISO timestamp when processing started." },
+    { name: "tokensToObserve", type: "number", description: "Tokens being processed in this batch." },
+    { name: "recordId", type: "string", description: "The OM record ID." },
+    { name: "threadId", type: "string", description: "This thread's ID." },
+    { name: "threadIds", type: "string[]", description: "All thread IDs in this batch (for resource-scoped)." },
+    { name: "config", type: "ObservationMarkerConfig", description: "Snapshot of `messageTokens`, `observationTokens`, and `scope` at observation time." },
+  ]}
+/>
+
+### `data-om-observation-end`
+
+Emitted when observation or reflection completes successfully.
+
+<PropertiesTable
+  content={[
+    { name: "cycleId", type: "string", description: "Matches the corresponding `start` marker." },
+    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that completed." },
+    { name: "completedAt", type: "string", description: "ISO timestamp when processing completed." },
+    { name: "durationMs", type: "number", description: "Duration in milliseconds." },
+    { name: "tokensObserved", type: "number", description: "Total input tokens that were processed." },
+    { name: "observationTokens", type: "number", description: "Resulting observation tokens after compression." },
+    { name: "observations", type: "string", description: "The generated observations text.", isOptional: true },
+    { name: "currentTask", type: "string", description: "Current task extracted by the Observer.", isOptional: true },
+    { name: "suggestedResponse", type: "string", description: "Suggested response extracted by the Observer.", isOptional: true },
+    { name: "recordId", type: "string", description: "The OM record ID." },
+    { name: "threadId", type: "string", description: "This thread's ID." },
+  ]}
+/>
+
+### `data-om-observation-failed`
+
+Emitted when observation or reflection fails. The system falls back to synchronous processing.
+
+<PropertiesTable
+  content={[
+    { name: "cycleId", type: "string", description: "Matches the corresponding `start` marker." },
+    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that failed." },
+    { name: "failedAt", type: "string", description: "ISO timestamp when the failure occurred." },
+    { name: "durationMs", type: "number", description: "Duration until failure in milliseconds." },
+    { name: "tokensAttempted", type: "number", description: "Tokens that were attempted." },
+    { name: "error", type: "string", description: "Error message." },
+    { name: "observations", type: "string", description: "Any partial content available for display.", isOptional: true },
+    { name: "recordId", type: "string", description: "The OM record ID." },
+    { name: "threadId", type: "string", description: "This thread's ID." },
+  ]}
+/>
+
+### `data-om-buffering-start`
+
+Emitted when async buffering begins in the background. Buffering pre-computes observations or reflections before the main threshold is reached.
+
+<PropertiesTable
+  content={[
+    { name: "cycleId", type: "string", description: "Unique ID for this buffering cycle." },
+    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation being buffered." },
+    { name: "startedAt", type: "string", description: "ISO timestamp when buffering started." },
+    { name: "tokensToBuffer", type: "number", description: "Tokens being buffered in this cycle." },
+    { name: "recordId", type: "string", description: "The OM record ID." },
+    { name: "threadId", type: "string", description: "This thread's ID." },
+    { name: "threadIds", type: "string[]", description: "All thread IDs being buffered (for resource-scoped)." },
+    { name: "config", type: "ObservationMarkerConfig", description: "Snapshot of config at buffering time." },
+  ]}
+/>
+
+### `data-om-buffering-end`
+
+Emitted when async buffering completes. The content is stored but not yet activated in the main context.
+
+<PropertiesTable
+  content={[
+    { name: "cycleId", type: "string", description: "Matches the corresponding `buffering-start` marker." },
+    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that was buffered." },
+    { name: "completedAt", type: "string", description: "ISO timestamp when buffering completed." },
+    { name: "durationMs", type: "number", description: "Duration in milliseconds." },
+    { name: "tokensBuffered", type: "number", description: "Total input tokens that were buffered." },
+    { name: "bufferedTokens", type: "number", description: "Resulting tokens after compression." },
+    { name: "observations", type: "string", description: "The buffered content.", isOptional: true },
+    { name: "recordId", type: "string", description: "The OM record ID." },
+    { name: "threadId", type: "string", description: "This thread's ID." },
+  ]}
+/>
+
+### `data-om-buffering-failed`
+
+Emitted when async buffering fails. The system falls back to synchronous processing when the threshold is reached.
+
+<PropertiesTable
+  content={[
+    { name: "cycleId", type: "string", description: "Matches the corresponding `buffering-start` marker." },
+    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that failed." },
+    { name: "failedAt", type: "string", description: "ISO timestamp when the failure occurred." },
+    { name: "durationMs", type: "number", description: "Duration until failure in milliseconds." },
+    { name: "tokensAttempted", type: "number", description: "Tokens that were attempted to buffer." },
+    { name: "error", type: "string", description: "Error message." },
+    { name: "observations", type: "string", description: "Any partial content.", isOptional: true },
+    { name: "recordId", type: "string", description: "The OM record ID." },
+    { name: "threadId", type: "string", description: "This thread's ID." },
+  ]}
+/>
+
+### `data-om-activation`
+
+Emitted when buffered observations or reflections are activated (moved into the active context window). This is an instant operation — no LLM call is involved.
+
+<PropertiesTable
+  content={[
+    { name: "cycleId", type: "string", description: "Unique ID for this activation event." },
+    { name: "operationType", type: "'observation' | 'reflection'", description: "Type of content activated." },
+    { name: "activatedAt", type: "string", description: "ISO timestamp when activation occurred." },
+    { name: "chunksActivated", type: "number", description: "Number of buffered chunks activated." },
+    { name: "tokensActivated", type: "number", description: "Total message tokens from activated chunks." },
+    { name: "observationTokens", type: "number", description: "Resulting observation tokens after activation." },
+    { name: "messagesActivated", type: "number", description: "Number of messages that were observed via activation." },
+    { name: "observations", type: "string", description: "The activated observations text.", isOptional: true },
+    { name: "recordId", type: "string", description: "The OM record ID." },
+    { name: "threadId", type: "string", description: "This thread's ID." },
+    { name: "config", type: "ObservationMarkerConfig", description: "Snapshot of config at activation time." },
+  ]}
+/>
 
 ## Standalone usage
 
