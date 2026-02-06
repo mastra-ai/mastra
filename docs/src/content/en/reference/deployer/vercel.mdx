@@ -11,7 +11,7 @@ The `VercelDeployer` bundles your Mastra server and generates output conforming 
 
 ## Installation
 
-In order to use `VercelDeployer`, you need to install the `@mastra/deployer-vercel` package:
+To use `VercelDeployer`, install the `@mastra/deployer-vercel` package:
 
 ```bash npm2yarn
 npm install @mastra/deployer-vercel@latest
@@ -34,7 +34,7 @@ export const mastra = new Mastra({
 
 ## Constructor options
 
-The deployer supports a small set of high-value overrides that are written to the Vercel Output API function config (`.vc-config.json`):
+The deployer accepts overrides that are written to the Vercel Output API function config (`.vc-config.json`):
 
 - `maxDuration?: number` — Function execution timeout (in seconds)
 - `memory?: number` — Function memory (in MB)
@@ -59,7 +59,7 @@ export const mastra = new Mastra({
 
 ## Build output
 
-After running `mastra build`, the deployer generates a `.vercel/output` directory conforming to Vercel's [Build Output API (v3)](https://vercel.com/docs/build-output-api/v3). This gives you fine-grained control over the deployment output rather than relying on Vercel's built-in framework detection.
+After running `mastra build`, the deployer generates a `.vercel/output` directory conforming to Vercel's [Build Output API (v3)](https://vercel.com/docs/build-output-api/v3). This directory contains routing configuration and serverless function bundles that Vercel deploys directly, bypassing framework detection.
 
 The output contains:
 
