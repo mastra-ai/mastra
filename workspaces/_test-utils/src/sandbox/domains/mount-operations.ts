@@ -35,148 +35,176 @@ export function createMountOperationsTests(getContext: () => TestContext): void 
         expect(sandbox.mounts.entries).toBeInstanceOf(Map);
       });
 
-      it('getInfo includes mounts array when mounting is supported', async () => {
-        const { sandbox, capabilities } = getContext();
-        if (!capabilities.supportsMounting) return;
-        if (!sandbox.getInfo) return;
+      it(
+        'getInfo includes mounts array when mounting is supported',
+        async () => {
+          const { sandbox, capabilities } = getContext();
+          if (!capabilities.supportsMounting) return;
+          if (!sandbox.getInfo) return;
 
-        const info = await sandbox.getInfo();
+          const info = await sandbox.getInfo();
 
-        expect(info.mounts).toBeDefined();
-        expect(Array.isArray(info.mounts)).toBe(true);
-      }, getContext().testTimeout);
+          expect(info.mounts).toBeDefined();
+          expect(Array.isArray(info.mounts)).toBe(true);
+        },
+        getContext().testTimeout,
+      );
     });
 
     describe('mount()', () => {
-      it('mounts filesystem at specified path', async () => {
-        const { sandbox, capabilities, createMountableFilesystem } = getContext();
-        if (!capabilities.supportsMounting) return;
-        if (!sandbox.mount) return;
-        if (!createMountableFilesystem) return;
+      it(
+        'mounts filesystem at specified path',
+        async () => {
+          const { sandbox, capabilities, createMountableFilesystem } = getContext();
+          if (!capabilities.supportsMounting) return;
+          if (!sandbox.mount) return;
+          if (!createMountableFilesystem) return;
 
-        const filesystem = await createMountableFilesystem();
+          const filesystem = await createMountableFilesystem();
 
-        // Skip if filesystem doesn't support mounting
-        if (!filesystem.getMountConfig) return;
+          // Skip if filesystem doesn't support mounting
+          if (!filesystem.getMountConfig) return;
 
-        const mountPath = '/test-mount-' + Date.now();
-        const result = await sandbox.mount(filesystem, mountPath);
+          const mountPath = '/test-mount-' + Date.now();
+          const result = await sandbox.mount(filesystem, mountPath);
 
-        expect(result.success).toBe(true);
-        expect(result.mountPath).toBe(mountPath);
+          expect(result.success).toBe(true);
+          expect(result.mountPath).toBe(mountPath);
 
-        // Clean up
-        if (sandbox.unmount) {
-          await sandbox.unmount(mountPath);
-        }
-      }, getContext().testTimeout);
+          // Clean up
+          if (sandbox.unmount) {
+            await sandbox.unmount(mountPath);
+          }
+        },
+        getContext().testTimeout,
+      );
 
-      it('mount returns MountResult with success and mountPath', async () => {
-        const { sandbox, capabilities, createMountableFilesystem } = getContext();
-        if (!capabilities.supportsMounting) return;
-        if (!sandbox.mount) return;
-        if (!createMountableFilesystem) return;
+      it(
+        'mount returns MountResult with success and mountPath',
+        async () => {
+          const { sandbox, capabilities, createMountableFilesystem } = getContext();
+          if (!capabilities.supportsMounting) return;
+          if (!sandbox.mount) return;
+          if (!createMountableFilesystem) return;
 
-        const filesystem = await createMountableFilesystem();
-        if (!filesystem.getMountConfig) return;
+          const filesystem = await createMountableFilesystem();
+          if (!filesystem.getMountConfig) return;
 
-        const mountPath = '/test-mount-result-' + Date.now();
-        const result = await sandbox.mount(filesystem, mountPath);
+          const mountPath = '/test-mount-result-' + Date.now();
+          const result = await sandbox.mount(filesystem, mountPath);
 
-        // MountResult should have required fields
-        expect(result).toHaveProperty('success');
-        expect(result).toHaveProperty('mountPath');
-        expect(typeof result.success).toBe('boolean');
-        expect(typeof result.mountPath).toBe('string');
+          // MountResult should have required fields
+          expect(result).toHaveProperty('success');
+          expect(result).toHaveProperty('mountPath');
+          expect(typeof result.success).toBe('boolean');
+          expect(typeof result.mountPath).toBe('string');
 
-        // Clean up
-        if (sandbox.unmount) {
-          await sandbox.unmount(mountPath);
-        }
-      }, getContext().testTimeout);
+          // Clean up
+          if (sandbox.unmount) {
+            await sandbox.unmount(mountPath);
+          }
+        },
+        getContext().testTimeout,
+      );
     });
 
     describe('unmount()', () => {
-      it('unmounts previously mounted filesystem', async () => {
-        const { sandbox, capabilities, createMountableFilesystem } = getContext();
-        if (!capabilities.supportsMounting) return;
-        if (!sandbox.mount || !sandbox.unmount) return;
-        if (!createMountableFilesystem) return;
+      it(
+        'unmounts previously mounted filesystem',
+        async () => {
+          const { sandbox, capabilities, createMountableFilesystem } = getContext();
+          if (!capabilities.supportsMounting) return;
+          if (!sandbox.mount || !sandbox.unmount) return;
+          if (!createMountableFilesystem) return;
 
-        const filesystem = await createMountableFilesystem();
-        if (!filesystem.getMountConfig) return;
+          const filesystem = await createMountableFilesystem();
+          if (!filesystem.getMountConfig) return;
 
-        const mountPath = '/test-unmount-' + Date.now();
+          const mountPath = '/test-unmount-' + Date.now();
 
-        // Mount first
-        await sandbox.mount(filesystem, mountPath);
+          // Mount first
+          await sandbox.mount(filesystem, mountPath);
 
-        // Then unmount - should not throw
-        await expect(sandbox.unmount(mountPath)).resolves.not.toThrow();
-      }, getContext().testTimeout);
+          // Then unmount - should not throw
+          await expect(sandbox.unmount(mountPath)).resolves.not.toThrow();
+        },
+        getContext().testTimeout,
+      );
     });
 
     describe('Mount State Tracking', () => {
-      it('mounts.has() returns true after mounting', async () => {
-        const { sandbox, capabilities, createMountableFilesystem } = getContext();
-        if (!capabilities.supportsMounting) return;
-        if (!sandbox.mount || !sandbox.mounts) return;
-        if (!createMountableFilesystem) return;
+      it(
+        'mounts.has() returns true after mounting',
+        async () => {
+          const { sandbox, capabilities, createMountableFilesystem } = getContext();
+          if (!capabilities.supportsMounting) return;
+          if (!sandbox.mount || !sandbox.mounts) return;
+          if (!createMountableFilesystem) return;
 
-        const filesystem = await createMountableFilesystem();
-        if (!filesystem.getMountConfig) return;
+          const filesystem = await createMountableFilesystem();
+          if (!filesystem.getMountConfig) return;
 
-        const mountPath = '/test-has-' + Date.now();
+          const mountPath = '/test-has-' + Date.now();
 
-        await sandbox.mount(filesystem, mountPath);
+          await sandbox.mount(filesystem, mountPath);
 
-        expect(sandbox.mounts.has(mountPath)).toBe(true);
+          expect(sandbox.mounts.has(mountPath)).toBe(true);
 
-        // Clean up
-        if (sandbox.unmount) {
+          // Clean up
+          if (sandbox.unmount) {
+            await sandbox.unmount(mountPath);
+          }
+        },
+        getContext().testTimeout,
+      );
+
+      it(
+        'mounts.has() returns false after unmounting',
+        async () => {
+          const { sandbox, capabilities, createMountableFilesystem } = getContext();
+          if (!capabilities.supportsMounting) return;
+          if (!sandbox.mount || !sandbox.unmount || !sandbox.mounts) return;
+          if (!createMountableFilesystem) return;
+
+          const filesystem = await createMountableFilesystem();
+          if (!filesystem.getMountConfig) return;
+
+          const mountPath = '/test-has-unmount-' + Date.now();
+
+          await sandbox.mount(filesystem, mountPath);
           await sandbox.unmount(mountPath);
-        }
-      }, getContext().testTimeout);
 
-      it('mounts.has() returns false after unmounting', async () => {
-        const { sandbox, capabilities, createMountableFilesystem } = getContext();
-        if (!capabilities.supportsMounting) return;
-        if (!sandbox.mount || !sandbox.unmount || !sandbox.mounts) return;
-        if (!createMountableFilesystem) return;
+          expect(sandbox.mounts.has(mountPath)).toBe(false);
+        },
+        getContext().testTimeout,
+      );
 
-        const filesystem = await createMountableFilesystem();
-        if (!filesystem.getMountConfig) return;
+      it(
+        'mounts.get() returns entry with mounted state',
+        async () => {
+          const { sandbox, capabilities, createMountableFilesystem } = getContext();
+          if (!capabilities.supportsMounting) return;
+          if (!sandbox.mount || !sandbox.mounts) return;
+          if (!createMountableFilesystem) return;
 
-        const mountPath = '/test-has-unmount-' + Date.now();
+          const filesystem = await createMountableFilesystem();
+          if (!filesystem.getMountConfig) return;
 
-        await sandbox.mount(filesystem, mountPath);
-        await sandbox.unmount(mountPath);
+          const mountPath = '/test-get-' + Date.now();
 
-        expect(sandbox.mounts.has(mountPath)).toBe(false);
-      }, getContext().testTimeout);
+          await sandbox.mount(filesystem, mountPath);
 
-      it('mounts.get() returns entry with mounted state', async () => {
-        const { sandbox, capabilities, createMountableFilesystem } = getContext();
-        if (!capabilities.supportsMounting) return;
-        if (!sandbox.mount || !sandbox.mounts) return;
-        if (!createMountableFilesystem) return;
+          const entry = sandbox.mounts.get(mountPath);
+          expect(entry).toBeDefined();
+          expect(entry?.state).toBe('mounted');
 
-        const filesystem = await createMountableFilesystem();
-        if (!filesystem.getMountConfig) return;
-
-        const mountPath = '/test-get-' + Date.now();
-
-        await sandbox.mount(filesystem, mountPath);
-
-        const entry = sandbox.mounts.get(mountPath);
-        expect(entry).toBeDefined();
-        expect(entry?.state).toBe('mounted');
-
-        // Clean up
-        if (sandbox.unmount) {
-          await sandbox.unmount(mountPath);
-        }
-      }, getContext().testTimeout);
+          // Clean up
+          if (sandbox.unmount) {
+            await sandbox.unmount(mountPath);
+          }
+        },
+        getContext().testTimeout,
+      );
     });
 
     // Note: More comprehensive mount tests (S3, GCS, error cases) are better

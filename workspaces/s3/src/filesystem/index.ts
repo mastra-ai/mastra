@@ -309,7 +309,11 @@ export class S3Filesystem extends MastraFilesystem {
       return 'azure';
     }
 
-    // Generic S3-compatible (MinIO, DigitalOcean Spaces, etc.)
+    if (hostname.includes('minio')) {
+      return 'minio';
+    }
+
+    // Generic S3-compatible (DigitalOcean Spaces, etc.)
     return 's3';
   }
 

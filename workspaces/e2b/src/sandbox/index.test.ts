@@ -13,8 +13,8 @@
  * Based on the Workspace Filesystem & Sandbox Test Plan.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { E2BSandbox } from './index';
 

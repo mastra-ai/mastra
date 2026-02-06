@@ -92,11 +92,7 @@ export class MockSandbox implements WorkspaceSandbox {
     };
   }
 
-  async executeCommand(
-    command: string,
-    args: string[] = [],
-    _options?: ExecuteCommandOptions,
-  ): Promise<CommandResult> {
+  async executeCommand(command: string, args: string[] = [], _options?: ExecuteCommandOptions): Promise<CommandResult> {
     const startTime = Date.now();
     const fullCommand = `${command} ${args.join(' ')}`.trim();
 

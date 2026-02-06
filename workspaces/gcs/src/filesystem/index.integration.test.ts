@@ -156,7 +156,7 @@ if (canRunGCSTests) {
         endpoint: process.env.GCS_ENDPOINT,
       });
     },
-    cleanupFilesystem: async (fs) => {
+    cleanupFilesystem: async fs => {
       // Cleanup test files
       try {
         const files = await fs.readdir('/');

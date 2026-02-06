@@ -12,8 +12,8 @@
  * - S3_ENDPOINT: Endpoint URL (optional, for R2/MinIO)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { S3Filesystem } from './index';
 
@@ -171,7 +171,7 @@ if (hasS3Credentials) {
         prefix: testPrefix,
       });
     },
-    cleanupFilesystem: async (fs) => {
+    cleanupFilesystem: async fs => {
       // Cleanup test files
       try {
         const files = await fs.readdir('/');

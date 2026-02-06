@@ -20,116 +20,136 @@ interface TestContext {
 export function createReconnectionTests(getContext: () => TestContext): void {
   describe('Reconnection', () => {
     describe('Identification', () => {
-      it('getInfo returns sandbox id for reconnection', async () => {
-        const { sandbox, capabilities } = getContext();
-        if (!capabilities.supportsReconnection) return;
-        if (!sandbox.getInfo) return;
+      it(
+        'getInfo returns sandbox id for reconnection',
+        async () => {
+          const { sandbox, capabilities } = getContext();
+          if (!capabilities.supportsReconnection) return;
+          if (!sandbox.getInfo) return;
 
-        const info = await sandbox.getInfo();
+          const info = await sandbox.getInfo();
 
-        // For providers that support reconnection, they should expose a sandbox ID
-        expect(info.id).toBeDefined();
-        expect(typeof info.id).toBe('string');
-        expect(info.id.length).toBeGreaterThan(0);
-      }, getContext().testTimeout);
+          // For providers that support reconnection, they should expose a sandbox ID
+          expect(info.id).toBeDefined();
+          expect(typeof info.id).toBe('string');
+          expect(info.id.length).toBeGreaterThan(0);
+        },
+        getContext().testTimeout,
+      );
 
-      it('sandbox id is consistent after stop/start', async () => {
-        const { sandbox, capabilities } = getContext();
-        if (!capabilities.supportsReconnection) return;
-        if (!sandbox.stop || !sandbox.start) return;
+      it(
+        'sandbox id is consistent after stop/start',
+        async () => {
+          const { sandbox, capabilities } = getContext();
+          if (!capabilities.supportsReconnection) return;
+          if (!sandbox.stop || !sandbox.start) return;
 
-        const originalId = sandbox.id;
+          const originalId = sandbox.id;
 
-        // Stop and restart
-        await sandbox.stop();
-        await sandbox.start();
+          // Stop and restart
+          await sandbox.stop();
+          await sandbox.start();
 
-        // ID should remain the same
-        expect(sandbox.id).toBe(originalId);
-      }, getContext().testTimeout * 2);
+          // ID should remain the same
+          expect(sandbox.id).toBe(originalId);
+        },
+        getContext().testTimeout * 2,
+      );
     });
 
     describe('State Preservation', () => {
-      it('files persist after stop/start', async () => {
-        const { sandbox, capabilities } = getContext();
-        if (!capabilities.supportsReconnection) return;
-        if (!sandbox.stop || !sandbox.start) return;
-        if (!sandbox.executeCommand) return;
+      it(
+        'files persist after stop/start',
+        async () => {
+          const { sandbox, capabilities } = getContext();
+          if (!capabilities.supportsReconnection) return;
+          if (!sandbox.stop || !sandbox.start) return;
+          if (!sandbox.executeCommand) return;
 
-        // Create a file
-        const testFile = `/tmp/reconnect-test-${Date.now()}.txt`;
-        const testContent = 'reconnection test content';
+          // Create a file
+          const testFile = `/tmp/reconnect-test-${Date.now()}.txt`;
+          const testContent = 'reconnection test content';
 
-        await sandbox.executeCommand('sh', ['-c', `echo "${testContent}" > ${testFile}`]);
+          await sandbox.executeCommand('sh', ['-c', `echo "${testContent}" > ${testFile}`]);
 
-        // Verify file exists
-        const beforeResult = await sandbox.executeCommand('cat', [testFile]);
-        expect(beforeResult.stdout.trim()).toBe(testContent);
+          // Verify file exists
+          const beforeResult = await sandbox.executeCommand('cat', [testFile]);
+          expect(beforeResult.stdout.trim()).toBe(testContent);
 
-        // Stop and restart
-        await sandbox.stop();
-        await sandbox.start();
+          // Stop and restart
+          await sandbox.stop();
+          await sandbox.start();
 
-        // File should still exist
-        const afterResult = await sandbox.executeCommand('cat', [testFile]);
-        expect(afterResult.stdout.trim()).toBe(testContent);
+          // File should still exist
+          const afterResult = await sandbox.executeCommand('cat', [testFile]);
+          expect(afterResult.stdout.trim()).toBe(testContent);
 
-        // Clean up
-        await sandbox.executeCommand('rm', [testFile]);
-      }, getContext().testTimeout * 3);
+          // Clean up
+          await sandbox.executeCommand('rm', [testFile]);
+        },
+        getContext().testTimeout * 3,
+      );
 
-      it('environment is preserved after reconnection', async () => {
-        const { sandbox, capabilities } = getContext();
-        if (!capabilities.supportsReconnection) return;
-        if (!sandbox.stop || !sandbox.start) return;
-        if (!sandbox.executeCommand) return;
+      it(
+        'environment is preserved after reconnection',
+        async () => {
+          const { sandbox, capabilities } = getContext();
+          if (!capabilities.supportsReconnection) return;
+          if (!sandbox.stop || !sandbox.start) return;
+          if (!sandbox.executeCommand) return;
 
-        // Stop and restart
-        await sandbox.stop();
-        await sandbox.start();
+          // Stop and restart
+          await sandbox.stop();
+          await sandbox.start();
 
-        // Basic environment should work
-        const result = await sandbox.executeCommand('pwd', []);
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout.trim()).toBeTruthy();
-      }, getContext().testTimeout * 2);
+          // Basic environment should work
+          const result = await sandbox.executeCommand('pwd', []);
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout.trim()).toBeTruthy();
+        },
+        getContext().testTimeout * 2,
+      );
     });
 
     describe('Mount Preservation', () => {
-      it('mounts are tracked after reconnection', async () => {
-        const { sandbox, capabilities, createMountableFilesystem } = getContext();
-        if (!capabilities.supportsReconnection) return;
-        if (!capabilities.supportsMounting) return;
-        if (!sandbox.stop || !sandbox.start) return;
-        if (!sandbox.mounts || !sandbox.mount) return;
-        if (!createMountableFilesystem) return;
+      it(
+        'mounts are tracked after reconnection',
+        async () => {
+          const { sandbox, capabilities, createMountableFilesystem } = getContext();
+          if (!capabilities.supportsReconnection) return;
+          if (!capabilities.supportsMounting) return;
+          if (!sandbox.stop || !sandbox.start) return;
+          if (!sandbox.mounts || !sandbox.mount) return;
+          if (!createMountableFilesystem) return;
 
-        const filesystem = await createMountableFilesystem();
-        if (!filesystem.getMountConfig) return;
+          const filesystem = await createMountableFilesystem();
+          if (!filesystem.getMountConfig) return;
 
-        const mountPath = '/reconnect-mount-' + Date.now();
+          const mountPath = '/reconnect-mount-' + Date.now();
 
-        // Mount filesystem
-        await sandbox.mount(filesystem, mountPath);
-        expect(sandbox.mounts.has(mountPath)).toBe(true);
+          // Mount filesystem
+          await sandbox.mount(filesystem, mountPath);
+          expect(sandbox.mounts.has(mountPath)).toBe(true);
 
-        // Stop and restart
-        await sandbox.stop();
-        await sandbox.start();
+          // Stop and restart
+          await sandbox.stop();
+          await sandbox.start();
 
-        // Mount state should be tracked (may need re-mounting depending on provider)
-        // At minimum, the sandbox should be operational
-        expect(sandbox.status).toBe('running');
+          // Mount state should be tracked (may need re-mounting depending on provider)
+          // At minimum, the sandbox should be operational
+          expect(sandbox.status).toBe('running');
 
-        // Clean up
-        if (sandbox.unmount) {
-          try {
-            await sandbox.unmount(mountPath);
-          } catch {
-            // May already be unmounted
+          // Clean up
+          if (sandbox.unmount) {
+            try {
+              await sandbox.unmount(mountPath);
+            } catch {
+              // May already be unmounted
+            }
           }
-        }
-      }, getContext().testTimeout * 3);
+        },
+        getContext().testTimeout * 3,
+      );
     });
 
     // Note: Config change triggers remount is an E2B-specific behavior

@@ -11,8 +11,9 @@
  * - GCS_SERVICE_ACCOUNT_KEY, TEST_GCS_BUCKET: For GCS mount tests
  */
 
+import { createSandboxTestSuite, createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
+import { S3Filesystem } from '@mastra/s3';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createSandboxTestSuite } from '@internal/workspace-test-utils';
 
 import { E2BSandbox } from './index';
 
@@ -85,135 +86,132 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Integration', () => {
 /**
  * S3 Mount integration tests.
  */
-describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)(
-  'E2BSandbox S3 Mount Integration',
-  () => {
-    let sandbox: E2BSandbox;
+describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox S3 Mount Integration', () => {
+  let sandbox: E2BSandbox;
 
-    beforeEach(() => {
-      sandbox = new E2BSandbox({
-        id: `test-s3-${Date.now()}`,
-        timeout: 120000,
-      });
+  beforeEach(() => {
+    sandbox = new E2BSandbox({
+      id: `test-s3-${Date.now()}`,
+      timeout: 120000,
     });
+  });
 
-    afterEach(async () => {
-      if (sandbox) {
-        try {
-          await sandbox.destroy();
-        } catch {
-          // Ignore cleanup errors
-        }
+  afterEach(async () => {
+    if (sandbox) {
+      try {
+        await sandbox.destroy();
+      } catch {
+        // Ignore cleanup errors
       }
-    });
+    }
+  });
 
-    it('S3 with credentials mounts successfully', async () => {
-      await sandbox.start();
+  it('S3 with credentials mounts successfully', async () => {
+    await sandbox.start();
 
-      const s3Config = getS3TestConfig();
-      const mockFilesystem = {
-        id: 'test-s3-fs',
-        name: 'S3Filesystem',
-        provider: 's3',
-        status: 'ready',
-        getMountConfig: () => s3Config,
-      } as any;
+    const s3Config = getS3TestConfig();
+    const mockFilesystem = {
+      id: 'test-s3-fs',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => s3Config,
+    } as any;
 
-      const result = await sandbox.mount(mockFilesystem, '/data/s3-test');
-      expect(result.success).toBe(true);
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-test');
+    expect(result.success).toBe(true);
 
-      // Verify mount works by listing directory
-      const lsResult = await sandbox.executeCommand('ls', ['-la', '/data/s3-test']);
-      expect(lsResult.exitCode).toBe(0);
-    }, 180000);
+    // Verify mount works by listing directory
+    const lsResult = await sandbox.executeCommand('ls', ['-la', '/data/s3-test']);
+    expect(lsResult.exitCode).toBe(0);
+  }, 180000);
 
-    it('S3 public bucket mounts with public_bucket=1', async () => {
-      await sandbox.start();
+  it('S3 public bucket mounts with public_bucket=1', async () => {
+    await sandbox.start();
 
-      const mockFilesystem = {
-        id: 'test-s3-public',
-        name: 'S3Filesystem',
-        provider: 's3',
-        status: 'ready',
-        getMountConfig: () => ({
-          type: 's3',
-          bucket: 'noaa-goes16', // Known public bucket
-          region: 'us-east-1',
-        }),
-      } as any;
+    const mockFilesystem = {
+      id: 'test-s3-public',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'noaa-goes16', // Known public bucket
+        region: 'us-east-1',
+      }),
+    } as any;
 
-      const result = await sandbox.mount(mockFilesystem, '/data/public-bucket');
-      expect(result.success).toBe(true);
-    }, 180000);
+    const result = await sandbox.mount(mockFilesystem, '/data/public-bucket');
+    expect(result.success).toBe(true);
+  }, 180000);
 
-    it('S3-compatible without credentials warns and fails', async () => {
-      await sandbox.start();
+  it('S3-compatible without credentials warns and fails', async () => {
+    await sandbox.start();
 
-      const mockFilesystem = {
-        id: 'test-s3-compat',
-        name: 'S3Filesystem',
-        provider: 's3',
-        status: 'ready',
-        getMountConfig: () => ({
-          type: 's3',
-          bucket: 'test-bucket',
-          region: 'auto',
-          endpoint: 'https://example.r2.cloudflarestorage.com',
-          // No credentials - should warn/fail for S3-compatible
-        }),
-      } as any;
+    const mockFilesystem = {
+      id: 'test-s3-compat',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'auto',
+        endpoint: 'https://example.r2.cloudflarestorage.com',
+        // No credentials - should warn/fail for S3-compatible
+      }),
+    } as any;
 
-      const result = await sandbox.mount(mockFilesystem, '/data/compat-test');
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('credentials');
-    }, 180000);
+    const result = await sandbox.mount(mockFilesystem, '/data/compat-test');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('credentials');
+  }, 180000);
 
-    it('S3 with readOnly mounts with -o ro', async () => {
-      await sandbox.start();
+  it('S3 with readOnly mounts with -o ro', async () => {
+    await sandbox.start();
 
-      const s3Config = getS3TestConfig();
-      const mockFilesystem = {
-        id: 'test-s3-ro',
-        name: 'S3Filesystem',
-        provider: 's3',
-        status: 'ready',
-        getMountConfig: () => ({
-          ...s3Config,
-          readOnly: true,
-        }),
-      } as any;
+    const s3Config = getS3TestConfig();
+    const mockFilesystem = {
+      id: 'test-s3-ro',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        ...s3Config,
+        readOnly: true,
+      }),
+    } as any;
 
-      const result = await sandbox.mount(mockFilesystem, '/data/s3-readonly');
-      expect(result.success).toBe(true);
+    const result = await sandbox.mount(mockFilesystem, '/data/s3-readonly');
+    expect(result.success).toBe(true);
 
-      // Verify writes fail
-      const writeResult = await sandbox.executeCommand('sh', [
-        '-c',
-        'echo "test" > /data/s3-readonly/test-file.txt 2>&1 || echo "write failed"',
-      ]);
-      expect(writeResult.stdout).toMatch(/Read-only|write failed/);
-    }, 180000);
+    // Verify writes fail
+    const writeResult = await sandbox.executeCommand('sh', [
+      '-c',
+      'echo "test" > /data/s3-readonly/test-file.txt 2>&1 || echo "write failed"',
+    ]);
+    expect(writeResult.stdout).toMatch(/Read-only|write failed/);
+  }, 180000);
 
-    it('S3 mount sets uid/gid for file ownership', async () => {
-      await sandbox.start();
+  it('S3 mount sets uid/gid for file ownership', async () => {
+    await sandbox.start();
 
-      const s3Config = getS3TestConfig();
-      const mockFilesystem = {
-        id: 'test-s3-ownership',
-        name: 'S3Filesystem',
-        provider: 's3',
-        status: 'ready',
-        getMountConfig: () => s3Config,
-      } as any;
+    const s3Config = getS3TestConfig();
+    const mockFilesystem = {
+      id: 'test-s3-ownership',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => s3Config,
+    } as any;
 
-      await sandbox.mount(mockFilesystem, '/data/s3-ownership');
+    await sandbox.mount(mockFilesystem, '/data/s3-ownership');
 
-      // Files should be owned by user, not root
-      const statResult = await sandbox.executeCommand('stat', ['-c', '%U', '/data/s3-ownership']);
-      expect(statResult.stdout.trim()).not.toBe('root');
-    }, 180000);
-  },
-);
+    // Files should be owned by user, not root
+    const statResult = await sandbox.executeCommand('stat', ['-c', '%U', '/data/s3-ownership']);
+    expect(statResult.stdout.trim()).not.toBe('root');
+  }, 180000);
+});
 
 /**
  * GCS Mount integration tests.
@@ -263,7 +261,8 @@ describe.skipIf(!process.env.E2B_API_KEY || !process.env.GCS_SERVICE_ACCOUNT_KEY
       // Note: mountpoint command may fail if gcsfuse can't access bucket content,
       // but the mount itself is established. We verify via `mount` output.
       const mountsResult = await sandbox.executeCommand('mount');
-      const hasFuseMount = mountsResult.stdout.includes('/data/gcs-test') && mountsResult.stdout.includes('fuse.gcsfuse');
+      const hasFuseMount =
+        mountsResult.stdout.includes('/data/gcs-test') && mountsResult.stdout.includes('fuse.gcsfuse');
       expect(hasFuseMount).toBe(true);
 
       // If the mount is accessible, verify we can list (may fail due to bucket perms)
@@ -414,27 +413,31 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
     }
   }, 120000);
 
-  it.skipIf(!hasS3Credentials)('mount creates directory with sudo for paths outside home', async () => {
-    await sandbox.start();
+  it.skipIf(!hasS3Credentials)(
+    'mount creates directory with sudo for paths outside home',
+    async () => {
+      await sandbox.start();
 
-    // Use real S3 config so mount succeeds and directory persists
-    const s3Config = getS3TestConfig();
-    const mockFilesystem = {
-      id: 'test-fs-outside-home',
-      name: 'S3Filesystem',
-      provider: 's3',
-      status: 'ready',
-      getMountConfig: () => s3Config,
-    } as any;
+      // Use real S3 config so mount succeeds and directory persists
+      const s3Config = getS3TestConfig();
+      const mockFilesystem = {
+        id: 'test-fs-outside-home',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => s3Config,
+      } as any;
 
-    // /opt is outside home, requires sudo to create
-    const result = await sandbox.mount(mockFilesystem, '/opt/test-mount');
-    expect(result.success).toBe(true);
+      // /opt is outside home, requires sudo to create
+      const result = await sandbox.mount(mockFilesystem, '/opt/test-mount');
+      expect(result.success).toBe(true);
 
-    // Verify directory was created (mount succeeded)
-    const checkDir = await sandbox.executeCommand('test', ['-d', '/opt/test-mount']);
-    expect(checkDir.exitCode).toBe(0);
-  }, 120000);
+      // Verify directory was created (mount succeeded)
+      const checkDir = await sandbox.executeCommand('test', ['-d', '/opt/test-mount']);
+      expect(checkDir.exitCode).toBe(0);
+    },
+    120000,
+  );
 });
 
 /**
@@ -493,397 +496,382 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Reconciliation', () 
 /**
  * Marker file handling integration tests.
  */
-describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)(
-  'E2BSandbox Marker Files',
-  () => {
-    let sandbox: E2BSandbox;
+describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Marker Files', () => {
+  let sandbox: E2BSandbox;
 
-    beforeEach(() => {
-      sandbox = new E2BSandbox({
-        id: `test-markers-${Date.now()}`,
-        timeout: 120000,
-      });
+  beforeEach(() => {
+    sandbox = new E2BSandbox({
+      id: `test-markers-${Date.now()}`,
+      timeout: 120000,
     });
+  });
 
-    afterEach(async () => {
-      if (sandbox) {
-        try {
-          await sandbox.destroy();
-        } catch {
-          // Ignore cleanup errors
-        }
+  afterEach(async () => {
+    if (sandbox) {
+      try {
+        await sandbox.destroy();
+      } catch {
+        // Ignore cleanup errors
       }
-    });
+    }
+  });
 
-    it('successful mount creates marker file', async () => {
-      await sandbox.start();
+  it('successful mount creates marker file', async () => {
+    await sandbox.start();
 
-      const s3Config = getS3TestConfig();
-      const mockFilesystem = {
-        id: 'test-s3-marker',
-        name: 'S3Filesystem',
-        provider: 's3',
-        status: 'ready',
-        getMountConfig: () => s3Config,
-      } as any;
+    const s3Config = getS3TestConfig();
+    const mockFilesystem = {
+      id: 'test-s3-marker',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => s3Config,
+    } as any;
 
-      await sandbox.mount(mockFilesystem, '/data/marker-test');
+    await sandbox.mount(mockFilesystem, '/data/marker-test');
 
-      // Check marker file exists
-      const markerDir = await sandbox.executeCommand('ls', ['/tmp/.mastra-mounts/']);
-      expect(markerDir.stdout).toContain('mount-');
-    }, 180000);
+    // Check marker file exists
+    const markerDir = await sandbox.executeCommand('ls', ['/tmp/.mastra-mounts/']);
+    expect(markerDir.stdout).toContain('mount-');
+  }, 180000);
 
-    it('unmount removes marker file', async () => {
-      await sandbox.start();
+  it('unmount removes marker file', async () => {
+    await sandbox.start();
 
-      const s3Config = getS3TestConfig();
-      const mockFilesystem = {
-        id: 'test-s3-unmount-marker',
-        name: 'S3Filesystem',
-        provider: 's3',
-        status: 'ready',
-        getMountConfig: () => s3Config,
-      } as any;
+    const s3Config = getS3TestConfig();
+    const mockFilesystem = {
+      id: 'test-s3-unmount-marker',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => s3Config,
+    } as any;
 
-      const mountPath = '/data/unmount-marker-test';
-      await sandbox.mount(mockFilesystem, mountPath);
+    const mountPath = '/data/unmount-marker-test';
+    await sandbox.mount(mockFilesystem, mountPath);
 
-      // Unmount
-      await sandbox.unmount(mountPath);
+    // Unmount
+    await sandbox.unmount(mountPath);
 
-      // Check marker file is gone
-      const markerFilename = sandbox.mounts.markerFilename(mountPath);
-      const checkMarker = await sandbox.executeCommand('test', ['-f', `/tmp/.mastra-mounts/${markerFilename}`]);
-      expect(checkMarker.exitCode).not.toBe(0);
-    }, 180000);
+    // Check marker file is gone
+    const markerFilename = sandbox.mounts.markerFilename(mountPath);
+    const checkMarker = await sandbox.executeCommand('test', ['-f', `/tmp/.mastra-mounts/${markerFilename}`]);
+    expect(checkMarker.exitCode).not.toBe(0);
+  }, 180000);
 
-    it('unmount removes empty mount directory', async () => {
-      await sandbox.start();
+  it('unmount removes empty mount directory', async () => {
+    await sandbox.start();
 
-      const s3Config = getS3TestConfig();
-      const mockFilesystem = {
-        id: 'test-s3-rmdir',
-        name: 'S3Filesystem',
-        provider: 's3',
-        status: 'ready',
-        getMountConfig: () => s3Config,
-      } as any;
+    const s3Config = getS3TestConfig();
+    const mockFilesystem = {
+      id: 'test-s3-rmdir',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => s3Config,
+    } as any;
 
-      const mountPath = '/data/rmdir-test';
-      await sandbox.mount(mockFilesystem, mountPath);
-      await sandbox.unmount(mountPath);
+    const mountPath = '/data/rmdir-test';
+    await sandbox.mount(mockFilesystem, mountPath);
+    await sandbox.unmount(mountPath);
 
-      // Directory should be removed
-      const checkDir = await sandbox.executeCommand('test', ['-d', mountPath]);
-      expect(checkDir.exitCode).not.toBe(0);
-    }, 180000);
-  },
-);
+    // Directory should be removed
+    const checkDir = await sandbox.executeCommand('test', ['-d', mountPath]);
+    expect(checkDir.exitCode).not.toBe(0);
+  }, 180000);
+});
 
 /**
  * Existing mount detection integration tests.
  */
-describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)(
-  'E2BSandbox Existing Mount Detection',
-  () => {
-    let sandbox: E2BSandbox;
+describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Existing Mount Detection', () => {
+  let sandbox: E2BSandbox;
 
-    beforeEach(() => {
-      sandbox = new E2BSandbox({
-        id: `test-existing-${Date.now()}`,
-        timeout: 120000,
-      });
+  beforeEach(() => {
+    sandbox = new E2BSandbox({
+      id: `test-existing-${Date.now()}`,
+      timeout: 120000,
     });
+  });
 
-    afterEach(async () => {
-      if (sandbox) {
-        try {
-          await sandbox.destroy();
-        } catch {
-          // Ignore cleanup errors
-        }
+  afterEach(async () => {
+    if (sandbox) {
+      try {
+        await sandbox.destroy();
+      } catch {
+        // Ignore cleanup errors
       }
-    });
+    }
+  });
 
-    it('mount skips if already mounted with matching config', async () => {
-      await sandbox.start();
+  it('mount skips if already mounted with matching config', async () => {
+    await sandbox.start();
 
-      const s3Config = getS3TestConfig();
-      const mockFilesystem = {
-        id: 'test-s3-skip',
+    const s3Config = getS3TestConfig();
+    const mockFilesystem = {
+      id: 'test-s3-skip',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => s3Config,
+    } as any;
+
+    const mountPath = '/data/skip-test';
+
+    // Mount once
+    const result1 = await sandbox.mount(mockFilesystem, mountPath);
+    expect(result1.success).toBe(true);
+
+    // Mount again with same config - should skip
+    const result2 = await sandbox.mount(mockFilesystem, mountPath);
+    expect(result2.success).toBe(true);
+  }, 180000);
+
+  it('mount unmounts and remounts if config changed', async () => {
+    await sandbox.start();
+
+    const s3Config = getS3TestConfig();
+    const createFilesystem = (readOnly: boolean) =>
+      ({
+        id: 'test-s3-remount',
         name: 'S3Filesystem',
         provider: 's3',
         status: 'ready',
-        getMountConfig: () => s3Config,
-      } as any;
+        getMountConfig: () => ({
+          ...s3Config,
+          readOnly,
+        }),
+      }) as any;
 
-      const mountPath = '/data/skip-test';
+    const mountPath = '/data/remount-test';
 
-      // Mount once
-      const result1 = await sandbox.mount(mockFilesystem, mountPath);
-      expect(result1.success).toBe(true);
+    // Mount with readOnly: false
+    await sandbox.mount(createFilesystem(false), mountPath);
 
-      // Mount again with same config - should skip
-      const result2 = await sandbox.mount(mockFilesystem, mountPath);
-      expect(result2.success).toBe(true);
-    }, 180000);
+    // Mount again with readOnly: true - should remount
+    const result = await sandbox.mount(createFilesystem(true), mountPath);
+    expect(result.success).toBe(true);
 
-    it('mount unmounts and remounts if config changed', async () => {
-      await sandbox.start();
-
-      const s3Config = getS3TestConfig();
-      const createFilesystem = (readOnly: boolean) =>
-        ({
-          id: 'test-s3-remount',
-          name: 'S3Filesystem',
-          provider: 's3',
-          status: 'ready',
-          getMountConfig: () => ({
-            ...s3Config,
-            readOnly,
-          }),
-        }) as any;
-
-      const mountPath = '/data/remount-test';
-
-      // Mount with readOnly: false
-      await sandbox.mount(createFilesystem(false), mountPath);
-
-      // Mount again with readOnly: true - should remount
-      const result = await sandbox.mount(createFilesystem(true), mountPath);
-      expect(result.success).toBe(true);
-
-      // Verify it's now read-only
-      const writeResult = await sandbox.executeCommand('sh', [
-        '-c',
-        `echo "test" > ${mountPath}/test.txt 2>&1 || echo "write failed"`,
-      ]);
-      expect(writeResult.stdout).toMatch(/Read-only|write failed/);
-    }, 240000);
-  },
-);
+    // Verify it's now read-only
+    const writeResult = await sandbox.executeCommand('sh', [
+      '-c',
+      `echo "test" > ${mountPath}/test.txt 2>&1 || echo "write failed"`,
+    ]);
+    expect(writeResult.stdout).toMatch(/Read-only|write failed/);
+  }, 240000);
+});
 
 /**
  * Full workflow integration tests - end-to-end scenarios.
  */
-describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)(
-  'E2BSandbox Full Workflow',
-  () => {
-    let sandbox: E2BSandbox;
+describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Full Workflow', () => {
+  let sandbox: E2BSandbox;
 
-    beforeEach(() => {
-      sandbox = new E2BSandbox({
-        id: `test-workflow-${Date.now()}`,
-        timeout: 120000,
-      });
+  beforeEach(() => {
+    sandbox = new E2BSandbox({
+      id: `test-workflow-${Date.now()}`,
+      timeout: 120000,
     });
+  });
 
-    afterEach(async () => {
-      if (sandbox) {
-        try {
-          await sandbox.destroy();
-        } catch {
-          // Ignore cleanup errors
-        }
+  afterEach(async () => {
+    if (sandbox) {
+      try {
+        await sandbox.destroy();
+      } catch {
+        // Ignore cleanup errors
       }
-    });
+    }
+  });
 
-    it('full workflow: create sandbox, mount S3, read/write files', async () => {
-      // 1. Start sandbox
-      await sandbox.start();
-      expect(sandbox.status).toBe('running');
+  it('full workflow: create sandbox, mount S3, read/write files', async () => {
+    // 1. Start sandbox
+    await sandbox.start();
+    expect(sandbox.status).toBe('running');
 
-      // 2. Mount S3 filesystem
-      const s3Config = getS3TestConfig();
-      const mockFilesystem = {
-        id: 'test-s3-workflow',
+    // 2. Mount S3 filesystem
+    const s3Config = getS3TestConfig();
+    const mockFilesystem = {
+      id: 'test-s3-workflow',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => s3Config,
+    } as any;
+
+    const mountPath = '/data/workflow-test';
+    const mountResult = await sandbox.mount(mockFilesystem, mountPath);
+    expect(mountResult.success).toBe(true);
+
+    // 3. Write file via executeCommand
+    const testContent = `test-${Date.now()}`;
+    const testFile = `${mountPath}/workflow-test-file.txt`;
+    const writeResult = await sandbox.executeCommand('sh', ['-c', `echo "${testContent}" > ${testFile}`]);
+    expect(writeResult.exitCode).toBe(0);
+
+    // 4. Read file via executeCommand
+    const readResult = await sandbox.executeCommand('cat', [testFile]);
+    expect(readResult.exitCode).toBe(0);
+    expect(readResult.stdout.trim()).toBe(testContent);
+
+    // 5. Verify file exists (list directory)
+    const lsResult = await sandbox.executeCommand('ls', ['-la', mountPath]);
+    expect(lsResult.stdout).toContain('workflow-test-file.txt');
+
+    // Cleanup: remove test file
+    await sandbox.executeCommand('rm', [testFile]);
+  }, 240000);
+
+  it('sandbox reconnect preserves mounts', async () => {
+    const sandboxId = `reconnect-mount-${Date.now()}`;
+
+    // 1. Create and start sandbox with mount
+    const sandbox1 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
+    await sandbox1.start();
+
+    const s3Config = getS3TestConfig();
+    const mockFilesystem = {
+      id: 'test-s3-reconnect',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => s3Config,
+    } as any;
+
+    const mountPath = '/data/reconnect-test';
+    await sandbox1.mount(mockFilesystem, mountPath);
+
+    // Write a file to verify mount works
+    const testFile = `${mountPath}/reconnect-marker.txt`;
+    await sandbox1.executeCommand('sh', ['-c', `echo "before-reconnect" > ${testFile}`]);
+
+    // 2. Stop sandbox (but don't destroy - auto-pause keeps it)
+    await sandbox1.stop();
+
+    // 3. Create new E2BSandbox instance with same id
+    const sandbox2 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
+    await sandbox2.start();
+
+    // 4. Verify sandbox reconnected
+    expect(sandbox2.status).toBe('running');
+
+    // 5. Mount should still be accessible (or remount)
+    // First, check if file is accessible
+    const checkMount = await sandbox2.executeCommand('mountpoint', ['-q', mountPath]);
+    if (checkMount.exitCode !== 0) {
+      // Mount not present, remount it
+      await sandbox2.mount(mockFilesystem, mountPath);
+    }
+
+    // Verify file still exists
+    const readResult = await sandbox2.executeCommand('cat', [testFile]);
+    expect(readResult.stdout.trim()).toBe('before-reconnect');
+
+    // Cleanup
+    await sandbox2.executeCommand('rm', [testFile]);
+    await sandbox2.destroy();
+  }, 300000);
+
+  it('config change triggers remount on reconnect', async () => {
+    const sandboxId = `config-change-${Date.now()}`;
+
+    // 1. Start sandbox with S3 mount (readOnly: false)
+    const sandbox1 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
+    await sandbox1.start();
+
+    const s3Config = getS3TestConfig();
+    const createFilesystem = (readOnly: boolean) =>
+      ({
+        id: 'test-s3-config-change',
         name: 'S3Filesystem',
         provider: 's3',
         status: 'ready',
-        getMountConfig: () => s3Config,
-      } as any;
+        getMountConfig: () => ({
+          ...s3Config,
+          readOnly,
+        }),
+      }) as any;
 
-      const mountPath = '/data/workflow-test';
-      const mountResult = await sandbox.mount(mockFilesystem, mountPath);
-      expect(mountResult.success).toBe(true);
+    const mountPath = '/data/config-change-test';
+    await sandbox1.mount(createFilesystem(false), mountPath);
 
-      // 3. Write file via executeCommand
-      const testContent = `test-${Date.now()}`;
-      const testFile = `${mountPath}/workflow-test-file.txt`;
-      const writeResult = await sandbox.executeCommand('sh', ['-c', `echo "${testContent}" > ${testFile}`]);
-      expect(writeResult.exitCode).toBe(0);
+    // Verify we can write
+    const writeResult1 = await sandbox1.executeCommand('sh', ['-c', `echo "test" > ${mountPath}/write-test.txt`]);
+    expect(writeResult1.exitCode).toBe(0);
 
-      // 4. Read file via executeCommand
-      const readResult = await sandbox.executeCommand('cat', [testFile]);
-      expect(readResult.exitCode).toBe(0);
-      expect(readResult.stdout.trim()).toBe(testContent);
+    // Cleanup test file
+    await sandbox1.executeCommand('rm', [`${mountPath}/write-test.txt`]);
 
-      // 5. Verify file exists (list directory)
-      const lsResult = await sandbox.executeCommand('ls', ['-la', mountPath]);
-      expect(lsResult.stdout).toContain('workflow-test-file.txt');
+    // 2. Stop sandbox
+    await sandbox1.stop();
 
-      // Cleanup: remove test file
-      await sandbox.executeCommand('rm', [testFile]);
-    }, 240000);
+    // 3. Reconnect with readOnly: true
+    const sandbox2 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
+    await sandbox2.start();
 
-    it('sandbox reconnect preserves mounts', async () => {
-      const sandboxId = `reconnect-mount-${Date.now()}`;
+    // 4. Mount with readOnly: true - should trigger remount
+    await sandbox2.mount(createFilesystem(true), mountPath);
 
-      // 1. Create and start sandbox with mount
-      const sandbox1 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
-      await sandbox1.start();
+    // 5. Verify writes now fail (read-only)
+    const writeResult2 = await sandbox2.executeCommand('sh', [
+      '-c',
+      `echo "test" > ${mountPath}/readonly-test.txt 2>&1 || echo "write failed"`,
+    ]);
+    expect(writeResult2.stdout).toMatch(/Read-only|write failed/);
 
-      const s3Config = getS3TestConfig();
-      const mockFilesystem = {
-        id: 'test-s3-reconnect',
-        name: 'S3Filesystem',
-        provider: 's3',
-        status: 'ready',
-        getMountConfig: () => s3Config,
-      } as any;
-
-      const mountPath = '/data/reconnect-test';
-      await sandbox1.mount(mockFilesystem, mountPath);
-
-      // Write a file to verify mount works
-      const testFile = `${mountPath}/reconnect-marker.txt`;
-      await sandbox1.executeCommand('sh', ['-c', `echo "before-reconnect" > ${testFile}`]);
-
-      // 2. Stop sandbox (but don't destroy - auto-pause keeps it)
-      await sandbox1.stop();
-
-      // 3. Create new E2BSandbox instance with same id
-      const sandbox2 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
-      await sandbox2.start();
-
-      // 4. Verify sandbox reconnected
-      expect(sandbox2.status).toBe('running');
-
-      // 5. Mount should still be accessible (or remount)
-      // First, check if file is accessible
-      const checkMount = await sandbox2.executeCommand('mountpoint', ['-q', mountPath]);
-      if (checkMount.exitCode !== 0) {
-        // Mount not present, remount it
-        await sandbox2.mount(mockFilesystem, mountPath);
-      }
-
-      // Verify file still exists
-      const readResult = await sandbox2.executeCommand('cat', [testFile]);
-      expect(readResult.stdout.trim()).toBe('before-reconnect');
-
-      // Cleanup
-      await sandbox2.executeCommand('rm', [testFile]);
-      await sandbox2.destroy();
-    }, 300000);
-
-    it('config change triggers remount on reconnect', async () => {
-      const sandboxId = `config-change-${Date.now()}`;
-
-      // 1. Start sandbox with S3 mount (readOnly: false)
-      const sandbox1 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
-      await sandbox1.start();
-
-      const s3Config = getS3TestConfig();
-      const createFilesystem = (readOnly: boolean) =>
-        ({
-          id: 'test-s3-config-change',
-          name: 'S3Filesystem',
-          provider: 's3',
-          status: 'ready',
-          getMountConfig: () => ({
-            ...s3Config,
-            readOnly,
-          }),
-        }) as any;
-
-      const mountPath = '/data/config-change-test';
-      await sandbox1.mount(createFilesystem(false), mountPath);
-
-      // Verify we can write
-      const writeResult1 = await sandbox1.executeCommand('sh', [
-        '-c',
-        `echo "test" > ${mountPath}/write-test.txt`,
-      ]);
-      expect(writeResult1.exitCode).toBe(0);
-
-      // Cleanup test file
-      await sandbox1.executeCommand('rm', [`${mountPath}/write-test.txt`]);
-
-      // 2. Stop sandbox
-      await sandbox1.stop();
-
-      // 3. Reconnect with readOnly: true
-      const sandbox2 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
-      await sandbox2.start();
-
-      // 4. Mount with readOnly: true - should trigger remount
-      await sandbox2.mount(createFilesystem(true), mountPath);
-
-      // 5. Verify writes now fail (read-only)
-      const writeResult2 = await sandbox2.executeCommand('sh', [
-        '-c',
-        `echo "test" > ${mountPath}/readonly-test.txt 2>&1 || echo "write failed"`,
-      ]);
-      expect(writeResult2.stdout).toMatch(/Read-only|write failed/);
-
-      await sandbox2.destroy();
-    }, 300000);
-  },
-);
+    await sandbox2.destroy();
+  }, 300000);
+});
 
 /**
  * Stop/destroy behavior integration tests.
  */
-describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)(
-  'E2BSandbox Stop/Destroy',
-  () => {
-    it('stop unmounts all filesystems', async () => {
-      const sandbox = new E2BSandbox({
-        id: `test-stop-unmount-${Date.now()}`,
-        timeout: 120000,
-      });
-      await sandbox.start();
+describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Stop/Destroy', () => {
+  it('stop unmounts all filesystems', async () => {
+    const sandbox = new E2BSandbox({
+      id: `test-stop-unmount-${Date.now()}`,
+      timeout: 120000,
+    });
+    await sandbox.start();
 
-      // Mount multiple filesystems
-      const s3Config = getS3TestConfig();
-      const createFilesystem = (id: string) =>
-        ({
-          id,
-          name: 'S3Filesystem',
-          provider: 's3',
-          status: 'ready',
-          getMountConfig: () => s3Config,
-        }) as any;
+    // Mount multiple filesystems
+    const s3Config = getS3TestConfig();
+    const createFilesystem = (id: string) =>
+      ({
+        id,
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => s3Config,
+      }) as any;
 
-      await sandbox.mount(createFilesystem('fs1'), '/data/mount1');
-      await sandbox.mount(createFilesystem('fs2'), '/data/mount2');
+    await sandbox.mount(createFilesystem('fs1'), '/data/mount1');
+    await sandbox.mount(createFilesystem('fs2'), '/data/mount2');
 
-      // Verify mounts exist
-      const mountsBefore = await sandbox.executeCommand('mount');
-      expect(mountsBefore.stdout).toContain('/data/mount1');
-      expect(mountsBefore.stdout).toContain('/data/mount2');
+    // Verify mounts exist
+    const mountsBefore = await sandbox.executeCommand('mount');
+    expect(mountsBefore.stdout).toContain('/data/mount1');
+    expect(mountsBefore.stdout).toContain('/data/mount2');
 
-      // Stop should unmount all
-      await sandbox.stop();
+    // Stop should unmount all
+    await sandbox.stop();
 
-      // Reconnect to verify mounts are gone
-      const sandbox2 = new E2BSandbox({ id: sandbox.id, timeout: 60000 });
-      await sandbox2.start();
+    // Reconnect to verify mounts are gone
+    const sandbox2 = new E2BSandbox({ id: sandbox.id, timeout: 60000 });
+    await sandbox2.start();
 
-      const mountsAfter = await sandbox2.executeCommand('mount');
-      // FUSE mounts should be gone (fusermount -u was called)
-      // Note: The mount points may still exist as directories, but not as mounts
-      const hasFuseMount1 = mountsAfter.stdout.includes('/data/mount1') && mountsAfter.stdout.includes('fuse');
-      const hasFuseMount2 = mountsAfter.stdout.includes('/data/mount2') && mountsAfter.stdout.includes('fuse');
+    const mountsAfter = await sandbox2.executeCommand('mount');
+    // FUSE mounts should be gone (fusermount -u was called)
+    // Note: The mount points may still exist as directories, but not as mounts
+    const hasFuseMount1 = mountsAfter.stdout.includes('/data/mount1') && mountsAfter.stdout.includes('fuse');
+    const hasFuseMount2 = mountsAfter.stdout.includes('/data/mount2') && mountsAfter.stdout.includes('fuse');
 
-      expect(hasFuseMount1).toBe(false);
-      expect(hasFuseMount2).toBe(false);
+    expect(hasFuseMount1).toBe(false);
+    expect(hasFuseMount2).toBe(false);
 
-      await sandbox2.destroy();
-    }, 300000);
-  },
-);
+    await sandbox2.destroy();
+  }, 300000);
+});
 
 /**
  * Environment variable handling integration tests.
@@ -958,7 +946,7 @@ if (process.env.E2B_API_KEY) {
         timeout: 120000,
       });
     },
-    cleanupSandbox: async (sandbox) => {
+    cleanupSandbox: async sandbox => {
       try {
         await sandbox.destroy();
       } catch {
@@ -975,5 +963,72 @@ if (process.env.E2B_API_KEY) {
       defaultCommandTimeout: 30000,
     },
     testTimeout: 60000, // E2B commands can take time
+  });
+}
+
+/**
+ * Shared Workspace Integration Tests (E2B + S3)
+ *
+ * These tests verify end-to-end filesystem↔sandbox sync using a real S3Filesystem
+ * mounted via s3fs FUSE inside an E2B sandbox. The mountPath config aligns the
+ * filesystem API paths (S3 keys) with sandbox paths (FUSE mount point).
+ */
+const canRunSharedIntegration = !!(process.env.E2B_API_KEY && hasS3Credentials);
+
+if (canRunSharedIntegration) {
+  const mountPoint = '/data/s3-shared';
+  const testPrefix = `shared-int-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  createWorkspaceIntegrationTests({
+    suiteName: 'E2B + S3 Shared Integration',
+    mountPath: mountPoint,
+    testTimeout: 120000,
+    testScenarios: {
+      fileSync: true,
+    },
+    createWorkspace: async () => {
+      const s3Config = getS3TestConfig();
+
+      const filesystem = new S3Filesystem({
+        bucket: s3Config.bucket,
+        region: s3Config.region,
+        accessKeyId: s3Config.accessKeyId,
+        secretAccessKey: s3Config.secretAccessKey,
+        endpoint: s3Config.endpoint,
+        prefix: testPrefix,
+      });
+
+      const sandbox = new E2BSandbox({
+        id: `shared-int-${Date.now()}`,
+        timeout: 180000,
+      });
+
+      await sandbox.start();
+      await sandbox.mount(filesystem, mountPoint);
+
+      return { filesystem, sandbox };
+    },
+    cleanupWorkspace: async setup => {
+      // Cleanup S3 test files
+      try {
+        const files = await setup.filesystem.readdir('/');
+        for (const file of files) {
+          if (file.type === 'file') {
+            await setup.filesystem.deleteFile(`/${file.name}`, { force: true });
+          } else if (file.type === 'directory') {
+            await setup.filesystem.rmdir(`/${file.name}`, { recursive: true });
+          }
+        }
+      } catch {
+        // Ignore cleanup errors
+      }
+
+      // Destroy sandbox
+      try {
+        await setup.sandbox.destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+    },
   });
 }

@@ -32,7 +32,7 @@ export function createSandboxConfigTests<T>(config: ConfigTestConfig<T>): void {
             createWithInvalidConfig();
           } catch (error) {
             const message = usesMastraError
-              ? (error as { message?: string }).message ?? String(error)
+              ? ((error as { message?: string }).message ?? String(error))
               : String(error);
 
             expect(message).toMatch(testCase.expectedError);

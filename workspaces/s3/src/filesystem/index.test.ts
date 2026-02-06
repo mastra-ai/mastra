@@ -11,10 +11,9 @@
  * Based on the Workspace Filesystem & Sandbox Test Plan.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { S3Filesystem } from './index';
-import type { S3FilesystemOptions } from './index';
 
 // Mock the AWS SDK
 vi.mock('@aws-sdk/client-s3', () => ({
@@ -106,6 +105,16 @@ describe('S3Filesystem', () => {
       });
 
       expect(fs.icon).toBe('azure');
+    });
+
+    it('detects minio icon for MinIO endpoint', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        endpoint: 'http://minio.local:9000',
+      });
+
+      expect(fs.icon).toBe('minio');
     });
 
     it('uses s3 icon for generic S3-compatible endpoint', () => {
@@ -360,6 +369,26 @@ describe('S3Filesystem', () => {
 
       // Now the client should have been created
       expect(MockS3Client).toHaveBeenCalled();
+    });
+
+    it('reuses client for subsequent operations', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'test',
+        secretAccessKey: 'test',
+      });
+
+      const fsAny = fs as any;
+
+      // Manually set _client to simulate a created client
+      const fakeClient = { send: vi.fn() };
+      fsAny._client = fakeClient;
+
+      // getClient() should return the cached _client, not create a new one
+      const result = fsAny.getClient();
+
+      expect(result).toBe(fakeClient);
     });
 
     it('uses anonymous credentials for public buckets', () => {

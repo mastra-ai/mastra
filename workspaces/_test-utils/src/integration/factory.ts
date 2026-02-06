@@ -38,6 +38,7 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
     testScenarios = {},
     testTimeout = 60000,
     fastOnly = false,
+    mountPath = '',
   } = config;
 
   describe(suiteName, () => {
@@ -75,6 +76,7 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
     const getContext = () => ({
       setup,
       getTestPath: () => generateTestPath('int-test'),
+      mountPath,
       testTimeout,
       fastOnly,
     });

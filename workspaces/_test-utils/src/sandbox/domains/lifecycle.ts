@@ -31,41 +31,49 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
         expect(typeof sandbox.provider).toBe('string');
       });
 
-      it('id is unique per instance', async () => {
-        const { sandbox, createSandbox, fastOnly } = getContext();
+      it(
+        'id is unique per instance',
+        async () => {
+          const { sandbox, createSandbox, fastOnly } = getContext();
 
-        // Skip in fast mode - creating additional sandbox is slow
-        if (fastOnly) return;
+          // Skip in fast mode - creating additional sandbox is slow
+          if (fastOnly) return;
 
-        const sandbox2 = await createSandbox();
-        try {
-          expect(sandbox.id).not.toBe(sandbox2.id);
-        } finally {
-          // Clean up the second sandbox
-          if (sandbox2.destroy) {
-            await sandbox2.destroy();
+          const sandbox2 = await createSandbox();
+          try {
+            expect(sandbox.id).not.toBe(sandbox2.id);
+          } finally {
+            // Clean up the second sandbox
+            if (sandbox2.destroy) {
+              await sandbox2.destroy();
+            }
           }
-        }
-      }, getContext().testTimeout * 2);
+        },
+        getContext().testTimeout * 2,
+      );
     });
 
     describe('Status Transitions', () => {
-      it('status starts as pending or stopped before start()', async () => {
-        const { createSandbox, fastOnly } = getContext();
+      it(
+        'status starts as pending or stopped before start()',
+        async () => {
+          const { createSandbox, fastOnly } = getContext();
 
-        // Skip in fast mode - creating additional sandbox is slow
-        if (fastOnly) return;
+          // Skip in fast mode - creating additional sandbox is slow
+          if (fastOnly) return;
 
-        const freshSandbox = await createSandbox();
-        try {
-          // Before start(), status should be pending or stopped
-          expect(['pending', 'stopped']).toContain(freshSandbox.status);
-        } finally {
-          if (freshSandbox.destroy) {
-            await freshSandbox.destroy();
+          const freshSandbox = await createSandbox();
+          try {
+            // Before start(), status should be pending or stopped
+            expect(['pending', 'stopped']).toContain(freshSandbox.status);
+          } finally {
+            if (freshSandbox.destroy) {
+              await freshSandbox.destroy();
+            }
           }
-        }
-      }, getContext().testTimeout * 2);
+        },
+        getContext().testTimeout * 2,
+      );
 
       it('status is running after start', () => {
         const { sandbox } = getContext();
@@ -74,100 +82,124 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
         expect(sandbox.status).toBe('running');
       });
 
-      it('start() is idempotent - calling twice does not error', async () => {
-        const { sandbox } = getContext();
+      it(
+        'start() is idempotent - calling twice does not error',
+        async () => {
+          const { sandbox } = getContext();
 
-        if (!sandbox.start) return;
+          if (!sandbox.start) return;
 
-        // Sandbox is already running from beforeAll
-        // Calling start() again should not throw
-        await expect(sandbox.start()).resolves.not.toThrow();
+          // Sandbox is already running from beforeAll
+          // Calling start() again should not throw
+          await expect(sandbox.start()).resolves.not.toThrow();
 
-        // Status should still be running
-        expect(sandbox.status).toBe('running');
-      }, getContext().testTimeout);
+          // Status should still be running
+          expect(sandbox.status).toBe('running');
+        },
+        getContext().testTimeout,
+      );
 
-      it('stop() changes status to stopped', async () => {
-        const { createSandbox, fastOnly } = getContext();
+      it(
+        'stop() changes status to stopped',
+        async () => {
+          const { createSandbox, fastOnly } = getContext();
 
-        // Skip in fast mode - creating additional sandbox is slow
-        if (fastOnly) return;
+          // Skip in fast mode - creating additional sandbox is slow
+          if (fastOnly) return;
 
-        const freshSandbox = await createSandbox();
-        try {
-          // Start the sandbox
-          if (freshSandbox.start) {
-            await freshSandbox.start();
+          const freshSandbox = await createSandbox();
+          try {
+            // Start the sandbox
+            if (freshSandbox.start) {
+              await freshSandbox.start();
+            }
+            expect(freshSandbox.status).toBe('running');
+
+            // Stop it
+            if (freshSandbox.stop) {
+              await freshSandbox.stop();
+              expect(freshSandbox.status).toBe('stopped');
+            }
+          } finally {
+            if (freshSandbox.destroy) {
+              await freshSandbox.destroy();
+            }
           }
-          expect(freshSandbox.status).toBe('running');
-
-          // Stop it
-          if (freshSandbox.stop) {
-            await freshSandbox.stop();
-            expect(freshSandbox.status).toBe('stopped');
-          }
-        } finally {
-          if (freshSandbox.destroy) {
-            await freshSandbox.destroy();
-          }
-        }
-      }, getContext().testTimeout * 3);
+        },
+        getContext().testTimeout * 3,
+      );
     });
 
     describe('Readiness', () => {
-      it('isReady returns true when running', async () => {
-        const { sandbox } = getContext();
+      it(
+        'isReady returns true when running',
+        async () => {
+          const { sandbox } = getContext();
 
-        if (!sandbox.isReady) return;
+          if (!sandbox.isReady) return;
 
-        const ready = await sandbox.isReady();
-        expect(ready).toBe(true);
-      }, getContext().testTimeout);
+          const ready = await sandbox.isReady();
+          expect(ready).toBe(true);
+        },
+        getContext().testTimeout,
+      );
 
-      it('isReady returns false when stopped', async () => {
-        const { createSandbox, fastOnly } = getContext();
+      it(
+        'isReady returns false when stopped',
+        async () => {
+          const { createSandbox, fastOnly } = getContext();
 
-        // Skip in fast mode - creating additional sandbox is slow
-        if (fastOnly) return;
+          // Skip in fast mode - creating additional sandbox is slow
+          if (fastOnly) return;
 
-        const freshSandbox = await createSandbox();
-        try {
-          // Before start, should not be ready
-          if (freshSandbox.isReady) {
-            const ready = await freshSandbox.isReady();
-            expect(ready).toBe(false);
+          const freshSandbox = await createSandbox();
+          try {
+            // Before start, should not be ready
+            if (freshSandbox.isReady) {
+              const ready = await freshSandbox.isReady();
+              expect(ready).toBe(false);
+            }
+          } finally {
+            if (freshSandbox.destroy) {
+              await freshSandbox.destroy();
+            }
           }
-        } finally {
-          if (freshSandbox.destroy) {
-            await freshSandbox.destroy();
-          }
-        }
-      }, getContext().testTimeout * 2);
+        },
+        getContext().testTimeout * 2,
+      );
     });
 
     describe('getInfo', () => {
-      it('returns sandbox information', async () => {
-        const { sandbox } = getContext();
+      it(
+        'returns sandbox information',
+        async () => {
+          const { sandbox } = getContext();
 
-        if (!sandbox.getInfo) return;
+          if (!sandbox.getInfo) return;
 
-        const info = await sandbox.getInfo();
+          const info = await sandbox.getInfo();
 
-        expect(info).toBeDefined();
-        expect(info.id).toBe(sandbox.id);
-        expect(info.name).toBe(sandbox.name);
-        expect(info.provider).toBe(sandbox.provider);
-        expect(info.status).toBe('running');
-      }, getContext().testTimeout);
+          expect(info).toBeDefined();
+          expect(info.id).toBe(sandbox.id);
+          expect(info.name).toBe(sandbox.name);
+          expect(info.provider).toBe(sandbox.provider);
+          expect(info.status).toBe('running');
+        },
+        getContext().testTimeout,
+      );
 
-      it('getInfo status matches sandbox status', async () => {
-        const { sandbox } = getContext();
+      it(
+        'getInfo status matches sandbox status',
+        async () => {
+          const { sandbox } = getContext();
 
-        if (!sandbox.getInfo) return;
+          if (!sandbox.getInfo) return;
 
-        const info = await sandbox.getInfo();
-        expect(info.status).toBe(sandbox.status);
-      }, getContext().testTimeout);
+          const info = await sandbox.getInfo();
+          expect(info.status).toBe(sandbox.status);
+        },
+        getContext().testTimeout,
+      );
     });
   });
 }

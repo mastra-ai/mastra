@@ -33,7 +33,6 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
     );
   }
 
-
   // Get user's uid/gid for proper file ownership
   const idResult = await sandbox.commands.run('id -u && id -g');
   const [uid, gid] = idResult.stdout.trim().split('\n');
