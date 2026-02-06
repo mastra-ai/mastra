@@ -1089,6 +1089,9 @@ if (canRunSharedIntegration) {
     testTimeout: 120000,
     testScenarios: {
       fileSync: true,
+      concurrentOperations: true,
+      largeFileHandling: true,
+      writeReadConsistency: true,
     },
     createWorkspace: async () => {
       const s3Config = getS3TestConfig();
@@ -1321,3 +1324,158 @@ if (canRunSharedIntegration) {
     },
   });
 }
+
+/**
+ * Stale FUSE Mount Recovery Tests (E2B-specific)
+ *
+ * Tests FUSE mount failure detection and recovery scenarios
+ * that are specific to E2B's s3fs mount implementation.
+ */
+describe.skipIf(!canRunSharedIntegration)('E2BSandbox Stale Mount Recovery', () => {
+  let sandbox: E2BSandbox;
+
+  beforeEach(() => {
+    sandbox = new E2BSandbox({
+      id: `test-stale-${Date.now()}`,
+      timeout: 180000,
+    });
+  });
+
+  afterEach(async () => {
+    if (sandbox) {
+      try {
+        await sandbox.destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  });
+
+  it(
+    'detects when FUSE mount has died',
+    async () => {
+      await sandbox.start();
+
+      const s3Config = getS3TestConfig();
+      const mockFilesystem = {
+        id: 'test-s3-stale-detect',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => s3Config,
+      } as any;
+
+      const mountPath = '/data/stale-detect';
+      const mountResult = await sandbox.mount(mockFilesystem, mountPath);
+      expect(mountResult.success).toBe(true);
+
+      // Verify mount is active
+      const checkBefore = await sandbox.executeCommand('mountpoint', ['-q', mountPath]);
+      expect(checkBefore.exitCode).toBe(0);
+
+      // Kill the FUSE mount
+      await sandbox.executeCommand('sudo', ['fusermount', '-u', mountPath]);
+
+      // mountpoint should now fail
+      const checkAfter = await sandbox.executeCommand('mountpoint', ['-q', mountPath]);
+      expect(checkAfter.exitCode).not.toBe(0);
+
+      // cat should fail on a file in the dead mount
+      const catResult = await sandbox.executeCommand('cat', [`${mountPath}/nonexistent.txt`]);
+      expect(catResult.exitCode).not.toBe(0);
+    },
+    240000,
+  );
+
+  it(
+    'remount recovers after FUSE mount killed',
+    async () => {
+      await sandbox.start();
+
+      const s3Config = getS3TestConfig();
+      const mockFilesystem = {
+        id: 'test-s3-stale-remount',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => s3Config,
+      } as any;
+
+      const mountPath = '/data/stale-remount';
+      await sandbox.mount(mockFilesystem, mountPath);
+
+      // Write a file (goes to S3 via FUSE)
+      const testFile = `${mountPath}/recovery-test.txt`;
+      const content = `recovery-${Date.now()}`;
+      await sandbox.executeCommand('sh', ['-c', `echo -n "${content}" > ${testFile}`]);
+
+      // Kill the FUSE mount
+      await sandbox.executeCommand('sudo', ['fusermount', '-u', mountPath]);
+
+      // Re-mount — should succeed since data lives in S3
+      const remountResult = await sandbox.mount(mockFilesystem, mountPath);
+      expect(remountResult.success).toBe(true);
+
+      // File should still be readable (data was persisted in S3)
+      const readResult = await sandbox.executeCommand('cat', [testFile]);
+      expect(readResult.exitCode).toBe(0);
+      expect(readResult.stdout.trim()).toBe(content);
+
+      // Cleanup
+      await sandbox.executeCommand('rm', [testFile]);
+    },
+    300000,
+  );
+
+  it(
+    'reconnect after stale mount re-mounts successfully',
+    async () => {
+      await sandbox.start();
+      const sandboxId = sandbox.id;
+
+      const s3Config = getS3TestConfig();
+      const mockFilesystem = {
+        id: 'test-s3-reconnect-stale',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => s3Config,
+      } as any;
+
+      const mountPath = '/data/reconnect-stale';
+      await sandbox.mount(mockFilesystem, mountPath);
+
+      // Write a file so we can verify after reconnect
+      const testFile = `${mountPath}/reconnect-stale-test.txt`;
+      const content = `reconnect-${Date.now()}`;
+      await sandbox.executeCommand('sh', ['-c', `echo -n "${content}" > ${testFile}`]);
+
+      // Kill FUSE mount
+      await sandbox.executeCommand('sudo', ['fusermount', '-u', mountPath]);
+
+      // Stop sandbox (don't destroy — keep it alive for reconnect)
+      await sandbox.stop();
+
+      // Create a new sandbox instance with the same ID and reconnect
+      const sandbox2 = new E2BSandbox({ id: sandboxId, timeout: 180000 });
+      await sandbox2.start();
+
+      // Re-mount at the same path
+      const remountResult = await sandbox2.mount(mockFilesystem, mountPath);
+      expect(remountResult.success).toBe(true);
+
+      // Verify the file is accessible (data persisted in S3)
+      const readResult = await sandbox2.executeCommand('cat', [testFile]);
+      expect(readResult.exitCode).toBe(0);
+      expect(readResult.stdout.trim()).toBe(content);
+
+      // Cleanup
+      await sandbox2.executeCommand('rm', [testFile]);
+      await sandbox2.destroy();
+
+      // Prevent afterEach from double-destroying
+      sandbox = undefined as any;
+    },
+    300000,
+  );
+});

@@ -83,4 +83,13 @@ export interface IntegrationTestScenarios {
 
   /** Verify readOnly enforcement end-to-end */
   readOnlyMount?: boolean;
+
+  /** Concurrent file operations (parallel reads/writes) */
+  concurrentOperations?: boolean;
+
+  /** Large file handling (5MB+ files) */
+  largeFileHandling?: boolean;
+
+  /** Write-read consistency (immediate read-after-write) */
+  writeReadConsistency?: boolean;
 }

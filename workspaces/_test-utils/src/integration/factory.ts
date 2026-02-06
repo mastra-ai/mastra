@@ -8,10 +8,13 @@ import { describe, beforeAll, afterAll, it, expect } from 'vitest';
 
 import { generateTestPath } from '../test-helpers';
 
-import { createFileSyncTests } from './scenarios/file-sync';
-import { createMultiMountTests } from './scenarios/multi-mount';
+import { createConcurrentOperationsTests } from './scenarios/concurrent-operations';
 import { createCrossMountCopyTests } from './scenarios/cross-mount-copy';
+import { createFileSyncTests } from './scenarios/file-sync';
+import { createLargeFileHandlingTests } from './scenarios/large-file-handling';
+import { createMultiMountTests } from './scenarios/multi-mount';
 import { createReadOnlyMountTests } from './scenarios/read-only-mount';
+import { createWriteReadConsistencyTests } from './scenarios/write-read-consistency';
 import type { WorkspaceIntegrationTestConfig, WorkspaceSetup } from './types';
 
 /**
@@ -104,6 +107,18 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
 
     if (testScenarios.readOnlyMount === true) {
       createReadOnlyMountTests(getContext);
+    }
+
+    if (testScenarios.concurrentOperations === true) {
+      createConcurrentOperationsTests(getContext);
+    }
+
+    if (testScenarios.largeFileHandling === true) {
+      createLargeFileHandlingTests(getContext);
+    }
+
+    if (testScenarios.writeReadConsistency === true) {
+      createWriteReadConsistencyTests(getContext);
     }
   });
 }
