@@ -106,6 +106,17 @@ export function createFileOperationsTests(getContext: () => TestContext): void {
         expect(result).toBe(content);
       });
 
+      it('writes with encoding option', async () => {
+        const { fs, getTestPath } = getContext();
+        const path = `${getTestPath()}/encoded-write.txt`;
+        const content = 'Encoded content: äöü';
+
+        await fs.writeFile(path, content, { encoding: 'utf-8' });
+
+        const result = await fs.readFile(path, { encoding: 'utf-8' });
+        expect(result).toBe(content);
+      });
+
       it('writes Buffer content', async () => {
         const { fs, getTestPath, capabilities } = getContext();
         if (!capabilities.supportsBinaryFiles) return;

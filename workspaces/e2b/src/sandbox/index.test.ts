@@ -96,8 +96,8 @@ describe('E2BSandbox', () => {
     it('default timeout is 5 minutes', () => {
       const sandbox = new E2BSandbox();
 
-      // We can't directly access timeout, but we can verify the sandbox was created
-      expect(sandbox.provider).toBe('e2b');
+      // Access private timeout field
+      expect((sandbox as any).timeout).toBe(300_000);
     });
 
     it('has correct provider and name', () => {
@@ -111,8 +111,9 @@ describe('E2BSandbox', () => {
       // Template preparation starts in constructor
       const sandbox = new E2BSandbox();
 
-      // No assertion needed - just verify it doesn't throw
-      expect(sandbox.id).toBeDefined();
+      // _templatePreparePromise should be set immediately
+      expect((sandbox as any)._templatePreparePromise).toBeDefined();
+      expect((sandbox as any)._templatePreparePromise).toBeInstanceOf(Promise);
     });
   });
 
@@ -125,7 +126,10 @@ describe('E2BSandbox', () => {
       const promise1 = sandbox.start();
       const promise2 = sandbox.start();
 
-      await Promise.all([promise1, promise2]);
+      const [result1, result2] = await Promise.all([promise1, promise2]);
+
+      // Both promises should resolve to the same value (void)
+      expect(result1).toBe(result2);
 
       // betaCreate should only be called once
       expect(Sandbox.betaCreate).toHaveBeenCalledTimes(1);
@@ -224,8 +228,8 @@ describe('E2BSandbox', () => {
       const sandbox = new E2BSandbox();
       await sandbox.start();
 
-      // Template.build should not be called if template exists
-      // (actual behavior depends on implementation)
+      // Template.build should NOT be called when template already exists
+      expect(Template.build).not.toHaveBeenCalled();
       expect(sandbox.status).toBe('running');
     });
 
@@ -272,9 +276,11 @@ describe('E2BSandbox', () => {
 
       await sandbox.start();
 
-      // After start, mount should be processed
+      // After start, mount should be processed and state should be 'mounted' or 'error'
       const entry = sandbox.mounts.get('/data');
       expect(entry?.state).not.toBe('pending');
+      // On success, the state should be 'mounted'
+      expect(['mounted', 'error', 'unsupported']).toContain(entry?.state);
     });
   });
 
@@ -580,7 +586,10 @@ describe('E2BSandbox Template Handling', () => {
     const { Template } = await import('e2b');
 
     // Template function that adds custom packages
+    const aptInstallSpy = vi.fn().mockReturnThis();
     const templateFn = (base: any) => {
+      // Replace aptInstall with spy so we can verify it was called
+      base.aptInstall = aptInstallSpy;
       base.aptInstall(['curl', 'wget']);
       return base;
     };
@@ -590,6 +599,9 @@ describe('E2BSandbox Template Handling', () => {
 
     // Template.build should be called (function creates customized builder)
     expect(Template.build).toHaveBeenCalled();
+
+    // Verify the function's aptInstall was called on the base template
+    expect(aptInstallSpy).toHaveBeenCalledWith(['curl', 'wget']);
   });
 });
 
@@ -611,7 +623,7 @@ describe('E2BSandbox Mount Configuration', () => {
     });
   });
 
-  it('S3 endpoint mount includes url and path style options', async () => {
+  it('S3 endpoint mount includes url, path style, and sigv4 options', async () => {
     const sandbox = new E2BSandbox();
     await sandbox.start();
 
@@ -644,6 +656,10 @@ describe('E2BSandbox Mount Configuration', () => {
     if (s3fsMountCall) {
       expect(s3fsMountCall[0]).toContain('url=');
       expect(s3fsMountCall[0]).toContain('use_path_request_style');
+      expect(s3fsMountCall[0]).toContain('sigv4');
+      expect(s3fsMountCall[0]).toContain('passwd_file=');
+      expect(s3fsMountCall[0]).toMatch(/uid=\d+/);
+      expect(s3fsMountCall[0]).toMatch(/gid=\d+/);
     }
   });
 
@@ -677,6 +693,131 @@ describe('E2BSandbox Mount Configuration', () => {
     expect(s3fsMountCall).toBeDefined();
     if (s3fsMountCall) {
       expect(s3fsMountCall[0]).toMatch(/\bro\b/);
+    }
+  });
+});
+
+/**
+ * S3 public bucket mount tests
+ */
+describe('E2BSandbox S3 Public Bucket Mount', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSandbox.commands.run.mockImplementation((cmd: string) => {
+      if (cmd.includes('which s3fs')) {
+        return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/s3fs', stderr: '' });
+      }
+      if (cmd.includes('id -u')) {
+        return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '' });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+    });
+  });
+
+  it('S3 public bucket includes public_bucket=1 in mount command', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    // Mock filesystem without credentials (public bucket)
+    const mockFilesystem = {
+      id: 'test-s3-public',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'public-bucket',
+        region: 'us-east-1',
+        // No accessKeyId/secretAccessKey
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-public');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-public') && !call[0].includes('which'),
+    );
+
+    expect(s3fsMountCall).toBeDefined();
+    if (s3fsMountCall) {
+      expect(s3fsMountCall[0]).toContain('public_bucket=1');
+    }
+  });
+});
+
+/**
+ * GCS mount command flag tests
+ */
+describe('E2BSandbox GCS Mount Configuration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSandbox.commands.run.mockImplementation((cmd: string) => {
+      if (cmd.includes('which gcsfuse')) {
+        return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/gcsfuse', stderr: '' });
+      }
+      if (cmd.includes('id -u')) {
+        return Promise.resolve({ exitCode: 0, stdout: '1000\n1000', stderr: '' });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+    });
+  });
+
+  it('GCS with credentials includes --key-file in gcsfuse command', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    const mockFilesystem = {
+      id: 'test-gcs-auth',
+      name: 'GCSFilesystem',
+      provider: 'gcs',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'gcs',
+        bucket: 'test-bucket',
+        serviceAccountKey: JSON.stringify({ type: 'service_account', project_id: 'test' }),
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/gcs-auth');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const gcsfuseCall = calls.find(
+      (call: any[]) => call[0].includes('gcsfuse') && call[0].includes('/data/gcs-auth') && !call[0].includes('which'),
+    );
+
+    expect(gcsfuseCall).toBeDefined();
+    if (gcsfuseCall) {
+      expect(gcsfuseCall[0]).toContain('--key-file=');
+    }
+  });
+
+  it('GCS without credentials includes --anonymous-access in gcsfuse command', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    const mockFilesystem = {
+      id: 'test-gcs-anon',
+      name: 'GCSFilesystem',
+      provider: 'gcs',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'gcs',
+        bucket: 'public-bucket',
+        // No serviceAccountKey
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/gcs-anon');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const gcsfuseCall = calls.find(
+      (call: any[]) => call[0].includes('gcsfuse') && call[0].includes('/data/gcs-anon') && !call[0].includes('which'),
+    );
+
+    expect(gcsfuseCall).toBeDefined();
+    if (gcsfuseCall) {
+      expect(gcsfuseCall[0]).toContain('--anonymous-access');
     }
   });
 });
@@ -729,6 +870,8 @@ describe('E2BSandbox Error Handling', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('credentials');
     expect(result.error).toContain('endpoint');
+    // Should mention public_bucket only works for AWS S3
+    expect(result.error).toContain('public_bucket');
   });
 });
 

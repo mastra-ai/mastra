@@ -27,6 +27,7 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
         const result = await sandbox.executeCommand('echo', ['hello']);
 
         expect(result.exitCode).toBe(0);
+        expect(result.success).toBe(true);
         expect(result.stdout.trim()).toBe('hello');
       },
       getContext().testTimeout,
@@ -71,6 +72,7 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
         const result = await sandbox.executeCommand('sh', ['-c', 'exit 1']);
 
         expect(result.exitCode).toBe(1);
+        expect(result.success).toBe(false);
       },
       getContext().testTimeout,
     );

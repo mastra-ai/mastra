@@ -29,6 +29,8 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
         expect(typeof sandbox.name).toBe('string');
         expect(sandbox.provider).toBeDefined();
         expect(typeof sandbox.provider).toBe('string');
+        expect(sandbox.status).toBeDefined();
+        expect(typeof sandbox.status).toBe('string');
       });
 
       it(

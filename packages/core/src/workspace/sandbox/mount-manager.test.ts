@@ -182,6 +182,39 @@ describe('MountManager', () => {
       expect(hash1).not.toBe(hash3); // Different type
     });
 
+    it('hashConfig changes when credentials change', () => {
+      const fs = createMockFilesystem();
+      const configNoCreds: FilesystemMountConfig = { type: 's3', bucket: 'test' };
+      const configWithCreds: FilesystemMountConfig = {
+        type: 's3',
+        bucket: 'test',
+        accessKeyId: 'AKIA',
+        secretAccessKey: 'secret',
+      } as FilesystemMountConfig;
+
+      mountManager.add({ '/path1': fs, '/path2': fs });
+      mountManager.set('/path1', { state: 'mounted', config: configNoCreds });
+      mountManager.set('/path2', { state: 'mounted', config: configWithCreds });
+
+      expect(mountManager.get('/path1')?.configHash).not.toBe(mountManager.get('/path2')?.configHash);
+    });
+
+    it('hashConfig changes when readOnly changes', () => {
+      const fs = createMockFilesystem();
+      const configWritable: FilesystemMountConfig = { type: 's3', bucket: 'test' };
+      const configReadOnly: FilesystemMountConfig = {
+        type: 's3',
+        bucket: 'test',
+        readOnly: true,
+      } as FilesystemMountConfig;
+
+      mountManager.add({ '/path1': fs, '/path2': fs });
+      mountManager.set('/path1', { state: 'mounted', config: configWritable });
+      mountManager.set('/path2', { state: 'mounted', config: configReadOnly });
+
+      expect(mountManager.get('/path1')?.configHash).not.toBe(mountManager.get('/path2')?.configHash);
+    });
+
     it('hashConfig is order-independent for object keys', () => {
       const fs = createMockFilesystem();
       const config1 = { type: 's3', bucket: 'test', region: 'us-east-1' } as FilesystemMountConfig;
@@ -301,16 +334,15 @@ describe('MountManager', () => {
   });
 
   describe('onMount Hook Integration', () => {
-    it('onMount hook is called before default mount', async () => {
+    it('onMount hook is called before default mount with correct arguments', async () => {
       const config: FilesystemMountConfig = { type: 's3', bucket: 'test' };
       const fs = createMockFilesystem({ getMountConfig: () => config });
 
       const hookOrder: string[] = [];
-
-      const onMount: OnMountHook = () => {
+      const onMount: OnMountHook = vi.fn(_args => {
         hookOrder.push('hook');
         return undefined; // Continue to default
-      };
+      });
 
       mockMountFn.mockImplementation(async () => {
         hookOrder.push('mount');
@@ -322,6 +354,15 @@ describe('MountManager', () => {
       await mountManager.processPending();
 
       expect(hookOrder).toEqual(['hook', 'mount']);
+
+      // Verify hook received correct arguments
+      expect(onMount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filesystem: fs,
+          mountPath: '/path',
+          config,
+        }),
+      );
     });
 
     it('onMount hook returning false skips mount entirely', async () => {

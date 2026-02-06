@@ -45,6 +45,15 @@ export function createMountConfigTests(getContext: () => TestContext): void {
       expect(['s3', 'gcs', 'local', 'r2']).toContain(config.type);
     });
 
+    it('getMountConfig is undefined for non-mountable filesystems', () => {
+      const { fs, capabilities } = getContext();
+
+      // If the filesystem does NOT support mounting, getMountConfig should not exist
+      if (capabilities.supportsMounting) return;
+
+      expect(fs.getMountConfig).toBeUndefined();
+    });
+
     it('getMountConfig includes readOnly when filesystem is readOnly', () => {
       const { fs, capabilities } = getContext();
 

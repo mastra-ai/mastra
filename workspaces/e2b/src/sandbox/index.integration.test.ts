@@ -390,6 +390,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
     const result = await sandbox.mount(mockFilesystem, testDir);
     expect(result.success).toBe(false);
     expect(result.error).toContain('not empty');
+    expect(result.error).toContain('Mounting would hide existing files');
   }, 120000);
 
   it('mount succeeds if directory exists but is empty', async () => {
@@ -410,8 +411,12 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
     } as any;
 
     const result = await sandbox.mount(mockFilesystem, testDir);
+    // Empty directory should not block mounting
     if (!result.success) {
+      // If mount failed, it should NOT be because of non-empty directory
       expect(result.error).not.toContain('not empty');
+    } else {
+      expect(result.success).toBe(true);
     }
   }, 120000);
 
@@ -467,7 +472,16 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Reconciliation', () 
 
   it('reconcileMounts unmounts stale FUSE mounts', async () => {
     await sandbox.start();
+
+    // Create a fake stale mount marker so reconcile has something to clean
+    await sandbox.executeCommand('mkdir', ['-p', '/tmp/.mastra-mounts']);
+    await sandbox.executeCommand('sh', ['-c', 'echo "/data/stale-mount|deadbeef" > /tmp/.mastra-mounts/mount-stale']);
+
     await expect(sandbox.reconcileMounts(['/expected-path'])).resolves.not.toThrow();
+
+    // The stale marker should be cleaned up since its path is not in expected list
+    const checkStaleMarker = await sandbox.executeCommand('test', ['-f', '/tmp/.mastra-mounts/mount-stale']);
+    expect(checkStaleMarker.exitCode).not.toBe(0);
   }, 120000);
 
   it('reconcileMounts cleans up orphaned marker files', async () => {
@@ -487,11 +501,15 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Reconciliation', () 
   it('reconcileMounts handles malformed marker files', async () => {
     await sandbox.start();
 
-    // Create malformed marker file
+    // Create malformed marker file (no pipe separator = invalid format)
     await sandbox.executeCommand('mkdir', ['-p', '/tmp/.mastra-mounts']);
     await sandbox.executeCommand('sh', ['-c', 'echo "invalid-no-pipe" > /tmp/.mastra-mounts/mount-malformed']);
 
     await expect(sandbox.reconcileMounts(['/expected'])).resolves.not.toThrow();
+
+    // Malformed marker should be deleted
+    const checkMalformed = await sandbox.executeCommand('test', ['-f', '/tmp/.mastra-mounts/mount-malformed']);
+    expect(checkMalformed.exitCode).not.toBe(0);
   }, 120000);
 });
 
@@ -535,6 +553,12 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Marke
     // Check marker file exists
     const markerDir = await sandbox.executeCommand('ls', ['/tmp/.mastra-mounts/']);
     expect(markerDir.stdout).toContain('mount-');
+
+    // Verify marker file content is in "path|configHash" format
+    const markerFilename = sandbox.mounts.markerFilename('/data/marker-test');
+    const markerContent = await sandbox.executeCommand('cat', [`/tmp/.mastra-mounts/${markerFilename}`]);
+    expect(markerContent.exitCode).toBe(0);
+    expect(markerContent.stdout.trim()).toMatch(/^\/data\/marker-test\|[a-f0-9]+$/);
   }, 180000);
 
   it('unmount removes marker file', async () => {

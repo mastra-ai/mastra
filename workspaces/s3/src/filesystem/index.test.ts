@@ -339,18 +339,32 @@ describe('S3Filesystem', () => {
   });
 
   describe('S3 Client Configuration', () => {
-    it('forcePathStyle defaults to true for custom endpoints', () => {
+    it('forcePathStyle defaults to true for custom endpoints', async () => {
+      const { S3Client } = await import('@aws-sdk/client-s3');
+      const MockS3Client = vi.mocked(S3Client);
+      MockS3Client.mockClear();
+
       const fs = new S3Filesystem({
         bucket: 'test',
         region: 'us-east-1',
         endpoint: 'http://minio:9000',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
       });
 
-      // Verify the filesystem was created (forcePathStyle is internal)
-      expect(fs.provider).toBe('s3');
-      // The getMountConfig should include forcePathStyle for non-AWS endpoints
-      const config = fs.getMountConfig();
-      expect(config.endpoint).toBe('http://minio:9000');
+      // Trigger client creation
+      try {
+        await fs.readFile('test.txt');
+      } catch {
+        // Expected to fail (mock), but client should be created
+      }
+
+      // Verify S3Client was constructed with forcePathStyle: true
+      expect(MockS3Client).toHaveBeenCalledWith(
+        expect.objectContaining({
+          forcePathStyle: true,
+        }),
+      );
     });
 
     it('creates client lazily on first operation', async () => {
@@ -401,7 +415,11 @@ describe('S3Filesystem', () => {
       expect(result).toBe(fakeClient);
     });
 
-    it('uses anonymous credentials for public buckets', () => {
+    it('uses anonymous credentials for public buckets', async () => {
+      const { S3Client } = await import('@aws-sdk/client-s3');
+      const MockS3Client = vi.mocked(S3Client);
+      MockS3Client.mockClear();
+
       // When no credentials provided, S3Filesystem should handle anonymous access
       const fs = new S3Filesystem({
         bucket: 'public-bucket',
@@ -411,9 +429,24 @@ describe('S3Filesystem', () => {
 
       const config = fs.getMountConfig();
 
-      // Should not have credentials
+      // Mount config should not have credentials
       expect(config.accessKeyId).toBeUndefined();
       expect(config.secretAccessKey).toBeUndefined();
+
+      // Trigger client creation to verify S3Client construction
+      try {
+        await fs.readFile('test.txt');
+      } catch {
+        // Expected to fail (mock), but client should be created
+      }
+
+      // Verify S3Client was constructed with empty credentials and signer bypass
+      expect(MockS3Client).toHaveBeenCalledWith(
+        expect.objectContaining({
+          credentials: { accessKeyId: '', secretAccessKey: '' },
+          signer: expect.objectContaining({ sign: expect.any(Function) }),
+        }),
+      );
     });
   });
 
@@ -430,6 +463,18 @@ describe('S3Filesystem', () => {
       expect(info.metadata?.prefix).toBe('workspace/');
     });
 
+    it('toKey adds prefix to actual key construction', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        prefix: 'workspace',
+      });
+
+      // Access the private toKey method to verify prefix is applied
+      const key = (fs as any).toKey('/myfile.txt');
+      expect(key).toBe('workspace/myfile.txt');
+    });
+
     it('toKey removes leading slashes from paths', () => {
       const fs = new S3Filesystem({
         bucket: 'test',
@@ -440,6 +485,21 @@ describe('S3Filesystem', () => {
       // Prefix should be normalized to remove leading slashes
       const info = fs.getInfo();
       expect(info.metadata?.prefix).toBe('foo/bar/');
+    });
+
+    it('toKey strips leading slashes from paths', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+      });
+
+      // Access the private toKey method to verify leading slash removal
+      const key = (fs as any).toKey('/leading-slash.txt');
+      expect(key).toBe('leading-slash.txt');
+
+      // Multiple leading slashes
+      const key2 = (fs as any).toKey('///multi-slash.txt');
+      expect(key2).toBe('multi-slash.txt');
     });
   });
 

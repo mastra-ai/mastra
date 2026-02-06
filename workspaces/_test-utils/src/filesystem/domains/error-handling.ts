@@ -106,6 +106,16 @@ export function createErrorHandlingTests(getContext: () => TestContext): void {
 
         // readdir() on root should not throw (assuming root exists)
         await expect(fs.readdir('/')).resolves.not.toThrow();
+
+        // readFile() should work if a file exists - use try/catch since
+        // the file may not exist on a fresh bucket, but it should not
+        // throw PermissionError
+        try {
+          await fs.readFile('/nonexistent-read-test.txt');
+        } catch (error) {
+          // Should be FileNotFoundError, NOT PermissionError
+          expect(error).not.toBeInstanceOf(PermissionError);
+        }
       });
     });
 

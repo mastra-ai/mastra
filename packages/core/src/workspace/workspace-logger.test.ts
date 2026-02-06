@@ -628,12 +628,13 @@ describe('Workspace Logger Integration', () => {
 
       // Logger should be propagated to the factory-resolved workspace
       const fs = workspace1!.filesystem;
-      if (fs && '__setLogger' in fs) {
-        // The filesystem should have received the logger via workspace.__setLogger
-        // Trigger a log to verify propagation
-        (fs as any).logger?.debug?.('factory-logger-test');
-        expect(mockLogger.debug).toHaveBeenCalledWith('factory-logger-test');
-      }
+      expect(fs).toBeDefined();
+      expect('__setLogger' in fs!).toBe(true);
+
+      // The filesystem should have received the logger via workspace.__setLogger
+      // Trigger a log to verify propagation
+      (fs as any).logger?.debug?.('factory-logger-test');
+      expect(mockLogger.debug).toHaveBeenCalledWith('factory-logger-test');
 
       await workspace1!.destroy();
     });
