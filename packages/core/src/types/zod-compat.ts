@@ -9,7 +9,7 @@ import type { z as zv4 } from 'zod/v4';
  * from both versions by checking for the presence of key methods rather
  * than relying on exact type matching.
  */
-export type ZodLikeSchema<T = any> = z.ZodType<T> | zv4.ZodType<T, any>;
+export type ZodLikeSchema<T = any> = z.ZodType<T, z.ZodTypeDef, any> | zv4.ZodType<T, any>;
 
 /**
  * Helper type for extracting the inferred type from a Zod-like schema after parsing
