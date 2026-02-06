@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { ChevronRight, GripVertical, Ruler, Trash2 } from 'lucide-react';
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 
@@ -40,11 +41,16 @@ const AgentCMSBlockContent = ({
   onDelete,
   schema,
 }: AgentCMSBlockContentProps) => {
+  const editorRef = useRef<ReactCodeMirrorRef>(null);
   const hasVariablesSet = Object.keys(schema?.properties ?? {}).length > 0;
   const showRulesSection = schema && hasVariablesSet;
   const ruleCount = block.rules.length;
 
   const [isRulesOpen, setIsRulesOpen] = useState(ruleCount > 0);
+
+  useEffect(() => {
+    editorRef.current?.editor?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
 
   const handleContentChange = (content: string) => {
     onBlockChange({ ...block, content });
@@ -79,6 +85,7 @@ const AgentCMSBlockContent = ({
       <div className="h-full grid grid-rows-[1fr_auto]">
         {/* CodeEditor */}
         <CodeEditor
+          ref={editorRef}
           value={block.content}
           onChange={handleContentChange}
           placeholder={placeholder}
@@ -87,6 +94,7 @@ const AgentCMSBlockContent = ({
           highlightVariables
           showCopyButton={false}
           schema={schema}
+          autoFocus
         />
 
         {/* Rules disclosure section */}
