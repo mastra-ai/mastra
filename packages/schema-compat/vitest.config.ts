@@ -6,7 +6,7 @@ export default defineConfig({
     projects: [
       {
         test: {
-          name: 'v4',
+          name: 'unit-v4',
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*-v3.test.ts'],
@@ -20,7 +20,7 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'v3',
+          name: 'unit-v3',
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: [

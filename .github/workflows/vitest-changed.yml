@@ -72,6 +72,7 @@ jobs:
       - name: Run changed tests (Shard ${{ matrix.shard }}/4)
         run: |
           pnpm vitest run \
+            --project 'unit*' --project typecheck \
             --changed origin/${{ steps.pr-info.outputs.base_ref }} \
             --reporter=blob \
             --outputFile.blob=.vitest-reports/blob-${{ matrix.shard }}.json \
