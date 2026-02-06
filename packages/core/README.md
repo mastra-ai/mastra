@@ -1,5 +1,22 @@
 # @mastra/core
 
+## Compatibility notes
+
+- Minimum Zod version for `zod` 4.x: **>= 4.3.6**.
+
+Reason: a TypeScript compiler edge case with chained `export *` re-exports in `zod@4.3.5` can cause `tsc` or DTS generation to OOM when consumers instantiate deep Zod generics (for example, calling `createStep()` with Zod schemas). Zod `4.3.6` fixed the export chaining issue; upgrading prevents the OOM during type-checking.
+
+## What to do if you see errors
+
+- If your project is pinned to `zod@4.3.5`, update it to `^4.3.6` in your `package.json` and re-install (or update your lockfile):
+
+```bash
+pnpm add -w zod@^4.3.6
+# or with npm/yarn as appropriate
+```
+
+- If your CI or install fails on peer dependency mismatches, allow or bump the dependency in your monorepo/lockfile to `>=4.3.6`.
+
 Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
 
 It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
