@@ -27,9 +27,8 @@
  * ```
  */
 
-import type { WebSocket } from 'ws';
-
 import { MastraVoice, mulawToPcm, pcmToMulaw } from '@mastra/core/voice';
+import type { WebSocket } from 'ws';
 
 export { generateTwiML, twiml } from './twiml';
 
