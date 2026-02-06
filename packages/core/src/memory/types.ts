@@ -488,11 +488,24 @@ export interface ObservationalMemoryObservationConfig {
    * Once unobserved tokens exceed `blockAfter`, a synchronous observation runs as a
    * last resort to prevent context window overflow.
    *
-   * Must be greater than `messageTokens`. Only relevant when `bufferEvery` is set.
+   * Accepts either:
+   * - A **fraction** (0 < value < 1): extra headroom above `messageTokens`.
+   *   e.g. `blockAfter: 0.25` with `messageTokens: 20_000` → blocks at 25,000 tokens.
+   * - An **absolute token count** (≥ 1): must be greater than `messageTokens`.
+   *   e.g. `blockAfter: 80_000` → blocks at 80,000 tokens.
+   *
+   * Only relevant when `bufferEvery` is set.
    * If not set, synchronous observation is never used when async buffering is enabled.
    *
    * @example
    * ```ts
+   * // Fraction: 25% headroom above messageTokens
+   * observation: {
+   *   messageTokens: 20_000,
+   *   bufferEvery: 0.25,
+   *   blockAfter: 0.25, // resolves to 25,000
+   * }
+   * // Absolute: explicit token count
    * observation: {
    *   messageTokens: 20_000,
    *   bufferEvery: 5_000,

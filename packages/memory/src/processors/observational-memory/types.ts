@@ -122,7 +122,12 @@ export interface ObservationConfig {
    * Between `messageTokens` and `blockAfter`, only async buffering/activation is used.
    * Above `blockAfter`, a synchronous observation runs as a last resort.
    *
-   * Must be greater than `messageTokens`. Only relevant when `bufferEvery` is set.
+   * Accepts either:
+   * - A fraction (0 < value < 1): extra headroom above `messageTokens`.
+   *   e.g. `blockAfter: 0.25` with `messageTokens: 20_000` → blocks at 25,000.
+   * - An absolute token count (≥ 1): must be greater than `messageTokens`.
+   *
+   * Only relevant when `bufferEvery` is set.
    * If not set, synchronous observation is never used when async buffering is enabled.
    */
   blockAfter?: number;

@@ -751,7 +751,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
       ),
       asyncActivation: config.observation?.asyncActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.asyncActivation,
-      blockAfter: config.observation?.blockAfter,
+      blockAfter: this.resolveBlockAfter(
+        config.observation?.blockAfter,
+        config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
+      ),
     };
 
     // Resolve reflection config with defaults
@@ -953,6 +956,23 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       return Math.round(threshold * bufferEvery);
     }
     return bufferEvery;
+  }
+
+  /**
+   * Resolve blockAfter config value.
+   * If 0 < blockAfter < 1, treat as a fraction of extra headroom above messageTokens.
+   * e.g. blockAfter: 0.25 with messageTokens: 20_000 → 25_000
+   */
+  private resolveBlockAfter(
+    blockAfter: number | undefined,
+    messageTokens: number | ThresholdRange,
+  ): number | undefined {
+    if (blockAfter === undefined) return undefined;
+    if (blockAfter > 0 && blockAfter < 1) {
+      const threshold = typeof messageTokens === 'number' ? messageTokens : messageTokens.max;
+      return Math.round(threshold * (1 + blockAfter));
+    }
+    return blockAfter;
   }
 
   /**
