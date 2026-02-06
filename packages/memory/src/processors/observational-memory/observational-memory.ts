@@ -16,8 +16,9 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
-const OM_DEBUG_LOG = join(process.cwd(), 'om-debug.log');
+const OM_DEBUG_LOG = process.env.OM_DEBUG ? join(process.cwd(), 'om-debug.log') : null;
 function omDebug(msg: string) {
+  if (!OM_DEBUG_LOG) return;
   try {
     appendFileSync(OM_DEBUG_LOG, `[${new Date().toISOString()}] ${msg}\n`);
   } catch {
