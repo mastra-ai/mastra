@@ -227,3 +227,15 @@ All tests use mock targets (no LLM calls). Mock agents/workflows/scorers with co
 - 50 items, `maxConcurrency: 10`
 - **Expected:** wall clock ~2500ms (dominated by storage, not execution)
 - Compare against 0ms storage: ~50ms. Ratio ~50x proves storage is in hot path.
+
+---
+
+## FOLLOW-UP WORK
+
+| Item                      | Description                                                                                                                       | Where                          |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| UI: `completedWithErrors` | Display partial failure badge/indicator in Playground run details                                                                 | `packages/playground-ui`       |
+| UI: `skippedCount`        | Show skipped item count in run summary view when abort occurs                                                                     | `packages/playground-ui`       |
+| Workflow abort            | `workflow.start()` does not accept `AbortSignal` — per-item timeout works but in-flight workflow runs to completion in background | `packages/core/src/workflows/` |
+| Memory: streaming results | `retainResults: false` is a workaround; true fix is streaming/paginated result delivery                                           | `index.ts`                     |
+| Dynamic p-map import      | `p-map` is dynamically imported on every `runDataset` call (P2)                                                                   | `index.ts:115`                 |
