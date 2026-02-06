@@ -39,6 +39,19 @@ export interface WorkspaceIntegrationTestConfig {
    * @default '' (filesystem paths are used directly for sandbox commands)
    */
   mountPath?: string;
+
+  /**
+   * Whether sandbox file paths align with filesystem API paths for multi-mount.
+   *
+   * When true: sandbox commands like `cat /mount1/file.txt` see the same files
+   * as `fs1.readFile('/file.txt')`. Required for sandbox-dependent multi-mount tests.
+   *
+   * When false: only API-level isolation tests run (e.g. prefix-based S3 on same bucket
+   * where s3fs mounts the full bucket, not the prefix).
+   *
+   * @default true
+   */
+  sandboxPathsAligned?: boolean;
 }
 
 /**

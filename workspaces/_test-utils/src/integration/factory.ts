@@ -39,6 +39,7 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
     testTimeout = 60000,
     fastOnly = false,
     mountPath = '',
+    sandboxPathsAligned = true,
   } = config;
 
   describe(suiteName, () => {
@@ -72,14 +73,20 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
       }
     }, 60000);
 
-    // Helper to get test context
-    const getContext = () => ({
-      setup,
-      getTestPath: () => generateTestPath('int-test'),
-      mountPath,
-      testTimeout,
-      fastOnly,
-    });
+    // Helper to get test context.
+    // The test path is generated once per getContext() call so that all
+    // references within a single test point to the same directory.
+    const getContext = () => {
+      const testPath = generateTestPath('int-test');
+      return {
+        setup,
+        getTestPath: () => testPath,
+        mountPath,
+        testTimeout,
+        fastOnly,
+        sandboxPathsAligned,
+      };
+    };
 
     // Register scenario tests
     // Note: Individual tests guard against missing mounts/features

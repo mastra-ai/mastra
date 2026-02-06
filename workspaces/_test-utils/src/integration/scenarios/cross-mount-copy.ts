@@ -14,6 +14,7 @@ interface TestContext {
   mountPath: string;
   testTimeout: number;
   fastOnly: boolean;
+  sandboxPathsAligned: boolean;
 }
 
 export function createCrossMountCopyTests(getContext: () => TestContext): void {
@@ -21,7 +22,9 @@ export function createCrossMountCopyTests(getContext: () => TestContext): void {
     it(
       'copy file from one mount to another via sandbox',
       async () => {
-        const { setup } = getContext();
+        const ctx = getContext();
+        const { setup } = ctx;
+        if (!ctx.sandboxPathsAligned) return;
         if (!setup.mounts) return;
         if (!setup.sandbox.executeCommand) return;
 
@@ -60,7 +63,9 @@ export function createCrossMountCopyTests(getContext: () => TestContext): void {
     it(
       'move file from one mount to another via sandbox',
       async () => {
-        const { setup } = getContext();
+        const ctx = getContext();
+        const { setup } = ctx;
+        if (!ctx.sandboxPathsAligned) return;
         if (!setup.mounts) return;
         if (!setup.sandbox.executeCommand) return;
 

@@ -14,6 +14,7 @@ interface TestContext {
   mountPath: string;
   testTimeout: number;
   fastOnly: boolean;
+  sandboxPathsAligned: boolean;
 }
 
 export function createMultiMountTests(getContext: () => TestContext): void {
@@ -48,7 +49,9 @@ export function createMultiMountTests(getContext: () => TestContext): void {
     it(
       'sandbox can access files from multiple mounts',
       async () => {
-        const { setup } = getContext();
+        const ctx = getContext();
+        const { setup } = ctx;
+        if (!ctx.sandboxPathsAligned) return;
         if (!setup.mounts) return;
         if (!setup.sandbox.executeCommand) return;
 

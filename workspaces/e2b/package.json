@@ -37,6 +37,7 @@
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/gcs": "workspace:*",
     "@mastra/s3": "workspace:*",
     "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",

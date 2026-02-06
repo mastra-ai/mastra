@@ -54,14 +54,15 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
 
     // Mount with credentials using --key-file flag
     // Use sudo for /dev/fuse access (same as s3fs)
-    mountCmd = `sudo gcsfuse --key-file=${keyPath} ${uidGidFlags} ${config.bucket} ${mountPath}`;
+    // -o allow_other lets non-root users access the FUSE mount
+    mountCmd = `sudo gcsfuse --key-file=${keyPath} -o allow_other ${uidGidFlags} ${config.bucket} ${mountPath}`;
   } else {
     // Public bucket mode - read-only access without credentials
     // Use --anonymous-access flag (not -o option)
     // Use sudo for /dev/fuse access (same as s3fs)
     logger.debug(`${LOG_PREFIX} No credentials provided, mounting GCS as public bucket (read-only)`);
 
-    mountCmd = `sudo gcsfuse --anonymous-access ${uidGidFlags} ${config.bucket} ${mountPath}`;
+    mountCmd = `sudo gcsfuse --anonymous-access -o allow_other ${uidGidFlags} ${config.bucket} ${mountPath}`;
   }
 
   logger.debug(`${LOG_PREFIX} Mounting GCS:`, mountCmd);

@@ -12,6 +12,7 @@
  */
 
 import { createSandboxTestSuite, createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
+import { GCSFilesystem } from '@mastra/gcs';
 import { S3Filesystem } from '@mastra/s3';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
@@ -21,6 +22,7 @@ import { E2BSandbox } from './index';
  * Check if we have S3-compatible credentials.
  */
 const hasS3Credentials = !!(process.env.S3_ACCESS_KEY_ID && process.env.S3_BUCKET);
+const hasGCSCredentials = !!(process.env.GCS_SERVICE_ACCOUNT_KEY && process.env.TEST_GCS_BUCKET);
 
 /**
  * Get S3 test configuration from environment.
@@ -977,7 +979,6 @@ const canRunSharedIntegration = !!(process.env.E2B_API_KEY && hasS3Credentials);
 
 if (canRunSharedIntegration) {
   const mountPoint = '/data/s3-shared';
-  const testPrefix = `shared-int-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   createWorkspaceIntegrationTests({
     suiteName: 'E2B + S3 Shared Integration',
@@ -995,7 +996,6 @@ if (canRunSharedIntegration) {
         accessKeyId: s3Config.accessKeyId,
         secretAccessKey: s3Config.secretAccessKey,
         endpoint: s3Config.endpoint,
-        prefix: testPrefix,
       });
 
       const sandbox = new E2BSandbox({
@@ -1034,20 +1034,19 @@ if (canRunSharedIntegration) {
 }
 
 /**
- * Multi-Mount Shared Integration Tests (E2B + 2x S3)
+ * S3+GCS Multi-Mount Integration Tests
  *
- * Tests multi-mount and cross-mount scenarios using two writable S3 filesystems
- * mounted at different paths inside an E2B sandbox.
+ * Two different buckets (S3 + GCS), each FUSE-mounted at a separate path.
+ * Sandbox paths align with API paths, so all multi-mount and cross-mount tests run.
  */
-if (canRunSharedIntegration) {
-  const mount1Path = '/data/s3-multi1';
-  const mount2Path = '/data/s3-multi2';
-  const multiPrefix1 = `multi-int-1-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const multiPrefix2 = `multi-int-2-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+if (canRunSharedIntegration && hasGCSCredentials) {
+  const s3Mount = '/data/multi-s3';
+  const gcsMount = '/data/multi-gcs';
 
   createWorkspaceIntegrationTests({
-    suiteName: 'E2B + S3 Multi-Mount Integration',
+    suiteName: 'E2B + S3/GCS Multi-Mount Integration',
     testTimeout: 120000,
+    sandboxPathsAligned: true,
     testScenarios: {
       fileSync: false,
       multiMount: true,
@@ -1055,58 +1054,106 @@ if (canRunSharedIntegration) {
     },
     createWorkspace: async () => {
       const s3Config = getS3TestConfig();
-
-      const fs1 = new S3Filesystem({
+      const s3Fs = new S3Filesystem({
         bucket: s3Config.bucket,
         region: s3Config.region,
         accessKeyId: s3Config.accessKeyId,
         secretAccessKey: s3Config.secretAccessKey,
         endpoint: s3Config.endpoint,
-        prefix: multiPrefix1,
       });
 
-      const fs2 = new S3Filesystem({
-        bucket: s3Config.bucket,
-        region: s3Config.region,
-        accessKeyId: s3Config.accessKeyId,
-        secretAccessKey: s3Config.secretAccessKey,
-        endpoint: s3Config.endpoint,
-        prefix: multiPrefix2,
+      const gcsFs = new GCSFilesystem({
+        bucket: process.env.TEST_GCS_BUCKET!,
+        credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
       });
 
       const sandbox = new E2BSandbox({
-        id: `multi-int-${Date.now()}`,
-        timeout: 180000,
+        id: `multi-s3gcs-${Date.now()}`,
+        timeout: 240000,
       });
-
       await sandbox.start();
-      await sandbox.mount(fs1, mount1Path);
-      await sandbox.mount(fs2, mount2Path);
+      await sandbox.mount(s3Fs, s3Mount);
+      await sandbox.mount(gcsFs, gcsMount);
 
       return {
-        filesystem: fs1,
+        filesystem: s3Fs,
         sandbox,
-        mounts: {
-          [mount1Path]: fs1,
-          [mount2Path]: fs2,
-        },
+        mounts: { [s3Mount]: s3Fs, [gcsMount]: gcsFs },
       };
     },
     cleanupWorkspace: async setup => {
-      if (setup.mounts) {
-        for (const fs of Object.values(setup.mounts)) {
-          try {
-            const files = await fs.readdir('/');
-            for (const file of files) {
-              if (file.type === 'file') {
-                await fs.deleteFile(`/${file.name}`, { force: true });
-              } else if (file.type === 'directory') {
-                await fs.rmdir(`/${file.name}`, { recursive: true });
-              }
-            }
-          } catch {
-            // Ignore cleanup errors
+      for (const fs of Object.values(setup.mounts || {})) {
+        try {
+          const files = await fs.readdir('/');
+          for (const f of files) {
+            if (f.type === 'file') await fs.deleteFile(`/${f.name}`, { force: true });
+            else if (f.type === 'directory') await fs.rmdir(`/${f.name}`, { recursive: true });
           }
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+      try {
+        await setup.sandbox.destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+    },
+  });
+}
+
+/**
+ * S3+S3 Multi-Mount Integration Tests
+ *
+ * Same bucket with different prefixes. s3fs FUSE mounts the full bucket,
+ * so sandbox paths don't align with prefix-scoped API paths.
+ * Only the API-level isolation test runs; sandbox-dependent tests are skipped.
+ */
+if (canRunSharedIntegration) {
+  const s3Mount1 = '/data/multi-s3a';
+  const s3Mount2 = '/data/multi-s3b';
+
+  createWorkspaceIntegrationTests({
+    suiteName: 'E2B + S3+S3 Multi-Mount Integration',
+    testTimeout: 120000,
+    sandboxPathsAligned: false,
+    testScenarios: {
+      fileSync: false,
+      multiMount: true,
+      crossMountCopy: false,
+    },
+    createWorkspace: async () => {
+      const s3Config = getS3TestConfig();
+      const prefix1 = `multi-s3a-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const prefix2 = `multi-s3b-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const s3Fs1 = new S3Filesystem({ ...s3Config, prefix: prefix1 });
+      const s3Fs2 = new S3Filesystem({ ...s3Config, prefix: prefix2 });
+
+      const sandbox = new E2BSandbox({
+        id: `multi-s3s3-${Date.now()}`,
+        timeout: 240000,
+      });
+      await sandbox.start();
+      await sandbox.mount(s3Fs1, s3Mount1);
+      await sandbox.mount(s3Fs2, s3Mount2);
+
+      return {
+        filesystem: s3Fs1,
+        sandbox,
+        mounts: { [s3Mount1]: s3Fs1, [s3Mount2]: s3Fs2 },
+      };
+    },
+    cleanupWorkspace: async setup => {
+      for (const fs of Object.values(setup.mounts || {})) {
+        try {
+          const files = await fs.readdir('/');
+          for (const f of files) {
+            if (f.type === 'file') await fs.deleteFile(`/${f.name}`, { force: true });
+            else if (f.type === 'directory') await fs.rmdir(`/${f.name}`, { recursive: true });
+          }
+        } catch {
+          // Ignore cleanup errors
         }
       }
       try {
@@ -1126,7 +1173,6 @@ if (canRunSharedIntegration) {
  */
 if (canRunSharedIntegration) {
   const roMountPath = '/data/s3-readonly-shared';
-  const roPrefix = `ro-int-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   createWorkspaceIntegrationTests({
     suiteName: 'E2B + S3 Read-Only Mount Integration',
@@ -1144,7 +1190,6 @@ if (canRunSharedIntegration) {
         accessKeyId: s3Config.accessKeyId,
         secretAccessKey: s3Config.secretAccessKey,
         endpoint: s3Config.endpoint,
-        prefix: roPrefix,
         readOnly: true,
       });
 
