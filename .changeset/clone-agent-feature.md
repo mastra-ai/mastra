@@ -5,6 +5,14 @@
 '@mastra/playground-ui': minor
 ---
 
-Add clone agent feature. Code-defined or stored agents can be cloned into new stored agents via `POST /agents/:agentId/clone`. The clone serializes the agent's resolved config (model, instructions, tools, workflows, memory, etc.) using the provided `requestContext` and saves it as a new stored agent.
+Add clone agent feature. Code-defined or stored agents can be cloned into new stored agents via a "Clone" button in the playground or the client SDK:
 
-Also replaces `@sindresorhus/slugify` in `@mastra/server` with a lightweight inline `toSlug` helper to avoid ESM-only transitive dependency issues in dev mode.
+```ts
+const client = new MastraClient();
+const cloned = await client.getAgent('my-agent').clone({
+  newName: 'My Agent Copy',
+  requestContext: { workspace: 'dev' },
+});
+```
+
+The clone serializes the agent's full resolved configuration — model, instructions, tools, workflows, sub-agents, memory, input/output processors, and scorers — using the caller's `requestContext` and persists it as a new stored agent.
