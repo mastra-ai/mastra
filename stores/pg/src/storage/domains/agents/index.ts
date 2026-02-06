@@ -1021,12 +1021,13 @@ export class AgentsPG extends AgentsStorage {
   // Private Helper Methods
   // ==========================================================================
 
-  private serializeInstructions(instructions: string | AgentInstructionBlock[]): string {
+  private serializeInstructions(instructions: string | AgentInstructionBlock[] | undefined | null): string | undefined {
+    if (instructions == null) return undefined;
     return Array.isArray(instructions) ? JSON.stringify(instructions) : instructions;
   }
 
-  private deserializeInstructions(raw: string): string | AgentInstructionBlock[] {
-    if (!raw) return raw;
+  private deserializeInstructions(raw: string | null | undefined): string | AgentInstructionBlock[] {
+    if (!raw) return '';
     try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed as AgentInstructionBlock[];

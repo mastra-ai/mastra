@@ -52,10 +52,6 @@ const scorerConfigSchema = z.object({
 });
 
 /**
- * Agent snapshot config fields (name, description, instructions, model, tools, etc.)
- * These live in version snapshots, not on the thin agent record.
- */
-/**
  * Rule and RuleGroup schemas for conditional prompt block evaluation.
  */
 const ruleSchema = z.object({
@@ -103,6 +99,10 @@ export const instructionsSchema = z
   .union([z.string(), z.array(agentInstructionBlockSchema)])
   .describe('System instructions for the agent (string or array of instruction blocks)');
 
+/**
+ * Agent snapshot config fields (name, description, instructions, model, tools, etc.)
+ * These live in version snapshots, not on the thin agent record.
+ */
 const snapshotConfigSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),

@@ -387,8 +387,8 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
     direction: ThreadSortDirection,
   ): StoragePromptBlockType[] {
     return blocks.sort((a, b) => {
-      const aValue = new Date(a[field]).getTime();
-      const bValue = new Date(b[field]).getTime();
+      const aValue = a[field].getTime();
+      const bValue = b[field].getTime();
 
       return direction === 'ASC' ? aValue - bValue : bValue - aValue;
     });

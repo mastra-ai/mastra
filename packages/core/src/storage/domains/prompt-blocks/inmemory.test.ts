@@ -382,7 +382,9 @@ describe('InMemoryPromptBlocksStorage', () => {
     it('should filter by authorId', async () => {
       const result = await storage.listPromptBlocks({ authorId: 'author-a' });
       expect(result.promptBlocks).toHaveLength(3);
-      result.promptBlocks.forEach(b => expect(b.authorId).toBe('author-a'));
+      result.promptBlocks.forEach(b => {
+        expect(b.authorId).toBe('author-a');
+      });
     });
 
     it('should filter by metadata', async () => {

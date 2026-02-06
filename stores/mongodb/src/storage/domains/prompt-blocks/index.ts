@@ -245,7 +245,6 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
       // If we have config updates, create a new version
       if (Object.keys(configFields).length > 0) {
         const latestVersion = await this.getLatestVersion(id);
-        const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
 
         if (!latestVersion) {
           throw new MastraError({
@@ -263,7 +262,7 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
         await this.createVersion({
           id: randomUUID(),
           blockId: id,
-          versionNumber: nextVersionNumber,
+          versionNumber: latestVersion.versionNumber + 1,
           ...existingSnapshot,
           ...configFields,
           changedFields: Object.keys(configFields),

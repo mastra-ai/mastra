@@ -37,9 +37,11 @@ export async function resolveInstructionBlocks(
   const segments: string[] = [];
 
   // Batch-fetch all prompt block ref IDs to avoid N+1 queries
-  const blockIds = blocks
-    .filter((b): b is { type: 'prompt_block_ref'; id: string } => b.type === 'prompt_block_ref')
-    .map(b => b.id);
+  const blockIds = [
+    ...new Set(
+      blocks.filter((b): b is { type: 'prompt_block_ref'; id: string } => b.type === 'prompt_block_ref').map(b => b.id),
+    ),
+  ];
 
   const resolvedBlocksMap = new Map<string, StorageResolvedPromptBlockType>();
   if (blockIds.length > 0) {

@@ -740,8 +740,8 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
-      createdAt: row.createdAtZ || row.createdAt,
-      updatedAt: row.updatedAtZ || row.updatedAt,
+      createdAt: new Date(row.createdAtZ || row.createdAt),
+      updatedAt: new Date(row.updatedAtZ || row.updatedAt),
     };
   }
 
@@ -756,7 +756,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       rules: this.parseJson(row.rules, 'rules'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
-      createdAt: row.createdAtZ || row.createdAt,
+      createdAt: new Date(row.createdAtZ || row.createdAt),
     };
   }
 }
