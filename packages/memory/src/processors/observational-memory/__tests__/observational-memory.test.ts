@@ -2470,18 +2470,23 @@ describe('Locking Behavior', () => {
       lastObservedAt: new Date(),
     });
 
-    // Set the isReflecting flag to true
+    // Set the isReflecting flag to true — simulating a stale flag from a crashed process
     const record = await storage.getObservationalMemory('thread-1', 'resource-1');
     await storage.setReflectingFlag(record!.id, true);
 
-    // Try to reflect - should be skipped because isReflecting is true
+    // Try to reflect — stale isReflecting should be detected and cleared,
+    // because no operation is registered in this process's activeOps registry
     await (om as any).maybeReflect(
       { ...record, isReflecting: true },
       500, // Token count exceeds threshold
     );
 
-    // Reflector should NOT have been called
-    expect(reflectorCalled).toBe(false);
+    // Reflector SHOULD be called because the stale flag was cleared
+    expect(reflectorCalled).toBe(true);
+
+    // Verify the flag was cleared in storage
+    const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
+    expect(updatedRecord!.isReflecting).toBe(false);
   });
 
   it('should skip observation when isObserving flag is true in processOutputResult', async () => {
@@ -3651,12 +3656,16 @@ describe('Async Buffering Processor Logic', () => {
         createTestMessage('New message', 'user', 'msg-2'),
       ];
 
-      // Access private method via prototype trick
+      // Default: buffered messages are NOT excluded (main agent still sees them)
       const unobserved = (om as any).getUnobservedMessages(allMessages, updatedRecord!);
+      expect(unobserved).toHaveLength(3);
 
-      // msg-0 and msg-1 should be excluded (in buffered chunks), msg-2 should be included
-      expect(unobserved).toHaveLength(1);
-      expect(unobserved[0].id).toBe('msg-2');
+      // With excludeBuffered: buffered messages ARE excluded (buffering path only)
+      const unobservedForBuffering = (om as any).getUnobservedMessages(allMessages, updatedRecord!, {
+        excludeBuffered: true,
+      });
+      expect(unobservedForBuffering).toHaveLength(1);
+      expect(unobservedForBuffering[0].id).toBe('msg-2');
     });
 
     it('should include all messages when no buffered chunks exist', async () => {
@@ -3730,11 +3739,17 @@ describe('Async Buffering Processor Logic', () => {
         createTestMessage('New 2', 'assistant', 'msg-3'),
       ];
 
-      const unobserved = (om as any).getUnobservedMessages(allMessages, updatedRecord!);
+      // Default (excludeBuffered=false): only observedMessageIds are excluded, buffered messages still visible
+      const unobservedDefault = (om as any).getUnobservedMessages(allMessages, updatedRecord!);
+      expect(unobservedDefault).toHaveLength(3);
+      expect(unobservedDefault.map((m: MastraDBMessage) => m.id)).toEqual(['msg-1', 'msg-2', 'msg-3']);
 
-      // msg-0 excluded (observedMessageIds), msg-1 excluded (buffered chunks), msg-2 and msg-3 included
-      expect(unobserved).toHaveLength(2);
-      expect(unobserved.map((m: MastraDBMessage) => m.id)).toEqual(['msg-2', 'msg-3']);
+      // With excludeBuffered=true: both observedMessageIds AND buffered chunks are excluded
+      const unobservedExcluded = (om as any).getUnobservedMessages(allMessages, updatedRecord!, {
+        excludeBuffered: true,
+      });
+      expect(unobservedExcluded).toHaveLength(2);
+      expect(unobservedExcluded.map((m: MastraDBMessage) => m.id)).toEqual(['msg-2', 'msg-3']);
     });
   });
 
@@ -3899,7 +3914,7 @@ describe('Async Buffering Processor Logic', () => {
       expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(true);
     });
 
-    it('should not re-trigger when record.isBufferingObservation is true', () => {
+    it('should treat stale isBufferingObservation flag as cleared (no active op in process)', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -3912,8 +3927,9 @@ describe('Async Buffering Processor Logic', () => {
         reflection: { observationTokens: 20000, asyncActivation: 0.5 },
       });
 
+      // isBufferingObservation=true but no op registered in this process → stale, should allow trigger
       const bufferingRecord = { isBufferingObservation: true, lastBufferedAtTokens: 0 } as any;
-      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', bufferingRecord)).toBe(false);
+      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', bufferingRecord)).toBe(true);
     });
 
     it('should not re-trigger for the same interval using record.lastBufferedAtTokens', () => {
@@ -4032,7 +4048,7 @@ describe('Async Buffering Processor Logic', () => {
       expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', recordWithBuffer)).toBe(false);
     });
 
-    it('should not trigger when record.isBufferingReflection is true', () => {
+    it('should treat stale isBufferingReflection flag as cleared (no active op in process)', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -4048,8 +4064,9 @@ describe('Async Buffering Processor Logic', () => {
         },
       });
 
+      // isBufferingReflection=true but no op registered in this process → stale, should allow trigger
       const bufferingRecord = { bufferedReflection: undefined, isBufferingReflection: true } as any;
-      expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', bufferingRecord)).toBe(false);
+      expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', bufferingRecord)).toBe(true);
     });
 
     it('should only trigger once per buffer key (in-memory fallback)', () => {
@@ -4998,8 +5015,8 @@ describe('Full Async Buffering Flow', () => {
     expect((om as any).observationConfig.bufferEvery).toBe(5000);
   });
 
-  it('should resolve fractional blockAfter to absolute token count with headroom', () => {
-    // blockAfter: 0.25 with messageTokens: 20000 → 25000 (20000 * 1.25)
+  it('should resolve fractional blockAfter to absolute token count with multiplier', () => {
+    // blockAfter: 1.25 with messageTokens: 20000 → 25000 (20000 * 1.25)
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -5008,7 +5025,7 @@ describe('Full Async Buffering Flow', () => {
         messageTokens: 20000,
         bufferEvery: 5000,
         asyncActivation: 0.7,
-        blockAfter: 0.25,
+        blockAfter: 1.25,
       },
       reflection: { observationTokens: 5000, asyncActivation: 0.5 },
     });

@@ -1686,6 +1686,7 @@ Notes:
             modelSettings: omConfig.reflection.modelSettings,
             providerOptions: omConfig.reflection.providerOptions,
             asyncActivation: omConfig.reflection.asyncActivation,
+            blockAfter: omConfig.reflection.blockAfter,
           }
         : undefined,
     });

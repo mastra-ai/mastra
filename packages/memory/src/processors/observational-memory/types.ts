@@ -123,9 +123,9 @@ export interface ObservationConfig {
    * Above `blockAfter`, a synchronous observation runs as a last resort.
    *
    * Accepts either:
-   * - A fraction (0 < value < 1): extra headroom above `messageTokens`.
-   *   e.g. `blockAfter: 0.25` with `messageTokens: 20_000` → blocks at 25,000.
-   * - An absolute token count (≥ 1): must be greater than `messageTokens`.
+   * - A multiplier (1 < value < 2): multiplied by `messageTokens`.
+   *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000.
+   * - An absolute token count (≥ 2): must be greater than `messageTokens`.
    *
    * Only relevant when `bufferEvery` is set.
    * If not set, synchronous observation is never used when async buffering is enabled.
@@ -168,6 +168,21 @@ export interface ReflectionConfig {
    * @default { google: { thinkingConfig: { thinkingBudget: 1024 } } }
    */
   providerOptions?: ProviderOptions;
+
+  /**
+   * Token threshold above which synchronous (blocking) reflection is forced.
+   * Between `observationTokens` and `blockAfter`, only async buffering/activation is used.
+   * Above `blockAfter`, a synchronous reflection runs as a last resort.
+   *
+   * Accepts either:
+   * - A multiplier (1 < value < 2): multiplied by `observationTokens`.
+   *   e.g. `blockAfter: 1.5` with `observationTokens: 30_000` → blocks at 45,000.
+   * - An absolute token count (≥ 2): must be greater than `observationTokens`.
+   *
+   * Only relevant when `asyncActivation` is set.
+   * If not set, synchronous reflection is never used when async reflection is enabled.
+   */
+  blockAfter?: number;
 
   /**
    * Ratio (0-1) controlling when async reflection buffering starts.

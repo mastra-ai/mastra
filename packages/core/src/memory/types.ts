@@ -489,9 +489,9 @@ export interface ObservationalMemoryObservationConfig {
    * last resort to prevent context window overflow.
    *
    * Accepts either:
-   * - A **fraction** (0 < value < 1): extra headroom above `messageTokens`.
-   *   e.g. `blockAfter: 0.25` with `messageTokens: 20_000` → blocks at 25,000 tokens.
-   * - An **absolute token count** (≥ 1): must be greater than `messageTokens`.
+   * - A **multiplier** (1 < value < 2): multiplied by `messageTokens`.
+   *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000 tokens.
+   * - An **absolute token count** (≥ 2): must be greater than `messageTokens`.
    *   e.g. `blockAfter: 80_000` → blocks at 80,000 tokens.
    *
    * Only relevant when `bufferEvery` is set.
@@ -499,11 +499,11 @@ export interface ObservationalMemoryObservationConfig {
    *
    * @example
    * ```ts
-   * // Fraction: 25% headroom above messageTokens
+   * // Multiplier: 1.5x messageTokens
    * observation: {
    *   messageTokens: 20_000,
    *   bufferEvery: 0.25,
-   *   blockAfter: 0.25, // resolves to 25,000
+   *   blockAfter: 1.5, // resolves to 30,000
    * }
    * // Absolute: explicit token count
    * observation: {
@@ -560,6 +560,24 @@ export interface ObservationalMemoryReflectionConfig {
    * @default { google: { thinkingConfig: { thinkingBudget: 1024 } } }
    */
   providerOptions?: Record<string, Record<string, unknown> | undefined>;
+
+  /**
+   * Token threshold above which synchronous (blocking) reflection is forced.
+   * When set with async reflection enabled, the system will not block for
+   * reflection between `observationTokens` and `blockAfter` — only async
+   * buffering and activation are used in that range. Once observation tokens
+   * exceed `blockAfter`, a synchronous reflection runs as a last resort.
+   *
+   * Accepts either:
+   * - A **multiplier** (1 < value < 2): multiplied by `observationTokens`.
+   *   e.g. `blockAfter: 1.5` with `observationTokens: 30_000` → blocks at 45,000 tokens.
+   * - An **absolute token count** (≥ 2): must be greater than `observationTokens`.
+   *   e.g. `blockAfter: 50_000` → blocks at 50,000 tokens.
+   *
+   * Only relevant when `asyncActivation` is set.
+   * If not set, synchronous reflection is never used when async reflection is enabled.
+   */
+  blockAfter?: number;
 
   /**
    * Ratio (0-1) controlling when async reflection buffering starts.
