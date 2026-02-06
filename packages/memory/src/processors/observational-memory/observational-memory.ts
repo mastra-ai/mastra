@@ -20,7 +20,7 @@ const OM_DEBUG_LOG = process.env.OM_DEBUG ? join(process.cwd(), 'om-debug.log') 
 function omDebug(msg: string) {
   if (!OM_DEBUG_LOG) return;
   try {
-    appendFileSync(OM_DEBUG_LOG, `[${new Date().toISOString()}] ${msg}\n`);
+    appendFileSync(OM_DEBUG_LOG, `[${new Date().toLocaleString()}] ${msg}\n`);
   } catch {
     // ignore write errors
   }
