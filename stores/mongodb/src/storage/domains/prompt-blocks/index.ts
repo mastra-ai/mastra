@@ -275,6 +275,10 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
       if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
       if (metadataFields.activeVersionId !== undefined) {
         updateDoc.activeVersionId = metadataFields.activeVersionId;
+        // Auto-set status to 'published' when activeVersionId is set, consistent with InMemory and LibSQL
+        if (metadataFields.status === undefined) {
+          updateDoc.status = 'published';
+        }
       }
       if (metadataFields.status !== undefined) {
         updateDoc.status = metadataFields.status;

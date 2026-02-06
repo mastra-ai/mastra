@@ -273,6 +273,11 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       if (activeVersionId !== undefined) {
         setClauses.push(`"activeVersionId" = $${paramIndex++}`);
         values.push(activeVersionId);
+        // Auto-set status to 'published' when activeVersionId is set, consistent with InMemory and LibSQL
+        if (status === undefined) {
+          setClauses.push(`status = $${paramIndex++}`);
+          values.push('published');
+        }
       }
 
       if (status !== undefined) {
