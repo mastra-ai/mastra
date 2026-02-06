@@ -99,7 +99,7 @@ describe('ModelsDevGateway', () => {
       expect(providers.cerebras.url).toBeUndefined(); // No URL needed - uses native @ai-sdk/cerebras
     });
 
-    it('should apply OPENAI_COMPATIBLE_OVERRIDES', async () => {
+    it('should apply PROVIDER_OVERRIDES', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockApiResponse,
