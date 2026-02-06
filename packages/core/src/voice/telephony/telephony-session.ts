@@ -41,7 +41,8 @@ import { RegisteredLogger } from '../../logger';
 import type { CompositeVoice } from '../composite-voice';
 import type { MastraVoice } from '../voice';
 
-import { mulawToPcm, pcmToMulaw, type AudioCodec } from './audio-codecs';
+import type { AudioCodec } from './audio-codecs';
+import { mulawToPcm, pcmToMulaw } from './audio-codecs';
 
 /**
  * Configuration for TelephonySession
