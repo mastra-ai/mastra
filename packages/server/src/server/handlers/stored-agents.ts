@@ -1,3 +1,5 @@
+import slugify from '@sindresorhus/slugify';
+
 import { HTTPException } from '../http-exception';
 import {
   storedAgentIdPathParams,
@@ -118,7 +120,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({
     mastra,
-    id,
+    id: providedId,
     authorId,
     metadata,
     name,
@@ -145,6 +147,15 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+      }
+
+      // Derive ID from name if not explicitly provided
+      const id = providedId || slugify(name);
+
+      if (!id) {
+        throw new HTTPException(400, {
+          message: 'Could not derive agent ID from name. Please provide an explicit id.',
+        });
       }
 
       // Check if agent with this ID already exists

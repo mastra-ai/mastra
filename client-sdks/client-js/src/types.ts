@@ -771,7 +771,8 @@ export interface ListStoredAgentsResponse {
  * Flat union of agent-record fields and config fields.
  */
 export interface CreateStoredAgentParams {
-  id: string;
+  /** Unique identifier for the agent. If not provided, derived from name via slugify. */
+  id?: string;
   authorId?: string;
   metadata?: Record<string, unknown>;
   name: string;

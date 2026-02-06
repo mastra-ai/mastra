@@ -139,20 +139,31 @@ const agentMetadataSchema = z.object({
 /**
  * POST /stored/agents - Create stored agent body
  * Flat union of agent-record fields + config fields
+ * The id is optional — if not provided, it will be derived from the agent name via slugify.
  */
 export const createStoredAgentBodySchema = z
   .object({
-    id: z.string().describe('Unique identifier for the agent'),
+    id: z.string().optional().describe('Unique identifier for the agent. If not provided, derived from name.'),
     authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
   })
   .merge(snapshotConfigSchema);
 
 /**
+ * Snapshot config schema for updates where nullable fields (like memory) can be set to null to clear them.
+ */
+const snapshotConfigUpdateSchema = snapshotConfigSchema.extend({
+  memory: z
+    .union([serializedMemoryConfigSchema, z.null()])
+    .optional()
+    .describe('Memory configuration object (SerializedMemoryConfig), or null to disable memory'),
+});
+
+/**
  * PATCH /stored/agents/:storedAgentId - Update stored agent body
  * Optional metadata-level fields + optional config fields
  */
-export const updateStoredAgentBodySchema = agentMetadataSchema.partial().merge(snapshotConfigSchema.partial());
+export const updateStoredAgentBodySchema = agentMetadataSchema.partial().merge(snapshotConfigUpdateSchema.partial());
 
 // ============================================================================
 // Response Schemas
