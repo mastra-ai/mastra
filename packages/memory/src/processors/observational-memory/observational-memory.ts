@@ -2264,9 +2264,10 @@ ${suggestedResponse}
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
       }
 
-      // Note: Messages are NOT removed from context here.
-      // They will be filtered out in subsequent steps because getUnobservedMessages
-      // checks observedMessageIds, and fully removed at the next turn's step 0.
+      // Note: Messages are NOT removed from context here, and we do NOT clear
+      // input/response tracking. The assistant is still streaming — new content
+      // needs to remain tracked so processOutputResult can save it.
+      return;
     } else {
       // No marker found — fall back to source-based clearing
       const newInput = messageList.clear.input.db();
@@ -2278,6 +2279,7 @@ ${suggestedResponse}
     }
 
     // Clear any remaining input/response tracking
+    // (only reached for marker-based and fallback paths, NOT activation path)
     messageList.clear.input.db();
     messageList.clear.response.db();
   }
