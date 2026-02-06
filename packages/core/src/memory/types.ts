@@ -462,16 +462,20 @@ export interface ObservationalMemoryObservationConfig {
   bufferEvery?: number;
 
   /**
-   * Percentage of buffered observations to activate when threshold is reached (0-100).
-   * Setting this below 100 keeps some observations in reserve, which helps maintain
+   * Ratio (0-1) of buffered observations to activate when threshold is reached.
+   * Setting this below 1 keeps some observations in reserve, which helps maintain
    * conversation continuity and provides a buffer for the next activation cycle.
    *
-   * @default 100 (activate all buffered observations)
+   * Requires `bufferEvery` to also be set.
+   *
+   * @default 1 (activate all buffered observations)
    * @example
    * ```ts
-   * // Activate 75% of buffered observations, keep 25% in reserve
+   * // Activate 70% of buffered observations, keep 30% in reserve
    * observation: {
-   *   asyncActivation: 75,
+   *   messageTokens: 20_000,
+   *   bufferEvery: 0.25,
+   *   asyncActivation: 0.7,
    * }
    * ```
    */

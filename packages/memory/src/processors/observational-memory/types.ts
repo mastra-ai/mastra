@@ -108,10 +108,12 @@ export interface ObservationConfig {
   bufferEvery?: number;
 
   /**
-   * Percentage of buffered observations to activate when threshold is reached (0-100).
-   * Setting this below 100 keeps some observations in reserve for continuity.
+   * Ratio (0-1) of buffered observations to activate when threshold is reached.
+   * Setting this below 1 keeps some observations in reserve for continuity.
    *
-   * @default 100 (activate all buffered observations)
+   * Requires `bufferEvery` to also be set.
+   *
+   * @default 1 (activate all buffered observations)
    */
   asyncActivation?: number;
 
