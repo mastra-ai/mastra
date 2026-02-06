@@ -2302,6 +2302,10 @@ export class Agent<
                 }) ||
                 `${slugify.default(this.id)}-${agentName}`;
 
+              const suspendedToolRunId = (inputData as any).suspendedToolRunId;
+
+              const { resumeData, suspend } = context?.agent ?? {};
+
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(modelVersion)
@@ -2318,20 +2322,40 @@ export class Agent<
                 //   },
                 // ]);
 
-                const generateResult = await agent.generate(inputData.prompt, {
-                  requestContext,
-                  tracingContext: context?.tracingContext,
-                  ...(inputData.instructions && { instructions: inputData.instructions }),
-                  ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
-                  ...(resourceId && threadId
-                    ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                        },
-                      }
-                    : {}),
-                });
+                const generateResult = resumeData
+                  ? await agent.resumeGenerate(resumeData, {
+                      runId: suspendedToolRunId,
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(inputData.instructions && { instructions: inputData.instructions }),
+                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...(resourceId && threadId
+                        ? { memory: { resource: subAgentResourceId, thread: subAgentThreadId } }
+                        : {}),
+                    })
+                  : await agent.generate(inputData.prompt, {
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(inputData.instructions && { instructions: inputData.instructions }),
+                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...(resourceId && threadId
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                            },
+                          }
+                        : {}),
+                    });
+
+                if (generateResult.finishReason === 'suspended') {
+                  return suspend?.(generateResult.suspendPayload, {
+                    resumeSchema: generateResult.resumeSchema,
+                    runId: generateResult.runId,
+                    isAgentSuspend: true,
+                  });
+                }
+
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
                 const generateResult = await agent.generateLegacy(inputData.prompt, {
@@ -2347,20 +2371,36 @@ export class Agent<
                   agent.__setMemory(this.#memory);
                 }
 
-                const streamResult = await agent.stream(inputData.prompt, {
-                  requestContext,
-                  tracingContext: context?.tracingContext,
-                  ...(inputData.instructions && { instructions: inputData.instructions }),
-                  ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
-                  ...(resourceId && threadId
-                    ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                        },
-                      }
-                    : {}),
-                });
+                const streamResult = resumeData
+                  ? await agent.resumeStream(resumeData, {
+                      runId: suspendedToolRunId,
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(inputData.instructions && { instructions: inputData.instructions }),
+                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...(resourceId && threadId
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                            },
+                          }
+                        : {}),
+                    })
+                  : await agent.stream(inputData.prompt, {
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(inputData.instructions && { instructions: inputData.instructions }),
+                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...(resourceId && threadId
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                            },
+                          }
+                        : {}),
+                    });
 
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
@@ -2369,8 +2409,36 @@ export class Agent<
                     if (chunk.type.startsWith('data-')) {
                       // Write data chunks directly to original stream to bubble up
                       await context.writer.custom(chunk as any);
+                      if (chunk.type === 'data-tool-call-approval') {
+                        return suspend?.(
+                          {},
+                          { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
+                        );
+                      }
+
+                      if (chunk.type === 'data-tool-call-suspended') {
+                        return suspend?.(chunk.data.suspendPayload, {
+                          resumeSchema: chunk.data.resumeSchema,
+                          runId: streamResult.runId,
+                          isAgentSuspend: true,
+                        });
+                      }
                     } else {
                       await context.writer.write(chunk);
+                      if (chunk.type === 'tool-call-approval') {
+                        return suspend?.(
+                          {},
+                          { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
+                        );
+                      }
+
+                      if (chunk.type === 'tool-call-suspended') {
+                        return suspend?.(chunk.payload.suspendPayload, {
+                          resumeSchema: chunk.payload.resumeSchema,
+                          runId: streamResult.runId,
+                          isAgentSuspend: true,
+                        });
+                      }
                     }
                   }
 

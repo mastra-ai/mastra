@@ -1,5 +1,19 @@
 # @mastra/editor
 
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed stale agent data in CMS pages by adding removeAgent method to Mastra and updating clearStoredAgentCache to clear both Editor cache and Mastra registry when stored agents are updated or deleted ([#12693](https://github.com/mastra-ai/mastra/pull/12693))
+
+- Fix memory persistence: ([#12704](https://github.com/mastra-ai/mastra/pull/12704))
+  - Fixed memory persistence bug by handling missing vector store gracefully
+  - When semantic recall is enabled but no vector store is configured, it now disables semantic recall instead of failing
+  - Fixed type compatibility for `embedder` field when creating agents from stored config
+
+- Updated dependencies [[`90f7894`](https://github.com/mastra-ai/mastra/commit/90f7894568dc9481f40a4d29672234fae23090bb), [`8109aee`](https://github.com/mastra-ai/mastra/commit/8109aeeab758e16cd4255a6c36f044b70eefc6a6)]:
+  - @mastra/core@1.2.1-alpha.0
+
 ## 0.2.0
 
 ### Minor Changes

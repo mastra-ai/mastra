@@ -61,6 +61,8 @@ import type {
   GetObservationalMemoryResponse,
   GetMemoryStatusResponse,
   ListWorkspacesResponse,
+  ListVectorsResponse,
+  ListEmbeddersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -866,5 +868,25 @@ export class MastraClient extends BaseResource {
    */
   public getWorkspace(workspaceId: string): Workspace {
     return new Workspace(this.options, workspaceId);
+  }
+
+  // ============================================================================
+  // Vectors & Embedders
+  // ============================================================================
+
+  /**
+   * Lists all available vector stores
+   * @returns Promise containing list of available vector stores
+   */
+  public listVectors(): Promise<ListVectorsResponse> {
+    return this.request('/vectors');
+  }
+
+  /**
+   * Lists all available embedding models
+   * @returns Promise containing list of available embedders
+   */
+  public listEmbedders(): Promise<ListEmbeddersResponse> {
+    return this.request('/embedders');
   }
 }

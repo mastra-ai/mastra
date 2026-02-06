@@ -134,6 +134,12 @@ export type SkillSource =
   | { type: 'local'; projectPath: string }
   | { type: 'managed'; mastraPath: string };
 
+/** Source info for skills installed via skills.sh */
+export interface SkillsShSource {
+  owner: string;
+  repo: string;
+}
+
 export interface SkillMetadata {
   name: string;
   description: string;
@@ -142,6 +148,8 @@ export interface SkillMetadata {
   metadata?: Record<string, unknown>;
   /** Path to the skill directory */
   path: string;
+  /** Source info for skills installed via skills.sh (from .meta.json) */
+  skillsShSource?: SkillsShSource;
 }
 
 export interface Skill extends SkillMetadata {

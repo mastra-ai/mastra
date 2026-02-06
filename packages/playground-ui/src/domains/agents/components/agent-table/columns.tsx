@@ -3,7 +3,6 @@ import { Cell, EntryCell } from '@/ds/components/Table';
 import { OpenAIIcon } from '@/ds/icons/OpenAIIcon';
 import { ColumnDef, Row } from '@tanstack/react-table';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
-import { Code2, Database } from 'lucide-react';
 
 import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
@@ -12,6 +11,7 @@ import { providerMapToIcon } from '../provider-map-icon';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { ToolsIcon, WorkflowIcon, ProcessorIcon } from '@/ds/icons';
 import { extractPrompt } from '../../utils/extractPrompt';
+import { AgentSourceIcon } from '../agent-source-icon';
 
 export type AgentTableColumn = {
   id: string;
@@ -19,26 +19,10 @@ export type AgentTableColumn = {
 
 const NameCell = ({ row, showSourceIcon }: { row: Row<AgentTableColumn>; showSourceIcon?: boolean }) => {
   const { Link, paths } = useLinkComponent();
-  const isStored = row.original.source === 'stored';
-
-  const sourceIcon = showSourceIcon ? (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {isStored ? (
-          <Database className="w-3.5 h-3.5 text-accent6 shrink-0" />
-        ) : (
-          <Code2 className="w-3.5 h-3.5 text-accent3 shrink-0" />
-        )}
-      </TooltipTrigger>
-      <TooltipContent>
-        {isStored ? 'Stored in database - can be edited in UI' : 'Defined in code - read-only in UI'}
-      </TooltipContent>
-    </Tooltip>
-  ) : undefined;
 
   return (
     <EntryCell
-      icon={sourceIcon}
+      icon={showSourceIcon ? <AgentSourceIcon source={row.original.source} /> : undefined}
       name={
         <Link className="w-full" href={paths.agentLink(row.original.id)}>
           {row.original.name}

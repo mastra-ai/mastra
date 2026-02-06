@@ -61,6 +61,13 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
 // =============================================================================
+// Constants
+// =============================================================================
+
+/** Directory path for skills installed via skills.sh */
+const SKILLS_SH_DIR = '.agents/skills';
+
+// =============================================================================
 // Helper Functions
 // =============================================================================
 
@@ -706,6 +713,9 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
 // Skills Routes (under /workspaces/:workspaceId/skills)
 // =============================================================================
 
+/** Path prefix for skills installed via skills.sh (with trailing slash for prefix matching) */
+const SKILLS_SH_PATH_PREFIX = `${SKILLS_SH_DIR}/`;
+
 export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills',
@@ -719,7 +729,8 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
     try {
       requireWorkspaceV1Support();
 
-      const skills = await getSkillsById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const skills = workspace?.skills;
       if (!skills) {
         return { skills: [], isSkillsConfigured: false };
       }
@@ -734,12 +745,30 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
       const skillsWithPath = await Promise.all(
         skillsList.map(async skillMeta => {
           let path = '';
+          let skillsShSource: { owner: string; repo: string } | undefined;
+
           try {
             const fullSkill = await skills.get(skillMeta.name);
             path = fullSkill?.path ?? '';
+
+            // For skills installed via skills.sh, read source info from .meta.json
+            if (path.startsWith(SKILLS_SH_PATH_PREFIX) && workspace.filesystem) {
+              try {
+                const metaPath = `${path}/.meta.json`;
+                const metaContent = await workspace.filesystem.readFile(metaPath);
+                const metaText = typeof metaContent === 'string' ? metaContent : metaContent.toString('utf-8');
+                const meta = JSON.parse(metaText) as { owner?: string; repo?: string };
+                if (meta.owner && meta.repo) {
+                  skillsShSource = { owner: meta.owner, repo: meta.repo };
+                }
+              } catch {
+                // .meta.json might not exist or be invalid - that's ok
+              }
+            }
           } catch {
             // Fall back to empty path if skill details can't be loaded
           }
+
           return {
             name: skillMeta.name,
             description: skillMeta.description,
@@ -747,6 +776,7 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
             compatibility: skillMeta.compatibility,
             metadata: skillMeta.metadata,
             path,
+            skillsShSource,
           };
         }),
       );
@@ -1235,7 +1265,7 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
 
       // Validate skill name to prevent path traversal
       const safeSkillId = assertSafeSkillName(result.skillId);
-      const installPath = `.agents/skills/${safeSkillId}`;
+      const installPath = `${SKILLS_SH_DIR}/${safeSkillId}`;
 
       // Ensure the skills directory exists
       try {
@@ -1332,7 +1362,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
 
       // Validate skill name to prevent path traversal
       const safeSkillName = assertSafeSkillName(skillName);
-      const skillPath = `.agents/skills/${safeSkillName}`;
+      const skillPath = `${SKILLS_SH_DIR}/${safeSkillName}`;
 
       // Check if skill exists
       try {
@@ -1386,7 +1416,6 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         throw new HTTPException(403, { message: 'Workspace is read-only' });
       }
 
-      const skillsPath = '.agents/skills';
       const results: Array<{
         skillName: string;
         success: boolean;
@@ -1401,7 +1430,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         skillsToUpdate = [assertSafeSkillName(skillName)];
       } else {
         try {
-          const entries = await workspace?.filesystem?.readdir(skillsPath);
+          const entries = await workspace?.filesystem?.readdir(SKILLS_SH_DIR);
           skillsToUpdate = entries?.filter(e => e.type === 'directory').map(e => e.name) ?? [];
         } catch {
           // Skills directory doesn't exist or isn't readable - no skills to update
@@ -1422,7 +1451,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
           });
           continue;
         }
-        const metaPath = `${skillsPath}/${skill}/.meta.json`;
+        const metaPath = `${SKILLS_SH_DIR}/${skill}/.meta.json`;
         try {
           const metaContent = await workspace?.filesystem?.readFile(metaPath, { encoding: 'utf-8' });
           const meta: SkillMetaFile = JSON.parse(metaContent as string);
@@ -1439,7 +1468,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
             continue;
           }
 
-          const installPath = `${skillsPath}/${skill}`;
+          const installPath = `${SKILLS_SH_DIR}/${skill}`;
           let filesWritten = 0;
 
           for (const file of fetchResult.files) {
