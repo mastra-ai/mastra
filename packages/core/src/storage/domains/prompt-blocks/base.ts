@@ -165,8 +165,8 @@ export abstract class PromptBlocksStorage extends StorageDomain {
 
       // Warn if activeVersionId points to a non-existent version
       if (!version) {
-        console.warn(
-          `[PromptBlocksStorage] Prompt block ${block.id} has activeVersionId ${block.activeVersionId} but version not found. Falling back to latest version.`,
+        this.logger?.warn?.(
+          `Prompt block ${block.id} has activeVersionId ${block.activeVersionId} but version not found. Falling back to latest version.`,
         );
       }
     }
