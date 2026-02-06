@@ -71,12 +71,6 @@ const mainNavigation: NavSection[] = [
         isOnMastraPlatform: true,
       },
       {
-        name: 'Datasets',
-        url: '/datasets',
-        icon: <DatabaseIcon />,
-        isOnMastraPlatform: false,
-      },
-      {
         name: 'Workspaces',
         url: '/workspaces',
         icon: <FolderIcon />,
@@ -98,6 +92,12 @@ const mainNavigation: NavSection[] = [
         url: '/observability',
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
+      },
+      {
+        name: 'Datasets',
+        url: '/datasets',
+        icon: <DatabaseIcon />,
+        isOnMastraPlatform: false,
       },
     ],
   },
