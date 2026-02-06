@@ -284,7 +284,12 @@ export class MastraModule implements NestModule {
     // Provide MASTRA by extracting from options
     providers.push({
       provide: MASTRA,
-      useFactory: (opts: MastraModuleOptions) => opts.mastra,
+      useFactory: (opts: MastraModuleOptions) => {
+        if (!opts.mastra) {
+          throw new Error('MastraModule: "mastra" instance is required in MastraModuleOptions');
+        }
+        return opts.mastra;
+      },
       inject: [MASTRA_OPTIONS],
     });
 

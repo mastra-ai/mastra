@@ -44,7 +44,10 @@ export class AuthService {
       return undefined;
     }
 
-    const getHeader = (name: string) => request.headers[name.toLowerCase()] as string | undefined;
+    const getHeader = (name: string): string | undefined => {
+      const value = request.headers[name.toLowerCase()];
+      return Array.isArray(value) ? value[0] : value;
+    };
 
     // Check if this is a dev playground request (skip auth in dev mode)
     if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {

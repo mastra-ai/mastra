@@ -129,7 +129,7 @@ export class MastraThrottleGuard implements CanActivate, OnModuleDestroy {
     }
 
     // Use stricter limits for /generate endpoints (LLM calls are expensive)
-    if (request.path.includes('/generate')) {
+    if (/\/generate(?:$|\/)/.test(request.path)) {
       return {
         limit: this.options.rateLimitOptions?.generateLimit ?? 10,
         windowMs: this.options.rateLimitOptions?.windowMs ?? 60000,
