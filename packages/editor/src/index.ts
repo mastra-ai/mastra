@@ -483,7 +483,10 @@ export class MastraEditor implements IMastraEditor {
   private resolveStoredTools(
     storedTools?: Record<string, StorageToolConfig> | string[],
   ): Record<string, ToolAction<any, any, any, any, any, any>> {
-    if (!storedTools || (Array.isArray(storedTools) ? storedTools.length === 0 : Object.keys(storedTools).length === 0)) {
+    if (
+      !storedTools ||
+      (Array.isArray(storedTools) ? storedTools.length === 0 : Object.keys(storedTools).length === 0)
+    ) {
       return {};
     }
 
