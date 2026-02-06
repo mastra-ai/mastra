@@ -27,11 +27,7 @@ import alawmulaw from 'alawmulaw';
  * ```
  */
 export function mulawToPcm(mulawBuffer: Buffer): Int16Array {
-  const pcm = new Int16Array(mulawBuffer.length);
-  for (let i = 0; i < mulawBuffer.length; i++) {
-    pcm[i] = alawmulaw.mulaw.decode(mulawBuffer[i]!);
-  }
-  return pcm;
+  return alawmulaw.mulaw.decode(new Uint8Array(mulawBuffer));
 }
 
 /**
@@ -49,11 +45,7 @@ export function mulawToPcm(mulawBuffer: Buffer): Int16Array {
  * ```
  */
 export function pcmToMulaw(pcm: Int16Array): Buffer {
-  const mulaw = Buffer.alloc(pcm.length);
-  for (let i = 0; i < pcm.length; i++) {
-    mulaw[i] = alawmulaw.mulaw.encode(pcm[i]!);
-  }
-  return mulaw;
+  return Buffer.from(alawmulaw.mulaw.encode(pcm));
 }
 
 /**
@@ -63,11 +55,7 @@ export function pcmToMulaw(pcm: Int16Array): Buffer {
  * @returns Int16Array containing PCM audio (16-bit signed)
  */
 export function alawToPcm(alawBuffer: Buffer): Int16Array {
-  const pcm = new Int16Array(alawBuffer.length);
-  for (let i = 0; i < alawBuffer.length; i++) {
-    pcm[i] = alawmulaw.alaw.decode(alawBuffer[i]!);
-  }
-  return pcm;
+  return alawmulaw.alaw.decode(new Uint8Array(alawBuffer));
 }
 
 /**
@@ -77,11 +65,7 @@ export function alawToPcm(alawBuffer: Buffer): Int16Array {
  * @returns Buffer containing A-law encoded audio (8-bit)
  */
 export function pcmToAlaw(pcm: Int16Array): Buffer {
-  const alaw = Buffer.alloc(pcm.length);
-  for (let i = 0; i < pcm.length; i++) {
-    alaw[i] = alawmulaw.alaw.encode(pcm[i]!);
-  }
-  return alaw;
+  return Buffer.from(alawmulaw.alaw.encode(pcm));
 }
 
 /**
