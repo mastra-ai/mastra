@@ -25,6 +25,7 @@ export type NestedNode = Node<
     isParallel?: boolean;
     canSuspend?: boolean;
     isForEach?: boolean;
+    metadata?: Record<string, unknown>;
   },
   'nested-node'
 >;

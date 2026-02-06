@@ -25,6 +25,10 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentSpan: Span<SpanType.AGENT_RUN>;
   agentId: string;
   methodType: AgentMethodType;
+  /**
+   * Shared processor state map that persists across agent turns.
+   */
+  processorStates?: Map<string, Record<string, unknown>>;
 }
 
 export function createMapResultsStep<OUTPUT = undefined>({
@@ -116,15 +120,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
       return bail(modelOutput);
     }
 
-    let effectiveOutputProcessors =
-      options.outputProcessors ||
-      (capabilities.outputProcessors
-        ? typeof capabilities.outputProcessors === 'function'
-          ? await capabilities.outputProcessors({
-              requestContext: result.requestContext!,
-            })
-          : capabilities.outputProcessors
-        : []);
+    // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
+    let effectiveOutputProcessors = capabilities.outputProcessors
+      ? typeof capabilities.outputProcessors === 'function'
+        ? await capabilities.outputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.outputProcessors,
+          })
+        : options.outputProcessors || capabilities.outputProcessors
+      : options.outputProcessors || [];
 
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     // Only create the processor if a model is explicitly provided
@@ -138,16 +142,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
         : [structuredProcessor];
     }
 
-    // Resolve input processors from options override or agent capability
-    const effectiveInputProcessors =
-      options.inputProcessors ||
-      (capabilities.inputProcessors
-        ? typeof capabilities.inputProcessors === 'function'
-          ? await capabilities.inputProcessors({
-              requestContext: result.requestContext!,
-            })
-          : capabilities.inputProcessors
-        : []);
+    // Resolve input processors - overrides replace user-configured but auto-derived (memory, skills) are kept
+    const effectiveInputProcessors = capabilities.inputProcessors
+      ? typeof capabilities.inputProcessors === 'function'
+        ? await capabilities.inputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.inputProcessors,
+          })
+        : options.inputProcessors || capabilities.inputProcessors
+      : options.inputProcessors || [];
 
     const messageList = memoryData.messageList!;
 
@@ -252,6 +255,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       completion: options.completion,
       // Iteration hook for supervisor patterns
       onIterationComplete: options.onIterationComplete,
+      processorStates: memoryData.processorStates,
     };
 
     return loopOptions;

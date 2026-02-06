@@ -5,7 +5,9 @@ packages:
   - "@mastra/core"
 ---
 
-# Workspace
+# Workspaces
+
+**Added in:** `@mastra/core@1.1.0`
 
 A Mastra workspace gives agents a persistent environment for storing files and executing commands. Agents use workspace tools to read and write files, run shell commands, and search indexed content.
 
@@ -58,7 +60,6 @@ const workspace = new Workspace({
 
 const mastra = new Mastra({
   workspace,
-  agents: { myAgent },
 });
 ```
 

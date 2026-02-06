@@ -39,6 +39,7 @@ import type {
   StepParams,
   ToolStep,
   DefaultEngineType,
+  StepMetadata,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -96,6 +97,7 @@ export function cloneStep<TStepId extends string>(
     execute: step.execute,
     retries: step.retries,
     scorers: step.scorers,
+    metadata: step.metadata,
     component: step.component,
   };
 }
@@ -185,6 +187,7 @@ export function createStep<TStepId extends string, TStepOutput>(
     structuredOutput: { schema: TStepOutput };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
   },
 ): Step<TStepId, unknown, { prompt: string }, TStepOutput, unknown, unknown, DefaultEngineType>;
 
@@ -212,7 +215,7 @@ export function createStep<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
+  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
 ): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /**
@@ -305,6 +308,7 @@ function createStepFromParams(
     requestContextSchema: params.requestContextSchema,
     scorers: params.scorers,
     retries: params.retries,
+    metadata: params.metadata,
     execute: params.execute.bind(params),
   };
 }
@@ -399,12 +403,16 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<TStepId, any, any, TStepOutput, unknown, unknown, DefaultEngineType> {
   const options = (agentOrToolOptions ?? {}) as
-    | (AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
+    | (AgentStepOptions<TStepOutput> & {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+        metadata?: StepMetadata;
+      })
     | undefined;
   // Determine output schema based on structuredOutput option
   const outputSchema = (options?.structuredOutput?.schema ??
     z.object({ text: z.string() })) as unknown as SchemaWithValidation<TStepOutput>;
-  const { retries, scorers, ...agentOptions } = options ?? {};
+  const { retries, scorers, metadata, ...agentOptions } = options ?? {};
 
   return {
     id: params.id,
@@ -415,6 +423,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     outputSchema,
     retries,
     scorers,
+    metadata,
     execute: async ({
       inputData,
       runId,
@@ -522,7 +531,9 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   params: ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
-  const toolOpts = agentOrToolOptions as { retries?: number; scorers?: DynamicArgument<MastraScorers> } | undefined;
+  const toolOpts = agentOrToolOptions as
+    | { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata }
+    | undefined;
   if (!params.inputSchema || !params.outputSchema) {
     throw new Error('Tool must have input and output schemas defined');
   }
@@ -536,6 +547,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
     suspendSchema: params.suspendSchema,
     retries: toolOpts?.retries,
     scorers: toolOpts?.scorers,
+    metadata: toolOpts?.metadata,
     execute: async ({ inputData, mastra, requestContext, suspend, resumeData, runId, workflowId, state, setState }) => {
       // Tools receive (input, context) - just call the tool's execute
       if (!params.execute) {
@@ -637,7 +649,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
-      const input = inputData as ProcessorStepOutput;
+      const input = inputData as ProcessorStepOutput & { abortSignal?: AbortSignal };
       const {
         phase,
         messages,
@@ -660,6 +672,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        // Abort signal for cancelling in-flight processor work (e.g. OM observations)
+        abortSignal,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -715,6 +729,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         retryCount: retryCount ?? 0,
         requestContext,
         tracingContext: processorTracingContext,
+        state: state ?? {},
+        abortSignal,
       };
 
       // Pass-through data that should flow to the next processor in a chain

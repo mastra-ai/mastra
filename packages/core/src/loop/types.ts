@@ -138,6 +138,12 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * Allows monitoring and controlling iteration flow with feedback.
    */
   onIterationComplete?: OnIterationCompleteHandler;
+  /**
+   * Shared processor state that persists across loop iterations.
+   * Used by all processor methods (input and output) to share state.
+   * Keyed by processor ID.
+   */
+  processorStates?: Map<string, ProcessorState>;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopOptions<Tools, OUTPUT> & {
@@ -150,7 +156,6 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
     deserialize: (state: any) => void;
   };
   methodType: ModelMethodType;
-  processorStates?: Map<string, ProcessorState<OUTPUT>>;
 };
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = {

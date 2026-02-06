@@ -61,6 +61,7 @@ export * from './ds/components/CombinedButtons';
 export * from './ds/components/DateTimePicker';
 export * from './ds/components/EntryList';
 export * from './ds/components/FormFields';
+export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
 export * from './ds/components/Notification';
@@ -72,6 +73,8 @@ export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
 export * from './ds/components/Text';
 export * from './ds/components/JSONSchemaForm';
+export * from './ds/components/ContentBlocks';
+export * from './lib/rule-engine';
 
 // Form utilities (AutoForm)
 export * from './lib/form';
@@ -98,5 +101,6 @@ export * from './domains/configuration/index';
 export * from './domains/workspace/index';
 export * from './domains/request-context/index';
 export * from './lib/mastra-platform';
+export * from './domains/cms/index';
 export * from './lib/experimental-features';
 export * from './lib/command';

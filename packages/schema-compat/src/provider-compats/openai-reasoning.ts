@@ -1,8 +1,11 @@
+import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
+import { isArraySchema, isNumberSchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
+import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
 import { isOptional, isObj, isArr, isUnion, isDefault, isNumber, isString, isDate, isNullable } from '../zodTypes';
 
@@ -36,9 +39,7 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
     return false;
   }
 
-  processZodType(value: ZodTypeV3): ZodTypeV3;
-  processZodType(value: ZodTypeV4): ZodTypeV4;
-  processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
+  processZodType(value: ZodType): ZodType {
     if (isOptional(z)(value)) {
       // For OpenAI reasoning models strict mode, convert .optional() to .nullable() with transform
       // The transform converts null -> undefined to match original .optional() semantics
@@ -92,7 +93,7 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
       }
 
       const description = this.mergeParameterDescription(value.description, constraints);
-      let result = this.processZodType(innerType);
+      let result = this.processZodType(innerType as ZodTypeV3 | ZodTypeV4);
       if (description) {
         result = result.describe(description);
       }
@@ -115,5 +116,44 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
     }
 
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
+  }
+
+  preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+    // Process based on schema type
+    if (isObjectSchema(schema)) {
+      this.defaultObjectHandler(schema);
+    } else if (isArraySchema(schema)) {
+      this.defaultArrayHandler(schema);
+    } else if (isNumberSchema(schema)) {
+      this.defaultNumberHandler(schema);
+    } else if (isStringSchema(schema)) {
+      this.defaultStringHandler(schema);
+    }
+  }
+
+  postProcessJSONNode(schema: JSONSchema7): void {
+    // Handle union schemas in post-processing (after children are processed)
+    if (isUnionSchema(schema)) {
+      this.defaultUnionHandler(schema);
+    }
+
+    // Fix v4-specific issues in post-processing
+    if (isObjectSchema(schema)) {
+      // OpenAI reasoning models don't support passthrough, but we still need to fix empty additionalProperties
+      if (
+        schema.additionalProperties !== undefined &&
+        typeof schema.additionalProperties === 'object' &&
+        schema.additionalProperties !== null &&
+        Object.keys(schema.additionalProperties).length === 0
+      ) {
+        // For reasoning models, set to false (strict mode)
+        schema.additionalProperties = false;
+      }
+
+      // Fix record schemas: remove propertyNames (v4 adds this but it's not needed)
+      if ('propertyNames' in schema) {
+        delete (schema as Record<string, unknown>).propertyNames;
+      }
+    }
   }
 }
