@@ -8,7 +8,16 @@ const instructionBlockSchema = z.object({
   rules: z.array(
     z.object({
       field: z.string(),
-      operator: z.enum(['equals', 'not_equals', 'contains', 'not_contains', 'greater_than', 'less_than', 'in', 'not_in']),
+      operator: z.enum([
+        'equals',
+        'not_equals',
+        'contains',
+        'not_contains',
+        'greater_than',
+        'less_than',
+        'in',
+        'not_in',
+      ]),
       value: z.unknown(),
     }),
   ),
