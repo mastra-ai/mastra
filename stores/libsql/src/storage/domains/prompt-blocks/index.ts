@@ -155,9 +155,11 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       if (authorId !== undefined) updateData.authorId = authorId;
       if (activeVersionId !== undefined) {
         updateData.activeVersionId = activeVersionId;
-        updateData.status = 'published';
+        if (status === undefined) {
+          updateData.status = 'published';
+        }
       }
-      if (status !== undefined && activeVersionId === undefined) updateData.status = status;
+      if (status !== undefined) updateData.status = status;
       if (metadata !== undefined) {
         updateData.metadata = { ...existing.metadata, ...metadata };
       }
@@ -205,7 +207,16 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
 
       // Fetch and return updated block
       const updated = await this.getPromptBlockById({ id });
-      return updated!;
+      if (!updated) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND_AFTER_UPDATE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: `Prompt block ${id} not found after update`,
+          details: { id },
+        });
+      }
+      return updated;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

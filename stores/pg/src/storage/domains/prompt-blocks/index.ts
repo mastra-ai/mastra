@@ -288,8 +288,9 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       }
 
       if (metadata !== undefined) {
+        const mergedMetadata = { ...(existingBlock.metadata || {}), ...metadata };
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(metadata));
+        values.push(JSON.stringify(mergedMetadata));
       }
 
       // Always update timestamps
