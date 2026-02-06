@@ -70,21 +70,40 @@ export async function executeTarget(
   target: Target,
   targetType: TargetType,
   item: DatasetItem,
+  options?: { signal?: AbortSignal },
 ): Promise<ExecutionResult> {
   try {
+    const signal = options?.signal;
+
+    // Check if already aborted before starting
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+    }
+
+    let executionPromise: Promise<ExecutionResult>;
     switch (targetType) {
       case 'agent':
-        return await executeAgent(target as Agent, item);
+        executionPromise = executeAgent(target as Agent, item, signal);
+        break;
       case 'workflow':
-        return await executeWorkflow(target as Workflow, item);
+        executionPromise = executeWorkflow(target as Workflow, item);
+        break;
       case 'scorer':
-        return await executeScorer(target as MastraScorer<any, any, any, any>, item);
+        executionPromise = executeScorer(target as MastraScorer<any, any, any, any>, item);
+        break;
       case 'processor':
         // Processor targets dropped from roadmap - not a core use case
         throw new Error(`Target type '${targetType}' not yet supported.`);
       default:
         throw new Error(`Unknown target type: ${targetType}`);
     }
+
+    // Race execution against signal abort (ensures timeout works even if target ignores signal)
+    if (signal) {
+      return await raceWithSignal(executionPromise, signal);
+    }
+
+    return await executionPromise;
   } catch (error) {
     return {
       output: null,
@@ -95,10 +114,38 @@ export async function executeTarget(
 }
 
 /**
+ * Race a promise against an AbortSignal. Rejects with the signal's reason when aborted.
+ */
+function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      reject(signal.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+
+    promise.then(
+      value => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      err => {
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
+/**
  * Execute a dataset item against an agent.
  * Uses generate() for both v1 and v2 models.
  */
-async function executeAgent(agent: Agent, item: DatasetItem): Promise<ExecutionResult> {
+async function executeAgent(agent: Agent, item: DatasetItem, signal?: AbortSignal): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
   // Use generate() - works for both v1 and v2 models
@@ -107,11 +154,16 @@ async function executeAgent(agent: Agent, item: DatasetItem): Promise<ExecutionR
     ? await agent.generate(item.input as any, {
         scorers: {},
         returnScorerData: true,
+        abortSignal: signal,
       })
     : await (agent as any).generateLegacy?.(item.input as any, {
         scorers: {},
         returnScorerData: true,
       });
+
+  if (result == null) {
+    throw new Error(`Agent "${agent.name}" does not support generateLegacy for this model type`);
+  }
 
   // Capture traceId and scoring data from agent result
   const traceId = (result as any)?.traceId ?? null;

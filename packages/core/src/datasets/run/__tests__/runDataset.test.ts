@@ -298,20 +298,23 @@ describe('runDataset', () => {
   });
 
   describe('cancellation', () => {
-    it('respects AbortSignal', async () => {
+    it('respects AbortSignal and returns partial summary', async () => {
       const controller = new AbortController();
 
       // Abort immediately
       controller.abort();
 
-      await expect(
-        runDataset(mastra, {
-          datasetId,
-          targetType: 'agent',
-          targetId: 'test-agent',
-          signal: controller.signal,
-        }),
-      ).rejects.toThrow('Aborted');
+      const result = await runDataset(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        signal: controller.signal,
+      });
+
+      // Should resolve with failed status, not reject
+      expect(result.status).toBe('failed');
+      expect(result.results).toHaveLength(0);
+      expect(result.totalItems).toBe(2);
     });
   });
 
