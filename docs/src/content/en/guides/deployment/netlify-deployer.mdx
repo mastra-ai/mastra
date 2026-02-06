@@ -1,11 +1,14 @@
 ---
-title: "NetlifyDeployer | Deployment"
+title: "Deploy Mastra to Netlify | Deployment"
 description: "Learn how to deploy a Mastra application to Netlify"
 ---
 
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
 # Deploy Mastra to Netlify
 
-In this guide, you'll learn how to deploy a Mastra application with Netlify using `@mastra/deployer-netlify`. The deployer handles packaging, configuration, and deployment by adapting Mastra's output to create an optimized version of your server.
+In this guide, you'll learn how to deploy a Mastra application with Netlify using `@mastra/deployer-netlify`. The deployer handles packaging, configuration, and deployment by adapting Mastra's output to create an optimized version of your server. At the end you'll have a Mastra application running on Netlify Functions.
 
 ## Before you begin
 
@@ -13,110 +16,75 @@ In this guide, you'll learn how to deploy a Mastra application with Netlify usin
 - A Netlify account. If you don't have one, sign up at [Netlify](https://www.netlify.com/).
 - Remove any usage of [LibSQLStore](/reference/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash. Netlify Functions use an ephemeral filesystem and cannot persist files.
 
+:::info
+
+You can use and deploy Mastra in different ways: Using its [standalone server](/docs/server/mastra-server), using a [server adapter](/docs/server/server-adapters), or by integrating it with a [web framework](/docs/deployment/web-framework).
+
+This guide assumes you're using the **standalone server** approach. For the other two options, refer to guides that the respective frameworks provide.
+
+:::
+
 ## Installation
+
+Add the `@mastra/deployer-netlify` package to your project:
 
 ```bash npm2yarn
 npm install @mastra/deployer-netlify@latest
 ```
 
-## Usage example
+Afterwards, import [`NetlifyDeployer`](/reference/deployer/netlify) and set it as the deployer in your Mastra configuration:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
+// highlight-next-line
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
+  // highlight-next-line
   deployer: new NetlifyDeployer(),
 });
 ```
 
-> See the [NetlifyDeployer](/reference/deployer/netlify) API reference for all available configuration options.
-
-## Continuous integration
-
-After connecting your Mastra project’s Git repository to Netlify, update the project settings. In the Netlify dashboard, go to **Project configuration** > **Build & deploy** > **Continuous deployment**, and under **Build settings**, set the following:
-
-- **Build command**: `npm run build` (optional)
-
-### Environment variables
-
-Before your first deployment, make sure to add any environment variables used by your application. For example, if you're using OpenAI as the LLM, you'll need to set `OPENAI_API_KEY` in your Netlify project settings.
-
-> See [Environment variables overview](https://docs.netlify.com/environment-variables/overview/) for more details.
-
-Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
-
-## Manual deployment
-
-Manual deployments are also possible using the [Netlify CLI](https://docs.netlify.com/cli/get-started/). With the Netlify CLI installed run the following from your project root to deploy your application. You can also run `netlify dev` from your project root to test your Mastra application locally.
-
-```bash
-netlify deploy --prod
-```
-
-:::warning
-
-When using `netlify deploy` instead of continuous deployment, you need to create a `netlify.toml` file with these contents:
+Lastly, create a `netlify.toml` file with the following contents in your project root:
 
 ```toml
 [build]
-  command = "npm run build"
-  publish = ".netlify/v1/functions"
-
-[functions]
-  directory = ".netlify/v1/functions"
-  node_bundler = "none"
-  included_files = [".netlify/v1/functions/**"]
-
-[[redirects]]
-  from = "/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
-
-[build.environment]
-  NODE_VERSION = "22.13.0"
+  command = "mastra build"
 ```
 
-Adjust the `build.command` to your project.
+## Usage
+
+After setting up your project, push it to your remote Git provider of choice (e.g. GitHub).
+
+<Steps>
+<StepItem>
+
+Connect your repository to Netlify. During the setup process, Netlify will detect your `netlify.toml` file and set the build command to `mastra build`.
+
+:::warning
+
+Do not forget to set your environment variables needed to run your application (e.g. `OPENAI_API_KEY` if you're using OpenAI as the LLM provider).
 
 :::
 
-## Build output
+</StepItem>
+<StepItem>
 
-The build output for Mastra applications using the `NetlifyDeployer` includes all agents, tools, and workflows in your project, along with Mastra-specific files required to run your application on Netlify.
+Once you're ready, click the **"Deploy"** button and wait for the first deployment to complete. It'll tell you that one function has been deployed.
 
-```bash
-your-project/
-└── .netlify/
-    └── v1/
-        ├── config.json
-        └── functions/
-            └── api/
-                ├── index.js
-                ├── package.json
-                └── node_modules/
-```
+</StepItem>
+<StepItem>
 
-The `NetlifyDeployer` automatically generates a `config.json` configuration file in `.netlify/v1` with the following settings:
+Try out your newly deployed function by going to `https://<random-slug>.netlify.app/api/agents`. You should get a JSON response listing all available agents.
 
-```json
-{
-  "functions": {
-    "directory": ".netlify/v1/functions",
-    "node_bundler": "none",
-    "included_files": [".netlify/v1/functions/**"]
-  },
-  "redirects": [
-    {
-      "force": true,
-      "from": "/*",
-      "to": "/.netlify/functions/api/:splat",
-      "status": 200
-    }
-  ]
-}
-```
+Since the [Mastra server](http://localhost:3000/docs/server/mastra-server) prefixes every API endpoint with `/api`, you have to add it to your URLs when making requests.
 
-## Next steps
+:::info
 
-- [Mastra Client SDK](/reference/client-js/mastra-client)
+Netlify functions are typically deployed at `https://<random-slug>.netlify.app/.netlify/functions/api`. The `NetlifyDeployer` redirects any request to `/.netlify/functions/api/:splat` to the root `/*`.
+
+:::
+
+</StepItem>
+
+</Steps>
