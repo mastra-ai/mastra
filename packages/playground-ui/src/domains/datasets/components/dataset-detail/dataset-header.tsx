@@ -1,96 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
 import { MoreVertical, Pencil, Copy, Trash2, Play, DatabaseIcon, Calendar1Icon, HistoryIcon } from 'lucide-react';
 import { MainHeader } from '@/ds/components/MainHeader';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { Dataset } from '@mastra/core/storage';
 import { format } from 'date-fns/format';
 import { TextAndIcon } from '@/ds/components/Text';
 
-/**
- * Format version date for display
- */
-function formatVersion(version: Date | string | undefined): string {
-  if (!version) return '';
-  const d = typeof version === 'string' ? new Date(version) : version;
-  return d.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-interface HeaderActionsMenuProps {
-  onEditClick?: () => void;
-  onDuplicateClick?: () => void;
-  onDeleteClick?: () => void;
-}
-
-/**
- * Three-dot actions menu for dataset header.
- * Options: Edit Dataset, Duplicate Dataset, Delete Dataset
- */
-function HeaderActionsMenu({ onEditClick, onDuplicateClick, onDeleteClick }: HeaderActionsMenuProps) {
-  const [open, setOpen] = useState(false);
-
-  const handleAction = (callback?: () => void) => {
-    callback?.();
-    setOpen(false);
-  };
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="secondary" size="default" aria-label="Dataset actions menu">
-          <MoreVertical />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 p-1">
-        <div className="flex flex-col gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2"
-            onClick={() => handleAction(onEditClick)}
-          >
-            <Icon>
-              <Pencil className="w-4 h-4" />
-            </Icon>
-            Edit Dataset
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2"
-            onClick={() => handleAction(onDuplicateClick)}
-          >
-            <Icon>
-              <Copy className="w-4 h-4" />
-            </Icon>
-            Duplicate Dataset
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-red-500 hover:text-red-400"
-            onClick={() => handleAction(onDeleteClick)}
-          >
-            <Icon>
-              <Trash2 className="w-4 h-4" />
-            </Icon>
-            Delete Dataset
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-export interface DatasetHeaderProps {
+export type DatasetHeaderProps = {
   dataset?: any;
   isLoading?: boolean;
   onEditClick?: () => void;
@@ -99,7 +17,7 @@ export interface DatasetHeaderProps {
   runTriggerSlot?: React.ReactNode;
   onRunClick?: () => void;
   className?: string;
-}
+};
 
 /**
  * Dataset header with name, description, actions menu, and run button.
@@ -143,11 +61,27 @@ export function DatasetHeader({
               Run Experiment
             </Button>
           ) : null}
-          <HeaderActionsMenu
-            onEditClick={onEditClick}
-            onDuplicateClick={onDuplicateClick}
-            onDeleteClick={onDeleteClick}
-          />
+          <DropdownMenu>
+            <DropdownMenu.Trigger asChild>
+              <Button variant="secondary" size="default" aria-label="Dataset actions menu">
+                <MoreVertical />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end" className="w-48">
+              <DropdownMenu.Item onSelect={onEditClick}>
+                <Pencil />
+                <span>Edit Dataset</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={onDuplicateClick}>
+                <Copy />
+                <span>Duplicate Dataset</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
+                <Trash2 />
+                <span>Delete Dataset</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu>
         </ButtonsGroup>
       </MainHeader.Column>
     </MainHeader>

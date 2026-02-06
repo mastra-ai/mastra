@@ -54,7 +54,7 @@ export * from './ds/components/Truncate';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';
-export * from './ds/components/Columns';
+export * from './ds/components/ListAndDetails';
 export * from './ds/components/MainContent';
 export * from './ds/components/MainHeader';
 export * from './ds/components/Sections';
@@ -78,6 +78,9 @@ export * from './ds/components/Text';
 export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/ContentBlocks';
 export * from './lib/rule-engine';
+
+// DS Components - New
+export * from './ds/components/ListAndDetails';
 
 // Form utilities (AutoForm)
 export * from './lib/form';

@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
 import {
@@ -13,7 +12,6 @@ import {
   FolderOutput,
   Trash2,
   ChevronDownIcon,
-  AmpersandIcon,
   MoveRightIcon,
   Search,
   History,
@@ -23,7 +21,57 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Badge } from '@/ds/components/Badge';
 import { Input } from '@/ds/components/Input';
 
-export interface ItemsToolbarProps {
+interface ActionsMenuProps {
+  onExportClick: () => void;
+  onExportJsonClick: () => void;
+  onCreateDatasetClick: () => void;
+  onAddToDatasetClick: () => void;
+  onDeleteClick: () => void;
+}
+
+function ActionsMenu({
+  onExportClick,
+  onExportJsonClick,
+  onCreateDatasetClick,
+  onAddToDatasetClick,
+  onDeleteClick,
+}: ActionsMenuProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenu.Trigger asChild>
+        <Button variant="secondary" size="default" aria-label="Actions menu">
+          <ArrowRightIcon /> Select and ...
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end" className="w-72">
+        <DropdownMenu.Item onSelect={onExportClick}>
+          <Download />
+          <span>Export Items as CSV</span>
+        </DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={onExportJsonClick}>
+          <FileJson />
+          <span>Export Items as JSON</span>
+        </DropdownMenu.Item>
+
+        <DropdownMenu.Item onSelect={onCreateDatasetClick}>
+          <FolderPlus />
+          <span>Create Dataset from Items</span>
+        </DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={onAddToDatasetClick}>
+          <FolderOutput />
+          <span>Copy Items to Dataset</span>
+        </DropdownMenu.Item>
+
+        <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
+          <Trash2 />
+          <span>Delete Items</span>
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  );
+}
+
+export type ItemsToolbarProps = {
   // Normal mode actions
   onAddClick: () => void;
   onImportClick: () => void;
@@ -50,99 +98,7 @@ export interface ItemsToolbarProps {
   onVersionsClick: () => void;
   isVersionsPanelOpen?: boolean;
   hideVersionsButton?: boolean;
-}
-
-interface ActionsMenuProps {
-  onExportClick: () => void;
-  onExportJsonClick: () => void;
-  onCreateDatasetClick: () => void;
-  onAddToDatasetClick: () => void;
-  onDeleteClick: () => void;
-}
-
-function ActionsMenu({
-  onExportClick,
-  onExportJsonClick,
-  onCreateDatasetClick,
-  onAddToDatasetClick,
-  onDeleteClick,
-}: ActionsMenuProps) {
-  const [open, setOpen] = useState(false);
-
-  const handleAction = (callback: () => void) => {
-    callback();
-    setOpen(false);
-  };
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="secondary" size="default" aria-label="Actions menu">
-          <ArrowRightIcon /> Select and ...
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 p-1 bg-surface4 ">
-        <div className="flex flex-col gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2"
-            onClick={() => handleAction(onExportClick)}
-          >
-            <Icon>
-              <Download className="w-4 h-4" />
-            </Icon>
-            Export Items as CSV
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2"
-            onClick={() => handleAction(onExportJsonClick)}
-          >
-            <Icon>
-              <FileJson className="w-4 h-4" />
-            </Icon>
-            Export Items as JSON
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2"
-            onClick={() => handleAction(onCreateDatasetClick)}
-          >
-            <Icon>
-              <FolderPlus className="w-4 h-4" />
-            </Icon>
-            Create Dataset from Items
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2"
-            onClick={() => handleAction(onAddToDatasetClick)}
-          >
-            <Icon>
-              <FolderOutput className="w-4 h-4" />
-            </Icon>
-            Copy Items to Dataset
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-red-500 hover:text-red-400"
-            onClick={() => handleAction(onDeleteClick)}
-          >
-            <Icon>
-              <Trash2 className="w-4 h-4" />
-            </Icon>
-            Delete Items
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
+};
 
 export function ItemsToolbar({
   onAddClick,
@@ -165,8 +121,6 @@ export function ItemsToolbar({
   isVersionsPanelOpen,
   hideVersionsButton,
 }: ItemsToolbarProps) {
-  const [open, setOpen] = useState(false);
-
   if (isSelectionActive) {
     return (
       <div className="flex items-center justify-between gap-4 w-full">
@@ -228,44 +182,23 @@ export function ItemsToolbar({
             New Item
           </Button>
 
-          <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
+          <DropdownMenu>
+            <DropdownMenu.Trigger asChild>
               <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Dataset actions menu">
                 <ChevronDownIcon />
               </Button>
-            </PopoverTrigger>
-
-            <PopoverContent>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-2"
-                onClick={() => {
-                  onImportClick();
-                  setOpen(false);
-                }}
-              >
-                <Icon>
-                  <Upload />
-                </Icon>
-                Import CSV
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-2"
-                onClick={() => {
-                  onImportJsonClick();
-                  setOpen(false);
-                }}
-              >
-                <Icon>
-                  <FileJson />
-                </Icon>
-                Import JSON
-              </Button>
-            </PopoverContent>
-          </Popover>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              <DropdownMenu.Item onSelect={onImportClick}>
+                <Upload />
+                <span>Import CSV</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={onImportJsonClick}>
+                <FileJson />
+                <span>Import JSON</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu>
         </div>
 
         {hasItems && (

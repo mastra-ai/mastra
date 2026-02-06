@@ -12,15 +12,10 @@ export function ItemListHeader({ columns, children }: ItemListHeaderProps & { ch
   return (
     <div className={cn('sticky top-0 bg-surface3 z-10 rounded-lg px-4 mb-4')}>
       <div
-        className={cn('grid gap-6 text-left uppercase py-3 text-neutral3 tracking-widest text-ui-xs')}
+        className={cn('grid gap-6 text-left items-center uppercase py-3 text-neutral3 tracking-widest text-ui-xs')}
         style={{ gridTemplateColumns: getColumnTemplate(columns) }}
       >
         {children}
-        {/*
-         {columns?.map(col => (
-          <span key={col.name}>{col.label || col.name}</span>
-        ))} 
-         */}
       </div>
     </div>
   );

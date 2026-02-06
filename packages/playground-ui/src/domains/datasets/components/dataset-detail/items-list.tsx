@@ -227,7 +227,7 @@ export function DatasetItemList({
                     id: item.id,
                     input: truncateValue(item.input, 60),
                     expectedOutput: item.expectedOutput ? truncateValue(item.expectedOutput, 40) : '-',
-                    metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
+                    metadata: item.context ? Object.keys(item.context).length + ' keys' : '-',
                     date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
                   };
 

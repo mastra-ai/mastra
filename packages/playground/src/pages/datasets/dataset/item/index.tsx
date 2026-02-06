@@ -29,12 +29,12 @@ import {
   Breadcrumb,
   Crumb,
   MainHeader,
-  cn,
   ButtonsGroup,
   toast,
   TextAndIcon,
   useDataset,
   CopyButton,
+  ListAndDetails,
 } from '@mastra/playground-ui';
 
 function DatasetItemPage() {
@@ -295,12 +295,8 @@ function DatasetItemPage() {
               </MainHeader.Column>
             </MainHeader>
 
-            <div className="grid grid-cols-[1fr_1px_auto] gap-12 overflow-y-auto">
-              <div
-                className={cn('overflow-y-auto grid gap-6 content-start', {
-                  'grid-rows-[auto_1fr]': isViewingOldVersion || isDeleted,
-                })}
-              >
+            <ListAndDetails isDetailsActive={true}>
+              <ListAndDetails.Column isTopFixed={isViewingOldVersion || isDeleted}>
                 {isDeleted && latestVersion && (
                   <Alert variant="destructive">
                     <AlertTitle>
@@ -340,11 +336,11 @@ function DatasetItemPage() {
                     </div>
                   )
                 )}
-              </div>
+              </ListAndDetails.Column>
 
-              <div className="bg-surface5"></div>
+              <ListAndDetails.Separator />
 
-              <div className="overflow-y-auto">
+              <ListAndDetails.Column>
                 <DatasetItemVersionsPanel
                   datasetId={datasetId}
                   itemId={itemId}
@@ -352,8 +348,8 @@ function DatasetItemPage() {
                   onVersionSelect={handleVersionSelect}
                   activeVersion={selectedVersion?.datasetVersion ?? null}
                 />
-              </div>
-            </div>
+              </ListAndDetails.Column>
+            </ListAndDetails>
           </div>
         </div>
       </MainContentLayout>

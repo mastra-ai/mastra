@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { DatasetRunResult } from '@mastra/client-js';
 import { cn } from '@/lib/utils';
-import { Columns } from '@/ds/components/Columns/columns';
+import { ListAndDetails } from '@/ds/components/ListAndDetails/list-and-details';
 import { RunResultDetailPanel } from './run-result-detail-panel';
 import { RunResultsListInternal } from './run-results-list';
 
@@ -16,7 +16,7 @@ export type RunResultsMasterDetailProps = {
  * Master-detail layout for run results.
  * Shows results list on left, result detail panel on right when a result is selected.
  */
-export function RunResultsMasterDetail({ results, isLoading }: RunResultsMasterDetailProps) {
+export function RunResultsMasterDetail({ results, isLoading }: RunResultsMasterDetailProps): React.JSX.Element {
   const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
 
   const selectedResult = results.find(r => r.id === selectedResultId) ?? null;
@@ -52,10 +52,8 @@ export function RunResultsMasterDetail({ results, isLoading }: RunResultsMasterD
     return undefined;
   };
 
-  const isSidePanelActive = Boolean(selectedResult);
-
   return (
-    <Columns isSideColumnVisible={isSidePanelActive}>
+    <ListAndDetails isDetailsActive={Boolean(selectedResult)}>
       {/* List column - always visible */}
       <div className="flex flex-col h-full overflow-hidden">
         <RunResultsListInternal
@@ -66,17 +64,21 @@ export function RunResultsMasterDetail({ results, isLoading }: RunResultsMasterD
         />
       </div>
 
-      {/* Detail column - shows when a result is selected */}
+      {/* Detail column and separator - shows when a result is selected */}
       {selectedResult && (
-        <div className={cn('flex flex-col h-full overflow-hidden w-[20rem] xl:w-[30rem] 2xl:w-[40rem]')}>
-          <RunResultDetailPanel
-            result={selectedResult}
-            onPrevious={toPreviousResult()}
-            onNext={toNextResult()}
-            onClose={handleClose}
-          />
-        </div>
+        <>
+          <ListAndDetails.Separator />
+
+          <div className={cn('flex flex-col h-full overflow-hidden w-[20rem] xl:w-[30rem] 2xl:w-[40rem]')}>
+            <RunResultDetailPanel
+              result={selectedResult}
+              onPrevious={toPreviousResult()}
+              onNext={toNextResult()}
+              onClose={handleClose}
+            />
+          </div>
+        </>
       )}
-    </Columns>
+    </ListAndDetails>
   );
 }
