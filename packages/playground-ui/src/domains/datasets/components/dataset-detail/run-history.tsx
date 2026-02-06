@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { DatasetRun } from '@mastra/client-js';
 import { Badge } from '@/ds/components/Badge';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { ItemList } from '@/ds/components/ItemList';
+import { EntryList } from '@/ds/components/EntryList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { useLinkComponent } from '@/lib/framework';
 import { Play } from 'lucide-react';
@@ -121,56 +121,50 @@ export function RunHistory({ runs, isLoading, datasetId }: RunHistoryProps) {
         onCancelSelection={handleCancelSelection}
       />
 
-      <ItemList>
-        <ItemList.Header columns={columns}>
-          {columns.map(col => (
-            <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
-          ))}
-        </ItemList.Header>
-
-        <ItemList.Scroller>
-          <ItemList.Items>
-            {runs.map(run => {
+      <EntryList>
+        <EntryList.Trim>
+          <EntryList.Header columns={columns} />
+          <EntryList.Entries>
+            {runs.map((run: DatasetRun) => {
               const status = run.status as RunStatus;
               const isSelected = selectedRunIds.includes(run.id);
               const entry = { id: run.id };
 
               return (
-                <ItemList.Row key={run.id} isSelected={isSelected}>
-                  <ItemList.RowButton
-                    entry={entry}
-                    isSelected={isSelected}
-                    columns={columns}
-                    onClick={() => handleRowClick(run.id)}
-                  >
-                    {isSelectionActive && (
-                      <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => {}}
-                          onClick={e => {
-                            e.stopPropagation();
-                            toggleRunSelection(run.id);
-                          }}
-                          aria-label={`Select run ${run.id}`}
-                        />
-                      </div>
-                    )}
-                    <ItemList.ItemText>{truncateRunId(run.id)}</ItemList.ItemText>
-                    <ItemList.ItemText>
-                      <span className="text-neutral3">{run.targetType}:</span> {run.targetId}
-                    </ItemList.ItemText>
-                    <div>
-                      <Badge variant={statusVariantMap[status]}>{statusLabelMap[status]}</Badge>
+                <EntryList.Entry
+                  key={run.id}
+                  entry={entry}
+                  isSelected={isSelected}
+                  columns={columns}
+                  onClick={() => handleRowClick(run.id)}
+                >
+                  {isSelectionActive && (
+                    <div className="flex items-center justify-center" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => {}}
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          toggleRunSelection(run.id);
+                        }}
+                        aria-label={`Select run ${run.id}`}
+                      />
                     </div>
-                    <ItemList.ItemText>{formatDate(run.createdAt)}</ItemList.ItemText>
-                  </ItemList.RowButton>
-                </ItemList.Row>
+                  )}
+                  <EntryList.EntryText>{truncateRunId(run.id)}</EntryList.EntryText>
+                  <EntryList.EntryText>
+                    <span className="text-neutral3">{run.targetType}:</span> {run.targetId}
+                  </EntryList.EntryText>
+                  <div>
+                    <Badge variant={statusVariantMap[status]}>{statusLabelMap[status]}</Badge>
+                  </div>
+                  <EntryList.EntryText>{formatDate(run.createdAt)}</EntryList.EntryText>
+                </EntryList.Entry>
               );
             })}
-          </ItemList.Items>
-        </ItemList.Scroller>
-      </ItemList>
+          </EntryList.Entries>
+        </EntryList.Trim>
+      </EntryList>
     </div>
   );
 }
@@ -179,26 +173,22 @@ function RunHistorySkeleton() {
   return (
     <div className="grid grid-rows-[auto_1fr] gap-4 h-full">
       <div className="h-9" /> {/* Toolbar placeholder */}
-      <ItemList>
-        <ItemList.Header columns={runsListColumns}>
-          {runsListColumns.map(col => (
-            <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
-          ))}
-        </ItemList.Header>
-        <ItemList.Items>
-          {Array.from({ length: 5 }).map((_, index) => (
-            <ItemList.Row key={index}>
-              <ItemList.RowButton columns={runsListColumns}>
-                {runsListColumns.map((_, colIndex) => (
-                  <ItemList.ItemText key={colIndex} isLoading>
+      <EntryList>
+        <EntryList.Trim>
+          <EntryList.Header columns={runsListColumns} />
+          <EntryList.Entries>
+            {Array.from({ length: 5 }).map((_: unknown, index: number) => (
+              <EntryList.Entry key={index} columns={runsListColumns}>
+                {runsListColumns.map((_col: { name: string; label: string; size: string }, colIndex: number) => (
+                  <EntryList.EntryText key={colIndex} isLoading>
                     Loading...
-                  </ItemList.ItemText>
+                  </EntryList.EntryText>
                 ))}
-              </ItemList.RowButton>
-            </ItemList.Row>
-          ))}
-        </ItemList.Items>
-      </ItemList>
+              </EntryList.Entry>
+            ))}
+          </EntryList.Entries>
+        </EntryList.Trim>
+      </EntryList>
     </div>
   );
 }

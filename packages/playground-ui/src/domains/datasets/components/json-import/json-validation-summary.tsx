@@ -30,7 +30,7 @@ export function JSONValidationSummary({ errors, maxErrors = 5 }: JSONValidationS
       </div>
 
       <ul className="text-sm text-accent2/80 space-y-1">
-        {displayErrors.map((error, index) => (
+        {displayErrors.map((error: JSONValidationError, index: number) => (
           <li key={index} className="flex gap-2">
             <span className="shrink-0">•</span>
             <span>{error.message}</span>

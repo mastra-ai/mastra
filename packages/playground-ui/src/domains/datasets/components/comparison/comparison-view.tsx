@@ -5,6 +5,7 @@ import { Skeleton } from '@/ds/components/Skeleton';
 import { Spinner } from '@/ds/components/Spinner';
 import { ScoreDelta } from './score-delta';
 import { useCompareRuns } from '../../hooks/use-compare-runs';
+import type { CompareRunsResponse } from '@mastra/client-js';
 
 interface ComparisonViewProps {
   datasetId: string;
@@ -17,7 +18,8 @@ interface ComparisonViewProps {
  * Shows version mismatch warning, per-scorer stats, and per-item score deltas.
  */
 export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProps) {
-  const { data: comparison, isLoading, error } = useCompareRuns(datasetId, runIdA, runIdB);
+  const { data, isLoading, error } = useCompareRuns(datasetId, runIdA, runIdB);
+  const comparison = data as CompareRunsResponse | undefined;
 
   if (isLoading) {
     return (
@@ -55,7 +57,7 @@ export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProp
       )}
 
       {/* Other warnings */}
-      {comparison.warnings.map((warning, i) => (
+      {comparison.warnings.map((warning: string, i: number) => (
         <Alert key={i} variant="info">
           <AlertDescription as="p">{warning}</AlertDescription>
         </Alert>
@@ -82,7 +84,7 @@ export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProp
               <Th>Status</Th>
             </Thead>
             <Tbody>
-              {scorerIds.map(scorerId => {
+              {scorerIds.map((scorerId: string) => {
                 const scorer = comparison.scorers[scorerId];
                 return (
                   <Row key={scorerId}>
@@ -119,12 +121,12 @@ export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProp
             <Thead className="sticky top-0">
               <Th>Item ID</Th>
               <Th>In Both</Th>
-              {scorerIds.map(scorerId => (
+              {scorerIds.map((scorerId: string) => (
                 <Th key={scorerId}>{scorerId}</Th>
               ))}
             </Thead>
             <Tbody>
-              {comparison.items.map(item => (
+              {comparison.items.map((item: { itemId: string; inBothRuns: boolean; scoresA: Record<string, number | null>; scoresB: Record<string, number | null> }) => (
                 <Row key={item.itemId}>
                   <TxtCell>{truncate(item.itemId, 16)}</TxtCell>
                   <Cell>
@@ -134,7 +136,7 @@ export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProp
                       <span className="text-amber-500 text-sm">No</span>
                     )}
                   </Cell>
-                  {scorerIds.map(scorerId => {
+                  {scorerIds.map((scorerId: string) => {
                     const scoreA = item.scoresA[scorerId];
                     const scoreB = item.scoresB[scorerId];
                     const delta = scoreA !== null && scoreB !== null ? scoreB - scoreA : null;

@@ -39,12 +39,12 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
     }
 
     try {
-      const result = await createDataset.mutateAsync({
+      const result = (await createDataset.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
         inputSchema,
         outputSchema,
-      });
+      })) as { id: string };
 
       toast.success('Dataset created successfully');
 

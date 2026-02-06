@@ -36,7 +36,7 @@ export function JSONPreviewTable({ items, maxRows = 5 }: JSONPreviewTableProps) 
           </tr>
         </thead>
         <tbody>
-          {displayItems.map((item, index) => (
+          {displayItems.map((item: ImportableItem, index: number) => (
             <tr key={index} className="border-b border-border1 last:border-b-0">
               <td className="px-3 py-2 text-neutral4">{index + 1}</td>
               <td className="px-3 py-2 text-neutral1 font-mono text-xs">{truncateValue(item.input)}</td>

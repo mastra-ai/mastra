@@ -55,7 +55,7 @@ export function ItemDetailDialog({
     if (item) {
       setInputValue(JSON.stringify(item.input, null, 2));
       setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
-      setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+      setMetadataValue(item.context ? JSON.stringify(item.context, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
     }
@@ -119,7 +119,7 @@ export function ItemDetailDialog({
         itemId: item.id,
         input: parsedInput,
         expectedOutput: parsedExpectedOutput,
-        metadata: parsedMetadata,
+        context: parsedMetadata,
       });
 
       toast.success('Item updated successfully');
@@ -133,7 +133,7 @@ export function ItemDetailDialog({
     // Reset to original values
     setInputValue(JSON.stringify(item.input, null, 2));
     setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
-    setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+    setMetadataValue(item.context ? JSON.stringify(item.context, null, 2) : '');
     setIsEditing(false);
   };
 
@@ -231,7 +231,7 @@ export function ItemDetailDialog({
  * Read-only view of the dataset item details
  */
 function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<typeof useLinkComponent>['Link'] }) {
-  const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
+  const metadataDisplay = item.context ? JSON.stringify(item.context, null, 2) : null;
 
   return (
     <>

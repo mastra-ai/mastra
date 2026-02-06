@@ -98,8 +98,8 @@ export function ItemsMasterDetail({
             </AlertTitle>
 
             <Button
-              variant="standard"
-              size="tiny"
+              variant="default"
+              size="sm"
               className="mt-2 mb-1"
               onClick={() => onVersionSelect?.({ version: currentDatasetVersion!, isCurrent: true })}
             >

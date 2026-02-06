@@ -30,14 +30,14 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
       <div className="overflow-x-auto rounded-lg border border-border1">
         <Table size="small">
           <Thead>
-            {headers.map(header => (
+            {headers.map((header: string) => (
               <Th key={header}>{header}</Th>
             ))}
           </Thead>
           <Tbody>
-            {displayData.map((row, rowIndex) => (
+            {displayData.map((row: Record<string, unknown>, rowIndex: number) => (
               <Row key={rowIndex}>
-                {headers.map(header => (
+                {headers.map((header: string) => (
                   <Cell key={header} className="text-sm max-w-[200px]">
                     <span className="truncate block">{truncateValue(row[header])}</span>
                   </Cell>

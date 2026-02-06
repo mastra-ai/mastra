@@ -1,7 +1,7 @@
 import type { ListScoresResponse } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { TraceRecord, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
+import type { PaginationInfo, TraceRecord, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
@@ -63,6 +63,21 @@ import type {
   ListWorkspacesResponse,
   ListVectorsResponse,
   ListEmbeddersResponse,
+  Dataset,
+  DatasetItem,
+  DatasetRun,
+  DatasetRunResult,
+  CreateDatasetParams,
+  UpdateDatasetParams,
+  AddDatasetItemParams,
+  UpdateDatasetItemParams,
+  BulkAddDatasetItemsParams,
+  BulkDeleteDatasetItemsParams,
+  TriggerDatasetRunParams,
+  CompareRunsParams,
+  CompareRunsResponse,
+  DatasetItemVersionResponse,
+  DatasetVersionResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -888,5 +903,285 @@ export class MastraClient extends BaseResource {
    */
   public listEmbedders(): Promise<ListEmbeddersResponse> {
     return this.request('/embedders');
+  }
+
+  // ============================================================================
+  // Datasets
+  // ============================================================================
+
+  /**
+   * Lists all datasets with optional pagination
+   */
+  public listDatasets(pagination?: {
+    page?: number;
+    perPage?: number;
+  }): Promise<{ datasets: Dataset[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/datasets${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single dataset by ID
+   */
+  public getDataset(datasetId: string): Promise<Dataset> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}`);
+  }
+
+  /**
+   * Creates a new dataset
+   */
+  public createDataset(params: CreateDatasetParams): Promise<Dataset> {
+    return this.request('/datasets', { method: 'POST', body: params });
+  }
+
+  /**
+   * Updates a dataset
+   */
+  public updateDataset(params: UpdateDatasetParams): Promise<Dataset> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+      method: 'PATCH',
+      body,
+    });
+  }
+
+  /**
+   * Deletes a dataset
+   */
+  public deleteDataset(datasetId: string): Promise<{ success: boolean }> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ============================================================================
+  // Dataset Items
+  // ============================================================================
+
+  /**
+   * Lists items in a dataset with optional pagination, search, and version filter
+   */
+  public listDatasetItems(
+    datasetId: string,
+    params?: { page?: number; perPage?: number; search?: string; version?: Date | string | null },
+  ): Promise<{ items: DatasetItem[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.version) {
+      const v = params.version instanceof Date ? params.version.toISOString() : params.version;
+      searchParams.set('version', v);
+    }
+    const qs = searchParams.toString();
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single dataset item by ID
+   */
+  public getDatasetItem(datasetId: string, itemId: string): Promise<DatasetItem> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`);
+  }
+
+  /**
+   * Adds an item to a dataset
+   */
+  public addDatasetItem(params: AddDatasetItemParams): Promise<DatasetItem> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Updates a dataset item
+   */
+  public updateDatasetItem(params: UpdateDatasetItemParams): Promise<DatasetItem> {
+    const { datasetId, itemId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`, {
+      method: 'PATCH',
+      body,
+    });
+  }
+
+  /**
+   * Deletes a dataset item
+   */
+  public deleteDatasetItem(datasetId: string, itemId: string): Promise<{ success: boolean }> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Bulk adds items to a dataset
+   */
+  public bulkAddDatasetItems(params: BulkAddDatasetItemsParams): Promise<{ items: DatasetItem[]; count: number }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/bulk`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Bulk deletes items from a dataset
+   */
+  public bulkDeleteDatasetItems(
+    params: BulkDeleteDatasetItemsParams,
+  ): Promise<{ success: boolean; deletedCount: number }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/bulk`, {
+      method: 'DELETE',
+      body,
+    });
+  }
+
+  // ============================================================================
+  // Dataset Item Versions
+  // ============================================================================
+
+  /**
+   * Lists versions for a dataset item
+   */
+  public listDatasetItemVersions(
+    datasetId: string,
+    itemId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<{ versions: DatasetItemVersionResponse[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/versions${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  /**
+   * Gets a specific version of a dataset item
+   */
+  public getDatasetItemVersion(
+    datasetId: string,
+    itemId: string,
+    versionNumber: number,
+  ): Promise<DatasetItemVersionResponse> {
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/versions/${versionNumber}`,
+    );
+  }
+
+  // ============================================================================
+  // Dataset Versions
+  // ============================================================================
+
+  /**
+   * Lists versions for a dataset
+   */
+  public listDatasetVersions(
+    datasetId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<{ versions: DatasetVersionResponse[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/versions${qs ? `?${qs}` : ''}`);
+  }
+
+  // ============================================================================
+  // Dataset Runs
+  // ============================================================================
+
+  /**
+   * Lists runs for a dataset
+   */
+  public listDatasetRuns(
+    datasetId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<{ runs: DatasetRun[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/runs${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single dataset run by ID
+   */
+  public getDatasetRun(datasetId: string, runId: string): Promise<DatasetRun> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/runs/${encodeURIComponent(runId)}`);
+  }
+
+  /**
+   * Lists results for a dataset run
+   */
+  public listDatasetRunResults(
+    datasetId: string,
+    runId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<{ results: DatasetRunResult[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/runs/${encodeURIComponent(runId)}/results${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  /**
+   * Triggers a new dataset run
+   */
+  public triggerDatasetRun(params: TriggerDatasetRunParams): Promise<{
+    runId: string;
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    totalItems: number;
+    succeededCount: number;
+    failedCount: number;
+    startedAt: string | Date;
+    completedAt: string | Date | null;
+    results: Array<{
+      itemId: string;
+      itemVersion: string | Date;
+      input: unknown;
+      output: unknown | null;
+      expectedOutput: unknown | null;
+      latency: number;
+      error: string | null;
+      startedAt: string | Date;
+      completedAt: string | Date;
+      retryCount: number;
+      scores: Array<{
+        scorerId: string;
+        scorerName: string;
+        score: number | null;
+        reason: string | null;
+        error: string | null;
+      }>;
+    }>;
+  }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/runs`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Compares two dataset runs for regression detection
+   */
+  public compareRuns(params: CompareRunsParams): Promise<CompareRunsResponse> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/compare`, {
+      method: 'POST',
+      body,
+    });
   }
 }

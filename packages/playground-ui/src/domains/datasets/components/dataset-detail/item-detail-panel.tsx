@@ -88,7 +88,7 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
     if (item) {
       setInputValue(JSON.stringify(item.input, null, 2));
       setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
-      setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+      setMetadataValue(item.context ? JSON.stringify(item.context, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
       setValidationErrors(null); // Reset validation errors on item change
@@ -151,7 +151,7 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
         itemId: item.id,
         input: parsedInput,
         expectedOutput: parsedExpectedOutput,
-        metadata: parsedMetadata,
+        context: parsedMetadata,
       });
 
       toast.success('Item updated successfully');
@@ -172,7 +172,7 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
     // Reset to original values
     setInputValue(JSON.stringify(item.input, null, 2));
     setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
-    setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
+    setMetadataValue(item.context ? JSON.stringify(item.context, null, 2) : '');
     setIsEditing(false);
     setValidationErrors(null);
   };

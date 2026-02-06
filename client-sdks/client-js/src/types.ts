@@ -1422,3 +1422,179 @@ export interface DatasetItem {
   createdAt: string | Date;
   updatedAt: string | Date;
 }
+
+export interface Dataset {
+  id: string;
+  name: string;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  inputSchema?: Record<string, unknown> | null;
+  outputSchema?: Record<string, unknown> | null;
+  version: string | Date;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetRun {
+  id: string;
+  datasetId: string;
+  datasetVersion: string | Date;
+  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
+  targetId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  totalItems: number;
+  succeededCount: number;
+  failedCount: number;
+  startedAt: string | Date | null;
+  completedAt: string | Date | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetRunResult {
+  id: string;
+  runId: string;
+  itemId: string;
+  itemVersion: string | Date;
+  input: unknown;
+  output: unknown | null;
+  expectedOutput: unknown | null;
+  latency: number;
+  error: string | null;
+  startedAt: string | Date;
+  completedAt: string | Date;
+  retryCount: number;
+  traceId: string | null;
+  scores: Array<{
+    scorerId: string;
+    scorerName: string;
+    score: number | null;
+    reason: string | null;
+    error: string | null;
+  }>;
+  createdAt: string | Date;
+}
+
+export interface CreateDatasetParams {
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  outputSchema?: Record<string, unknown> | null;
+}
+
+export interface UpdateDatasetParams {
+  datasetId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  outputSchema?: Record<string, unknown> | null;
+}
+
+export interface AddDatasetItemParams {
+  datasetId: string;
+  input: unknown;
+  expectedOutput?: unknown;
+  context?: Record<string, unknown>;
+}
+
+export interface UpdateDatasetItemParams {
+  datasetId: string;
+  itemId: string;
+  input?: unknown;
+  expectedOutput?: unknown;
+  context?: Record<string, unknown>;
+}
+
+export interface BulkAddDatasetItemsParams {
+  datasetId: string;
+  items: Array<{
+    input: unknown;
+    expectedOutput?: unknown;
+    context?: Record<string, unknown>;
+  }>;
+}
+
+export interface BulkDeleteDatasetItemsParams {
+  datasetId: string;
+  itemIds: string[];
+}
+
+export interface TriggerDatasetRunParams {
+  datasetId: string;
+  targetType: 'agent' | 'workflow' | 'scorer';
+  targetId: string;
+  scorerIds?: string[];
+  version?: Date | string;
+  maxConcurrency?: number;
+}
+
+export interface CompareRunsParams {
+  datasetId: string;
+  runIdA: string;
+  runIdB: string;
+  thresholds?: Record<
+    string,
+    {
+      value: number;
+      direction?: 'higher-is-better' | 'lower-is-better';
+    }
+  >;
+}
+
+export interface DatasetItemVersionResponse {
+  id: string;
+  itemId: string;
+  datasetId: string;
+  versionNumber: number;
+  datasetVersion: string | Date;
+  snapshot: {
+    input: unknown;
+    expectedOutput?: unknown;
+    context?: Record<string, unknown>;
+  };
+  isDeleted: boolean;
+  createdAt: string | Date;
+}
+
+export interface DatasetVersionResponse {
+  id: string;
+  datasetId: string;
+  version: string | Date;
+  createdAt: string | Date;
+}
+
+export interface CompareRunsResponse {
+  runA: { id: string; datasetVersion: string | Date };
+  runB: { id: string; datasetVersion: string | Date };
+  versionMismatch: boolean;
+  hasRegression: boolean;
+  scorers: Record<
+    string,
+    {
+      statsA: ScorerStats;
+      statsB: ScorerStats;
+      delta: number;
+      regressed: boolean;
+      threshold: number;
+    }
+  >;
+  items: Array<{
+    itemId: string;
+    inBothRuns: boolean;
+    scoresA: Record<string, number | null>;
+    scoresB: Record<string, number | null>;
+  }>;
+  warnings: string[];
+}
+
+interface ScorerStats {
+  errorRate: number;
+  errorCount: number;
+  passRate: number;
+  passCount: number;
+  avgScore: number;
+  scoreCount: number;
+  totalItems: number;
+}

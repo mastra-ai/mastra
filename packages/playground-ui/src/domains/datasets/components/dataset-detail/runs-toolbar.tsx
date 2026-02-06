@@ -32,11 +32,11 @@ export function RunsToolbar({
             <MoveRightIcon />
           </div>
           <ButtonsGroup>
-            <Button variant="standard" size="default" disabled={selectedCount !== 2} onClick={onExecuteCompare}>
+            <Button variant="default" size="md" disabled={selectedCount !== 2} onClick={onExecuteCompare}>
               <GitCompare className="w-4 h-4" />
               Compare Runs
             </Button>
-            <Button variant="secondary" size="default" onClick={onCancelSelection}>
+            <Button variant="outline" size="md" onClick={onCancelSelection}>
               Cancel
             </Button>
           </ButtonsGroup>
@@ -51,7 +51,7 @@ export function RunsToolbar({
 
   return (
     <div className="flex items-center justify-end gap-4 w-full">
-      <Button variant="secondary" size="default" onClick={onCompareClick}>
+      <Button variant="outline" size="md" onClick={onCompareClick}>
         <GitCompare className="w-4 h-4" />
         Compare
       </Button>

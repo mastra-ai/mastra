@@ -47,7 +47,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
             </tr>
           </thead>
           <tbody>
-            {invalidRows.map((row, idx) => (
+            {invalidRows.map((row: RowValidationResult, idx: number) => (
               <ValidationRow key={idx} row={row} />
             ))}
             {invalidCount > invalidRows.length && (

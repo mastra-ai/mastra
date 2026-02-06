@@ -96,7 +96,7 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
           datasetId,
           input: item.input,
           expectedOutput: item.expectedOutput,
-          metadata: item.metadata,
+          context: item.metadata,
         });
         successCount++;
       } catch {

@@ -54,7 +54,9 @@ export * from './ds/components/Truncate';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';
+export * from './ds/components/Columns';
 export * from './ds/components/MainContent';
+export * from './ds/components/MainHeader';
 export * from './ds/components/Sections';
 
 // DS Components - Migrated Complex Elements

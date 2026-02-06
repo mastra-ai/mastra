@@ -19,7 +19,6 @@ import { AlertDialog } from '@/ds/components/AlertDialog';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
-import { Columns } from '@/ds/components/Columns';
 
 export interface DatasetDetailProps {
   datasetId: string;

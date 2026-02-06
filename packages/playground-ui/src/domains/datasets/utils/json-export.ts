@@ -8,7 +8,7 @@ export function exportItemsToJSON(items: DatasetItem[], filename: string): void 
   const data = items.map(item => ({
     input: item.input,
     expectedOutput: item.expectedOutput,
-    metadata: item.metadata,
+    context: item.context,
     createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt,
   }));
 

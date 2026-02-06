@@ -59,7 +59,7 @@ export function DuplicateDatasetDialog({
 
     try {
       // Fetch all items from source dataset
-      const allItems: Array<{ input: unknown; expectedOutput?: unknown; metadata?: Record<string, unknown> }> = [];
+      const allItems: Array<{ input: unknown; expectedOutput?: unknown; context?: Record<string, unknown> }> = [];
       let page = 0;
       const perPage = 100;
       let hasMore = true;
@@ -71,7 +71,7 @@ export function DuplicateDatasetDialog({
           ...items.map(item => ({
             input: item.input,
             expectedOutput: item.expectedOutput,
-            metadata: item.metadata,
+            context: item.context as Record<string, unknown> | undefined,
           })),
         );
 
@@ -101,7 +101,7 @@ export function DuplicateDatasetDialog({
           datasetId: dataset.id,
           input: item.input,
           expectedOutput: item.expectedOutput,
-          metadata: item.metadata,
+          context: item.context,
         });
         setProgress({ phase: 'copying', current: i + 1, total: allItems.length });
       }

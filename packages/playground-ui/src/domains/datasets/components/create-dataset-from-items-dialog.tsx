@@ -41,10 +41,10 @@ export function CreateDatasetFromItemsDialog({
 
     try {
       // Create the dataset
-      const dataset = await createDataset.mutateAsync({
+      const dataset = (await createDataset.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
-      });
+      })) as { id: string };
 
       // Copy items to new dataset
       for (let i = 0; i < items.length; i++) {

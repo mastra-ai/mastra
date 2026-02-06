@@ -106,11 +106,11 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
     }
 
     // Check each row for missing input values
-    data.forEach((row, index) => {
+    data.forEach((row: Record<string, unknown>, index: number) => {
       const rowNum = index + 2; // 1-indexed + header row
 
       // Check if all input columns have values
-      inputColumns.forEach(col => {
+      inputColumns.forEach((col: string) => {
         const value = row[col];
         if (value === null || value === undefined || value === '') {
           errors.push({
@@ -177,7 +177,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
     const { mapping } = columnMapping;
 
     // Build mapped rows for schema validation
-    const mappedRows = data.map(row => buildItemFromRow(row, mapping, headers));
+    const mappedRows = data.map((row: Record<string, unknown>) => buildItemFromRow(row, mapping, headers));
 
     // Perform schema validation if dataset has schemas
     const hasSchemas = dataset?.inputSchema || dataset?.outputSchema;
@@ -210,7 +210,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       setSchemaValidation({
         validCount: mappedRows.length,
         invalidCount: 0,
-        validRows: mappedRows.map((row, i) => ({ rowNumber: i + 2, ...row })),
+        validRows: mappedRows.map((row: { input: unknown; expectedOutput?: unknown; metadata?: Record<string, unknown> }, i: number) => ({ rowNumber: i + 2, ...row })),
         invalidRows: [],
         totalRows: mappedRows.length,
       });
@@ -264,7 +264,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
           datasetId,
           input,
           expectedOutput,
-          metadata,
+          context: metadata,
         });
         successCount++;
       } catch {

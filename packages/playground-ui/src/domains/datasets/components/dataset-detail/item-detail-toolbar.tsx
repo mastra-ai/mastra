@@ -35,19 +35,17 @@ export function ItemDetailToolbar({
       {/* Left side: Navigation */}
       <div className="flex items-center gap-[2px]">
         <Button
-          variant="secondary"
-          size="default"
+          variant="outline"
+          size="md"
           onClick={onPrevious}
           disabled={!onPrevious}
           aria-label="Previous item"
-          hasRightSibling={true}
         >
           <ArrowUpIcon /> Previous
         </Button>
         <Button
-          variant="secondary"
-          hasLeftSibling={true}
-          size="default"
+          variant="outline"
+          size="md"
           onClick={onNext}
           disabled={!onNext}
           aria-label="Next item"
@@ -60,20 +58,20 @@ export function ItemDetailToolbar({
       <div className="flex items-center gap-2">
         {!isEditing && (
           <>
-            <Button variant="secondary" size="default" href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
+            <Button variant="outline" size="md" href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
               <History />
               History
             </Button>
 
             <div className="flex items-center gap-[2px]">
-              <Button variant="secondary" hasRightSibling={true} size="default" onClick={onEdit}>
+              <Button variant="outline" size="md" onClick={onEdit}>
                 <Pencil />
                 Edit
               </Button>
 
               <Popover open={open} onOpenChange={setOpen}>
                 <PopoverTrigger asChild>
-                  <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Actions menu">
+                  <Button variant="outline" size="md" aria-label="Actions menu">
                     <ChevronDownIcon />
                   </Button>
                 </PopoverTrigger>
@@ -103,7 +101,7 @@ export function ItemDetailToolbar({
           </>
         )}
 
-        <Button variant="secondary" size="default" onClick={onClose} aria-label="Close detail panel">
+        <Button variant="outline" size="md" onClick={onClose} aria-label="Close detail panel">
           <XIcon />
         </Button>
       </div>

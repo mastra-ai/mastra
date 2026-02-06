@@ -22,7 +22,7 @@ export function ItemPageToolbar({ datasetId, onBack, onEdit, onDelete, isEditing
     <div className="flex items-center justify-between">
       {/* Left side: Back button */}
       <div className="flex items-center gap-2">
-        <Button variant="secondary" size="default" onClick={onBack} aria-label="Back to dataset">
+        <Button variant="outline" size="md" onClick={onBack} aria-label="Back to dataset">
           <ArrowLeft /> Back
         </Button>
       </div>
@@ -31,14 +31,14 @@ export function ItemPageToolbar({ datasetId, onBack, onEdit, onDelete, isEditing
       <div className="flex items-center gap-2">
         {!isEditing && (
           <div className="flex items-center gap-[2px]">
-            <Button variant="secondary" hasRightSibling={true} size="default" onClick={onEdit}>
+            <Button variant="outline" size="md" onClick={onEdit}>
               <Pencil />
               Edit
             </Button>
 
             <Popover open={open} onOpenChange={setOpen}>
               <PopoverTrigger asChild>
-                <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Actions menu">
+                <Button variant="outline" size="md" aria-label="Actions menu">
                   <ChevronDownIcon />
                 </Button>
               </PopoverTrigger>

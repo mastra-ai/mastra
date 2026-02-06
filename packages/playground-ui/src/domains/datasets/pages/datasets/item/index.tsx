@@ -31,7 +31,7 @@ export function DatasetItemPage({ item }: DatasetItemPageProps) {
  * Read-only view of the dataset item details
  */
 function DatasetItemContent({ item, Link }: { item: DatasetItem; Link: ReturnType<typeof useLinkComponent>['Link'] }) {
-  const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
+  const metadataDisplay = item.context ? JSON.stringify(item.context, null, 2) : null;
 
   return (
     <>
