@@ -15,7 +15,7 @@ export type ZodLikeSchema<T = any> = z.ZodType<T, z.ZodTypeDef, any> | zv4.ZodTy
  * Helper type for extracting the inferred type from a Zod-like schema after parsing
  */
 export type InferZodLikeSchema<T extends ZodLikeSchema<any>> =
-  T extends z.ZodType<infer V> ? V : T extends zv4.ZodType<infer V> ? V : never;
+  T extends z.ZodType<infer V, z.ZodTypeDef, any> ? V : T extends zv4.ZodType<infer V> ? V : never;
 
 /**
  * Helper type for extracting the input type from a Zod-like schema.

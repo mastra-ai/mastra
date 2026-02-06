@@ -64,6 +64,58 @@ describe('Workflow schema type inference', () => {
       expectTypeOf(chained).not.toBeNever();
     });
 
+    it('should allow dowhile with optional default schemas', () => {
+      const schema = z.object({
+        value: z.number(),
+        threshold: z.number().optional().default(100),
+      });
+
+      const step = createStep({
+        id: 'loop-step',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ inputData }) => {
+          return { value: inputData.value + 1, threshold: inputData.threshold };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'dowhile-workflow',
+        inputSchema: schema,
+        outputSchema: schema,
+      });
+
+      const chained = workflow.dowhile(step, async ({ inputData }) => inputData.value < 10);
+
+      expectTypeOf(chained).not.toBeNever();
+    });
+
+    it('should allow dountil with optional default schemas', () => {
+      const schema = z.object({
+        value: z.number(),
+        threshold: z.number().optional().default(100),
+      });
+
+      const step = createStep({
+        id: 'loop-step',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ inputData }) => {
+          return { value: inputData.value + 1, threshold: inputData.threshold };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'dountil-workflow',
+        inputSchema: schema,
+        outputSchema: schema,
+      });
+
+      const chained = workflow.dountil(step, async ({ inputData }) => inputData.value >= 10);
+
+      expectTypeOf(chained).not.toBeNever();
+    });
+
     it('should still reject steps with incompatible input schemas', () => {
       const workflowSchema = z.object({
         name: z.string(),
