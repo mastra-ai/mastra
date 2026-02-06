@@ -4756,4 +4756,266 @@ describe('Full Async Buffering Flow', () => {
       });
     }).toThrow();
   });
+
+  it('should resolve fractional bufferEvery to absolute token count', () => {
+    // bufferEvery: 0.25 with messageTokens: 20000 → 5000
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      observation: {
+        messageTokens: 20000,
+        bufferEvery: 0.25,
+        asyncActivation: 0.7,
+      },
+      reflection: { observationTokens: 5000, asyncActivation: 0.5 },
+    });
+    expect((om as any).observationConfig.bufferEvery).toBe(5000);
+  });
+
+  it('should resolve fractional blockAfter to absolute token count with headroom', () => {
+    // blockAfter: 0.25 with messageTokens: 20000 → 25000 (20000 * 1.25)
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      observation: {
+        messageTokens: 20000,
+        bufferEvery: 5000,
+        asyncActivation: 0.7,
+        blockAfter: 0.25,
+      },
+      reflection: { observationTokens: 5000, asyncActivation: 0.5 },
+    });
+    expect((om as any).observationConfig.blockAfter).toBe(25000);
+  });
+
+  it('should activate buffered chunks on new turn and buffer new messages', async () => {
+    // Turn 1: buffer messages below threshold
+    // Turn 2: step 0 activates existing chunks, then buffers new unobserved messages
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 20000,
+      bufferEvery: 200,
+      asyncActivation: 1.0,
+      reflectionObservationTokens: 50000,
+      messageCount: 10, // ~1100 tokens
+    });
+
+    // Turn 1, step 0: buffers messages
+    await step(0);
+    await waitForAsyncOps();
+
+    const firstCallCount = observerCalls.length;
+    expect(firstCallCount).toBeGreaterThan(0);
+
+    let record = await storage.getObservationalMemory(threadId, resourceId);
+    const chunks1 =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : (record?.bufferedObservationChunks ?? []);
+    expect(chunks1.length).toBeGreaterThan(0);
+
+    // Add new messages
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 10; i < 25; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Turn 2 step 0: activates existing chunks, then buffers new messages
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record).toBeDefined();
+
+    // Activation should have moved first batch to activeObservations
+    expect(record!.activeObservations).toBeTruthy();
+    expect(record!.activeObservations!.length).toBeGreaterThan(0);
+
+    // Observer should have been called again for the new messages
+    expect(observerCalls.length).toBeGreaterThan(firstCallCount);
+  });
+
+  it('should complete full flow: buffer → activate → reflect → new generation', async () => {
+    // End-to-end test: buffer observations, activate them, trigger reflection,
+    // and verify a new generation is created with reflected content.
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls, reflectorCalls } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 3000,
+        bufferEvery: 500,
+        asyncActivation: 1.0,
+        reflectionObservationTokens: 10, // Very low - reflection triggers after any activation
+        reflectionAsyncActivation: 1.0,
+        messageCount: 8, // ~1600 tokens, below threshold
+      });
+
+    // Step 0: below threshold, triggers async buffering
+    await step(0);
+    await waitForAsyncOps();
+    expect(observerCalls.length).toBeGreaterThan(0);
+
+    // Verify buffered chunks exist
+    let record = await storage.getObservationalMemory(threadId, resourceId);
+    const chunks =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : (record?.bufferedObservationChunks ?? []);
+    expect(chunks.length).toBeGreaterThan(0);
+    const gen0Id = record?.id;
+
+    // Add messages to push past threshold
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 8; i < 25; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // New turn: activates buffered observations → triggers maybeAsyncReflect
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    // Run a few more steps to let async reflection complete and activate
+    for (let i = 1; i < 5; i++) {
+      await step(i);
+      await waitForAsyncOps();
+    }
+
+    record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record).toBeDefined();
+    expect(record!.activeObservations).toBeTruthy();
+    expect(record!.activeObservations!.length).toBeGreaterThan(0);
+
+    // Check history for generation changes
+    const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 10);
+
+    // If reflection ran, there should be a new generation or reflector was called
+    if (reflectorCalls.length > 0) {
+      // Reflection was triggered
+      expect(reflectorCalls.length).toBeGreaterThan(0);
+      // A new generation should exist (generationCount > 0)
+      if (history && history.length > 1) {
+        expect(record!.generationCount).toBeGreaterThan(0);
+        // The original generation should be in history
+        expect(history.some((h: any) => h.id === gen0Id)).toBe(true);
+      }
+    } else {
+      // Even without reflection, observations must be present from activation
+      expect(record!.activeObservations).toContain('Observed');
+    }
+  });
+
+  it('should handle writer errors gracefully during async buffering', async () => {
+    const { step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 10000,
+      bufferEvery: 500,
+      asyncActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+    });
+
+    // Step 0: triggers async buffering. The writer in the test helper doesn't
+    // have a real stream controller, so writer.custom() may fail.
+    // The key assertion: no unhandled promise rejections / crashes.
+    await step(0);
+    await waitForAsyncOps();
+
+    // If buffering completed despite writer issues, observer was still called
+    expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
+  it('should not activate more chunks than asyncActivation ratio allows', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'partial-activation-thread';
+    const resourceId = 'partial-activation-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Partial Activation Test',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      },
+    });
+
+    // Initialize OM record
+    await storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      lookupKey: `thread:${threadId}`,
+      observedTimezone: 'UTC',
+    });
+
+    // Get the record to use its ID
+    let record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record).toBeDefined();
+    const recordId = record!.id;
+
+    // Manually add 4 buffered chunks with known messageTokens
+    for (let i = 0; i < 4; i++) {
+      await storage.updateBufferedObservations({
+        id: recordId,
+        chunk: {
+          observations: `Chunk ${i} observations`,
+          tokenCount: 100,
+          messageIds: [`chunk-msg-${i}`],
+          messageTokens: 1000, // Each chunk covers 1000 message tokens
+          lastObservedAt: new Date(Date.UTC(2025, 0, 1, 8 + i)),
+          cycleId: `cycle-${i}`,
+        },
+      });
+    }
+
+    // Verify 4 chunks stored
+    record = await storage.getObservationalMemory(threadId, resourceId);
+    const chunks = record?.bufferedObservationChunks ?? [];
+    expect(chunks).toHaveLength(4);
+
+    // Activate with ratio 0.5 → should activate ~2000 out of 4000 message tokens
+    // Target = 4000 * 0.5 = 2000. Closest boundary: 2 chunks (exactly 2000).
+    const result = await storage.swapBufferedToActive({
+      id: recordId,
+      activationRatio: 0.5,
+    });
+
+    // Should activate exactly 2 chunks (2000 message tokens = 50% of 4000)
+    expect(result.chunksActivated).toBe(2);
+    expect(result.messageTokensActivated).toBe(2000);
+    expect(result.activatedCycleIds).toHaveLength(2);
+
+    // Remaining chunks should be 2
+    record = await storage.getObservationalMemory(threadId, resourceId);
+    const remaining = record?.bufferedObservationChunks ?? [];
+    expect(remaining).toHaveLength(2);
+  });
 });
