@@ -4428,14 +4428,13 @@ describe('Full Async Buffering Flow', () => {
     // 20 messages × ~200 tokens = ~4000 tokens total
     // bufferEvery=1000 → first buffer at ~1000 tokens
     // messageTokens=10000 → threshold not reached
-    const { _om, storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } =
-      await setupAsyncBufferingScenario({
-        messageTokens: 10000,
-        bufferEvery: 1000,
-        asyncActivation: 0.7,
-        reflectionObservationTokens: 50000, // High - don't trigger reflection
-        messageCount: 20,
-      });
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 10000,
+      bufferEvery: 1000,
+      asyncActivation: 0.7,
+      reflectionObservationTokens: 50000, // High - don't trigger reflection
+      messageCount: 20,
+    });
 
     // Step 0 loads historical messages and should trigger async buffering
     // since ~4000 tokens > bufferEvery (1000)
@@ -4460,14 +4459,13 @@ describe('Full Async Buffering Flow', () => {
     // Phase 1: Start with few messages so buffering triggers (below threshold)
     // 10 messages × ~200 tokens = ~2000 tokens, threshold = 5000
     // bufferEvery=1000 → async buffering triggers at ~1000 tokens
-    const { _om, storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } =
-      await setupAsyncBufferingScenario({
-        messageTokens: 5000,
-        bufferEvery: 1000,
-        asyncActivation: 0.7,
-        reflectionObservationTokens: 50000,
-        messageCount: 10,
-      });
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 5000,
+      bufferEvery: 1000,
+      asyncActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+    });
 
     // Step 0: loads historical messages (~2000 tokens < 5000 threshold), triggers async buffering
     await step(0);
@@ -4613,15 +4611,14 @@ describe('Full Async Buffering Flow', () => {
   });
 
   it('should fall back to sync observation when blockAfter is exceeded', async () => {
-    const { storage, _om, threadId, resourceId, step, waitForAsyncOps, observerCalls } =
-      await setupAsyncBufferingScenario({
-        messageTokens: 1000,
-        bufferEvery: 500,
-        asyncActivation: 0.7,
-        reflectionObservationTokens: 50000,
-        blockAfter: 2000, // Will force sync when tokens exceed this
-        messageCount: 30, // ~6000 tokens, well above blockAfter
-      });
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferEvery: 500,
+      asyncActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      blockAfter: 2000, // Will force sync when tokens exceed this
+      messageCount: 30, // ~6000 tokens, well above blockAfter
+    });
 
     // Run multiple steps — with blockAfter=2000, once we exceed that
     // and there are no buffered chunks to activate, sync observation should trigger
@@ -4670,7 +4667,7 @@ describe('Full Async Buffering Flow', () => {
 
     // Either reflector was called (background reflection ran)
     // or a new generation was created (reflection completed)
-    const _history = await storage.getObservationalMemoryHistory(threadId, resourceId, 10);
+    const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 10);
     const record = await storage.getObservationalMemory(threadId, resourceId);
 
     // At minimum, observations should be present
@@ -4680,31 +4677,37 @@ describe('Full Async Buffering Flow', () => {
     // (async reflection starts in background when maybeAsyncReflect detects no buffered content)
     if (record!.observationTokenCount && record!.observationTokenCount > 30) {
       // If observations are still above threshold, reflection may be in progress or completed
+      // Either reflector was called OR a new generation was created (history > 1)
       expect(reflectorCalls.length + (history?.length ?? 0)).toBeGreaterThan(0);
     }
   });
 
   it('should preserve continuation hints only for sync observation, not async buffering', async () => {
-    const { _om, _storage, _threadId, _resourceId, step, waitForAsyncOps, observerCalls } =
-      await setupAsyncBufferingScenario({
-        messageTokens: 10000,
-        bufferEvery: 500,
-        asyncActivation: 0.7,
-        reflectionObservationTokens: 50000,
-        messageCount: 10,
-      });
+    const { step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 10000,
+      bufferEvery: 500,
+      asyncActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+    });
 
     // Step 0: triggers async buffering
     await step(0);
     await waitForAsyncOps();
 
-    // The observer prompt for buffering should contain the skip instruction
-    if (observerCalls.length > 0) {
-      // The buildObserverPrompt adds "Do NOT generate <current-task>" when skipContinuationHints is true
-      // We can't check the exact prompt here since MockLanguageModelV2 receives the full prompt,
-      // but we verify the observer was called (the prompt construction is tested separately)
-      expect(observerCalls.length).toBeGreaterThan(0);
-    }
+    // Observer should have been called for async buffering
+    expect(observerCalls.length).toBeGreaterThan(0);
+
+    // The mock captures `input: JSON.stringify(prompt).slice(0, 200)`.
+    // buildObserverPrompt appends "Do NOT include <current-task> or <suggested-response>"
+    // when skipContinuationHints is true. Since the mock only captures 200 chars
+    // of the serialized prompt, we can't reliably check the end of the prompt here.
+    // The important thing: the observer was called (buffering happened), and the
+    // skipContinuationHints logic is unit-tested in buildObserverPrompt's own tests.
+    // For this integration test, we verify the async buffering path was exercised.
+    const lastCall = observerCalls[observerCalls.length - 1];
+    expect(lastCall).toBeDefined();
+    expect(lastCall.input.length).toBeGreaterThan(0);
   });
 
   it('should enforce paired async config: observation.bufferEvery requires reflection.asyncActivation', () => {
