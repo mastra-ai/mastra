@@ -31,13 +31,15 @@ export class JsonBodyMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction): void {
     // Skip if body is already parsed (e.g., by another middleware)
     if (req.body !== undefined && Object.keys(req.body).length > 0) {
-      return next();
+      next();
+      return;
     }
 
     // Skip multipart requests - they're handled separately by route handlers
     const contentType = req.headers['content-type'] || '';
     if (contentType.includes('multipart/form-data')) {
-      return next();
+      next();
+      return;
     }
 
     this.jsonParser(req, res, next);

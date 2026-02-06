@@ -240,6 +240,10 @@ export class MastraModule implements NestModule {
    * @returns Dynamic module configuration
    */
   static registerAsync(options: MastraModuleAsyncOptions): DynamicModule {
+    if (!options.useFactory && !options.useClass && !options.useExisting) {
+      throw new Error('MastraModule.registerAsync() requires one of: useFactory, useClass, or useExisting');
+    }
+
     const providers: Provider[] = [];
 
     if (options.useFactory) {

@@ -129,19 +129,23 @@ export class ShutdownService implements OnModuleDestroy, OnApplicationShutdown {
       this.logger.debug(`  - ${id}: ${info.path} (running for ${elapsed}ms)`);
     }
 
-    // Wait for requests to complete or timeout
+    let timer: ReturnType<typeof setTimeout>;
+
     const waitForRequests = new Promise<void>(resolve => {
-      this.shutdownResolve = resolve;
+      this.shutdownResolve = () => {
+        clearTimeout(timer);
+        resolve();
+      };
       if (this.activeRequests.size === 0) {
+        clearTimeout(timer);
         resolve();
       }
     });
 
     const timeout = new Promise<void>(resolve => {
-      setTimeout(() => {
+      timer = setTimeout(() => {
         if (this.activeRequests.size > 0) {
           this.logger.warn(`Shutdown timeout: ${this.activeRequests.size} requests still active, forcing shutdown`);
-          // Log which requests are still running
           for (const [id, info] of this.activeRequests) {
             const elapsed = Date.now() - info.startTime;
             this.logger.warn(`  - ${id}: ${info.path} (running for ${elapsed}ms)`);

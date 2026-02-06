@@ -38,9 +38,9 @@ export class MastraRouteGuard implements CanActivate {
       return true;
     }
 
-    // Run Mastra's internal auth if explicitly enabled via module options
-    // or if the Mastra server instance has auth configured.
-    if (this.options.auth?.enabled || this.mastra.getServer()?.auth) {
+    // Run auth if module options enable it, or if the Mastra server has auth
+    // configured (unless module options explicitly disable it).
+    if (this.options.auth?.enabled !== false && (this.options.auth?.enabled || this.mastra.getServer()?.auth)) {
       const user = await this.authService.authenticate(request);
       if (user !== undefined) {
         this.requestContext.setUser(user);

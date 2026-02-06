@@ -388,7 +388,7 @@ describe('MastraModule', () => {
         method: 'GET',
         path: '/health',
       });
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(503);
       expect((response.body as any).status).toBe('shutting_down');
 
       await app.close();

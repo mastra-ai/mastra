@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import type { Mastra } from '@mastra/core/mastra';
-import { Controller, Get, Inject } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Inject, Res } from '@nestjs/common';
+import type { Response } from 'express';
 
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import { Public } from '../decorators/public.decorator';
@@ -46,11 +47,14 @@ export class SystemController {
   @Get('health')
   @Public()
   @SkipThrottle()
-  health(): { status: 'ok' | 'shutting_down'; timestamp: string } {
-    const status = this.shutdownService.shuttingDown ? 'shutting_down' : 'ok';
+  health(@Res({ passthrough: true }) res: Response): { status: 'ok' | 'shutting_down'; timestamp: string } {
+    const shuttingDown = this.shutdownService.shuttingDown;
+    if (shuttingDown) {
+      res.status(HttpStatus.SERVICE_UNAVAILABLE);
+    }
 
     return {
-      status,
+      status: shuttingDown ? 'shutting_down' : 'ok',
       timestamp: new Date().toISOString(),
     };
   }
@@ -62,8 +66,11 @@ export class SystemController {
   @Get('ready')
   @Public()
   @SkipThrottle()
-  ready(): { ready: boolean; activeRequests: number; timestamp: string } {
+  ready(@Res({ passthrough: true }) res: Response): { ready: boolean; activeRequests: number; timestamp: string } {
     const ready = !this.shutdownService.shuttingDown;
+    if (!ready) {
+      res.status(HttpStatus.SERVICE_UNAVAILABLE);
+    }
 
     return {
       ready,
