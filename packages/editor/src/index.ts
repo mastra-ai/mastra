@@ -276,7 +276,10 @@ export class MastraEditor implements IMastraEditor {
     const store = await this.getPromptBlocksStore();
     await store.createPromptBlock({ promptBlock: input });
     const resolved = await store.getPromptBlockByIdResolved({ id: input.id });
-    return resolved!;
+    if (!resolved) {
+      throw new Error(`Failed to resolve prompt block ${input.id} after creation`);
+    }
+    return resolved;
   }
 
   /**
@@ -296,7 +299,10 @@ export class MastraEditor implements IMastraEditor {
     const store = await this.getPromptBlocksStore();
     await store.updatePromptBlock(input);
     const resolved = await store.getPromptBlockByIdResolved({ id: input.id });
-    return resolved!;
+    if (!resolved) {
+      throw new Error(`Failed to resolve prompt block ${input.id} after update`);
+    }
+    return resolved;
   }
 
   /**

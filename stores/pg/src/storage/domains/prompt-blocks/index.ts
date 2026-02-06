@@ -310,7 +310,16 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       }
 
       const updatedBlock = await this.getPromptBlockById({ id });
-      return updatedBlock!;
+      if (!updatedBlock) {
+        throw new MastraError({
+          id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND_AFTER_UPDATE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: `Prompt block ${id} not found after update`,
+          details: { blockId: id },
+        });
+      }
+      return updatedBlock;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
