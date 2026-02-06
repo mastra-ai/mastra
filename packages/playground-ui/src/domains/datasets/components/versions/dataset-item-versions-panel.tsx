@@ -1,6 +1,7 @@
 'use client';
 
 import { format } from 'date-fns';
+import { Button } from '@/ds/components/Button';
 import { ItemList } from '@/ds/components/ItemList';
 import { useDatasetItemVersions, type DatasetItemVersion } from '../../hooks/use-dataset-item-versions';
 import { Badge } from '@/ds/components/Badge';
@@ -28,7 +29,7 @@ export function DatasetItemVersionsPanel({
   onVersionSelect,
   activeVersion,
 }: DatasetItemVersionsPanelProps) {
-  const { data: versions, isLoading } = useDatasetItemVersions(datasetId, itemId);
+  const { data: versions, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useDatasetItemVersions(datasetId, itemId);
 
   const handleVersionClick = (version: DatasetItemVersion) => {
     onVersionSelect?.(version);
@@ -88,6 +89,17 @@ export function DatasetItemVersionsPanel({
                 );
               })}
             </ItemList.Items>
+            {hasNextPage && (
+              <Button
+                variant="secondary"
+                size="default"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className="w-full mt-2"
+              >
+                {isFetchingNextPage ? 'Loading...' : 'Load More'}
+              </Button>
+            )}
           </ItemList.Scroller>
         </ItemList>
       )}
