@@ -19,6 +19,8 @@ export interface RunConfig {
   maxConcurrency?: number;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
+  /** Per-item execution timeout in milliseconds. Default: no timeout. */
+  itemTimeout?: number;
   /** Pre-created run ID (for async trigger - skips run creation) */
   runId?: string;
 }
