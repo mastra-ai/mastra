@@ -116,6 +116,39 @@ describe('Workflow schema type inference', () => {
       expectTypeOf(chained).not.toBeNever();
     });
 
+    it('should allow foreach with optional default schemas in array elements', () => {
+      const elementSchema = z.object({
+        value: z.number(),
+        threshold: z.number().optional().default(100),
+      });
+
+      const step = createStep({
+        id: 'each-step',
+        inputSchema: elementSchema,
+        outputSchema: elementSchema,
+        execute: async ({ inputData }) => {
+          return { value: inputData.value + 1, threshold: inputData.threshold };
+        },
+      });
+
+      const arrayStep = createStep({
+        id: 'produce-array',
+        inputSchema: z.object({ items: z.array(elementSchema) }),
+        outputSchema: z.array(elementSchema),
+        execute: async ({ inputData }) => inputData.items,
+      });
+
+      const workflow = createWorkflow({
+        id: 'foreach-workflow',
+        inputSchema: z.object({ items: z.array(elementSchema) }),
+        outputSchema: z.array(elementSchema),
+      });
+
+      const chained = workflow.then(arrayStep).foreach(step);
+
+      expectTypeOf(chained).not.toBeNever();
+    });
+
     it('should still reject steps with incompatible input schemas', () => {
       const workflowSchema = z.object({
         name: z.string(),
