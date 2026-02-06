@@ -22,10 +22,10 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:lib": "pnpm build",
     "build:watch": "pnpm build --watch",
-    "test": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
     "test:watch": "vitest watch",
-    "test:integration": "vitest run ./src/**/*.integration.test.ts",
-    "test:integration:cloud": "pnpm test:integration",
+    "test": "vitest run ./src/**/*.integration.test.ts",
+    "test:cloud": "pnpm test",
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
