@@ -12,6 +12,14 @@ export function truncateIdentifier(value: string, maxLength = POSTGRES_IDENTIFIE
   return truncated;
 }
 
+/**
+ * Builds a constraint name with an optional schema prefix, truncated to fit
+ * within Postgres' identifier length limit.  The result is always lowercased
+ * because PostgreSQL folds unquoted identifiers to lowercase when storing them
+ * in system catalogs (pg_constraint.conname, pg_indexes.indexname, etc.).
+ * Without this normalisation, runtime lookups that compare a mixed-case name
+ * against the catalog would silently fail.
+ */
 export function buildConstraintName({
   baseName,
   schemaName,
@@ -22,5 +30,5 @@ export function buildConstraintName({
   maxLength?: number;
 }): string {
   const prefix = schemaName ? `${schemaName}_` : '';
-  return truncateIdentifier(`${prefix}${baseName}`, maxLength);
+  return truncateIdentifier(`${prefix}${baseName}`.toLowerCase(), maxLength);
 }

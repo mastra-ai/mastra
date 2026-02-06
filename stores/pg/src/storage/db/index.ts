@@ -853,7 +853,7 @@ export class PgDB extends MastraBase {
     });
 
     const result = await this.client.oneOrNone<{ exists: boolean }>(
-      `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = $1) as exists`,
+      `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = lower($1)) as exists`,
       [constraintName],
     );
 
@@ -877,7 +877,7 @@ export class PgDB extends MastraBase {
       const constraintExists = await this.client.oneOrNone<{ exists: boolean }>(
         `
         SELECT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = $1
+          SELECT 1 FROM pg_constraint WHERE conname = lower($1)
         ) as exists
       `,
         [constraintName],
