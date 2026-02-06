@@ -4584,7 +4584,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // threads are not saved until the request completes successfully.
       const mockMemory = new MockMemory();
       const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
-      const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
       if (version === 'v1') {
@@ -4641,17 +4640,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       const thread = await mockMemory.getThreadById({ threadId: 'thread-err' });
 
-      if (version === 'v1') {
-        // v1 (legacy): Thread should NOT exist - old behavior preserved
-        expect(saveThreadSpy).not.toHaveBeenCalled();
-        expect(thread).toBeNull();
-      } else {
-        // v2: Thread should exist (created upfront to prevent race condition)
-        expect(thread).not.toBeNull();
-        expect(thread?.id).toBe('thread-err');
-        // But no messages should be saved since the LLM call failed
-        expect(saveMessagesSpy).not.toHaveBeenCalled();
-      }
+      // Thread should exist (created upfront to prevent race condition with storage
+      // backends like PostgresStore that validate thread existence before saving messages).
+      // This applies to all versions: v1 was fixed in Issue #12566, v2/v3 in PR #10881.
+      expect(thread).not.toBeNull();
+      expect(thread?.id).toBe('thread-err');
+      // But no messages should be saved since the LLM call failed
+      expect(saveMessagesSpy).not.toHaveBeenCalled();
     });
   });
 

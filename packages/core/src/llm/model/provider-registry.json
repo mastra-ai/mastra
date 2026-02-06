@@ -10,7 +10,7 @@
       "gateway": "models.dev"
     },
     "moonshotai-cn": {
-      "url": "https://api.moonshot.cn/v1",
+      "url": "https://api.moonshot.cn/anthropic/v1",
       "apiKeyEnvVar": "MOONSHOT_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Moonshot AI (China)",
@@ -23,7 +23,8 @@
         "kimi-k2.5"
       ],
       "docUrl": "https://platform.moonshot.cn/docs/api/chat",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "firmware": {
       "url": "https://app.firmware.ai/api/v1",
@@ -33,6 +34,7 @@
       "models": [
         "claude-haiku-4-5",
         "claude-opus-4-5",
+        "claude-opus-4-6",
         "claude-sonnet-4-5",
         "deepseek-chat",
         "deepseek-reasoner",
@@ -76,7 +78,7 @@
       "gateway": "models.dev"
     },
     "moonshotai": {
-      "url": "https://api.moonshot.ai/v1",
+      "url": "https://api.moonshot.ai/anthropic/v1",
       "apiKeyEnvVar": "MOONSHOT_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Moonshot AI",
@@ -89,7 +91,8 @@
         "kimi-k2.5"
       ],
       "docUrl": "https://platform.moonshot.ai/docs/api/chat",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "302ai": {
       "url": "https://api.302.ai/v1",
@@ -418,7 +421,6 @@
     "groq": {
       "url": "https://api.groq.com/openai/v1",
       "apiKeyEnvVar": "GROQ_API_KEY",
-      "apiKeyHeader": "Authorization",
       "name": "Groq",
       "models": [
         "llama-3.1-8b-instant",
@@ -564,6 +566,7 @@
         "alibaba/qwen3-embedding-8b",
         "alibaba/qwen3-max",
         "alibaba/qwen3-max-preview",
+        "alibaba/qwen3-max-thinking",
         "alibaba/qwen3-next-80b-a3b-instruct",
         "alibaba/qwen3-next-80b-a3b-thinking",
         "alibaba/qwen3-vl-instruct",
@@ -583,8 +586,10 @@
         "anthropic/claude-opus-4",
         "anthropic/claude-opus-4.1",
         "anthropic/claude-opus-4.5",
+        "anthropic/claude-opus-4.6",
         "anthropic/claude-sonnet-4",
         "anthropic/claude-sonnet-4.5",
+        "arcee-ai/trinity-large-preview",
         "arcee-ai/trinity-mini",
         "bfl/flux-kontext-max",
         "bfl/flux-kontext-pro",
@@ -673,6 +678,7 @@
         "openai/gpt-4.1-nano",
         "openai/gpt-4o",
         "openai/gpt-4o-mini",
+        "openai/gpt-4o-mini-search-preview",
         "openai/gpt-5",
         "openai/gpt-5-chat",
         "openai/gpt-5-codex",
@@ -734,7 +740,8 @@
         "zai/glm-4.6",
         "zai/glm-4.6v",
         "zai/glm-4.6v-flash",
-        "zai/glm-4.7"
+        "zai/glm-4.7",
+        "zai/glm-4.7-flashx"
       ],
       "docUrl": "https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway",
       "gateway": "models.dev"
@@ -1091,6 +1098,7 @@
         "Qwen/Qwen3-30B-A3B-Instruct-2507",
         "Qwen/Qwen3-32B",
         "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE",
+        "Qwen/Qwen3-Coder-Next",
         "Qwen/Qwen3-Next-80B-A3B-Instruct",
         "Qwen/Qwen3-VL-235B-A22B-Instruct",
         "Qwen/Qwen3Guard-Gen-0.6B",
@@ -1704,6 +1712,7 @@
         "anthropic/claude-opus-4",
         "anthropic/claude-opus-4-1",
         "anthropic/claude-opus-4-5",
+        "anthropic/claude-opus-4-6",
         "anthropic/claude-sonnet-4",
         "anthropic/claude-sonnet-4-5",
         "openai/gpt-3.5-turbo",
@@ -1793,6 +1802,7 @@
         "gpt-5.2-chat-latest",
         "gpt-5.2-codex",
         "gpt-5.2-pro",
+        "gpt-5.3-codex",
         "o1",
         "o1-mini",
         "o1-preview",
@@ -2205,7 +2215,8 @@
         "moonshotai/Kimi-K2-Thinking",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
-        "zai-org/GLM-4.7"
+        "zai-org/GLM-4.7",
+        "zai-org/GLM-4.7-Flash"
       ],
       "docUrl": "https://deepinfra.com/models",
       "gateway": "models.dev",
@@ -2420,6 +2431,7 @@
         "claude-opus-4-20250514",
         "claude-opus-4-5",
         "claude-opus-4-5-20251101",
+        "claude-opus-4-6",
         "claude-sonnet-4-0",
         "claude-sonnet-4-20250514",
         "claude-sonnet-4-5",
@@ -2598,6 +2610,7 @@
         "anthropic/claude-haiku-3.5",
         "anthropic/claude-haiku-4.5",
         "anthropic/claude-opus-4",
+        "anthropic/claude-opus-4-6",
         "anthropic/claude-opus-4.1",
         "anthropic/claude-opus-4.5",
         "anthropic/claude-sonnet-3.5",
@@ -2803,6 +2816,7 @@
     "firmware": [
       "claude-haiku-4-5",
       "claude-opus-4-5",
+      "claude-opus-4-6",
       "claude-sonnet-4-5",
       "deepseek-chat",
       "deepseek-reasoner",
@@ -3198,6 +3212,7 @@
       "alibaba/qwen3-embedding-8b",
       "alibaba/qwen3-max",
       "alibaba/qwen3-max-preview",
+      "alibaba/qwen3-max-thinking",
       "alibaba/qwen3-next-80b-a3b-instruct",
       "alibaba/qwen3-next-80b-a3b-thinking",
       "alibaba/qwen3-vl-instruct",
@@ -3217,8 +3232,10 @@
       "anthropic/claude-opus-4",
       "anthropic/claude-opus-4.1",
       "anthropic/claude-opus-4.5",
+      "anthropic/claude-opus-4.6",
       "anthropic/claude-sonnet-4",
       "anthropic/claude-sonnet-4.5",
+      "arcee-ai/trinity-large-preview",
       "arcee-ai/trinity-mini",
       "bfl/flux-kontext-max",
       "bfl/flux-kontext-pro",
@@ -3307,6 +3324,7 @@
       "openai/gpt-4.1-nano",
       "openai/gpt-4o",
       "openai/gpt-4o-mini",
+      "openai/gpt-4o-mini-search-preview",
       "openai/gpt-5",
       "openai/gpt-5-chat",
       "openai/gpt-5-codex",
@@ -3368,7 +3386,8 @@
       "zai/glm-4.6",
       "zai/glm-4.6v",
       "zai/glm-4.6v-flash",
-      "zai/glm-4.7"
+      "zai/glm-4.7",
+      "zai/glm-4.7-flashx"
     ],
     "nebius": [
       "BAAI/bge-en-icl",
@@ -3669,6 +3688,7 @@
       "Qwen/Qwen3-30B-A3B-Instruct-2507",
       "Qwen/Qwen3-32B",
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE",
+      "Qwen/Qwen3-Coder-Next",
       "Qwen/Qwen3-Next-80B-A3B-Instruct",
       "Qwen/Qwen3-VL-235B-A22B-Instruct",
       "Qwen/Qwen3Guard-Gen-0.6B",
@@ -4146,6 +4166,7 @@
       "anthropic/claude-opus-4",
       "anthropic/claude-opus-4-1",
       "anthropic/claude-opus-4-5",
+      "anthropic/claude-opus-4-6",
       "anthropic/claude-sonnet-4",
       "anthropic/claude-sonnet-4-5",
       "openai/gpt-3.5-turbo",
@@ -4229,6 +4250,7 @@
       "gpt-5.2-chat-latest",
       "gpt-5.2-codex",
       "gpt-5.2-pro",
+      "gpt-5.3-codex",
       "o1",
       "o1-mini",
       "o1-preview",
@@ -4560,7 +4582,8 @@
       "moonshotai/Kimi-K2-Thinking",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
-      "zai-org/GLM-4.7"
+      "zai-org/GLM-4.7",
+      "zai-org/GLM-4.7-Flash"
     ],
     "zhipuai": [
       "glm-4.5",
@@ -4679,6 +4702,7 @@
       "claude-opus-4-20250514",
       "claude-opus-4-5",
       "claude-opus-4-5-20251101",
+      "claude-opus-4-6",
       "claude-sonnet-4-0",
       "claude-sonnet-4-20250514",
       "claude-sonnet-4-5",
@@ -4800,6 +4824,7 @@
       "anthropic/claude-haiku-3.5",
       "anthropic/claude-haiku-4.5",
       "anthropic/claude-opus-4",
+      "anthropic/claude-opus-4-6",
       "anthropic/claude-opus-4.1",
       "anthropic/claude-opus-4.5",
       "anthropic/claude-sonnet-3.5",
