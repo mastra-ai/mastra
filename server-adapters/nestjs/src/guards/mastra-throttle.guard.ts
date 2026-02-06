@@ -101,7 +101,7 @@ export class MastraThrottleGuard implements CanActivate, OnModuleDestroy {
     if (entry.count > limit) {
       const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
 
-      this.logger.warn(`Rate limit exceeded for ${clientId} on ${request.path}`);
+      this.logger.debug(`Rate limit exceeded for client on ${request.path}`);
 
       throw new HttpException(
         {

@@ -50,7 +50,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
     if (normalized.status >= 500) {
       this.logger.error(
         `${request.method} ${request.path} - ${normalized.status} ${normalized.error}`,
-        exception instanceof Error ? exception.stack : undefined,
+        exception instanceof Error ? exception.stack : String(exception),
       );
     } else {
       this.logger.warn(`${request.method} ${request.path} - ${normalized.status} ${normalized.error}`);
