@@ -12,7 +12,7 @@
  * the `alawmulaw` library for accurate codec implementation.
  */
 
-import alawmulaw from 'alawmulaw';
+import * as alawmulaw from 'alawmulaw';
 
 /**
  * Convert μ-law encoded audio to 16-bit PCM
