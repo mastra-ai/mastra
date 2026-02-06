@@ -510,6 +510,7 @@ export function MastraRuntimeProvider({
 
   // Helper to refresh OM sidebar when observation/reflection completes
   const refreshObservationalMemory = (operationType?: string) => {
+    console.log('[OM-REFRESH] refreshObservationalMemory called', { operationType });
     if (operationType === 'reflection') {
       setIsReflectingFromStream(false);
     } else {
@@ -724,6 +725,7 @@ export function MastraRuntimeProvider({
                 (chunk as any).type === 'data-om-observation-failed' ||
                 (chunk as any).type === 'data-om-activation'
               ) {
+                console.log('[OM-CHUNK] triggering refresh from chunk', { type: (chunk as any).type, data: (chunk as any).data });
                 refreshObservationalMemory((chunk as any).data?.operationType);
               }
 
@@ -789,6 +791,7 @@ export function MastraRuntimeProvider({
                   chunk.type === 'data-om-observation-failed' ||
                   chunk.type === 'data-om-activation'
                 ) {
+                  console.log('[OM-CHUNK] triggering refresh from chunk (legacy)', { type: chunk.type, data: (chunk as any).data });
                   refreshObservationalMemory((chunk as any).data?.operationType);
                 }
 

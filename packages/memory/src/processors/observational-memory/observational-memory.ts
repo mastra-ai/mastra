@@ -554,6 +554,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private lastBufferedBoundary = new Map<string, number>();
 
   /**
+   * Tracks cycleId for in-flight buffered reflections.
+   * Since reflection buffering doesn't use chunks (it's a single string),
+   * we store the cycleId in-memory so we can match it at activation time.
+   * Key format: "refl:{lockKey}"
+   */
+  private reflectionBufferCycleIds = new Map<string, string>();
+
+  /**
    * Check if async buffering is enabled for observations.
    */
   private isAsyncObservationEnabled(): boolean {
@@ -2356,7 +2364,13 @@ ${suggestedResponse}
     const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
     const currentTask = threadOMMetadata?.currentTask;
     const suggestedResponse = threadOMMetadata?.suggestedResponse;
-    const currentDate = (requestContext?.get('currentDate') as Date | undefined) ?? new Date();
+    const rawCurrentDate = requestContext?.get('currentDate');
+    const currentDate =
+      rawCurrentDate instanceof Date
+        ? rawCurrentDate
+        : typeof rawCurrentDate === 'string'
+          ? new Date(rawCurrentDate)
+          : new Date();
 
     if (!record.activeObservations) {
       return;
@@ -3585,6 +3599,9 @@ ${formattedMessages}
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const observationTokens = record.observationTokenCount ?? 0;
 
+    // Store cycleId so tryActivateBufferedReflection can use it for UI markers
+    this.reflectionBufferCycleIds.set(_bufferKey, cycleId);
+
     // Emit buffering start marker
     if (writer) {
       const startMarker = this.createBufferingStartMarker({
@@ -3680,12 +3697,16 @@ ${formattedMessages}
       activationRatio: this.reflectionConfig.asyncActivation ?? 1,
     });
 
-    // Emit activation marker
+    // Reset lastBufferedBoundary so new reflection buffering can start fresh
+    this.lastBufferedBoundary.delete(bufferKey);
+
+    // Emit activation marker using the original buffering cycleId so the UI can match it
     if (writer) {
       const afterRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
       const afterTokens = afterRecord?.observationTokenCount ?? 0;
+      const originalCycleId = this.reflectionBufferCycleIds.get(bufferKey);
       const activationMarker = this.createActivationMarker({
-        cycleId: `reflect-act-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+        cycleId: originalCycleId ?? `reflect-act-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
         operationType: 'reflection',
         chunksActivated: 1,
         tokensActivated: beforeTokens,
@@ -3697,6 +3718,9 @@ ${formattedMessages}
       });
       void writer.custom(activationMarker).catch(() => {});
     }
+
+    // Clean up the stored cycleId
+    this.reflectionBufferCycleIds.delete(bufferKey);
 
     return true;
   }
@@ -4223,8 +4247,10 @@ ${formattedMessages}
     const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer);
     if (activationSuccess) return;
 
-    // No buffered reflection available — don't fall through to sync.
-    // Sync reflection will happen naturally after the next synchronous observation.
+    // No buffered reflection available — start one now in the background.
+    // This can happen when observations jump past the threshold via activation
+    // without any background reflection having been triggered beforehand.
+    this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer);
   }
 
   /**

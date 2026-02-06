@@ -1791,7 +1791,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Split by lines for partial activation
       const lines = bufferedContent.split('\n');
       const totalLines = lines.length;
-      const linesToActivate = Math.ceil((totalLines * input.activationRatio) / 100);
+      // activationRatio is a 0-1 float (e.g., 0.5 = 50%)
+      const linesToActivate = Math.ceil(totalLines * input.activationRatio);
 
       const activatedLines = lines.slice(0, linesToActivate);
       const remainingLines = lines.slice(linesToActivate);
@@ -1800,7 +1801,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const remainingContent = remainingLines.length > 0 ? remainingLines.join('\n') : null;
 
       // Calculate approximate token split
-      const activatedTokens = Math.ceil((bufferedTokens * input.activationRatio) / 100);
+      const activatedTokens = Math.ceil(bufferedTokens * input.activationRatio);
       const remainingTokens = bufferedTokens - activatedTokens;
 
       // Create new generation with activated reflection

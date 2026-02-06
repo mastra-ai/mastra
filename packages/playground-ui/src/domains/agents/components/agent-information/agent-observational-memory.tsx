@@ -338,6 +338,17 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     return record.activeObservations;
   }, [record]);
 
+  // DEBUG: trace what the UI receives
+  console.log('[OM-UI] record update', {
+    recordId: record?.id,
+    activeObservationsLength: record?.activeObservations?.length,
+    activeObservationsPreview: record?.activeObservations?.slice(0, 100),
+    observationTokenCount: record?.observationTokenCount,
+    pendingMessageTokens: record?.pendingMessageTokens,
+    streamProgressObsTokens: streamProgress?.observationTokens,
+    streamProgressPendingTokens: streamProgress?.pendingTokens,
+  });
+
   const hasObservations = Boolean(observations);
   // Use current observation token count, not cumulative total
   const tokenCount = statusData?.observationalMemory?.observationTokenCount;
