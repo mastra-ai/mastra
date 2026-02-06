@@ -214,6 +214,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       }
 
       const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
+      let versionCreated = false;
 
       // Check if any snapshot config fields are present
       const hasConfigUpdate = SNAPSHOT_FIELDS.some(field => field in configFields);
@@ -248,6 +249,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         );
 
         if (changedFields.length > 0) {
+          versionCreated = true;
           const newVersionId = crypto.randomUUID();
           await this.createVersion({
             id: newVersionId,
@@ -299,8 +301,8 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       values.push(id);
 
-      if (setClauses.length > 2) {
-        // More than just updatedAt and updatedAtZ
+      if (setClauses.length > 2 || versionCreated) {
+        // More than just updatedAt and updatedAtZ, or a new version was created
         await this.#db.client.none(
           `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
           values,
