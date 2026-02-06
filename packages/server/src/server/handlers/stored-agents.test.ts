@@ -3,7 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { HTTPException } from '../http-exception';
-import { updateStoredAgentBodySchema } from '../schemas/stored-agents';
+import { createStoredAgentBodySchema, updateStoredAgentBodySchema } from '../schemas/stored-agents';
 import type { ServerContext } from '../server-adapter';
 import {
   LIST_STORED_AGENTS_ROUTE,
@@ -456,6 +456,42 @@ describe('Stored Agents Handlers', () => {
       });
     });
 
+    it('should derive id from name via slugify when id is not provided', async () => {
+      const result = await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        id: undefined,
+        name: 'My Cool Agent',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+
+      expect(result).toMatchObject({
+        id: 'my-cool-agent',
+        name: 'My Cool Agent',
+      });
+      expect(mockAgentsStore.createAgent).toHaveBeenCalledWith({
+        agent: expect.objectContaining({
+          id: 'my-cool-agent',
+          name: 'My Cool Agent',
+        }),
+      });
+    });
+
+    it('should use provided id when explicitly set', async () => {
+      const result = await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        id: 'custom-id-123',
+        name: 'My Agent',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+
+      expect(result).toMatchObject({
+        id: 'custom-id-123',
+        name: 'My Agent',
+      });
+    });
+
     it('should throw 409 when agent with same ID already exists', async () => {
       mockAgentsData.set('existing-agent', {
         id: 'existing-agent',
@@ -715,5 +751,44 @@ describe('updateStoredAgentBodySchema', () => {
       expect(result.data.name).toBe('New Name');
       expect(result.data.memory).toBeNull();
     }
+  });
+});
+
+describe('createStoredAgentBodySchema', () => {
+  const baseAgent = {
+    name: 'Test Agent',
+    instructions: 'Be helpful',
+    model: { name: 'gpt-4', provider: 'openai' },
+  };
+
+  it('should accept a create body without id', () => {
+    const result = createStoredAgentBodySchema.safeParse(baseAgent);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.id).toBeUndefined();
+      expect(result.data.name).toBe('Test Agent');
+    }
+  });
+
+  it('should accept a create body with an explicit id', () => {
+    const result = createStoredAgentBodySchema.safeParse({
+      ...baseAgent,
+      id: 'custom-id',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.id).toBe('custom-id');
+    }
+  });
+
+  it('should require name', () => {
+    const result = createStoredAgentBodySchema.safeParse({
+      instructions: 'Be helpful',
+      model: { name: 'gpt-4', provider: 'openai' },
+    });
+
+    expect(result.success).toBe(false);
   });
 });

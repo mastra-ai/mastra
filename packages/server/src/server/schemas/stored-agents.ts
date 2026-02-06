@@ -91,10 +91,11 @@ const agentMetadataSchema = z.object({
 /**
  * POST /stored/agents - Create stored agent body
  * Flat union of agent-record fields + config fields
+ * The id is optional — if not provided, it will be derived from the agent name via slugify.
  */
 export const createStoredAgentBodySchema = z
   .object({
-    id: z.string().describe('Unique identifier for the agent'),
+    id: z.string().optional().describe('Unique identifier for the agent. If not provided, derived from name.'),
     authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
   })
