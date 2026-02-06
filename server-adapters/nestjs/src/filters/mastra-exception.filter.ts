@@ -74,6 +74,14 @@ export class MastraExceptionFilter implements ExceptionFilter {
       const status = exception.getStatus();
       const response = exception.getResponse();
 
+      if (status >= 500) {
+        return {
+          status,
+          error: 'An internal error occurred',
+          code: this.getErrorCode(status),
+        };
+      }
+
       if (typeof response === 'string') {
         return {
           status,

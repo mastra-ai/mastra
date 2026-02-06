@@ -106,8 +106,16 @@ describe('NestJS MCP Registry Routes Integration', () => {
         headers[key] = value;
       });
 
-      // Parse JSON response
-      const data = await response.json();
+      // Parse response body safely
+      const text = await response.text();
+      let data: unknown = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { raw: text };
+        }
+      }
 
       return {
         status: response.status,
