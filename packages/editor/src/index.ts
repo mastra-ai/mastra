@@ -10,6 +10,7 @@ import type {
   MastraScorers,
   StorageResolvedAgentType,
   StorageScorerConfig,
+  StorageToolConfig,
   SerializedMemoryConfig,
   SharedMemoryConfig,
 } from '@mastra/core';
@@ -477,9 +478,12 @@ export class MastraEditor implements IMastraEditor {
 
   /**
    * Resolve stored tool IDs to actual tool instances from Mastra's registry.
+   * Applies description overrides from per-tool config when present.
    */
-  private resolveStoredTools(storedTools?: string[]): Record<string, ToolAction<any, any, any, any, any, any>> {
-    if (!storedTools || storedTools.length === 0) {
+  private resolveStoredTools(
+    storedTools?: Record<string, StorageToolConfig>,
+  ): Record<string, ToolAction<any, any, any, any, any, any>> {
+    if (!storedTools || Object.keys(storedTools).length === 0) {
       return {};
     }
 
@@ -489,10 +493,15 @@ export class MastraEditor implements IMastraEditor {
 
     const resolvedTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
 
-    for (const toolKey of storedTools) {
+    for (const [toolKey, toolConfig] of Object.entries(storedTools)) {
       try {
         const tool = this.mastra.getToolById(toolKey);
-        resolvedTools[toolKey] = tool;
+
+        if (toolConfig.description) {
+          resolvedTools[toolKey] = { ...tool, description: toolConfig.description };
+        } else {
+          resolvedTools[toolKey] = tool;
+        }
       } catch {
         this.logger?.warn(`Tool "${toolKey}" referenced in stored agent but not registered in Mastra`);
       }

@@ -576,7 +576,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       });
 
       it('should handle tools configuration', async () => {
-        const tools = ['calculator', 'webSearch', 'codeInterpreter'];
+        const tools = { calculator: {}, webSearch: {}, codeInterpreter: {} };
 
         const agent = createSampleAgent({ tools });
 

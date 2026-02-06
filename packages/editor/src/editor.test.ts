@@ -23,7 +23,7 @@ const sampleStoredAgent = {
   description: 'A test agent from storage',
   instructions: 'You are a helpful test assistant',
   model: { provider: 'openai', name: 'gpt-4' },
-  tools: ['test-tool'],
+  tools: { 'test-tool': {} },
   defaultOptions: { maxSteps: 5 },
   metadata: { version: '1.0' },
 };
@@ -676,7 +676,7 @@ describe('Stored Agents via MastraEditor', () => {
         description: 'An agent with primitives',
         instructions: 'You are a comprehensive test assistant',
         model: { provider: 'openai', name: 'gpt-4' },
-        tools: ['registered-tool'],
+        tools: { 'registered-tool': {} },
         workflows: ['registered-workflow'],
         agents: ['registered-sub-agent'],
         defaultOptions: { maxSteps: 10 },
@@ -782,7 +782,7 @@ describe('Stored Agents via MastraEditor', () => {
         name: 'Agent With Missing References',
         instructions: 'Test agent',
         model: { provider: 'openai', name: 'gpt-4' },
-        tools: ['missing-tool'],
+        tools: { 'missing-tool': {} },
         workflows: ['missing-workflow'],
         agents: ['missing-agent'],
         memory: {
@@ -817,6 +817,68 @@ describe('Stored Agents via MastraEditor', () => {
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Workflow "missing-workflow"'));
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Agent "missing-agent"'));
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Scorer "missing-scorer"'));
+    });
+
+    it('should apply tool description overrides from stored config', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+
+      await agentsStore?.createAgent({
+        agent: {
+          id: 'agent-with-tool-override',
+          name: 'Tool Override Agent',
+          instructions: 'Test agent with tool description override',
+          model: { provider: 'openai', name: 'gpt-4' },
+          tools: {
+            'test-tool': { description: 'Custom overridden description' },
+          },
+        },
+      });
+
+      const editor = new MastraEditor();
+      const mastra = new Mastra({
+        storage,
+        tools: { 'test-tool': mockTool },
+        editor,
+      });
+
+      const agent = await editor.getStoredAgentById('agent-with-tool-override');
+      expect(agent).toBeInstanceOf(Agent);
+
+      const tools = await agent!.listTools();
+      expect(tools['test-tool']).toBeDefined();
+      expect(tools['test-tool'].description).toBe('Custom overridden description');
+    });
+
+    it('should keep original tool description when no override is provided', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+
+      await agentsStore?.createAgent({
+        agent: {
+          id: 'agent-without-tool-override',
+          name: 'No Override Agent',
+          instructions: 'Test agent without tool description override',
+          model: { provider: 'openai', name: 'gpt-4' },
+          tools: {
+            'test-tool': {},
+          },
+        },
+      });
+
+      const editor = new MastraEditor();
+      const mastra = new Mastra({
+        storage,
+        tools: { 'test-tool': mockTool },
+        editor,
+      });
+
+      const agent = await editor.getStoredAgentById('agent-without-tool-override');
+      expect(agent).toBeInstanceOf(Agent);
+
+      const tools = await agent!.listTools();
+      expect(tools['test-tool']).toBeDefined();
+      expect(tools['test-tool'].description).toBe('A test tool');
     });
   });
 });
