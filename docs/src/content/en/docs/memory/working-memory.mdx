@@ -27,7 +27,7 @@ Working memory can persist at two different scopes:
 
 **Important:** Switching between scopes means the agent won't see memory from the other scope - thread-scoped memory is completely separate from resource-scoped memory.
 
-## Quick Start
+## Getting started
 
 Here's a minimal example of setting up an agent with working memory:
 
@@ -51,17 +51,17 @@ const agent = new Agent({
 });
 ```
 
-## How it Works
+## How it works
 
 Working memory is a block of Markdown text that the agent is able to update over time to store continuously relevant information:
 
 <YouTube id="UMy_JHLf1n8" />
 
-## Memory Persistence Scopes
+## Memory persistence scopes
 
 Working memory can operate in two different scopes, allowing you to choose how memory persists across conversations:
 
-### Resource-Scoped Memory (Default)
+### Resource-scoped memory (default)
 
 By default, working memory persists across all conversation threads for the same user (resourceId), enabling persistent user memory:
 
@@ -90,7 +90,7 @@ const memory = new Memory({
 - Customer service bots that maintain customer context
 - Educational applications that track student progress
 
-### Usage with Agents
+### Usage with agents
 
 When using resource-scoped memory, make sure to pass the `resource` parameter in the memory options:
 
@@ -104,7 +104,7 @@ const response = await agent.generate("Hello!", {
 });
 ```
 
-### Thread-Scoped Memory
+### Thread-scoped memory
 
 Thread-scoped memory isolates working memory to individual conversation threads. Each thread maintains its own isolated memory:
 
@@ -131,18 +131,18 @@ const memory = new Memory({
 - Temporary or session-specific information
 - Workflows where each thread needs working memory but threads are ephemeral and not related to each other
 
-## Storage Adapter Support
+## Storage adapter support
 
 Resource-scoped working memory requires specific storage adapters that support the `mastra_resources` table:
 
-### Supported Storage Adapters
+### Supported storage adapters
 
 - **libSQL** (`@mastra/libsql`)
 - **PostgreSQL** (`@mastra/pg`)
 - **Upstash** (`@mastra/upstash`)
 - **MongoDB** (`@mastra/mongodb`)
 
-## Custom Templates
+## Custom templates
 
 Templates guide the agent on what information to track and update in working memory. While a default template is used if none is provided, you'll typically want to define a custom template tailored to your agent's specific use case to ensure it remembers the most relevant information.
 
@@ -182,7 +182,7 @@ const memory = new Memory({
 });
 ```
 
-## Designing Effective Templates
+## Designing effective templates
 
 A well-structured template keeps the information easy for the agent to parse and update. Treat the
 template as a short form that you want the assistant to keep up to date.
@@ -198,7 +198,7 @@ template as a short form that you want the assistant to keep up to date.
 - **Mention update rules in `instructions`.** You can instruct how and when to fill or clear parts of
   the template directly in the agent's `instructions` field.
 
-### Alternative Template Styles
+### Alternative template styles
 
 Use a shorter single block if you only need a few items:
 
@@ -226,13 +226,13 @@ const paragraphMemory = new Memory({
 });
 ```
 
-## Structured Working Memory
+## Structured working memory
 
 Working memory can also be defined using a structured schema instead of a Markdown template. This allows you to specify the exact fields and types that should be tracked, using a [Zod](https://zod.dev/) schema. When using a schema, the agent will see and update working memory as a JSON object matching your schema.
 
 **Important:** You must specify either `template` or `schema`, but not both.
 
-### Example: Schema-Based Working Memory
+### Example: schema-based working memory
 
 ```typescript
 import { z } from "zod";
@@ -277,7 +277,7 @@ When a schema is provided, the agent receives the working memory as a JSON objec
 }
 ```
 
-### Merge Semantics for Schema-Based Memory
+### Merge semantics for schema-based memory
 
 Schema-based working memory uses **merge semantics**, meaning the agent only needs to include fields it wants to add or update. Existing fields are preserved automatically.
 
@@ -285,13 +285,13 @@ Schema-based working memory uses **merge semantics**, meaning the agent only nee
 - **Set a field to `null` to delete it:** This explicitly removes the field from memory
 - **Arrays are replaced entirely:** When an array field is provided, it replaces the existing array (arrays are not merged element-by-element)
 
-## Choosing Between Template and Schema
+## Choosing between template and schema
 
 - Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad. Templates use **replace semantics** — the agent must provide the complete memory content on each update.
 - Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON. Schemas use **merge semantics** — the agent only provides fields to update, and existing fields are preserved.
 - Only one mode can be active at a time: setting both `template` and `schema` is not supported.
 
-## Example: Multi-step Retention
+## Example: multi-step retention
 
 Below is a simplified view of how the `User Profile` template updates across a short user
 conversation:
@@ -326,11 +326,11 @@ again because it has been stored in working memory.
 If your agent is not properly updating working memory when you expect it to, you can add system
 instructions on _how_ and _when_ to use this template in your agent's `instructions` setting.
 
-## Setting Initial Working Memory
+## Setting initial working memory
 
 While agents typically update working memory through the `updateWorkingMemory` tool, you can also set initial working memory programmatically when creating or updating threads. This is useful for injecting user data (like their name, preferences, or other info) that you want available to the agent without passing it in every request.
 
-### Setting Working Memory via Thread Metadata
+### Setting working memory via thread metadata
 
 When creating a thread, you can provide initial working memory through the metadata's `workingMemory` key:
 
@@ -361,7 +361,7 @@ await agent.generate("What's my blood type?", {
 // Response: "Your blood type is O+."
 ```
 
-### Updating Working Memory Programmatically
+### Updating working memory programmatically
 
 You can also update an existing thread's working memory:
 
@@ -383,7 +383,7 @@ await memory.updateThread({
 });
 ```
 
-### Direct Memory Update
+### Direct memory update
 
 Alternatively, use the `updateWorkingMemory` method directly:
 
@@ -395,7 +395,7 @@ await memory.updateWorkingMemory({
 });
 ```
 
-## Read-Only Working Memory
+## Read-only working memory
 
 In some scenarios, you may want an agent to have access to working memory data without the ability to modify it. This is useful for:
 

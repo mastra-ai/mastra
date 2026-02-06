@@ -19,7 +19,7 @@ What semantic recall is, how it works, and how to configure it in Mastra → [Yo
 
 :::
 
-## How Semantic Recall Works
+## How semantic recall works
 
 Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent message history](./message-history).
 
@@ -31,7 +31,7 @@ When it's enabled, new messages are used to query a vector DB for semantically s
 
 After getting a response from the LLM, all new messages (user, assistant, and tool calls/results) are inserted into the vector DB to be recalled in later interactions.
 
-## Quick Start
+## Getting started
 
 Semantic recall is enabled by default, so if you give your agent memory it will be included:
 
@@ -48,7 +48,7 @@ const agent = new Agent({
 });
 ```
 
-## Using the recall() Method
+## Using the recall() method
 
 While `listMessages` retrieves messages by thread ID with basic pagination, [`recall()`](/reference/memory/recall) adds support for **semantic search**. When you need to find messages by meaning rather than just recency, use `recall()` with a `vectorSearchString`:
 
@@ -142,7 +142,7 @@ const agent = new Agent({
 
 Semantic recall relies on an [embedding model](/reference/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
 
-#### Using the Model Router (Recommended)
+#### Using the model router (recommended)
 
 The simplest way is to use a `provider/model` string with autocomplete support:
 
@@ -165,7 +165,7 @@ Supported embedding models:
 
 The model router automatically handles API key detection from environment variables (`OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`).
 
-#### Using AI SDK Packages
+#### Using AI SDK packages
 
 You can also use AI SDK embedding models directly:
 
@@ -181,7 +181,7 @@ const agent = new Agent({
 });
 ```
 
-#### Using FastEmbed (Local)
+#### Using FastEmbed (local)
 
 To use FastEmbed (a local embedding model), install `@mastra/fastembed`:
 
@@ -203,7 +203,7 @@ const agent = new Agent({
 });
 ```
 
-## PostgreSQL Index Optimization
+## PostgreSQL index optimization
 
 When using PostgreSQL as your vector store, you can optimize semantic recall performance by configuring the vector index. This is particularly important for large-scale deployments with thousands of messages.
 
@@ -262,6 +262,6 @@ You might want to disable semantic recall in scenarios like:
 - When message history provides sufficient context for the current conversation.
 - In performance-sensitive applications, like realtime two-way audio, where the added latency of creating embeddings and running vector queries is noticeable.
 
-## Viewing Recalled Messages
+## Viewing recalled messages
 
 When tracing is enabled, any messages retrieved via semantic recall will appear in the agent's trace output, alongside recent message history (if configured).

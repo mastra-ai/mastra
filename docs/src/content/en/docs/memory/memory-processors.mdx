@@ -17,7 +17,7 @@ When memory is enabled on an agent, Mastra adds memory processors to the agent's
 
 Memory processors are [processors](/docs/agents/processors) that operate specifically on memory-related messages and state.
 
-## Built-in Memory Processors
+## Built-in memory processors
 
 Mastra automatically adds these processors when memory is enabled:
 
@@ -170,7 +170,7 @@ const agent = new Agent({
 });
 ```
 
-## Manual Control and Deduplication
+## Manual control and deduplication
 
 If you manually add a memory processor to `inputProcessors` or `outputProcessors`, Mastra will **not** automatically add it. This gives you full control over processor ordering:
 
@@ -203,11 +203,11 @@ const agent = new Agent({
 });
 ```
 
-## Processor Execution Order
+## Processor execution order
 
 Understanding the execution order is important when combining guardrails with memory:
 
-### Input Processors
+### Input processors
 
 ```
 [Memory Processors] → [Your inputProcessors]
@@ -218,7 +218,7 @@ Understanding the execution order is important when combining guardrails with me
 
 This means memory loads message history before your processors can validate or filter the input.
 
-### Output Processors
+### Output processors
 
 ```
 [Your outputProcessors] → [Memory Processors]
@@ -229,7 +229,7 @@ This means memory loads message history before your processors can validate or f
 
 This ordering is designed to be **safe by default**: if your output guardrail calls `abort()`, the memory processors never run and **no messages are saved**.
 
-## Guardrails and Memory
+## Guardrails and memory
 
 The default execution order provides safe guardrail behavior:
 
@@ -318,7 +318,7 @@ const agent = new Agent({
 
 Both scenarios are safe - guardrails prevent inappropriate content from being persisted to memory
 
-## Related documentation
+## Related
 
 - [Processors](/docs/agents/processors) - General processor concepts and custom processor creation
 - [Guardrails](/docs/agents/guardrails) - Security and validation processors

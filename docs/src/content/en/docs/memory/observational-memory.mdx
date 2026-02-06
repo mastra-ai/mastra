@@ -12,7 +12,7 @@ packages:
 
 Observational Memory (OM) is Mastra's memory system for long-context agentic memory. Two background agents — an **Observer** and a **Reflector** — watch your agent's conversations and maintain a dense observation log that replaces raw message history as it grows.
 
-## Quick Start
+## Getting started
 
 Enable `observationalMemory` in the memory options when creating your agent:
 
@@ -50,7 +50,7 @@ It also uses background agents for managing memory. The default model (configura
 - **Compression**: Raw message history and tool results get compressed into a dense observation log. Smaller context means faster responses and longer coherent conversations.
 - **Zero context rot**: The agent sees relevant information instead of noisy tool calls and irrelevant tokens, so the agent stays on task over long sessions.
 
-## How It Works
+## How it works
 
 You don't remember every word of every conversation you've ever had. You observe what happened subconsciously, then your brain reflects — reorganizing, combining, and condensing into long-term memory. OM works the same way.
 
@@ -135,7 +135,7 @@ In resource scope, unobserved messages across *all* threads are processed togeth
 
 :::
 
-## Token Budgets
+## Token budgets
 
 OM uses token thresholds to decide when to observe and reflect. See [token budget configuration](/reference/memory/observational-memory#shared-token-budget) for details.
 
