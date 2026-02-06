@@ -21,6 +21,12 @@ export interface RunConfig {
   signal?: AbortSignal;
   /** Per-item execution timeout in milliseconds. Default: no timeout. */
   itemTimeout?: number;
+  /** When false, results are not accumulated in memory. Use storage to retrieve results. Default: true. */
+  retainResults?: boolean;
+  /** Maximum retry attempts per item on transient failure. Default: 0 (no retry). */
+  maxRetries?: number;
+  /** Base delay between retries in ms. Actual delay: retryDelay * 2^attempt + jitter. Default: 1000. */
+  retryDelay?: number;
   /** Pre-created run ID (for async trigger - skips run creation) */
   runId?: string;
 }
@@ -93,6 +99,10 @@ export interface RunSummary {
   startedAt: Date;
   /** When the run completed */
   completedAt: Date;
+  /** True when run completed but some items failed */
+  completedWithErrors: boolean;
+  /** Number of items not processed (aborted or never started) */
+  skippedCount: number;
   /** All item results with their scores */
   results: ItemWithScores[];
 }

@@ -45,6 +45,9 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
     maxConcurrency = 5,
     signal,
     itemTimeout,
+    retainResults = true,
+    maxRetries = 0,
+    retryDelay = 1000,
     runId: providedRunId,
   } = config;
 
@@ -110,14 +113,14 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
   // 6. Execute items with p-map
   let succeededCount = 0;
   let failedCount = 0;
-  const results: ItemWithScores[] = [];
+  const results: (ItemWithScores | undefined)[] = new Array(items.length);
 
   try {
     const pMap = (await import('p-map')).default;
 
     await pMap(
       items,
-      async item => {
+      async (item, index) => {
         // Check for cancellation
         if (signal?.aborted) {
           throw new DOMException('Aborted', 'AbortError');
@@ -133,8 +136,24 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
           itemSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
         }
 
-        // Execute target
-        const execResult = await executeTarget(target, targetType, item, { signal: itemSignal });
+        // Execute target with retry
+        let execResult = await executeTarget(target, targetType, item, { signal: itemSignal });
+        let retryCount = 0;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          if (!execResult.error) break;
+          if (!isTransientError(execResult.error)) break;
+          if (itemSignal?.aborted) break;
+
+          retryCount = attempt + 1;
+          const jitter = Math.random() * (retryDelay / 2);
+          await new Promise(r => setTimeout(r, retryDelay * Math.pow(2, attempt) + jitter));
+
+          // Re-check abort after delay
+          if (itemSignal?.aborted) break;
+
+          execResult = await executeTarget(target, targetType, item, { signal: itemSignal });
+        }
 
         const latency = performance.now() - perfStart;
         const itemCompletedAt = new Date();
@@ -157,7 +176,7 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
           error: execResult.error,
           startedAt: itemStartedAt,
           completedAt: itemCompletedAt,
-          retryCount: 0,
+          retryCount,
         };
 
         // Run scorers (inline, after target completes)
@@ -187,7 +206,7 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
               error: execResult.error,
               startedAt: itemStartedAt,
               completedAt: itemCompletedAt,
-              retryCount: 0,
+              retryCount,
               traceId: execResult.traceId,
               scores: itemScores,
             });
@@ -196,10 +215,12 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
           }
         }
 
-        results.push({
-          ...itemResult,
-          scores: itemScores,
-        });
+        if (retainResults) {
+          results[index] = {
+            ...itemResult,
+            scores: itemScores,
+          };
+        }
       },
       { concurrency: maxConcurrency },
     );
@@ -217,6 +238,8 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
       });
     }
 
+    const skippedCount = items.length - succeededCount - failedCount;
+
     return {
       runId,
       status: 'failed' as const,
@@ -225,7 +248,9 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
       failedCount,
       startedAt,
       completedAt,
-      results,
+      completedWithErrors: false,
+      skippedCount,
+      results: results.filter((r): r is ItemWithScores => r !== undefined),
     };
   }
 
@@ -243,6 +268,8 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
     });
   }
 
+  const skippedCount = items.length - succeededCount - failedCount;
+
   return {
     runId,
     status,
@@ -251,7 +278,9 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
     failedCount,
     startedAt,
     completedAt,
-    results,
+    completedWithErrors: status === 'completed' && failedCount > 0,
+    skippedCount,
+    results: results.filter((r): r is ItemWithScores => r !== undefined),
   };
 }
 
@@ -294,4 +323,25 @@ function resolveTarget(mastra: Mastra, targetType: string, targetId: string): Ta
     default:
       return null;
   }
+}
+
+/**
+ * Check if an error message indicates a transient failure that should be retried.
+ * Never retries abort errors.
+ */
+function isTransientError(error: string): boolean {
+  if (/abort/i.test(error)) return false;
+  const patterns = [
+    /timeout/i,
+    /rate.?limit/i,
+    /429/,
+    /503/,
+    /5\d\d/,
+    /ECONNRESET/i,
+    /ECONNREFUSED/i,
+    /ETIMEDOUT/i,
+    /socket hang up/i,
+    /fetch failed/i,
+  ];
+  return patterns.some(p => p.test(error));
 }
