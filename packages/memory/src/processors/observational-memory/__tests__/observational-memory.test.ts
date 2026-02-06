@@ -4699,8 +4699,8 @@ describe('Full Async Buffering Flow', () => {
     // 10 messages × ~200 tokens = ~2000 tokens, threshold = 5000
     // bufferEvery=1000 → async buffering triggers at ~1000 tokens
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
-      messageTokens: 5000,
-      bufferEvery: 1000,
+      messageTokens: 3000,
+      bufferEvery: 500,
       asyncActivation: 0.7,
       reflectionObservationTokens: 50000,
       messageCount: 10,
@@ -4759,12 +4759,12 @@ describe('Full Async Buffering Flow', () => {
     // since the observer output easily exceeds 10 tokens.
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls, reflectorCalls } =
       await setupAsyncBufferingScenario({
-        messageTokens: 5000,
-        bufferEvery: 1000,
+        messageTokens: 3000,
+        bufferEvery: 500,
         asyncActivation: 1.0,
         reflectionObservationTokens: 10, // Very low - reflection triggers after any activation
         reflectionAsyncActivation: 1.0,
-        messageCount: 10, // ~2000 tokens, below threshold
+        messageCount: 10, // ~1100 tokens, below threshold
       });
 
     // Step 0: loads messages, triggers async buffering (under threshold)
@@ -5036,7 +5036,7 @@ describe('Full Async Buffering Flow', () => {
     // Turn 1: buffer messages below threshold
     // Turn 2: step 0 activates existing chunks, then buffers new unobserved messages
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
-      messageTokens: 20000,
+      messageTokens: 2000,
       bufferEvery: 200,
       asyncActivation: 1.0,
       reflectionObservationTokens: 50000,
@@ -5098,12 +5098,12 @@ describe('Full Async Buffering Flow', () => {
     // and verify a new generation is created with reflected content.
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls, reflectorCalls } =
       await setupAsyncBufferingScenario({
-        messageTokens: 3000,
+        messageTokens: 2000,
         bufferEvery: 500,
         asyncActivation: 1.0,
         reflectionObservationTokens: 10, // Very low - reflection triggers after any activation
         reflectionAsyncActivation: 1.0,
-        messageCount: 8, // ~1600 tokens, below threshold
+        messageCount: 8, // ~880 tokens, below threshold
       });
 
     // Step 0: below threshold, triggers async buffering
@@ -5408,12 +5408,12 @@ describe('Full Async Buffering Flow', () => {
       // reflectionObservationTokens=20 → activation point = 10 tokens.
       const { storage, threadId, resourceId, step, waitForAsyncOps, reflectorCalls, observerCalls } =
         await setupAsyncBufferingScenario({
-          messageTokens: 3000,
+          messageTokens: 2000,
           bufferEvery: 500,
           asyncActivation: 1.0,
           reflectionObservationTokens: 20, // Very low threshold
           reflectionAsyncActivation: 0.5, // Trigger reflection at 50% = 10 tokens
-          messageCount: 8, // ~1600 tokens, below message threshold
+          messageCount: 8, // ~880 tokens, below message threshold
         });
 
       // Step 0: below message threshold, triggers async observation buffering
