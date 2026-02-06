@@ -50,6 +50,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'getting-started/nestjs',
+          label: 'NestJS',
+        },
+        {
+          type: 'doc',
           id: 'getting-started/hono',
           label: 'Hono',
         },
