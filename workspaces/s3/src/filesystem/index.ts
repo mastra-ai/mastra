@@ -182,6 +182,16 @@ export interface S3FilesystemOptions {
  * });
  * ```
  */
+
+/** Trim leading and trailing slashes without regex (avoids polynomial regex on user input). */
+function trimSlashes(s: string): string {
+  let start = 0;
+  let end = s.length;
+  while (start < end && s[start] === '/') start++;
+  while (end > start && s[end - 1] === '/') end--;
+  return s.slice(start, end);
+}
+
 export class S3Filesystem extends MastraFilesystem {
   readonly id: string;
   readonly name = 'S3Filesystem';
@@ -214,8 +224,8 @@ export class S3Filesystem extends MastraFilesystem {
     this.secretAccessKey = options.secretAccessKey;
     this.endpoint = options.endpoint;
     this.forcePathStyle = options.forcePathStyle ?? !!options.endpoint; // Default true for custom endpoints
-    // Trim leading/trailing slashes from prefix (split to avoid polynomial regex)
-    this.prefix = options.prefix ? options.prefix.replace(/^\/+/, '').replace(/\/+$/, '') + '/' : '';
+    // Trim leading/trailing slashes from prefix using iterative approach (avoids polynomial regex)
+    this.prefix = options.prefix ? trimSlashes(options.prefix) + '/' : '';
 
     // Display metadata - detect icon first, then derive displayName from it
     this.icon = options.icon ?? this.detectIconFromEndpoint(options.endpoint);
@@ -296,16 +306,28 @@ export class S3Filesystem extends MastraFilesystem {
       hostname = endpoint.toLowerCase();
     }
 
-    // Check hostname suffix for known providers
-    if (hostname.endsWith('r2.cloudflarestorage.com') || hostname.endsWith('.cloudflare.com')) {
+    // Check hostname suffix for known providers (use dot-prefix or exact match to prevent subdomain spoofing)
+    if (
+      hostname === 'r2.cloudflarestorage.com' ||
+      hostname.endsWith('.r2.cloudflarestorage.com') ||
+      hostname.endsWith('.cloudflare.com')
+    ) {
       return 'r2';
     }
 
-    if (hostname.endsWith('storage.googleapis.com') || hostname.endsWith('.googleapis.com')) {
+    if (
+      hostname === 'storage.googleapis.com' ||
+      hostname.endsWith('.storage.googleapis.com') ||
+      hostname.endsWith('.googleapis.com')
+    ) {
       return 'gcs';
     }
 
-    if (hostname.endsWith('blob.core.windows.net') || hostname.endsWith('.azure.com')) {
+    if (
+      hostname === 'blob.core.windows.net' ||
+      hostname.endsWith('.blob.core.windows.net') ||
+      hostname.endsWith('.azure.com')
+    ) {
       return 'azure';
     }
 

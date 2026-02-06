@@ -166,6 +166,16 @@ export interface GCSFilesystemOptions {
  * });
  * ```
  */
+
+/** Trim leading and trailing slashes without regex (avoids polynomial regex on user input). */
+function trimSlashes(s: string): string {
+  let start = 0;
+  let end = s.length;
+  while (start < end && s[start] === '/') start++;
+  while (end > start && s[end - 1] === '/') end--;
+  return s.slice(start, end);
+}
+
 export class GCSFilesystem extends MastraFilesystem {
   readonly id: string;
   readonly name = 'GCSFilesystem';
@@ -194,8 +204,8 @@ export class GCSFilesystem extends MastraFilesystem {
     this.bucketName = options.bucket;
     this.projectId = options.projectId;
     this.credentials = options.credentials;
-    // Trim leading/trailing slashes from prefix (split to avoid polynomial regex)
-    this.prefix = options.prefix ? options.prefix.replace(/^\/+/, '').replace(/\/+$/, '') + '/' : '';
+    // Trim leading/trailing slashes from prefix using iterative approach (avoids polynomial regex)
+    this.prefix = options.prefix ? trimSlashes(options.prefix) + '/' : '';
     this.endpoint = options.endpoint;
 
     // Display metadata
