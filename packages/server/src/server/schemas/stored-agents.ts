@@ -101,10 +101,20 @@ export const createStoredAgentBodySchema = z
   .merge(snapshotConfigSchema);
 
 /**
+ * Snapshot config schema for updates where nullable fields (like memory) can be set to null to clear them.
+ */
+const snapshotConfigUpdateSchema = snapshotConfigSchema.extend({
+  memory: z
+    .union([serializedMemoryConfigSchema, z.null()])
+    .optional()
+    .describe('Memory configuration object (SerializedMemoryConfig), or null to disable memory'),
+});
+
+/**
  * PATCH /stored/agents/:storedAgentId - Update stored agent body
  * Optional metadata-level fields + optional config fields
  */
-export const updateStoredAgentBodySchema = agentMetadataSchema.partial().merge(snapshotConfigSchema.partial());
+export const updateStoredAgentBodySchema = agentMetadataSchema.partial().merge(snapshotConfigUpdateSchema.partial());
 
 // ============================================================================
 // Response Schemas

@@ -391,13 +391,18 @@ export class AgentsLibSQL extends AgentsStorage {
           }
         }
 
+        // Convert null values to undefined (null means "remove this field")
+        const sanitizedConfigFields = Object.fromEntries(
+          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
+        );
+
         // Create new version with the config updates
         const versionInput: CreateVersionInput = {
           id: crypto.randomUUID(),
           agentId: id,
           versionNumber: nextVersionNumber,
           ...latestSnapshot, // Start from latest version
-          ...configFields, // Apply updates
+          ...sanitizedConfigFields, // Apply updates (null values converted to undefined)
           changedFields: Object.keys(configFields),
           changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
         } as CreateVersionInput;

@@ -412,6 +412,8 @@ export type StorageCreateAgentInput = {
 /**
  * Input for updating an agent. Includes metadata-level fields and optional config fields.
  * The handler layer separates these into agent-record updates vs new-version creation.
+ *
+ * Memory can be set to `null` to explicitly disable/remove memory from the agent.
  */
 export type StorageUpdateAgentInput = {
   id: string;
@@ -423,7 +425,10 @@ export type StorageUpdateAgentInput = {
   activeVersionId?: string;
   /** Agent status: 'draft' or 'published' */
   status?: string;
-} & Partial<StorageAgentSnapshotType>;
+} & Partial<Omit<StorageAgentSnapshotType, 'memory'>> & {
+    /** Memory configuration object, or null to disable memory */
+    memory?: SerializedMemoryConfig | null;
+  };
 
 export type StorageListAgentsInput = {
   /**

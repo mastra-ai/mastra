@@ -3,6 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { HTTPException } from '../http-exception';
+import { updateStoredAgentBodySchema } from '../schemas/stored-agents';
 import type { ServerContext } from '../server-adapter';
 import {
   LIST_STORED_AGENTS_ROUTE,
@@ -14,7 +15,9 @@ import {
 
 // Mock handleAutoVersioning to prevent version creation in tests
 vi.mock('./agent-versions', () => ({
-  handleAutoVersioning: vi.fn().mockResolvedValue(undefined),
+  handleAutoVersioning: vi.fn().mockImplementation(async (_store: any, _id: any, _existing: any, updatedAgent: any) => {
+    return { agent: updatedAgent, versionCreated: false };
+  }),
 }));
 
 // =============================================================================
@@ -523,6 +526,80 @@ describe('Stored Agents Handlers', () => {
         expect((error as HTTPException).message).toBe('Stored agent with id non-existent not found');
       }
     });
+
+    it('should allow updating memory to null to disable memory', async () => {
+      // Set up an agent with memory configured
+      mockAgentsData.set('memory-test', {
+        id: 'memory-test',
+        name: 'Memory Agent',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+        memory: {
+          options: {
+            lastMessages: 10,
+            semanticRecall: false,
+          },
+        },
+        activeVersionId: 'v-memory-test-1',
+      });
+
+      // Update memory to null (disable it)
+      const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'memory-test',
+        memory: null,
+      });
+
+      expect(result).toMatchObject({
+        id: 'memory-test',
+        name: 'Memory Agent',
+      });
+
+      // Verify the storage update was called with null memory
+      expect(mockAgentsStore.updateAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'memory-test',
+          memory: null,
+        }),
+      );
+    });
+
+    it('should not modify memory when memory is not provided in update', async () => {
+      mockAgentsData.set('memory-keep-test', {
+        id: 'memory-keep-test',
+        name: 'Memory Keep Agent',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+        memory: {
+          options: {
+            lastMessages: 10,
+            semanticRecall: false,
+          },
+        },
+        activeVersionId: 'v-memory-keep-test-1',
+      });
+
+      // Update only the name, not memory
+      const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'memory-keep-test',
+        name: 'Updated Name',
+      });
+
+      expect(result).toMatchObject({
+        id: 'memory-keep-test',
+        name: 'Updated Name',
+      });
+
+      // Verify the stored agent still has memory
+      const stored = mockAgentsData.get('memory-keep-test');
+      expect(stored?.memory).toEqual({
+        options: {
+          lastMessages: 10,
+          semanticRecall: false,
+        },
+      });
+    });
   });
 
   describe('DELETE_STORED_AGENT_ROUTE', () => {
@@ -557,5 +634,86 @@ describe('Stored Agents Handlers', () => {
         expect((error as HTTPException).message).toBe('Stored agent with id non-existent not found');
       }
     });
+  });
+});
+
+// =============================================================================
+// Schema Validation Tests
+// =============================================================================
+
+describe('updateStoredAgentBodySchema', () => {
+  it('should accept memory as null to disable memory', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      memory: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.memory).toBeNull();
+    }
+  });
+
+  it('should accept memory as undefined (omitted)', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      name: 'Updated Name',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.memory).toBeUndefined();
+    }
+  });
+
+  it('should accept a valid memory config object', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      memory: {
+        options: {
+          lastMessages: 10,
+          semanticRecall: false,
+        },
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.memory).toEqual({
+        options: {
+          lastMessages: 10,
+          semanticRecall: false,
+        },
+      });
+    }
+  });
+
+  it('should reject invalid memory config (non-object, non-null)', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      memory: 'invalid',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('should accept update with only memory set to null', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      memory: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({ memory: null });
+    }
+  });
+
+  it('should accept update with memory null alongside other fields', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      name: 'New Name',
+      memory: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.name).toBe('New Name');
+      expect(result.data.memory).toBeNull();
+    }
   });
 });

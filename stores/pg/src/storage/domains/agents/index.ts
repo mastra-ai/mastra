@@ -442,9 +442,13 @@ export class AgentsPG extends AgentsStorage {
         } = latestVersion;
 
         // Merge updates into latest config
+        // Convert null values to undefined (null means "remove this field")
+        const sanitizedConfigFields = Object.fromEntries(
+          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
+        );
         const newConfig = {
           ...latestConfig,
-          ...configFields,
+          ...sanitizedConfigFields,
         };
 
         // Identify which fields changed
