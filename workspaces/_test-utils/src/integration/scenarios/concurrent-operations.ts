@@ -64,9 +64,7 @@ export function createConcurrentOperationsTests(getContext: () => TestContext): 
         }
 
         // Read all 5 concurrently
-        const results = await Promise.all(
-          files.map(f => setup.filesystem.readFile(f.path, { encoding: 'utf-8' })),
-        );
+        const results = await Promise.all(files.map(f => setup.filesystem.readFile(f.path, { encoding: 'utf-8' })));
 
         for (let i = 0; i < files.length; i++) {
           expect(results[i]).toBe(files[i]!.content);
@@ -93,9 +91,7 @@ export function createConcurrentOperationsTests(getContext: () => TestContext): 
         await Promise.all(files.map(f => setup.filesystem.writeFile(f.fsPath, f.content)));
 
         // Read all via sandbox concurrently
-        const results = await Promise.all(
-          files.map(f => setup.sandbox.executeCommand!('cat', [f.sandboxPath])),
-        );
+        const results = await Promise.all(files.map(f => setup.sandbox.executeCommand!('cat', [f.sandboxPath])));
 
         for (let i = 0; i < files.length; i++) {
           expect(results[i]!.exitCode).toBe(0);
