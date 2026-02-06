@@ -26,7 +26,9 @@ const OPERATOR_ICONS: Record<ConditionOperator, React.ReactNode> = {
 /**
  * Select component for choosing a rule operator
  */
-export const RuleOperatorSelect: React.FC<RuleOperatorSelectProps> = ({ value, onChange, className }) => {
+export const RuleOperatorSelect: React.FC<RuleOperatorSelectProps> = ({ value, onChange, operators, className }) => {
+  const operatorList = operators ?? OPERATORS;
+
   return (
     <div className={cn('relative', className)}>
       <Select value={value} onValueChange={onChange}>
@@ -34,7 +36,7 @@ export const RuleOperatorSelect: React.FC<RuleOperatorSelectProps> = ({ value, o
           <SelectValue placeholder="Select operator" />
         </SelectTrigger>
         <SelectContent>
-          {OPERATORS.map(operator => (
+          {operatorList.map(operator => (
             <SelectItem key={operator} value={operator}>
               <span className="flex items-center gap-2">
                 <Icon size="sm" className="text-neutral3">

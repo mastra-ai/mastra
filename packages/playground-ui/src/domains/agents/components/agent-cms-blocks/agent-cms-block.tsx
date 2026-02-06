@@ -55,7 +55,7 @@ const AgentCMSBlockContent = ({
   };
 
   return (
-    <div className="h-full min-h-[300px] grid grid-rows-[auto_1fr_auto]">
+    <div className="h-full grid grid-rows-[auto_1fr_auto]">
       {/* Top bar with drag handle and delete button */}
       <div className="bg-surface2 px-2 py-1 flex items-center justify-between gap-2">
         <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6">
@@ -82,7 +82,7 @@ const AgentCMSBlockContent = ({
           value={block.content}
           onChange={handleContentChange}
           placeholder={placeholder}
-          className="border-none rounded-none text-neutral6 h-full bg-surface2"
+          className="border-none rounded-none text-neutral6 h-full bg-surface2 min-h-[300px]"
           language="markdown"
           highlightVariables
           showCopyButton={false}

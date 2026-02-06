@@ -73,6 +73,8 @@ export type RuleOperatorSelectProps = {
   value: ConditionOperator;
   /** Callback when operator changes */
   onChange: (operator: ConditionOperator) => void;
+  /** Subset of operators to show. Defaults to all operators. */
+  operators?: readonly ConditionOperator[];
   /** Optional class name */
   className?: string;
 };

@@ -22,8 +22,13 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
     return getFieldOptionAtPath(schema, rule.field)?.type;
   }, [schema, rule.field]);
 
-  // Show value input only for primitive types, hide for object/array or when no field selected
-  const showValueInput = fieldType !== undefined && PRIMITIVE_TYPES.has(fieldType);
+  const isPrimitive = fieldType !== undefined && PRIMITIVE_TYPES.has(fieldType);
+  const isArray = fieldType === 'array';
+  const isArrayOperator = rule.operator === 'in' || rule.operator === 'not_in';
+
+  // Show operator + value for primitive types, or for array types (restricted to in/not_in)
+  const showComparator = isPrimitive || isArray;
+  const showValueInput = isPrimitive || (isArray && isArrayOperator);
 
   const handleFieldChange = React.useCallback(
     (field: string) => {
@@ -60,27 +65,33 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
   );
 
   return (
-    <div>
-      <IconButton type="button" onClick={onRemove} tooltip="Remove rule" size="sm" variant="ghost">
-        <X />
-      </IconButton>
-
-      <div className={cn('flex flex-wrap items-center gap-2 pt-2', className)}>
+    <div className="flex justify-between gap-2">
+      <div className={cn('flex flex-wrap items-center gap-2', className)}>
         <RuleFieldSelect schema={schema} value={rule.field} onChange={handleFieldChange} />
 
-        {showValueInput && (
+        {showComparator && (
           <>
-            <RuleOperatorSelect value={rule.operator} onChange={handleOperatorChange} />
-
-            <RuleValueInput
-              value={rule.value}
-              onChange={handleValueChange}
-              operator={rule.operator}
-              fieldType={fieldType}
+            <RuleOperatorSelect
+              value={rule.operator}
+              onChange={handleOperatorChange}
+              operators={isArray ? (['in', 'not_in'] as const) : undefined}
             />
+
+            {showValueInput && (
+              <RuleValueInput
+                value={rule.value}
+                onChange={handleValueChange}
+                operator={rule.operator}
+                fieldType={fieldType}
+              />
+            )}
           </>
         )}
       </div>
+
+      <IconButton type="button" onClick={onRemove} tooltip="Remove rule" size="sm" variant="ghost">
+        <X />
+      </IconButton>
     </div>
   );
 };
