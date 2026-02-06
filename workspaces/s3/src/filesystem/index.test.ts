@@ -166,6 +166,16 @@ describe('S3Filesystem', () => {
       expect(fs.displayName).toBe('Google Cloud Storage');
     });
 
+    it('derives displayName from icon - minio', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        endpoint: 'http://minio.local:9000',
+      });
+
+      expect(fs.displayName).toBe('MinIO');
+    });
+
     it('uses provided displayName over derived', () => {
       const fs = new S3Filesystem({
         bucket: 'test',

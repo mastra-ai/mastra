@@ -1032,3 +1032,144 @@ if (canRunSharedIntegration) {
     },
   });
 }
+
+/**
+ * Multi-Mount Shared Integration Tests (E2B + 2x S3)
+ *
+ * Tests multi-mount and cross-mount scenarios using two writable S3 filesystems
+ * mounted at different paths inside an E2B sandbox.
+ */
+if (canRunSharedIntegration) {
+  const mount1Path = '/data/s3-multi1';
+  const mount2Path = '/data/s3-multi2';
+  const multiPrefix1 = `multi-int-1-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const multiPrefix2 = `multi-int-2-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  createWorkspaceIntegrationTests({
+    suiteName: 'E2B + S3 Multi-Mount Integration',
+    testTimeout: 120000,
+    testScenarios: {
+      fileSync: false,
+      multiMount: true,
+      crossMountCopy: true,
+    },
+    createWorkspace: async () => {
+      const s3Config = getS3TestConfig();
+
+      const fs1 = new S3Filesystem({
+        bucket: s3Config.bucket,
+        region: s3Config.region,
+        accessKeyId: s3Config.accessKeyId,
+        secretAccessKey: s3Config.secretAccessKey,
+        endpoint: s3Config.endpoint,
+        prefix: multiPrefix1,
+      });
+
+      const fs2 = new S3Filesystem({
+        bucket: s3Config.bucket,
+        region: s3Config.region,
+        accessKeyId: s3Config.accessKeyId,
+        secretAccessKey: s3Config.secretAccessKey,
+        endpoint: s3Config.endpoint,
+        prefix: multiPrefix2,
+      });
+
+      const sandbox = new E2BSandbox({
+        id: `multi-int-${Date.now()}`,
+        timeout: 180000,
+      });
+
+      await sandbox.start();
+      await sandbox.mount(fs1, mount1Path);
+      await sandbox.mount(fs2, mount2Path);
+
+      return {
+        filesystem: fs1,
+        sandbox,
+        mounts: {
+          [mount1Path]: fs1,
+          [mount2Path]: fs2,
+        },
+      };
+    },
+    cleanupWorkspace: async setup => {
+      if (setup.mounts) {
+        for (const fs of Object.values(setup.mounts)) {
+          try {
+            const files = await fs.readdir('/');
+            for (const file of files) {
+              if (file.type === 'file') {
+                await fs.deleteFile(`/${file.name}`, { force: true });
+              } else if (file.type === 'directory') {
+                await fs.rmdir(`/${file.name}`, { recursive: true });
+              }
+            }
+          } catch {
+            // Ignore cleanup errors
+          }
+        }
+      }
+      try {
+        await setup.sandbox.destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+    },
+  });
+}
+
+/**
+ * Read-Only Mount Shared Integration Tests (E2B + S3 readOnly)
+ *
+ * Tests read-only mount enforcement end-to-end using an S3 filesystem
+ * mounted with readOnly: true inside an E2B sandbox.
+ */
+if (canRunSharedIntegration) {
+  const roMountPath = '/data/s3-readonly-shared';
+  const roPrefix = `ro-int-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  createWorkspaceIntegrationTests({
+    suiteName: 'E2B + S3 Read-Only Mount Integration',
+    testTimeout: 120000,
+    testScenarios: {
+      fileSync: false,
+      readOnlyMount: true,
+    },
+    createWorkspace: async () => {
+      const s3Config = getS3TestConfig();
+
+      const filesystem = new S3Filesystem({
+        bucket: s3Config.bucket,
+        region: s3Config.region,
+        accessKeyId: s3Config.accessKeyId,
+        secretAccessKey: s3Config.secretAccessKey,
+        endpoint: s3Config.endpoint,
+        prefix: roPrefix,
+        readOnly: true,
+      });
+
+      const sandbox = new E2BSandbox({
+        id: `ro-int-${Date.now()}`,
+        timeout: 180000,
+      });
+
+      await sandbox.start();
+      await sandbox.mount(filesystem, roMountPath);
+
+      return {
+        filesystem,
+        sandbox,
+        mounts: {
+          [roMountPath]: filesystem,
+        },
+      };
+    },
+    cleanupWorkspace: async setup => {
+      try {
+        await setup.sandbox.destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+    },
+  });
+}
