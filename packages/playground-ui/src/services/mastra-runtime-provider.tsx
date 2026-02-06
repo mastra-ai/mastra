@@ -543,9 +543,19 @@ export function MastraRuntimeProvider({
       const updatedParts = msg[partsKey].map((part: any) => {
         // Check for raw data-om-observation-start parts (before conversion to tool-call)
         if (part.type === 'data-om-observation-start') {
-          // Convert to a disconnected end marker
           return {
             type: 'data-om-observation-end',
+            data: {
+              ...part.data,
+              disconnectedAt: new Date().toISOString(),
+              _state: 'disconnected',
+            },
+          };
+        }
+        // Check for raw data-om-buffering-start parts
+        if (part.type === 'data-om-buffering-start') {
+          return {
+            type: 'data-om-buffering-end',
             data: {
               ...part.data,
               disconnectedAt: new Date().toISOString(),
