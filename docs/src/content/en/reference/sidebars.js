@@ -424,6 +424,7 @@ const sidebars = {
         { type: 'doc', id: 'server/hono-adapter', label: 'Hono Adapter' },
         { type: 'doc', id: 'server/koa-adapter', label: 'Koa Adapter' },
         { type: 'doc', id: 'server/mastra-server', label: 'MastraServer' },
+        { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
       ],
