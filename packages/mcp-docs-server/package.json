@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "1.0.1",
+  "version": "1.1.1-alpha.0",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -22,8 +22,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "prepare-docs": "cross-env PREPARE=true node dist/prepare-docs/prepare.js",
-    "build:cli": "tsup src/stdio.ts src/prepare-docs/prepare.ts --format esm --no-dts --treeshake=smallest --splitting && tsc -p tsconfig.build.json",
+    "prepare-docs": "tsx ./scripts/prepare-docs.ts",
+    "build:cli": "tsup --silent --config tsup.config.ts",
     "pretest": "pnpm turbo build --filter @mastra/mcp-docs-server",
     "test": "vitest run",
     "lint": "eslint ."
@@ -40,8 +40,9 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.6",
+    "@hono/node-server": "^1.19.9",
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/jsdom": "^21.1.7",
     "@types/node": "22.19.7",

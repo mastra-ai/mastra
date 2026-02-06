@@ -25,10 +25,11 @@ export default function YouTube({ id, title = 'YouTube video player' }: YouTubeP
           width: '100%',
           height: '100%',
         }}
-        src={`https://www.youtube.com/embed/${id}`}
+        src={`https://www.youtube-nocookie.com/embed/${id}`}
         title={title}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowFullScreen
+        loading="lazy"
       />
     </div>
   )

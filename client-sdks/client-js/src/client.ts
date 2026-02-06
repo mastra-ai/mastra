@@ -16,6 +16,7 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  Workspace,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -56,6 +57,12 @@ import type {
   StoredAgentResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
+  GetObservationalMemoryParams,
+  GetObservationalMemoryResponse,
+  GetMemoryStatusResponse,
+  ListWorkspacesResponse,
+  ListVectorsResponse,
+  ListEmbeddersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -236,14 +243,37 @@ export class MastraClient extends BaseResource {
   /**
    * Gets the status of the memory system
    * @param agentId - The agent ID
-   * @param requestContext - Optional request context to pass as query parameter
-   * @returns Promise containing memory system status
+   * @param opts - Optional parameters including resourceId, threadId, and requestContext
+   * @returns Promise containing memory system status including observational memory info
    */
   public getMemoryStatus(
     agentId: string,
     requestContext?: RequestContext | Record<string, any>,
-  ): Promise<{ result: boolean }> {
-    return this.request(`/memory/status?agentId=${agentId}${requestContextQueryString(requestContext, '&')}`);
+    opts?: {
+      resourceId?: string;
+      threadId?: string;
+    },
+  ): Promise<GetMemoryStatusResponse> {
+    const queryParams = new URLSearchParams({ agentId });
+    if (opts?.resourceId) queryParams.set('resourceId', opts.resourceId);
+    if (opts?.threadId) queryParams.set('threadId', opts.threadId);
+    const queryString = queryParams.toString();
+    return this.request(`/memory/status?${queryString}${requestContextQueryString(requestContext, '&')}`);
+  }
+
+  /**
+   * Gets observational memory data for a resource or thread
+   * @param params - Parameters containing agentId, resourceId, threadId, and optional request context
+   * @returns Promise containing the current OM record and history
+   */
+  public getObservationalMemory(params: GetObservationalMemoryParams): Promise<GetObservationalMemoryResponse> {
+    const queryParams = new URLSearchParams({ agentId: params.agentId });
+    if (params.resourceId) queryParams.set('resourceId', params.resourceId);
+    if (params.threadId) queryParams.set('threadId', params.threadId);
+    const queryString = queryParams.toString();
+    return this.request(
+      `/memory/observational-memory?${queryString}${requestContextQueryString(params.requestContext, '&')}`,
+    );
   }
 
   /**
@@ -817,5 +847,46 @@ export class MastraClient extends BaseResource {
    */
   public getSystemPackages(): Promise<GetSystemPackagesResponse> {
     return this.request('/system/packages');
+  }
+
+  // ============================================================================
+  // Workspace
+  // ============================================================================
+
+  /**
+   * Lists all workspaces from both Mastra instance and agents
+   * @returns Promise containing array of workspace items
+   */
+  public listWorkspaces(): Promise<ListWorkspacesResponse> {
+    return this.request('/workspaces');
+  }
+
+  /**
+   * Gets the workspace resource for filesystem, search, and skills operations
+   * @param workspaceId - Workspace ID to target
+   * @returns Workspace instance
+   */
+  public getWorkspace(workspaceId: string): Workspace {
+    return new Workspace(this.options, workspaceId);
+  }
+
+  // ============================================================================
+  // Vectors & Embedders
+  // ============================================================================
+
+  /**
+   * Lists all available vector stores
+   * @returns Promise containing list of available vector stores
+   */
+  public listVectors(): Promise<ListVectorsResponse> {
+    return this.request('/vectors');
+  }
+
+  /**
+   * Lists all available embedding models
+   * @returns Promise containing list of available embedders
+   */
+  public listEmbedders(): Promise<ListEmbeddersResponse> {
+    return this.request('/embedders');
   }
 }

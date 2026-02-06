@@ -52,13 +52,33 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
     const now = new Date();
     const newAgent: StorageAgentType = {
-      ...agent,
+      id: agent.id,
+      status: 'draft',
+      activeVersionId: undefined,
+      authorId: agent.authorId,
+      metadata: agent.metadata,
       createdAt: now,
       updatedAt: now,
     };
 
     this.db.agents.set(agent.id, newAgent);
-    return { ...newAgent };
+
+    // Extract config fields from the flat input (everything except agent-record fields)
+    const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+
+    // Create version 1 from the config
+    const versionId = crypto.randomUUID();
+    await this.createVersion({
+      id: versionId,
+      agentId: agent.id,
+      versionNumber: 1,
+      ...snapshotConfig,
+      changedFields: Object.keys(snapshotConfig),
+      changeMessage: 'Initial version',
+    });
+
+    // Return the thin agent record (activeVersionId remains null)
+    return this.deepCopyAgent(newAgent);
   }
 
   async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
@@ -69,33 +89,94 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       throw new Error(`Agent with id ${id} not found`);
     }
 
+    // Separate metadata fields from config fields
+    const { authorId, activeVersionId, metadata, ...configFields } = updates;
+
+    // Extract just the config field names from StorageAgentSnapshotType
+    const configFieldNames = [
+      'name',
+      'description',
+      'instructions',
+      'model',
+      'tools',
+      'defaultOptions',
+      'workflows',
+      'agents',
+      'integrationTools',
+      'inputProcessors',
+      'outputProcessors',
+      'memory',
+      'scorers',
+    ];
+
+    // Check if any config fields are present in the update
+    const hasConfigUpdate = configFieldNames.some(field => field in configFields);
+
+    // Update metadata fields on the agent record
     const updatedAgent: StorageAgentType = {
       ...existingAgent,
-      ...(updates.name !== undefined && { name: updates.name }),
-      ...(updates.description !== undefined && { description: updates.description }),
-      ...(updates.instructions !== undefined && { instructions: updates.instructions }),
-      ...(updates.model !== undefined && { model: updates.model }),
-      ...(updates.tools !== undefined && { tools: updates.tools }),
-      ...(updates.defaultOptions !== undefined && {
-        defaultOptions: updates.defaultOptions,
+      ...(authorId !== undefined && { authorId }),
+      ...(activeVersionId !== undefined && { activeVersionId }),
+      ...(metadata !== undefined && {
+        metadata: { ...existingAgent.metadata, ...metadata },
       }),
-      ...(updates.workflows !== undefined && { workflows: updates.workflows }),
-      ...(updates.agents !== undefined && { agents: updates.agents }),
-      ...(updates.inputProcessors !== undefined && { inputProcessors: updates.inputProcessors }),
-      ...(updates.outputProcessors !== undefined && { outputProcessors: updates.outputProcessors }),
-      ...(updates.memory !== undefined && { memory: updates.memory }),
-      ...(updates.scorers !== undefined && { scorers: updates.scorers }),
-      ...(updates.metadata !== undefined && {
-        metadata: { ...existingAgent.metadata, ...updates.metadata },
-      }),
-      ...(updates.ownerId !== undefined && { ownerId: updates.ownerId }),
-      ...(updates.activeVersionId !== undefined && { activeVersionId: updates.activeVersionId }),
-      ...(updates.integrationTools !== undefined && { integrationTools: updates.integrationTools }),
       updatedAt: new Date(),
     };
 
+    // If activeVersionId is set, mark as published
+    if (activeVersionId !== undefined) {
+      updatedAgent.status = 'published';
+    }
+
+    // If config fields are being updated, create a new version
+    if (hasConfigUpdate) {
+      // Get the latest version to use as base
+      const latestVersion = await this.getLatestVersion(id);
+      if (!latestVersion) {
+        throw new Error(`No versions found for agent ${id}`);
+      }
+
+      // Extract config from latest version
+      const {
+        id: _versionId,
+        agentId: _agentId,
+        versionNumber: _versionNumber,
+        changedFields: _changedFields,
+        changeMessage: _changeMessage,
+        createdAt: _createdAt,
+        ...latestConfig
+      } = latestVersion;
+
+      // Merge updates into latest config
+      const newConfig = {
+        ...latestConfig,
+        ...configFields,
+      };
+
+      // Identify which fields changed
+      const changedFields = configFieldNames.filter(
+        field =>
+          field in configFields &&
+          configFields[field as keyof typeof configFields] !== latestConfig[field as keyof typeof latestConfig],
+      );
+
+      // Create new version
+      const newVersionId = crypto.randomUUID();
+      const newVersionNumber = latestVersion.versionNumber + 1;
+
+      await this.createVersion({
+        id: newVersionId,
+        agentId: id,
+        versionNumber: newVersionNumber,
+        ...newConfig,
+        changedFields,
+        changeMessage: `Updated ${changedFields.join(', ')}`,
+      });
+    }
+
+    // Save the updated agent record
     this.db.agents.set(id, updatedAgent);
-    return { ...updatedAgent };
+    return this.deepCopyAgent(updatedAgent);
   }
 
   async deleteAgent({ id }: { id: string }): Promise<void> {
@@ -107,7 +188,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, ownerId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryAgentsStorage: listAgents called`);
@@ -128,9 +209,9 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     // Get all agents and apply filters
     let agents = Array.from(this.db.agents.values());
 
-    // Filter by ownerId if provided
-    if (ownerId !== undefined) {
-      agents = agents.filter(agent => agent.ownerId === ownerId);
+    // Filter by authorId if provided
+    if (authorId !== undefined) {
+      agents = agents.filter(agent => agent.authorId === authorId);
     }
 
     // Filter by metadata if provided (AND logic - all key-value pairs must match)
@@ -297,21 +378,12 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   // ==========================================================================
 
   /**
-   * Deep copy an agent to prevent external mutation of stored data
+   * Deep copy a thin agent record to prevent external mutation of stored data
    */
   private deepCopyAgent(agent: StorageAgentType): StorageAgentType {
     return {
       ...agent,
       metadata: agent.metadata ? { ...agent.metadata } : agent.metadata,
-      model: { ...agent.model },
-      tools: agent.tools ? [...agent.tools] : agent.tools,
-      defaultOptions: agent.defaultOptions ? { ...agent.defaultOptions } : agent.defaultOptions,
-      workflows: agent.workflows ? [...agent.workflows] : agent.workflows,
-      agents: agent.agents ? [...agent.agents] : agent.agents,
-      integrationTools: agent.integrationTools ? [...agent.integrationTools] : agent.integrationTools,
-      inputProcessors: agent.inputProcessors ? agent.inputProcessors.map(p => ({ ...p })) : agent.inputProcessors,
-      outputProcessors: agent.outputProcessors ? agent.outputProcessors.map(p => ({ ...p })) : agent.outputProcessors,
-      scorers: agent.scorers ? { ...agent.scorers } : agent.scorers,
     };
   }
 
@@ -321,7 +393,16 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   private deepCopyVersion(version: AgentVersion): AgentVersion {
     return {
       ...version,
-      snapshot: this.deepCopyAgent(version.snapshot),
+      model: { ...version.model },
+      tools: version.tools ? [...version.tools] : version.tools,
+      defaultOptions: version.defaultOptions ? { ...version.defaultOptions } : version.defaultOptions,
+      workflows: version.workflows ? [...version.workflows] : version.workflows,
+      agents: version.agents ? [...version.agents] : version.agents,
+      integrationTools: version.integrationTools ? [...version.integrationTools] : version.integrationTools,
+      inputProcessors: version.inputProcessors ? [...version.inputProcessors] : version.inputProcessors,
+      outputProcessors: version.outputProcessors ? [...version.outputProcessors] : version.outputProcessors,
+      memory: version.memory ? { ...version.memory } : version.memory,
+      scorers: version.scorers ? { ...version.scorers } : version.scorers,
       changedFields: version.changedFields ? [...version.changedFields] : version.changedFields,
     };
   }

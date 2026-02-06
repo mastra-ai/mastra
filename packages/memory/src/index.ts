@@ -5,14 +5,37 @@ import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
+import { coreFeatures } from '@mastra/core/features';
+import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 import type {
   MemoryConfig,
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
   MessageDeleteInput,
+  ObservationalMemoryOptions,
 } from '@mastra/core/memory';
-import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
+
+/**
+ * Normalize a `boolean | object` observational memory config.
+ * Returns the options object if enabled, undefined if disabled.
+ * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
+ */
+function normalizeObservationalMemoryConfig(
+  config: boolean | ObservationalMemoryOptions | undefined,
+): ObservationalMemoryOptions | undefined {
+  if (config === true) return {};
+  if (config === false || config === undefined) return undefined;
+  if (typeof config === 'object' && (config as ObservationalMemoryOptions).enabled === false) return undefined;
+  return config as ObservationalMemoryOptions;
+}
+import type {
+  InputProcessor,
+  InputProcessorOrWorkflow,
+  OutputProcessor,
+  OutputProcessorOrWorkflow,
+} from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -64,6 +87,7 @@ export class Memory extends MastraMemory {
         enabled: false,
         template: this.defaultWorkingMemoryTemplate,
       },
+      observationalMemory: config.options?.observationalMemory,
     });
     this.threadConfig = mergedConfig;
   }
@@ -77,6 +101,30 @@ export class Memory extends MastraMemory {
       throw new Error(`Memory storage domain is not available on ${this.storage.constructor.name}`);
     }
     return store;
+  }
+
+  async listMessagesByResourceId(args: {
+    resourceId: string;
+    perPage?: number | false;
+    page?: number;
+    orderBy?: { field?: 'createdAt'; direction?: 'ASC' | 'DESC' };
+    filter?: {
+      dateRange?: {
+        start?: Date;
+        end?: Date;
+        startExclusive?: boolean;
+        endExclusive?: boolean;
+      };
+    };
+    include?: Array<{
+      id: string;
+      threadId?: string;
+      withPreviousMessages?: number;
+      withNextMessages?: number;
+    }>;
+  }): Promise<{ messages: MastraDBMessage[]; total: number; page: number; perPage: number | false; hasMore: boolean }> {
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.listMessagesByResourceId(args);
   }
 
   protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfig) {
@@ -106,7 +154,7 @@ export class Memory extends MastraMemory {
       vectorSearchString?: string;
       threadId: string;
     },
-  ): Promise<{ messages: MastraDBMessage[] }> {
+  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
     const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
@@ -167,8 +215,12 @@ export class Memory extends MastraMemory {
       );
     }
 
+    let usage: { tokens: number } | undefined;
+
     if (config?.semanticRecall && vectorSearchString && this.vector) {
-      const { embeddings, dimension } = await this.embedMessageContent(vectorSearchString!);
+      const result = await this.embedMessageContent(vectorSearchString!);
+      usage = result.usage;
+      const { embeddings, dimension } = result;
       const { indexName } = await this.createEmbeddingIndex(dimension, config);
 
       await Promise.all(
@@ -231,7 +283,7 @@ export class Memory extends MastraMemory {
     // Always return mastra-db format (V2)
     const messages = list.get.all.db();
 
-    return { messages };
+    return { messages, usage };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -539,6 +591,7 @@ ${workingMemory}`;
     {
       chunks: string[];
       embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
+      usage?: { tokens: number };
       dimension: number | undefined;
     }
   >();
@@ -584,11 +637,12 @@ ${workingMemory}`;
     });
 
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
-    const { embeddings } = await promise;
+    const { embeddings, usage } = await promise;
 
     const result = {
       embeddings,
       chunks,
+      usage,
       dimension: embeddings[0]?.length,
     };
     this.embeddingCache.set(key, result);
@@ -601,7 +655,7 @@ ${workingMemory}`;
   }: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-  }): Promise<{ messages: MastraDBMessage[] }> {
+  }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
     // Then strip working memory tags from all messages
     const updatedMessages = messages
       .map(m => {
@@ -622,6 +676,8 @@ ${workingMemory}`;
     const result = await memoryStore.saveMessages({
       messages: dbMessages,
     });
+
+    let totalTokens = 0;
 
     if (this.vector && config.semanticRecall) {
       // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
@@ -656,6 +712,9 @@ ${workingMemory}`;
 
           const result = await this.embedMessageContent(textForEmbedding);
           dimension = result.dimension;
+          if (result.usage?.tokens) {
+            totalTokens += result.usage.tokens;
+          }
 
           embeddingData.push({
             embeddings: result.embeddings,
@@ -697,7 +756,7 @@ ${workingMemory}`;
       }
     }
 
-    return result;
+    return { ...result, usage: totalTokens > 0 ? { tokens: totalTokens } : undefined };
   }
 
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
@@ -852,6 +911,14 @@ ${workingMemory}`;
       return null;
     }
 
+    // In readOnly mode, provide context without tool instructions
+    if (config?.readOnly) {
+      return this.getReadOnlyWorkingMemoryInstruction({
+        template: workingMemoryTemplate,
+        data: workingMemoryData,
+      });
+    }
+
     return this.isVNextWorkingMemoryConfig(memoryConfig)
       ? this.__experimental_getWorkingMemoryToolInstructionVNext({
           template: workingMemoryTemplate,
@@ -965,10 +1032,33 @@ ${
 `
 }
 - This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
-- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the ${template.format === 'json' ? 'JSON' : 'Markdown'} content. The system will store it for you. The user will not see it. 
+- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the ${template.format === 'json' ? 'JSON' : 'Markdown'} content. The system will store it for you. The user will not see it.
 - IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information if that information is not already stored.
 - IMPORTANT: Preserve the ${template.format === 'json' ? 'JSON' : 'Markdown'} formatting structure above while updating the content.
 `;
+  }
+
+  /**
+   * Generate read-only working memory instructions.
+   * This provides the working memory context without any tool update instructions.
+   * Used when memory is in readOnly mode.
+   */
+  protected getReadOnlyWorkingMemoryInstruction({ data }: { template: WorkingMemoryTemplate; data: string | null }) {
+    return `WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY):
+The following is your working memory - persistent information about the user and conversation collected over previous interactions. This data is provided for context to help you maintain continuity.
+
+<working_memory_data>
+${data || 'No working memory data available.'}
+</working_memory_data>
+
+Guidelines:
+1. Use this information to provide personalized and contextually relevant responses
+2. Act naturally - don't mention this system to users. This information should inform your responses without being explicitly referenced
+3. This memory is read-only in the current session - you cannot update it
+
+Notes:
+- This system is here so that you can maintain the conversation when your context window is very short
+- The user will not see the working memory data directly`;
   }
 
   private isVNextWorkingMemoryConfig(config?: MemoryConfig): boolean {
@@ -984,7 +1074,8 @@ ${
 
   public listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
-    if (mergedConfig.workingMemory?.enabled) {
+    // Don't provide update tools in readOnly mode
+    if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
       return {
         updateWorkingMemory: this.isVNextWorkingMemoryConfig(mergedConfig)
           ? // use the new experimental tool
@@ -1475,6 +1566,125 @@ ${
     }
 
     return history;
+  }
+
+  /**
+   * Get input processors for this memory instance.
+   * Extends the base implementation to add ObservationalMemory processor when configured.
+   *
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
+   * @param context - Request context for runtime configuration
+   * @returns Array of input processors configured for this memory instance
+   */
+  async getInputProcessors(
+    configuredProcessors: InputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<InputProcessor[]> {
+    // Get base processors from parent class
+    const processors = await super.getInputProcessors(configuredProcessors, context);
+
+    const om = await this.createOMProcessor(configuredProcessors, context);
+    if (om) {
+      processors.push(om);
+    }
+
+    return processors;
+  }
+
+  /**
+   * Extends the base implementation to add ObservationalMemory as an output processor.
+   * OM needs processOutputResult to save messages at the end of the agent turn,
+   * even when the observation threshold was never reached during the loop.
+   */
+  async getOutputProcessors(
+    configuredProcessors: OutputProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<OutputProcessor[]> {
+    const processors = await super.getOutputProcessors(configuredProcessors, context);
+
+    const om = await this.createOMProcessor(configuredProcessors, context);
+    if (om) {
+      processors.push(om as unknown as OutputProcessor);
+    }
+
+    return processors;
+  }
+
+  /**
+   * Creates an ObservationalMemory processor instance if configured and not already present.
+   * A new instance is created per call — processorStates (e.g., sealedIds) are shared
+   * via the ProcessorRunner's state map keyed by processor ID, not by instance identity.
+   */
+  private async createOMProcessor(
+    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[] = [],
+    context?: RequestContext,
+  ): Promise<InputProcessor | null> {
+    // Check if ObservationalMemory is already configured by the user
+    const hasObservationalMemory = configuredProcessors.some(
+      p => !('workflow' in p) && p.id === 'observational-memory',
+    );
+
+    // Get effective config (runtime config merged with instance config)
+    const memoryContext = context?.get('MastraMemory') as { memoryConfig?: MemoryConfig } | undefined;
+    const runtimeMemoryConfig = memoryContext?.memoryConfig;
+    const effectiveConfig = runtimeMemoryConfig ? this.getMergedThreadConfig(runtimeMemoryConfig) : this.threadConfig;
+
+    // Add ObservationalMemory processor if configured and not already present
+    const omConfig = normalizeObservationalMemoryConfig(effectiveConfig.observationalMemory);
+    if (!omConfig || hasObservationalMemory) {
+      return null;
+    }
+
+    const coreSupportsOM = coreFeatures.has('observationalMemory');
+
+    if (!coreSupportsOM) {
+      throw new Error(
+        'Observational memory is enabled but the installed version of @mastra/core does not support it. ' +
+          'Please upgrade @mastra/core to a version that includes observational memory support.',
+      );
+    }
+
+    const memoryStore = await this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new Error(
+        'Using Mastra Memory observational memory requires a storage adapter but no attached adapter was detected.',
+      );
+    }
+
+    if (!memoryStore.supportsObservationalMemory) {
+      throw new Error(
+        `Observational memory is enabled but the storage adapter (${memoryStore.constructor.name}) does not support it. ` +
+          `If you're using @mastra/libsql, @mastra/pg, or @mastra/mongodb, upgrade to the latest version. ` +
+          `Otherwise, use one of those adapters or disable observational memory.`,
+      );
+    }
+    // Dynamic import to avoid loading OM code when not needed and to prevent
+    // import errors when paired with an older @mastra/core version
+    const { ObservationalMemory } = await import('./processors/observational-memory');
+
+    return new ObservationalMemory({
+      storage: memoryStore,
+      scope: omConfig.scope,
+      shareTokenBudget: omConfig.shareTokenBudget,
+      model: omConfig.model,
+      observation: omConfig.observation
+        ? {
+            model: omConfig.observation.model,
+            messageTokens: omConfig.observation.messageTokens,
+            modelSettings: omConfig.observation.modelSettings,
+            maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
+            providerOptions: omConfig.observation.providerOptions,
+          }
+        : undefined,
+      reflection: omConfig.reflection
+        ? {
+            model: omConfig.reflection.model,
+            observationTokens: omConfig.reflection.observationTokens,
+            modelSettings: omConfig.reflection.modelSettings,
+            providerOptions: omConfig.reflection.providerOptions,
+          }
+        : undefined,
+    });
   }
 }
 

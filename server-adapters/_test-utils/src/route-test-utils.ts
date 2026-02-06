@@ -44,14 +44,24 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
   if (field === 'fields') return 'result'; // For workflow execution result field filtering (status is always included)
+  // JSON-encoded query params (wrapped with wrapSchemaForQueryParams)
+  if (field === 'tags') return '["test-tag"]'; // For observability traces filtering
 
   // Version comparison query params (from/to are version IDs)
-  if (field === 'from') return 'test-version-1';
+  // Both use the same known version ID - comparing a version to itself returns empty diffs,
+  // which is valid for route integration tests that verify the endpoint responds correctly
+  if (field === 'from') return 'test-version-id';
   if (field === 'to') return 'test-version-id';
+
+  // Workspace filesystem - content and query fields
+  if (field === 'content') return 'test content'; // For write/index operations
+  if (field === 'query') return 'test'; // For search operations
 
   if (field.includes('agent')) return 'test-agent';
   if (field.includes('workflow')) return 'test-workflow';
   if (field.includes('tool')) return 'test-tool';
+  if (field.includes('skill')) return 'test-skill';
+  if (field.includes('reference') && field.includes('path')) return 'test-reference.md';
   if (field.includes('thread')) return 'test-thread';
   if (field.includes('resource')) return 'test-resource';
   if (field.includes('run')) return 'test-run';
@@ -229,6 +239,13 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':id') && route.path.includes('/mcp/v0/servers/')) params.id = 'test-server-1';
   if (route.path.includes(':serverId')) params.serverId = 'test-server-1';
   if (route.path.includes(':toolId') && route.path.includes('/mcp/')) params.toolId = 'getWeather';
+
+  // Workspace route params
+  if (route.path.includes(':workspaceId')) params.workspaceId = 'test-workspace';
+
+  // Skills route params
+  if (route.path.includes(':skillName')) params.skillName = 'test-skill';
+  if (route.path.includes(':referencePath')) params.referencePath = 'test-reference.md';
 
   return params;
 }

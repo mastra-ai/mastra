@@ -142,7 +142,9 @@ describe('Template Workflow Integration Tests', () => {
       { dir: 'src/mastra/agents', patterns: ['csvQuestionAgent.ts', 'csv-question-agent.ts'] },
       {
         dir: 'src/mastra/tools',
-        patterns: ['csvFetcherTool.ts', 'csv-fetcher-tool.ts', 'download-csv-tool.ts'],
+        // AI discovery may return export name (csvFetcherTool) or filename-based ID (download-csv-tool),
+        // and convertNaming then adapts to the target project's convention
+        patterns: ['csvFetcherTool.ts', 'csv-fetcher-tool.ts', 'download-csv-tool.ts', 'downloadCsvTool.ts'],
       },
       {
         dir: 'src/mastra/workflows',

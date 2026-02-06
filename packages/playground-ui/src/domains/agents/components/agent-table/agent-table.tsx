@@ -3,7 +3,6 @@ import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
@@ -16,7 +15,7 @@ import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
-import { useExperimentalFeatures } from '@/lib/experimental-features/hooks/use-experimental-features';
+import { useIsCmsAvailable } from '@/domains/cms';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
@@ -27,9 +26,9 @@ export interface AgentsTableProps {
 export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
+  const { isCmsAvailable } = useIsCmsAvailable();
   const projectData: AgentTableData[] = useMemo(() => Object.values(agents), [agents]);
-  const columns = useMemo(() => getColumns(experimentalFeaturesEnabled), [experimentalFeaturesEnabled]);
+  const columns = useMemo(() => getColumns(isCmsAvailable), [isCmsAvailable]);
   const filteredData = useMemo(
     () => projectData.filter(agent => agent.name.toLowerCase().includes(search.toLowerCase())),
     [projectData, search],
@@ -66,7 +65,7 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
       </SearchbarWrapper>
 
       {isLoading ? (
-        <AgentsTableSkeleton showSourceColumn={experimentalFeaturesEnabled} />
+        <AgentsTableSkeleton />
       ) : (
         <ScrollableContainer>
           <TooltipProvider>
@@ -101,11 +100,10 @@ export function AgentsTable({ agents, isLoading, onCreateClick }: AgentsTablePro
   );
 }
 
-const AgentsTableSkeleton = ({ showSourceColumn }: { showSourceColumn: boolean }) => (
+const AgentsTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
-      {showSourceColumn && <Th>Source</Th>}
       <Th>Model</Th>
       <Th>Attached entities</Th>
     </Thead>
@@ -115,11 +113,6 @@ const AgentsTableSkeleton = ({ showSourceColumn }: { showSourceColumn: boolean }
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
-          {showSourceColumn && (
-            <Cell>
-              <Skeleton className="h-4 w-16" />
-            </Cell>
-          )}
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
@@ -149,7 +142,7 @@ const EmptyAgentsTable = ({ onCreateClick }: EmptyAgentsTableProps) => (
               <Icon>
                 <Plus />
               </Icon>
-              Create Agent
+              Create an agent
             </Button>
           )}
           <Button

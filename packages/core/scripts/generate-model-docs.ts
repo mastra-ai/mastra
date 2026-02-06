@@ -210,6 +210,8 @@ async function fetchProviderInfo(providerId: string): Promise<{ models: any[]; p
     if (!provider?.models) return { models: [] };
 
     const models = Object.entries(provider.models)
+      // The model.status is an optional enum of 'alpha' | 'beta' | 'deprecated'. Filter out deprecated models.
+      .filter(([_, model]: [string, any]) => model.status !== 'deprecated')
       .map(([modelId, model]: [string, any]) => ({
         model: `${providerId}/${modelId}`,
         imageInput: model.modalities?.input?.includes('image') || false,
