@@ -309,7 +309,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // Priority: streamProgress > recordConfig > agentConfig > defaults
   // For messages bar: use stream threshold (real-time effective) or total budget (max available)
   const messageTokensThreshold =
-    streamProgress?.messageTokens ??
+    streamProgress?.windows?.active?.messages?.threshold ??
     recordConfig?.observation?.messageTokens ??
     getThresholdValue(omAgentConfig?.messageTokens, 10000);
 
@@ -317,13 +317,13 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // The adaptive logic is handled by the backend - UI just shows progress against configured threshold
   const configObservationTokens = getThresholdValue(omAgentConfig?.observationTokens, 30000);
   const observationTokensThreshold =
-    streamProgress?.observationTokensThreshold ??
+    streamProgress?.windows?.active?.observations?.threshold ??
     recordConfig?.reflection?.observationTokens ??
     configObservationTokens;
 
   // Use stream progress token counts when available (real-time), fallback to record
-  const pendingMessageTokens = streamProgress?.pendingTokens ?? record?.pendingMessageTokens ?? 0;
-  const observationTokenCount = streamProgress?.observationTokens ?? record?.observationTokenCount ?? 0;
+  const pendingMessageTokens = streamProgress?.windows?.active?.messages?.tokens ?? record?.pendingMessageTokens ?? 0;
+  const observationTokenCount = streamProgress?.windows?.active?.observations?.tokens ?? record?.observationTokenCount ?? 0;
 
   // Show all previous observation records (exclude current active record), oldest first
   const previousObservations = useMemo(() => {
@@ -463,14 +463,30 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
         </div>
 
         {/* Buffered chunks info - show when there are buffered observations */}
-        {streamProgress?.hasBufferedChunks && streamProgress.bufferedChunksCount && streamProgress.bufferedChunksCount > 0 && (
+        {(streamProgress?.windows?.buffered?.observations?.chunks ?? 0) > 0 && streamProgress && (
           <div className="text-[10px] text-cyan-600 flex items-center gap-1.5 mt-1">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
+            <span className={`inline-block w-1.5 h-1.5 rounded-full bg-cyan-500 ${streamProgress.windows.buffered.observations.status === 'running' ? 'animate-pulse' : ''}`} />
             <span>
-              {streamProgress.bufferedChunksCount} buffered chunk{streamProgress.bufferedChunksCount !== 1 ? 's' : ''} (
-              {formatTokens(streamProgress.bufferedMessageTokens ?? 0)} msg tokens →{' '}
-              {formatTokens(streamProgress.bufferedObservationTokens ?? 0)} obs tokens)
+              {streamProgress.windows.buffered.observations.chunks} buffered chunk{streamProgress.windows.buffered.observations.chunks !== 1 ? 's' : ''} (
+              {formatTokens(streamProgress.windows.buffered.observations.messageTokens)} msg tokens →{' '}
+              {formatTokens(streamProgress.windows.buffered.observations.observationTokens)} obs tokens)
             </span>
+          </div>
+        )}
+        {/* Buffered reflection info */}
+        {streamProgress?.windows?.buffered?.reflection?.status === 'complete' && (
+          <div className="text-[10px] text-purple-500 flex items-center gap-1.5 mt-1">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500" />
+            <span>
+              Reflection ready ({formatTokens(streamProgress.windows.buffered.reflection.inputObservationTokens)} →{' '}
+              {formatTokens(streamProgress.windows.buffered.reflection.observationTokens)})
+            </span>
+          </div>
+        )}
+        {streamProgress?.windows?.buffered?.reflection?.status === 'running' && (
+          <div className="text-[10px] text-purple-400 flex items-center gap-1.5 mt-1">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+            <span>Reflection in progress…</span>
           </div>
         )}
       </TooltipProvider>

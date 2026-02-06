@@ -1,25 +1,30 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 
-/** Progress data streamed from OM in real-time */
+/** Progress data streamed from OM in real-time (maps to DataOmStatusPart) */
 export interface OmProgressData {
-  pendingTokens: number;
-  messageTokens: number;
-  messageTokensPercent: number;
-  observationTokens: number;
-  observationTokensThreshold: number;
-  observationTokensPercent: number;
-  willObserve: boolean;
+  windows: {
+    active: {
+      messages: { tokens: number; threshold: number };
+      observations: { tokens: number; threshold: number };
+    };
+    buffered: {
+      observations: {
+        chunks: number;
+        messageTokens: number;
+        observationTokens: number;
+        status: 'idle' | 'running' | 'complete';
+      };
+      reflection: {
+        inputObservationTokens: number;
+        observationTokens: number;
+        status: 'idle' | 'running' | 'complete';
+      };
+    };
+  };
   recordId: string;
   threadId: string;
   stepNumber: number;
-  /** Number of buffered observation chunks */
-  bufferedChunksCount?: number;
-  /** Total message tokens in buffered chunks */
-  bufferedMessageTokens?: number;
-  /** Total observation tokens in buffered chunks */
-  bufferedObservationTokens?: number;
-  /** Whether there are any buffered chunks */
-  hasBufferedChunks?: boolean;
+  generationCount: number;
 }
 
 interface ObservationalMemoryContextValue {

@@ -484,27 +484,18 @@ export function MastraRuntimeProvider({
     }
   };
 
-  // Helper to update progress from streamed data-om-progress parts
+  // Helper to update progress from streamed data-om-status parts
   const handleProgressUpdate = (data: any) => {
     // Ignore progress from a different thread (e.g., if user switched threads mid-stream)
     if (data.threadId && data.threadId !== threadId) {
       return;
     }
     setStreamProgress({
-      pendingTokens: data.pendingTokens,
-      messageTokens: data.messageTokens,
-      messageTokensPercent: data.messageTokensPercent,
-      observationTokens: data.observationTokens,
-      observationTokensThreshold: data.observationTokensThreshold,
-      observationTokensPercent: data.observationTokensPercent,
-      willObserve: data.willObserve,
+      windows: data.windows,
       recordId: data.recordId,
       threadId: data.threadId,
       stepNumber: data.stepNumber,
-      bufferedChunksCount: data.bufferedChunksCount,
-      bufferedMessageTokens: data.bufferedMessageTokens,
-      bufferedObservationTokens: data.bufferedObservationTokens,
-      hasBufferedChunks: data.hasBufferedChunks,
+      generationCount: data.generationCount,
     });
   };
 
@@ -616,7 +607,7 @@ export function MastraRuntimeProvider({
         if (part?.type === 'data-om-activation' && part?.data?.cycleId) {
           markCycleIdActivated(part.data.cycleId);
         }
-        if (part?.type === 'data-om-progress' && part?.data) {
+        if (part?.type === 'data-om-status' && part?.data) {
           lastProgress = part.data;
         }
       }
@@ -723,8 +714,8 @@ export function MastraRuntimeProvider({
                 handleObservationStart((chunk as any).data?.operationType);
               }
 
-              // Update progress from streamed data-om-progress parts
-              if ((chunk as any).type === 'data-om-progress') {
+              // Update progress from streamed data-om-status parts
+              if ((chunk as any).type === 'data-om-status') {
                 handleProgressUpdate((chunk as any).data);
               }
 
@@ -788,8 +779,8 @@ export function MastraRuntimeProvider({
                   handleObservationStart((chunk as any).data?.operationType);
                 }
 
-                // Update progress from streamed data-om-progress parts
-                if (chunk.type === 'data-om-progress') {
+                // Update progress from streamed data-om-status parts
+                if (chunk.type === 'data-om-status') {
                   handleProgressUpdate((chunk as any).data);
                 }
 
