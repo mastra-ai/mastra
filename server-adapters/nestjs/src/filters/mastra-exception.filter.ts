@@ -42,7 +42,9 @@ export class MastraExceptionFilter implements ExceptionFilter {
     }
 
     const normalized = this.normalizeError(exception);
-    const requestId = request.headers['x-request-id'] || (request as any).mastraRequestId;
+    const rawRequestId = request.headers['x-request-id'];
+    const requestId =
+      (Array.isArray(rawRequestId) ? rawRequestId[0] : rawRequestId) || (request as any).mastraRequestId;
 
     // Log error
     if (normalized.status >= 500) {
