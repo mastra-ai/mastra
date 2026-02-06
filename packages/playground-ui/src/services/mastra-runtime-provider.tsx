@@ -515,7 +515,8 @@ export function MastraRuntimeProvider({
     } else {
       setIsObservingFromStream(false);
     }
-    setStreamProgress(null); // Clear progress when observation completes
+    // Don't clear streamProgress — keep last known values so sidebar shows
+    // accurate token counts even after the stream ends or on page reload
     signalObservationsUpdated();
     // Invalidate both the OM data and status queries to trigger refetch
     queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
@@ -593,10 +594,11 @@ export function MastraRuntimeProvider({
     queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
   };
 
-  // On initial load, scan messages for activation markers and populate activatedCycleIds
-  // This ensures buffering badges show as activated even after page reload
+  // On initial load, scan messages for activation markers and the last progress part.
+  // This ensures buffering badges show as activated and token counts are accurate on reload.
   useEffect(() => {
     const allMessages = [...(initialMessages || []), ...(initialLegacyMessages || [])];
+    let lastProgress: any = null;
     for (const msg of allMessages) {
       const parts = (msg as any).parts || (msg as any).content || [];
       if (!Array.isArray(parts)) continue;
@@ -604,7 +606,14 @@ export function MastraRuntimeProvider({
         if (part?.type === 'data-om-activation' && part?.data?.cycleId) {
           markCycleIdActivated(part.data.cycleId);
         }
+        if (part?.type === 'data-om-progress' && part?.data) {
+          lastProgress = part.data;
+        }
       }
+    }
+    // Restore the last known progress so sidebar shows accurate token counts on load
+    if (lastProgress) {
+      handleProgressUpdate(lastProgress);
     }
   }, []); // Only run once on mount
 

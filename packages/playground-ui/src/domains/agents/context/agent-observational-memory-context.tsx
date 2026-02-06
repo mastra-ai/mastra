@@ -65,7 +65,7 @@ export function ObservationalMemoryProvider({ children }: { children: ReactNode 
   }, []);
 
   const clearProgress = useCallback(() => {
-    setStreamProgress(null);
+    // Don't clear streamProgress — keep last known values for sidebar display on reload
     setIsObservingFromStream(false);
     setIsReflectingFromStream(false);
     setActivatedCycleIds(new Set());
