@@ -468,6 +468,27 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   asyncActivation?: number;
+
+  /**
+   * Token threshold above which synchronous (blocking) observation is forced.
+   * When set, the system will never block for observation between `messageTokens`
+   * and `blockAfter` — only async buffering and activation are used in that range.
+   * Once unobserved tokens exceed `blockAfter`, a synchronous observation runs as a
+   * last resort to prevent context window overflow.
+   *
+   * Must be greater than `messageTokens`. Only relevant when `bufferEvery` is set.
+   * If not set, synchronous observation is never used when async buffering is enabled.
+   *
+   * @example
+   * ```ts
+   * observation: {
+   *   messageTokens: 20_000,
+   *   bufferEvery: 5_000,
+   *   blockAfter: 80_000,
+   * }
+   * ```
+   */
+  blockAfter?: number;
 }
 
 /**

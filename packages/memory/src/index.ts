@@ -1676,6 +1676,7 @@ Notes:
             providerOptions: omConfig.observation.providerOptions,
             bufferEvery: omConfig.observation.bufferEvery,
             asyncActivation: omConfig.observation.asyncActivation,
+            blockAfter: omConfig.observation.blockAfter,
           }
         : undefined,
       reflection: omConfig.reflection

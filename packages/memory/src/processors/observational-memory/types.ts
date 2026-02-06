@@ -111,6 +111,16 @@ export interface ObservationConfig {
    * @default 100 (activate all buffered observations)
    */
   asyncActivation?: number;
+
+  /**
+   * Token threshold above which synchronous (blocking) observation is forced.
+   * Between `messageTokens` and `blockAfter`, only async buffering/activation is used.
+   * Above `blockAfter`, a synchronous observation runs as a last resort.
+   *
+   * Must be greater than `messageTokens`. Only relevant when `bufferEvery` is set.
+   * If not set, synchronous observation is never used when async buffering is enabled.
+   */
+  blockAfter?: number;
 }
 
 /**
@@ -303,6 +313,9 @@ export interface DataOmObservationFailedPart {
 
     /** This thread's ID */
     threadId: string;
+
+    /** The buffered observations/reflection content (for UI expansion) */
+    observations?: string;
   };
 }
 
@@ -420,6 +433,9 @@ export interface DataOmBufferingEndPart {
 
     /** This thread's ID */
     threadId: string;
+
+    /** The buffered observations/reflection content (for UI expansion) */
+    observations?: string;
   };
 }
 
@@ -453,6 +469,9 @@ export interface DataOmBufferingFailedPart {
 
     /** This thread's ID */
     threadId: string;
+
+    /** The buffered observations/reflection content (for UI expansion) */
+    observations?: string;
   };
 }
 

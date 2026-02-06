@@ -345,6 +345,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   if (isBufferingComplete) {
     const tokensBuffered = omData.tokensBuffered;
     const bufferedTokens = omData.bufferedTokens;
+    const { observations } = omData;
     const bufferedLabel = isReflection ? 'Buffered reflection' : 'Buffered observations';
     const compressionRatio =
       tokensBuffered && bufferedTokens && bufferedTokens > 0
@@ -359,16 +360,24 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         data-om-type={isReflection ? 'reflection' : 'observation'}
       >
         <div className="my-1">
-          <div
-            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-500/10 text-purple-600 text-xs font-medium border border-dashed border-purple-400/40"
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-500/10 text-purple-600 text-xs font-medium hover:bg-purple-500/20 transition-colors cursor-pointer border border-dashed border-purple-400/40"
           >
+            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             <CloudCog className="w-3 h-3" />
             <span>
               {bufferedLabel} {tokensBuffered ? formatTokens(tokensBuffered) : '?'}→
               {bufferedTokens ? formatTokens(bufferedTokens) : '?'} tokens
               {compressionRatio ? ` (-${compressionRatio}x)` : ''}
             </span>
-          </div>
+          </button>
+
+          {isExpanded && observations && (
+            <div className="mt-1 ml-4 p-2 rounded-md bg-purple-500/5 text-purple-700 text-xs border border-purple-500/10 whitespace-pre-wrap max-h-60 overflow-y-auto">
+              {observations}
+            </div>
+          )}
         </div>
       </div>
     );

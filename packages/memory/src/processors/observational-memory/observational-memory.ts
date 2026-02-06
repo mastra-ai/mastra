@@ -396,6 +396,8 @@ interface ResolvedObservationConfig {
   bufferEvery?: number;
   /** Ratio of buffered observations to activate (0-1 float) */
   asyncActivation?: number;
+  /** Token threshold above which synchronous observation is forced */
+  blockAfter?: number;
 }
 
 interface ResolvedReflectionConfig {
@@ -738,6 +740,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         config.observation?.maxTokensPerBatch ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.maxTokensPerBatch,
       bufferEvery: config.observation?.bufferEvery ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferEvery,
       asyncActivation: config.observation?.asyncActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.asyncActivation,
+      blockAfter: config.observation?.blockAfter,
     };
 
     // Resolve reflection config with defaults
@@ -886,6 +889,20 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       if (this.observationConfig.asyncActivation <= 0 || this.observationConfig.asyncActivation > 1) {
         throw new Error(
           `observation.asyncActivation must be in range (0, 1], got ${this.observationConfig.asyncActivation}`,
+        );
+      }
+    }
+
+    // Validate observation blockAfter
+    if (this.observationConfig.blockAfter !== undefined) {
+      if (this.observationConfig.blockAfter <= observationThreshold) {
+        throw new Error(
+          `observation.blockAfter (${this.observationConfig.blockAfter}) must be greater than messageTokens (${observationThreshold})`,
+        );
+      }
+      if (!this.observationConfig.bufferEvery) {
+        throw new Error(
+          `observation.blockAfter requires observation.bufferEvery to be set (blockAfter only applies when async buffering is enabled)`,
         );
       }
     }
@@ -1192,6 +1209,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     bufferedTokens: number;
     recordId: string;
     threadId: string;
+    observations?: string;
   }): DataOmBufferingEndPart {
     const completedAt = new Date().toISOString();
     const durationMs = new Date(completedAt).getTime() - new Date(params.startedAt).getTime();
@@ -1207,6 +1225,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         bufferedTokens: params.bufferedTokens,
         recordId: params.recordId,
         threadId: params.threadId,
+        observations: params.observations,
       },
     };
   }
@@ -2133,10 +2152,23 @@ ${suggestedResponse}
           observationSucceeded = true;
           updatedRecord = activationResult.updatedRecord ?? recordAfterWait;
 
-          // NOTE: We intentionally do NOT trigger reflection here.
-          // Activation just moves buffered content to active - triggering reflection
-          // immediately could discard freshly activated observations before the agent sees them.
-          // Reflection triggers naturally after the next synchronous observation.
+          // Check if async reflection should be triggered or activated.
+          // This only does async work (background buffering or instant activation) —
+          // never blocking sync reflection that could overwrite freshly activated observations.
+          await this.maybeAsyncReflect(updatedRecord, updatedRecord.observationTokenCount ?? 0, writer);
+          return;
+        }
+
+        // When async observation is enabled, don't fall through to synchronous observation
+        // unless blockAfter is set and we've exceeded it.
+        if (this.observationConfig.blockAfter && freshTotal >= this.observationConfig.blockAfter) {
+          // blockAfter exceeded — fall through to synchronous observation as a last resort.
+          // Re-fetch unobserved messages since activation may have changed things.
+          freshRecord = await this.getOrCreateRecord(threadId, resourceId);
+          const refreshedAll = messageList.get.all.db();
+          freshUnobservedMessages = this.getUnobservedMessages(refreshedAll, freshRecord);
+        } else {
+          // Below blockAfter (or no blockAfter set) — let async buffering catch up.
           return;
         }
       }
@@ -2519,6 +2551,9 @@ NOTE: Any messages following this system reminder are newer than your memories.
           if (idsToRemove.length > 0) {
             messageList.removeByIds(idsToRemove);
           }
+
+          // Check if async reflection should be triggered or activated
+          await this.maybeAsyncReflect(record, record.observationTokenCount ?? 0, writer);
         }
       }
     }
@@ -3377,6 +3412,7 @@ ${formattedMessages}
         bufferedTokens: totalBufferedTokens,
         recordId: record.id,
         threadId,
+        observations: newObservations,
       });
       void writer.custom(endMarker).catch(() => {});
     }
@@ -3496,6 +3532,7 @@ ${formattedMessages}
     record: ObservationalMemoryRecord,
     observationTokens: number,
     lockKey: string,
+    writer?: ProcessorStreamWriter,
   ): void {
     const bufferKey = this.getReflectionBufferKey(lockKey);
 
@@ -3508,8 +3545,21 @@ ${formattedMessages}
     this.lastBufferedBoundary.set(bufferKey, observationTokens);
 
     // Start the async operation
-    const asyncOp = this.doAsyncBufferedReflection(record, bufferKey)
+    const asyncOp = this.doAsyncBufferedReflection(record, bufferKey, writer)
       .catch(error => {
+        // Emit buffering failed marker
+        if (writer) {
+          const failedMarker = this.createBufferingFailedMarker({
+            cycleId: `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+            operationType: 'reflection',
+            startedAt: new Date().toISOString(),
+            tokensAttempted: observationTokens,
+            error: error instanceof Error ? error.message : String(error),
+            recordId: record.id,
+            threadId: record.threadId ?? '',
+          });
+          void writer.custom(failedMarker).catch(() => {});
+        }
         // Log but don't crash - async buffering failure is recoverable
         console.error(`[OM] Async buffered reflection failed:`, error instanceof Error ? error.stack : String(error));
       })
@@ -3525,8 +3575,28 @@ ${formattedMessages}
    * Perform async buffered reflection - reflects observations and stores to bufferedReflection.
    * Does NOT create a new generation or update activeObservations.
    */
-  private async doAsyncBufferedReflection(record: ObservationalMemoryRecord, _bufferKey: string): Promise<void> {
+  private async doAsyncBufferedReflection(
+    record: ObservationalMemoryRecord,
+    _bufferKey: string,
+    writer?: ProcessorStreamWriter,
+  ): Promise<void> {
     const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    const startedAt = new Date().toISOString();
+    const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    const observationTokens = record.observationTokenCount ?? 0;
+
+    // Emit buffering start marker
+    if (writer) {
+      const startMarker = this.createBufferingStartMarker({
+        cycleId,
+        operationType: 'reflection',
+        tokensToBuffer: observationTokens,
+        recordId: record.id,
+        threadId: record.threadId ?? '',
+        threadIds: record.threadId ? [record.threadId] : [],
+      });
+      void writer.custom(startMarker).catch(() => {});
+    }
 
     // Call reflector (skip continuation hints for async buffering)
     const reflectResult = await this.callReflector(
@@ -3546,6 +3616,21 @@ ${formattedMessages}
       reflection: reflectResult.observations,
       tokenCount: reflectionTokenCount,
     });
+
+    // Emit buffering end marker
+    if (writer) {
+      const endMarker = this.createBufferingEndMarker({
+        cycleId,
+        operationType: 'reflection',
+        startedAt,
+        tokensBuffered: observationTokens,
+        bufferedTokens: reflectionTokenCount,
+        recordId: record.id,
+        threadId: record.threadId ?? '',
+        observations: reflectResult.observations,
+      });
+      void writer.custom(endMarker).catch(() => {});
+    }
   }
 
   /**
@@ -3555,7 +3640,11 @@ ${formattedMessages}
    * @param record - Current OM record
    * @param lockKey - Lock key for this scope
    */
-  private async tryActivateBufferedReflection(record: ObservationalMemoryRecord, lockKey: string): Promise<boolean> {
+  private async tryActivateBufferedReflection(
+    record: ObservationalMemoryRecord,
+    lockKey: string,
+    writer?: ProcessorStreamWriter,
+  ): Promise<boolean> {
     // Check if there's buffered content to activate
     if (!record.bufferedReflection) {
       return false;
@@ -3583,11 +3672,31 @@ ${formattedMessages}
       return false;
     }
 
+    const beforeTokens = freshRecord.observationTokenCount ?? 0;
+
     // Perform partial swap with asyncActivation ratio
     await this.storage.swapBufferedReflectionToActive({
       currentRecord: freshRecord,
       activationRatio: this.reflectionConfig.asyncActivation ?? 1,
     });
+
+    // Emit activation marker
+    if (writer) {
+      const afterRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+      const afterTokens = afterRecord?.observationTokenCount ?? 0;
+      const activationMarker = this.createActivationMarker({
+        cycleId: `reflect-act-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+        operationType: 'reflection',
+        chunksActivated: 1,
+        tokensActivated: beforeTokens,
+        observationTokens: afterTokens,
+        messagesActivated: 0,
+        recordId: freshRecord.id,
+        threadId: freshRecord.threadId ?? '',
+        observations: afterRecord?.activeObservations,
+      });
+      void writer.custom(activationMarker).catch(() => {});
+    }
 
     return true;
   }
@@ -4086,6 +4195,39 @@ ${formattedMessages}
   }
 
   /**
+   * Check if async reflection should be triggered or activated.
+   * Only handles the async path — will never do synchronous (blocking) reflection.
+   * Safe to call after buffered observation activation.
+   */
+  private async maybeAsyncReflect(
+    record: ObservationalMemoryRecord,
+    observationTokens: number,
+    writer?: ProcessorStreamWriter,
+  ): Promise<void> {
+    if (!this.isAsyncReflectionEnabled()) return;
+
+    const lockKey = this.getLockKey(record.threadId, record.resourceId);
+    const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+
+    // Below threshold: trigger background buffering if at the right interval
+    if (observationTokens < reflectThreshold) {
+      if (this.shouldTriggerAsyncReflection(observationTokens, lockKey)) {
+        this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer);
+      }
+      return;
+    }
+
+    // At/above threshold: try to activate buffered reflection
+    if (record.isReflecting) return;
+
+    const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer);
+    if (activationSuccess) return;
+
+    // No buffered reflection available — don't fall through to sync.
+    // Sync reflection will happen naturally after the next synchronous observation.
+  }
+
+  /**
    * Check if reflection needed and trigger if so.
    * Supports both synchronous reflection and async buffered reflection.
    * When async buffering is enabled via `bufferEvery`, reflection is triggered
@@ -4109,7 +4251,7 @@ ${formattedMessages}
       // Check if we've crossed the asyncActivation threshold
       if (this.shouldTriggerAsyncReflection(observationTokens, lockKey)) {
         // Start background reflection (fire-and-forget)
-        this.startAsyncBufferedReflection(record, observationTokens, lockKey);
+        this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer);
       }
     }
 
@@ -4131,7 +4273,7 @@ ${formattedMessages}
     // This provides instant activation without blocking on new reflection.
     // ════════════════════════════════════════════════════════════════════════
     if (this.isAsyncReflectionEnabled()) {
-      const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey);
+      const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer);
       if (activationSuccess) {
         // Buffered reflection was activated - we're done
         return;
