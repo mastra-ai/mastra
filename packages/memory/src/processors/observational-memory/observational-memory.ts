@@ -2133,10 +2133,10 @@ ${suggestedResponse}
           observationSucceeded = true;
           updatedRecord = activationResult.updatedRecord ?? recordAfterWait;
 
-          // Trigger reflection after activation (async buffering is enforced to be paired,
-          // so this will use async reflection path via maybeReflect)
-          const activatedObsTokens = updatedRecord.observationTokenCount ?? 0;
-          await this.maybeReflect(updatedRecord, activatedObsTokens, threadId, writer);
+          // NOTE: We intentionally do NOT trigger reflection here.
+          // Activation just moves buffered content to active - triggering reflection
+          // immediately could discard freshly activated observations before the agent sees them.
+          // Reflection triggers naturally after the next synchronous observation.
           return;
         }
       }
