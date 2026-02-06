@@ -5,7 +5,6 @@
 '@mastra/mongodb': patch
 '@mastra/libsql': patch
 '@mastra/pg': patch
-'@mastra/editor': patch
 ---
 
 Fixed multiple issues with stored agents:
