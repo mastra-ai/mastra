@@ -249,27 +249,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const record = omData?.record;
   const history = omData?.history ?? [];
 
-  // DEBUG: trace OM sidebar data flow
-  console.log('[OM Sidebar Debug]', {
-    isStatusLoading,
-    isOMLoading,
-    isEnabled,
-    statusData: statusData?.observationalMemory,
-    omData: omData ? { record: !!omData.record, historyLen: omData.history?.length } : null,
-    record: record
-      ? {
-          id: record.id,
-          hasActiveObservations: !!record.activeObservations,
-          activeObservationsLen: record.activeObservations?.length,
-          observationTokenCount: record.observationTokenCount,
-          pendingMessageTokens: record.pendingMessageTokens,
-          generationCount: record.generationCount,
-          config: record.config,
-        }
-      : null,
-    streamProgress,
-  });
-
   // Extract threshold values - try multiple sources in priority order:
   // 1. Stream progress (real-time during streaming)
   // 2. Record config (from OM processor when added via input/output processors)
