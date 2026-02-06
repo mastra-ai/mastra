@@ -1,6 +1,7 @@
 import type { Agent } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import type { MastraScorer } from '../../evals/base';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { DatasetItem, TargetType } from '../../storage/types';
 import type { Workflow } from '../../workflows';
 
@@ -20,6 +21,10 @@ export interface ExecutionResult {
   error: string | null;
   /** Trace ID from agent/workflow execution (null for scorers or errors) */
   traceId: string | null;
+  /** Structured input for scorers (extracted from agent scoring data) */
+  scorerInput?: ScorerRunInputForAgent;
+  /** Structured output for scorers (extracted from agent scoring data) */
+  scorerOutput?: ScorerRunOutputForAgent;
 }
 
 /**
@@ -108,13 +113,18 @@ async function executeAgent(agent: Agent, item: DatasetItem): Promise<ExecutionR
         returnScorerData: true,
       });
 
-  // Capture traceId from agent result
+  // Capture traceId and scoring data from agent result
   const traceId = (result as any)?.traceId ?? null;
+  const scoringData = (result as any)?.scoringData as
+    | { input: ScorerRunInputForAgent; output: ScorerRunOutputForAgent }
+    | undefined;
 
   return {
     output: result,
     error: null,
     traceId,
+    scorerInput: scoringData?.input,
+    scorerOutput: scoringData?.output,
   };
 }
 

@@ -161,6 +161,8 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
           runId,
           targetType,
           targetId,
+          execResult.scorerInput,
+          execResult.scorerOutput,
         );
 
         // Persist result with scores (if storage available)

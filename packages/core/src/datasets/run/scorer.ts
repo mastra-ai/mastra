@@ -1,4 +1,5 @@
 import type { MastraScorer } from '../../evals/base';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import type { MastraCompositeStore } from '../../storage/base';
@@ -42,13 +43,15 @@ export async function runScorersForItem(
   runId: string,
   targetType: TargetType,
   targetId: string,
+  scorerInput?: ScorerRunInputForAgent,
+  scorerOutput?: ScorerRunOutputForAgent,
 ): Promise<ScorerResult[]> {
   if (scorers.length === 0) return [];
 
   const results: ScorerResult[] = [];
 
   for (const scorer of scorers) {
-    const result = await runScorerSafe(scorer, item, output);
+    const result = await runScorerSafe(scorer, item, output, scorerInput, scorerOutput);
     results.push(result);
 
     // Persist score if storage available and score was computed
@@ -92,11 +95,13 @@ async function runScorerSafe(
   scorer: MastraScorer<any, any, any, any>,
   item: DatasetItem,
   output: unknown,
+  scorerInput?: ScorerRunInputForAgent,
+  scorerOutput?: ScorerRunOutputForAgent,
 ): Promise<ScorerResult> {
   try {
     const scoreResult = await scorer.run({
-      input: item.input,
-      output,
+      input: scorerInput ?? item.input,
+      output: scorerOutput ?? output,
       groundTruth: item.expectedOutput,
     });
 
