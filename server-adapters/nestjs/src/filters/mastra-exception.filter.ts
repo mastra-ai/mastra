@@ -82,9 +82,10 @@ export class MastraExceptionFilter implements ExceptionFilter {
 
       if (typeof response === 'object' && response !== null) {
         const resp = response as any;
+        const message = Array.isArray(resp.message) ? resp.message.join(', ') : resp.message;
         return {
           status,
-          error: resp.message || resp.error || exception.message,
+          error: message || resp.error || exception.message,
           code: resp.code || this.getErrorCode(status),
           issues: resp.issues,
         };
@@ -122,12 +123,11 @@ export class MastraExceptionFilter implements ExceptionFilter {
     // HTTPException from Mastra (has status property)
     if (exception !== null && typeof exception === 'object' && 'status' in exception) {
       const status = (exception as any).status;
-      const message = (exception as any).message || 'An error occurred';
 
       if (typeof status === 'number') {
         return {
           status,
-          error: message,
+          error: status >= 500 ? 'An internal error occurred' : (exception as any).message || 'An error occurred',
           code: this.getErrorCode(status),
         };
       }
@@ -143,12 +143,11 @@ export class MastraExceptionFilter implements ExceptionFilter {
       'status' in (exception as any).details
     ) {
       const status = (exception as any).details.status;
-      const message = (exception as any).message || 'An error occurred';
 
       if (typeof status === 'number') {
         return {
           status,
-          error: message,
+          error: status >= 500 ? 'An internal error occurred' : (exception as any).message || 'An error occurred',
           code: (exception as any).code || this.getErrorCode(status),
         };
       }

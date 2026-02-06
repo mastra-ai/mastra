@@ -49,7 +49,7 @@ export class MastraRouteGuard implements CanActivate {
 
     // Apply rate limiting to matched Mastra routes.
     if (this.options.rateLimitOptions?.enabled !== false) {
-      const limit = request.path.includes('/generate')
+      const limit = /\/generate(?:$|\/)/.test(request.path)
         ? (this.options.rateLimitOptions?.generateLimit ?? 10)
         : (this.options.rateLimitOptions?.defaultLimit ?? 100);
       const windowMs = this.options.rateLimitOptions?.windowMs ?? 60000;
