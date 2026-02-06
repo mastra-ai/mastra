@@ -19,6 +19,8 @@ export {
 export {
   createSandboxTestSuite,
   createSandboxConfigTests,
+  createSandboxLifecycleTests,
+  createMountOperationsTests,
   type SandboxTestConfig,
   type SandboxCapabilities,
   type SandboxTestDomains,

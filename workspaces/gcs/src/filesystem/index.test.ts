@@ -10,7 +10,7 @@
  * Based on the Workspace Filesystem & Sandbox Test Plan.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { GCSFilesystem } from './index';
 

@@ -13,7 +13,8 @@
  * Based on the Workspace Filesystem & Sandbox Test Plan.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
 
 import { E2BSandbox } from './index';
 
@@ -104,12 +105,6 @@ describe('E2BSandbox', () => {
 
       expect(sandbox.provider).toBe('e2b');
       expect(sandbox.name).toBe('E2BSandbox');
-    });
-
-    it('status starts as pending', () => {
-      const sandbox = new E2BSandbox();
-
-      expect(sandbox.status).toBe('pending');
     });
 
     it('starts template preparation in background', () => {
@@ -254,10 +249,7 @@ describe('E2BSandbox', () => {
       await sandbox.start();
 
       // betaCreate should be called with the custom template ID
-      expect(Sandbox.betaCreate).toHaveBeenCalledWith(
-        'my-custom-template',
-        expect.any(Object),
-      );
+      expect(Sandbox.betaCreate).toHaveBeenCalledWith('my-custom-template', expect.any(Object));
     });
   });
 
@@ -318,17 +310,6 @@ describe('E2BSandbox', () => {
   });
 
   describe('Stop/Destroy', () => {
-    it('stop clears sandbox reference', async () => {
-      const sandbox = new E2BSandbox();
-      await sandbox.start();
-
-      expect(sandbox.status).toBe('running');
-
-      await sandbox.stop();
-
-      expect(sandbox.status).toBe('stopped');
-    });
-
     it('destroy kills sandbox', async () => {
       const sandbox = new E2BSandbox();
       await sandbox.start();
@@ -369,23 +350,6 @@ describe('E2BSandbox', () => {
   });
 
   describe('isReady()', () => {
-    it('returns false when not started', async () => {
-      const sandbox = new E2BSandbox();
-
-      const ready = await sandbox.isReady();
-
-      expect(ready).toBe(false);
-    });
-
-    it('returns true when running', async () => {
-      const sandbox = new E2BSandbox();
-      await sandbox.start();
-
-      const ready = await sandbox.isReady();
-
-      expect(ready).toBe(true);
-    });
-
     it('returns false when stopped', async () => {
       const sandbox = new E2BSandbox();
       await sandbox.start();
@@ -502,19 +466,7 @@ describe('E2BSandbox Mounting', () => {
     mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: 'ok', stderr: '' });
   });
 
-  describe('Mount State Tracking', () => {
-    it('has mounts property', async () => {
-      const sandbox = new E2BSandbox();
-
-      expect(sandbox.mounts).toBeDefined();
-    });
-
-    it('mounts.entries is a Map', () => {
-      const sandbox = new E2BSandbox();
-
-      expect(sandbox.mounts.entries).toBeInstanceOf(Map);
-    });
-  });
+  // Mount property tests are covered by the shared conformance suite
 
   describe('Marker File Helpers', () => {
     it('markerFilename generates consistent filename', () => {
@@ -853,9 +805,7 @@ describe('E2BSandbox Stop Behavior', () => {
     await sandbox.stop();
 
     // fusermount -u should be called for each mount
-    const fusermountCalls = mockSandbox.commands.run.mock.calls.filter((call: any[]) =>
-      call[0].includes('fusermount'),
-    );
+    const fusermountCalls = mockSandbox.commands.run.mock.calls.filter((call: any[]) => call[0].includes('fusermount'));
 
     expect(fusermountCalls.length).toBeGreaterThanOrEqual(2);
   });
@@ -1061,9 +1011,7 @@ describe('E2BSandbox Runtime Installation', () => {
       await sandbox.mount(mockFilesystem, '/data/gcs');
 
       // Verify gcsfuse installation commands were run
-      const installCommand = commandsRun.find(
-        cmd => cmd.includes('apt-get install') && cmd.includes('gcsfuse'),
-      );
+      const installCommand = commandsRun.find(cmd => cmd.includes('apt-get install') && cmd.includes('gcsfuse'));
       expect(installCommand).toBeDefined();
 
       // Also verify the apt repo was added
@@ -1111,4 +1059,41 @@ describe('E2BSandbox Runtime Installation', () => {
       expect(installCommand).toBeUndefined();
     });
   });
+});
+
+/**
+ * Shared conformance tests from _test-utils.
+ * These validate that E2BSandbox conforms to the WorkspaceSandbox contract.
+ */
+describe('E2BSandbox Shared Conformance', () => {
+  let sandbox: E2BSandbox;
+
+  beforeAll(async () => {
+    sandbox = new E2BSandbox({ id: `conformance-${Date.now()}` });
+    await sandbox.start();
+  });
+
+  afterAll(async () => {
+    if (sandbox?.destroy) await sandbox.destroy();
+  });
+
+  const getContext = () => ({
+    sandbox: sandbox as any,
+    capabilities: {
+      supportsMounting: true,
+      supportsReconnection: false,
+      supportsConcurrency: true,
+      supportsEnvVars: true,
+      supportsWorkingDirectory: true,
+      supportsTimeout: true,
+      defaultCommandTimeout: 5000,
+      supportsStreaming: true,
+    },
+    testTimeout: 5000,
+    fastOnly: false,
+    createSandbox: () => new E2BSandbox(),
+  });
+
+  createSandboxLifecycleTests(getContext);
+  createMountOperationsTests(getContext);
 });

@@ -11,8 +11,8 @@
  * - GCS_ENDPOINT: Endpoint URL for fake-gcs emulator (optional)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { GCSFilesystem } from './index';
 
