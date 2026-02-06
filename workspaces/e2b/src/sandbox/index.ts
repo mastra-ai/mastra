@@ -23,6 +23,7 @@ import type { TemplateBuilder, TemplateClass } from 'e2b';
 
 import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, MountContext } from './mounts';
 import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
+import { shellQuote } from '../utils/shell-quote';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 
@@ -846,7 +847,7 @@ export class E2BSandbox extends MastraSandbox {
     const sandbox = await this.ensureSandbox();
 
     const startTime = Date.now();
-    const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
 
     this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`);
 
