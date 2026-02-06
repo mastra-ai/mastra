@@ -151,7 +151,7 @@ function CmsAgentsEditForm({
         name: values.name,
         description: values.description,
         instructions: values.instructions,
-        model: values.model as Record<string, unknown>,
+        model: values.model,
         tools: codeDefinedTools,
         integrationTools: integrationToolIds,
         workflows: Object.keys(values.workflows || {}),

@@ -7,8 +7,8 @@ import {
   AgentEditSidebar,
   AgentEditLayout,
   useAgentEditForm,
-  AgentEditMainContentBlocks,
   MainContentLayout,
+  AgentEditMain,
   Header,
   HeaderTitle,
   Icon,
@@ -80,11 +80,10 @@ function CmsAgentsCreatePage() {
         leftSlot={
           <AgentEditSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} formRef={formRef} />
         }
-
       >
         <form ref={formRef} className="h-full">
-          {/* <AgentEditMain form={form} /> */}
-          <AgentEditMainContentBlocks form={form} />
+          <AgentEditMain form={form} />
+          {/* <AgentEditMainContentBlocks form={form} /> */}
         </form>
       </AgentEditLayout>
     </MainContentLayout>
