@@ -3110,13 +3110,10 @@ NOTE: Any messages following this system reminder are newer than your memories.
       // Re-fetch record to capture any changes from observation/activation/reflection
       const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
 
-      // Count actual messages in context window for accurate status reporting.
-      // messageList represents what the LLM will see:
-      //   - At step 0, it's already filtered by filterAlreadyObservedMessages
-      //   - At step > 0, it contains everything accumulated so far
-      // We filter out system/observation-injection messages to count only user/assistant messages.
-      const contextMessages = messageList.get.all.db().filter(m => m.role !== 'system');
-      const messageTokensInContext = this.tokenCounter.countMessages(contextMessages);
+      // Recompute unobserved tokens using the fresh record (updated lastObservedAt)
+      const allMessages = messageList.get.all.db();
+      const freshUnobserved = this.getUnobservedMessages(allMessages, freshRecord);
+      const freshUnobservedTokens = this.tokenCounter.countMessages(freshUnobserved);
       const otherThreadTokens = unobservedContextBlocks ? this.tokenCounter.countString(unobservedContextBlocks) : 0;
       const currentObservationTokens = freshRecord.observationTokenCount ?? 0;
 
@@ -3130,7 +3127,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
         ? Math.max(totalBudget - threshold, 1000)
         : baseReflectionThreshold;
 
-      const totalMessageTokens = messageTokensInContext + otherThreadTokens;
+      const totalPendingTokens = freshUnobservedTokens + otherThreadTokens;
 
       await this.emitStepProgress(
         writer,
@@ -3139,7 +3136,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
         stepNumber,
         freshRecord,
         {
-          totalPendingTokens: totalMessageTokens,
+          totalPendingTokens,
           threshold,
           effectiveObservationTokensThreshold,
         },
