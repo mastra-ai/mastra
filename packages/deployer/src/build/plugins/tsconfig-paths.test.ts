@@ -147,6 +147,87 @@ describe('tsconfig-paths plugin', () => {
       expect(result.output[0].code).toContain('hello');
     });
 
+    it('should not mark transitive dependencies of tsconfig-resolved cross-package imports as external (issue #12550)', async () => {
+      const mastraDir = join(tempDir, 'apps', 'mastra');
+      const mastraSrcDir = join(mastraDir, 'src', 'mastra');
+      const libDir = join(tempDir, 'packages', 'lib');
+      const betterAuthDir = join(libDir, 'node_modules', 'better-auth');
+
+      fs.mkdirSync(mastraSrcDir, { recursive: true });
+      fs.mkdirSync(betterAuthDir, { recursive: true });
+
+      // Create tsconfig.json in the mastra app with path alias to lib package
+      const tsConfigPath = join(mastraDir, 'tsconfig.json');
+      fs.writeFileSync(
+        tsConfigPath,
+        JSON.stringify({
+          compilerOptions: {
+            baseUrl: '.',
+            paths: {
+              '@lib/*': ['../../packages/lib/*'],
+            },
+          },
+        }),
+      );
+
+      // Create the lib package's auth module that imports an external dependency
+      fs.writeFileSync(
+        join(libDir, 'package.json'),
+        JSON.stringify({
+          name: '@test/lib',
+          version: '1.0.0',
+          dependencies: {
+            'better-auth': '^1.0.0',
+          },
+        }),
+      );
+      fs.writeFileSync(
+        join(libDir, 'auth.ts'),
+        `import { betterAuth } from 'better-auth';\nexport const auth = betterAuth({ database: 'test' });`,
+      );
+
+      // Create the fake better-auth package (only in packages/lib/node_modules)
+      fs.writeFileSync(
+        join(betterAuthDir, 'package.json'),
+        JSON.stringify({
+          name: 'better-auth',
+          version: '1.0.0',
+          main: 'index.js',
+          type: 'module',
+        }),
+      );
+      fs.writeFileSync(join(betterAuthDir, 'index.js'), `export function betterAuth(config) { return { config }; }`);
+
+      // Create the mastra entry file
+      const indexFile = join(mastraSrcDir, 'index.ts');
+      fs.writeFileSync(indexFile, `import { auth } from '@lib/auth';\nexport const mastra = { auth };`);
+
+      // Use tsConfigPaths with localResolve: true (same as dev mode)
+      const plugin = tsConfigPaths({ tsConfigPath, localResolve: true });
+
+      // Build using rollup - this simulates the dev mode bundling
+      const bundle = await rollup({
+        logLevel: 'silent',
+        input: indexFile,
+        plugins: [
+          plugin,
+          {
+            name: 'ts-loader',
+            load(id) {
+              if (fs.existsSync(id)) {
+                return fs.readFileSync(id, 'utf-8');
+              }
+              return null;
+            },
+          },
+        ],
+      });
+
+      const result = await bundle.generate({ format: 'esm' });
+      const output = result.output[0];
+      expect(output.imports).not.toContain('better-auth');
+    });
+
     it('should resolve aliases from extended tsconfig', async () => {
       // Create base config
       const baseConfig = JSON.stringify({
