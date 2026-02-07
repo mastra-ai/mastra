@@ -13,10 +13,14 @@ import type {
   TABLE_SPANS,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
+  TABLE_PROMPT_BLOCKS,
+  TABLE_PROMPT_BLOCK_VERSIONS,
   SpanRecord,
   StorageAgentType,
+  StoragePromptBlockType,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
+import type { PromptBlockVersion } from '@mastra/core/storage/domains/prompt-blocks';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type Cloudflare from 'cloudflare';
 
@@ -112,6 +116,8 @@ export type RecordTypes = {
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
   [TABLE_AGENT_VERSIONS]: AgentVersion;
+  [TABLE_PROMPT_BLOCKS]: StoragePromptBlockType;
+  [TABLE_PROMPT_BLOCK_VERSIONS]: PromptBlockVersion;
 };
 
 export type ListOptions = {

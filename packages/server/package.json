@@ -120,6 +120,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@sindresorhus/slugify": "^2.2.1",
     "hono": "^4.11.3"
   }
 }
