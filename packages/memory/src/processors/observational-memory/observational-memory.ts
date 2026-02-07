@@ -952,10 +952,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Validate buffer configuration
     this.validateBufferConfig();
 
-    // Capture stack trace to debug where OM instances are created from
-    const stack = new Error().stack?.split('\n').slice(2, 8).join('\n') ?? 'no stack';
     omDebug(
-      `[OM:init] new ObservationalMemory instance created — scope=${this.scope}, messageTokens=${JSON.stringify(this.observationConfig.messageTokens)}, obsAsyncEnabled=${this.isAsyncObservationEnabled()}, bufferEvery=${this.observationConfig.bufferEvery}, asyncActivation=${this.observationConfig.asyncActivation}, blockAfter=${this.observationConfig.blockAfter}, reflectionTokens=${this.reflectionConfig.observationTokens}, refAsyncEnabled=${this.isAsyncReflectionEnabled()}, refAsyncActivation=${this.reflectionConfig.asyncActivation}, refBlockAfter=${this.reflectionConfig.blockAfter}\nStack:\n${stack}`,
+      `[OM:init] new ObservationalMemory instance created — scope=${this.scope}, messageTokens=${JSON.stringify(this.observationConfig.messageTokens)}, obsAsyncEnabled=${this.isAsyncObservationEnabled()}, bufferEvery=${this.observationConfig.bufferEvery}, asyncActivation=${this.observationConfig.asyncActivation}, blockAfter=${this.observationConfig.blockAfter}, reflectionTokens=${this.reflectionConfig.observationTokens}, refAsyncEnabled=${this.isAsyncReflectionEnabled()}, refAsyncActivation=${this.reflectionConfig.asyncActivation}, refBlockAfter=${this.reflectionConfig.blockAfter}`,
     );
   }
 
@@ -1058,6 +1056,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Ensures bufferEvery is less than the threshold and asyncActivation is valid.
    */
   private validateBufferConfig(): void {
+    // Async buffering is not yet supported with resource scope
+    const hasAsyncBuffering =
+      this.observationConfig.bufferEvery !== undefined ||
+      this.observationConfig.asyncActivation !== undefined ||
+      this.reflectionConfig.asyncActivation !== undefined;
+    if (hasAsyncBuffering && this.scope === 'resource') {
+      throw new Error(
+        `Async buffering is not yet supported with scope: 'resource'. Use scope: 'thread' or remove bufferEvery/asyncActivation settings.`,
+      );
+    }
+
     // Validate observation bufferEvery
     const observationThreshold = this.getMaxThreshold(this.observationConfig.messageTokens);
     if (this.observationConfig.bufferEvery !== undefined) {
@@ -2943,12 +2952,16 @@ NOTE: Any messages following this system reminder are newer than your memories.
             record,
           );
 
-        const step0ActivationThreshold = this.observationConfig.blockAfter ?? step0Threshold;
+        // Activate buffered chunks at step 0 if:
+        // - We're at or above the regular observation threshold (buffers are needed)
+        // Use the regular threshold, not blockAfter — blockAfter gates synchronous observation,
+        // but activating already-buffered chunks is cheap (no LLM call) and prevents chunks
+        // from piling up in single-step turns that never reach step > 0.
         omDebug(
-          `[OM:step0-activation] pendingTokens=${step0PendingTokens}, threshold=${step0Threshold}, blockAfter=${this.observationConfig.blockAfter}, activationThreshold=${step0ActivationThreshold}, shouldActivate=${step0PendingTokens >= step0ActivationThreshold}, allMsgs=${allMsgsForCheck.length}, unobserved=${unobservedForCheck.length}`,
+          `[OM:step0-activation] pendingTokens=${step0PendingTokens}, threshold=${step0Threshold}, blockAfter=${this.observationConfig.blockAfter}, shouldActivate=${step0PendingTokens >= step0Threshold}, allMsgs=${allMsgsForCheck.length}, unobserved=${unobservedForCheck.length}`,
         );
 
-        if (step0PendingTokens >= step0ActivationThreshold) {
+        if (step0PendingTokens >= step0Threshold) {
           const activationResult = await this.tryActivateBufferedObservations(record, lockKey, writer);
 
           if (activationResult.success && activationResult.updatedRecord) {
@@ -3503,7 +3516,8 @@ ${formattedMessages}
     // This ties together the start/end/failed markers
     const cycleId = crypto.randomUUID();
 
-    // Insert START marker before observation
+    // Insert START marker before observation (uses total unobserved as estimate;
+    // actual observed count may be smaller with ratio-aware observation)
     const tokensToObserve = this.tokenCounter.countMessages(unobservedMessages);
     const lastMessage = unobservedMessages[unobservedMessages.length - 1];
     const startedAt = new Date().toISOString();
@@ -3536,9 +3550,68 @@ ${formattedMessages}
         }
       }
 
+      // ════════════════════════════════════════════════════════════
+      // ACTIVATION-RATIO-AWARE MESSAGE SELECTION
+      // When asyncActivation is set, observe only a subset of messages
+      // to keep some raw messages in context. Walk backwards from newest,
+      // keeping ~asyncActivation ratio of tokens unobserved.
+      // ════════════════════════════════════════════════════════════
+      let messagesToObserve = unobservedMessages;
+      const asyncActivation = this.observationConfig.asyncActivation;
+      if (asyncActivation && asyncActivation < 1 && unobservedMessages.length > 1) {
+        const perMessageTokens = unobservedMessages.map(m => this.tokenCounter.countMessage(m));
+        const totalTokens = perMessageTokens.reduce((sum, t) => sum + t, 0);
+        const keepTokens = totalTokens * (1 - asyncActivation);
+
+        omDebug(
+          `[OM:sync-obs] ratio-aware check: ${unobservedMessages.length} msgs, totalTokens=${totalTokens}, keepTokens=${Math.round(keepTokens)}, asyncActivation=${asyncActivation}\n` +
+            `  per-message tokens: [${perMessageTokens.map((t, i) => `${i}:${Math.round(t)}(${unobservedMessages[i]?.role})`).join(', ')}]`,
+        );
+
+        // Walk backwards (newest→oldest) accumulating tokens to keep
+        let keptTokens = 0;
+        let cutoffIndex = unobservedMessages.length; // start: observe all
+        for (let i = unobservedMessages.length - 1; i >= 0; i--) {
+          if (keptTokens + perMessageTokens[i]! > keepTokens) {
+            cutoffIndex = i + 1; // observe [0..i], keep [i+1..end]
+            break;
+          }
+          keptTokens += perMessageTokens[i]!;
+          cutoffIndex = i;
+        }
+
+        omDebug(
+          `[OM:sync-obs] ratio-aware walk: cutoffIndex=${cutoffIndex}, keptTokens=${Math.round(keptTokens)}, observing=[0..${cutoffIndex - 1}], keeping=[${cutoffIndex}..${unobservedMessages.length - 1}]`,
+        );
+
+        // Safety: ensure remaining tokens would actually be under the threshold
+        const threshold = this.getMaxThreshold(this.observationConfig.messageTokens);
+        const currentObsTokens = (freshRecord ?? record).observationTokenCount ?? 0;
+        let remainingTokens = keptTokens + currentObsTokens;
+        while (remainingTokens >= threshold && cutoffIndex < unobservedMessages.length) {
+          remainingTokens -= perMessageTokens[cutoffIndex]!;
+          cutoffIndex++;
+        }
+
+        // Must observe at least 1 message
+        cutoffIndex = Math.max(cutoffIndex, 1);
+
+        if (cutoffIndex < unobservedMessages.length) {
+          messagesToObserve = unobservedMessages.slice(0, cutoffIndex);
+          omDebug(
+            `[OM:sync-obs] ratio-aware: observing ${messagesToObserve.length}/${unobservedMessages.length} msgs ` +
+              `(keeping ~${Math.round(keptTokens)} tokens unobserved, asyncActivation=${asyncActivation})`,
+          );
+        } else {
+          omDebug(
+            `[OM:sync-obs] ratio-aware: no split possible, observing all ${unobservedMessages.length} msgs (cutoff=${cutoffIndex})`,
+          );
+        }
+      }
+
       const result = await this.callObserver(
         freshRecord?.activeObservations ?? record.activeObservations,
-        unobservedMessages,
+        messagesToObserve,
         abortSignal,
       );
 
@@ -3561,13 +3634,12 @@ ${formattedMessages}
       // Calculate tokens generated in THIS cycle only (for UI marker)
       const cycleObservationTokens = this.tokenCounter.countObservations(result.observations);
 
-      // Use the max message timestamp as cursor instead of current time
-      // This ensures historical data (like LongMemEval fixtures) works correctly
-      const lastObservedAt = this.getMaxMessageTimestamp(unobservedMessages);
+      // Use the max message timestamp as cursor — only for the messages we actually observed
+      const lastObservedAt = this.getMaxMessageTimestamp(messagesToObserve);
 
       // Collect message IDs being observed for the safeguard
-      // Merge with existing IDs, filter to only keep IDs newer than lastObservedAt
-      const newMessageIds = unobservedMessages.map(m => m.id);
+      // Only mark the messages we actually observed, not the ones we kept
+      const newMessageIds = messagesToObserve.map(m => m.id);
       const existingIds = freshRecord?.observedMessageIds ?? record.observedMessageIds ?? [];
       const allObservedIds = [...new Set([...(Array.isArray(existingIds) ? existingIds : []), ...newMessageIds])];
 
@@ -3599,12 +3671,13 @@ ${formattedMessages}
       // INSERT END MARKER after successful observation
       // This marks the boundary between observed and unobserved parts
       // ════════════════════════════════════════════════════════════════════════
+      const actualTokensObserved = this.tokenCounter.countMessages(messagesToObserve);
       if (lastMessage?.id) {
         const endMarker = this.createObservationEndMarker({
           cycleId,
           operationType: 'observation',
           startedAt,
-          tokensObserved: tokensToObserve,
+          tokensObserved: actualTokensObserved,
           observationTokens: cycleObservationTokens,
           observations: result.observations,
           currentTask: result.currentTask,
@@ -3632,7 +3705,7 @@ ${formattedMessages}
         observations: newObservations,
         rawObserverOutput: result.observations,
         previousObservations: record.activeObservations,
-        messages: unobservedMessages.map(m => ({
+        messages: messagesToObserve.map(m => ({
           role: m.role,
           content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
         })),
@@ -4097,10 +4170,14 @@ ${formattedMessages}
     _bufferKey: string,
     writer?: ProcessorStreamWriter,
   ): Promise<void> {
+    // Re-fetch the record to get the latest observation token count.
+    // The record passed in may be stale if sync observation just ran.
+    const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    const currentRecord = freshRecord ?? record;
+    const observationTokens = currentRecord.observationTokenCount ?? 0;
     // Use the current observation token count as the compression target.
     // The goal is "compress below what you're given" — any compression is useful
     // since buffered reflection runs early, before we hit the full threshold.
-    const observationTokens = record.observationTokenCount ?? 0;
     const compressionTarget = observationTokens;
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -4124,11 +4201,11 @@ ${formattedMessages}
     // Record the line count of activeObservations at the time of reflection.
     // At activation time, lines 0..lineCount are replaced by the reflection,
     // and any lines added after are appended as unreflected observations.
-    const activeObservations = record.activeObservations ?? '';
+    const activeObservations = currentRecord.activeObservations ?? '';
     const reflectedObservationLineCount = activeObservations.split('\n').length;
 
     omDebug(
-      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${record.id}, observationTokens=${observationTokens}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
+      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${currentRecord.id}, observationTokens=${observationTokens}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
     );
 
     // Call reflector with compression target = input observation tokens.
@@ -4145,12 +4222,12 @@ ${formattedMessages}
 
     const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
     omDebug(
-      `[OM:reflect] doAsyncBufferedReflection: reflector returned ${reflectionTokenCount} tokens (${reflectResult.observations?.length} chars), saving to recordId=${record.id}`,
+      `[OM:reflect] doAsyncBufferedReflection: reflector returned ${reflectionTokenCount} tokens (${reflectResult.observations?.length} chars), saving to recordId=${currentRecord.id}`,
     );
 
     // Store to bufferedReflection along with the line boundary
     await this.storage.updateBufferedReflection({
-      id: record.id,
+      id: currentRecord.id,
       reflection: reflectResult.observations,
       tokenCount: reflectionTokenCount,
       inputTokenCount: observationTokens,
@@ -4168,8 +4245,8 @@ ${formattedMessages}
         startedAt,
         tokensBuffered: observationTokens,
         bufferedTokens: reflectionTokenCount,
-        recordId: record.id,
-        threadId: record.threadId ?? '',
+        recordId: currentRecord.id,
+        threadId: currentRecord.threadId ?? '',
         observations: reflectResult.observations,
       });
       void writer.custom(endMarker).catch(() => {});
