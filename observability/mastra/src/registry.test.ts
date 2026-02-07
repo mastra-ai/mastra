@@ -439,7 +439,7 @@ describe('Observability Registry', () => {
         default: { enabled: true },
         configs: {},
       });
-      expect(observability.ensureInitialized()).resolves.toBeUndefined();
+      await expect(observability.ensureInitialized()).resolves.toBeUndefined();
 
       new Mastra({
         observability,
