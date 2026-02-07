@@ -14,7 +14,6 @@ import {
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
   type AgentSettingsType,
-  ResourceIdSelector,
 } from '@mastra/playground-ui';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -33,20 +32,88 @@ function Agent() {
     const stored = localStorage.getItem(`mastra-agent-resource-${agentId}`);
     return stored || agentId!;
   });
+
+  const [resourceHistory, setResourceHistory] = useState<string[]>(() => {
+    if (!agentId) return [];
+    try {
+      const raw = localStorage.getItem(`mastra-agent-resource-history-${agentId}`);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // React Router may keep this page mounted while switching agents.
+  // Reload persisted resource selection + history whenever agentId changes.
+  useEffect(() => {
+    if (!agentId) return;
+
+    const stored = localStorage.getItem(`mastra-agent-resource-${agentId}`);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedResourceId(stored || agentId);
+
+    try {
+      const raw = localStorage.getItem(`mastra-agent-resource-history-${agentId}`);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+      setResourceHistory(Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []);
+    } catch {
+      setResourceHistory([]);
+    }
+  }, [agentId]);
+
   const {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
   } = useThreads({ resourceId: selectedResourceId, agentId: agentId!, isMemoryEnabled: !!memory?.result });
 
-  const availableResourceIds = useMemo(() => {
-    if (!threads) return [];
-    return [...new Set(threads.map((t: { resourceId: string }) => t.resourceId))];
-  }, [threads]);
+  const { data: allThreads } = useThreads({ agentId: agentId!, isMemoryEnabled: !!memory?.result });
+
+  const availableResourceIds = useMemo<string[]>(() => {
+    const ids = new Set<string>();
+
+    // Always include the currently selected resourceId so it shows up in the selector
+    // even if the backend can't enumerate all resourceIds.
+    if (selectedResourceId && selectedResourceId !== agentId) {
+      ids.add(selectedResourceId);
+    }
+
+    // Include previously used resourceIds (localStorage history)
+    for (const id of resourceHistory) {
+      if (id && id !== agentId) ids.add(id);
+    }
+
+    // Best-effort discovery from all threads (when supported by server)
+    if (allThreads) {
+      for (const t of allThreads as Array<{ resourceId: string }>) {
+        if (t?.resourceId && t.resourceId !== agentId) ids.add(t.resourceId);
+      }
+    }
+
+    return Array.from(ids);
+  }, [allThreads, agentId, resourceHistory, selectedResourceId]);
 
   const handleResourceIdChange = (newResourceId: string) => {
-    setSelectedResourceId(newResourceId);
-    localStorage.setItem(`mastra-agent-resource-${agentId}`, newResourceId);
+    if (!agentId) return;
+
+    const next = newResourceId.trim();
+    if (!next) return;
+
+    setSelectedResourceId(next);
+    localStorage.setItem(`mastra-agent-resource-${agentId}`, next);
+
+    setResourceHistory(prev => {
+      const deduped = [next, ...prev.filter(x => x !== next)].filter(x => x && x !== agentId);
+      const capped = deduped.slice(0, 20);
+      try {
+        localStorage.setItem(`mastra-agent-resource-history-${agentId}`, JSON.stringify(capped));
+      } catch {
+        // ignore localStorage failures
+      }
+      return capped;
+    });
+
     navigate(`/agents/${agentId}/chat/${uuid()}?new=true`);
   };
 
@@ -113,7 +180,11 @@ function Agent() {
       <AgentPromptExperimentProvider initialPrompt={agent!.instructions} agentId={agentId!}>
         <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
           <SchemaRequestContextProvider>
-            <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={selectedResourceId}>
+            <WorkingMemoryProvider
+              agentId={agentId!}
+              threadId={isNewThread ? '' : threadId!}
+              resourceId={selectedResourceId}
+            >
               <ThreadInputProvider>
                 <ObservationalMemoryProvider>
                   <ActivatedSkillsProvider>
@@ -127,25 +198,21 @@ function Agent() {
                             threads={threads || []}
                             isLoading={isThreadsLoading}
                             resourceId={selectedResourceId}
+                            onResourceIdChange={handleResourceIdChange}
+                            availableResourceIds={availableResourceIds}
                           />
                         )
                       }
                       rightSlot={
-                        <AgentInformation agentId={agentId!} threadId={threadId!} resourceId={selectedResourceId} />
+                        <AgentInformation
+                          agentId={agentId!}
+                          threadId={isNewThread ? '' : threadId!}
+                          resourceId={selectedResourceId}
+                        />
                       }
                     >
-                      {Boolean(memory?.result) && (
-                        <div className="absolute top-4 right-4 z-50 w-64">
-                          <ResourceIdSelector
-                            value={selectedResourceId}
-                            onChange={handleResourceIdChange}
-                            agentId={agentId!}
-                            availableResourceIds={availableResourceIds}
-                          />
-                        </div>
-                      )}
                       <AgentChat
-                        key={threadId}
+                        key={`${threadId}-${selectedResourceId}`}
                         agentId={agentId!}
                         resourceId={selectedResourceId}
                         agentName={agent?.name}

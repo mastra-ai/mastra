@@ -1,4 +1,4 @@
-import { ChatThreads, useLinkComponent, useDeleteThread } from '@mastra/playground-ui';
+import { ChatThreads, useLinkComponent, useDeleteThread, ResourceIdSelector } from '@mastra/playground-ui';
 
 import { StorageThreadType } from '@mastra/core/memory';
 
@@ -8,12 +8,16 @@ export function AgentSidebar({
   threads,
   isLoading,
   resourceId,
+  onResourceIdChange,
+  availableResourceIds,
 }: {
   agentId: string;
   threadId: string;
   threads?: StorageThreadType[];
   isLoading: boolean;
   resourceId: string;
+  onResourceIdChange: (resourceId: string) => void;
+  availableResourceIds: string[];
 }) {
   const { mutateAsync } = useDeleteThread();
   const { paths, navigate } = useLinkComponent();
@@ -26,13 +30,27 @@ export function AgentSidebar({
   };
 
   return (
-    <ChatThreads
-      resourceId={resourceId}
-      resourceType={'agent'}
-      threads={threads || []}
-      isLoading={isLoading}
-      threadId={threadId}
-      onDelete={handleDelete}
-    />
+    <div className="flex flex-col h-full">
+      {/* ResourceId Selector at top */}
+      <div className="p-3 border-b border-border1">
+        <ResourceIdSelector
+          value={resourceId}
+          onChange={onResourceIdChange}
+          agentId={agentId}
+          availableResourceIds={availableResourceIds}
+        />
+      </div>
+
+      {/* Chat threads below */}
+      <ChatThreads
+        resourceId={resourceId}
+        resourceType={'agent'}
+        threads={threads || []}
+        isLoading={isLoading}
+        threadId={threadId}
+        onDelete={handleDelete}
+        agentId={agentId}
+      />
+    </div>
   );
 }

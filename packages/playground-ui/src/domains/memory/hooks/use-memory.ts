@@ -41,18 +41,20 @@ export const useThreads = ({
   agentId,
   isMemoryEnabled,
 }: {
-  resourceId: string;
+  resourceId?: string;
   agentId: string;
   isMemoryEnabled: boolean;
 }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
+  const resourceKey = resourceId ?? null;
+
   return useQuery({
-    queryKey: ['memory', 'threads', resourceId, agentId],
+    queryKey: ['memory', 'threads', resourceKey, agentId],
     queryFn: async () => {
       if (!isMemoryEnabled) return null;
-      const result = await client.listMemoryThreads({ resourceId, agentId, requestContext });
+      const result = await client.listMemoryThreads({ ...(resourceId ? { resourceId } : {}), agentId, requestContext });
       return result.threads;
     },
     enabled: Boolean(isMemoryEnabled),

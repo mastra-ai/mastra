@@ -345,6 +345,7 @@ export function MastraRuntimeProvider({
     networkToolCallApprovals,
   } = useChat({
     agentId,
+    resourceId: resourceId ?? agentId,
     initializeMessages: () => initialMessages || [],
   });
 

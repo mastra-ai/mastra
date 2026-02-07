@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useMastraClient } from '@mastra/react';
 import { usePlaygroundStore } from '@/store/playground-store';
 
@@ -19,16 +19,25 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const { requestContext } = usePlaygroundStore();
+  const fetchIdRef = useRef(0);
 
   const refetch = useCallback(async () => {
+    const currentFetchId = ++fetchIdRef.current;
     setIsLoading(true);
     try {
       if (!agentId || !threadId) {
-        setWorkingMemoryData(null);
-        setIsLoading(false);
+        if (currentFetchId === fetchIdRef.current) {
+          setWorkingMemoryData(null);
+          setIsLoading(false);
+        }
         return;
       }
       const res = await client.getWorkingMemory({ agentId, threadId, resourceId, requestContext });
+
+      if (currentFetchId !== fetchIdRef.current) {
+        return;
+      }
+
       const { workingMemory, source, workingMemoryTemplate, threadExists } = res as {
         workingMemory: string | null;
         source: 'thread' | 'resource';
@@ -53,12 +62,24 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
         setWorkingMemoryData(workingMemory || workingMemoryTemplate?.content || '');
       }
     } catch (error) {
+      if (currentFetchId !== fetchIdRef.current) {
+        return;
+      }
+
+      if (error && typeof error === 'object' && 'status' in error && (error as any).status === 403) {
+        console.warn('Working memory: thread belongs to different resource, skipping');
+        setIsLoading(false);
+        return;
+      }
+
       setWorkingMemoryData(null);
       console.error('Error fetching working memory', error);
     } finally {
-      setIsLoading(false);
+      if (currentFetchId === fetchIdRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [agentId, threadId, resourceId]);
+  }, [agentId, threadId, resourceId, requestContext, client]);
 
   useEffect(() => {
     refetch();

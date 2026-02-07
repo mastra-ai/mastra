@@ -586,8 +586,11 @@ export class MastraClient extends BaseResource {
     resourceId?: string;
     requestContext?: RequestContext | Record<string, any>;
   }) {
+    const params = new URLSearchParams({ agentId });
+    if (resourceId) params.set('resourceId', resourceId);
+    const qs = params.toString();
     return this.request(
-      `/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}${requestContextQueryString(requestContext, '&')}`,
+      `/memory/threads/${threadId}/working-memory?${qs}${requestContextQueryString(requestContext, '&')}`,
     );
   }
 
