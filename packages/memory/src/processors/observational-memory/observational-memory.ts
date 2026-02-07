@@ -2008,7 +2008,13 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       onChunk(chunk) {
         chunkCount++;
         if (chunkCount === 1 || chunkCount % 50 === 0) {
-          omDebug(`c${chunkCount}:${chunk.type}`);
+          const preview =
+            chunk.type === 'text-delta'
+              ? ` text="${(chunk as any).textDelta?.slice(0, 80)}..."`
+              : chunk.type === 'tool-call'
+                ? ` tool=${(chunk as any).toolName}`
+                : '';
+          omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
         }
       },
       onFinish(event) {
@@ -2029,7 +2035,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }, abortSignal);
 
     omDebug(
-      `[OM:callReflector] first attempt returned: textLen=${result.text?.length}, inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
+      `[OM:callReflector] first attempt returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}, keys=${Object.keys(result).join(',')}`,
     );
 
     // Accumulate usage from first attempt
@@ -2960,14 +2966,25 @@ NOTE: Any messages following this system reminder are newer than your memories.
     // conversation starts (e.g. from a previous session), trigger reflection.
     // This covers the case where no buffered observation activation happened above.
     // Safe because reflection carries over lastObservedAt — unobserved messages won't be lost.
+    // Also triggers async buffered reflection if above the activation point but
+    // below the full threshold (e.g. after a crash lost a previous reflection attempt).
     // ════════════════════════════════════════════════════════════════════════
-    if (stepNumber === 0 && !readOnly && this.shouldReflect(record.observationTokenCount ?? 0)) {
-      omDebug(
-        `[OM:step0-reflect] obsTokens=${record.observationTokenCount} over reflectThreshold, triggering reflection`,
-      );
-      await this.maybeReflect(record, record.observationTokenCount ?? 0, threadId, writer);
-      // Re-fetch record after reflection may have created a new generation
-      record = await this.getOrCreateRecord(threadId, resourceId);
+    if (stepNumber === 0 && !readOnly) {
+      const obsTokens = record.observationTokenCount ?? 0;
+      if (this.shouldReflect(obsTokens)) {
+        omDebug(`[OM:step0-reflect] obsTokens=${obsTokens} over reflectThreshold, triggering reflection`);
+        await this.maybeReflect(record, obsTokens, threadId, writer);
+        // Re-fetch record after reflection may have created a new generation
+        record = await this.getOrCreateRecord(threadId, resourceId);
+      } else if (this.isAsyncReflectionEnabled()) {
+        // Below full threshold but maybe above activation point — try async reflection
+        const lockKey = this.getLockKey(threadId, resourceId);
+        if (this.shouldTriggerAsyncReflection(obsTokens, lockKey, record)) {
+          omDebug(`[OM:step0-reflect] obsTokens=${obsTokens} above activation point, triggering async reflection`);
+          await this.maybeAsyncReflect(record, obsTokens, writer);
+          record = await this.getOrCreateRecord(threadId, resourceId);
+        }
+      }
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -4108,19 +4125,6 @@ ${formattedMessages}
 
     // Store cycleId so tryActivateBufferedReflection can use it for UI markers
     ObservationalMemory.reflectionBufferCycleIds.set(_bufferKey, cycleId);
-
-    // Emit buffering start marker
-    if (writer) {
-      const startMarker = this.createBufferingStartMarker({
-        cycleId,
-        operationType: 'reflection',
-        tokensToBuffer: observationTokens,
-        recordId: record.id,
-        threadId: record.threadId ?? '',
-        threadIds: record.threadId ? [record.threadId] : [],
-      });
-      void writer.custom(startMarker).catch(() => {});
-    }
 
     // Slice activeObservations to only the first N lines that fit within the
     // activation-point token budget. This keeps the reflector prompt small
