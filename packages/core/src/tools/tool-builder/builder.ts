@@ -11,9 +11,10 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import { z } from 'zod/v4';
+import { Mastra } from '../..';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra, executeWithContext, EntityType, createObservabilityContext } from '../../observability';
+import { SpanType, wrapMastra, executeWithContext, EntityType, getOrCreateSpan, createObservabilityContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import { isVercelTool } from '../../tools/toolchecks';
@@ -321,9 +322,9 @@ export class CoreToolBuilder extends MastraBase {
       // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
       const tracingContext = execOptions.tracingContext || options.tracingContext;
 
-      // Create tool span if we have a current span available
+      // Create tool span - either as child of existing span or as new root span (e.g. MCP tools)
       const toolRequestContext = execOptions.requestContext ?? options.requestContext;
-      const toolSpan = tracingContext?.currentSpan?.createChildSpan({
+      const toolSpan = getOrCreateSpan({
         type: SpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
         input: args,
@@ -335,7 +336,9 @@ export class CoreToolBuilder extends MastraBase {
           toolType: logType || 'tool',
         },
         tracingPolicy: options.tracingPolicy,
+        tracingContext: tracingContext,
         requestContext: toolRequestContext,
+        mastra: options.mastra instanceof Mastra ? options.mastra : undefined,
       });
 
       try {
