@@ -1654,6 +1654,7 @@ export type ProviderModelsMap = {
     'x-ai/grok-4-fast',
     'x-ai/grok-4.1-fast',
     'x-ai/grok-code-fast-1',
+    'xiaomi/mimo-v2-flash',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.5-air:free',
