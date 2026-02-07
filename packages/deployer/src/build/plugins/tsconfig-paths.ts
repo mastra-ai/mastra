@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path, { normalize } from 'node:path';
 import type { Plugin } from 'rollup';
 import stripJsonComments from 'strip-json-comments';
@@ -134,6 +135,27 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
         if (!moduleName) {
           const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
           if (!resolved) {
+            // When localResolve is enabled and the importer was resolved via tsconfig-paths
+            // (e.g., @lib/auth -> ../../packages/lib/auth.ts), bare imports from the resolved
+            // module may not be resolvable from the output directory (.mastra/output/).
+            // Resolve them from the importer's location using absolute paths so Node.js can
+            // find them at runtime regardless of CWD.
+            // See: https://github.com/mastra-ai/mastra/issues/12550
+            if (localResolve && !request.startsWith('./') && !request.startsWith('../')) {
+              const importerInfo = this.getModuleInfo(importer);
+              if (importerInfo?.meta?.[PLUGIN_NAME]?.resolved) {
+                try {
+                  const importerRequire = createRequire(importer);
+                  const resolvedPath = importerRequire.resolve(request);
+                  return {
+                    id: resolvedPath,
+                    external: true,
+                  };
+                } catch {
+                  // Can't resolve from importer's location, fall through
+                }
+              }
+            }
             return null;
           }
 
