@@ -69,14 +69,14 @@ export const useDeleteThread = () => {
   const { requestContext } = usePlaygroundStore();
 
   return useMutation({
-    mutationFn: ({ threadId, agentId }: { threadId: string; agentId: string }) => {
+    mutationFn: ({ threadId, agentId, resourceId }: { threadId: string; agentId: string; resourceId: string }) => {
       const thread = client.getMemoryThread({ threadId, agentId });
       return thread.delete({ requestContext });
     },
     onSuccess: (_, variables) => {
-      const { agentId } = variables;
+      const { agentId, resourceId } = variables;
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', resourceId, agentId] });
       }
       toast.success('Chat deleted successfully');
     },
@@ -110,14 +110,24 @@ export const useCloneThread = () => {
   const { requestContext } = usePlaygroundStore();
 
   return useMutation({
-    mutationFn: async ({ threadId, agentId, title }: { threadId: string; agentId: string; title?: string }) => {
+    mutationFn: async ({
+      threadId,
+      agentId,
+      title,
+      resourceId,
+    }: {
+      threadId: string;
+      agentId: string;
+      title?: string;
+      resourceId: string;
+    }) => {
       const thread = client.getMemoryThread({ threadId, agentId });
       return thread.clone({ title, requestContext });
     },
     onSuccess: (_, variables) => {
-      const { agentId } = variables;
+      const { agentId, resourceId } = variables;
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', resourceId, agentId] });
       }
       toast.success('Thread cloned successfully');
     },

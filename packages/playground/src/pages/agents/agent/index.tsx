@@ -15,7 +15,7 @@ import {
   SchemaRequestContextProvider,
   type AgentSettingsType,
 } from '@mastra/playground-ui';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
 
@@ -33,6 +33,23 @@ function Agent() {
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
   } = useThreads({ resourceId: agentId!, agentId: agentId!, isMemoryEnabled: !!memory?.result });
+
+  const [selectedResourceId, setSelectedResourceId] = useState<string>(agentId!);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(`mastra-agent-resource-${agentId}`);
+    if (stored) {
+      setSelectedResourceId(stored);
+    } else {
+      setSelectedResourceId(agentId!);
+    }
+  }, [agentId]);
+
+  const handleResourceIdChange = (newResourceId: string) => {
+    setSelectedResourceId(newResourceId);
+    localStorage.setItem(`mastra-agent-resource-${agentId}`, newResourceId);
+    navigate(`/agents/${agentId}/chat/${uuid()}?new=true`);
+  };
 
   useEffect(() => {
     if (memory?.result && !threadId) {
@@ -97,7 +114,7 @@ function Agent() {
       <AgentPromptExperimentProvider initialPrompt={agent!.instructions} agentId={agentId!}>
         <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
           <SchemaRequestContextProvider>
-            <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
+            <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={selectedResourceId}>
               <ThreadInputProvider>
                 <ObservationalMemoryProvider>
                   <ActivatedSkillsProvider>
@@ -118,6 +135,7 @@ function Agent() {
                       <AgentChat
                         key={threadId}
                         agentId={agentId!}
+                        resourceId={selectedResourceId}
                         agentName={agent?.name}
                         modelVersion={agent?.modelVersion}
                         threadId={threadId}

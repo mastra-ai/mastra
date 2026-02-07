@@ -55,6 +55,7 @@ export interface AgentSettingsType {
 
 export interface ChatProps {
   agentId: string;
+  resourceId?: string;
   agentName?: string;
   modelVersion?: string;
   threadId?: string;

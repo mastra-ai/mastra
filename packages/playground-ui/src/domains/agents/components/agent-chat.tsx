@@ -11,6 +11,7 @@ import { useMergedRequestContext } from '@/domains/request-context/context/schem
 
 export const AgentChat = ({
   agentId,
+  resourceId,
   agentName,
   threadId,
   memory,
@@ -56,6 +57,7 @@ export const AgentChat = ({
   return (
     <MastraRuntimeProvider
       agentId={agentId}
+      resourceId={resourceId}
       agentName={agentName}
       modelVersion={modelVersion}
       threadId={threadId}
