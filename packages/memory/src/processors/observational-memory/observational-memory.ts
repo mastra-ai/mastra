@@ -1459,6 +1459,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     messagesActivated: number;
     recordId: string;
     threadId: string;
+    generationCount: number;
     observations?: string;
   }): DataOmActivationPart {
     return {
@@ -1473,6 +1474,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         messagesActivated: params.messagesActivated,
         recordId: params.recordId,
         threadId: params.threadId,
+        generationCount: params.generationCount,
         config: this.getObservationMarkerConfig(),
         observations: params.observations,
       },
@@ -2316,8 +2318,13 @@ ${suggestedResponse}
     if (writer) {
       // Calculate buffered chunk totals for UI
       const bufferedChunks = this.getBufferedChunks(record);
-      const bufferedMessageTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
       const bufferedObservationTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.tokenCount ?? 0), 0);
+
+      // chunk.messageTokens represents the token count of raw messages that will be
+      // removed from the context window when the chunk activates (lastObservedAt advances).
+      // Cap at totalPendingTokens so the UI never shows a reduction larger than the window.
+      const rawBufferedMessageTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
+      const bufferedMessageTokens = Math.min(rawBufferedMessageTokens, totalPendingTokens);
 
       // Determine observation buffering status
       let obsBufferStatus: 'idle' | 'running' | 'complete' = 'idle';
@@ -2369,6 +2376,9 @@ ${suggestedResponse}
           generationCount: record.generationCount,
         },
       };
+      omDebug(
+        `[OM:status] step=${stepNumber} msgs=${totalPendingTokens}/${threshold} obs=${currentObservationTokens}/${effectiveObservationTokensThreshold} bufObs={chunks=${bufferedChunks.length},msgTok=${bufferedMessageTokens},obsTok=${bufferedObservationTokens},status=${obsBufferStatus}} bufRef={inTok=${record.bufferedReflectionInputTokens ?? 0},outTok=${record.bufferedReflectionTokens ?? 0},status=${refBufferStatus}} gen=${record.generationCount}`,
+      );
       await writer.custom(statusPart).catch(() => {
         // Ignore errors if stream is closed
       });
@@ -2944,17 +2954,6 @@ NOTE: Any messages following this system reminder are newer than your memories.
       );
       const { totalPendingTokens, threshold } = thresholds;
 
-      // Emit progress for UI feedback
-      await this.emitStepProgress(
-        writer,
-        threadId,
-        resourceId,
-        stepNumber,
-        record,
-        thresholds,
-        currentObservationTokens,
-      );
-
       const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
       const lockKey = this.getLockKey(threadId, resourceId);
 
@@ -3026,6 +3025,47 @@ NOTE: Any messages following this system reminder are newer than your memories.
     // ════════════════════════════════════════════════════════════════════════
     if (stepNumber === 0) {
       this.filterAlreadyObservedMessages(messageList, record);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // STEP 5: EMIT FINAL STATUS (after all observations/activations/reflections)
+    // ════════════════════════════════════════════════════════════════════════
+    {
+      // Re-fetch record to capture any changes from observation/activation/reflection
+      const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
+
+      // messageList has already been filtered (step 4) — it IS the context window.
+      // Count tokens from the actual messages the LLM will see, not "unobserved" messages.
+      const contextMessages = messageList.get.all.db();
+      const messageTokensInContext = this.tokenCounter.countMessages(contextMessages);
+      const otherThreadTokens = unobservedContextBlocks ? this.tokenCounter.countString(unobservedContextBlocks) : 0;
+      const currentObservationTokens = freshRecord.observationTokenCount ?? 0;
+
+      const threshold = this.calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+      const baseReflectionThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+      const isSharedBudget = typeof this.observationConfig.messageTokens !== 'number';
+      const totalBudget = isSharedBudget
+        ? (this.observationConfig.messageTokens as { min: number; max: number }).max
+        : 0;
+      const effectiveObservationTokensThreshold = isSharedBudget
+        ? Math.max(totalBudget - threshold, 1000)
+        : baseReflectionThreshold;
+
+      const totalMessageTokens = messageTokensInContext + otherThreadTokens;
+
+      await this.emitStepProgress(
+        writer,
+        threadId,
+        resourceId,
+        stepNumber,
+        freshRecord,
+        {
+          totalPendingTokens: totalMessageTokens,
+          threshold,
+          effectiveObservationTokensThreshold,
+        },
+        currentObservationTokens,
+      );
     }
 
     return messageList;
@@ -3908,6 +3948,7 @@ ${formattedMessages}
           messagesActivated: activationResult.messagesActivated,
           recordId: updatedRecord.id,
           threadId: updatedRecord.threadId ?? record.threadId ?? '',
+          generationCount: updatedRecord.generationCount ?? 0,
           observations: activationResult.observations,
         });
         void writer.custom(activationMarker).catch(() => {});
@@ -4164,6 +4205,7 @@ ${formattedMessages}
         messagesActivated: 0,
         recordId: freshRecord.id,
         threadId: freshRecord.threadId ?? '',
+        generationCount: afterRecord?.generationCount ?? freshRecord.generationCount ?? 0,
         observations: afterRecord?.activeObservations,
       });
       void writer.custom(activationMarker).catch(() => {});
