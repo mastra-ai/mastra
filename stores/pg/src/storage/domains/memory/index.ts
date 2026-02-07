@@ -289,6 +289,20 @@ export class MemoryPG extends MemoryStorage {
     const { field, direction } = this.parseOrderBy(orderBy);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
+    // Validate custom columns to prevent undeclared column filtering (USER error, not caught by try)
+    if (filter?.customColumns && Object.keys(filter.customColumns).length > 0) {
+      for (const [key] of Object.entries(filter.customColumns)) {
+        if (!this.#threadExtensionCols.includes(key)) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'LIST_THREADS', 'INVALID_CUSTOM_COLUMN'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Custom column '${key}' is not declared in schemaExtensions for ${TABLE_THREADS}`,
+          });
+        }
+      }
+    }
+
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
       const whereClauses: string[] = [];
@@ -316,16 +330,9 @@ export class MemoryPG extends MemoryStorage {
       }
 
       // Add custom column filters if provided (AND logic)
+      // Validation already done above, so just build the WHERE clauses
       if (filter?.customColumns && Object.keys(filter.customColumns).length > 0) {
         for (const [key, value] of Object.entries(filter.customColumns)) {
-          if (!this.#threadExtensionCols.includes(key)) {
-            throw new MastraError({
-              id: createStorageErrorId('PG', 'LIST_THREADS', 'INVALID_CUSTOM_COLUMN'),
-              domain: ErrorDomain.STORAGE,
-              category: ErrorCategory.USER,
-              text: `Custom column '${key}' is not declared in schemaExtensions for ${TABLE_THREADS}`,
-            });
-          }
           whereClauses.push(`"${key}" = $${paramIndex}`);
           queryParams.push(value);
           paramIndex++;
