@@ -291,11 +291,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'guide/data-scientist-agent',
-          label: 'Sandbox: Data Scientist',
-        },
-        {
-          type: 'doc',
           id: 'guide/docs-manager',
           label: 'Filesystem: Docs Manager',
         },
