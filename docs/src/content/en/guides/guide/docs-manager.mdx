@@ -128,13 +128,14 @@ Always explain what you're creating and why.`,
 <StepItem title="Register the agent">
 
 ```typescript title="src/mastra/index.ts"
+import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { docsManager } from './agents/docs-manager';
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
-    basePath: './workspace',
+    basePath: resolve(import.meta.dirname, '../../workspace'),
   }),
 });
 

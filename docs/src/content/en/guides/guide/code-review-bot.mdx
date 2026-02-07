@@ -187,13 +187,14 @@ When asked to review code:
 <StepItem title="Register the agent">
 
 ```typescript title="src/mastra/index.ts"
+import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { codeReviewer } from './agents/code-reviewer';
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
-    basePath: './workspace',
+    basePath: resolve(import.meta.dirname, '../../workspace'),
   }),
   skills: ['/skills'],
 });
