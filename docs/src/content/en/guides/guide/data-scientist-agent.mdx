@@ -1,0 +1,376 @@
+---
+title: "Guide: Building a Data Scientist Agent with Workspace Sandbox | Mastra"
+description: Build an AI data scientist that executes Python code to analyze CSV files, generate statistics, and create visualizations using workspace sandbox.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Building a Data Scientist Agent
+
+Build an AI data scientist that analyzes CSV data by writing and executing Python scripts. The agent uses workspace sandbox to safely run code, compute statistics, and generate insights from your data files.
+
+## What you'll build
+
+A data scientist agent that:
+- Reads CSV files from your workspace
+- Writes Python scripts for data analysis
+- Executes scripts safely in a sandbox
+- Computes statistics and trends
+- Generates text-based visualizations
+
+## Before you begin
+
+- A Mastra project ([Quickstart](/guides/getting-started/quickstart))
+- An OpenAI API key
+- Node.js v22.13.0+
+- Python 3.x with pandas installed (`pip install pandas`)
+
+## Set up the workspace
+
+<Steps>
+
+<StepItem title="Create data directory">
+
+```bash
+mkdir -p workspace/data
+mkdir -p workspace/scripts
+```
+
+</StepItem>
+
+<StepItem title="Add sample sales data">
+
+```csv title="workspace/data/sales.csv"
+date,product,quantity,revenue
+2024-01-01,Widget A,10,150.00
+2024-01-01,Widget B,5,200.00
+2024-01-02,Widget A,8,120.00
+2024-01-02,Widget B,12,480.00
+2024-01-03,Widget A,15,225.00
+2024-01-03,Widget B,7,280.00
+2024-01-04,Widget A,20,300.00
+2024-01-04,Widget B,9,360.00
+```
+
+</StepItem>
+
+<StepItem title="Configure workspace with sandbox">
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+    timeout: 60000, // 60 seconds for data processing
+  }),
+});
+
+export const mastra = new Mastra({
+  workspace,
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## Create the data scientist agent
+
+<Steps>
+
+<StepItem title="Build the agent">
+
+```typescript title="src/mastra/agents/data-scientist.ts"
+import { Agent } from '@mastra/core/agent';
+
+export const dataScientist = new Agent({
+  id: 'data-scientist',
+  name: 'Data Scientist',
+  instructions: `You are an AI data scientist that analyzes CSV files.
+
+When asked to analyze data:
+
+1. Check what files are in /data
+2. Read the CSV to understand structure
+3. Write a Python script in /scripts to analyze it
+4. Execute the script using execute_command
+5. Interpret results and explain findings
+
+For analysis, use pandas to:
+- Calculate statistics (mean, median, sum, min, max)
+- Group and aggregate data
+- Find trends and patterns
+- Compare values
+
+Keep scripts simple and print results clearly. Always explain what the data shows in plain language.`,
+  model: 'openai/gpt-4o',
+});
+```
+
+</StepItem>
+
+<StepItem title="Register the agent">
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { dataScientist } from './agents/data-scientist';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+  }),
+});
+
+export const mastra = new Mastra({
+  workspace,
+  agents: { dataScientist },
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## Run your first analysis
+
+<Steps>
+
+<StepItem title="Start Mastra Studio">
+
+```bash npm2yarn
+npm run dev
+```
+
+Open [localhost:4111](http://localhost:4111) and navigate to the Data Scientist agent.
+
+</StepItem>
+
+<StepItem title="Ask for revenue analysis">
+
+```
+What's the total revenue for each product in the sales data?
+```
+
+The agent will:
+1. List files in `/data` → finds `sales.csv`
+2. Read the CSV to understand columns
+3. Write a Python script:
+
+```python
+import pandas as pd
+
+df = pd.read_csv('data/sales.csv')
+revenue_by_product = df.groupby('product')['revenue'].sum()
+
+print("Total Revenue by Product:")
+print(revenue_by_product)
+```
+
+4. Execute it: `python3 scripts/analyze.py`
+5. Explain the results:
+
+```
+Based on the sales data:
+
+**Widget A**: $795.00 total revenue
+- Consistent sales across 4 days
+- Average daily revenue: $198.75
+
+**Widget B**: $1,320.00 total revenue
+- Higher revenue despite fewer units some days
+- Average daily revenue: $330.00
+
+Widget B generates 66% more revenue than Widget A.
+```
+
+</StepItem>
+
+<StepItem title="Ask for trend analysis">
+
+```
+Show me the daily revenue trend
+```
+
+The agent creates a script to calculate daily totals:
+
+```python
+import pandas as pd
+
+df = pd.read_csv('data/sales.csv')
+daily_revenue = df.groupby('date')['revenue'].sum()
+
+print("Daily Revenue Trend:")
+for date, revenue in daily_revenue.items():
+    print(f"{date}: ${revenue:.2f}")
+
+# Calculate trend
+print(f"\nFirst day: ${daily_revenue.iloc[0]:.2f}")
+print(f"Last day: ${daily_revenue.iloc[-1]:.2f}")
+print(f"Change: ${daily_revenue.iloc[-1] - daily_revenue.iloc[0]:.2f}")
+```
+
+Output:
+```
+Daily Revenue Trend:
+2024-01-01: $350.00
+2024-01-02: $600.00
+2024-01-03: $505.00
+2024-01-04: $660.00
+
+First day: $350.00
+Last day: $660.00
+Change: +$310.00 (89% increase)
+
+The trend is positive with revenue growing from $350 to $660
+over 4 days, indicating strong business growth.
+```
+
+</StepItem>
+
+</Steps>
+
+## Advanced: Generate visualizations
+
+The agent can create and save charts:
+
+<Steps>
+
+<StepItem title="Install matplotlib">
+
+```bash
+pip install matplotlib
+```
+
+</StepItem>
+
+<StepItem title="Ask for a chart">
+
+```
+Create a chart showing daily revenue trends
+```
+
+The agent generates:
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+
+df = pd.read_csv('data/sales.csv')
+daily_revenue = df.groupby('date')['revenue'].sum()
+
+plt.figure(figsize=(10, 6))
+plt.plot(daily_revenue.index, daily_revenue.values, marker='o', linewidth=2)
+plt.title('Daily Revenue Trend', fontsize=16)
+plt.xlabel('Date')
+plt.ylabel('Revenue ($)')
+plt.grid(True, alpha=0.3)
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.savefig('data/revenue_trend.png')
+print('Chart saved to data/revenue_trend.png')
+```
+
+The chart is saved in `workspace/data/revenue_trend.png`!
+
+</StepItem>
+
+</Steps>
+
+## Add execution safety
+
+Require approval before running code:
+
+```typescript title="src/mastra/index.ts"
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      requireApproval: true,  // Ask before running
+    },
+  },
+});
+```
+
+Now you'll see the command before it executes and can approve or reject it.
+
+## Real-world use cases
+
+### Sales Analytics Dashboard
+
+```
+Analyze sales.csv and create:
+1. Total revenue by product
+2. Daily sales trends
+3. Best performing day
+4. Product with highest average sale
+```
+
+### Customer Behavior Analysis
+
+```
+Analyze customer_orders.csv and tell me:
+1. Average order value
+2. Most popular products
+3. Peak ordering times
+4. Customer retention rate
+```
+
+### Financial Reporting
+
+```
+Process transactions.csv and generate:
+1. Monthly expense breakdown
+2. Category-wise spending
+3. Budget vs actual comparison
+4. Savings rate
+```
+
+## Error handling
+
+The agent handles errors gracefully:
+
+```
+Analyze the file customers.csv
+
+# If file doesn't exist:
+"I checked the /data directory but couldn't find customers.csv.
+Available files are: sales.csv
+
+Would you like me to analyze sales.csv instead?"
+
+# If Python package missing:
+"The script needs the 'matplotlib' package which isn't installed.
+You can install it with: pip install matplotlib"
+
+# If script has errors:
+"The analysis failed with: NameError: 'pd' is not defined
+Let me fix the import statement and try again."
+```
+
+## Next steps
+
+Your data scientist agent is ready! You can:
+
+- Add more data sources (JSON, Excel, databases)
+- Create specialized analysis skills
+- Build automated reporting workflows
+- Generate interactive dashboards
+- Integrate with BI tools
+
+Learn more:
+- [Sandbox documentation](/docs/workspace/sandbox)
+- [Filesystem documentation](/docs/workspace/filesystem)
+- [Workspace overview](/docs/workspace/overview)

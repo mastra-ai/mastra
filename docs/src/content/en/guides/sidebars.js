@@ -284,6 +284,26 @@ const sidebars = {
           id: 'guide/github-actions-pr-description',
           label: 'GitHub Actions: PR Description',
         },
+        {
+          type: 'doc',
+          id: 'guide/code-review-bot',
+          label: 'Skills: Code Review Bot',
+        },
+        {
+          type: 'doc',
+          id: 'guide/data-scientist-agent',
+          label: 'Sandbox: Data Scientist',
+        },
+        {
+          type: 'doc',
+          id: 'guide/docs-manager',
+          label: 'Filesystem: Docs Manager',
+        },
+        {
+          type: 'doc',
+          id: 'guide/dev-assistant',
+          label: 'Workspace: Dev Assistant',
+        },
       ],
     },
   ],

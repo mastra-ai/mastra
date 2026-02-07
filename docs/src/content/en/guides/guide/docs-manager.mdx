@@ -1,0 +1,488 @@
+---
+title: "Guide: Building a Docs Manager with Workspace Filesystem | Mastra"
+description: Build an AI documentation manager that creates, updates, and organizes markdown documentation files using workspace filesystem.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Building a Docs Manager
+
+Build an AI documentation manager that maintains your project's docs. It creates well-structured markdown files, keeps documentation organized, and prevents accidental overwrites—like having a technical writer on your team.
+
+## What you'll build
+
+A docs manager that:
+- Creates markdown documentation files
+- Updates existing docs without losing content
+- Organizes files into logical directories
+- Maintains consistent formatting
+- Prevents accidental data loss with safety features
+
+## Before you begin
+
+- A Mastra project ([Quickstart](/guides/getting-started/quickstart))
+- An OpenAI API key
+- Node.js v22.13.0+
+
+## Set up the workspace
+
+<Steps>
+
+<StepItem title="Create docs structure">
+
+```bash
+mkdir -p workspace/docs/guides
+mkdir -p workspace/docs/api
+mkdir -p workspace/docs/tutorials
+```
+
+</StepItem>
+
+<StepItem title="Add initial documentation">
+
+```markdown title="workspace/docs/README.md"
+# Project Documentation
+
+Welcome to the documentation!
+
+## Sections
+
+- [Guides](./guides/) - How-to guides
+- [API](./api/) - API reference
+- [Tutorials](./tutorials/) - Step-by-step tutorials
+
+## Contributing
+
+When adding docs:
+- Use clear, descriptive titles
+- Include code examples
+- Keep content focused
+```
+
+```markdown title="workspace/docs/guides/getting-started.md"
+# Getting Started
+
+Quick start guide for the project.
+
+## Installation
+
+\`\`\`bash
+npm install example-package
+\`\`\`
+
+## Quick Example
+
+\`\`\`typescript
+import { Example } from 'example-package';
+
+const example = new Example();
+example.run();
+\`\`\`
+```
+
+</StepItem>
+
+<StepItem title="Configure workspace">
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+});
+
+export const mastra = new Mastra({
+  workspace,
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## Create the docs manager
+
+<Steps>
+
+<StepItem title="Build the agent">
+
+```typescript title="src/mastra/agents/docs-manager.ts"
+import { Agent } from '@mastra/core/agent';
+
+export const docsManager = new Agent({
+  id: 'docs-manager',
+  name: 'Docs Manager',
+  instructions: `You are a documentation manager that creates and maintains high-quality markdown docs.
+
+## Creating New Docs
+
+1. Ask for topic and target audience
+2. Create well-structured markdown with clear sections
+3. Include relevant code examples with syntax highlighting
+4. Save in the appropriate directory:
+   - /docs/guides/ - User guides and how-tos
+   - /docs/api/ - API reference docs
+   - /docs/tutorials/ - Step-by-step tutorials
+
+## Updating Existing Docs
+
+1. ALWAYS read the file first
+2. Make targeted updates without removing unrelated content
+3. Preserve existing structure and formatting
+4. Keep changes minimal and focused
+
+## File Organization
+
+- Use kebab-case naming: \`getting-started.md\`
+- Update README files when adding new docs
+- Maintain consistent section structure
+
+## Markdown Style
+
+- Use # for h1, ## for h2, ### for h3
+- Use \`code\` for inline code
+- Use triple backticks with language for code blocks
+- Use - for lists
+
+Always explain what you're creating and why.`,
+  model: 'openai/gpt-4o',
+});
+```
+
+</StepItem>
+
+<StepItem title="Register the agent">
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { docsManager } from './agents/docs-manager';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+});
+
+export const mastra = new Mastra({
+  workspace,
+  agents: { docsManager },
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## Use your docs manager
+
+<Steps>
+
+<StepItem title="Start Mastra Studio">
+
+```bash npm2yarn
+npm run dev
+```
+
+Open [localhost:4111](http://localhost:4111) and navigate to the Docs Manager.
+
+</StepItem>
+
+<StepItem title="Create new documentation">
+
+```
+Create a tutorial for setting up authentication.
+Cover installation, configuration, and a basic example.
+```
+
+The agent will:
+1. Create a new file in `/docs/tutorials/authentication-setup.md`
+2. Structure it with clear sections
+3. Add code examples
+4. Explain what was created
+
+Result:
+```markdown
+# Authentication Setup
+
+Learn how to add authentication to your application.
+
+## Installation
+
+Install the auth package:
+
+\`\`\`bash
+npm install @example/auth
+\`\`\`
+
+## Configuration
+
+Create a config file:
+
+\`\`\`typescript
+// auth.config.ts
+export const authConfig = {
+  provider: 'oauth',
+  clientId: process.env.AUTH_CLIENT_ID,
+  secret: process.env.AUTH_SECRET,
+};
+\`\`\`
+
+## Basic Example
+
+\`\`\`typescript
+import { createAuth } from '@example/auth';
+import { authConfig } from './auth.config';
+
+const auth = createAuth(authConfig);
+
+// Protect a route
+app.get('/protected', auth.requireAuth(), (req, res) => {
+  res.json({ user: req.user });
+});
+\`\`\`
+
+## Next Steps
+
+- [API Reference](../api/auth.md)
+- [Advanced Configuration](./auth-advanced.md)
+```
+
+</StepItem>
+
+<StepItem title="Update existing docs">
+
+```
+Update the getting started guide to include
+a section on configuration after the Quick Example
+```
+
+The agent will:
+1. Read the existing file
+2. Find the right insertion point
+3. Add the new section without disrupting existing content
+4. Save the update
+
+New section added:
+```markdown
+## Configuration
+
+Configure the package with a config file:
+
+\`\`\`typescript
+// example.config.ts
+export const config = {
+  apiKey: process.env.API_KEY,
+  environment: 'production',
+};
+\`\`\`
+
+Pass the config when creating an instance:
+
+\`\`\`typescript
+import { Example } from 'example-package';
+import { config } from './example.config';
+
+const example = new Example(config);
+\`\`\`
+```
+
+</StepItem>
+
+<StepItem title="Organize documentation">
+
+```
+List all tutorial files and create an index page
+that links to all of them
+```
+
+The agent will:
+1. List files in `/docs/tutorials/`
+2. Create an organized README with links
+3. Group by topic if many files exist
+
+Result:
+```markdown
+# Tutorials
+
+Step-by-step guides for common tasks.
+
+## Getting Started
+- [Authentication Setup](./authentication-setup.md)
+
+## Advanced Topics
+- [Custom Integrations](./custom-integrations.md)
+- [Performance Optimization](./performance.md)
+
+## Troubleshooting
+- [Common Issues](./troubleshooting.md)
+```
+
+</StepItem>
+
+</Steps>
+
+## Add safety features
+
+### Prevent accidental overwrites
+
+Enable read-before-write protection:
+
+```typescript title="src/mastra/index.ts"
+import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireReadBeforeWrite: true,  // Must read before writing
+    },
+  },
+});
+```
+
+Now the agent **must** read a file before modifying it:
+
+```
+✅ Allowed:
+1. Read /docs/README.md
+2. Write /docs/README.md (with updates)
+
+❌ Blocked:
+1. Write /docs/README.md (without reading first)
+
+✅ Allowed (new files):
+1. Write /docs/new-guide.md (doesn't exist yet)
+```
+
+### Read-only mode for search
+
+Create a separate search agent that can only read:
+
+```typescript title="src/mastra/agents/docs-search.ts"
+export const docsSearch = new Agent({
+  id: 'docs-search',
+  name: 'Docs Search',
+  instructions: `Search documentation files to answer questions.
+  You can read and search but cannot modify files.`,
+  model: 'openai/gpt-4o',
+});
+```
+
+```typescript title="src/mastra/index.ts"
+const searchWorkspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+    readOnly: true,  // No write/delete tools
+  }),
+});
+
+export const mastra = new Mastra({
+  agents: {
+    docsManager,    // Can read and write
+    docsSearch,     // Can only read
+  },
+});
+```
+
+## Real-world workflows
+
+### Create API documentation
+
+```
+Document the User API with endpoints for:
+- GET /api/users
+- POST /api/users
+- PUT /api/users/:id
+- DELETE /api/users/:id
+
+Include request/response examples for each.
+```
+
+The agent creates complete API reference docs with examples.
+
+### Maintain changelog
+
+```
+Add an entry to CHANGELOG.md for version 2.1.0
+with the following changes:
+- Added user authentication
+- Fixed dashboard loading bug
+- Improved API response times
+```
+
+The agent reads the existing changelog, adds the new entry in the correct format.
+
+### Generate from code
+
+```
+Read src/utils/string-helpers.ts and generate
+API documentation for all exported functions
+```
+
+The agent reads the source code and creates structured documentation.
+
+## Best practices
+
+### Consistent naming
+
+```typescript
+// Good: kebab-case, descriptive
+/docs/guides/getting-started.md
+/docs/api/authentication-api.md
+/docs/tutorials/build-first-app.md
+
+// Bad: inconsistent
+/docs/GettingStarted.md
+/docs/auth.md
+/docs/tutorial_1.md
+```
+
+### Organized structure
+
+```plaintext
+docs/
+├── README.md          # Overview
+├── guides/            # How-to guides
+│   ├── README.md
+│   └── getting-started.md
+├── api/               # API reference
+│   ├── README.md
+│   └── auth-api.md
+└── tutorials/         # Step-by-step
+    ├── README.md
+    └── first-app.md
+```
+
+### Maintain index files
+
+Keep README files updated:
+
+```markdown
+# Guides
+
+- [Getting Started](./getting-started.md) - Start here
+- [Advanced Usage](./advanced.md) - Power features
+- [Troubleshooting](./troubleshooting.md) - Common issues
+```
+
+## Next steps
+
+Your docs manager is ready! You can:
+
+- Add search to find relevant documentation
+- Create skills for documentation templates
+- Build automated doc generation from code
+- Integrate with GitHub to update docs on commits
+- Add validation to check links and formatting
+
+Learn more:
+- [Filesystem documentation](/docs/workspace/filesystem)
+- [Workspace overview](/docs/workspace/overview)
+- [Search and indexing](/docs/workspace/search)

@@ -1,0 +1,432 @@
+---
+title: "Guide: Building a Code Review Bot with Workspace Skills | Mastra"
+description: Build an automated code review bot that uses workspace skills to enforce coding standards, run linters, and provide consistent PR feedback.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Building a Code Review Bot with Workspace Skills
+
+Build a code review bot that automatically reviews pull requests using workspace skills. The bot loads coding standards from skill files, runs automated checks, and provides structured feedback—just like having a senior developer on every PR.
+
+## What you'll build
+
+A code review agent that:
+- Loads your team's coding standards from a skill
+- Reviews code against style guidelines
+- Runs automated lint checks via scripts
+- Provides consistent, constructive feedback
+- References documentation from skill assets
+
+## Before you begin
+
+- A Mastra project ([Quickstart](/guides/getting-started/quickstart))
+- An OpenAI API key
+- Node.js v22.13.0+
+
+## Create the workspace
+
+<Steps>
+
+<StepItem title="Set up workspace structure">
+
+```bash
+mkdir -p workspace/skills/code-standards/references
+mkdir -p workspace/skills/code-standards/scripts
+```
+
+</StepItem>
+
+<StepItem title="Configure workspace with skills">
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  skills: ['/skills'],
+});
+
+export const mastra = new Mastra({
+  workspace,
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## Create the code standards skill
+
+<Steps>
+
+<StepItem title="Write the skill instructions">
+
+```markdown title="workspace/skills/code-standards/SKILL.md"
+---
+name: code-standards
+description: Automated code review standards and checks
+version: 1.0.0
+---
+
+# Code Review Standards
+
+Review code systematically using these steps:
+
+## 1. Critical Issues (Must Fix)
+- Security vulnerabilities (XSS, SQL injection, etc.)
+- Memory leaks or resource issues
+- Logic bugs causing incorrect behavior
+- Missing error handling
+
+## 2. Code Quality Checks
+- Functions over 50 lines → Suggest breaking up
+- Code duplication → Recommend extraction
+- Confusing variable names → Suggest improvements
+- Missing TypeScript types → Request addition
+
+## 3. Style Guide Compliance
+Read `references/style-guide.md` and check:
+- Naming conventions (camelCase, UPPER_SNAKE_CASE)
+- File organization (imports, types, functions)
+- Comment quality (explain "why" not "what")
+
+## 4. Automated Checks
+Run `scripts/lint-check.ts` to catch:
+- Use of `var` instead of `const`/`let`
+- Console.log statements
+- TODO comments
+- Lines over 100 characters
+
+## Review Format
+
+**Summary**: One sentence overview
+
+**Critical Issues**: List with line numbers
+- Issue 1 (line X)
+- Issue 2 (line Y)
+
+**Suggestions**: Improvements that would help
+- Suggestion 1
+- Suggestion 2
+
+**Positive Notes**: What the code does well
+
+Be constructive and specific.
+```
+
+</StepItem>
+
+<StepItem title="Add style guide reference">
+
+```markdown title="workspace/skills/code-standards/references/style-guide.md"
+# Style Guide
+
+## Naming
+- Variables/Functions: `camelCase`
+- Constants: `UPPER_SNAKE_CASE`
+- Files: `kebab-case.ts`
+- Booleans: Start with `is`, `has`, `should`
+
+## Code Organization
+\`\`\`typescript
+// 1. Imports
+import { foo } from 'bar';
+
+// 2. Constants
+const MAX_SIZE = 100;
+
+// 3. Types
+interface User {
+  id: string;
+  name: string;
+}
+
+// 4. Functions
+function doSomething() {}
+
+// 5. Exports
+export { doSomething };
+\`\`\`
+
+## Error Handling
+Always handle errors explicitly:
+\`\`\`typescript
+// Good
+try {
+  await fetchData();
+} catch (error) {
+  console.error('Failed:', error);
+  throw new Error('Operation failed');
+}
+
+// Bad
+try {
+  await fetchData();
+} catch (error) {}
+\`\`\`
+
+## Comments
+Write "why" not "what":
+\`\`\`typescript
+// Good: Using binary search for 1M+ record datasets
+const index = binarySearch(data, target);
+
+// Bad: Loop through array
+for (const item of items) {}
+\`\`\`
+```
+
+</StepItem>
+
+<StepItem title="Add automated check script">
+
+```typescript title="workspace/skills/code-standards/scripts/lint-check.ts"
+interface CheckResult {
+  passed: boolean;
+  issues: string[];
+}
+
+export async function runLintCheck(code: string): Promise<CheckResult> {
+  const issues: string[] = [];
+
+  const checks = [
+    {
+      pattern: /var\s+/g,
+      message: 'Use const or let instead of var',
+    },
+    {
+      pattern: /console\.log/g,
+      message: 'Remove console.log before committing',
+    },
+    {
+      pattern: /TODO:/g,
+      message: 'Resolve TODO comments',
+    },
+    {
+      pattern: /debugger/g,
+      message: 'Remove debugger statements',
+    },
+    {
+      pattern: /\w{100,}/g,
+      message: 'Lines should be under 100 characters',
+    },
+  ];
+
+  for (const check of checks) {
+    const matches = code.match(check.pattern);
+    if (matches) {
+      issues.push(`${check.message} (${matches.length} found)`);
+    }
+  }
+
+  return {
+    passed: issues.length === 0,
+    issues,
+  };
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const testCode = `
+    var x = 1;
+    console.log('debug');
+    // TODO: fix this
+  `;
+  const result = await runLintCheck(testCode);
+  console.log('Lint Result:', result);
+  process.exit(result.passed ? 0 : 1);
+}
+```
+
+</StepItem>
+
+</Steps>
+
+## Create the review agent
+
+<Steps>
+
+<StepItem title="Build the code reviewer">
+
+```typescript title="src/mastra/agents/code-reviewer.ts"
+import { Agent } from '@mastra/core/agent';
+
+export const codeReviewer = new Agent({
+  id: 'code-reviewer',
+  name: 'Code Review Bot',
+  instructions: `You are an automated code reviewer.
+
+When asked to review code:
+1. Activate the 'code-standards' skill
+2. Follow the review process from the skill
+3. Check against the style guide in skill references
+4. Be constructive and specific with line numbers`,
+  model: 'openai/gpt-4o',
+});
+```
+
+</StepItem>
+
+<StepItem title="Register the agent">
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { codeReviewer } from './agents/code-reviewer';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  skills: ['/skills'],
+});
+
+export const mastra = new Mastra({
+  workspace,
+  agents: { codeReviewer },
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## Test the bot
+
+<Steps>
+
+<StepItem title="Start Mastra Studio">
+
+```bash npm2yarn
+npm run dev
+```
+
+Open [localhost:4111](http://localhost:4111)
+
+</StepItem>
+
+<StepItem title="Review some code">
+
+Navigate to the code reviewer agent and paste code:
+
+```
+Review this code:
+
+function getData(id) {
+  var result = fetch('/api/data/' + id);
+  console.log(result);
+  return result;
+}
+```
+
+The bot will:
+- Activate the code-standards skill
+- Check against style guidelines
+- Run lint checks
+- Provide structured feedback
+
+Example response:
+```
+**Summary**: Function has several issues with variable declaration,
+debugging statements, and missing error handling.
+
+**Critical Issues**:
+- Missing error handling for fetch (line 2)
+- No async/await for asynchronous operation (line 2)
+
+**Suggestions**:
+- Use const instead of var (line 2)
+- Remove console.log before committing (line 3)
+- Add TypeScript type for id parameter
+- Use template literals instead of concatenation
+
+**Positive Notes**:
+- Function name is clear and descriptive
+```
+
+</StepItem>
+
+</Steps>
+
+## Make skills context-aware
+
+Enable different standards for different teams:
+
+```typescript title="src/mastra/index.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: (context) => {
+    const team = context.requestContext?.get('team');
+    const paths = ['/skills/code-standards'];
+
+    if (team === 'frontend') {
+      paths.push('/skills/react-standards');
+    } else if (team === 'backend') {
+      paths.push('/skills/api-standards');
+    }
+
+    return paths;
+  },
+});
+```
+
+## Integrate with GitHub Actions
+
+Use this bot in CI/CD to automatically review PRs:
+
+```yaml title=".github/workflows/code-review.yml"
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Review changed files
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD > changes.diff
+          npx tsx scripts/review-pr.ts
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+```typescript title="scripts/review-pr.ts"
+import { readFileSync } from 'fs';
+import { mastra } from '../src/mastra';
+
+const diff = readFileSync('changes.diff', 'utf-8');
+const agent = mastra.getAgent('codeReviewer');
+
+const result = await agent.generate(
+  `Review this code diff:\n\n${diff}`
+);
+
+console.log(result.text);
+```
+
+## Next steps
+
+Your code review bot is ready! You can:
+
+- Add more skills for different languages or frameworks
+- Create skills for security checks, performance reviews
+- Integrate with Slack to post reviews automatically
+- Build a PR comment bot that leaves inline feedback
+- Add evals to measure review quality
+
+Learn more:
+- [Skills documentation](/docs/workspace/skills)
+- [Workspace overview](/docs/workspace/overview)
+- [Agent Skills spec](https://agentskills.io)
