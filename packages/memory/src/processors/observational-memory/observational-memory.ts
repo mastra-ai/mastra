@@ -2696,6 +2696,10 @@ ${suggestedResponse}
     const newOutput = messageList.clear.response.db();
     const messagesToSave = [...newInput, ...newOutput];
 
+    omDebug(
+      `[OM:handlePerStepSave] cleared input=${newInput.length}, response=${newOutput.length}, toSave=${messagesToSave.length}, ids=${messagesToSave.map(m => m.id?.slice(0, 8)).join(',')}`,
+    );
+
     if (messagesToSave.length > 0) {
       await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
 
@@ -3165,13 +3169,24 @@ NOTE: Any messages following this system reminder are newer than your memories.
     const newOutput = messageList.get.response.db();
     const messagesToSave = [...newInput, ...newOutput];
 
+    omDebug(
+      `[OM:processOutputResult] threadId=${threadId}, inputMsgs=${newInput.length}, responseMsgs=${newOutput.length}, totalToSave=${messagesToSave.length}, allMsgsInList=${messageList.get.all.db().length}`,
+    );
+
     if (messagesToSave.length === 0) {
+      omDebug(`[OM:processOutputResult] nothing to save — all messages were already saved during per-step saves`);
       return messageList;
     }
 
     const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
 
+    omDebug(
+      `[OM:processOutputResult] saving ${messagesToSave.length} messages, sealedIds=${sealedIds.size}, ids=${messagesToSave.map(m => m.id?.slice(0, 8)).join(',')}`,
+    );
     await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
+    omDebug(
+      `[OM:processOutputResult] saved successfully, finalIds=${messagesToSave.map(m => m.id?.slice(0, 8)).join(',')}`,
+    );
 
     return messageList;
   }
