@@ -588,6 +588,7 @@ export class InMemoryMemory extends MemoryStorage {
     const clonedThreads = sortedThreads.map(thread => ({
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
+      customColumns: thread.customColumns ? { ...thread.customColumns } : thread.customColumns,
     })) as StorageThreadType[];
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);

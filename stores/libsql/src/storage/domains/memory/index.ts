@@ -1348,7 +1348,7 @@ export class MemoryLibSQL extends MemoryStorage {
         ];
 
         for (const col of this.#threadExtensionCols) {
-          columns.push(`"${col}"`);
+          columns.push(parseSqlIdentifier(col, 'column name'));
           placeholders.push('?');
           insertArgs.push((newThread.customColumns?.[col] ?? null) as InValue);
         }

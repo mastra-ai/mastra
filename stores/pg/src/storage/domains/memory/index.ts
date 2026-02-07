@@ -136,6 +136,26 @@ export class MemoryPG extends MemoryStorage {
   }
 
   /**
+   * Maps a database row to a StorageThreadType object, handling metadata parsing,
+   * timezone-aware date conversion, and custom column extraction.
+   * @internal
+   */
+  private mapThreadRow(row: any): StorageThreadType {
+    return {
+      id: row.id,
+      resourceId: row.resourceId,
+      title: row.title,
+      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+      createdAt: row.createdAtZ || row.createdAt,
+      updatedAt: row.updatedAtZ || row.updatedAt,
+      ...(() => {
+        const cc = extractCustomColumns(row as Record<string, unknown>, this.#threadExtensionCols);
+        return cc ? { customColumns: cc } : {};
+      })(),
+    };
+  }
+
+  /**
    * Returns default index definitions for the memory domain tables.
    */
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
@@ -224,21 +244,7 @@ export class MemoryPG extends MemoryStorage {
         return null;
       }
 
-      const result: StorageThreadType = {
-        id: thread.id,
-        resourceId: thread.resourceId,
-        title: thread.title,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAtZ || thread.createdAt,
-        updatedAt: thread.updatedAtZ || thread.updatedAt,
-      };
-
-      const customColumns = extractCustomColumns(thread as Record<string, unknown>, this.#threadExtensionCols);
-      if (customColumns) {
-        result.customColumns = customColumns;
-      }
-
-      return result;
+      return this.mapThreadRow(thread);
     } catch (error) {
       throw new MastraError(
         {
@@ -369,20 +375,7 @@ export class MemoryPG extends MemoryStorage {
         [...queryParams, limitValue, offset],
       );
 
-      const threads: StorageThreadType[] = (rows || []).map(thread => {
-        const result: StorageThreadType = {
-          id: thread.id,
-          resourceId: thread.resourceId,
-          title: thread.title,
-          metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-          // Use timezone-aware columns (*Z) for correct UTC timestamps, with fallback for legacy data
-          createdAt: thread.createdAtZ || thread.createdAt,
-          updatedAt: thread.updatedAtZ || thread.updatedAt,
-        };
-        const cc = extractCustomColumns(thread as unknown as Record<string, unknown>, this.#threadExtensionCols);
-        if (cc) result.customColumns = cc;
-        return result;
-      });
+      const threads: StorageThreadType[] = (rows || []).map(thread => this.mapThreadRow(thread));
 
       return {
         threads,
