@@ -756,7 +756,6 @@ article p {
 }
 
 .breadcrumbs__item--active .breadcrumbs__link {
-  background: transparent;
   color: var(--mastra-text-primary);
 }
 

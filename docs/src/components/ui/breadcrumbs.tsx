@@ -11,13 +11,17 @@ export function BreadcrumbsItemLink({
   href: string | undefined
   isLast: boolean
 }): ReactNode {
-  const className = 'breadcrumbs__link'
+  const className = clsx('breadcrumbs__link', {
+    'cursor-pointer': !isLast && href,
+  })
+
   if (isLast) {
     return <span className={className}>{children}</span>
   }
+
   return href ? (
     <Link className={className} href={href}>
-      <span>{children}</span>
+      {children}
     </Link>
   ) : (
     <span className={className}>{children}</span>
