@@ -63,7 +63,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.getByRole('tab', { name: 'Memory' }).click();
 
       // Wait for OM section
-      await expect(page.getByText('Observational Memory')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('heading', { name: 'Observational Memory' })).toBeVisible({ timeout: 10000 });
 
       // ACT: Hover over the info icon next to Messages
       const messagesLabel = page.getByText('Messages', { exact: true });
@@ -76,10 +76,10 @@ test.describe('Observational Memory - Behavior Tests', () => {
         const tooltip = page.getByRole('tooltip');
         await expect(tooltip).toBeVisible({ timeout: 5000 });
         await expect(tooltip).toContainText(/Observer Settings/i);
-        // Verify the model name is shown (from omMemory config: openai/gpt-4o-mini)
-        await expect(tooltip).toContainText(/gpt-4o-mini/i);
-        // Verify the threshold value is shown (from omMemory config: 10000)
-        await expect(tooltip).toContainText(/10.*k|10,?000/i);
+        // Verify the model name is shown (from omMemory config: mock/mock-observer)
+        await expect(tooltip).toContainText(/mock-observer/i);
+        // Verify the threshold value is shown (from omMemory config: messageTokens: 20)
+        await expect(tooltip).toContainText(/20/i);
       }
     });
   });
@@ -278,7 +278,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.getByRole('tab', { name: 'Memory' }).click();
 
       // ASSERT: OM sidebar should show adaptive threshold behavior
-      const omSection = page.getByText('Observational Memory');
+      const omSection = page.getByRole('heading', { name: 'Observational Memory' });
       await expect(omSection).toBeVisible({ timeout: 10000 });
 
       // Progress bars should be visible (use .first() since "Observations" may appear in both progress bar and section header)
