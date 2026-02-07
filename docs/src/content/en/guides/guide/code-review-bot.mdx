@@ -8,16 +8,7 @@ import StepItem from "@site/src/components/StepItem";
 
 # Building a Code Review Bot with Workspace Skills
 
-Build a code review bot that automatically reviews pull requests using workspace skills. The bot loads coding standards from skill files, runs automated checks, and provides structured feedback—just like having a senior developer on every PR.
-
-## What you'll build
-
-A code review agent that:
-- Loads your team's coding standards from a skill
-- Reviews code against style guidelines
-- Runs automated lint checks via scripts
-- Provides consistent, constructive feedback
-- References documentation from skill assets
+In this guide, you'll build a code review bot that automatically reviews pull requests using workspace skills. The bot loads coding standards from skill files, runs automated checks, and provides structured feedback.
 
 ## Before you begin
 
@@ -77,46 +68,20 @@ version: 1.0.0
 
 Review code systematically using these steps:
 
-## 1. Critical Issues (Must Fix)
-- Security vulnerabilities (XSS, SQL injection, etc.)
-- Memory leaks or resource issues
-- Logic bugs causing incorrect behavior
-- Missing error handling
+1. **Critical Issues** - Security vulnerabilities, memory leaks, logic bugs, missing error handling
+2. **Code Quality** - Functions over 50 lines, code duplication, confusing names, missing types
+3. **Style Guide** - Check references/style-guide.md for naming and organization
+4. **Automated Checks** - Run scripts/lint-check.ts
 
-## 2. Code Quality Checks
-- Functions over 50 lines → Suggest breaking up
-- Code duplication → Recommend extraction
-- Confusing variable names → Suggest improvements
-- Missing TypeScript types → Request addition
-
-## 3. Style Guide Compliance
-Read `references/style-guide.md` and check:
-- Naming conventions (camelCase, UPPER_SNAKE_CASE)
-- File organization (imports, types, functions)
-- Comment quality (explain "why" not "what")
-
-## 4. Automated Checks
-Run `scripts/lint-check.ts` to catch:
-- Use of `var` instead of `const`/`let`
-- Console.log statements
-- TODO comments
-- Lines over 100 characters
-
-## Review Format
+Provide feedback in this format:
 
 **Summary**: One sentence overview
 
 **Critical Issues**: List with line numbers
-- Issue 1 (line X)
-- Issue 2 (line Y)
 
 **Suggestions**: Improvements that would help
-- Suggestion 1
-- Suggestion 2
 
 **Positive Notes**: What the code does well
-
-Be constructive and specific.
 ```
 
 </StepItem>
@@ -141,10 +106,7 @@ import { foo } from 'bar';
 const MAX_SIZE = 100;
 
 // 3. Types
-interface User {
-  id: string;
-  name: string;
-}
+interface User { id: string; }
 
 // 4. Functions
 function doSomething() {}
@@ -154,31 +116,10 @@ export { doSomething };
 \`\`\`
 
 ## Error Handling
-Always handle errors explicitly:
-\`\`\`typescript
-// Good
-try {
-  await fetchData();
-} catch (error) {
-  console.error('Failed:', error);
-  throw new Error('Operation failed');
-}
-
-// Bad
-try {
-  await fetchData();
-} catch (error) {}
-\`\`\`
+Always handle errors explicitly - never silently catch.
 
 ## Comments
-Write "why" not "what":
-\`\`\`typescript
-// Good: Using binary search for 1M+ record datasets
-const index = binarySearch(data, target);
-
-// Bad: Loop through array
-for (const item of items) {}
-\`\`\`
+Write "why" not "what".
 ```
 
 </StepItem>
@@ -195,26 +136,11 @@ export async function runLintCheck(code: string): Promise<CheckResult> {
   const issues: string[] = [];
 
   const checks = [
-    {
-      pattern: /var\s+/g,
-      message: 'Use const or let instead of var',
-    },
-    {
-      pattern: /console\.log/g,
-      message: 'Remove console.log before committing',
-    },
-    {
-      pattern: /TODO:/g,
-      message: 'Resolve TODO comments',
-    },
-    {
-      pattern: /debugger/g,
-      message: 'Remove debugger statements',
-    },
-    {
-      pattern: /\w{100,}/g,
-      message: 'Lines should be under 100 characters',
-    },
+    { pattern: /var\s+/g, message: 'Use const or let instead of var' },
+    { pattern: /console\.log/g, message: 'Remove console.log before committing' },
+    { pattern: /TODO:/g, message: 'Resolve TODO comments' },
+    { pattern: /debugger/g, message: 'Remove debugger statements' },
+    { pattern: /\w{100,}/g, message: 'Lines should be under 100 characters' },
   ];
 
   for (const check of checks) {
@@ -224,21 +150,7 @@ export async function runLintCheck(code: string): Promise<CheckResult> {
     }
   }
 
-  return {
-    passed: issues.length === 0,
-    issues,
-  };
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const testCode = `
-    var x = 1;
-    console.log('debug');
-    // TODO: fix this
-  `;
-  const result = await runLintCheck(testCode);
-  console.log('Lint Result:', result);
-  process.exit(result.passed ? 0 : 1);
+  return { passed: issues.length === 0, issues };
 }
 ```
 
@@ -305,13 +217,13 @@ export const mastra = new Mastra({
 npm run dev
 ```
 
-Open [localhost:4111](http://localhost:4111)
+Open [localhost:4111](http://localhost:4111) and navigate to the code reviewer agent.
 
 </StepItem>
 
 <StepItem title="Review some code">
 
-Navigate to the code reviewer agent and paste code:
+Paste code to review:
 
 ```
 Review this code:
@@ -323,13 +235,8 @@ function getData(id) {
 }
 ```
 
-The bot will:
-- Activate the code-standards skill
-- Check against style guidelines
-- Run lint checks
-- Provide structured feedback
+The bot will activate the code-standards skill and provide structured feedback:
 
-Example response:
 ```
 **Summary**: Function has several issues with variable declaration,
 debugging statements, and missing error handling.
@@ -352,79 +259,14 @@ debugging statements, and missing error handling.
 
 </Steps>
 
-## Make skills context-aware
-
-Enable different standards for different teams:
-
-```typescript title="src/mastra/index.ts"
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: (context) => {
-    const team = context.requestContext?.get('team');
-    const paths = ['/skills/code-standards'];
-
-    if (team === 'frontend') {
-      paths.push('/skills/react-standards');
-    } else if (team === 'backend') {
-      paths.push('/skills/api-standards');
-    }
-
-    return paths;
-  },
-});
-```
-
-## Integrate with GitHub Actions
-
-Use this bot in CI/CD to automatically review PRs:
-
-```yaml title=".github/workflows/code-review.yml"
-name: Code Review
-
-on:
-  pull_request:
-    types: [opened, synchronize]
-
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: npm ci
-      - name: Review changed files
-        run: |
-          git diff origin/${{ github.base_ref }}...HEAD > changes.diff
-          npx tsx scripts/review-pr.ts
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-```
-
-```typescript title="scripts/review-pr.ts"
-import { readFileSync } from 'fs';
-import { mastra } from '../src/mastra';
-
-const diff = readFileSync('changes.diff', 'utf-8');
-const agent = mastra.getAgent('codeReviewer');
-
-const result = await agent.generate(
-  `Review this code diff:\n\n${diff}`
-);
-
-console.log(result.text);
-```
-
 ## Next steps
 
-Your code review bot is ready! You can:
+You can extend this bot to:
 
-- Add more skills for different languages or frameworks
-- Create skills for security checks, performance reviews
-- Integrate with Slack to post reviews automatically
+- Add skills for different languages or frameworks
+- Create skills for security checks and performance reviews
+- Integrate with GitHub Actions for automatic PR reviews
 - Build a PR comment bot that leaves inline feedback
-- Add evals to measure review quality
 
 Learn more:
 - [Skills documentation](/docs/workspace/skills)

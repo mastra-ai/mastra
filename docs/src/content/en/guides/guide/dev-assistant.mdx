@@ -8,37 +8,24 @@ import StepItem from "@site/src/components/StepItem";
 
 # Building a Full Dev Assistant
 
-Build a complete AI development assistant that combines all workspace features. It writes code following your standards, runs tests to verify functionality, and maintains documentation—a full development workflow automated.
-
-## What you'll build
-
-A dev assistant that:
-- Writes code following your team's standards (skills)
-- Manages files and tests (filesystem)
-- Executes tests and linters (sandbox)
-- Finds relevant code examples (search)
-- Follows test-driven development workflows
+In this guide, you'll build a complete development assistant that combines all workspace features: filesystem for file management, sandbox for code execution, skills for coding standards, and search for finding examples.
 
 ## Before you begin
 
 - A Mastra project ([Quickstart](/guides/getting-started/quickstart))
 - An OpenAI API key
 - Node.js v22.13.0+
-- Python 3.x (optional, for examples)
 
-## Set up the complete workspace
+## Set up the workspace
 
 <Steps>
 
 <StepItem title="Create full workspace structure">
 
 ```bash
-# Code and tests
 mkdir -p workspace/src/utils
 mkdir -p workspace/tests
 mkdir -p workspace/docs
-
-# Coding standards skill
 mkdir -p workspace/skills/coding-standards/references
 ```
 
@@ -69,10 +56,6 @@ describe('String Helpers', () => {
     it('capitalizes first letter', () => {
       expect(capitalize('hello')).toBe('Hello');
     });
-
-    it('handles empty string', () => {
-      expect(capitalize('')).toBe('');
-    });
   });
 
   describe('slugify', () => {
@@ -90,8 +73,7 @@ describe('String Helpers', () => {
     "test": "vitest run"
   },
   "devDependencies": {
-    "vitest": "^1.0.0",
-    "typescript": "^5.0.0"
+    "vitest": "^1.0.0"
   }
 }
 ```
@@ -109,21 +91,16 @@ description: Project coding standards and testing guidelines
 # Coding Standards
 
 ## Code Quality
-
 - Functions under 50 lines
-- Max 3 parameters per function
 - Use descriptive variable names
 - Always add TypeScript types
 
 ## Testing
-
 - Test all exported functions
 - Use AAA pattern: Arrange, Act, Assert
 - Cover happy paths and edge cases
-- See references/testing-guide.md
 
 ## Before Committing
-
 1. Write implementation
 2. Write comprehensive tests
 3. Run tests: \`npm test\`
@@ -133,7 +110,7 @@ description: Project coding standards and testing guidelines
 ```markdown title="workspace/skills/coding-standards/references/testing-guide.md"
 # Testing Guide
 
-## Test Structure (AAA Pattern)
+## AAA Pattern
 
 \`\`\`typescript
 it('descriptive test name', () => {
@@ -149,7 +126,6 @@ it('descriptive test name', () => {
 \`\`\`
 
 ## What to Test
-
 - Happy paths (normal inputs)
 - Edge cases (empty, null, boundary values)
 - Error cases (invalid inputs, exceptions)
@@ -169,14 +145,13 @@ const workspace = new Workspace({
   }),
   sandbox: new LocalSandbox({
     workingDirectory: './workspace',
-    timeout: 60000,
   }),
   skills: ['/skills'],
-  bm25: true,  // Enable search
-  autoIndexPaths: ['/docs', '/src'],  // Index code and docs
+  bm25: true,
+  autoIndexPaths: ['/docs', '/src'],
 });
 
-await workspace.init();  // Index files
+await workspace.init();
 
 export const mastra = new Mastra({
   workspace,
@@ -199,36 +174,17 @@ import { Agent } from '@mastra/core/agent';
 export const devAssistant = new Agent({
   id: 'dev-assistant',
   name: 'Dev Assistant',
-  instructions: `You are a full-stack development assistant.
+  instructions: `You are a development assistant.
 
-## When Adding Features
-
+When adding features:
 1. Activate 'coding-standards' skill
 2. Search workspace for similar code examples
 3. Write the implementation following standards
 4. Write comprehensive tests
 5. Run tests: \`npm test\`
 6. Update documentation if needed
-7. Summarize what was added
 
-## Code Writing
-
-- Follow coding standards from skill
-- Include TypeScript types
-- Add JSDoc for exported functions
-- Consider edge cases
-
-## Testing
-
-- Read testing guide from skill references
-- Follow AAA pattern (Arrange, Act, Assert)
-- Cover happy paths, edge cases, and errors
-- All tests must pass before finishing
-
-## Workflow
-
-For every new feature:
-- Write code → Write tests → Run tests → Update docs
+For every new feature: Write code → Write tests → Run tests → Update docs
 
 Always explain your reasoning and steps.`,
   model: 'openai/gpt-4o',
@@ -264,7 +220,7 @@ export const mastra = new Mastra({
 
 </Steps>
 
-## See it in action
+## Test-driven development workflow
 
 <Steps>
 
@@ -289,20 +245,11 @@ Follow TDD: write tests first, then implementation.
 
 The agent will:
 
-**1. Activate coding standards**
-```
-Activating 'coding-standards' skill to get testing guidelines...
-```
+1. Activate coding-standards skill
+2. Search workspace for similar code patterns
+3. Write tests first:
 
-**2. Search for similar code**
-```
-Searching workspace for string utility patterns...
-Found: capitalize and slugify in string-helpers.ts
-```
-
-**3. Write tests first (TDD)**
 ```typescript
-// Adds to workspace/tests/string-helpers.test.ts
 describe('truncate', () => {
   it('truncates long strings', () => {
     expect(truncate('Hello World', 5)).toBe('He...');
@@ -312,23 +259,15 @@ describe('truncate', () => {
     expect(truncate('Hi', 10)).toBe('Hi');
   });
 
-  it('handles exact length', () => {
-    expect(truncate('Hello', 5)).toBe('Hello');
-  });
-
   it('handles edge cases', () => {
     expect(truncate('', 5)).toBe('');
-    expect(truncate('Test', 0)).toBe('...');
   });
 });
 ```
 
-**4. Write implementation**
+4. Write implementation:
+
 ```typescript
-// Adds to workspace/src/utils/string-helpers.ts
-/**
- * Truncates a string to a maximum length, adding ellipsis if truncated
- */
 export function truncate(str: string, maxLength: number): string {
   if (!str || maxLength < 0) return str;
   if (str.length <= maxLength) return str;
@@ -337,31 +276,7 @@ export function truncate(str: string, maxLength: number): string {
 }
 ```
 
-**5. Run tests**
-```
-Executing: npm test
-
-✓ String Helpers > capitalize > capitalizes first letter
-✓ String Helpers > capitalize > handles empty string
-✓ String Helpers > slugify > converts to lowercase
-✓ String Helpers > truncate > truncates long strings
-✓ String Helpers > truncate > keeps short strings
-✓ String Helpers > truncate > handles exact length
-✓ String Helpers > truncate > handles edge cases
-
-All tests passed! ✓
-```
-
-**6. Summary**
-```
-✅ Added truncate function to string-helpers.ts
-✅ Wrote 4 comprehensive test cases
-✅ All tests passing
-✅ Follows coding standards (types, JSDoc, edge cases)
-
-The function shortens strings to maxLength, adding '...' if truncated.
-Edge cases (empty string, 0 length) are handled.
-```
+5. Run tests and verify they pass
 
 </StepItem>
 
@@ -373,218 +288,24 @@ Make sure all tests still pass.
 ```
 
 The agent will:
-
-**1. Read current code and tests**
-```
-Reading string-helpers.ts and tests to understand current behavior...
-```
-
-**2. Refactor code**
-```typescript
-// More functional approach
-export const capitalize = (str: string): string =>
-  str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
-
-export const slugify = (str: string): string =>
-  str
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-');
-
-export const truncate = (str: string, maxLength: number): string => {
-  if (!str || maxLength < 0) return str;
-  if (str.length <= maxLength) return str;
-  return maxLength === 0 ? '...' : str.slice(0, maxLength - 3) + '...';
-};
-```
-
-**3. Verify tests still pass**
-```
-Running tests to ensure behavior unchanged...
-
-✓ All 7 tests still passing
-
-Refactoring complete! Code is more functional while maintaining
-all existing behavior.
-```
-
-</StepItem>
-
-<StepItem title="Generate documentation">
-
-```
-Generate API documentation for all string-helpers functions
-```
-
-The agent will:
-
-**1. Read source code**
-```
-Reading string-helpers.ts to document all functions...
-```
-
-**2. Create documentation**
-```markdown
-# String Helpers API
-
-Utility functions for string manipulation.
-
-## Functions
-
-### capitalize(str: string): string
-
-Capitalizes the first letter of a string.
-
-**Parameters:**
-- `str` (string): The string to capitalize
-
-**Returns:** String with first letter capitalized
-
-**Example:**
-\`\`\`typescript
-capitalize('hello');  // 'Hello'
-capitalize('');       // ''
-\`\`\`
-
-### slugify(str: string): string
-
-Converts a string to URL-friendly slug format.
-
-**Parameters:**
-- `str` (string): The string to slugify
-
-**Returns:** Lowercase string with spaces replaced by hyphens
-
-**Example:**
-\`\`\`typescript
-slugify('Hello World!');  // 'hello-world'
-\`\`\`
-
-### truncate(str: string, maxLength: number): string
-
-Truncates a string to maximum length with ellipsis.
-
-**Parameters:**
-- `str` (string): The string to truncate
-- `maxLength` (number): Maximum length (including ellipsis)
-
-**Returns:** Truncated string with '...' if shortened
-
-**Example:**
-\`\`\`typescript
-truncate('Hello World', 8);  // 'Hello...'
-truncate('Hi', 10);          // 'Hi'
-\`\`\`
-```
-
-**3. Save documentation**
-```
-Saved to /docs/api/string-helpers.md
-```
+1. Read current code and tests
+2. Refactor to functional style
+3. Run tests to ensure behavior unchanged
+4. Report results
 
 </StepItem>
 
 </Steps>
 
-## Complete workflow example
-
-Here's a full feature request workflow:
-
-```
-Add input validation to capitalize. It should throw a TypeError
-if input is not a string. Update tests and docs.
-```
-
-**Agent executes:**
-
-1. ✅ Activate coding-standards skill
-2. ✅ Search for validation patterns in workspace
-3. ✅ Read current implementation and tests
-4. ✅ Add validation to function:
-   ```typescript
-   export const capitalize = (str: string): string => {
-     if (typeof str !== 'string') {
-       throw new TypeError('Input must be a string');
-     }
-     return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
-   };
-   ```
-5. ✅ Add test for validation:
-   ```typescript
-   it('throws TypeError for non-string', () => {
-     expect(() => capitalize(123 as any)).toThrow(TypeError);
-   });
-   ```
-6. ✅ Run tests → All pass
-7. ✅ Update documentation with "Throws" clause
-8. ✅ Summary:
-   ```
-   ✅ Added input validation to capitalize
-   ✅ Throws TypeError for non-string input
-   ✅ Added test case
-   ✅ All tests passing (8/8)
-   ✅ Updated API documentation
-   ```
-
-## Add safety controls
-
-```typescript title="src/mastra/index.ts"
-import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
-
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-  skills: ['/skills'],
-  bm25: true,
-  autoIndexPaths: ['/docs', '/src'],
-  tools: {
-    // Must read file before modifying
-    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
-      requireReadBeforeWrite: true,
-    },
-    // Approve before running commands
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      requireApproval: true,
-    },
-  },
-});
-```
-
-## Real-world use cases
-
-### API Development
-```
-Create a new API endpoint for user registration.
-Include validation, error handling, and tests.
-```
-
-### Bug Fixing
-```
-Fix the authentication bug in user-service.ts.
-Find and fix the issue, add a test to prevent regression.
-```
-
-### Feature Addition
-```
-Add support for pagination to the products API.
-Update the function, tests, and documentation.
-```
-
-### Code Review
-```
-Review changes in pull-request.diff and provide
-feedback on code quality and potential issues.
-```
-
 ## Next steps
 
-Your dev assistant is production-ready! You can:
+You can extend this assistant to:
 
-- Add more skills (architecture, security, performance)
+- Add more skills for different languages or frameworks
+- Create specialized agents for backend, frontend, or DevOps
 - Integrate with GitHub for automated PR reviews
-- Create specialized agents (backend, frontend, DevOps)
-- Add CI/CD automation
-- Build multi-agent workflows
+- Build CI/CD automation
+- Add multi-agent workflows
 
 Learn more:
 - [Workspace overview](/docs/workspace/overview)

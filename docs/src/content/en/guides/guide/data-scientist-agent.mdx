@@ -8,16 +8,7 @@ import StepItem from "@site/src/components/StepItem";
 
 # Building a Data Scientist Agent
 
-Build an AI data scientist that analyzes CSV data by writing and executing Python scripts. The agent uses workspace sandbox to safely run code, compute statistics, and generate insights from your data files.
-
-## What you'll build
-
-A data scientist agent that:
-- Reads CSV files from your workspace
-- Writes Python scripts for data analysis
-- Executes scripts safely in a sandbox
-- Computes statistics and trends
-- Generates text-based visualizations
+In this guide, you'll build a data scientist agent that analyzes CSV data by writing and executing Python scripts. The agent uses workspace sandbox to safely run code, compute statistics, and generate insights from data files.
 
 ## Before you begin
 
@@ -67,7 +58,7 @@ const workspace = new Workspace({
   }),
   sandbox: new LocalSandbox({
     workingDirectory: './workspace',
-    timeout: 60000, // 60 seconds for data processing
+    timeout: 60000,
   }),
 });
 
@@ -106,7 +97,6 @@ For analysis, use pandas to:
 - Calculate statistics (mean, median, sum, min, max)
 - Group and aggregate data
 - Find trends and patterns
-- Compare values
 
 Keep scripts simple and print results clearly. Always explain what the data shows in plain language.`,
   model: 'openai/gpt-4o',
@@ -162,31 +152,21 @@ What's the total revenue for each product in the sales data?
 ```
 
 The agent will:
-1. List files in `/data` → finds `sales.csv`
-2. Read the CSV to understand columns
-3. Write a Python script:
+1. List files in `/data` and find `sales.csv`
+2. Read the file to understand its structure
+3. Write and execute a Python script
+4. Explain the results
 
-```python
-import pandas as pd
-
-df = pd.read_csv('data/sales.csv')
-revenue_by_product = df.groupby('product')['revenue'].sum()
-
-print("Total Revenue by Product:")
-print(revenue_by_product)
-```
-
-4. Execute it: `python3 scripts/analyze.py`
-5. Explain the results:
+Example output:
 
 ```
 Based on the sales data:
 
-**Widget A**: $795.00 total revenue
+Widget A: $795.00 total revenue
 - Consistent sales across 4 days
 - Average daily revenue: $198.75
 
-**Widget B**: $1,320.00 total revenue
+Widget B: $1,320.00 total revenue
 - Higher revenue despite fewer units some days
 - Average daily revenue: $330.00
 
@@ -201,25 +181,8 @@ Widget B generates 66% more revenue than Widget A.
 Show me the daily revenue trend
 ```
 
-The agent creates a script to calculate daily totals:
+The agent creates a script to calculate daily totals and shows:
 
-```python
-import pandas as pd
-
-df = pd.read_csv('data/sales.csv')
-daily_revenue = df.groupby('date')['revenue'].sum()
-
-print("Daily Revenue Trend:")
-for date, revenue in daily_revenue.items():
-    print(f"{date}: ${revenue:.2f}")
-
-# Calculate trend
-print(f"\nFirst day: ${daily_revenue.iloc[0]:.2f}")
-print(f"Last day: ${daily_revenue.iloc[-1]:.2f}")
-print(f"Change: ${daily_revenue.iloc[-1] - daily_revenue.iloc[0]:.2f}")
-```
-
-Output:
 ```
 Daily Revenue Trend:
 2024-01-01: $350.00
@@ -227,147 +190,22 @@ Daily Revenue Trend:
 2024-01-03: $505.00
 2024-01-04: $660.00
 
-First day: $350.00
-Last day: $660.00
-Change: +$310.00 (89% increase)
-
 The trend is positive with revenue growing from $350 to $660
-over 4 days, indicating strong business growth.
+over 4 days, a +$310.00 increase (89%).
 ```
 
 </StepItem>
 
 </Steps>
-
-## Advanced: Generate visualizations
-
-The agent can create and save charts:
-
-<Steps>
-
-<StepItem title="Install matplotlib">
-
-```bash
-pip install matplotlib
-```
-
-</StepItem>
-
-<StepItem title="Ask for a chart">
-
-```
-Create a chart showing daily revenue trends
-```
-
-The agent generates:
-
-```python
-import pandas as pd
-import matplotlib.pyplot as plt
-
-df = pd.read_csv('data/sales.csv')
-daily_revenue = df.groupby('date')['revenue'].sum()
-
-plt.figure(figsize=(10, 6))
-plt.plot(daily_revenue.index, daily_revenue.values, marker='o', linewidth=2)
-plt.title('Daily Revenue Trend', fontsize=16)
-plt.xlabel('Date')
-plt.ylabel('Revenue ($)')
-plt.grid(True, alpha=0.3)
-plt.xticks(rotation=45)
-plt.tight_layout()
-plt.savefig('data/revenue_trend.png')
-print('Chart saved to data/revenue_trend.png')
-```
-
-The chart is saved in `workspace/data/revenue_trend.png`!
-
-</StepItem>
-
-</Steps>
-
-## Add execution safety
-
-Require approval before running code:
-
-```typescript title="src/mastra/index.ts"
-import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
-
-const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-  tools: {
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      requireApproval: true,  // Ask before running
-    },
-  },
-});
-```
-
-Now you'll see the command before it executes and can approve or reject it.
-
-## Real-world use cases
-
-### Sales Analytics Dashboard
-
-```
-Analyze sales.csv and create:
-1. Total revenue by product
-2. Daily sales trends
-3. Best performing day
-4. Product with highest average sale
-```
-
-### Customer Behavior Analysis
-
-```
-Analyze customer_orders.csv and tell me:
-1. Average order value
-2. Most popular products
-3. Peak ordering times
-4. Customer retention rate
-```
-
-### Financial Reporting
-
-```
-Process transactions.csv and generate:
-1. Monthly expense breakdown
-2. Category-wise spending
-3. Budget vs actual comparison
-4. Savings rate
-```
-
-## Error handling
-
-The agent handles errors gracefully:
-
-```
-Analyze the file customers.csv
-
-# If file doesn't exist:
-"I checked the /data directory but couldn't find customers.csv.
-Available files are: sales.csv
-
-Would you like me to analyze sales.csv instead?"
-
-# If Python package missing:
-"The script needs the 'matplotlib' package which isn't installed.
-You can install it with: pip install matplotlib"
-
-# If script has errors:
-"The analysis failed with: NameError: 'pd' is not defined
-Let me fix the import statement and try again."
-```
 
 ## Next steps
 
-Your data scientist agent is ready! You can:
+You can extend this agent to:
 
 - Add more data sources (JSON, Excel, databases)
-- Create specialized analysis skills
+- Generate charts and visualizations with matplotlib
 - Build automated reporting workflows
-- Generate interactive dashboards
+- Create specialized analysis skills
 - Integrate with BI tools
 
 Learn more:
