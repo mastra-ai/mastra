@@ -3980,7 +3980,7 @@ describe('Async Buffering Processor Logic', () => {
       expect((om as any).shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
 
       // Simulate that startAsyncBufferedObservation updated lastBufferedBoundary (in-memory)
-      (om as any).lastBufferedBoundary.set(bufferKey, 10000);
+      (ObservationalMemory as any).lastBufferedBoundary.set(bufferKey, 10000);
 
       // Same interval should not re-trigger
       expect((om as any).shouldTriggerAsyncObservation(12000, lockKey, mockRecord)).toBe(false);
@@ -4092,7 +4092,7 @@ describe('Async Buffering Processor Logic', () => {
       expect((om as any).shouldTriggerAsyncReflection(15000, lockKey, mockRecord)).toBe(true);
 
       // Simulate that reflection was started (sets lastBufferedBoundary)
-      (om as any).lastBufferedBoundary.set(reflectionKey, 15000);
+      (ObservationalMemory as any).lastBufferedBoundary.set(reflectionKey, 15000);
 
       // Should not trigger again
       expect((om as any).shouldTriggerAsyncReflection(18000, lockKey, mockRecord)).toBe(false);
@@ -4121,7 +4121,7 @@ describe('Async Buffering Processor Logic', () => {
         reflection: { observationTokens: 20000 },
       });
 
-      (om as any).asyncBufferingOps.set('obs:thread:test', Promise.resolve());
+      (ObservationalMemory as any).asyncBufferingOps.set('obs:thread:test', Promise.resolve());
       expect((om as any).isAsyncBufferingInProgress('obs:thread:test')).toBe(true);
     });
   });
@@ -4470,13 +4470,13 @@ describe('Async Buffering Processor Logic', () => {
       const bufferKey = (om as any).getObservationBufferKey(lockKey);
 
       // Simulate that buffering set a boundary
-      (om as any).lastBufferedBoundary.set(bufferKey, 15000);
+      (ObservationalMemory as any).lastBufferedBoundary.set(bufferKey, 15000);
 
       const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
       await (om as any).tryActivateBufferedObservations(updatedRecord!, lockKey);
 
       // After activation, the boundary should be cleared
-      expect((om as any).lastBufferedBoundary.has(bufferKey)).toBe(false);
+      expect((ObservationalMemory as any).lastBufferedBoundary.has(bufferKey)).toBe(false);
     });
   });
 });
@@ -4503,6 +4503,11 @@ describe('Full Async Buffering Flow', () => {
   }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
+
+    // Clear static maps to avoid cross-test pollution
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'flow-thread';
@@ -4643,7 +4648,7 @@ describe('Full Async Buffering Flow', () => {
     async function waitForAsyncOps(timeoutMs = 5000) {
       const start = Date.now();
       while (Date.now() - start < timeoutMs) {
-        const ops = (om as any).asyncBufferingOps as Map<string, Promise<void>>;
+        const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
         if (ops.size === 0) return;
         await Promise.allSettled([...ops.values()]);
         // Small delay to let finally blocks clean up

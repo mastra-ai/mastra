@@ -609,25 +609,27 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /**
    * Track in-flight async buffering operations per resource/thread.
+   * STATIC: Shared across all ObservationalMemory instances in this process.
+   * This is critical because multiple OM instances are created per agent loop step,
+   * and we need them to share knowledge of in-flight operations.
    * Key format: "obs:{lockKey}" or "refl:{lockKey}"
    * Value: Promise that resolves when buffering completes
    */
-  private asyncBufferingOps = new Map<string, Promise<void>>();
+  private static asyncBufferingOps = new Map<string, Promise<void>>();
 
   /**
    * Track the last token boundary at which we started buffering.
-   * Used to determine when we've crossed a new `bufferEvery` interval.
+   * STATIC: Shared across all instances so boundary tracking persists across OM recreations.
    * Key format: "obs:{lockKey}" or "refl:{lockKey}"
    */
-  private lastBufferedBoundary = new Map<string, number>();
+  private static lastBufferedBoundary = new Map<string, number>();
 
   /**
    * Tracks cycleId for in-flight buffered reflections.
-   * Since reflection buffering doesn't use chunks (it's a single string),
-   * we store the cycleId in-memory so we can match it at activation time.
+   * STATIC: Shared across instances so we can match cycleId at activation time.
    * Key format: "refl:{lockKey}"
    */
-  private reflectionBufferCycleIds = new Map<string, string>();
+  private static reflectionBufferCycleIds = new Map<string, string>();
 
   /**
    * Check if async buffering is enabled for observations.
@@ -705,7 +707,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // DB value survives instance recreation; in-memory value is set immediately
     // when buffering starts (before the DB write completes).
     const dbBoundary = record.lastBufferedAtTokens ?? 0;
-    const memBoundary = this.lastBufferedBoundary.get(bufferKey) ?? 0;
+    const memBoundary = ObservationalMemory.lastBufferedBoundary.get(bufferKey) ?? 0;
     const lastBoundary = Math.max(dbBoundary, memBoundary);
 
     // Calculate which interval we're in
@@ -745,7 +747,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Also check in-memory state for the current instance
     const bufferKey = this.getReflectionBufferKey(lockKey);
     if (this.isAsyncBufferingInProgress(bufferKey)) return false;
-    if (this.lastBufferedBoundary.has(bufferKey)) return false;
+    if (ObservationalMemory.lastBufferedBoundary.has(bufferKey)) return false;
 
     // Don't re-trigger if the record already has a buffered reflection
     if (record.bufferedReflection) return false;
@@ -766,7 +768,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Check if an async buffering operation is already in progress.
    */
   private isAsyncBufferingInProgress(bufferKey: string): boolean {
-    return this.asyncBufferingOps.has(bufferKey);
+    return ObservationalMemory.asyncBufferingOps.has(bufferKey);
   }
 
   /**
@@ -2436,7 +2438,7 @@ ${suggestedResponse}
       if (this.isAsyncObservationEnabled()) {
         // Wait for any in-flight async buffering to complete first
         const bufferKey = this.getObservationBufferKey(lockKey);
-        const asyncOp = this.asyncBufferingOps.get(bufferKey);
+        const asyncOp = ObservationalMemory.asyncBufferingOps.get(bufferKey);
         if (asyncOp) {
           try {
             // Wait for buffering to complete (with reasonable timeout)
@@ -2970,9 +2972,16 @@ NOTE: Any messages following this system reminder are newer than your memories.
           this.startAsyncBufferedObservation(record, threadId, unobservedMessages, lockKey, writer);
         }
       } else if (this.isAsyncObservationEnabled()) {
+        // Above threshold but we still need to check async buffering:
+        // - At step 0, sync observation won't run, so we need chunks ready
+        // - Below blockAfter, sync observation won't run, so we need chunks ready
+        const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record);
         omDebug(
-          `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, threshold=${threshold}, step=${stepNumber}`,
+          `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}`,
         );
+        if (shouldTrigger) {
+          this.startAsyncBufferedObservation(record, threadId, unobservedMessages, lockKey, writer);
+        }
       }
 
       // ════════════════════════════════════════════════════════════════════════
@@ -3639,7 +3648,7 @@ ${formattedMessages}
 
     // Update the last buffered boundary (in-memory for current instance)
     const currentTokens = this.tokenCounter.countMessages(unobservedMessages) + (record.pendingMessageTokens ?? 0);
-    this.lastBufferedBoundary.set(bufferKey, currentTokens);
+    ObservationalMemory.lastBufferedBoundary.set(bufferKey, currentTokens);
 
     // Set persistent flag so new instances (created per request) know buffering is in progress
     registerOp(record.id, 'bufferingObservation');
@@ -3651,7 +3660,7 @@ ${formattedMessages}
     const asyncOp = this.runAsyncBufferedObservation(record, threadId, unobservedMessages, bufferKey, writer).finally(
       () => {
         // Clean up the operation tracking
-        this.asyncBufferingOps.delete(bufferKey);
+        ObservationalMemory.asyncBufferingOps.delete(bufferKey);
         // Clear persistent flag
         unregisterOp(record.id, 'bufferingObservation');
         this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
@@ -3660,7 +3669,7 @@ ${formattedMessages}
       },
     );
 
-    this.asyncBufferingOps.set(bufferKey, asyncOp);
+    ObservationalMemory.asyncBufferingOps.set(bufferKey, asyncOp);
   }
 
   /**
@@ -3675,7 +3684,7 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter,
   ): Promise<void> {
     // Wait for any existing buffering operation to complete first (mutex behavior)
-    const existingOp = this.asyncBufferingOps.get(bufferKey);
+    const existingOp = ObservationalMemory.asyncBufferingOps.get(bufferKey);
     if (existingOp) {
       try {
         await existingOp;
@@ -3891,7 +3900,7 @@ ${formattedMessages}
 
     // Wait for any in-progress async buffering to complete (with timeout)
     // Use 60s timeout - buffering can take a while for large message batches
-    const asyncOp = this.asyncBufferingOps.get(bufferKey);
+    const asyncOp = ObservationalMemory.asyncBufferingOps.get(bufferKey);
     if (asyncOp) {
       try {
         await Promise.race([
@@ -3927,7 +3936,7 @@ ${formattedMessages}
     );
 
     // Reset lastBufferedBoundary so new buffering can start fresh after activation
-    this.lastBufferedBoundary.delete(bufferKey);
+    ObservationalMemory.lastBufferedBoundary.delete(bufferKey);
     // Reset persistent lastBufferedAtTokens to 0 so interval tracking restarts
     await this.storage.setBufferingObservationFlag(freshRecord.id, false, 0);
     unregisterOp(freshRecord.id, 'bufferingObservation');
@@ -3981,7 +3990,7 @@ ${formattedMessages}
     }
 
     // Update the last buffered boundary (in-memory for current instance)
-    this.lastBufferedBoundary.set(bufferKey, observationTokens);
+    ObservationalMemory.lastBufferedBoundary.set(bufferKey, observationTokens);
 
     // Set persistent flag so new instances know buffering is in progress
     registerOp(record.id, 'bufferingReflection');
@@ -4010,7 +4019,7 @@ ${formattedMessages}
       })
       .finally(() => {
         // Clean up the operation tracking
-        this.asyncBufferingOps.delete(bufferKey);
+        ObservationalMemory.asyncBufferingOps.delete(bufferKey);
         // Clear persistent flag
         unregisterOp(record.id, 'bufferingReflection');
         this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
@@ -4018,7 +4027,7 @@ ${formattedMessages}
         });
       });
 
-    this.asyncBufferingOps.set(bufferKey, asyncOp);
+    ObservationalMemory.asyncBufferingOps.set(bufferKey, asyncOp);
   }
 
   /**
@@ -4039,7 +4048,7 @@ ${formattedMessages}
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
     // Store cycleId so tryActivateBufferedReflection can use it for UI markers
-    this.reflectionBufferCycleIds.set(_bufferKey, cycleId);
+    ObservationalMemory.reflectionBufferCycleIds.set(_bufferKey, cycleId);
 
     // Emit buffering start marker
     if (writer) {
@@ -4135,7 +4144,7 @@ ${formattedMessages}
 
     // Wait for any in-progress async reflection buffering to complete (with timeout)
     // Use 60s timeout - reflection can take a while for large observation batches
-    const asyncOp = this.asyncBufferingOps.get(bufferKey);
+    const asyncOp = ObservationalMemory.asyncBufferingOps.get(bufferKey);
     if (asyncOp) {
       omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
       try {
@@ -4185,7 +4194,7 @@ ${formattedMessages}
     });
 
     // Reset lastBufferedBoundary so new reflection buffering can start fresh
-    this.lastBufferedBoundary.delete(bufferKey);
+    ObservationalMemory.lastBufferedBoundary.delete(bufferKey);
 
     // Emit activation marker using the original buffering cycleId so the UI can match it
     const afterRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
@@ -4195,7 +4204,7 @@ ${formattedMessages}
     );
 
     if (writer) {
-      const originalCycleId = this.reflectionBufferCycleIds.get(bufferKey);
+      const originalCycleId = ObservationalMemory.reflectionBufferCycleIds.get(bufferKey);
       const activationMarker = this.createActivationMarker({
         cycleId: originalCycleId ?? `reflect-act-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
         operationType: 'reflection',
@@ -4212,7 +4221,7 @@ ${formattedMessages}
     }
 
     // Clean up the stored cycleId
-    this.reflectionBufferCycleIds.delete(bufferKey);
+    ObservationalMemory.reflectionBufferCycleIds.delete(bufferKey);
 
     return true;
   }
