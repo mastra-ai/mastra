@@ -866,18 +866,10 @@ export class MessageList {
 
           if (incomingParts.length <= sealedPartCount) {
             // Incoming message has fewer or equal parts than the sealed boundary.
-            // Check if these are truly stale (same parts as the sealed message) or
+            // Check if these are truly stale (same content as the sealed message) or
             // new content flushed independently (e.g., text deltas flushed with the
             // same messageId but only containing a text part).
-            const isStale = incomingParts.every((part, idx) => {
-              const existingPart = existingParts[idx];
-              if (!existingPart) return false;
-              const pType = (part as { type?: string }).type;
-              const eType = (existingPart as { type?: string }).type;
-              return pType === eType;
-            });
-
-            if (isStale) {
+            if (messagesAreEqual(existingMessage, messageV2)) {
               // Stale message, ignore - don't replace, don't create new
               return this;
             }
