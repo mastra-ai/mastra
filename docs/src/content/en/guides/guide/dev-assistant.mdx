@@ -136,16 +136,13 @@ it('descriptive test name', () => {
 <StepItem title="Configure full workspace">
 
 ```typescript title="src/mastra/index.ts"
+import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: './workspace',
-  }),
-  sandbox: new LocalSandbox({
-    workingDirectory: './workspace',
-  }),
+  filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
+  sandbox: new LocalSandbox({ workingDirectory: resolve(import.meta.dirname, '../../workspace') }),
   skills: ['/skills'],
   bm25: true,
   autoIndexPaths: ['/docs', '/src'],
@@ -196,13 +193,14 @@ Always explain your reasoning and steps.`,
 <StepItem title="Register the agent">
 
 ```typescript title="src/mastra/index.ts"
+import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import { devAssistant } from './agents/dev-assistant';
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
+  sandbox: new LocalSandbox({ workingDirectory: resolve(import.meta.dirname, '../../workspace') }),
   skills: ['/skills'],
   bm25: true,
   autoIndexPaths: ['/docs', '/src'],
