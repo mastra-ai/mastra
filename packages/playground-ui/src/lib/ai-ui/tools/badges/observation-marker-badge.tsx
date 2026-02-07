@@ -352,6 +352,15 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         ? Math.round(tokensBuffered / bufferedTokens)
         : null;
 
+    const handleToggle = (e: React.MouseEvent) => {
+      const scrollContainer = e.currentTarget.closest('[data-radix-scroll-area-viewport]') || document.documentElement;
+      const scrollTop = scrollContainer.scrollTop;
+      setIsExpanded(!isExpanded);
+      requestAnimationFrame(() => {
+        scrollContainer.scrollTop = scrollTop;
+      });
+    };
+
     return (
       <div
         className="mb-3"
@@ -361,8 +370,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
       >
         <div className="my-1">
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-500/10 text-purple-600 text-xs font-medium hover:bg-purple-500/20 transition-colors cursor-pointer border border-dashed border-purple-400/40"
+            onClick={handleToggle}
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${completeBgColor} ${completeTextColor} text-xs font-medium ${completeHoverBgColor} transition-colors cursor-pointer border border-dashed border-green-400/40`}
           >
             {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             <CloudCog className="w-3 h-3" />
@@ -374,8 +383,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           </button>
 
           {isExpanded && observations && (
-            <div className="mt-1 ml-4 p-2 rounded-md bg-purple-500/5 text-purple-700 text-xs border border-purple-500/10 whitespace-pre-wrap max-h-60 overflow-y-auto">
-              {observations}
+            <div className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} text-xs border ${expandedBorderColor}`}>
+              <ObservationRenderer observations={observations} maxHeight="240px" />
             </div>
           )}
         </div>
