@@ -18,8 +18,8 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
  * @param tableName - The table name to get the schema for
  * @returns A comma-separated column list with json() wrappers for JSONB columns
  */
-export function buildSelectColumns(tableName: TABLE_NAMES): string {
-  const schema = TABLE_SCHEMAS[tableName];
+export function buildSelectColumns(tableName: TABLE_NAMES, schemaOverride?: Record<string, StorageColumn>): string {
+  const schema = schemaOverride || TABLE_SCHEMAS[tableName];
   return Object.keys(schema)
     .map(col => {
       const colDef = schema[col];
