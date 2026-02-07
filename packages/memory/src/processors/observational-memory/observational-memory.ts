@@ -4225,20 +4225,11 @@ ${formattedMessages}
     lockKey: string,
     writer?: ProcessorStreamWriter,
   ): Promise<boolean> {
-    omDebug(
-      `[OM:reflect] tryActivateBufferedReflection: recordId=${record.id}, hasBufferedReflection=${!!record.bufferedReflection}, bufferedReflectionLen=${record.bufferedReflection?.length ?? 0}`,
-    );
-
-    // Check if there's buffered content to activate
-    if (!record.bufferedReflection) {
-      omDebug(`[OM:reflect] tryActivateBufferedReflection: no buffered reflection, returning false`);
-      return false;
-    }
-
     const bufferKey = this.getReflectionBufferKey(lockKey);
 
-    // Wait for any in-progress async reflection buffering to complete (with timeout)
-    // Use 60s timeout - reflection can take a while for large observation batches
+    // Wait for any in-flight async reflection before checking DB state.
+    // The passed-in record may be stale — the async reflector could have
+    // saved results between when the record was fetched and now.
     const asyncOp = ObservationalMemory.asyncBufferingOps.get(bufferKey);
     if (asyncOp) {
       omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
@@ -4252,8 +4243,13 @@ ${formattedMessages}
       }
     }
 
-    // Re-fetch record to get latest buffered content
+    // Fetch the latest record — either the async op just completed, or we
+    // need the freshest DB state to check for buffered reflection content.
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+
+    omDebug(
+      `[OM:reflect] tryActivateBufferedReflection: recordId=${record.id}, hasBufferedReflection=${!!freshRecord?.bufferedReflection}, bufferedReflectionLen=${freshRecord?.bufferedReflection?.length ?? 0}`,
+    );
     omDebug(
       `[OM:reflect] tryActivateBufferedReflection: freshRecord.id=${freshRecord?.id}, freshBufferedReflection=${freshRecord?.bufferedReflection ? 'present (' + freshRecord.bufferedReflection.length + ' chars)' : 'empty'}, freshObsTokens=${freshRecord?.observationTokenCount}`,
     );
