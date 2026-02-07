@@ -41,9 +41,22 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
    *
    * @param {string} url - The url of the ElasticSearch node.
    * @param {ElasticSearchAuth} [auth] - The authentication credentials for ElasticSearch.
+   * @param {ElasticSearchClient} [client] - ElasticSearchClient client
    */
-  constructor({ url, id, auth }: { url: string } & { id: string } & { auth?: ElasticSearchAuth }) {
+  constructor({
+    url,
+    id,
+    auth,
+    client,
+  }: ({ id: string } & { url: string; auth?: ElasticSearchAuth }) & { client?: ElasticSearchClient }) {
     super({ id });
+    if (client) {
+      this.client = client;
+      return;
+    }
+    if (!url) {
+      throw 'Either Url or client is required';
+    }
     this.client = new ElasticSearchClient({ node: url, ...(auth && { auth }) });
   }
 
