@@ -7,17 +7,19 @@ export function AgentSidebar({
   threadId,
   threads,
   isLoading,
+  resourceId,
 }: {
   agentId: string;
   threadId: string;
   threads?: StorageThreadType[];
   isLoading: boolean;
+  resourceId: string;
 }) {
   const { mutateAsync } = useDeleteThread();
   const { paths, navigate } = useLinkComponent();
 
   const handleDelete = async (deleteId: string) => {
-    await mutateAsync({ threadId: deleteId!, agentId });
+    await mutateAsync({ threadId: deleteId!, agentId, resourceId });
     if (deleteId === threadId) {
       navigate(paths.agentNewThreadLink(agentId));
     }
@@ -25,7 +27,7 @@ export function AgentSidebar({
 
   return (
     <ChatThreads
-      resourceId={agentId}
+      resourceId={resourceId}
       resourceType={'agent'}
       threads={threads || []}
       isLoading={isLoading}

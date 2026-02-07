@@ -14,9 +14,10 @@ import { cn } from '@/lib/utils';
 export interface AgentInformationProps {
   agentId: string;
   threadId: string;
+  resourceId: string;
 }
 
-export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
+export function AgentInformation({ agentId, threadId, resourceId }: AgentInformationProps) {
   const { data: agent } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const hasMemory = !isMemoryLoading && Boolean(memory?.result);
@@ -56,7 +57,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
 
           {hasMemory && (
             <TabContent value="memory">
-              <AgentMemory agentId={agentId} threadId={threadId} />
+              <AgentMemory agentId={agentId} threadId={threadId} resourceId={resourceId} />
             </TabContent>
           )}
 

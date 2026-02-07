@@ -14,6 +14,7 @@ import {
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
   type AgentSettingsType,
+  ResourceIdSelector,
 } from '@mastra/playground-ui';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -28,22 +29,20 @@ function Agent() {
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isNewThread = searchParams.get('new') === 'true';
+  const [selectedResourceId, setSelectedResourceId] = useState<string>(() => {
+    const stored = localStorage.getItem(`mastra-agent-resource-${agentId}`);
+    return stored || agentId!;
+  });
   const {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
-  } = useThreads({ resourceId: agentId!, agentId: agentId!, isMemoryEnabled: !!memory?.result });
+  } = useThreads({ resourceId: selectedResourceId, agentId: agentId!, isMemoryEnabled: !!memory?.result });
 
-  const [selectedResourceId, setSelectedResourceId] = useState<string>(agentId!);
-
-  useEffect(() => {
-    const stored = localStorage.getItem(`mastra-agent-resource-${agentId}`);
-    if (stored) {
-      setSelectedResourceId(stored);
-    } else {
-      setSelectedResourceId(agentId!);
-    }
-  }, [agentId]);
+  const availableResourceIds = useMemo(() => {
+    if (!threads) return [];
+    return [...new Set(threads.map((t: { resourceId: string }) => t.resourceId))];
+  }, [threads]);
 
   const handleResourceIdChange = (newResourceId: string) => {
     setSelectedResourceId(newResourceId);
@@ -127,11 +126,24 @@ function Agent() {
                             threadId={threadId!}
                             threads={threads || []}
                             isLoading={isThreadsLoading}
+                            resourceId={selectedResourceId}
                           />
                         )
                       }
-                      rightSlot={<AgentInformation agentId={agentId!} threadId={threadId!} />}
+                      rightSlot={
+                        <AgentInformation agentId={agentId!} threadId={threadId!} resourceId={selectedResourceId} />
+                      }
                     >
+                      {Boolean(memory?.result) && (
+                        <div className="absolute top-4 right-4 z-50 w-64">
+                          <ResourceIdSelector
+                            value={selectedResourceId}
+                            onChange={handleResourceIdChange}
+                            agentId={agentId!}
+                            availableResourceIds={availableResourceIds}
+                          />
+                        </div>
+                      )}
                       <AgentChat
                         key={threadId}
                         agentId={agentId!}
