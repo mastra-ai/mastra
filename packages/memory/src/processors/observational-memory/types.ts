@@ -414,30 +414,6 @@ export interface DataOmStatusPart {
 }
 
 /**
- * @deprecated Use DataOmStatusPart instead. Clients consuming this type will not
- * receive updates — migrate to `data-om-status` for progress tracking.
- */
-export interface DataOmProgressPart {
-  type: 'data-om-progress';
-  data: {
-    pendingTokens: number;
-    messageTokens: number;
-    messageTokensPercent: number;
-    observationTokens: number;
-    observationTokensThreshold: number;
-    observationTokensPercent: number;
-    willObserve: boolean;
-    recordId: string;
-    threadId: string;
-    stepNumber: number;
-    bufferedChunksCount: number;
-    bufferedMessageTokens: number;
-    bufferedObservationTokens: number;
-    hasBufferedChunks: boolean;
-  };
-}
-
-/**
  * Start marker inserted when async buffering begins.
  * Buffering runs in the background to pre-compute observations before the main threshold.
  */

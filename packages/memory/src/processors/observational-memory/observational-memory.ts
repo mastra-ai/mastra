@@ -1,4 +1,4 @@
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
@@ -683,11 +683,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Calculate the projected message tokens that would be removed if activation happened now.
    * This replicates the chunk boundary logic in swapBufferedToActive without actually activating.
    */
-  private calculateProjectedMessageRemoval(chunks: BufferedObservationChunk[], activationRatio: number): number {
+  private calculateProjectedMessageRemoval(
+    chunks: BufferedObservationChunk[],
+    activationRatio: number,
+    messageTokensThreshold: number,
+  ): number {
     if (chunks.length === 0) return 0;
 
-    const totalBufferedMessageTokens = chunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
-    const targetMessageTokens = totalBufferedMessageTokens * activationRatio;
+    const targetMessageTokens = messageTokensThreshold * activationRatio;
 
     // Find the closest chunk boundary to the target, biased under
     let cumulativeMessageTokens = 0;
@@ -1995,32 +1998,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       `[OM:callReflector] starting first attempt: originalTokens=${originalTokens}, targetThreshold=${targetThreshold}, promptLen=${prompt.length}, skipContinuationHints=${skipContinuationHints}`,
     );
 
-    // Dump fixture for debugging hanging reflector calls
-    if (OM_DEBUG_LOG) {
-      try {
-        const fixture = {
-          timestamp: new Date().toISOString(),
-          prompt,
-          systemPrompt: buildReflectorSystemPrompt(),
-          modelConfig: this.reflectionConfig.model,
-          modelSettings: this.reflectionConfig.modelSettings,
-          providerOptions: this.reflectionConfig.providerOptions,
-          meta: {
-            originalTokens,
-            targetThreshold,
-            promptLen: prompt.length,
-            skipContinuationHints,
-            compressionLevel: firstLevel,
-          },
-        };
-        const fixturePath = join(process.cwd(), 'om-reflector-fixture.json');
-        writeFileSync(fixturePath, JSON.stringify(fixture, null, 2));
-        omDebug(`[OM:callReflector] fixture written to ${fixturePath}`);
-      } catch (e) {
-        omDebug(`[OM:callReflector] failed to write fixture: ${e}`);
-      }
-    }
-
     let chunkCount = 0;
     const generatePromise = agent.generate(prompt, {
       modelSettings: {
@@ -2047,19 +2024,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       },
     });
 
-    // Heartbeat timer — pings every 5s to confirm the promise is still pending
-    const heartbeatStart = Date.now();
-    const heartbeat = setInterval(() => {
-      const elapsed = Math.round((Date.now() - heartbeatStart) / 1000);
-      omDebug(`[OM:callReflector] heartbeat: ${elapsed}s elapsed, chunks=${chunkCount}, promptLen=${prompt.length}`);
-    }, 5_000);
-
     let result = await this.withAbortCheck(async () => {
-      try {
-        return await generatePromise;
-      } finally {
-        clearInterval(heartbeat);
-      }
+      return await generatePromise;
     }, abortSignal);
 
     omDebug(
@@ -2393,6 +2359,7 @@ ${suggestedResponse}
       const projectedMessageRemoval = this.calculateProjectedMessageRemoval(
         bufferedChunks,
         this.observationConfig.asyncActivation ?? 1,
+        this.getMaxThreshold(this.observationConfig.messageTokens),
       );
 
       // Determine observation buffering status
@@ -4015,9 +3982,11 @@ ${formattedMessages}
     omDebug(
       `[OM:tryActivate] swapping: freshChunks=${freshChunks.length}, activationRatio=${activationRatio}, totalChunkTokens=${freshChunks.reduce((s, c) => s + (c.tokenCount ?? 0), 0)}`,
     );
+    const messageTokensThreshold = this.getMaxThreshold(this.observationConfig.messageTokens);
     const activationResult = await this.storage.swapBufferedToActive({
       id: freshRecord.id,
       activationRatio,
+      messageTokensThreshold,
     });
     omDebug(
       `[OM:tryActivate] swapResult: chunksActivated=${activationResult.chunksActivated}, tokensActivated=${activationResult.messageTokensActivated}, obsTokensActivated=${activationResult.observationTokensActivated}, activatedCycleIds=${activationResult.activatedCycleIds.join(',')}`,
