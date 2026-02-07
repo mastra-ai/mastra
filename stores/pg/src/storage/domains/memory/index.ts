@@ -333,9 +333,14 @@ export class MemoryPG extends MemoryStorage {
       // Validation already done above, so just build the WHERE clauses
       if (filter?.customColumns && Object.keys(filter.customColumns).length > 0) {
         for (const [key, value] of Object.entries(filter.customColumns)) {
-          whereClauses.push(`"${key}" = $${paramIndex}`);
-          queryParams.push(value);
-          paramIndex++;
+          if (value === null) {
+            // NULL-aware comparison: use IS NULL instead of = NULL
+            whereClauses.push(`"${key}" IS NULL`);
+          } else {
+            whereClauses.push(`"${key}" = $${paramIndex}`);
+            queryParams.push(value);
+            paramIndex++;
+          }
         }
       }
 
