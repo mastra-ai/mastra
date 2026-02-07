@@ -414,14 +414,25 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   }
 
   // Activation state - buffered observations have been activated into active observations
-  // Note: This marker shouldn't draw a highlight - it just confirms activation happened
-  // The buffered markers should update to show "activated" state
+  // Styled to match sync observation/reflection markers (green scheme with Brain icon)
   if (isActivated) {
-    const chunksActivated = omData.chunksActivated ?? 0;
-    const tokensActivated = omData.tokensActivated ?? 0; // Message tokens cleared from context
-    const messagesActivated = omData.messagesActivated ?? 0;
+    const tokensActivated = omData.tokensActivated ?? 0;
+    const observationTokens = omData.observationTokens ?? 0;
     const { observations } = omData;
-    const activatedLabel = isReflection ? 'Activated reflection' : 'Activated observations';
+    const activatedLabel = isReflection ? 'Reflected' : 'Observed';
+    const compressionRatio =
+      tokensActivated && observationTokens && observationTokens > 0
+        ? Math.round(tokensActivated / observationTokens)
+        : null;
+
+    const handleToggle = (e: React.MouseEvent) => {
+      const scrollContainer = e.currentTarget.closest('[data-radix-scroll-area-viewport]') || document.documentElement;
+      const scrollTop = scrollContainer.scrollTop;
+      setIsExpanded(!isExpanded);
+      requestAnimationFrame(() => {
+        scrollContainer.scrollTop = scrollTop;
+      });
+    };
 
     return (
       <div
@@ -433,20 +444,32 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
       >
         <div className="my-1">
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 text-xs font-medium transition-colors cursor-pointer"
+            onClick={handleToggle}
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${completeBgColor} ${completeTextColor} text-xs font-medium ${completeHoverBgColor} transition-colors cursor-pointer`}
           >
             {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             <Brain className="w-3 h-3" />
             <span>
-              {activatedLabel}: {chunksActivated} chunk{chunksActivated !== 1 ? 's' : ''},{' '}
-              {messagesActivated} msg{messagesActivated !== 1 ? 's' : ''},{' '}
-              {formatTokens(tokensActivated)} context tokens
+              {activatedLabel} {tokensActivated ? formatTokens(tokensActivated) : '?'}→
+              {observationTokens ? formatTokens(observationTokens) : '?'} tokens
+              {compressionRatio ? ` (-${compressionRatio}x)` : ''}
             </span>
           </button>
-          {isExpanded && observations && (
-            <div className="mt-1 ml-6 p-2 rounded-md bg-cyan-500/5 text-xs space-y-1.5 border border-cyan-500/10">
-              <ObservationRenderer observations={observations} maxHeight="500px" />
+          {isExpanded && (
+            <div
+              className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} text-xs space-y-1.5 border ${expandedBorderColor}`}
+            >
+              {/* Stats row */}
+              <div className={`flex gap-4 text-[11px] ${labelColor}`}>
+                {tokensActivated > 0 && <span>Input: {formatTokens(tokensActivated)}</span>}
+                {observationTokens > 0 && <span>Output: {formatTokens(observationTokens)}</span>}
+                {compressionRatio && compressionRatio > 1 && <span>Compression: {compressionRatio}x</span>}
+              </div>
+              {observations && (
+                <div className="mt-1 pt-1 border-t border-neutral-700">
+                  <ObservationRenderer observations={observations} maxHeight="500px" />
+                </div>
+              )}
             </div>
           )}
         </div>

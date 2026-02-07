@@ -236,9 +236,9 @@ function getStateColor(state: HighlightPosition['state']): string {
       return 'rgba(168, 85, 247, 0.4)';
     case 'buffering-failed':
       return 'rgba(239, 68, 68, 0.4)';
-    // Activation state uses cyan color
+    // Activation state uses green — same as sync observation/reflection 'complete'
     case 'activated':
-      return 'rgba(6, 182, 212, 0.4)';
+      return 'rgba(34, 197, 94, 0.4)';
     default:
       return 'rgba(34, 197, 94, 0.4)';
   }
