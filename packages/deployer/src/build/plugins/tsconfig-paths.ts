@@ -143,7 +143,7 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
                   const resolvedPath = importerRequire.resolve(request);
                   return {
                     id: resolvedPath,
-                    external: true,
+                    external: !request.startsWith('hono/') && request !== 'hono',
                   };
                 } catch {
                   // Can't resolve from importer's location, fall through
