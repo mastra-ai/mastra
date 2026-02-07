@@ -2776,15 +2776,10 @@ NOTE: Any messages following this system reminder are newer than your memories.
       // captured in observations (via lastObservedAt timestamp or observedMessageIds).
       // This prevents context overflow on session resume after buffered activation.
       const observedIds = new Set<string>(Array.isArray(record.observedMessageIds) ? record.observedMessageIds : []);
-      // Also include message IDs from any remaining buffered chunks
-      const bufferedChunks = this.getBufferedChunks(record);
-      for (const chunk of bufferedChunks) {
-        if (Array.isArray(chunk.messageIds)) {
-          for (const id of chunk.messageIds) {
-            observedIds.add(id);
-          }
-        }
-      }
+      // NOTE: Do NOT add buffered chunk messageIds here. Buffered messages are NOT yet
+      // observed — they're staged for future activation. They must remain in context
+      // for the LLM to see. Only observedMessageIds and lastObservedAt determine what's
+      // been truly observed.
 
       const lastObservedAt = record.lastObservedAt;
       const messagesToRemove: string[] = [];
