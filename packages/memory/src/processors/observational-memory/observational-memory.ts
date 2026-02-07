@@ -4101,12 +4101,8 @@ ${formattedMessages}
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const currentRecord = freshRecord ?? record;
     const observationTokens = currentRecord.observationTokenCount ?? 0;
-    // Target = input size × activation ratio, capped at the reflection threshold.
-    // This pre-compresses to the size the reflected content will occupy after activation,
-    // while still enforcing the hard ceiling if observations are already over threshold.
     const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
     const asyncActivation = this.reflectionConfig.asyncActivation ?? 0.5;
-    const compressionTarget = Math.min(observationTokens * asyncActivation, reflectThreshold);
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
@@ -4126,17 +4122,35 @@ ${formattedMessages}
       void writer.custom(startMarker).catch(() => {});
     }
 
-    // Record the line count of activeObservations at the time of reflection.
-    // At activation time, lines 0..lineCount are replaced by the reflection,
-    // and any lines added after are appended as unreflected observations.
-    const activeObservations = currentRecord.activeObservations ?? '';
-    const reflectedObservationLineCount = activeObservations.split('\n').length;
+    // Slice activeObservations to only the first N lines that fit within the
+    // activation-point token budget. This keeps the reflector prompt small
+    // (avoiding LLM hangs on huge prompts) and matches the portion that will
+    // be replaced at activation time.
+    const fullObservations = currentRecord.activeObservations ?? '';
+    const allLines = fullObservations.split('\n');
+    const totalLines = allLines.length;
+
+    // Calculate how many lines fit within the activation point budget
+    const avgTokensPerLine = totalLines > 0 ? observationTokens / totalLines : 0;
+    const activationPointTokens = reflectThreshold * asyncActivation;
+    const linesToReflect =
+      avgTokensPerLine > 0 ? Math.min(Math.floor(activationPointTokens / avgTokensPerLine), totalLines) : totalLines;
+
+    const activeObservations = allLines.slice(0, linesToReflect).join('\n');
+    const reflectedObservationLineCount = linesToReflect;
+    const sliceTokenEstimate = Math.round(avgTokensPerLine * linesToReflect);
+    // Compression target is the slice size × activation ratio, capped at the reflection threshold.
+    const compressionTarget = Math.min(sliceTokenEstimate * asyncActivation, reflectThreshold);
 
     omDebug(
-      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${currentRecord.id}, observationTokens=${observationTokens}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
+      `[OM:reflect] doAsyncBufferedReflection: slicing observations for reflection — totalLines=${totalLines}, avgTokPerLine=${avgTokensPerLine.toFixed(1)}, activationPointTokens=${activationPointTokens}, linesToReflect=${linesToReflect}/${totalLines}, sliceTokenEstimate=${sliceTokenEstimate}, compressionTarget=${compressionTarget}`,
     );
 
-    // Call reflector with compression target = input observation tokens.
+    omDebug(
+      `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${currentRecord.id}, observationTokens=${sliceTokenEstimate}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
+    );
+
+    // Call reflector with compression target.
     // Start at compression level 1 (standard guidance), retry at level 2 (aggressive).
     const reflectResult = await this.callReflector(
       activeObservations,
@@ -4158,7 +4172,7 @@ ${formattedMessages}
       id: currentRecord.id,
       reflection: reflectResult.observations,
       tokenCount: reflectionTokenCount,
-      inputTokenCount: observationTokens,
+      inputTokenCount: sliceTokenEstimate,
       reflectedObservationLineCount,
     });
     omDebug(
