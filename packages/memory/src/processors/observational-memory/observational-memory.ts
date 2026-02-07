@@ -3040,10 +3040,14 @@ NOTE: Any messages following this system reminder are newer than your memories.
       // Re-fetch record to capture any changes from observation/activation/reflection
       const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
 
-      // messageList has already been filtered (step 4) — it IS the context window.
-      // Count tokens from the actual messages the LLM will see, not "unobserved" messages.
-      const contextMessages = messageList.get.all.db();
-      const messageTokensInContext = this.tokenCounter.countMessages(contextMessages);
+      // For accurate status, we need to count only unobserved messages.
+      // At step 0, messageList is already filtered. At step > 0, it's not.
+      // Use getUnobservedMessages to get accurate count regardless of step.
+      const allMsgsForStatus = messageList.get.all.db();
+      const statusUnobservedMessages = this.getUnobservedMessages(allMsgsForStatus, freshRecord, {
+        excludeBuffered: false,
+      });
+      const messageTokensInContext = this.tokenCounter.countMessages(statusUnobservedMessages);
       const otherThreadTokens = unobservedContextBlocks ? this.tokenCounter.countString(unobservedContextBlocks) : 0;
       const currentObservationTokens = freshRecord.observationTokenCount ?? 0;
 
