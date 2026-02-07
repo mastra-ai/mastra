@@ -680,6 +680,55 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Calculate the projected message tokens that would be removed if activation happened now.
+   * This replicates the chunk boundary logic in swapBufferedToActive without actually activating.
+   */
+  private calculateProjectedMessageRemoval(chunks: BufferedObservationChunk[], activationRatio: number): number {
+    if (chunks.length === 0) return 0;
+
+    const totalBufferedMessageTokens = chunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
+    const targetMessageTokens = totalBufferedMessageTokens * activationRatio;
+
+    // Find the closest chunk boundary to the target, biased under
+    let cumulativeMessageTokens = 0;
+    let bestBoundary = 0;
+    let bestBoundaryMessageTokens = 0;
+
+    for (let i = 0; i < chunks.length; i++) {
+      cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
+      const boundary = i + 1;
+
+      const isUnder = cumulativeMessageTokens <= targetMessageTokens;
+      const bestIsUnder = bestBoundaryMessageTokens <= targetMessageTokens;
+
+      if (bestBoundary === 0) {
+        bestBoundary = boundary;
+        bestBoundaryMessageTokens = cumulativeMessageTokens;
+      } else if (isUnder && !bestIsUnder) {
+        bestBoundary = boundary;
+        bestBoundaryMessageTokens = cumulativeMessageTokens;
+      } else if (isUnder && bestIsUnder) {
+        if (cumulativeMessageTokens > bestBoundaryMessageTokens) {
+          bestBoundary = boundary;
+          bestBoundaryMessageTokens = cumulativeMessageTokens;
+        }
+      } else if (!isUnder && !bestIsUnder) {
+        if (cumulativeMessageTokens < bestBoundaryMessageTokens) {
+          bestBoundary = boundary;
+          bestBoundaryMessageTokens = cumulativeMessageTokens;
+        }
+      }
+    }
+
+    // If bestBoundary is 0, at least 1 chunk would activate
+    if (bestBoundary === 0) {
+      return chunks[0]?.messageTokens ?? 0;
+    }
+
+    return bestBoundaryMessageTokens;
+  }
+
+  /**
    * Check if we've crossed a new bufferEvery interval boundary.
    * Returns true if async buffering should be triggered.
    */
@@ -2330,6 +2379,13 @@ ${suggestedResponse}
       const rawBufferedMessageTokens = bufferedChunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
       const bufferedMessageTokens = Math.min(rawBufferedMessageTokens, totalPendingTokens);
 
+      // Calculate projected message removal based on activation ratio and chunk boundaries
+      // This replicates the logic in swapBufferedToActive without actually activating
+      const projectedMessageRemoval = this.calculateProjectedMessageRemoval(
+        bufferedChunks,
+        this.observationConfig.asyncActivation ?? 1,
+      );
+
       // Determine observation buffering status
       let obsBufferStatus: 'idle' | 'running' | 'complete' = 'idle';
       if (record.isBufferingObservation) {
@@ -2364,6 +2420,7 @@ ${suggestedResponse}
               observations: {
                 chunks: bufferedChunks.length,
                 messageTokens: bufferedMessageTokens,
+                projectedMessageRemoval,
                 observationTokens: bufferedObservationTokens,
                 status: obsBufferStatus,
               },

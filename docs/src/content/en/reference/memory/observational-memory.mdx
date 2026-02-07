@@ -383,8 +383,10 @@ interface DataOmStatusPart {
         observations: {
           /** Number of buffered chunks staged for activation */
           chunks: number;
-          /** Message tokens that will be cleared from context on activation */
+          /** Total message tokens across all buffered chunks */
           messageTokens: number;
+          /** Projected message tokens that would be removed if activation happened now (based on asyncActivation ratio and chunk boundaries) */
+          projectedMessageRemoval: number;
           /** Observation tokens that will be added on activation */
           observationTokens: number;
           /** idle: no buffering in progress. running: background observer is working. complete: chunks are ready for activation. */
@@ -422,9 +424,10 @@ const msgPercent = status.windows.active.messages.tokens
 const obsPercent = status.windows.active.observations.tokens
   / status.windows.active.observations.threshold;
 
-// Estimated message tokens after buffered observations activate
+// Projected message tokens after buffered observations activate
+// Uses projectedMessageRemoval which accounts for asyncActivation ratio and chunk boundaries
 const postActivation = status.windows.active.messages.tokens
-  - status.windows.buffered.observations.messageTokens;
+  - status.windows.buffered.observations.projectedMessageRemoval;
 
 // Reflection compression ratio (when buffered reflection exists)
 const { inputObservationTokens, observationTokens } = status.windows.buffered.reflection;

@@ -384,6 +384,8 @@ export interface DataOmStatusPart {
           chunks: number;
           /** Message tokens that will be cleared from context on activation */
           messageTokens: number;
+          /** Projected message tokens that would be removed if activation happened now (based on asyncActivation ratio and chunk boundaries) */
+          projectedMessageRemoval: number;
           /** Observation tokens that will be added on activation */
           observationTokens: number;
           /** Current state of observation buffering */

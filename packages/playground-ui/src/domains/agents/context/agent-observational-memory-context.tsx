@@ -11,6 +11,7 @@ export interface OmProgressData {
       observations: {
         chunks: number;
         messageTokens: number;
+        projectedMessageRemoval: number;
         observationTokens: number;
         status: 'idle' | 'running' | 'complete';
       };
