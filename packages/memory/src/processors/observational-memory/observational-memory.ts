@@ -4132,10 +4132,12 @@ ${formattedMessages}
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const currentRecord = freshRecord ?? record;
     const observationTokens = currentRecord.observationTokenCount ?? 0;
-    // Use the current observation token count as the compression target.
-    // The goal is "compress below what you're given" — any compression is useful
-    // since buffered reflection runs early, before we hit the full threshold.
-    const compressionTarget = observationTokens;
+    // Target = input size × activation ratio, capped at the reflection threshold.
+    // This pre-compresses to the size the reflected content will occupy after activation,
+    // while still enforcing the hard ceiling if observations are already over threshold.
+    const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    const asyncActivation = this.reflectionConfig.asyncActivation ?? 0.5;
+    const compressionTarget = Math.min(observationTokens * asyncActivation, reflectThreshold);
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
