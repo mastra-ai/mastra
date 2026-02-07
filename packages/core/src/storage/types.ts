@@ -6,6 +6,7 @@ import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from 
 import type { ProcessorPhase } from '../processor-provider';
 import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
+import type { TABLE_NAMES } from './constants';
 
 export type StoragePagination = {
   page: number;
@@ -46,7 +47,7 @@ export interface StorageTableConfig {
  * };
  * ```
  */
-export type SchemaExtensions = Partial<Record<string, Record<string, StorageColumn>>>;
+export type SchemaExtensions = Partial<Record<TABLE_NAMES, Record<string, StorageColumn>>>;
 export interface WorkflowRuns {
   runs: WorkflowRun[];
   total: number;
