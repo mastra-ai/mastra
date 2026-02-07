@@ -366,7 +366,7 @@ Observational Memory emits typed data parts during agent execution that clients 
 
 ### `data-om-status`
 
-Emitted once per agent loop step. Provides a snapshot of the current memory state, including token usage for both the message and observation windows, and the state of any async buffered content.
+Emitted once per agent loop step, before model generation. Provides a snapshot of the current memory state, including token usage for both context windows and the state of any async buffered content.
 
 ```typescript
 interface DataOmStatusPart {
@@ -380,17 +380,22 @@ interface DataOmStatusPart {
         observations: { tokens: number; threshold: number };
       };
       buffered: {
-        /** Observation chunks staged for activation */
         observations: {
+          /** Number of buffered chunks staged for activation */
           chunks: number;
+          /** Message tokens that will be cleared from context on activation */
           messageTokens: number;
+          /** Observation tokens that will be added on activation */
           observationTokens: number;
+          /** idle: no buffering in progress. running: background observer is working. complete: chunks are ready for activation. */
           status: 'idle' | 'running' | 'complete';
         };
-        /** Reflection waiting to be activated */
         reflection: {
+          /** Observation tokens that were fed into the reflector (pre-compression size) */
           inputObservationTokens: number;
+          /** Observation tokens the reflection will produce on activation (post-compression size) */
           observationTokens: number;
+          /** idle: no reflection buffered. running: background reflector is working. complete: reflection is ready for activation. */
           status: 'idle' | 'running' | 'complete';
         };
       };
@@ -398,10 +403,13 @@ interface DataOmStatusPart {
     recordId: string;
     threadId: string;
     stepNumber: number;
+    /** Increments each time the Reflector creates a new generation */
     generationCount: number;
   };
 }
 ```
+
+`buffered.reflection.inputObservationTokens` is the size of the observations that were sent to the Reflector. `buffered.reflection.observationTokens` is the compressed result — the size of what will replace those observations when the reflection activates. A client can use these two values to show a compression ratio.
 
 Clients can derive percentages and post-activation estimates from the raw values:
 
@@ -434,7 +442,7 @@ Emitted when the Observer or Reflector agent begins processing.
     { name: "cycleId", type: "string", description: "Unique ID for this cycle — shared between start/end/failed markers." },
     { name: "operationType", type: "'observation' | 'reflection'", description: "Whether this is an observation or reflection operation." },
     { name: "startedAt", type: "string", description: "ISO timestamp when processing started." },
-    { name: "tokensToObserve", type: "number", description: "Tokens being processed in this batch." },
+    { name: "tokensToObserve", type: "number", description: "Message tokens (input) being processed in this batch." },
     { name: "recordId", type: "string", description: "The OM record ID." },
     { name: "threadId", type: "string", description: "This thread's ID." },
     { name: "threadIds", type: "string[]", description: "All thread IDs in this batch (for resource-scoped)." },
@@ -452,8 +460,8 @@ Emitted when observation or reflection completes successfully.
     { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that completed." },
     { name: "completedAt", type: "string", description: "ISO timestamp when processing completed." },
     { name: "durationMs", type: "number", description: "Duration in milliseconds." },
-    { name: "tokensObserved", type: "number", description: "Total input tokens that were processed." },
-    { name: "observationTokens", type: "number", description: "Resulting observation tokens after compression." },
+    { name: "tokensObserved", type: "number", description: "Message tokens (input) that were processed." },
+    { name: "observationTokens", type: "number", description: "Resulting observation tokens (output) after the Observer compressed them." },
     { name: "observations", type: "string", description: "The generated observations text.", isOptional: true },
     { name: "currentTask", type: "string", description: "Current task extracted by the Observer.", isOptional: true },
     { name: "suggestedResponse", type: "string", description: "Suggested response extracted by the Observer.", isOptional: true },
@@ -472,7 +480,7 @@ Emitted when observation or reflection fails. The system falls back to synchrono
     { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that failed." },
     { name: "failedAt", type: "string", description: "ISO timestamp when the failure occurred." },
     { name: "durationMs", type: "number", description: "Duration until failure in milliseconds." },
-    { name: "tokensAttempted", type: "number", description: "Tokens that were attempted." },
+    { name: "tokensAttempted", type: "number", description: "Message tokens (input) that were attempted." },
     { name: "error", type: "string", description: "Error message." },
     { name: "observations", type: "string", description: "Any partial content available for display.", isOptional: true },
     { name: "recordId", type: "string", description: "The OM record ID." },
@@ -489,7 +497,7 @@ Emitted when async buffering begins in the background. Buffering pre-computes ob
     { name: "cycleId", type: "string", description: "Unique ID for this buffering cycle." },
     { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation being buffered." },
     { name: "startedAt", type: "string", description: "ISO timestamp when buffering started." },
-    { name: "tokensToBuffer", type: "number", description: "Tokens being buffered in this cycle." },
+    { name: "tokensToBuffer", type: "number", description: "Message tokens (input) being buffered in this cycle." },
     { name: "recordId", type: "string", description: "The OM record ID." },
     { name: "threadId", type: "string", description: "This thread's ID." },
     { name: "threadIds", type: "string[]", description: "All thread IDs being buffered (for resource-scoped)." },
@@ -507,8 +515,8 @@ Emitted when async buffering completes. The content is stored but not yet activa
     { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that was buffered." },
     { name: "completedAt", type: "string", description: "ISO timestamp when buffering completed." },
     { name: "durationMs", type: "number", description: "Duration in milliseconds." },
-    { name: "tokensBuffered", type: "number", description: "Total input tokens that were buffered." },
-    { name: "bufferedTokens", type: "number", description: "Resulting tokens after compression." },
+    { name: "tokensBuffered", type: "number", description: "Message tokens (input) that were buffered." },
+    { name: "bufferedTokens", type: "number", description: "Observation tokens (output) after the Observer compressed them." },
     { name: "observations", type: "string", description: "The buffered content.", isOptional: true },
     { name: "recordId", type: "string", description: "The OM record ID." },
     { name: "threadId", type: "string", description: "This thread's ID." },
@@ -525,7 +533,7 @@ Emitted when async buffering fails. The system falls back to synchronous process
     { name: "operationType", type: "'observation' | 'reflection'", description: "Type of operation that failed." },
     { name: "failedAt", type: "string", description: "ISO timestamp when the failure occurred." },
     { name: "durationMs", type: "number", description: "Duration until failure in milliseconds." },
-    { name: "tokensAttempted", type: "number", description: "Tokens that were attempted to buffer." },
+    { name: "tokensAttempted", type: "number", description: "Message tokens (input) that were attempted to buffer." },
     { name: "error", type: "string", description: "Error message." },
     { name: "observations", type: "string", description: "Any partial content.", isOptional: true },
     { name: "recordId", type: "string", description: "The OM record ID." },
@@ -543,9 +551,10 @@ Emitted when buffered observations or reflections are activated (moved into the 
     { name: "operationType", type: "'observation' | 'reflection'", description: "Type of content activated." },
     { name: "activatedAt", type: "string", description: "ISO timestamp when activation occurred." },
     { name: "chunksActivated", type: "number", description: "Number of buffered chunks activated." },
-    { name: "tokensActivated", type: "number", description: "Total message tokens from activated chunks." },
+    { name: "tokensActivated", type: "number", description: "Message tokens (input) from activated chunks. For observation activation, these are removed from the message window. For reflection activation, this is the observation tokens that were compressed." },
     { name: "observationTokens", type: "number", description: "Resulting observation tokens after activation." },
     { name: "messagesActivated", type: "number", description: "Number of messages that were observed via activation." },
+    { name: "generationCount", type: "number", description: "Current reflection generation count." },
     { name: "observations", type: "string", description: "The activated observations text.", isOptional: true },
     { name: "recordId", type: "string", description: "The OM record ID." },
     { name: "threadId", type: "string", description: "This thread's ID." },
