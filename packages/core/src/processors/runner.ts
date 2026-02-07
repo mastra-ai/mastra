@@ -296,6 +296,7 @@ export class ProcessorRunner {
       // Get per-processor state that persists across all method calls within this request
       const processorState = this.getProcessorState(processor.id);
 
+      let recordingStopped = false;
       try {
         const result = await processMethod({
           messages: processableMessages,
@@ -310,6 +311,7 @@ export class ProcessorRunner {
 
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();
+        recordingStopped = true;
 
         // Handle the new return type - MessageList or MastraDBMessage[]
         if (result instanceof MessageList) {
@@ -345,8 +347,10 @@ export class ProcessorRunner {
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
-        // Stop recording on error
-        messageList.stopRecording();
+        // Stop recording on error (only if not already stopped)
+        if (!recordingStopped) {
+          messageList.stopRecording();
+        }
 
         if (error instanceof TripWire) {
           processorSpan?.end({
@@ -656,6 +660,7 @@ export class ProcessorRunner {
       // Get per-processor state that persists across all method calls within this request
       const processorState = this.getProcessorState(processor.id);
 
+      let recordingStopped = false;
       try {
         const result = await processMethod({
           messages: processableMessages,
@@ -690,6 +695,7 @@ export class ProcessorRunner {
           }
           // Stop recording and capture mutations
           mutations = messageList.stopRecording();
+          recordingStopped = true;
           if (mutations.length > 0) {
             // Processor returned a MessageList - it has been modified in place
             // Update processableMessages to reflect ALL current messages for next processor
@@ -698,6 +704,7 @@ export class ProcessorRunner {
         } else if (this.isProcessInputResultWithSystemMessages(result)) {
           // Processor returned { messages, systemMessages } - handle both
           mutations = messageList.stopRecording();
+          recordingStopped = true;
 
           // Replace system messages with the modified ones
           messageList.replaceAllSystemMessages(result.systemMessages);
@@ -736,6 +743,7 @@ export class ProcessorRunner {
         } else {
           // Processor returned an array - stop recording before clear/add (that's just internal plumbing)
           mutations = messageList.stopRecording();
+          recordingStopped = true;
 
           if (result) {
             // Clear and re-add since processor worked with array. clear all messages, the new result array is all messages in the list (new input but also any messages added by other processors, memory for ex)
@@ -775,8 +783,10 @@ export class ProcessorRunner {
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
-        // Stop recording on error
-        messageList.stopRecording();
+        // Stop recording on error (only if not already stopped)
+        if (!recordingStopped) {
+          messageList.stopRecording();
+        }
 
         if (error instanceof TripWire) {
           processorSpan?.end({
@@ -914,6 +924,7 @@ export class ProcessorRunner {
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
 
+      let recordingStopped = false;
       try {
         // Get per-processor state that persists across all method calls within this request
         const processorState = this.getProcessorState(processor.id);
@@ -948,6 +959,7 @@ export class ProcessorRunner {
 
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();
+        recordingStopped = true;
 
         processorSpan?.end({
           output: {
@@ -965,8 +977,10 @@ export class ProcessorRunner {
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
-        // Stop recording on error
-        messageList.stopRecording();
+        // Stop recording on error (only if not already stopped)
+        if (!recordingStopped) {
+          messageList.stopRecording();
+        }
 
         if (error instanceof TripWire) {
           processorSpan?.end({
@@ -1117,6 +1131,7 @@ export class ProcessorRunner {
       // Get or create processor state (persists across steps within a request)
       const processorState = this.getProcessorState(processor.id);
 
+      let recordingStopped = false;
       try {
         const result = await processMethod({
           messages: processableMessages,
@@ -1137,6 +1152,7 @@ export class ProcessorRunner {
 
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();
+        recordingStopped = true;
 
         // Handle the return type - MessageList or MastraDBMessage[]
         if (result instanceof MessageList) {
@@ -1178,8 +1194,10 @@ export class ProcessorRunner {
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
-        // Stop recording on error
-        messageList.stopRecording();
+        // Stop recording on error (only if not already stopped)
+        if (!recordingStopped) {
+          messageList.stopRecording();
+        }
 
         if (error instanceof TripWire) {
           processorSpan?.end({
