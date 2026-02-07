@@ -485,18 +485,6 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       // Get history (last 5 generations)
       const history = await memoryStore.getObservationalMemoryHistory(omThreadId, effectiveResourceId, 5);
 
-      // DEBUG: trace what server returns for OM sidebar
-      console.info('[OM-SERVER] GET observational-memory', {
-        omThreadId,
-        effectiveResourceId,
-        recordId: record?.id,
-        activeObservationsLength: record?.activeObservations?.length,
-        activeObservationsPreview: record?.activeObservations?.slice(0, 100),
-        observationTokenCount: record?.observationTokenCount,
-        generationCount: record?.generationCount,
-        historyCount: history.length,
-      });
-
       return {
         record: record ?? null,
         history: history.length > 0 ? history : undefined,
