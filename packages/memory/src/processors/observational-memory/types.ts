@@ -579,6 +579,9 @@ export interface DataOmActivationPart {
     /** This thread's ID */
     threadId: string;
 
+    /** Current reflection generation count */
+    generationCount: number;
+
     /** Snapshot of config at activation time */
     config: ObservationMarkerConfig;
 
