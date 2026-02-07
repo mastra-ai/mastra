@@ -903,8 +903,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Validate buffer configuration
     this.validateBufferConfig();
 
+    // Capture stack trace to debug where OM instances are created from
+    const stack = new Error().stack?.split('\n').slice(2, 8).join('\n') ?? 'no stack';
     omDebug(
-      `[OM:init] new ObservationalMemory instance created — scope=${this.scope}, messageTokens=${JSON.stringify(this.observationConfig.messageTokens)}, obsAsyncEnabled=${this.isAsyncObservationEnabled()}, bufferEvery=${this.observationConfig.bufferEvery}, asyncActivation=${this.observationConfig.asyncActivation}, blockAfter=${this.observationConfig.blockAfter}, reflectionTokens=${this.reflectionConfig.observationTokens}, refAsyncEnabled=${this.isAsyncReflectionEnabled()}, refAsyncActivation=${this.reflectionConfig.asyncActivation}, refBlockAfter=${this.reflectionConfig.blockAfter}`,
+      `[OM:init] new ObservationalMemory instance created — scope=${this.scope}, messageTokens=${JSON.stringify(this.observationConfig.messageTokens)}, obsAsyncEnabled=${this.isAsyncObservationEnabled()}, bufferEvery=${this.observationConfig.bufferEvery}, asyncActivation=${this.observationConfig.asyncActivation}, blockAfter=${this.observationConfig.blockAfter}, reflectionTokens=${this.reflectionConfig.observationTokens}, refAsyncEnabled=${this.isAsyncReflectionEnabled()}, refAsyncActivation=${this.reflectionConfig.asyncActivation}, refBlockAfter=${this.reflectionConfig.blockAfter}\nStack:\n${stack}`,
     );
   }
 
