@@ -3551,60 +3551,21 @@ ${formattedMessages}
       }
 
       // ════════════════════════════════════════════════════════════
-      // ACTIVATION-RATIO-AWARE MESSAGE SELECTION
-      // When asyncActivation is set, observe only a subset of messages
-      // to keep some raw messages in context. Walk backwards from newest,
-      // keeping ~asyncActivation ratio of tokens unobserved.
+      // RATIO-AWARE MESSAGE SEALING
+      // When asyncActivation is set and sync observation fires, seal the
+      // most recent message so any future parts added by the LLM go into
+      // a new message. This keeps the observation scope bounded — the sealed
+      // content gets observed now, and new content accumulates separately
+      // for the next observation cycle.
       // ════════════════════════════════════════════════════════════
       let messagesToObserve = unobservedMessages;
       const asyncActivation = this.observationConfig.asyncActivation;
-      if (asyncActivation && asyncActivation < 1 && unobservedMessages.length > 1) {
-        const perMessageTokens = unobservedMessages.map(m => this.tokenCounter.countMessage(m));
-        const totalTokens = perMessageTokens.reduce((sum, t) => sum + t, 0);
-        const keepTokens = totalTokens * (1 - asyncActivation);
-
-        omDebug(
-          `[OM:sync-obs] ratio-aware check: ${unobservedMessages.length} msgs, totalTokens=${totalTokens}, keepTokens=${Math.round(keepTokens)}, asyncActivation=${asyncActivation}\n` +
-            `  per-message tokens: [${perMessageTokens.map((t, i) => `${i}:${Math.round(t)}(${unobservedMessages[i]?.role})`).join(', ')}]`,
-        );
-
-        // Walk backwards (newest→oldest) accumulating tokens to keep
-        let keptTokens = 0;
-        let cutoffIndex = unobservedMessages.length; // start: observe all
-        for (let i = unobservedMessages.length - 1; i >= 0; i--) {
-          if (keptTokens + perMessageTokens[i]! > keepTokens) {
-            cutoffIndex = i + 1; // observe [0..i], keep [i+1..end]
-            break;
-          }
-          keptTokens += perMessageTokens[i]!;
-          cutoffIndex = i;
-        }
-
-        omDebug(
-          `[OM:sync-obs] ratio-aware walk: cutoffIndex=${cutoffIndex}, keptTokens=${Math.round(keptTokens)}, observing=[0..${cutoffIndex - 1}], keeping=[${cutoffIndex}..${unobservedMessages.length - 1}]`,
-        );
-
-        // Safety: ensure remaining tokens would actually be under the threshold
-        const threshold = this.getMaxThreshold(this.observationConfig.messageTokens);
-        const currentObsTokens = (freshRecord ?? record).observationTokenCount ?? 0;
-        let remainingTokens = keptTokens + currentObsTokens;
-        while (remainingTokens >= threshold && cutoffIndex < unobservedMessages.length) {
-          remainingTokens -= perMessageTokens[cutoffIndex]!;
-          cutoffIndex++;
-        }
-
-        // Must observe at least 1 message
-        cutoffIndex = Math.max(cutoffIndex, 1);
-
-        if (cutoffIndex < unobservedMessages.length) {
-          messagesToObserve = unobservedMessages.slice(0, cutoffIndex);
+      if (asyncActivation && asyncActivation < 1 && unobservedMessages.length >= 1) {
+        const newestMsg = unobservedMessages[unobservedMessages.length - 1];
+        if (newestMsg?.content?.parts?.length) {
+          this.sealMessagesForBuffering([newestMsg]);
           omDebug(
-            `[OM:sync-obs] ratio-aware: observing ${messagesToObserve.length}/${unobservedMessages.length} msgs ` +
-              `(keeping ~${Math.round(keptTokens)} tokens unobserved, asyncActivation=${asyncActivation})`,
-          );
-        } else {
-          omDebug(
-            `[OM:sync-obs] ratio-aware: no split possible, observing all ${unobservedMessages.length} msgs (cutoff=${cutoffIndex})`,
+            `[OM:sync-obs] sealed newest message (${newestMsg.role}, ${newestMsg.content.parts.length} parts) for ratio-aware observation`,
           );
         }
       }
