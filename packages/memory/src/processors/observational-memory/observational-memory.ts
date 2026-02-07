@@ -4154,6 +4154,19 @@ ${formattedMessages}
       `[OM:reflect] doAsyncBufferedReflection: starting reflector call, recordId=${currentRecord.id}, observationTokens=${sliceTokenEstimate}, compressionTarget=${compressionTarget} (inputTokens), activeObsLength=${activeObservations.length}, reflectedLineCount=${reflectedObservationLineCount}`,
     );
 
+    // Emit buffering start marker (after slice so we report the actual token count)
+    if (writer) {
+      const startMarker = this.createBufferingStartMarker({
+        cycleId,
+        operationType: 'reflection',
+        tokensToBuffer: sliceTokenEstimate,
+        recordId: record.id,
+        threadId: record.threadId ?? '',
+        threadIds: record.threadId ? [record.threadId] : [],
+      });
+      void writer.custom(startMarker).catch(() => {});
+    }
+
     // Call reflector with compression target.
     // Start at compression level 1 (standard guidance), retry at level 2 (aggressive).
     const reflectResult = await this.callReflector(
