@@ -1036,10 +1036,7 @@ export class MemoryLibSQL extends MemoryStorage {
         }
       }
 
-      const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-      const baseQuery = `FROM ${TABLE_THREADS} ${whereClause}`;
-
-      // Add customColumns filters if provided
+      // Add customColumns filters if provided (must be before baseQuery is built)
       if (filter?.customColumns && Object.keys(filter.customColumns).length > 0) {
         for (const [key, value] of Object.entries(filter.customColumns)) {
           if (!this.#threadExtensionCols.includes(key)) continue;
@@ -1052,6 +1049,9 @@ export class MemoryLibSQL extends MemoryStorage {
           }
         }
       }
+
+      const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+      const baseQuery = `FROM ${TABLE_THREADS} ${whereClause}`;
 
       const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
         id: row.id as string,
