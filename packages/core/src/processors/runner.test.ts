@@ -1918,22 +1918,15 @@ describe('ProcessorRunner', () => {
       expect(parentSpan._childSpans.length).toBe(1);
       const processorSpan = parentSpan._childSpans[0];
 
-      // CRITICAL: The processor span should be properly ended/errored, not left dangling
-      const wasEnded = processorSpan._endCalls.length > 0;
-      const wasErrored = processorSpan._errorCalls.length > 0;
-      expect(wasEnded || wasErrored).toBe(true);
+      // TripWire should end the span (not error it) with blocked metadata
+      expect(processorSpan._endCalls.length).toBe(1);
+      expect(processorSpan._errorCalls.length).toBe(0);
 
-      // The span should record the tripwire information
-      if (wasErrored) {
-        expect(processorSpan._errorCalls[0].error).toBeInstanceOf(TripWire);
-      }
-      if (wasEnded) {
-        const endOptions = processorSpan._endCalls[0];
-        expect(endOptions?.metadata?.blocked).toBe(true);
-        expect(endOptions?.metadata?.reason).toBe('Content blocked: forbidden word detected');
-        expect(endOptions?.metadata?.retry).toBe(true);
-        expect(endOptions?.metadata?.processorId).toBe('guard-processor');
-      }
+      const endOptions = processorSpan._endCalls[0];
+      expect(endOptions?.metadata?.blocked).toBe(true);
+      expect(endOptions?.metadata?.reason).toBe('Content blocked: forbidden word detected');
+      expect(endOptions?.metadata?.retry).toBe(true);
+      expect(endOptions?.metadata?.processorId).toBe('guard-processor');
     });
 
     it('should properly end processor span when tripwire is triggered in runOutputProcessors', async () => {
@@ -1970,21 +1963,14 @@ describe('ProcessorRunner', () => {
       expect(parentSpan._childSpans.length).toBe(1);
       const processorSpan = parentSpan._childSpans[0];
 
-      // CRITICAL: The processor span should be properly ended/errored, not left dangling
-      const wasEnded = processorSpan._endCalls.length > 0;
-      const wasErrored = processorSpan._errorCalls.length > 0;
-      expect(wasEnded || wasErrored).toBe(true);
+      // TripWire should end the span (not error it) with blocked metadata
+      expect(processorSpan._endCalls.length).toBe(1);
+      expect(processorSpan._errorCalls.length).toBe(0);
 
-      // The span should record the tripwire information
-      if (wasErrored) {
-        expect(processorSpan._errorCalls[0].error).toBeInstanceOf(TripWire);
-      }
-      if (wasEnded) {
-        const endOptions = processorSpan._endCalls[0];
-        expect(endOptions?.metadata?.blocked).toBe(true);
-        expect(endOptions?.metadata?.reason).toBe('PII detected in output');
-        expect(endOptions?.metadata?.processorId).toBe('output-guard');
-      }
+      const endOptions = processorSpan._endCalls[0];
+      expect(endOptions?.metadata?.blocked).toBe(true);
+      expect(endOptions?.metadata?.reason).toBe('PII detected in output');
+      expect(endOptions?.metadata?.processorId).toBe('output-guard');
     });
 
     it('should include full tripwire metadata (retry, metadata, processorId) when span ends in runProcessInputStep', async () => {
@@ -2037,21 +2023,16 @@ describe('ProcessorRunner', () => {
       expect(parentSpan._childSpans.length).toBe(1);
       const processorSpan = parentSpan._childSpans[0];
 
-      // The span must be ended
-      const wasEnded = processorSpan._endCalls.length > 0;
-      const wasErrored = processorSpan._errorCalls.length > 0;
-      expect(wasEnded || wasErrored).toBe(true);
+      // TripWire should end the span (not error it) with blocked metadata
+      expect(processorSpan._endCalls.length).toBe(1);
+      expect(processorSpan._errorCalls.length).toBe(0);
 
-      // CRITICAL: The span metadata should include ALL tripwire details
-      if (wasEnded) {
-        const endOptions = processorSpan._endCalls[0];
-        expect(endOptions?.metadata?.blocked).toBe(true);
-        expect(endOptions?.metadata?.reason).toBe('Token limit exceeded');
-        // These are the fields currently MISSING:
-        expect(endOptions?.metadata?.retry).toBe(true);
-        expect(endOptions?.metadata?.metadata).toEqual({ tokenCount: 5000, limit: 4096 });
-        expect(endOptions?.metadata?.processorId).toBe('step-guard');
-      }
+      const endOptions = processorSpan._endCalls[0];
+      expect(endOptions?.metadata?.blocked).toBe(true);
+      expect(endOptions?.metadata?.reason).toBe('Token limit exceeded');
+      expect(endOptions?.metadata?.retry).toBe(true);
+      expect(endOptions?.metadata?.metadata).toEqual({ tokenCount: 5000, limit: 4096 });
+      expect(endOptions?.metadata?.processorId).toBe('step-guard');
     });
 
     it('should include processorId in span metadata when tripwire triggers in runProcessOutputStep', async () => {
@@ -2101,12 +2082,11 @@ describe('ProcessorRunner', () => {
       expect(parentSpan._childSpans.length).toBe(1);
       const processorSpan = parentSpan._childSpans[0];
 
-      // The span must be ended with complete metadata
-      const wasEnded = processorSpan._endCalls.length > 0;
-      expect(wasEnded).toBe(true);
+      // TripWire should end the span (not error it) with blocked metadata
+      expect(processorSpan._endCalls.length).toBe(1);
+      expect(processorSpan._errorCalls.length).toBe(0);
 
       const endOptions = processorSpan._endCalls[0];
-      // processorId should be included in the span metadata
       expect(endOptions?.metadata?.processorId).toBe('output-step-guard');
     });
 
@@ -2143,9 +2123,9 @@ describe('ProcessorRunner', () => {
       expect(parentSpan._childSpans.length).toBe(1);
       const processorSpan = parentSpan._childSpans[0];
 
-      // The span must be properly ended (not left dangling) with tripwire metadata
-      const wasEnded = processorSpan._endCalls.length > 0;
-      expect(wasEnded).toBe(true);
+      // TripWire should end the span (not error it) with blocked metadata
+      expect(processorSpan._endCalls.length).toBe(1);
+      expect(processorSpan._errorCalls.length).toBe(0);
 
       const endOptions = processorSpan._endCalls[0];
       expect(endOptions?.metadata?.blocked).toBe(true);
@@ -2196,23 +2176,17 @@ describe('ProcessorRunner', () => {
       expect(state).toBeDefined();
       expect(state?.span).toBeDefined();
 
-      // The span should be ended with complete tripwire metadata
-      if (state?.span) {
-        const spanEndCalls = (state.span as any)._endCalls || [];
-        const spanErrorCalls = (state.span as any)._errorCalls || [];
+      // TripWire should end the span (not error it) with blocked metadata
+      const spanEndCalls = (state!.span as any)._endCalls || [];
+      const spanErrorCalls = (state!.span as any)._errorCalls || [];
 
-        const wasEnded = spanEndCalls.length > 0;
-        const wasErrored = spanErrorCalls.length > 0;
-        expect(wasEnded || wasErrored).toBe(true);
+      expect(spanEndCalls.length).toBe(1);
+      expect(spanErrorCalls.length).toBe(0);
 
-        if (wasEnded) {
-          const endOptions = spanEndCalls[0];
-          expect(endOptions?.metadata?.blocked).toBe(true);
-          // Should include ALL metadata, not just reason and retry
-          expect(endOptions?.metadata?.metadata).toEqual({ category: 'harmful', confidence: 0.99 });
-          expect(endOptions?.metadata?.processorId).toBe('stream-guard');
-        }
-      }
+      const endOptions = spanEndCalls[0];
+      expect(endOptions?.metadata?.blocked).toBe(true);
+      expect(endOptions?.metadata?.metadata).toEqual({ category: 'harmful', confidence: 0.99 });
+      expect(endOptions?.metadata?.processorId).toBe('stream-guard');
     });
   });
 });
