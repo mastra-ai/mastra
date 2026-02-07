@@ -922,9 +922,8 @@ export class InMemoryMemory extends MemoryStorage {
       };
     }
 
-    // Calculate total buffered MESSAGE tokens across all chunks (what we're clearing from context)
-    const totalBufferedMessageTokens = chunks.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
-    const targetMessageTokens = totalBufferedMessageTokens * activationRatio;
+    // Calculate target message tokens to activate based on threshold * ratio
+    const targetMessageTokens = input.messageTokensThreshold * activationRatio;
 
     // Find the closest chunk boundary to the target, biased under
     let cumulativeMessageTokens = 0;
