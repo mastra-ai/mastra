@@ -17,6 +17,7 @@ import type {
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
   CreateReflectionGenerationInput,
+  StorageColumn,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -27,6 +28,8 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
+  mergeSchemaExtensions,
+  extractCustomColumns,
 } from '@mastra/core/storage';
 
 /**
@@ -45,16 +48,20 @@ export class MemoryLibSQL extends MemoryStorage {
 
   #client: Client;
   #db: LibSQLDB;
+  #threadSchema: Record<string, StorageColumn>;
+  #threadExtensionCols: string[];
 
   constructor(config: LibSQLDomainConfig) {
     super();
     const client = resolveClient(config);
     this.#client = client;
     this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+    this.#threadSchema = mergeSchemaExtensions(TABLE_SCHEMAS[TABLE_THREADS], config.schemaExtensions?.[TABLE_THREADS]);
+    this.#threadExtensionCols = Object.keys(config.schemaExtensions?.[TABLE_THREADS] || {});
   }
 
   async init(): Promise<void> {
-    await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.#db.createTable({ tableName: TABLE_THREADS, schema: this.#threadSchema });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
@@ -880,22 +887,37 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const result = await this.#db.select<
-        Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }
-      >({
-        tableName: TABLE_THREADS,
-        keys: { id: threadId },
+      const columns = buildSelectColumns(TABLE_THREADS, this.#threadSchema);
+      const parsedTableName = parseSqlIdentifier(TABLE_THREADS, 'table name');
+      const queryResult = await this.#client.execute({
+        sql: `SELECT ${columns} FROM ${parsedTableName} WHERE id = ? ORDER BY createdAt DESC LIMIT 1`,
+        args: [threadId],
       });
 
-      if (!result) {
+      if (!queryResult.rows || queryResult.rows.length === 0) {
         return null;
       }
 
+      const row = queryResult.rows[0]!;
+      // Parse JSON columns
+      const result = Object.fromEntries(
+        Object.entries(row).map(([k, v]) => {
+          try {
+            return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
+          } catch {
+            return [k, v];
+          }
+        }),
+      );
+
       return {
-        ...result,
+        id: result.id as string,
+        resourceId: result.resourceId as string,
+        title: result.title as string,
         metadata: typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata,
-        createdAt: new Date(result.createdAt),
-        updatedAt: new Date(result.updatedAt),
+        createdAt: new Date(result.createdAt as string),
+        updatedAt: new Date(result.updatedAt as string),
+        customColumns: extractCustomColumns(result as Record<string, unknown>, this.#threadExtensionCols),
       };
     } catch (error) {
       throw new MastraError(
@@ -995,6 +1017,20 @@ export class MemoryLibSQL extends MemoryStorage {
       const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
       const baseQuery = `FROM ${TABLE_THREADS} ${whereClause}`;
 
+      // Add customColumns filters if provided
+      if (filter?.customColumns && Object.keys(filter.customColumns).length > 0) {
+        for (const [key, value] of Object.entries(filter.customColumns)) {
+          if (!this.#threadExtensionCols.includes(key)) continue;
+          const parsedKey = parseSqlIdentifier(key, 'column name');
+          if (value === null) {
+            whereClauses.push(`${parsedKey} IS NULL`);
+          } else {
+            whereClauses.push(`${parsedKey} = ?`);
+            queryParams.push(value as InValue);
+          }
+        }
+      }
+
       const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
         id: row.id as string,
         resourceId: row.resourceId as string,
@@ -1002,6 +1038,7 @@ export class MemoryLibSQL extends MemoryStorage {
         createdAt: new Date(row.createdAt as string),
         updatedAt: new Date(row.updatedAt as string),
         metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+        customColumns: extractCustomColumns(row as Record<string, unknown>, this.#threadExtensionCols),
       });
 
       const countResult = await this.#client.execute({
@@ -1022,7 +1059,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       const dataResult = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_THREADS)} ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_THREADS, this.#threadSchema)} ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
       });
 
@@ -1066,12 +1103,20 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
+      // Spread custom columns as top-level record fields for DB insertion
+      const { customColumns, ...threadFields } = thread;
+      const record: Record<string, unknown> = { ...threadFields };
+      if (customColumns) {
+        for (const col of this.#threadExtensionCols) {
+          if (col in customColumns) {
+            record[col] = customColumns[col];
+          }
+        }
+      }
+
       await this.#db.insert({
         tableName: TABLE_THREADS,
-        record: {
-          ...thread,
-          // metadata is handled by prepareStatement which stringifies jsonb columns
-        },
+        record,
       });
 
       return thread;
@@ -1095,10 +1140,12 @@ export class MemoryLibSQL extends MemoryStorage {
     id,
     title,
     metadata,
+    customColumns,
   }: {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
+    customColumns?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
@@ -1114,20 +1161,33 @@ export class MemoryLibSQL extends MemoryStorage {
       });
     }
 
-    const updatedThread = {
+    const mergedCustomColumns = customColumns ? { ...thread.customColumns, ...customColumns } : thread.customColumns;
+
+    const updatedThread: StorageThreadType = {
       ...thread,
       title,
       metadata: {
         ...thread.metadata,
         ...metadata,
       },
+      customColumns: mergedCustomColumns,
     };
 
     try {
-      await this.#client.execute({
-        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?) WHERE id = ?`,
-        args: [title, JSON.stringify(updatedThread.metadata), id],
-      });
+      // Build SET clauses dynamically
+      let sql = `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?)`;
+      const args: InValue[] = [title, JSON.stringify(updatedThread.metadata)];
+
+      for (const col of this.#threadExtensionCols) {
+        const parsedCol = parseSqlIdentifier(col, 'column name');
+        sql += `, ${parsedCol} = ?`;
+        args.push((mergedCustomColumns?.[col] ?? null) as InValue);
+      }
+
+      sql += ` WHERE id = ?`;
+      args.push(id);
+
+      await this.#client.execute({ sql, args });
 
       return updatedThread;
     } catch (error) {
@@ -1268,24 +1328,34 @@ export class MemoryLibSQL extends MemoryStorage {
         },
         createdAt: now,
         updatedAt: now,
+        customColumns: sourceThread.customColumns,
       };
 
       // Use transaction for consistency
       const tx = await this.#client.transaction('write');
 
       try {
-        // Insert the new thread
+        // Insert the new thread with dynamic columns
+        const columns = ['id', '"resourceId"', 'title', 'metadata', '"createdAt"', '"updatedAt"'];
+        const placeholders = ['?', '?', '?', 'jsonb(?)', '?', '?'];
+        const insertArgs: InValue[] = [
+          newThread.id,
+          newThread.resourceId,
+          newThread.title || null,
+          JSON.stringify(newThread.metadata),
+          nowStr,
+          nowStr,
+        ];
+
+        for (const col of this.#threadExtensionCols) {
+          columns.push(`"${col}"`);
+          placeholders.push('?');
+          insertArgs.push((newThread.customColumns?.[col] ?? null) as InValue);
+        }
+
         await tx.execute({
-          sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
-                VALUES (?, ?, ?, jsonb(?), ?, ?)`,
-          args: [
-            newThread.id,
-            newThread.resourceId,
-            newThread.title || null,
-            JSON.stringify(newThread.metadata),
-            nowStr,
-            nowStr,
-          ],
+          sql: `INSERT INTO "${TABLE_THREADS}" (${columns.join(', ')}) VALUES (${placeholders.join(', ')})`,
+          args: insertArgs,
         });
 
         // Clone messages with new IDs

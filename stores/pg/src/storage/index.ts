@@ -87,6 +87,7 @@ export class PostgresStore extends MastraCompositeStore {
         schemaName: this.schema,
         skipDefaultIndexes: config.skipDefaultIndexes,
         indexes: config.indexes,
+        schemaExtensions: config.schemaExtensions,
       };
 
       this.stores = {

@@ -11,6 +11,8 @@ import {
   TABLE_THREADS,
   TABLE_SCHEMAS,
   createStorageErrorId,
+  mergeSchemaExtensions,
+  extractCustomColumns,
 } from '@mastra/core/storage';
 
 /**
@@ -20,6 +22,7 @@ import {
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
 import type {
+  StorageColumn,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesByResourceIdInput,
@@ -76,22 +79,27 @@ export class MemoryPG extends MemoryStorage {
   #schema: string;
   #skipDefaultIndexes?: boolean;
   #indexes?: CreateIndexOptions[];
+  #threadSchema: Record<string, StorageColumn>;
+  #threadExtensionCols: string[];
 
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, OM_TABLE] as const;
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    const { client, schemaName, skipDefaultIndexes, indexes, schemaExtensions } = resolvePgConfig(config);
     this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.#indexes = indexes?.filter(idx => (MemoryPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+    // Merge custom columns for threads
+    this.#threadSchema = mergeSchemaExtensions(TABLE_SCHEMAS[TABLE_THREADS], schemaExtensions?.[TABLE_THREADS]);
+    this.#threadExtensionCols = Object.keys(schemaExtensions?.[TABLE_THREADS] || {});
   }
 
   async init(): Promise<void> {
-    await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.#db.createTable({ tableName: TABLE_THREADS, schema: this.#threadSchema });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
@@ -216,7 +224,7 @@ export class MemoryPG extends MemoryStorage {
         return null;
       }
 
-      return {
+      const result: StorageThreadType = {
         id: thread.id,
         resourceId: thread.resourceId,
         title: thread.title,
@@ -224,6 +232,13 @@ export class MemoryPG extends MemoryStorage {
         createdAt: thread.createdAtZ || thread.createdAt,
         updatedAt: thread.updatedAtZ || thread.updatedAt,
       };
+
+      const customColumns = extractCustomColumns(thread as Record<string, unknown>, this.#threadExtensionCols);
+      if (customColumns) {
+        result.customColumns = customColumns;
+      }
+
+      return result;
     } catch (error) {
       throw new MastraError(
         {
@@ -300,6 +315,23 @@ export class MemoryPG extends MemoryStorage {
         }
       }
 
+      // Add custom column filters if provided (AND logic)
+      if (filter?.customColumns && Object.keys(filter.customColumns).length > 0) {
+        for (const [key, value] of Object.entries(filter.customColumns)) {
+          if (!this.#threadExtensionCols.includes(key)) {
+            throw new MastraError({
+              id: createStorageErrorId('PG', 'LIST_THREADS', 'INVALID_CUSTOM_COLUMN'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Custom column '${key}' is not declared in schemaExtensions for ${TABLE_THREADS}`,
+            });
+          }
+          whereClauses.push(`"${key}" = $${paramIndex}`);
+          queryParams.push(value);
+          paramIndex++;
+        }
+      }
+
       const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
       const baseQuery = `FROM ${tableName} ${whereClause}`;
 
@@ -318,22 +350,27 @@ export class MemoryPG extends MemoryStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      // Use SELECT * to include custom columns alongside standard columns
+      const dataQuery = `SELECT * ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
       );
 
-      const threads = (rows || []).map(thread => ({
-        id: thread.id,
-        resourceId: thread.resourceId,
-        title: thread.title,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        // Use timezone-aware columns (*Z) for correct UTC timestamps, with fallback for legacy data
-        createdAt: thread.createdAtZ || thread.createdAt,
-        updatedAt: thread.updatedAtZ || thread.updatedAt,
-      }));
+      const threads: StorageThreadType[] = (rows || []).map(thread => {
+        const result: StorageThreadType = {
+          id: thread.id,
+          resourceId: thread.resourceId,
+          title: thread.title,
+          metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+          // Use timezone-aware columns (*Z) for correct UTC timestamps, with fallback for legacy data
+          createdAt: thread.createdAtZ || thread.createdAt,
+          updatedAt: thread.updatedAtZ || thread.updatedAt,
+        };
+        const cc = extractCustomColumns(thread as unknown as Record<string, unknown>, this.#threadExtensionCols);
+        if (cc) result.customColumns = cc;
+        return result;
+      });
 
       return {
         threads,
@@ -371,35 +408,45 @@ export class MemoryPG extends MemoryStorage {
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+
+      // Build base columns and values
+      const columns: string[] = [
+        'id',
+        '"resourceId"',
+        'title',
+        'metadata',
+        '"createdAt"',
+        '"createdAtZ"',
+        '"updatedAt"',
+        '"updatedAtZ"',
+      ];
+      const values: unknown[] = [
+        thread.id,
+        thread.resourceId,
+        thread.title,
+        thread.metadata ? JSON.stringify(thread.metadata) : null,
+        thread.createdAt,
+        thread.createdAt,
+        thread.updatedAt,
+        thread.updatedAt,
+      ];
+
+      // Add custom column values
+      for (const col of this.#threadExtensionCols) {
+        columns.push(`"${col}"`);
+        values.push(thread.customColumns?.[col] ?? null);
+      }
+
+      const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+      const updateClauses = columns
+        .filter(c => c !== 'id')
+        .map(c => `${c} = EXCLUDED.${c}`)
+        .join(', ');
+
       await this.#db.client.none(
-        `INSERT INTO ${tableName} (
-          id,
-          "resourceId",
-          title,
-          metadata,
-          "createdAt",
-          "createdAtZ",
-          "updatedAt",
-          "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (id) DO UPDATE SET
-          "resourceId" = EXCLUDED."resourceId",
-          title = EXCLUDED.title,
-          metadata = EXCLUDED.metadata,
-          "createdAt" = EXCLUDED."createdAt",
-          "createdAtZ" = EXCLUDED."createdAtZ",
-          "updatedAt" = EXCLUDED."updatedAt",
-          "updatedAtZ" = EXCLUDED."updatedAtZ"`,
-        [
-          thread.id,
-          thread.resourceId,
-          thread.title,
-          thread.metadata ? JSON.stringify(thread.metadata) : null,
-          thread.createdAt,
-          thread.createdAt,
-          thread.updatedAt,
-          thread.updatedAt,
-        ],
+        `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})
+        ON CONFLICT (id) DO UPDATE SET ${updateClauses}`,
+        values,
       );
 
       return thread;
@@ -422,10 +469,12 @@ export class MemoryPG extends MemoryStorage {
     id,
     title,
     metadata,
+    customColumns,
   }: {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
+    customColumns?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const existingThread = await this.getThreadById({ threadId: id });
@@ -447,19 +496,31 @@ export class MemoryPG extends MemoryStorage {
       ...metadata,
     };
 
+    const mergedCustomColumns = customColumns
+      ? { ...existingThread.customColumns, ...customColumns }
+      : existingThread.customColumns;
+
     try {
       const now = new Date().toISOString();
+
+      // Build SET clauses dynamically
+      const setClauses: string[] = ['title = $1', 'metadata = $2', '"updatedAt" = $3', '"updatedAtZ" = $4'];
+      const values: unknown[] = [title, mergedMetadata, now, now];
+      let paramIdx = 5;
+
+      // Add custom column SET clauses
+      for (const col of this.#threadExtensionCols) {
+        setClauses.push(`"${col}" = $${paramIdx++}`);
+        values.push(mergedCustomColumns?.[col] ?? null);
+      }
+
+      values.push(id);
       const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         `UPDATE ${threadTableName}
-                    SET
-                        title = $1,
-                        metadata = $2,
-                        "updatedAt" = $3,
-                        "updatedAtZ" = $4
-                    WHERE id = $5
-                    RETURNING *
-                `,
-        [title, mergedMetadata, now, now, id],
+                    SET ${setClauses.join(', ')}
+                    WHERE id = $${paramIdx}
+                    RETURNING *`,
+        values,
       );
 
       return {
@@ -469,6 +530,7 @@ export class MemoryPG extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAtZ || thread.createdAt,
         updatedAt: thread.updatedAtZ || thread.updatedAt,
+        customColumns: extractCustomColumns(thread as unknown as Record<string, unknown>, this.#threadExtensionCols),
       };
     } catch (error) {
       throw new MastraError(
@@ -1440,31 +1502,38 @@ export class MemoryPG extends MemoryStorage {
           },
           createdAt: now,
           updatedAt: now,
+          customColumns: sourceThread.customColumns,
         };
 
-        // Insert the new thread
-        await t.none(
-          `INSERT INTO ${threadTableName} (
-            id,
-            "resourceId",
-            title,
-            metadata,
-            "createdAt",
-            "createdAtZ",
-            "updatedAt",
-            "updatedAtZ"
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [
-            newThread.id,
-            newThread.resourceId,
-            newThread.title,
-            newThread.metadata ? JSON.stringify(newThread.metadata) : null,
-            now,
-            now,
-            now,
-            now,
-          ],
-        );
+        // Insert the new thread with dynamic columns
+        const columns: string[] = [
+          'id',
+          '"resourceId"',
+          'title',
+          'metadata',
+          '"createdAt"',
+          '"createdAtZ"',
+          '"updatedAt"',
+          '"updatedAtZ"',
+        ];
+        const values: unknown[] = [
+          newThread.id,
+          newThread.resourceId,
+          newThread.title,
+          newThread.metadata ? JSON.stringify(newThread.metadata) : null,
+          now,
+          now,
+          now,
+          now,
+        ];
+
+        for (const col of this.#threadExtensionCols) {
+          columns.push(`"${col}"`);
+          values.push(newThread.customColumns?.[col] ?? null);
+        }
+
+        const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+        await t.none(`INSERT INTO ${threadTableName} (${columns.join(', ')}) VALUES (${placeholders})`, values);
 
         // Clone messages with new IDs
         const clonedMessages: MastraDBMessage[] = [];

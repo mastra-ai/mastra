@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import type { StorageDomains } from '@mastra/core/storage';
+import type { StorageDomains, SchemaExtensions } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { AgentsLibSQL } from './domains/agents';
@@ -50,6 +50,11 @@ export type LibSQLBaseConfig = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+  /**
+   * Optional schema extensions to add custom columns to built-in tables.
+   * Keys are table names, values are column definitions.
+   */
+  schemaExtensions?: SchemaExtensions;
 };
 
 export type LibSQLConfig =
@@ -125,6 +130,7 @@ export class LibSQLStore extends MastraCompositeStore {
       client: this.client,
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
+      schemaExtensions: config.schemaExtensions,
     };
 
     const scores = new ScoresLibSQL(domainConfig);

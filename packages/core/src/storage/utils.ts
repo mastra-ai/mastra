@@ -3,6 +3,70 @@ import { TABLE_SCHEMAS, TABLE_SCORERS } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type { StorageColumn } from './types';
 
+/** Pattern for valid column names: starts with letter or underscore, alphanumeric + underscore */
+const VALID_COLUMN_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/**
+ * Merges base table schema with user-defined schema extensions.
+ * Validates that custom columns don't conflict with built-in columns.
+ *
+ * @param baseSchema - The built-in schema for a table (from TABLE_SCHEMAS)
+ * @param extensions - Optional custom columns to add
+ * @returns Merged schema containing both built-in and custom columns
+ * @throws If a custom column conflicts with a built-in column, uses an invalid name, or sets primaryKey
+ */
+export function mergeSchemaExtensions(
+  baseSchema: Record<string, StorageColumn>,
+  extensions?: Record<string, StorageColumn>,
+): Record<string, StorageColumn> {
+  if (!extensions || Object.keys(extensions).length === 0) {
+    return baseSchema;
+  }
+
+  for (const colName of Object.keys(extensions)) {
+    if (baseSchema[colName]) {
+      throw new Error(
+        `Schema extension column '${colName}' conflicts with a built-in column. ` +
+          `Custom columns cannot override built-in columns.`,
+      );
+    }
+    if (extensions[colName]!.primaryKey) {
+      throw new Error(
+        `Schema extension column '${colName}' cannot be a primary key. ` + `Only built-in columns can be primary keys.`,
+      );
+    }
+    if (!VALID_COLUMN_NAME_PATTERN.test(colName)) {
+      throw new Error(
+        `Invalid schema extension column name: '${colName}'. ` +
+          `Column names must start with a letter or underscore and contain only alphanumeric characters and underscores.`,
+      );
+    }
+  }
+
+  return { ...baseSchema, ...extensions };
+}
+
+/**
+ * Extracts custom column values from a row object given the list of extension column names.
+ * Returns undefined if no custom columns are present.
+ */
+export function extractCustomColumns(
+  row: Record<string, unknown>,
+  extensionColumnNames: string[],
+): Record<string, unknown> | undefined {
+  if (extensionColumnNames.length === 0) return undefined;
+
+  const customColumns: Record<string, unknown> = {};
+  let hasAny = false;
+  for (const col of extensionColumnNames) {
+    if (row[col] !== undefined) {
+      customColumns[col] = row[col];
+      hasAny = true;
+    }
+  }
+  return hasAny ? customColumns : undefined;
+}
+
 /**
  * Canonical store names for type safety.
  * Provides autocomplete suggestions while still accepting any string.

@@ -22,6 +22,25 @@ export interface StorageColumn {
     column: string;
   };
 }
+
+/**
+ * Schema extensions allow users to add custom columns to Mastra's built-in tables.
+ * Custom columns are real database columns (not JSONB metadata), enabling proper
+ * indexing, type checking, and efficient queries.
+ *
+ * Maps table name to a record of column name → column definition.
+ *
+ * @example
+ * ```typescript
+ * const extensions: SchemaExtensions = {
+ *   mastra_threads: {
+ *     organizationId: { type: 'text', nullable: false },
+ *     priority: { type: 'integer', nullable: true },
+ *   },
+ * };
+ * ```
+ */
+export type SchemaExtensions = Partial<Record<string, Record<string, StorageColumn>>>;
 export interface WorkflowRuns {
   runs: WorkflowRun[];
   total: number;
@@ -173,6 +192,12 @@ export type StorageListThreadsInput = {
      * All specified key-value pairs must match (AND logic).
      */
     metadata?: Record<string, unknown>;
+    /**
+     * Filter threads by custom column values declared via schemaExtensions.
+     * All specified key-value pairs must match (AND logic).
+     * Keys must correspond to columns declared in the store's schemaExtensions config.
+     */
+    customColumns?: Record<string, unknown>;
   };
 };
 

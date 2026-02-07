@@ -48,10 +48,13 @@ export abstract class MemoryStorage extends StorageDomain {
     id,
     title,
     metadata,
+    customColumns,
   }: {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
+    /** Values for user-defined custom columns to update (merged with existing) */
+    customColumns?: Record<string, unknown>;
   }): Promise<StorageThreadType>;
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
