@@ -296,53 +296,73 @@ export class ProcessorRunner {
       // Get per-processor state that persists across all method calls within this request
       const processorState = this.getProcessorState(processor.id);
 
-      const result = await processMethod({
-        messages: processableMessages,
-        messageList,
-        state: processorState.customState,
-        abort,
-        tracingContext: { currentSpan: processorSpan },
-        requestContext,
-        retryCount,
-        writer,
-      });
+      try {
+        const result = await processMethod({
+          messages: processableMessages,
+          messageList,
+          state: processorState.customState,
+          abort,
+          tracingContext: { currentSpan: processorSpan },
+          requestContext,
+          retryCount,
+          writer,
+        });
 
-      // Stop recording and get mutations for this processor
-      const mutations = messageList.stopRecording();
+        // Stop recording and get mutations for this processor
+        const mutations = messageList.stopRecording();
 
-      // Handle the new return type - MessageList or MastraDBMessage[]
-      if (result instanceof MessageList) {
-        if (result !== messageList) {
-          throw new MastraError({
-            category: 'USER',
-            domain: 'AGENT',
-            id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
-            text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+        // Handle the new return type - MessageList or MastraDBMessage[]
+        if (result instanceof MessageList) {
+          if (result !== messageList) {
+            throw new MastraError({
+              category: 'USER',
+              domain: 'AGENT',
+              id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+              text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+            });
+          }
+          if (mutations.length > 0) {
+            processableMessages = result.get.response.db();
+          }
+        } else {
+          if (result) {
+            const deletedIds = idsBeforeProcessing.filter(
+              (i: string) => !result.some((m: MastraDBMessage) => m.id === i),
+            );
+            if (deletedIds.length) {
+              messageList.removeByIds(deletedIds);
+            }
+            processableMessages = result || [];
+            for (const message of result) {
+              messageList.removeByIds([message.id]);
+              messageList.add(message, check.getSource(message) || 'response');
+            }
+          }
+        }
+
+        processorSpan?.end({
+          output: processableMessages,
+          attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
+        });
+      } catch (error) {
+        // Stop recording on error
+        messageList.stopRecording();
+
+        if (error instanceof TripWire) {
+          processorSpan?.end({
+            metadata: {
+              blocked: true,
+              reason: error.message,
+              retry: error.options?.retry,
+              metadata: error.options?.metadata,
+              processorId: error.processorId,
+            },
           });
+          throw error;
         }
-        if (mutations.length > 0) {
-          processableMessages = result.get.response.db();
-        }
-      } else {
-        if (result) {
-          const deletedIds = idsBeforeProcessing.filter(
-            (i: string) => !result.some((m: MastraDBMessage) => m.id === i),
-          );
-          if (deletedIds.length) {
-            messageList.removeByIds(deletedIds);
-          }
-          processableMessages = result || [];
-          for (const message of result) {
-            messageList.removeByIds([message.id]);
-            messageList.add(message, check.getSource(message) || 'response');
-          }
-        }
+        processorSpan?.error({ error: error as Error, endSpan: true });
+        throw error;
       }
-
-      processorSpan?.end({
-        output: processableMessages,
-        attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
-      });
     }
 
     return messageList;
@@ -465,7 +485,13 @@ export class ProcessorRunner {
             // End span with blocked metadata
             const state = processorStates.get(processor.id);
             state?.span?.end({
-              metadata: { blocked: true, reason: error.message, retry: error.options?.retry },
+              metadata: {
+                blocked: true,
+                reason: error.message,
+                retry: error.options?.retry,
+                metadata: error.options?.metadata,
+                processorId: error.processorId,
+              },
             });
             return {
               part: null,
@@ -630,123 +656,143 @@ export class ProcessorRunner {
       // Get per-processor state that persists across all method calls within this request
       const processorState = this.getProcessorState(processor.id);
 
-      const result = await processMethod({
-        messages: processableMessages,
-        systemMessages: currentSystemMessages,
-        state: processorState.customState,
-        abort,
-        tracingContext: { currentSpan: processorSpan },
-        messageList,
-        requestContext,
-        retryCount,
-      });
+      try {
+        const result = await processMethod({
+          messages: processableMessages,
+          systemMessages: currentSystemMessages,
+          state: processorState.customState,
+          abort,
+          tracingContext: { currentSpan: processorSpan },
+          messageList,
+          requestContext,
+          retryCount,
+        });
 
-      // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types
-      let mutations: Array<{
-        type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
-        source?: string;
-        count?: number;
-        ids?: string[];
-        text?: string;
-        tag?: string;
-        message?: any;
-      }>;
+        // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types
+        let mutations: Array<{
+          type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+          source?: string;
+          count?: number;
+          ids?: string[];
+          text?: string;
+          tag?: string;
+          message?: any;
+        }>;
 
-      if (result instanceof MessageList) {
-        if (result !== messageList) {
-          throw new MastraError({
-            category: 'USER',
-            domain: 'AGENT',
-            id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
-            text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+        if (result instanceof MessageList) {
+          if (result !== messageList) {
+            throw new MastraError({
+              category: 'USER',
+              domain: 'AGENT',
+              id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+              text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+            });
+          }
+          // Stop recording and capture mutations
+          mutations = messageList.stopRecording();
+          if (mutations.length > 0) {
+            // Processor returned a MessageList - it has been modified in place
+            // Update processableMessages to reflect ALL current messages for next processor
+            processableMessages = messageList.get.input.db();
+          }
+        } else if (this.isProcessInputResultWithSystemMessages(result)) {
+          // Processor returned { messages, systemMessages } - handle both
+          mutations = messageList.stopRecording();
+
+          // Replace system messages with the modified ones
+          messageList.replaceAllSystemMessages(result.systemMessages);
+
+          // Handle regular messages
+          const regularMessages = result.messages;
+          if (regularMessages) {
+            const deletedIds = inputIds.filter(i => !regularMessages.some(m => m.id === i));
+            if (deletedIds.length) {
+              messageList.removeByIds(deletedIds);
+            }
+
+            // Separate any new system messages from other messages (backward compat)
+            const newSystemMessages = regularMessages.filter(m => m.role === 'system');
+            const nonSystemMessages = regularMessages.filter(m => m.role !== 'system');
+
+            // Add any new system messages from the messages array
+            for (const sysMsg of newSystemMessages) {
+              const systemText =
+                (sysMsg.content.content as string | undefined) ??
+                sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+                '';
+              messageList.addSystem(systemText);
+            }
+
+            // Add non-system messages normally
+            if (nonSystemMessages.length > 0) {
+              for (const message of nonSystemMessages) {
+                messageList.removeByIds([message.id]);
+                messageList.add(message, check.getSource(message) || 'input');
+              }
+            }
+          }
+
+          processableMessages = messageList.get.input.db();
+        } else {
+          // Processor returned an array - stop recording before clear/add (that's just internal plumbing)
+          mutations = messageList.stopRecording();
+
+          if (result) {
+            // Clear and re-add since processor worked with array. clear all messages, the new result array is all messages in the list (new input but also any messages added by other processors, memory for ex)
+            const deletedIds = inputIds.filter(i => !result.some(m => m.id === i));
+            if (deletedIds.length) {
+              messageList.removeByIds(deletedIds);
+            }
+
+            // Separate system messages from other messages since they need different handling
+            const systemMessages = result.filter(m => m.role === 'system');
+            const nonSystemMessages = result.filter(m => m.role !== 'system');
+
+            // Add system messages using addSystem
+            for (const sysMsg of systemMessages) {
+              const systemText =
+                (sysMsg.content.content as string | undefined) ??
+                sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+                '';
+              messageList.addSystem(systemText);
+            }
+
+            // Add non-system messages normally
+            if (nonSystemMessages.length > 0) {
+              for (const message of nonSystemMessages) {
+                messageList.removeByIds([message.id]);
+                messageList.add(message, check.getSource(message) || 'input');
+              }
+            }
+
+            // Use messageList.get.input.db() for consistency with MessageList return type
+            processableMessages = messageList.get.input.db();
+          }
+        }
+
+        processorSpan?.end({
+          output: processableMessages,
+          attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
+        });
+      } catch (error) {
+        // Stop recording on error
+        messageList.stopRecording();
+
+        if (error instanceof TripWire) {
+          processorSpan?.end({
+            metadata: {
+              blocked: true,
+              reason: error.message,
+              retry: error.options?.retry,
+              metadata: error.options?.metadata,
+              processorId: error.processorId,
+            },
           });
+          throw error;
         }
-        // Stop recording and capture mutations
-        mutations = messageList.stopRecording();
-        if (mutations.length > 0) {
-          // Processor returned a MessageList - it has been modified in place
-          // Update processableMessages to reflect ALL current messages for next processor
-          processableMessages = messageList.get.input.db();
-        }
-      } else if (this.isProcessInputResultWithSystemMessages(result)) {
-        // Processor returned { messages, systemMessages } - handle both
-        mutations = messageList.stopRecording();
-
-        // Replace system messages with the modified ones
-        messageList.replaceAllSystemMessages(result.systemMessages);
-
-        // Handle regular messages
-        const regularMessages = result.messages;
-        if (regularMessages) {
-          const deletedIds = inputIds.filter(i => !regularMessages.some(m => m.id === i));
-          if (deletedIds.length) {
-            messageList.removeByIds(deletedIds);
-          }
-
-          // Separate any new system messages from other messages (backward compat)
-          const newSystemMessages = regularMessages.filter(m => m.role === 'system');
-          const nonSystemMessages = regularMessages.filter(m => m.role !== 'system');
-
-          // Add any new system messages from the messages array
-          for (const sysMsg of newSystemMessages) {
-            const systemText =
-              (sysMsg.content.content as string | undefined) ??
-              sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-              '';
-            messageList.addSystem(systemText);
-          }
-
-          // Add non-system messages normally
-          if (nonSystemMessages.length > 0) {
-            for (const message of nonSystemMessages) {
-              messageList.removeByIds([message.id]);
-              messageList.add(message, check.getSource(message) || 'input');
-            }
-          }
-        }
-
-        processableMessages = messageList.get.input.db();
-      } else {
-        // Processor returned an array - stop recording before clear/add (that's just internal plumbing)
-        mutations = messageList.stopRecording();
-
-        if (result) {
-          // Clear and re-add since processor worked with array. clear all messages, the new result array is all messages in the list (new input but also any messages added by other processors, memory for ex)
-          const deletedIds = inputIds.filter(i => !result.some(m => m.id === i));
-          if (deletedIds.length) {
-            messageList.removeByIds(deletedIds);
-          }
-
-          // Separate system messages from other messages since they need different handling
-          const systemMessages = result.filter(m => m.role === 'system');
-          const nonSystemMessages = result.filter(m => m.role !== 'system');
-
-          // Add system messages using addSystem
-          for (const sysMsg of systemMessages) {
-            const systemText =
-              (sysMsg.content.content as string | undefined) ??
-              sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-              '';
-            messageList.addSystem(systemText);
-          }
-
-          // Add non-system messages normally
-          if (nonSystemMessages.length > 0) {
-            for (const message of nonSystemMessages) {
-              messageList.removeByIds([message.id]);
-              messageList.add(message, check.getSource(message) || 'input');
-            }
-          }
-
-          // Use messageList.get.input.db() for consistency with MessageList return type
-          processableMessages = messageList.get.input.db();
-        }
+        processorSpan?.error({ error: error as Error, endSpan: true });
+        throw error;
       }
-
-      processorSpan?.end({
-        output: processableMessages,
-        attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
-      });
     }
 
     return messageList;
@@ -924,7 +970,13 @@ export class ProcessorRunner {
 
         if (error instanceof TripWire) {
           processorSpan?.end({
-            metadata: { blocked: true, reason: error.message },
+            metadata: {
+              blocked: true,
+              reason: error.message,
+              retry: error.options?.retry,
+              metadata: error.options?.metadata,
+              processorId: error.processorId,
+            },
           });
           throw error;
         }
@@ -1136,6 +1188,7 @@ export class ProcessorRunner {
               reason: error.message,
               retry: error.options?.retry,
               metadata: error.options?.metadata,
+              processorId: error.processorId,
             },
           });
           throw error;

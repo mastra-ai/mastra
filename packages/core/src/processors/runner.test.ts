@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { IMastraLogger } from '../logger';
+import { SpanType } from '../observability';
+import type { AnySpan, TracingContext } from '../observability';
 import type { ChunkType } from '../stream';
 import { ChunkFrom } from '../stream/types';
 import { ProcessorRunner } from './runner';
@@ -1808,6 +1810,409 @@ describe('ProcessorRunner', () => {
       const allMessages = result.get.all.db();
       expect(allMessages).toHaveLength(2);
       expect(allMessages[1].role).toBe('assistant');
+    });
+  });
+
+  /**
+   * Trip-wire abort events should be properly captured in tracing spans.
+   */
+  describe('Issue #12163: Trip-wire abort tracing', () => {
+    /**
+     * Helper to create a mock span that tracks all method calls.
+     */
+    function createMockSpan() {
+      const span: Record<string, any> = {
+        id: `span-${Math.random()}`,
+        traceId: 'trace-1',
+        name: 'test-span',
+        type: SpanType.PROCESSOR_RUN,
+        startTime: new Date(),
+        isEvent: false,
+        isInternal: false,
+        isValid: true,
+        isRootSpan: false,
+
+        // Track calls
+        _endCalls: [] as any[],
+        _errorCalls: [] as any[],
+        _updateCalls: [] as any[],
+        _childSpans: [] as any[],
+
+        end: vi.fn(function (this: any, options?: any) {
+          this._endCalls.push(options);
+          this.endTime = new Date();
+        }),
+        error: vi.fn(function (this: any, options?: any) {
+          this._errorCalls.push(options);
+          this.errorInfo = {
+            message: options?.error?.message || 'unknown error',
+          };
+          if (options?.endSpan) {
+            this.endTime = new Date();
+          }
+        }),
+        update: vi.fn(function (this: any, options?: any) {
+          this._updateCalls.push(options);
+        }),
+        createChildSpan: vi.fn(function (this: any, options?: any) {
+          const child = createMockSpan();
+          child.name = options?.name || 'child-span';
+          child.parent = this;
+          this._childSpans.push(child);
+          return child;
+        }),
+        createEventSpan: vi.fn(),
+        findParent: vi.fn(() => span),
+        exportSpan: vi.fn(),
+        getParentSpanId: vi.fn(),
+        executeInContext: vi.fn(async (fn: any) => fn()),
+        executeInContextSync: vi.fn((fn: any) => fn()),
+        get externalTraceId() {
+          return this.traceId;
+        },
+        observabilityInstance: {} as any,
+      };
+      return span as unknown as AnySpan & {
+        _endCalls: any[];
+        _errorCalls: any[];
+        _updateCalls: any[];
+        _childSpans: any[];
+      };
+    }
+
+    function createTracingContext(span: AnySpan): TracingContext {
+      return { currentSpan: span };
+    }
+
+    it('should properly end processor span when tripwire is triggered in runInputProcessors', async () => {
+      const inputProcessors: Processor[] = [
+        {
+          id: 'guard-processor',
+          name: 'Guard Processor',
+          processInput: async ({ abort }) => {
+            abort('Content blocked: forbidden word detected', {
+              retry: true,
+              metadata: { word: 'secret' },
+            });
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('tell me a secret', 'user')], 'user');
+
+      const parentSpan = createMockSpan();
+      const tracingContext = createTracingContext(parentSpan);
+
+      // The tripwire should still be thrown
+      await expect(runner.runInputProcessors(messageList, tracingContext)).rejects.toThrow(TripWire);
+
+      // A child span should have been created for the processor
+      expect(parentSpan._childSpans.length).toBe(1);
+      const processorSpan = parentSpan._childSpans[0];
+
+      // CRITICAL: The processor span should be properly ended/errored, not left dangling
+      const wasEnded = processorSpan._endCalls.length > 0;
+      const wasErrored = processorSpan._errorCalls.length > 0;
+      expect(wasEnded || wasErrored).toBe(true);
+
+      // The span should record the tripwire information
+      if (wasErrored) {
+        expect(processorSpan._errorCalls[0].error).toBeInstanceOf(TripWire);
+      }
+      if (wasEnded) {
+        const endOptions = processorSpan._endCalls[0];
+        expect(endOptions?.metadata?.blocked).toBe(true);
+        expect(endOptions?.metadata?.reason).toBe('Content blocked: forbidden word detected');
+        expect(endOptions?.metadata?.retry).toBe(true);
+        expect(endOptions?.metadata?.processorId).toBe('guard-processor');
+      }
+    });
+
+    it('should properly end processor span when tripwire is triggered in runOutputProcessors', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'output-guard',
+          name: 'Output Guard',
+          processOutputResult: async ({ abort }) => {
+            abort('PII detected in output', {
+              retry: false,
+              metadata: { piiType: 'email' },
+            });
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('Here is my email: test@example.com', 'assistant')], 'response');
+
+      const parentSpan = createMockSpan();
+      const tracingContext = createTracingContext(parentSpan);
+
+      // The tripwire should still be thrown
+      await expect(runner.runOutputProcessors(messageList, tracingContext)).rejects.toThrow(TripWire);
+
+      // A child span should have been created for the processor
+      expect(parentSpan._childSpans.length).toBe(1);
+      const processorSpan = parentSpan._childSpans[0];
+
+      // CRITICAL: The processor span should be properly ended/errored, not left dangling
+      const wasEnded = processorSpan._endCalls.length > 0;
+      const wasErrored = processorSpan._errorCalls.length > 0;
+      expect(wasEnded || wasErrored).toBe(true);
+
+      // The span should record the tripwire information
+      if (wasErrored) {
+        expect(processorSpan._errorCalls[0].error).toBeInstanceOf(TripWire);
+      }
+      if (wasEnded) {
+        const endOptions = processorSpan._endCalls[0];
+        expect(endOptions?.metadata?.blocked).toBe(true);
+        expect(endOptions?.metadata?.reason).toBe('PII detected in output');
+        expect(endOptions?.metadata?.processorId).toBe('output-guard');
+      }
+    });
+
+    it('should include full tripwire metadata (retry, metadata, processorId) when span ends in runProcessInputStep', async () => {
+      const inputProcessors: Processor[] = [
+        {
+          id: 'step-guard',
+          name: 'Step Guard',
+          processInputStep: async ({ abort }) => {
+            abort('Token limit exceeded', {
+              retry: true,
+              metadata: { tokenCount: 5000, limit: 4096 },
+            });
+            return {};
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('a very long message', 'user')], 'user');
+
+      const parentSpan = createMockSpan();
+      const tracingContext = createTracingContext(parentSpan);
+
+      // Create a mock model for processInputStep
+      const mockModel = {
+        modelId: 'test-model',
+        provider: 'test-provider',
+        specificationVersion: 'v2',
+      };
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          steps: [],
+          tracingContext,
+          tools: {},
+          model: mockModel as any,
+          retryCount: 0,
+        }),
+      ).rejects.toThrow(TripWire);
+
+      // A child span should have been created
+      expect(parentSpan._childSpans.length).toBe(1);
+      const processorSpan = parentSpan._childSpans[0];
+
+      // The span must be ended
+      const wasEnded = processorSpan._endCalls.length > 0;
+      const wasErrored = processorSpan._errorCalls.length > 0;
+      expect(wasEnded || wasErrored).toBe(true);
+
+      // CRITICAL: The span metadata should include ALL tripwire details
+      if (wasEnded) {
+        const endOptions = processorSpan._endCalls[0];
+        expect(endOptions?.metadata?.blocked).toBe(true);
+        expect(endOptions?.metadata?.reason).toBe('Token limit exceeded');
+        // These are the fields currently MISSING:
+        expect(endOptions?.metadata?.retry).toBe(true);
+        expect(endOptions?.metadata?.metadata).toEqual({ tokenCount: 5000, limit: 4096 });
+        expect(endOptions?.metadata?.processorId).toBe('step-guard');
+      }
+    });
+
+    it('should include processorId in span metadata when tripwire triggers in runProcessOutputStep', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'output-step-guard',
+          name: 'Output Step Guard',
+          processOutputStep: async ({ abort }) => {
+            abort('Response quality too low', {
+              retry: true,
+              metadata: { qualityScore: 0.3 },
+            });
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+      messageList.add([createMessage('bad response', 'assistant')], 'response');
+
+      const parentSpan = createMockSpan();
+      const tracingContext = createTracingContext(parentSpan);
+
+      try {
+        await runner.runProcessOutputStep({
+          steps: [],
+          messages: messageList.get.all.db(),
+          messageList,
+          stepNumber: 0,
+          text: 'bad response',
+          tracingContext,
+          retryCount: 0,
+        });
+        expect.fail('Should have thrown TripWire');
+      } catch (error) {
+        expect(error).toBeInstanceOf(TripWire);
+      }
+
+      // A child span should have been created
+      expect(parentSpan._childSpans.length).toBe(1);
+      const processorSpan = parentSpan._childSpans[0];
+
+      // The span must be ended with complete metadata
+      const wasEnded = processorSpan._endCalls.length > 0;
+      expect(wasEnded).toBe(true);
+
+      const endOptions = processorSpan._endCalls[0];
+      // processorId should be included in the span metadata
+      expect(endOptions?.metadata?.processorId).toBe('output-step-guard');
+    });
+
+    it('should properly end span (not leave it dangling) with blocked metadata for tripwire in runInputProcessors', async () => {
+      // A trip-wire is intentional behavior (guardrail working correctly), not an unexpected error.
+      // The span should be ended with blocked metadata so observability tools can filter/query
+      // for blocked requests via metadata.blocked === true.
+      const inputProcessors: Processor[] = [
+        {
+          id: 'error-trace-processor',
+          name: 'Error Trace Processor',
+          processInput: async ({ abort }) => {
+            abort('Blocked for safety');
+            return [];
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test', 'user')], 'user');
+
+      const parentSpan = createMockSpan();
+      const tracingContext = createTracingContext(parentSpan);
+
+      await expect(runner.runInputProcessors(messageList, tracingContext)).rejects.toThrow(TripWire);
+
+      // A child span should have been created
+      expect(parentSpan._childSpans.length).toBe(1);
+      const processorSpan = parentSpan._childSpans[0];
+
+      // The span must be properly ended (not left dangling) with tripwire metadata
+      const wasEnded = processorSpan._endCalls.length > 0;
+      expect(wasEnded).toBe(true);
+
+      const endOptions = processorSpan._endCalls[0];
+      expect(endOptions?.metadata?.blocked).toBe(true);
+      expect(endOptions?.metadata?.reason).toBe('Blocked for safety');
+    });
+
+    it('should properly trace tripwire in stream processPart with complete metadata', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'stream-guard',
+          name: 'Stream Guard',
+          processOutputStream: async ({ abort }) => {
+            abort('Harmful content detected in stream', {
+              retry: true,
+              metadata: { category: 'harmful', confidence: 0.99 },
+            });
+            return null;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const parentSpan = createMockSpan();
+      const tracingContext = createTracingContext(parentSpan);
+      const processorStates = new Map();
+
+      const result = await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'harmful content', id: 'text-1' },
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+        tracingContext,
+      );
+
+      expect(result.blocked).toBe(true);
+
+      // A ProcessorState with a span should have been created
+      const state = processorStates.get('stream-guard');
+      expect(state).toBeDefined();
+      expect(state?.span).toBeDefined();
+
+      // The span should be ended with complete tripwire metadata
+      if (state?.span) {
+        const spanEndCalls = (state.span as any)._endCalls || [];
+        const spanErrorCalls = (state.span as any)._errorCalls || [];
+
+        const wasEnded = spanEndCalls.length > 0;
+        const wasErrored = spanErrorCalls.length > 0;
+        expect(wasEnded || wasErrored).toBe(true);
+
+        if (wasEnded) {
+          const endOptions = spanEndCalls[0];
+          expect(endOptions?.metadata?.blocked).toBe(true);
+          // Should include ALL metadata, not just reason and retry
+          expect(endOptions?.metadata?.metadata).toEqual({ category: 'harmful', confidence: 0.99 });
+          expect(endOptions?.metadata?.processorId).toBe('stream-guard');
+        }
+      }
     });
   });
 });
