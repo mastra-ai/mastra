@@ -450,23 +450,23 @@ export interface ObservationalMemoryObservationConfig {
    * // Buffer every 5k tokens, activate at 20k
    * observation: {
    *   messageTokens: 20_000,
-   *   bufferEvery: 5_000,
+   *   bufferTokens: 5_000,
    * }
    * // Or equivalently, using a fraction:
    * observation: {
    *   messageTokens: 20_000,
-   *   bufferEvery: 0.25,
+   *   bufferTokens: 0.25,
    * }
    * ```
    */
-  bufferEvery?: number;
+  bufferTokens?: number;
 
   /**
    * Ratio (0-1) of buffered observations to activate when threshold is reached.
    * Setting this below 1 keeps some observations in reserve, which helps maintain
    * conversation continuity and provides a buffer for the next activation cycle.
    *
-   * Requires `bufferEvery` to also be set.
+   * Requires `bufferTokens` to also be set.
    *
    * @default 1 (activate all buffered observations)
    * @example
@@ -474,12 +474,12 @@ export interface ObservationalMemoryObservationConfig {
    * // Activate 70% of buffered observations, keep 30% in reserve
    * observation: {
    *   messageTokens: 20_000,
-   *   bufferEvery: 0.25,
-   *   asyncActivation: 0.7,
+   *   bufferTokens: 0.25,
+   *   bufferActivation: 0.7,
    * }
    * ```
    */
-  asyncActivation?: number;
+  bufferActivation?: number;
 
   /**
    * Token threshold above which synchronous (blocking) observation is forced.
@@ -494,7 +494,7 @@ export interface ObservationalMemoryObservationConfig {
    * - An **absolute token count** (≥ 2): must be greater than `messageTokens`.
    *   e.g. `blockAfter: 80_000` → blocks at 80,000 tokens.
    *
-   * Only relevant when `bufferEvery` is set.
+   * Only relevant when `bufferTokens` is set.
    * If not set, synchronous observation is never used when async buffering is enabled.
    *
    * @example
@@ -502,13 +502,13 @@ export interface ObservationalMemoryObservationConfig {
    * // Multiplier: 1.5x messageTokens
    * observation: {
    *   messageTokens: 20_000,
-   *   bufferEvery: 0.25,
+   *   bufferTokens: 0.25,
    *   blockAfter: 1.5, // resolves to 30,000
    * }
    * // Absolute: explicit token count
    * observation: {
    *   messageTokens: 20_000,
-   *   bufferEvery: 5_000,
+   *   bufferTokens: 5_000,
    *   blockAfter: 80_000,
    * }
    * ```
@@ -574,14 +574,14 @@ export interface ObservationalMemoryReflectionConfig {
    * - An **absolute token count** (≥ 2): must be greater than `observationTokens`.
    *   e.g. `blockAfter: 50_000` → blocks at 50,000 tokens.
    *
-   * Only relevant when `asyncActivation` is set.
+   * Only relevant when `bufferActivation` is set.
    * If not set, synchronous reflection is never used when async reflection is enabled.
    */
   blockAfter?: number;
 
   /**
    * Ratio (0-1) controlling when async reflection buffering starts.
-   * When observation tokens reach `observationTokens * asyncActivation`,
+   * When observation tokens reach `observationTokens * bufferActivation`,
    * reflection runs asynchronously in the background. When the full
    * `observationTokens` threshold is reached, the buffered reflection
    * is spliced into the observation content instantly (no blocking LLM call).
@@ -590,17 +590,17 @@ export interface ObservationalMemoryReflectionConfig {
    * the buffered reflection replaces the line range it was generated from,
    * and any new observations appended after that range are preserved.
    *
-   * Requires `observation.bufferEvery` to also be set (async observation).
+   * Requires `observation.bufferTokens` to also be set (async observation).
    *
    * @example
    * ```ts
    * reflection: {
    *   observationTokens: 30_000,
-   *   asyncActivation: 0.5, // Start buffering at 15k tokens
+   *   bufferActivation: 0.5, // Start buffering at 15k tokens
    * }
    * ```
    */
-  asyncActivation?: number;
+  bufferActivation?: number;
 }
 
 /**

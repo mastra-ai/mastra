@@ -105,17 +105,17 @@ export interface ObservationConfig {
    * Must resolve to less than `messageTokens`.
    * If not set, async buffering is disabled and observations run synchronously.
    */
-  bufferEvery?: number;
+  bufferTokens?: number;
 
   /**
    * Ratio (0-1) of buffered observations to activate when threshold is reached.
    * Setting this below 1 keeps some observations in reserve for continuity.
    *
-   * Requires `bufferEvery` to also be set.
+   * Requires `bufferTokens` to also be set.
    *
    * @default 1 (activate all buffered observations)
    */
-  asyncActivation?: number;
+  bufferActivation?: number;
 
   /**
    * Token threshold above which synchronous (blocking) observation is forced.
@@ -127,7 +127,7 @@ export interface ObservationConfig {
    *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000.
    * - An absolute token count (≥ 2): must be greater than `messageTokens`.
    *
-   * Only relevant when `bufferEvery` is set.
+   * Only relevant when `bufferTokens` is set.
    * If not set, synchronous observation is never used when async buffering is enabled.
    */
   blockAfter?: number;
@@ -179,21 +179,21 @@ export interface ReflectionConfig {
    *   e.g. `blockAfter: 1.5` with `observationTokens: 30_000` → blocks at 45,000.
    * - An absolute token count (≥ 2): must be greater than `observationTokens`.
    *
-   * Only relevant when `asyncActivation` is set.
+   * Only relevant when `bufferActivation` is set.
    * If not set, synchronous reflection is never used when async reflection is enabled.
    */
   blockAfter?: number;
 
   /**
    * Ratio (0-1) controlling when async reflection buffering starts.
-   * When observation tokens reach `observationTokens * asyncActivation`,
+   * When observation tokens reach `observationTokens * bufferActivation`,
    * reflection runs in the background. On activation at the full threshold,
    * the buffered reflection replaces the line range it covers, preserving
    * any new observations appended after that range.
    *
-   * Requires `observation.bufferEvery` to also be set.
+   * Requires `observation.bufferTokens` to also be set.
    */
-  asyncActivation?: number;
+  bufferActivation?: number;
 }
 
 /**
@@ -384,7 +384,7 @@ export interface DataOmStatusPart {
           chunks: number;
           /** Message tokens that will be cleared from context on activation */
           messageTokens: number;
-          /** Projected message tokens that would be removed if activation happened now (based on asyncActivation ratio and chunk boundaries) */
+          /** Projected message tokens that would be removed if activation happened now (based on bufferActivation ratio and chunk boundaries) */
           projectedMessageRemoval: number;
           /** Observation tokens that will be added on activation */
           observationTokens: number;

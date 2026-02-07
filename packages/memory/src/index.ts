@@ -1674,8 +1674,8 @@ Notes:
             modelSettings: omConfig.observation.modelSettings,
             maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
             providerOptions: omConfig.observation.providerOptions,
-            bufferEvery: omConfig.observation.bufferEvery,
-            asyncActivation: omConfig.observation.asyncActivation,
+            bufferTokens: omConfig.observation.bufferTokens,
+            bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
           }
         : undefined,
@@ -1685,7 +1685,7 @@ Notes:
             observationTokens: omConfig.reflection.observationTokens,
             modelSettings: omConfig.reflection.modelSettings,
             providerOptions: omConfig.reflection.providerOptions,
-            asyncActivation: omConfig.reflection.asyncActivation,
+            bufferActivation: omConfig.reflection.bufferActivation,
             blockAfter: omConfig.reflection.blockAfter,
           }
         : undefined,

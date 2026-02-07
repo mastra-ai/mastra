@@ -3478,7 +3478,7 @@ describe('Async Buffering Storage Operations', () => {
 });
 
 describe('Async Buffering Config Validation', () => {
-  it('should throw if asyncActivation is out of range', () => {
+  it('should throw if bufferActivation is out of range', () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -3487,18 +3487,18 @@ describe('Async Buffering Config Validation', () => {
           model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
-            bufferEvery: 10000,
-            asyncActivation: 1.5,
+            bufferTokens: 10000,
+            bufferActivation: 1.5,
           },
           reflection: {
             observationTokens: 20000,
-            asyncActivation: 0.7,
+            bufferActivation: 0.7,
           },
         }),
-    ).toThrow('asyncActivation must be in range (0, 1]');
+    ).toThrow('bufferActivation must be in range (0, 1]');
   });
 
-  it('should throw if asyncActivation is zero', () => {
+  it('should throw if bufferActivation is zero', () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -3507,18 +3507,18 @@ describe('Async Buffering Config Validation', () => {
           model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
-            bufferEvery: 10000,
-            asyncActivation: 0,
+            bufferTokens: 10000,
+            bufferActivation: 0,
           },
           reflection: {
             observationTokens: 20000,
-            asyncActivation: 0.7,
+            bufferActivation: 0.7,
           },
         }),
-    ).toThrow('asyncActivation must be in range (0, 1]');
+    ).toThrow('bufferActivation must be in range (0, 1]');
   });
 
-  it('should throw if observation has bufferEvery but reflection has no asyncActivation', () => {
+  it('should throw if observation has bufferTokens but reflection has no bufferActivation', () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -3527,18 +3527,18 @@ describe('Async Buffering Config Validation', () => {
           model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
-            bufferEvery: 10000,
-            asyncActivation: 0.7,
+            bufferTokens: 10000,
+            bufferActivation: 0.7,
           },
           reflection: {
             observationTokens: 20000,
-            // No asyncActivation
+            // No bufferActivation
           },
         }),
-    ).toThrow('reflection.asyncActivation must also be set');
+    ).toThrow('reflection.bufferActivation must also be set');
   });
 
-  it('should throw if bufferEvery >= messageTokens', () => {
+  it('should throw if bufferTokens >= messageTokens', () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -3547,15 +3547,15 @@ describe('Async Buffering Config Validation', () => {
           model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 10000,
-            bufferEvery: 15000,
-            asyncActivation: 0.7,
+            bufferTokens: 15000,
+            bufferActivation: 0.7,
           },
           reflection: {
             observationTokens: 20000,
-            asyncActivation: 0.7,
+            bufferActivation: 0.7,
           },
         }),
-    ).toThrow('bufferEvery');
+    ).toThrow('bufferTokens');
   });
 
   it('should accept valid async config', () => {
@@ -3567,18 +3567,18 @@ describe('Async Buffering Config Validation', () => {
           model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
-            bufferEvery: 10000,
-            asyncActivation: 0.7,
+            bufferTokens: 10000,
+            bufferActivation: 0.7,
           },
           reflection: {
             observationTokens: 20000,
-            asyncActivation: 0.5,
+            bufferActivation: 0.5,
           },
         }),
     ).not.toThrow();
   });
 
-  it('should throw if observation has bufferEvery but reflection has asyncActivation of 0', () => {
+  it('should throw if observation has bufferTokens but reflection has bufferActivation of 0', () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -3587,18 +3587,18 @@ describe('Async Buffering Config Validation', () => {
           model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
-            bufferEvery: 10000,
-            asyncActivation: 0.7,
+            bufferTokens: 10000,
+            bufferActivation: 0.7,
           },
           reflection: {
             observationTokens: 20000,
-            asyncActivation: 0,
+            bufferActivation: 0,
           },
         }),
     ).toThrow();
   });
 
-  it('should accept config with only asyncActivation on reflection (no bufferEvery)', () => {
+  it('should accept config with only bufferActivation on reflection (no bufferTokens)', () => {
     expect(
       () =>
         new ObservationalMemory({
@@ -3607,12 +3607,12 @@ describe('Async Buffering Config Validation', () => {
           model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
-            bufferEvery: 10000,
-            asyncActivation: 0.7,
+            bufferTokens: 10000,
+            bufferActivation: 0.7,
           },
           reflection: {
             observationTokens: 20000,
-            asyncActivation: 0.5,
+            bufferActivation: 0.5,
           },
         }),
     ).not.toThrow();
@@ -3895,24 +3895,24 @@ describe('Async Buffering Processor Logic', () => {
         storage: createInMemoryStorage(),
         scope: 'thread',
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 }, // No bufferEvery
+        observation: { messageTokens: 50000 }, // No bufferTokens
         reflection: { observationTokens: 20000 },
       });
 
       expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(false);
     });
 
-    it('should return true when crossing a bufferEvery interval boundary', () => {
+    it('should return true when crossing a bufferTokens interval boundary', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
-          bufferEvery: 10000,
-          asyncActivation: 0.7,
+          bufferTokens: 10000,
+          bufferActivation: 0.7,
         },
-        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
 
       // At 5000 tokens, interval = 0, lastBoundary = 0 → no trigger
@@ -3929,10 +3929,10 @@ describe('Async Buffering Processor Logic', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
-          bufferEvery: 10000,
-          asyncActivation: 0.7,
+          bufferTokens: 10000,
+          bufferActivation: 0.7,
         },
-        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
 
       // isBufferingObservation=true but no op registered in this process → stale, should allow trigger
@@ -3947,10 +3947,10 @@ describe('Async Buffering Processor Logic', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
-          bufferEvery: 10000,
-          asyncActivation: 0.7,
+          bufferTokens: 10000,
+          bufferActivation: 0.7,
         },
-        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
 
       const lockKey = 'thread:test';
@@ -3975,10 +3975,10 @@ describe('Async Buffering Processor Logic', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
-          bufferEvery: 10000,
-          asyncActivation: 0.7,
+          bufferTokens: 10000,
+          bufferActivation: 0.7,
         },
-        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
 
       const lockKey = 'thread:test';
@@ -4007,25 +4007,25 @@ describe('Async Buffering Processor Logic', () => {
         scope: 'thread',
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 }, // No asyncActivation
+        reflection: { observationTokens: 20000 }, // No bufferActivation
       });
 
       expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', mockRecord)).toBe(false);
     });
 
-    it('should trigger when observation tokens reach threshold * asyncActivation', () => {
+    it('should trigger when observation tokens reach threshold * bufferActivation', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
-          bufferEvery: 10000,
-          asyncActivation: 0.7,
+          bufferTokens: 10000,
+          bufferActivation: 0.7,
         },
         reflection: {
           observationTokens: 20000,
-          asyncActivation: 0.5, // trigger at 20000 * 0.5 = 10000 observation tokens
+          bufferActivation: 0.5, // trigger at 20000 * 0.5 = 10000 observation tokens
         },
       });
 
@@ -4043,12 +4043,12 @@ describe('Async Buffering Processor Logic', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
-          bufferEvery: 10000,
-          asyncActivation: 0.7,
+          bufferTokens: 10000,
+          bufferActivation: 0.7,
         },
         reflection: {
           observationTokens: 20000,
-          asyncActivation: 0.5,
+          bufferActivation: 0.5,
         },
       });
 
@@ -4063,12 +4063,12 @@ describe('Async Buffering Processor Logic', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
-          bufferEvery: 10000,
-          asyncActivation: 0.7,
+          bufferTokens: 10000,
+          bufferActivation: 0.7,
         },
         reflection: {
           observationTokens: 20000,
-          asyncActivation: 0.5,
+          bufferActivation: 0.5,
         },
       });
 
@@ -4084,12 +4084,12 @@ describe('Async Buffering Processor Logic', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
-          bufferEvery: 10000,
-          asyncActivation: 0.7,
+          bufferTokens: 10000,
+          bufferActivation: 0.7,
         },
         reflection: {
           observationTokens: 20000,
-          asyncActivation: 0.5,
+          bufferActivation: 0.5,
         },
       });
 
@@ -4384,10 +4384,10 @@ describe('Async Buffering Processor Logic', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
-          bufferEvery: 10000,
-          asyncActivation: 0.7,
+          bufferTokens: 10000,
+          bufferActivation: 0.7,
         },
-        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
 
       const record = await storage.initializeObservationalMemory({
@@ -4410,10 +4410,10 @@ describe('Async Buffering Processor Logic', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
-          bufferEvery: 10000,
-          asyncActivation: 1,
+          bufferTokens: 10000,
+          bufferActivation: 1,
         },
-        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
 
       const record = await storage.initializeObservationalMemory({
@@ -4452,10 +4452,10 @@ describe('Async Buffering Processor Logic', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
-          bufferEvery: 10000,
-          asyncActivation: 1,
+          bufferTokens: 10000,
+          bufferActivation: 1,
         },
-        reflection: { observationTokens: 20000, asyncActivation: 0.5 },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
 
       const record = await storage.initializeObservationalMemory({
@@ -4504,8 +4504,8 @@ describe('Full Async Buffering Flow', () => {
    */
   async function setupAsyncBufferingScenario(opts: {
     messageTokens: number;
-    bufferEvery: number;
-    asyncActivation: number;
+    bufferTokens: number;
+    bufferActivation: number;
     reflectionObservationTokens: number;
     reflectionAsyncActivation?: number;
     blockAfter?: number;
@@ -4573,13 +4573,13 @@ describe('Full Async Buffering Flow', () => {
       model: mockModel as any,
       observation: {
         messageTokens: opts.messageTokens,
-        bufferEvery: opts.bufferEvery,
-        asyncActivation: opts.asyncActivation,
+        bufferTokens: opts.bufferTokens,
+        bufferActivation: opts.bufferActivation,
         blockAfter: opts.blockAfter,
       },
       reflection: {
         observationTokens: opts.reflectionObservationTokens,
-        asyncActivation: opts.reflectionAsyncActivation ?? opts.asyncActivation,
+        bufferActivation: opts.reflectionAsyncActivation ?? opts.bufferActivation,
       },
     });
 
@@ -4679,20 +4679,20 @@ describe('Full Async Buffering Flow', () => {
     };
   }
 
-  it('should trigger async buffering at bufferEvery interval', async () => {
+  it('should trigger async buffering at bufferTokens interval', async () => {
     // 20 messages × ~200 tokens = ~4000 tokens total
-    // bufferEvery=1000 → first buffer at ~1000 tokens
+    // bufferTokens=1000 → first buffer at ~1000 tokens
     // messageTokens=10000 → threshold not reached
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 10000,
-      bufferEvery: 1000,
-      asyncActivation: 0.7,
+      bufferTokens: 1000,
+      bufferActivation: 0.7,
       reflectionObservationTokens: 50000, // High - don't trigger reflection
       messageCount: 20,
     });
 
     // Step 0 loads historical messages and should trigger async buffering
-    // since ~4000 tokens > bufferEvery (1000)
+    // since ~4000 tokens > bufferTokens (1000)
     await step(0);
     await waitForAsyncOps();
 
@@ -4713,11 +4713,11 @@ describe('Full Async Buffering Flow', () => {
   it('should activate buffered observations when threshold is reached', async () => {
     // Phase 1: Start with few messages so buffering triggers (below threshold)
     // 10 messages × ~200 tokens = ~2000 tokens, threshold = 5000
-    // bufferEvery=1000 → async buffering triggers at ~1000 tokens
+    // bufferTokens=1000 → async buffering triggers at ~1000 tokens
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 3000,
-      bufferEvery: 500,
-      asyncActivation: 0.7,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
       reflectionObservationTokens: 50000,
       messageCount: 10,
     });
@@ -4776,8 +4776,8 @@ describe('Full Async Buffering Flow', () => {
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls, reflectorCalls } =
       await setupAsyncBufferingScenario({
         messageTokens: 3000,
-        bufferEvery: 500,
-        asyncActivation: 1.0,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
         reflectionObservationTokens: 10, // Very low - reflection triggers after any activation
         reflectionAsyncActivation: 1.0,
         messageCount: 10, // ~1100 tokens, below threshold
@@ -4835,8 +4835,8 @@ describe('Full Async Buffering Flow', () => {
   it('should not duplicate observations from already-buffered messages', async () => {
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 10000,
-      bufferEvery: 1000,
-      asyncActivation: 1.0,
+      bufferTokens: 1000,
+      bufferActivation: 1.0,
       reflectionObservationTokens: 50000,
       messageCount: 15,
     });
@@ -4868,8 +4868,8 @@ describe('Full Async Buffering Flow', () => {
   it('should fall back to sync observation when blockAfter is exceeded', async () => {
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 1000,
-      bufferEvery: 500,
-      asyncActivation: 0.7,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
       reflectionObservationTokens: 50000,
       blockAfter: 2000, // Will force sync when tokens exceed this
       messageCount: 30, // ~6000 tokens, well above blockAfter
@@ -4899,8 +4899,8 @@ describe('Full Async Buffering Flow', () => {
     // The fix should start background reflection immediately.
     const { storage, threadId, resourceId, step, waitForAsyncOps, reflectorCalls } = await setupAsyncBufferingScenario({
       messageTokens: 500, // Low - triggers observation/activation fast
-      bufferEvery: 200,
-      asyncActivation: 1.0,
+      bufferTokens: 200,
+      bufferActivation: 1.0,
       reflectionObservationTokens: 30, // Very low - any observations should trigger reflection
       reflectionAsyncActivation: 1.0,
       messageCount: 15,
@@ -4940,8 +4940,8 @@ describe('Full Async Buffering Flow', () => {
   it('should preserve continuation hints only for sync observation, not async buffering', async () => {
     const { step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 10000,
-      bufferEvery: 500,
-      asyncActivation: 0.7,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
       reflectionObservationTokens: 50000,
       messageCount: 10,
     });
@@ -4965,8 +4965,8 @@ describe('Full Async Buffering Flow', () => {
     expect(lastCall.input.length).toBeGreaterThan(0);
   });
 
-  it('should enforce paired async config: observation.bufferEvery requires reflection.asyncActivation', () => {
-    // When observation has bufferEvery, reflection must have asyncActivation
+  it('should enforce paired async config: observation.bufferTokens requires reflection.bufferActivation', () => {
+    // When observation has bufferTokens, reflection must have bufferActivation
     expect(() => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
@@ -4974,18 +4974,18 @@ describe('Full Async Buffering Flow', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
-          bufferEvery: 5000,
-          asyncActivation: 0.7,
+          bufferTokens: 5000,
+          bufferActivation: 0.7,
         },
         reflection: {
           observationTokens: 5000,
-          // No asyncActivation — should throw
+          // No bufferActivation — should throw
         },
       });
     }).toThrow();
   });
 
-  it('should validate asyncActivation must be in (0, 1] range', () => {
+  it('should validate bufferActivation must be in (0, 1] range', () => {
     expect(() => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
@@ -4993,10 +4993,10 @@ describe('Full Async Buffering Flow', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
-          bufferEvery: 5000,
-          asyncActivation: 1.5, // Invalid: > 1
+          bufferTokens: 5000,
+          bufferActivation: 1.5, // Invalid: > 1
         },
-        reflection: { observationTokens: 5000, asyncActivation: 0.5 },
+        reflection: { observationTokens: 5000, bufferActivation: 0.5 },
       });
     }).toThrow();
 
@@ -5007,28 +5007,28 @@ describe('Full Async Buffering Flow', () => {
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
-          bufferEvery: 5000,
-          asyncActivation: 0, // Invalid: must be > 0
+          bufferTokens: 5000,
+          bufferActivation: 0, // Invalid: must be > 0
         },
-        reflection: { observationTokens: 5000, asyncActivation: 0.5 },
+        reflection: { observationTokens: 5000, bufferActivation: 0.5 },
       });
     }).toThrow();
   });
 
-  it('should resolve fractional bufferEvery to absolute token count', () => {
-    // bufferEvery: 0.25 with messageTokens: 20000 → 5000
+  it('should resolve fractional bufferTokens to absolute token count', () => {
+    // bufferTokens: 0.25 with messageTokens: 20000 → 5000
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
       model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
       observation: {
         messageTokens: 20000,
-        bufferEvery: 0.25,
-        asyncActivation: 0.7,
+        bufferTokens: 0.25,
+        bufferActivation: 0.7,
       },
-      reflection: { observationTokens: 5000, asyncActivation: 0.5 },
+      reflection: { observationTokens: 5000, bufferActivation: 0.5 },
     });
-    expect((om as any).observationConfig.bufferEvery).toBe(5000);
+    expect((om as any).observationConfig.bufferTokens).toBe(5000);
   });
 
   it('should resolve fractional blockAfter to absolute token count with multiplier', () => {
@@ -5039,11 +5039,11 @@ describe('Full Async Buffering Flow', () => {
       model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
       observation: {
         messageTokens: 20000,
-        bufferEvery: 5000,
-        asyncActivation: 0.7,
+        bufferTokens: 5000,
+        bufferActivation: 0.7,
         blockAfter: 1.25,
       },
-      reflection: { observationTokens: 5000, asyncActivation: 0.5 },
+      reflection: { observationTokens: 5000, bufferActivation: 0.5 },
     });
     expect((om as any).observationConfig.blockAfter).toBe(25000);
   });
@@ -5053,8 +5053,8 @@ describe('Full Async Buffering Flow', () => {
     // Turn 2: step 0 activates existing chunks, then buffers new unobserved messages
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 2000,
-      bufferEvery: 200,
-      asyncActivation: 1.0,
+      bufferTokens: 200,
+      bufferActivation: 1.0,
       reflectionObservationTokens: 50000,
       messageCount: 10, // ~1100 tokens
     });
@@ -5115,8 +5115,8 @@ describe('Full Async Buffering Flow', () => {
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls, reflectorCalls } =
       await setupAsyncBufferingScenario({
         messageTokens: 2000,
-        bufferEvery: 500,
-        asyncActivation: 1.0,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
         reflectionObservationTokens: 10, // Very low - reflection triggers after any activation
         reflectionAsyncActivation: 1.0,
         messageCount: 8, // ~880 tokens, below threshold
@@ -5194,8 +5194,8 @@ describe('Full Async Buffering Flow', () => {
   it('should handle writer errors gracefully during async buffering', async () => {
     const { step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 10000,
-      bufferEvery: 500,
-      asyncActivation: 0.7,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
       reflectionObservationTokens: 50000,
       messageCount: 10,
     });
@@ -5417,16 +5417,16 @@ describe('Full Async Buffering Flow', () => {
       expect(record!.activeObservations).not.toMatch(/\* Line C\n/);
     });
 
-    it('should trigger async reflection via processInputStep when observation tokens cross asyncActivation threshold', async () => {
+    it('should trigger async reflection via processInputStep when observation tokens cross bufferActivation threshold', async () => {
       // Setup: Low reflection threshold so reflection triggers quickly.
-      // asyncActivation=0.5 means reflection starts at 50% of reflectionObservationTokens.
+      // bufferActivation=0.5 means reflection starts at 50% of reflectionObservationTokens.
       // Observer returns ~10 tokens of observation per call.
       // reflectionObservationTokens=20 → activation point = 10 tokens.
       const { storage, threadId, resourceId, step, waitForAsyncOps, reflectorCalls, observerCalls } =
         await setupAsyncBufferingScenario({
           messageTokens: 2000,
-          bufferEvery: 500,
-          asyncActivation: 1.0,
+          bufferTokens: 500,
+          bufferActivation: 1.0,
           reflectionObservationTokens: 20, // Very low threshold
           reflectionAsyncActivation: 0.5, // Trigger reflection at 50% = 10 tokens
           messageCount: 8, // ~880 tokens, below message threshold
@@ -5543,12 +5543,12 @@ describe('Full Async Buffering Flow', () => {
         model: mockModel as any,
         observation: {
           messageTokens: 10000,
-          bufferEvery: 500,
-          asyncActivation: 1.0,
+          bufferTokens: 500,
+          bufferActivation: 1.0,
         },
         reflection: {
           observationTokens: 100,
-          asyncActivation: 0.5,
+          bufferActivation: 0.5,
         },
       });
 
@@ -5586,7 +5586,7 @@ describe('Full Async Buffering Flow', () => {
     });
   });
 
-  it('should not activate more chunks than asyncActivation ratio allows', async () => {
+  it('should not activate more chunks than bufferActivation ratio allows', async () => {
     const storage = createInMemoryStorage();
     const threadId = 'partial-activation-thread';
     const resourceId = 'partial-activation-resource';

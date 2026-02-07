@@ -11,10 +11,10 @@ Added async buffering for observational memory. Observations can now be pre-comp
 
 **New configuration options:**
 
-- `observation.bufferEvery` — Token interval for triggering background observation buffering (e.g., `6000` buffers every 6k tokens)
-- `observation.asyncActivation` — Ratio of the message token threshold to activate when buffered observations are applied (0-1 float, e.g., `0.6` activates 60% of the threshold worth of message tokens)
+- `observation.bufferTokens` — Token interval for triggering background observation buffering (e.g., `6000` buffers every 6k tokens)
+- `observation.bufferActivation` — Ratio of the message token threshold to activate when buffered observations are applied (0-1 float, e.g., `0.6` activates 60% of the threshold worth of message tokens)
 - `observation.blockAfter` — Token count (or 1.x multiplier of the threshold) at which synchronous observation blocks the response. Defaults to 1.2x when async buffering is enabled
-- `reflection.asyncActivation` — Same as observation but for reflections. Background reflection runs when observation tokens cross the activation point
+- `reflection.bufferActivation` — Same as observation but for reflections. Background reflection runs when observation tokens cross the activation point
 - `reflection.blockAfter` — Same as observation but for reflections
 
 **Example:**
@@ -26,13 +26,13 @@ const memory = new Memory({
     observationalMemory: {
       observation: {
         messageTokens: 30_000,
-        bufferEvery: 6_000,
-        asyncActivation: 0.6,
+        bufferTokens: 6_000,
+        bufferActivation: 0.6,
         blockAfter: 1.5,
       },
       reflection: {
         observationTokens: 5_000,
-        asyncActivation: 0.5,
+        bufferActivation: 0.5,
         blockAfter: 1.2,
       },
     },

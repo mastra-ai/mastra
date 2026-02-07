@@ -124,17 +124,17 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
       defaultValue: "{ temperature: 0.3, maxOutputTokens: 100_000 }",
     },
     {
-      name: "bufferEvery",
+      name: "bufferTokens",
       type: "number",
       description:
         "Token interval for async background observation buffering. Can be an absolute token count (e.g. `5000`) or a fraction of `messageTokens` (e.g. `0.25` = buffer every 25% of threshold). When set, observations run in the background at this interval, storing results in a buffer. When the main `messageTokens` threshold is reached, buffered observations activate instantly without a blocking LLM call. Must resolve to less than `messageTokens`. If not set, async buffering is disabled and observations run synchronously.",
       isOptional: true,
     },
     {
-      name: "asyncActivation",
+      name: "bufferActivation",
       type: "number",
       description:
-        "Ratio (0-1) of buffered observations to activate when threshold is reached. Setting this below 1 keeps some observations in reserve for continuity. Requires `bufferEvery` to also be set.",
+        "Ratio (0-1) of buffered observations to activate when threshold is reached. Setting this below 1 keeps some observations in reserve for continuity. Requires `bufferTokens` to also be set.",
       isOptional: true,
       defaultValue: "1",
     },
@@ -142,9 +142,9 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
       name: "blockAfter",
       type: "number",
       description:
-        "Token threshold above which synchronous (blocking) observation is forced. Between `messageTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous observation runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `messageTokens`) or an absolute token count (≥ 2, must be greater than `messageTokens`). Only relevant when `bufferEvery` is set. Defaults to `1.2` when async buffering is enabled.",
+        "Token threshold above which synchronous (blocking) observation is forced. Between `messageTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous observation runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `messageTokens`) or an absolute token count (≥ 2, must be greater than `messageTokens`). Only relevant when `bufferTokens` is set. Defaults to `1.2` when async buffering is enabled.",
       isOptional: true,
-      defaultValue: "1.2 (when bufferEvery is set)",
+      defaultValue: "1.2 (when bufferTokens is set)",
     },
   ]}
 />
@@ -178,19 +178,19 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
       defaultValue: "{ temperature: 0, maxOutputTokens: 100_000 }",
     },
     {
-      name: "asyncActivation",
+      name: "bufferActivation",
       type: "number",
       description:
-        "Ratio (0-1) controlling when async reflection buffering starts. When observation tokens reach `observationTokens * asyncActivation`, reflection runs in the background. On activation at the full threshold, the buffered reflection replaces the observations it covers, preserving any new observations appended after that range. Requires `observation.bufferEvery` to also be set.",
+        "Ratio (0-1) controlling when async reflection buffering starts. When observation tokens reach `observationTokens * bufferActivation`, reflection runs in the background. On activation at the full threshold, the buffered reflection replaces the observations it covers, preserving any new observations appended after that range. Requires `observation.bufferTokens` to also be set.",
       isOptional: true,
     },
     {
       name: "blockAfter",
       type: "number",
       description:
-        "Token threshold above which synchronous (blocking) reflection is forced. Between `observationTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous reflection runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `observationTokens`) or an absolute token count (≥ 2, must be greater than `observationTokens`). Only relevant when `asyncActivation` is set. Defaults to `1.2` when async reflection is enabled.",
+        "Token threshold above which synchronous (blocking) reflection is forced. Between `observationTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous reflection runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `observationTokens`) or an absolute token count (≥ 2, must be greater than `observationTokens`). Only relevant when `bufferActivation` is set. Defaults to `1.2` when async reflection is enabled.",
       isOptional: true,
-      defaultValue: "1.2 (when asyncActivation is set)",
+      defaultValue: "1.2 (when bufferActivation is set)",
     },
   ]}
 />
@@ -321,7 +321,7 @@ export const agent = new Agent({
 
 ### Async buffering
 
-Async buffering pre-computes observations in the background before the main threshold is reached, enabling instant activation with no blocking LLM call. The `bufferEvery` option triggers background observations at regular token intervals, and `asyncActivation` controls what fraction of buffered content is activated at threshold.
+Async buffering pre-computes observations in the background before the main threshold is reached, enabling instant activation with no blocking LLM call. The `bufferTokens` option triggers background observations at regular token intervals, and `bufferActivation` controls what fraction of buffered content is activated at threshold.
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from "@mastra/memory";
@@ -337,16 +337,16 @@ export const agent = new Agent({
         observation: {
           messageTokens: 30_000,
           // Buffer every 5k tokens (runs in background)
-          bufferEvery: 5_000,
+          bufferTokens: 5_000,
           // Activate 70% of buffered chunks at threshold
-          asyncActivation: 0.7,
+          bufferActivation: 0.7,
           // Force synchronous observation at 1.5x threshold
           blockAfter: 1.5,
         },
         reflection: {
           observationTokens: 60_000,
           // Start background reflection at 50% of threshold
-          asyncActivation: 0.5,
+          bufferActivation: 0.5,
           // Force synchronous reflection at 1.2x threshold
           blockAfter: 1.2,
         },
@@ -356,9 +356,9 @@ export const agent = new Agent({
 });
 ```
 
-When `bufferEvery` is set, observation buffering begins at that token interval. At 30k tokens (the `messageTokens` threshold), 70% of the buffered chunks activate instantly. If tokens exceed 45k (`blockAfter: 1.5 × 30k`), a synchronous observation runs as a fallback.
+When `bufferTokens` is set, observation buffering begins at that token interval. At 30k tokens (the `messageTokens` threshold), 70% of the buffered chunks activate instantly. If tokens exceed 45k (`blockAfter: 1.5 × 30k`), a synchronous observation runs as a fallback.
 
-For reflection, `asyncActivation: 0.5` begins background reflection when observation tokens reach 30k (50% of the 60k threshold). At 60k, the buffered reflection activates. Above 72k (`blockAfter: 1.2 × 60k`), synchronous reflection runs.
+For reflection, `bufferActivation: 0.5` begins background reflection when observation tokens reach 30k (50% of the 60k threshold). At 60k, the buffered reflection activates. Above 72k (`blockAfter: 1.2 × 60k`), synchronous reflection runs.
 
 ## Streaming data parts
 
@@ -385,7 +385,7 @@ interface DataOmStatusPart {
           chunks: number;
           /** Total message tokens across all buffered chunks */
           messageTokens: number;
-          /** Projected message tokens that would be removed if activation happened now (based on asyncActivation ratio and chunk boundaries) */
+          /** Projected message tokens that would be removed if activation happened now (based on bufferActivation ratio and chunk boundaries) */
           projectedMessageRemoval: number;
           /** Observation tokens that will be added on activation */
           observationTokens: number;
@@ -425,7 +425,7 @@ const obsPercent = status.windows.active.observations.tokens
   / status.windows.active.observations.threshold;
 
 // Projected message tokens after buffered observations activate
-// Uses projectedMessageRemoval which accounts for asyncActivation ratio and chunk boundaries
+// Uses projectedMessageRemoval which accounts for bufferActivation ratio and chunk boundaries
 const postActivation = status.windows.active.messages.tokens
   - status.windows.buffered.observations.projectedMessageRemoval;
 

@@ -670,7 +670,7 @@ export interface ObservationalMemoryRecord {
   isBufferingReflection: boolean;
   /**
    * The pending message token count at which the last async observation buffer was triggered.
-   * Used to determine when the next bufferEvery interval is crossed.
+   * Used to determine when the next bufferTokens interval is crossed.
    * Persisted so new instances (created per request) can pick up where the last left off.
    */
   lastBufferedAtTokens: number;
@@ -721,7 +721,7 @@ export interface UpdateActiveObservationsInput {
 
 /**
  * Input for updating buffered observations.
- * Used when async buffering is enabled via `bufferEvery` config.
+ * Used when async buffering is enabled via `bufferTokens` config.
  * Adds a new chunk to the bufferedObservationChunks array.
  */
 export interface UpdateBufferedObservationsInput {
@@ -776,7 +776,7 @@ export interface SwapBufferedToActiveResult {
 
 /**
  * Input for updating buffered reflection.
- * Used when async reflection buffering is enabled via `bufferEvery` config.
+ * Used when async reflection buffering is enabled via `bufferTokens` config.
  */
 export interface UpdateBufferedReflectionInput {
   id: string;

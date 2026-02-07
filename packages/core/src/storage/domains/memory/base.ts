@@ -205,12 +205,12 @@ export abstract class MemoryStorage extends StorageDomain {
 
   // ============================================
   // Buffering Methods (for async observation/reflection)
-  // These methods support async buffering when `bufferEvery` is configured.
+  // These methods support async buffering when `bufferTokens` is configured.
   // ============================================
 
   /**
    * Update buffered observations.
-   * Called when observations are created asynchronously via `bufferEvery`.
+   * Called when observations are created asynchronously via `bufferTokens`.
    */
   async updateBufferedObservations(_input: UpdateBufferedObservationsInput): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
@@ -243,7 +243,7 @@ export abstract class MemoryStorage extends StorageDomain {
 
   /**
    * Update buffered reflection (async reflection in progress).
-   * Called when reflection runs asynchronously via `bufferEvery`.
+   * Called when reflection runs asynchronously via `bufferTokens`.
    */
   async updateBufferedReflection(_input: UpdateBufferedReflectionInput): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
