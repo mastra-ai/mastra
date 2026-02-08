@@ -1859,9 +1859,10 @@ describe('Scenario: Buffering Flow', () => {
     current = await storage.getObservationalMemory('thread-1', 'resource-1');
     expect(current?.activeObservations).toContain('Buffered observation');
     expect(current?.bufferedObservationChunks).toBeUndefined();
-    // NOTE: observedMessageIds is NOT updated during buffered activation
-    // because buffered chunks represent observations of messages as they were at buffering time.
-    // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
+    // NOTE: observedMessageIds is NOT updated during buffered activation.
+    // Adding activated IDs would permanently block future messages with recycled IDs
+    // from being observed. Instead, activatedMessageIds is returned separately
+    // and used directly by cleanupAfterObservation.
     expect(current?.observedMessageIds).toBeUndefined();
     expect(current?.lastObservedAt).toEqual(swapTime);
   });
@@ -4522,6 +4523,7 @@ describe('Full Async Buffering Flow', () => {
     (ObservationalMemory as any).lastBufferedBoundary.clear();
     (ObservationalMemory as any).lastBufferedAtTime.clear();
     (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
 
     const storage = createInMemoryStorage();
     const threadId = 'flow-thread';
@@ -6138,19 +6140,18 @@ describe('Full Async Buffering Flow', () => {
     expect(msgsAfterStep1.length).toBeLessThan(msgCountBefore);
   });
 
-  it('should set lastBufferedBoundary to post-activation token count after activation', async () => {
-    // Regression test: after activation, lastBufferedBoundary should be set to the
-    // post-activation context token count (freshTotal - tokensActivated), not reset
-    // to 0 or deleted. Without this, the very next step after activation would
-    // immediately re-trigger buffering because interval tracking would start from 0.
-    const { storage, threadId, resourceId, step, waitForAsyncOps, om, observerCalls } =
-      await setupAsyncBufferingScenario({
-        messageTokens: 3000,
-        bufferTokens: 500,
-        bufferActivation: 1.0,
-        reflectionObservationTokens: 50000,
-        messageCount: 10, // ~2200 tokens, below 3000 threshold → buffers first
-      });
+  it('should reset lastBufferedBoundary to 0 after activation so remaining messages can be buffered', async () => {
+    // After activation, lastBufferedBoundary is reset to 0 so that any remaining
+    // unbuffered messages in context can trigger a new buffering interval.
+    // The worst case is one no-op trigger if all remaining messages are already
+    // in buffered chunks.
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 3000,
+      bufferTokens: 500,
+      bufferActivation: 1.0,
+      reflectionObservationTokens: 50000,
+      messageCount: 10, // ~2200 tokens, below 3000 threshold → buffers first
+    });
 
     // Phase 1: step 0 buffers messages (below threshold)
     await step(0);
@@ -6186,26 +6187,13 @@ describe('Full Async Buffering Flow', () => {
     const record = await storage.getObservationalMemory(threadId, resourceId);
     expect(record!.activeObservations).toBeTruthy();
 
-    // Check that lastBufferedBoundary is set (not deleted)
-    const lockKey = `thread:${threadId}`;
-    const bufferKey = (om as any).getObservationBufferKey(lockKey);
-    const boundary = (ObservationalMemory as any).lastBufferedBoundary.get(bufferKey);
-    expect(boundary).toBeDefined();
-    expect(typeof boundary).toBe('number');
-    // The boundary should be positive (post-activation tokens)
-    expect(boundary).toBeGreaterThan(0);
-
-    const boundaryAfterActivation = boundary;
-
-    // Step 1: should NOT immediately re-trigger buffering because boundary
-    // is set correctly — we need to cross another interval
-    await step(1);
-    await waitForAsyncOps();
-
-    // The boundary should be unchanged (no new buffer was triggered because
-    // we haven't crossed a new bufferTokens interval)
-    const boundaryAfterStep1 = (ObservationalMemory as any).lastBufferedBoundary.get(bufferKey);
-    expect(boundaryAfterStep1).toBe(boundaryAfterActivation);
+    // After activation, the boundary is reset to 0, which immediately allows
+    // shouldTriggerAsyncObservation to trigger buffering for remaining messages.
+    // By the time step 0 completes, the boundary has been raised again by
+    // startAsyncBufferedObservation to the current context token count.
+    // The key assertion is that new buffering was triggered (observer called again).
+    const callsAfterActivation = observerCalls.length;
+    expect(callsAfterActivation).toBeGreaterThan(1); // buffered once before, buffered again after activation
   });
 
   it('should use lastBufferedAtTime cursor to prevent re-observing same messages', async () => {

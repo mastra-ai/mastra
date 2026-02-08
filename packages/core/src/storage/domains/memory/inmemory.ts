@@ -998,10 +998,11 @@ export class InMemoryMemory extends MemoryStorage {
     // Update observation token count
     record.observationTokenCount = (record.observationTokenCount ?? 0) + activatedTokens;
 
-    // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.
-    // Buffered chunks represent observations of messages as they were at buffering time.
-    // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
-    // New content after lastObservedAt will be picked up in subsequent observations.
+    // NOTE: We intentionally do NOT add activatedMessageIds to record.observedMessageIds.
+    // observedMessageIds is used by getUnobservedMessages to filter future messages.
+    // Since AI SDK may reuse message IDs for new content, adding them here would
+    // permanently block new content from being observed. Instead, we return
+    // activatedMessageIds so the caller can remove them from messageList directly.
 
     // Update buffered state with remaining chunks
     record.bufferedObservationChunks = remainingChunks.length > 0 ? remainingChunks : undefined;

@@ -640,6 +640,15 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private static reflectionBufferCycleIds = new Map<string, string>();
 
   /**
+   * Track message IDs that have been sealed during async buffering.
+   * STATIC: Shared across all instances so saveMessagesWithSealedIdTracking
+   * generates new IDs when re-saving messages that were sealed in a previous step.
+   * Key format: threadId
+   * Value: Set of sealed message IDs
+   */
+  private static sealedMessageIds = new Map<string, Set<string>>();
+
+  /**
    * Check if async buffering is enabled for observations.
    */
   private isAsyncObservationEnabled(): boolean {
@@ -2532,17 +2541,12 @@ ${suggestedResponse}
           updatedRecord = activationResult.updatedRecord ?? recordAfterWait;
           activatedMessageIds = activationResult.activatedMessageIds;
 
-          // Set lastBufferedBoundary to the post-activation context size so that
-          // interval tracking continues from the correct position. Without this,
-          // the boundary resets to 0 and the very next step re-triggers buffering.
-          const postActivationTokens = Math.max(0, freshTotal - (activationResult.messageTokensActivated ?? 0));
-          const bufKey = this.getObservationBufferKey(lockKey);
-          ObservationalMemory.lastBufferedBoundary.set(bufKey, postActivationTokens);
-          this.storage.setBufferingObservationFlag(updatedRecord.id, false, postActivationTokens).catch(() => {});
-
           omDebug(
-            `[OM:threshold] activation succeeded, obsTokens=${updatedRecord.observationTokenCount}, activeObsLen=${updatedRecord.activeObservations?.length}, postActivationBoundary=${postActivationTokens}`,
+            `[OM:threshold] activation succeeded, obsTokens=${updatedRecord.observationTokenCount}, activeObsLen=${updatedRecord.activeObservations?.length}`,
           );
+
+          // Note: lastBufferedBoundary is updated by the caller AFTER cleanupAfterObservation
+          // removes the activated messages from messageList and recounts the actual context size.
 
           // Check if async reflection should be triggered or activated.
           // This only does async work (background buffering or instant activation) —
@@ -2630,6 +2634,10 @@ ${suggestedResponse}
       }
     }
 
+    omDebug(
+      `[OM:cleanupBranch] allMsgs=${allMsgs.length}, markerFound=${markerIdx !== -1}, markerIdx=${markerIdx}, observedMessageIds=${observedMessageIds?.length ?? 'undefined'}, allIds=${allMsgs.map(m => m.id?.slice(0, 8)).join(',')}`,
+    );
+
     if (markerMsg && markerIdx !== -1) {
       // Collect all messages before the marker (these are fully observed)
       const idsToRemove: string[] = [];
@@ -2658,14 +2666,15 @@ ${suggestedResponse}
         markerMsg.content.parts = unobservedParts;
       }
 
+      // Remove observed messages from context FIRST, before saveMessagesWithSealedIdTracking
+      // which may mutate msg.id for sealed messages (causing removeByIds to miss them).
+      if (idsToRemove.length > 0) {
+        messageList.removeByIds(idsToRemove);
+      }
+
       // Save all observed messages (with their markers) to DB
       if (messagesToSave.length > 0) {
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
-      }
-
-      // Remove observed messages from context
-      if (idsToRemove.length > 0) {
-        messageList.removeByIds(idsToRemove);
       }
     } else if (observedMessageIds && observedMessageIds.length > 0) {
       // Activation-based cleanup: remove observed messages from context.
@@ -2683,14 +2692,22 @@ ${suggestedResponse}
         }
       }
 
+      omDebug(
+        `[OM:cleanupActivation] observedSet=${[...observedSet].map(id => id.slice(0, 8)).join(',')}, matched=${idsToRemove.length}, idsToRemove=${idsToRemove.map(id => id.slice(0, 8)).join(',')}`,
+      );
+
+      // Remove observed messages from context FIRST, before saveMessagesWithSealedIdTracking
+      // which may mutate msg.id for sealed messages (causing removeByIds to miss them).
+      if (idsToRemove.length > 0) {
+        messageList.removeByIds(idsToRemove);
+        omDebug(
+          `[OM:cleanupActivation] removed ${idsToRemove.length} messages, remaining=${messageList.get.all.db().length}`,
+        );
+      }
+
       // Save observed messages to DB (without markers, since this is activation-based)
       if (messagesToSave.length > 0) {
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
-      }
-
-      // Remove observed messages from context
-      if (idsToRemove.length > 0) {
-        messageList.removeByIds(idsToRemove);
       }
     } else {
       // No marker found — fall back to source-based clearing
@@ -2989,16 +3006,10 @@ NOTE: Any messages following this system reminder are newer than your memories.
           if (activationResult.success && activationResult.updatedRecord) {
             record = activationResult.updatedRecord;
 
-            // Set lastBufferedBoundary to the post-activation context size
-            const postActivationTokens = Math.max(
-              0,
-              step0PendingTokens - (activationResult.messageTokensActivated ?? 0),
-            );
-            const bufKey = this.getObservationBufferKey(lockKey);
-            ObservationalMemory.lastBufferedBoundary.set(bufKey, postActivationTokens);
-            this.storage.setBufferingObservationFlag(record.id, false, postActivationTokens).catch(() => {});
-
-            // Remove activated messages from context
+            // Remove activated messages from context FIRST, then compute the boundary
+            // from the actual remaining context size. If we compute the boundary before
+            // removal, it reflects the pre-removal size and shouldTriggerAsyncObservation
+            // sees currentInterval < lastInterval, preventing new buffering triggers.
             const observedSet = new Set(Array.isArray(record?.observedMessageIds) ? record.observedMessageIds : []);
             const allMsgs = messageList.get.all.db();
             const idsToRemove = allMsgs
@@ -3008,6 +3019,14 @@ NOTE: Any messages following this system reminder are newer than your memories.
             if (idsToRemove.length > 0) {
               messageList.removeByIds(idsToRemove);
             }
+
+            // Reset lastBufferedBoundary to 0 after activation so that any
+            // remaining unbuffered messages in context can trigger a new buffering
+            // interval. The worst case is one no-op trigger if all remaining messages
+            // are already in buffered chunks.
+            const bufKey = this.getObservationBufferKey(lockKey);
+            ObservationalMemory.lastBufferedBoundary.set(bufKey, 0);
+            this.storage.setBufferingObservationFlag(record.id, false, 0).catch(() => {});
 
             // Check if reflection should be triggered or activated
             await this.maybeReflect(record, record.observationTokenCount ?? 0, threadId, writer);
@@ -3064,7 +3083,11 @@ NOTE: Any messages following this system reminder are newer than your memories.
       );
       const { totalPendingTokens, threshold } = thresholds;
 
-      const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
+      // Merge per-state sealedIds with static sealedMessageIds (survives across OM instances)
+      const stateSealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
+      const staticSealedIds = ObservationalMemory.sealedMessageIds.get(threadId) ?? new Set<string>();
+      const sealedIds = new Set<string>([...stateSealedIds, ...staticSealedIds]);
+      state.sealedIds = sealedIds;
       const lockKey = this.getLockKey(threadId, resourceId);
 
       // ════════════════════════════════════════════════════════════════════════
@@ -3093,6 +3116,16 @@ NOTE: Any messages following this system reminder are newer than your memories.
       }
 
       // ════════════════════════════════════════════════════════════════════════
+      // PER-STEP SAVE: Always persist messages incrementally (step > 0)
+      // Must run BEFORE threshold handling so that:
+      // 1. Sealed messages get new IDs (preventing observedMessageIds collisions)
+      // 2. Messages are persisted even when activation runs
+      // ════════════════════════════════════════════════════════════════════════
+      if (stepNumber > 0) {
+        await this.handlePerStepSave(messageList, sealedIds, threadId, resourceId, state);
+      }
+
+      // ════════════════════════════════════════════════════════════════════════
       // THRESHOLD REACHED: Observe and clean up
       // ════════════════════════════════════════════════════════════════════════
       if (stepNumber > 0 && totalPendingTokens >= threshold) {
@@ -3111,23 +3144,31 @@ NOTE: Any messages following this system reminder are newer than your memories.
         if (observationSucceeded) {
           // Use activatedMessageIds from chunk activation if available,
           // otherwise fall back to observedMessageIds from sync observation.
-          // swapBufferedToActive does NOT populate record.observedMessageIds,
-          // so without this, cleanupAfterObservation falls to the fallback path
-          // and doesn't remove activated chunk messages from context.
+          // swapBufferedToActive does NOT populate record.observedMessageIds
+          // (intentionally — recycled IDs would block future content),
+          // so we pass activatedMessageIds directly for cleanup.
           const observedIds = activatedMessageIds?.length
             ? activatedMessageIds
             : Array.isArray(updatedRecord.observedMessageIds)
               ? updatedRecord.observedMessageIds
               : undefined;
+          omDebug(
+            `[OM:cleanup] observedIds=${observedIds?.length ?? 'undefined'}, ids=${observedIds?.join(',') ?? 'none'}, updatedRecord.observedMessageIds=${JSON.stringify(updatedRecord.observedMessageIds)}`,
+          );
           await this.cleanupAfterObservation(messageList, sealedIds, threadId, resourceId, state, observedIds);
+
+          // Reset lastBufferedBoundary to 0 after activation so that any
+          // remaining unbuffered messages in context can trigger a new buffering
+          // interval on the next step.
+          if (this.isAsyncObservationEnabled()) {
+            const bufKey = this.getObservationBufferKey(lockKey);
+            ObservationalMemory.lastBufferedBoundary.set(bufKey, 0);
+            this.storage.setBufferingObservationFlag(updatedRecord.id, false, 0).catch(() => {});
+            omDebug(`[OM:threshold] post-activation boundary reset to 0`);
+          }
         }
 
         record = updatedRecord;
-      } else if (stepNumber > 0) {
-        // ════════════════════════════════════════════════════════════════════════
-        // PER-STEP SAVE: Persist messages incrementally when threshold not reached
-        // ════════════════════════════════════════════════════════════════════════
-        await this.handlePerStepSave(messageList, sealedIds, threadId, resourceId, state);
       }
     }
 
@@ -3910,6 +3951,19 @@ ${formattedMessages}
       threadId,
       resourceId: freshRecord.resourceId ?? undefined,
     });
+
+    // Track sealed message IDs in the static map so saveMessagesWithSealedIdTracking
+    // generates new IDs for any future saves of these messages.
+    // Uses static map because async buffering runs in the background and the per-state
+    // sealedIds set may belong to a different (already-finished) processInputStep call.
+    let staticSealedIds = ObservationalMemory.sealedMessageIds.get(threadId);
+    if (!staticSealedIds) {
+      staticSealedIds = new Set<string>();
+      ObservationalMemory.sealedMessageIds.set(threadId, staticSealedIds);
+    }
+    for (const msg of messagesToBuffer) {
+      staticSealedIds.add(msg.id);
+    }
 
     // Generate cycle ID and capture start time
     const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
