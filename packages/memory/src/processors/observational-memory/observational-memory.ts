@@ -2932,6 +2932,24 @@ NOTE: Any messages following this system reminder are newer than your memories.
         `[OM:step0-activation] asyncObsEnabled=true, bufferedChunks=${bufferedChunks.length}, isBufferingObs=${record.isBufferingObservation}`,
       );
 
+      // Reset stale lastBufferedBoundary at the start of a new turn.
+      // After activation+reflection on a previous turn, the context may have shrunk
+      // significantly (e.g., 51k → 3k) but the DB boundary stays at 51k. This makes
+      // shouldTriggerAsyncObservation think we're still in interval 5, preventing any
+      // new buffering triggers until tokens grow past 51k again.
+      {
+        const bufKey = this.getObservationBufferKey(lockKey);
+        const dbBoundary = record.lastBufferedAtTokens ?? 0;
+        const currentContextTokens = this.tokenCounter.countMessages(messageList.get.all.db());
+        if (dbBoundary > currentContextTokens) {
+          omDebug(
+            `[OM:step0-boundary-reset] dbBoundary=${dbBoundary} > currentContext=${currentContextTokens}, resetting to current`,
+          );
+          ObservationalMemory.lastBufferedBoundary.set(bufKey, currentContextTokens);
+          this.storage.setBufferingObservationFlag(record.id, false, currentContextTokens).catch(() => {});
+        }
+      }
+
       if (bufferedChunks.length > 0) {
         // Compute threshold to check if activation is warranted
         const allMsgsForCheck = messageList.get.all.db();
