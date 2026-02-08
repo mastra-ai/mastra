@@ -6056,6 +6056,88 @@ describe('Full Async Buffering Flow', () => {
     expect(removedCount).toBeGreaterThan(0);
   });
 
+  it('should remove activated chunk messages from context during mid-turn (step > 0) activation', async () => {
+    // Regression test: when activation happens at step > 0 via handleThresholdReached,
+    // the activated chunk messages must be removed from messageList immediately.
+    //
+    // The root cause: swapBufferedToActive does NOT populate observedMessageIds on the
+    // record. So cleanupAfterObservation gets observedIds=undefined and falls to the
+    // fallback path which doesn't remove chunk messages from context.
+    //
+    // Strategy: use a very high threshold for step 0 so it just loads messages without
+    // activating, then manually add chunks and lower the threshold before step 1.
+    const { storage, threadId, resourceId, step, waitForAsyncOps, om } = await setupAsyncBufferingScenario({
+      messageTokens: 999999, // very high — step 0 won't activate or trigger threshold
+      bufferTokens: 999998, // very high — step 0 won't trigger async buffering either
+      bufferActivation: 1.0,
+      reflectionObservationTokens: 50000,
+      messageCount: 10, // ~2200 tokens
+    });
+
+    // Step 0: loads messages, well below both thresholds. No activation or buffering.
+    const messageListAfterStep0 = await step(0);
+    await waitForAsyncOps();
+
+    // Get message IDs from context to use as chunk references
+    const contextMsgs = messageListAfterStep0.get.all.db();
+    const chunkMsgIds = contextMsgs.slice(0, 4).map((m: any) => m.id);
+    expect(chunkMsgIds.length).toBe(4);
+
+    // Manually add buffered chunks referencing these context messages
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    const recordId = record!.id;
+    for (let i = 0; i < 2; i++) {
+      const ids = chunkMsgIds.slice(i * 2, (i + 1) * 2);
+      await storage.updateBufferedObservations({
+        id: recordId,
+        chunk: {
+          observations: `Manual chunk ${i} observations`,
+          tokenCount: 50,
+          messageIds: ids,
+          messageTokens: 400,
+          lastObservedAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+          cycleId: `manual-cycle-${i}`,
+        },
+      });
+    }
+
+    // Lower thresholds so step 1 crosses them → triggers handleThresholdReached
+    (om as any).observationConfig.messageTokens = 1000;
+    (om as any).observationConfig.bufferTokens = 500;
+    (om as any).observationConfig.blockAfter = 1200;
+
+    const msgCountBefore = contextMsgs.length;
+
+    // Verify no activeObservations before step 1
+    const recordBeforeStep1 = await storage.getObservationalMemory(threadId, resourceId);
+    expect(recordBeforeStep1!.activeObservations ?? '').toBe('');
+
+    // Step 1 (mid-turn): totalPendingTokens (~2200) >= threshold (1000)
+    // → handleThresholdReached → tryActivateBufferedObservations → cleanupAfterObservation
+    const messageListAfterStep1 = await step(1);
+    await waitForAsyncOps();
+
+    // Verify at least one manual chunk was activated (moved to activeObservations)
+    const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
+    expect(recordAfterStep1!.activeObservations).toBeTruthy();
+    expect(recordAfterStep1!.activeObservations).toContain('Manual chunk');
+
+    const msgsAfterStep1 = messageListAfterStep1.get.all.db();
+    const allMsgIds = new Set(msgsAfterStep1.map((m: any) => m.id));
+
+    // Activated chunk message IDs should be removed from context
+    let stillPresent = 0;
+    for (const id of chunkMsgIds) {
+      if (allMsgIds.has(id)) {
+        stillPresent++;
+      }
+    }
+
+    // At least the activated chunk's messages (2 IDs) should be removed
+    expect(stillPresent).toBeLessThan(chunkMsgIds.length);
+    expect(msgsAfterStep1.length).toBeLessThan(msgCountBefore);
+  });
+
   it('should set lastBufferedBoundary to post-activation token count after activation', async () => {
     // Regression test: after activation, lastBufferedBoundary should be set to the
     // post-activation context token count (freshTotal - tokensActivated), not reset

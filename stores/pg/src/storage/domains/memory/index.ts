@@ -2238,6 +2238,7 @@ export class MemoryPG extends MemoryStorage {
           observationTokensActivated: 0,
           messagesActivated: 0,
           activatedCycleIds: [],
+          activatedMessageIds: [],
         };
       }
 
@@ -2297,6 +2298,7 @@ export class MemoryPG extends MemoryStorage {
       const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
       const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
       const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
+      const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
 
       // Derive lastObservedAt from the latest activated chunk, or use provided value
       const latestChunk = activatedChunks[activatedChunks.length - 1];
@@ -2342,6 +2344,7 @@ export class MemoryPG extends MemoryStorage {
         observationTokensActivated: activatedTokens,
         messagesActivated: activatedMessageCount,
         activatedCycleIds,
+        activatedMessageIds,
         observations: activatedContent,
         perChunk: activatedChunks.map(c => ({
           cycleId: c.cycleId ?? '',

@@ -2457,9 +2457,14 @@ ${suggestedResponse}
     writer: ProcessInputStepArgs['writer'],
     abortSignal: ProcessInputStepArgs['abortSignal'],
     abort: ProcessInputStepArgs['abort'],
-  ): Promise<{ observationSucceeded: boolean; updatedRecord: ObservationalMemoryRecord }> {
+  ): Promise<{
+    observationSucceeded: boolean;
+    updatedRecord: ObservationalMemoryRecord;
+    activatedMessageIds?: string[];
+  }> {
     let observationSucceeded = false;
     let updatedRecord = record;
+    let activatedMessageIds: string[] | undefined;
 
     await this.withLock(lockKey, async () => {
       let freshRecord = await this.getOrCreateRecord(threadId, resourceId);
@@ -2492,6 +2497,7 @@ ${suggestedResponse}
         success: boolean;
         updatedRecord?: ObservationalMemoryRecord;
         messageTokensActivated?: number;
+        activatedMessageIds?: string[];
       } = { success: false };
       if (this.isAsyncObservationEnabled()) {
         // Wait for any in-flight async buffering to complete first
@@ -2524,6 +2530,7 @@ ${suggestedResponse}
           // The activated chunks have already been moved to activeObservations.
           observationSucceeded = true;
           updatedRecord = activationResult.updatedRecord ?? recordAfterWait;
+          activatedMessageIds = activationResult.activatedMessageIds;
 
           // Set lastBufferedBoundary to the post-activation context size so that
           // interval tracking continues from the correct position. Without this,
@@ -2593,7 +2600,7 @@ ${suggestedResponse}
       }
     });
 
-    return { observationSucceeded, updatedRecord };
+    return { observationSucceeded, updatedRecord, activatedMessageIds };
   }
 
   /**
@@ -3089,7 +3096,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
       // THRESHOLD REACHED: Observe and clean up
       // ════════════════════════════════════════════════════════════════════════
       if (stepNumber > 0 && totalPendingTokens >= threshold) {
-        const { observationSucceeded, updatedRecord } = await this.handleThresholdReached(
+        const { observationSucceeded, updatedRecord, activatedMessageIds } = await this.handleThresholdReached(
           messageList,
           record,
           threadId,
@@ -3102,10 +3109,16 @@ NOTE: Any messages following this system reminder are newer than your memories.
         );
 
         if (observationSucceeded) {
-          // Pass observedMessageIds from the updated record for activation-based cleanup
-          const observedIds = Array.isArray(updatedRecord.observedMessageIds)
-            ? updatedRecord.observedMessageIds
-            : undefined;
+          // Use activatedMessageIds from chunk activation if available,
+          // otherwise fall back to observedMessageIds from sync observation.
+          // swapBufferedToActive does NOT populate record.observedMessageIds,
+          // so without this, cleanupAfterObservation falls to the fallback path
+          // and doesn't remove activated chunk messages from context.
+          const observedIds = activatedMessageIds?.length
+            ? activatedMessageIds
+            : Array.isArray(updatedRecord.observedMessageIds)
+              ? updatedRecord.observedMessageIds
+              : undefined;
           await this.cleanupAfterObservation(messageList, sealedIds, threadId, resourceId, state, observedIds);
         }
 
@@ -4061,7 +4074,12 @@ ${formattedMessages}
     record: ObservationalMemoryRecord,
     lockKey: string,
     writer?: ProcessInputStepArgs['writer'],
-  ): Promise<{ success: boolean; updatedRecord?: ObservationalMemoryRecord; messageTokensActivated?: number }> {
+  ): Promise<{
+    success: boolean;
+    updatedRecord?: ObservationalMemoryRecord;
+    messageTokensActivated?: number;
+    activatedMessageIds?: string[];
+  }> {
     // Check if there's buffered content to activate
     const chunks = this.getBufferedChunks(record);
     omDebug(`[OM:tryActivate] chunks=${chunks.length}, recordId=${record.id}`);
@@ -4147,6 +4165,7 @@ ${formattedMessages}
       success: true,
       updatedRecord: updatedRecord ?? undefined,
       messageTokensActivated: activationResult.messageTokensActivated,
+      activatedMessageIds: activationResult.activatedMessageIds,
     };
   }
 
