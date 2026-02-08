@@ -5656,4 +5656,468 @@ describe('Full Async Buffering Flow', () => {
     const remaining = record?.bufferedObservationChunks ?? [];
     expect(remaining).toHaveLength(2);
   });
+
+  // ===========================================================================
+  // Critical Async Buffering Scenarios
+  // ===========================================================================
+
+  it('should use context window tokens (not just unobserved) for threshold check', async () => {
+    // Regression test for the bug where calculateObservationThresholds used
+    // getUnobservedMessages for token counting, which filters by lastObservedAt.
+    // After activation, lastObservedAt advances and older messages were excluded
+    // from the count, even though they were still in the context window.
+    // The fix: threshold checks count ALL messages in the context window.
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 3000,
+      bufferTokens: 500,
+      bufferActivation: 1.0,
+      reflectionObservationTokens: 50000,
+      messageCount: 10, // ~2200 tokens, below 3000 threshold
+    });
+
+    // Step 0: buffers messages
+    await step(0);
+    await waitForAsyncOps();
+    const firstObserverCallCount = observerCalls.length;
+    expect(firstObserverCallCount).toBeGreaterThan(0);
+
+    // Add enough messages to push past the 3000 token threshold
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 10; i < 30; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // New turn step 0: should activate because total context tokens > threshold
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record).toBeDefined();
+
+    // Activation should have moved buffered observations to active
+    expect(record!.activeObservations).toBeTruthy();
+    expect(record!.activeObservations!.length).toBeGreaterThan(0);
+    expect(record!.activeObservations).toContain('Observed');
+
+    // Now add more messages and run a mid-turn step (step > 0).
+    // The key assertion: even after activation advances lastObservedAt,
+    // the threshold check should still count ALL context window messages.
+    for (let i = 30; i < 45; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Step 1 mid-turn: should still trigger buffering since total context tokens > bufferTokens
+    // Before the fix, this would not trigger because unobserved-only count was near 0
+    await step(1);
+    await waitForAsyncOps();
+
+    // Observer should have been called again for the new messages
+    expect(observerCalls.length).toBeGreaterThan(firstObserverCallCount);
+  });
+
+  it('should remove activated messages from context mid-turn', async () => {
+    // Regression test: activated chunk messages should be removed from messageList
+    // immediately, not deferred to next turn. Each processInputStep prepares a fresh
+    // context window for the LLM — activated messages are older and no longer being
+    // written to, so removing them is safe and prevents the LLM from seeing both
+    // raw messages and their compressed observations.
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 3000,
+      bufferTokens: 500,
+      bufferActivation: 1.0,
+      reflectionObservationTokens: 50000,
+      messageCount: 10, // ~2200 tokens, below 3000 threshold → triggers buffering
+    });
+
+    // Step 0: below threshold, triggers async buffering
+    await step(0);
+    await waitForAsyncOps();
+
+    // Verify buffered chunks exist
+    let record = await storage.getObservationalMemory(threadId, resourceId);
+    const chunks =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : (record?.bufferedObservationChunks ?? []);
+    expect(chunks.length).toBeGreaterThan(0);
+
+    // Collect the message IDs from the buffered chunks (these will be activated)
+    const bufferedMsgIds = new Set(chunks.flatMap((c: any) => c.messageIds ?? []));
+
+    // Add more messages to push past the 3000 token threshold
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 10; i < 30; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // New turn step 0: above threshold → activates chunks and removes their messages
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record!.activeObservations).toBeTruthy();
+
+    // Step 1: the context should not contain the activated messages
+    const messageList = await step(1);
+    const allMsgs = messageList.get.all.db();
+    const allMsgIds = new Set(allMsgs.map((m: any) => m.id));
+
+    // None of the buffered chunk message IDs should be in the current context
+    let removedCount = 0;
+    for (const buffId of bufferedMsgIds) {
+      if (!allMsgIds.has(buffId)) {
+        removedCount++;
+      }
+    }
+    // At least some of the buffered messages should have been removed
+    expect(removedCount).toBeGreaterThan(0);
+  });
+
+  it('should set lastBufferedBoundary to post-activation token count after activation', async () => {
+    // Regression test: after activation, lastBufferedBoundary should be set to the
+    // post-activation context token count (freshTotal - tokensActivated), not reset
+    // to 0 or deleted. Without this, the very next step after activation would
+    // immediately re-trigger buffering because interval tracking would start from 0.
+    const { storage, threadId, resourceId, step, waitForAsyncOps, om, observerCalls } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 3000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        reflectionObservationTokens: 50000,
+        messageCount: 10, // ~2200 tokens, below 3000 threshold → buffers first
+      });
+
+    // Phase 1: step 0 buffers messages (below threshold)
+    await step(0);
+    await waitForAsyncOps();
+    expect(observerCalls.length).toBeGreaterThan(0);
+
+    // Phase 2: add messages to push past threshold
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 10; i < 30; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // New turn step 0: above threshold → activates buffered chunks
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    // Verify activation happened
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record!.activeObservations).toBeTruthy();
+
+    // Check that lastBufferedBoundary is set (not deleted)
+    const lockKey = `thread:${threadId}`;
+    const bufferKey = (om as any).getObservationBufferKey(lockKey);
+    const boundary = (ObservationalMemory as any).lastBufferedBoundary.get(bufferKey);
+    expect(boundary).toBeDefined();
+    expect(typeof boundary).toBe('number');
+    // The boundary should be positive (post-activation tokens)
+    expect(boundary).toBeGreaterThan(0);
+
+    const boundaryAfterActivation = boundary;
+
+    // Step 1: should NOT immediately re-trigger buffering because boundary
+    // is set correctly — we need to cross another interval
+    await step(1);
+    await waitForAsyncOps();
+
+    // The boundary should be unchanged (no new buffer was triggered because
+    // we haven't crossed a new bufferTokens interval)
+    const boundaryAfterStep1 = (ObservationalMemory as any).lastBufferedBoundary.get(bufferKey);
+    expect(boundaryAfterStep1).toBe(boundaryAfterActivation);
+  });
+
+  it('should use lastBufferedAtTime cursor to prevent re-observing same messages', async () => {
+    // Regression test: without the lastBufferedAtTime cursor, sequential buffer
+    // triggers would re-observe the same messages because getUnobservedMessages
+    // didn't track which messages had already been buffered (only activated/synced
+    // messages were tracked via lastObservedAt).
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 10000,
+      bufferTokens: 500,
+      bufferActivation: 1.0,
+      reflectionObservationTokens: 50000,
+      messageCount: 5, // ~1100 tokens
+    });
+
+    // Turn 1, step 0: triggers first buffer
+    await step(0);
+    await waitForAsyncOps();
+    const callsAfterFirstBuffer = observerCalls.length;
+    expect(callsAfterFirstBuffer).toBeGreaterThan(0);
+
+    // Check the first buffer's chunk
+    let record = await storage.getObservationalMemory(threadId, resourceId);
+    const chunks1 =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : (record?.bufferedObservationChunks ?? []);
+    const firstChunkMsgIds = new Set(chunks1.flatMap((c: any) => c.messageIds ?? []));
+
+    // Add more messages that will cross the next buffer interval
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 5; i < 12; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Turn 2, step 0: loads new messages from storage, triggers second buffer
+    // The cursor should prevent re-observing messages from the first buffer
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    // Observer should have been called again for the new messages
+    expect(observerCalls.length).toBeGreaterThan(callsAfterFirstBuffer);
+
+    // Check that the new chunk contains different message IDs than the first
+    record = await storage.getObservationalMemory(threadId, resourceId);
+    const chunks2 =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : (record?.bufferedObservationChunks ?? []);
+
+    // Should have more chunks than before
+    expect(chunks2.length).toBeGreaterThan(chunks1.length);
+
+    // The newer chunks should not contain message IDs from the first chunk
+    const newerChunks = chunks2.slice(chunks1.length);
+    const newerMsgIds = newerChunks.flatMap((c: any) => c.messageIds ?? []);
+    for (const newId of newerMsgIds) {
+      expect(firstChunkMsgIds.has(newId)).toBe(false);
+    }
+  });
+
+  it('should only buffer new messages in sequential buffer triggers (no duplication)', async () => {
+    // End-to-end test: sequential buffer triggers across turns should produce
+    // chunks with non-overlapping message sets. This validates both the excludeBuffered
+    // filtering and the lastBufferedAtTime cursor working together.
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 10000,
+      bufferTokens: 300,
+      bufferActivation: 1.0,
+      reflectionObservationTokens: 50000,
+      messageCount: 10, // ~2200 tokens, will cross multiple buffer intervals
+    });
+
+    // Turn 1, step 0: triggers first buffer(s)
+    await step(0);
+    await waitForAsyncOps();
+
+    let record = await storage.getObservationalMemory(threadId, resourceId);
+    const chunksAfterTurn1 =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : (record?.bufferedObservationChunks ?? []);
+    expect(chunksAfterTurn1.length).toBeGreaterThan(0);
+
+    // Add more messages for the next turn
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 10; i < 20; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Turn 2, step 0: loads all messages from storage, triggers more buffers
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    record = await storage.getObservationalMemory(threadId, resourceId);
+    const allChunks =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : (record?.bufferedObservationChunks ?? []);
+
+    // Should have more chunks now
+    expect(allChunks.length).toBeGreaterThan(chunksAfterTurn1.length);
+
+    // Verify: all message IDs across all chunks are unique (no overlapping)
+    const allMsgIds = allChunks.flatMap((c: any) => c.messageIds ?? []);
+    const uniqueIds = new Set(allMsgIds);
+    expect(uniqueIds.size).toBe(allMsgIds.length);
+  });
+
+  it('should continue buffering after activation within the same multi-step turn', async () => {
+    // Integration test for the full cycle across turns:
+    // Turn 1: Buffer messages as context grows
+    // Turn 2: Activate when threshold is crossed (with existing chunks)
+    // Turn 3: After activation, new messages should trigger fresh buffering
+    //         (boundary is set to post-activation count, not deleted/reset to 0)
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls, om } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 300,
+        bufferActivation: 1.0,
+        reflectionObservationTokens: 50000,
+        messageCount: 5, // ~1100 tokens, below 2000 threshold
+      });
+
+    // Turn 1, step 0: triggers first buffer
+    await step(0);
+    await waitForAsyncOps();
+    const callsAfterFirstBuffer = observerCalls.length;
+    expect(callsAfterFirstBuffer).toBeGreaterThan(0);
+
+    // Add messages to push past threshold
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 5; i < 20; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Turn 2, step 0: should activate buffered chunks
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    // Verify activation happened
+    let record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record!.activeObservations).toBeTruthy();
+    expect(record!.activeObservations).toContain('Observed');
+
+    const callsAfterActivation = observerCalls.length;
+
+    // Verify lastBufferedBoundary is set (not deleted)
+    const lockKey = `thread:${threadId}`;
+    const bufferKey = (om as any).getObservationBufferKey(lockKey);
+    const boundaryAfterActivation = (ObservationalMemory as any).lastBufferedBoundary.get(bufferKey);
+    expect(boundaryAfterActivation).toBeDefined();
+    expect(boundaryAfterActivation).toBeGreaterThan(0);
+
+    // Add even more messages to cross the next buffer interval
+    for (let i = 20; i < 35; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Turn 3, step 0: should trigger new buffering for the post-activation messages
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    // Observer should have been called again for the post-activation messages
+    expect(observerCalls.length).toBeGreaterThan(callsAfterActivation);
+
+    // Verify new chunks were created
+    record = await storage.getObservationalMemory(threadId, resourceId);
+    const newChunks =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : (record?.bufferedObservationChunks ?? []);
+    expect(newChunks.length).toBeGreaterThan(0);
+  });
 });
