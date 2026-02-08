@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -131,8 +132,12 @@ export class DevBundler extends Bundler {
           {
             name: 'public-files-copier',
             buildStart() {
-              // Watch the public directory so changes to worker files trigger rebuilds
-              this.addWatchFile(join(mastraDir, 'public'));
+              // Watch the public directory so changes to worker files trigger rebuilds.
+              // Only add the watch if the directory exists to avoid ENOENT warnings from chokidar.
+              const publicDir = join(mastraDir, 'public');
+              if (existsSync(publicDir)) {
+                this.addWatchFile(publicDir);
+              }
             },
             async buildEnd() {
               await bundlerSelf.copyPublic(mastraDir, outputDirectory);
