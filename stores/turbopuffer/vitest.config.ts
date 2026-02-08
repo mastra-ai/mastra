@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    name: 'unit',
+    name: 'e2e:stores/turbopuffer',
     environment: 'node',
     include: ['src/**/*.test.ts'],
     coverage: {

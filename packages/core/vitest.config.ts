@@ -5,16 +5,17 @@ export default defineConfig({
     projects: [
       {
         test: {
-          name: 'unit',
+          name: 'unit:packages/core',
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*.e2e.test.ts'],
           testTimeout: 120000,
+          isolate: false,
         },
       },
       {
         test: {
-          name: 'e2e',
+          name: 'e2e:packages/core',
           environment: 'node',
           include: ['src/**/*.e2e.test.ts'],
           testTimeout: 120000,
@@ -22,7 +23,7 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'typecheck',
+          name: 'typecheck:packages/core',
           environment: 'node',
           typecheck: {
             enabled: true,

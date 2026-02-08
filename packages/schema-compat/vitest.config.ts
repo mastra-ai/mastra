@@ -6,10 +6,11 @@ export default defineConfig({
     projects: [
       {
         test: {
-          name: 'unit-v4',
+          name: 'unit:packages/schema-compat:v4',
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*-v3.test.ts'],
+          isolate: false,
         },
         resolve: {
           alias: {
@@ -20,7 +21,7 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'unit-v3',
+          name: 'unit:packages/schema-compat:v3',
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: [
@@ -29,6 +30,7 @@ export default defineConfig({
             // that produce different output between v3 (zod-to-json-schema) and v4 (native toJSONSchema)
             'src/provider-compats/*.test.ts',
           ],
+          isolate: false,
         },
       },
     ],
