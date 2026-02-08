@@ -1,15 +1,15 @@
-# @mastra/aisearch
+# @mastra/azure
 
 Azure AI Search vector store provider for Mastra. This package provides vector storage and similarity search capabilities using Azure AI Search's vector search features.
 
 ## Installation
 
 ```bash
-npm install @mastra/aisearch
+npm install @mastra/azure
 # or
-pnpm add @mastra/aisearch
+pnpm add @mastra/azure
 # or
-yarn add @mastra/aisearch
+yarn add @mastra/azure
 ```
 
 ## Prerequisites
@@ -25,7 +25,7 @@ Before using this package, you'll need:
 ### Basic Setup with API Key
 
 ```typescript
-import { AzureAISearchVector } from '@mastra/aisearch';
+import { AzureAISearchVector } from '@mastra/azure';
 
 const azureVector = new AzureAISearchVector({
   id: 'azure-search-vectors',
@@ -37,7 +37,7 @@ const azureVector = new AzureAISearchVector({
 ### Setup with Azure Credentials
 
 ```typescript
-import { AzureAISearchVector } from '@mastra/aisearch';
+import { AzureAISearchVector } from '@mastra/azure';
 import { DefaultAzureCredential } from '@azure/identity';
 
 const azureVector = new AzureAISearchVector({
@@ -52,7 +52,7 @@ const azureVector = new AzureAISearchVector({
 Use `clientOptions` to customize the SearchClient behavior with retry policies, custom headers, or proxy configurations:
 
 ```typescript
-import { AzureAISearchVector } from '@mastra/aisearch';
+import { AzureAISearchVector } from '@mastra/azure';
 
 const azureVector = new AzureAISearchVector({
   id: 'azure-search-custom',
@@ -85,7 +85,7 @@ const azureVector = new AzureAISearchVector({
 #### Example: Using with a Proxy
 
 ```typescript
-import { AzureAISearchVector } from '@mastra/aisearch';
+import { AzureAISearchVector } from '@mastra/azure';
 import type { PipelinePolicy } from '@azure/core-rest-pipeline';
 
 // Custom proxy policy
@@ -128,7 +128,7 @@ const azureVector = new AzureAISearchVector({
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { AzureAISearchVector } from '@mastra/aisearch';
+import { AzureAISearchVector } from '@mastra/azure';
 
 // Setup Azure AI Search vector store
 const azureVector = new AzureAISearchVector({
@@ -164,7 +164,7 @@ const agent = new Agent({
 
 ```typescript
 import { Mastra } from '@mastra/core';
-import { AzureAISearchVector } from '@mastra/aisearch';
+import { AzureAISearchVector } from '@mastra/azure';
 
 const azureVector = new AzureAISearchVector({
   id: 'azure-search',
@@ -607,7 +607,7 @@ import type {
   AzureAISearchVector, 
   AzureAISearchVectorFilter,
   AzureAISearchVectorOptions 
-} from '@mastra/aisearch';
+} from '@mastra/azure';
 
 // Type-safe filter construction
 const filter: AzureAISearchVectorFilter = {

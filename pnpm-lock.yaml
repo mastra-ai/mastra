@@ -2937,7 +2937,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
 
-  stores/aisearch:
+  stores/azure:
     dependencies:
       '@azure/core-auth':
         specifier: ^1.7.2
