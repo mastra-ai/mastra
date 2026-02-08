@@ -238,13 +238,13 @@ An Electron window opens with the chat interface. Type a message and you should 
 
 </Steps>
 
-## How it works
+## How It Works
 
 The Electron main process creates a `BrowserWindow` that loads the React renderer. The renderer uses `useChat()` from `@ai-sdk/react` with a `DefaultChatTransport` configured to send requests to the Mastra server's chat endpoint. This is the same pattern used in a standard [React + Vite](/guides/getting-started/vite-react) app — Electron adds the desktop shell around it.
 
-## Next steps
+## Next Steps
 
-- Learn more about [agents](/docs/agents/overview)
+- See [agents](/docs/agents/overview)
 - Give your agent its own [tools](/docs/agents/using-tools)
 - Add [memory](/docs/agents/agent-memory) to your agent for persistent conversations
-- Explore the [AI SDK UI guide](/guides/build-your-ui/ai-sdk-ui) for advanced streaming patterns
+- See the [AI SDK UI guide](/guides/build-your-ui/ai-sdk-ui) for advanced streaming patterns
