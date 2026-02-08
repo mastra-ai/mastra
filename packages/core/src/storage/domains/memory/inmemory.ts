@@ -43,7 +43,13 @@ export class InMemoryMemory extends MemoryStorage {
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     this.logger.debug(`InMemoryMemory: getThreadById called for ${threadId}`);
     const thread = this.db.threads.get(threadId);
-    return thread ? { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata } : null;
+    return thread
+      ? {
+          ...thread,
+          metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
+          customColumns: thread.customColumns ? { ...thread.customColumns } : thread.customColumns,
+        }
+      : null;
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {

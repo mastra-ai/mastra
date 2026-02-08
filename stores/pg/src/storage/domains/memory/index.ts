@@ -141,6 +141,7 @@ export class MemoryPG extends MemoryStorage {
    * @internal
    */
   private mapThreadRow(row: any): StorageThreadType {
+    const cc = extractCustomColumns(row as Record<string, unknown>, this.#threadExtensionCols);
     return {
       id: row.id,
       resourceId: row.resourceId,
@@ -148,10 +149,7 @@ export class MemoryPG extends MemoryStorage {
       metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       createdAt: row.createdAtZ || row.createdAt,
       updatedAt: row.updatedAtZ || row.updatedAt,
-      ...(() => {
-        const cc = extractCustomColumns(row as Record<string, unknown>, this.#threadExtensionCols);
-        return cc ? { customColumns: cc } : {};
-      })(),
+      ...(cc ? { customColumns: cc } : {}),
     };
   }
 
@@ -444,7 +442,7 @@ export class MemoryPG extends MemoryStorage {
 
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
       const updateClauses = columns
-        .filter(c => c !== 'id')
+        .filter(c => c !== 'id' && c !== '"createdAt"' && c !== '"createdAtZ"')
         .map(c => `${c} = EXCLUDED.${c}`)
         .join(', ');
 
@@ -528,15 +526,7 @@ export class MemoryPG extends MemoryStorage {
         values,
       );
 
-      return {
-        id: thread.id,
-        resourceId: thread.resourceId,
-        title: thread.title,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAtZ || thread.createdAt,
-        updatedAt: thread.updatedAtZ || thread.updatedAt,
-        customColumns: extractCustomColumns(thread as unknown as Record<string, unknown>, this.#threadExtensionCols),
-      };
+      return this.mapThreadRow(thread);
     } catch (error) {
       throw new MastraError(
         {

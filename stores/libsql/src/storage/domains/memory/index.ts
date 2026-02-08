@@ -899,14 +899,21 @@ export class MemoryLibSQL extends MemoryStorage {
       }
 
       const row = queryResult.rows[0]!;
-      // Parse JSON columns
+      // Parse JSON columns - only for known JSONB columns (handled by buildSelectColumns)
+      // Metadata is the primary JSONB column in threads; custom columns are stored as-is
+      const KNOWN_JSON_COLUMNS = new Set(['metadata']);
       const result = Object.fromEntries(
         Object.entries(row).map(([k, v]) => {
-          try {
-            return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
-          } catch {
-            return [k, v];
+          // Only attempt to parse known JSON columns (metadata, etc.)
+          if (KNOWN_JSON_COLUMNS.has(k) && typeof v === 'string') {
+            try {
+              return [k, JSON.parse(v)];
+            } catch {
+              return [k, v];
+            }
           }
+          // Leave all other values unchanged (preserves user strings)
+          return [k, v];
         }),
       );
 
@@ -1015,9 +1022,23 @@ export class MemoryLibSQL extends MemoryStorage {
       }
 
       // Add customColumns filters if provided (must be before baseQuery is built)
+      // Validate all custom column keys first (USER error, not caught by try)
+      if (filter?.customColumns && Object.keys(filter.customColumns).length > 0) {
+        for (const [key] of Object.entries(filter.customColumns)) {
+          if (!this.#threadExtensionCols.includes(key)) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'LIST_THREADS', 'INVALID_CUSTOM_COLUMN'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Custom column '${key}' is not declared in schemaExtensions for ${TABLE_THREADS}`,
+            });
+          }
+        }
+      }
+
+      // Build WHERE clauses for custom columns (after validation)
       if (filter?.customColumns && Object.keys(filter.customColumns).length > 0) {
         for (const [key, value] of Object.entries(filter.customColumns)) {
-          if (!this.#threadExtensionCols.includes(key)) continue;
           const parsedKey = parseSqlIdentifier(key, 'column name');
           if (value === null) {
             whereClauses.push(`${parsedKey} IS NULL`);
@@ -1171,12 +1192,13 @@ export class MemoryLibSQL extends MemoryStorage {
         ...metadata,
       },
       customColumns: mergedCustomColumns,
+      updatedAt: new Date(),
     };
 
     try {
       // Build SET clauses dynamically
-      let sql = `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?)`;
-      const args: InValue[] = [title, JSON.stringify(updatedThread.metadata)];
+      let sql = `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?), "updatedAt" = ?`;
+      const args: InValue[] = [title, JSON.stringify(updatedThread.metadata), updatedThread.updatedAt.toISOString()];
 
       for (const col of this.#threadExtensionCols) {
         const parsedCol = parseSqlIdentifier(col, 'column name');
