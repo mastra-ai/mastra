@@ -3899,6 +3899,9 @@ ${formattedMessages}
     }
 
     try {
+      omDebug(
+        `[OM:bufferInput] cycleId=${cycleId}, msgCount=${messagesToBuffer.length}, msgTokens=${this.tokenCounter.countMessages(messagesToBuffer)}, ids=${messagesToBuffer.map(m => `${m.id?.slice(0, 8)}@${m.createdAt ? new Date(m.createdAt).toISOString() : 'none'}`).join(',')}`,
+      );
       await this.doAsyncBufferedObservation(freshRecord, threadId, messagesToBuffer, cycleId, startedAt, writer);
 
       // Update the buffer cursor so the next buffer only sees messages newer than this one.
@@ -4101,20 +4104,22 @@ ${formattedMessages}
     const updatedRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
 
     // Emit activation markers for UI feedback - one per activated cycleId
-    // This allows the UI to link each activation back to its original buffering badge
+    // Each marker gets its own chunk's data so the UI shows per-chunk breakdowns
     if (writer && updatedRecord && activationResult.activatedCycleIds.length > 0) {
+      const perChunkMap = new Map(activationResult.perChunk?.map(c => [c.cycleId, c]));
       for (const cycleId of activationResult.activatedCycleIds) {
+        const chunkData = perChunkMap.get(cycleId);
         const activationMarker = this.createActivationMarker({
           cycleId, // Use the original buffering cycleId so UI can link them
           operationType: 'observation',
-          chunksActivated: activationResult.chunksActivated,
-          tokensActivated: activationResult.messageTokensActivated,
-          observationTokens: activationResult.observationTokensActivated,
-          messagesActivated: activationResult.messagesActivated,
+          chunksActivated: 1,
+          tokensActivated: chunkData?.messageTokens ?? activationResult.messageTokensActivated,
+          observationTokens: chunkData?.observationTokens ?? activationResult.observationTokensActivated,
+          messagesActivated: chunkData?.messageCount ?? activationResult.messagesActivated,
           recordId: updatedRecord.id,
           threadId: updatedRecord.threadId ?? record.threadId ?? '',
           generationCount: updatedRecord.generationCount ?? 0,
-          observations: activationResult.observations,
+          observations: chunkData?.observations ?? activationResult.observations,
         });
         void writer.custom(activationMarker).catch(() => {});
       }

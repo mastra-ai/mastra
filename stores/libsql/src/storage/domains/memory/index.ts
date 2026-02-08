@@ -2128,6 +2128,13 @@ export class MemoryLibSQL extends MemoryStorage {
         messagesActivated: activatedMessageCount,
         activatedCycleIds,
         observations: activatedContent,
+        perChunk: activatedChunks.map(c => ({
+          cycleId: c.cycleId ?? '',
+          messageTokens: c.messageTokens ?? 0,
+          observationTokens: c.tokenCount,
+          messageCount: c.messageIds.length,
+          observations: c.observations,
+        })),
       };
     } catch (error) {
       if (error instanceof MastraError) {

@@ -781,6 +781,14 @@ export interface SwapBufferedToActiveResult {
   activatedCycleIds: string[];
   /** Concatenated observations from activated chunks (for UI display) */
   observations?: string;
+  /** Per-chunk breakdown for individual UI markers */
+  perChunk?: Array<{
+    cycleId: string;
+    messageTokens: number;
+    observationTokens: number;
+    messageCount: number;
+    observations: string;
+  }>;
 }
 
 /**
