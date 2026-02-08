@@ -76,6 +76,25 @@ describe('ElasticSearchVector', () => {
       }
     });
   });
+
+  describe('Constructor', () => {
+    it('should throw error if both client , url are not passed', async () => {
+      expect(() => {
+        new ElasticSearchVector({
+          id: 'elasticsearch-shared-test',
+          auth: { apiKey: process.env.ELASTICSEARCH_API_KEY ?? '' },
+        });
+      }).toThrowError('Either url or client is required');
+    });
+    it('should initialize with url', async () => {
+      expect(() => {
+        new ElasticSearchVector({
+          url: process.env.ELASTICSEARCH_URL || 'http://localhost:9200',
+          id: 'elasticsearch-shared-test',
+        });
+      }).not.toThrowError();
+    });
+  });
 });
 
 // Shared vector store test suite
