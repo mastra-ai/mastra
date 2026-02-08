@@ -48,14 +48,19 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     id,
     auth,
     client,
-  }: ({ id: string } & { url: string; auth?: ElasticSearchAuth }) & { client?: ElasticSearchClient }) {
+  }: ({ id: string } & { url?: string; auth?: ElasticSearchAuth }) & { client?: ElasticSearchClient }) {
     super({ id });
     if (client) {
       this.client = client;
       return;
     }
     if (!url) {
-      throw 'Either Url or client is required';
+      throw new MastraError({
+        id: 'ELASTIC_SEARCH_CONSTRUCTOR_ERROR',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Either url or client is required',
+      });
     }
     this.client = new ElasticSearchClient({ node: url, ...(auth && { auth }) });
   }
