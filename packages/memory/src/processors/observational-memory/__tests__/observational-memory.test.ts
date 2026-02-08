@@ -4444,7 +4444,7 @@ describe('Async Buffering Processor Logic', () => {
       expect(result.updatedRecord.bufferedObservationChunks).toBeUndefined();
     });
 
-    it('should reset lastBufferedBoundary after activation', async () => {
+    it('should not reset lastBufferedBoundary after activation (callers set it)', async () => {
       const storage = createInMemoryStorage();
       const om = new ObservationalMemory({
         storage,
@@ -4486,8 +4486,10 @@ describe('Async Buffering Processor Logic', () => {
       const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
       await (om as any).tryActivateBufferedObservations(updatedRecord!, lockKey);
 
-      // After activation, the boundary should be cleared
-      expect((ObservationalMemory as any).lastBufferedBoundary.has(bufferKey)).toBe(false);
+      // After activation, the boundary should NOT be cleared by tryActivateBufferedObservations.
+      // Callers are responsible for setting it to the post-activation context size.
+      // tryActivateBufferedObservations preserves the existing boundary.
+      expect((ObservationalMemory as any).lastBufferedBoundary.has(bufferKey)).toBe(true);
     });
   });
 });

@@ -2488,7 +2488,11 @@ ${suggestedResponse}
       const preObservationTime = freshRecord.lastObservedAt?.getTime() ?? 0;
 
       // Try to activate buffered observations first (instant activation)
-      let activationResult: { success: boolean; updatedRecord?: ObservationalMemoryRecord } = { success: false };
+      let activationResult: {
+        success: boolean;
+        updatedRecord?: ObservationalMemoryRecord;
+        messageTokensActivated?: number;
+      } = { success: false };
       if (this.isAsyncObservationEnabled()) {
         // Wait for any in-flight async buffering to complete first
         const bufferKey = this.getObservationBufferKey(lockKey);
@@ -2520,8 +2524,17 @@ ${suggestedResponse}
           // The activated chunks have already been moved to activeObservations.
           observationSucceeded = true;
           updatedRecord = activationResult.updatedRecord ?? recordAfterWait;
+
+          // Set lastBufferedBoundary to the post-activation context size so that
+          // interval tracking continues from the correct position. Without this,
+          // the boundary resets to 0 and the very next step re-triggers buffering.
+          const postActivationTokens = Math.max(0, freshTotal - (activationResult.messageTokensActivated ?? 0));
+          const bufKey = this.getObservationBufferKey(lockKey);
+          ObservationalMemory.lastBufferedBoundary.set(bufKey, postActivationTokens);
+          this.storage.setBufferingObservationFlag(updatedRecord.id, false, postActivationTokens).catch(() => {});
+
           omDebug(
-            `[OM:threshold] activation succeeded, obsTokens=${updatedRecord.observationTokenCount}, activeObsLen=${updatedRecord.activeObservations?.length}`,
+            `[OM:threshold] activation succeeded, obsTokens=${updatedRecord.observationTokenCount}, activeObsLen=${updatedRecord.activeObservations?.length}, postActivationBoundary=${postActivationTokens}`,
           );
 
           // Check if async reflection should be triggered or activated.
@@ -2950,6 +2963,15 @@ NOTE: Any messages following this system reminder are newer than your memories.
 
           if (activationResult.success && activationResult.updatedRecord) {
             record = activationResult.updatedRecord;
+
+            // Set lastBufferedBoundary to the post-activation context size
+            const postActivationTokens = Math.max(
+              0,
+              step0PendingTokens - (activationResult.messageTokensActivated ?? 0),
+            );
+            const bufKey = this.getObservationBufferKey(lockKey);
+            ObservationalMemory.lastBufferedBoundary.set(bufKey, postActivationTokens);
+            this.storage.setBufferingObservationFlag(record.id, false, postActivationTokens).catch(() => {});
 
             // Remove activated messages from context
             const observedSet = new Set(Array.isArray(record?.observedMessageIds) ? record.observedMessageIds : []);
@@ -4018,7 +4040,7 @@ ${formattedMessages}
     record: ObservationalMemoryRecord,
     lockKey: string,
     writer?: ProcessInputStepArgs['writer'],
-  ): Promise<{ success: boolean; updatedRecord?: ObservationalMemoryRecord }> {
+  ): Promise<{ success: boolean; updatedRecord?: ObservationalMemoryRecord; messageTokensActivated?: number }> {
     // Check if there's buffered content to activate
     const chunks = this.getBufferedChunks(record);
     omDebug(`[OM:tryActivate] chunks=${chunks.length}, recordId=${record.id}`);
@@ -4068,10 +4090,11 @@ ${formattedMessages}
       `[OM:tryActivate] swapResult: chunksActivated=${activationResult.chunksActivated}, tokensActivated=${activationResult.messageTokensActivated}, obsTokensActivated=${activationResult.observationTokensActivated}, activatedCycleIds=${activationResult.activatedCycleIds.join(',')}`,
     );
 
-    // Reset lastBufferedBoundary so new buffering can start fresh after activation
-    ObservationalMemory.lastBufferedBoundary.delete(bufferKey);
-    // Reset persistent lastBufferedAtTokens to 0 so interval tracking restarts
-    await this.storage.setBufferingObservationFlag(freshRecord.id, false, 0);
+    // Clear the buffering flag but do NOT reset lastBufferedBoundary here.
+    // The caller sets the boundary to the post-activation context size so that
+    // interval tracking continues from the correct position. Deleting it here
+    // would reset to 0 and cause the next step to immediately re-trigger buffering.
+    await this.storage.setBufferingObservationFlag(freshRecord.id, false);
     unregisterOp(freshRecord.id, 'bufferingObservation');
 
     // Fetch updated record
@@ -4097,7 +4120,11 @@ ${formattedMessages}
       }
     }
 
-    return { success: true, updatedRecord: updatedRecord ?? undefined };
+    return {
+      success: true,
+      updatedRecord: updatedRecord ?? undefined,
+      messageTokensActivated: activationResult.messageTokensActivated,
+    };
   }
 
   /**
