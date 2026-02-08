@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
 import { FileText } from 'lucide-react';
 
@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { SectionHeader } from '@/domains/cms';
 
 import { InstructionsPreviewDialog } from './instructions-preview-dialog';
-import type { AgentFormValues } from './utils/form-validation';
+import type { AgentFormValues, InstructionBlock } from './utils/form-validation';
 
 interface AgentEditMainProps {
   form: UseFormReturn<AgentFormValues>;
@@ -25,6 +25,12 @@ export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
 
   const variables = watch('variables');
   const instructions = watch('instructions');
+
+  // Convert single instruction string to a block array for the preview dialog
+  const instructionBlocks = useMemo<InstructionBlock[]>(
+    () => [{ id: 'single-instruction', content: instructions, rules: [] }],
+    [instructions],
+  );
 
   return (
     <div className="flex flex-col gap-6 h-full">
@@ -70,7 +76,7 @@ export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
       <InstructionsPreviewDialog
         open={isPreviewDialogOpen}
         onOpenChange={setIsPreviewDialogOpen}
-        instructions={instructions}
+        blocks={instructionBlocks}
         variablesSchema={variables}
       />
     </div>

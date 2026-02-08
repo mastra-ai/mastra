@@ -9,11 +9,11 @@ import {
   useStoredAgentMutations,
   AgentEditMain,
   AgentEditSidebar,
-  AgentVersionsPanel,
   AgentEditLayout,
   useAgentEditForm,
   Header,
   HeaderTitle,
+  HeaderAction,
   Icon,
   AgentIcon,
   Spinner,
@@ -24,6 +24,7 @@ import {
   Alert,
   Button,
   AlertTitle,
+  AgentVersionCombobox,
 } from '@mastra/playground-ui';
 
 // Type for the agent data (inferred from useStoredAgent)
@@ -43,7 +44,6 @@ interface CmsAgentsEditFormProps {
   agentId: string;
   selectedVersionId: string | null;
   versionData?: AgentVersionResponse;
-  onVersionSelect: (versionId: string) => void;
   readOnly?: boolean;
 }
 
@@ -53,7 +53,6 @@ function CmsAgentsEditForm({
   agentId,
   selectedVersionId,
   versionData,
-  onVersionSelect,
   readOnly = false,
 }: CmsAgentsEditFormProps) {
   const { navigate, paths } = useLinkComponent();
@@ -152,7 +151,7 @@ function CmsAgentsEditForm({
         name: values.name,
         description: values.description,
         instructions: values.instructions,
-        model: values.model as Record<string, unknown>,
+        model: values.model,
         tools: codeDefinedTools,
         integrationTools: integrationToolIds,
         workflows: Object.keys(values.workflows || {}),
@@ -191,13 +190,6 @@ function CmsAgentsEditForm({
           formRef={formRef}
           mode="edit"
           readOnly={readOnly || isViewingVersion}
-        />
-      }
-      rightSlot={
-        <AgentVersionsPanel
-          agentId={agentId}
-          selectedVersionId={selectedVersionId ?? undefined}
-          onVersionSelect={onVersionSelect}
         />
       }
     >
@@ -261,11 +253,6 @@ function CmsAgentsEditPage() {
               <Spinner className="h-8 w-8" />
             </div>
           }
-          rightSlot={
-            <div className="flex items-center justify-center h-full">
-              <Spinner className="h-8 w-8" />
-            </div>
-          }
         >
           <div className="flex items-center justify-center h-full">
             <Spinner className="h-8 w-8" />
@@ -289,7 +276,6 @@ function CmsAgentsEditPage() {
         </Header>
         <AgentEditLayout
           leftSlot={<div className="flex items-center justify-center h-full text-icon3">Agent not found</div>}
-          rightSlot={<div className="flex items-center justify-center h-full text-icon3">No versions</div>}
         >
           <div className="flex items-center justify-center h-full text-icon3">Agent not found</div>
         </AgentEditLayout>
@@ -307,6 +293,14 @@ function CmsAgentsEditPage() {
           </Icon>
           Edit agent: {agent.name}
         </HeaderTitle>
+        <HeaderAction>
+          <AgentVersionCombobox
+            agentId={agentId}
+            value={selectedVersionId ?? ''}
+            onValueChange={handleVersionSelect}
+            variant="outline"
+          />
+        </HeaderAction>
       </Header>
 
       <CmsAgentsEditForm
@@ -314,7 +308,6 @@ function CmsAgentsEditPage() {
         agentId={agentId}
         selectedVersionId={selectedVersionId}
         versionData={versionData}
-        onVersionSelect={handleVersionSelect}
         readOnly={isLoadingVersion}
       />
     </MainContentLayout>

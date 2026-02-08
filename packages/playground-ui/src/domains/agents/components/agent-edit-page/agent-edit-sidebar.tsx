@@ -5,7 +5,7 @@ import { Check, PlusIcon } from 'lucide-react';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { Button } from '@/ds/components/Button';
-import { Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@/ds/icons';
+import { Icon, AgentIcon, ToolsIcon } from '@/ds/icons';
 import { Spinner } from '@/ds/components/Spinner';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
