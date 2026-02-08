@@ -679,6 +679,39 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Clean up static maps for a thread/resource to prevent memory leaks.
+   * Called after activation (to remove activated message IDs from sealedMessageIds)
+   * and from clear() (to fully remove all static state for a thread).
+   */
+  private cleanupStaticMaps(threadId: string, resourceId?: string | null, activatedMessageIds?: string[]): void {
+    const lockKey = this.getLockKey(threadId, resourceId);
+    const obsBufKey = this.getObservationBufferKey(lockKey);
+    const reflBufKey = this.getReflectionBufferKey(lockKey);
+
+    if (activatedMessageIds) {
+      // Partial cleanup: remove only activated IDs from sealedMessageIds
+      const sealedSet = ObservationalMemory.sealedMessageIds.get(threadId);
+      if (sealedSet) {
+        for (const id of activatedMessageIds) {
+          sealedSet.delete(id);
+        }
+        if (sealedSet.size === 0) {
+          ObservationalMemory.sealedMessageIds.delete(threadId);
+        }
+      }
+    } else {
+      // Full cleanup: remove all static state for this thread
+      ObservationalMemory.sealedMessageIds.delete(threadId);
+      ObservationalMemory.lastBufferedAtTime.delete(obsBufKey);
+      ObservationalMemory.lastBufferedBoundary.delete(obsBufKey);
+      ObservationalMemory.lastBufferedBoundary.delete(reflBufKey);
+      ObservationalMemory.asyncBufferingOps.delete(obsBufKey);
+      ObservationalMemory.asyncBufferingOps.delete(reflBufKey);
+      ObservationalMemory.reflectionBufferCycleIds.delete(obsBufKey);
+    }
+  }
+
+  /**
    * Safely get bufferedObservationChunks as an array.
    * Handles cases where it might be a JSON string or undefined.
    */
@@ -3009,19 +3042,26 @@ NOTE: Any messages following this system reminder are newer than your memories.
           if (activationResult.success && activationResult.updatedRecord) {
             record = activationResult.updatedRecord;
 
-            // Remove activated messages from context FIRST, then compute the boundary
-            // from the actual remaining context size. If we compute the boundary before
-            // removal, it reflects the pre-removal size and shouldTriggerAsyncObservation
-            // sees currentInterval < lastInterval, preventing new buffering triggers.
-            const observedSet = new Set(Array.isArray(record?.observedMessageIds) ? record.observedMessageIds : []);
-            const allMsgs = messageList.get.all.db();
-            const idsToRemove = allMsgs
-              .filter(msg => msg?.id && msg.id !== 'om-continuation' && observedSet.has(msg.id))
-              .map(msg => msg.id);
+            // Remove activated messages from context using activatedMessageIds.
+            // Note: swapBufferedToActive does NOT populate record.observedMessageIds
+            // (intentionally — recycled IDs would block future content).
+            // filterAlreadyObservedMessages runs later at step 0 and uses lastObservedAt
+            // as a fallback, but we do explicit removal here for immediate effect.
+            const activatedIds = activationResult.activatedMessageIds ?? [];
+            if (activatedIds.length > 0) {
+              const activatedSet = new Set(activatedIds);
+              const allMsgs = messageList.get.all.db();
+              const idsToRemove = allMsgs
+                .filter(msg => msg?.id && msg.id !== 'om-continuation' && activatedSet.has(msg.id))
+                .map(msg => msg.id);
 
-            if (idsToRemove.length > 0) {
-              messageList.removeByIds(idsToRemove);
+              if (idsToRemove.length > 0) {
+                messageList.removeByIds(idsToRemove);
+              }
             }
+
+            // Clean up sealed IDs for activated messages (prevents memory leak)
+            this.cleanupStaticMaps(threadId, resourceId, activatedIds);
 
             // Reset lastBufferedBoundary to 0 after activation so that any
             // remaining unbuffered messages in context can trigger a new buffering
@@ -3159,6 +3199,11 @@ NOTE: Any messages following this system reminder are newer than your memories.
             `[OM:cleanup] observedIds=${observedIds?.length ?? 'undefined'}, ids=${observedIds?.join(',') ?? 'none'}, updatedRecord.observedMessageIds=${JSON.stringify(updatedRecord.observedMessageIds)}`,
           );
           await this.cleanupAfterObservation(messageList, sealedIds, threadId, resourceId, state, observedIds);
+
+          // Clean up sealed IDs for activated messages (prevents memory leak)
+          if (activatedMessageIds?.length) {
+            this.cleanupStaticMaps(threadId, resourceId, activatedMessageIds);
+          }
 
           // Reset lastBufferedBoundary to 0 after activation so that any
           // remaining unbuffered messages in context can trigger a new buffering
@@ -5342,6 +5387,8 @@ ${formattedMessages}
   async clear(threadId: string, resourceId?: string): Promise<void> {
     const ids = this.getStorageIds(threadId, resourceId);
     await this.storage.clearObservationalMemory(ids.threadId, ids.resourceId);
+    // Clean up static maps to prevent memory leaks
+    this.cleanupStaticMaps(ids.threadId ?? ids.resourceId, ids.resourceId);
   }
 
   /**
