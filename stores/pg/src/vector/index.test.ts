@@ -1294,8 +1294,6 @@ describe('PgVector', () => {
             return;
           }
 
-          // This currently fails because 'bit' is not in the VectorType union
-          // and validation rejects it
           await bitVectorDB.createIndex({
             indexName: testIndexName,
             dimension: 64,
@@ -1502,8 +1500,6 @@ describe('PgVector', () => {
             return;
           }
 
-          // This currently fails because 'sparsevec' is not in the VectorType union
-          // and validation rejects it
           await sparseVectorDB.createIndex({
             indexName: testIndexName,
             dimension: 100,
