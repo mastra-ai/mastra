@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { remove } from 'fs-extra/esm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DevBundler } from './DevBundler';
@@ -78,6 +80,73 @@ describe('DevBundler', () => {
   afterEach(() => {
     process.env.NODE_ENV = originalEnv;
     process.exit = originalExit;
+  });
+
+  describe('prepare - public files (issue #5121)', () => {
+    it('should copy public directory files to output during prepare', async () => {
+      // Mimic real layout: project root has src/mastra/ and .mastra/ as siblings
+      const projectRoot = '.test-public-tmp';
+      const mastraDir = join(projectRoot, 'src', 'mastra');
+      const publicDir = join(mastraDir, 'public');
+      const dotMastraPath = join(projectRoot, '.mastra');
+
+      try {
+        // Create a mock mastra project with a worker file in public/
+        mkdirSync(publicDir, { recursive: true });
+        writeFileSync(join(publicDir, 'scanWorker.js'), '// CPU-intensive worker');
+
+        const devBundler = new DevBundler(undefined, mastraDir);
+
+        // prepare() cleans .mastra/ and rebuilds the output directory
+        await devBundler.prepare(dotMastraPath);
+
+        // After prepare(), public files should be available in .mastra/output/
+        // so that Worker threads can reference them via import.meta.url
+        expect(existsSync(join(dotMastraPath, 'output', 'scanWorker.js'))).toBe(true);
+      } finally {
+        await remove(projectRoot);
+      }
+    });
+
+    it('should handle missing public directory gracefully', async () => {
+      // If the user has no public/ dir, prepare() should not fail
+      const projectRoot = '.test-no-public-tmp';
+      const mastraDir = join(projectRoot, 'src', 'mastra');
+      const dotMastraPath = join(projectRoot, '.mastra');
+
+      try {
+        mkdirSync(mastraDir, { recursive: true });
+
+        const devBundler = new DevBundler(undefined, mastraDir);
+        await devBundler.prepare(dotMastraPath);
+
+        // Should complete without error even with no public/ directory
+        expect(existsSync(join(dotMastraPath, 'output'))).toBe(true);
+      } finally {
+        await remove(projectRoot);
+      }
+    });
+  });
+
+  describe('watch - public files (issue #5121)', () => {
+    it('should include public-files-copier plugin in watcher', async () => {
+      const devBundler = new DevBundler(undefined, '/fake/src/mastra');
+      const { createWatcher } = await import('@mastra/deployer/build');
+
+      const tmpDir = '.test-watch-public-tmp';
+      try {
+        await devBundler.watch('test-entry.js', tmpDir, []);
+
+        // Verify createWatcher was called with the public-files-copier plugin
+        const call = vi.mocked(createWatcher).mock.calls[0]!;
+        const inputOptions = call[0] as { plugins: Array<{ name: string }> };
+        const pluginNames = inputOptions.plugins.map((p: { name: string }) => p.name).filter(Boolean);
+
+        expect(pluginNames).toContain('public-files-copier');
+      } finally {
+        await remove(tmpDir);
+      }
+    });
   });
 
   describe('watch', () => {
