@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import type { JsonSchema } from '@/lib/json-schema';
+import type { Rule } from '@/lib/rule-engine';
 import { isEligible } from '@/lib/rule-engine';
 import { generateDefaultValues, interpolateTemplate } from '@/lib/template';
 import { cn } from '@/lib/utils';
@@ -40,9 +41,11 @@ export function InstructionsPreviewDialog({
       const variables = JSON.parse(variablesJson || '{}') as Record<string, unknown>;
 
       // Filter blocks by eligibility based on their rules
-      const eligibleBlocks = blocks.filter(block =>
-        block.rules.length > 0 ? isEligible(block.rules, variables) : true,
-      );
+      const eligibleBlocks = blocks.filter(block => {
+        if (!block.rules) return true;
+        const flatRules = block.rules.conditions.filter((c): c is Rule => 'field' in c);
+        return flatRules.length > 0 ? isEligible(flatRules, variables) : true;
+      });
 
       // Join eligible block contents
       const joinedInstructions = eligibleBlocks.map(b => b.content).join('\n\n');

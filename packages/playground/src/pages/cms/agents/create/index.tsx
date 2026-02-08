@@ -8,7 +8,7 @@ import {
   AgentEditLayout,
   useAgentEditForm,
   MainContentLayout,
-  AgentEditMain,
+  AgentEditMainContentBlocks,
   Header,
   HeaderTitle,
   Icon,
@@ -36,7 +36,11 @@ function CmsAgentsCreatePage() {
       const createParams = {
         name: values.name,
         description: values.description || undefined,
-        instructions: values.instructions,
+        instructions: (values.instructionBlocks ?? []).map(block => ({
+          type: block.type,
+          content: block.content,
+          rules: block.rules,
+        })),
         model: values.model as Record<string, unknown>,
         tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
         workflows:
@@ -80,8 +84,7 @@ function CmsAgentsCreatePage() {
         }
       >
         <form ref={formRef} className="h-full">
-          <AgentEditMain form={form} />
-          {/* <AgentEditMainContentBlocks form={form} /> */}
+          <AgentEditMainContentBlocks form={form} />
         </form>
       </AgentEditLayout>
     </MainContentLayout>

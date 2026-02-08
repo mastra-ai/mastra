@@ -174,6 +174,52 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
         return Array.isArray(rule.value) && rule.value.indexOf(fieldValue) === -1;
       }
 
+      case 'greater_than_or_equal': {
+        const fieldValue = getNestedValue(context, rule.field);
+
+        if (isNullish(fieldValue) || isNullish(rule.value)) return false;
+
+        if (areBothNumbers(fieldValue, rule.value)) {
+          return fieldValue >= rule.value;
+        }
+        if (areBothStrings(fieldValue, rule.value)) {
+          return fieldValue >= rule.value;
+        }
+        if (areBothDates(fieldValue, rule.value)) {
+          return fieldValue >= rule.value;
+        }
+
+        return false;
+      }
+
+      case 'less_than_or_equal': {
+        const fieldValue = getNestedValue(context, rule.field);
+
+        if (isNullish(fieldValue) || isNullish(rule.value)) return false;
+
+        if (areBothNumbers(fieldValue, rule.value)) {
+          return fieldValue <= rule.value;
+        }
+        if (areBothStrings(fieldValue, rule.value)) {
+          return fieldValue <= rule.value;
+        }
+        if (areBothDates(fieldValue, rule.value)) {
+          return fieldValue <= rule.value;
+        }
+
+        return false;
+      }
+
+      case 'exists': {
+        const fieldValue = getNestedValue(context, rule.field);
+        return !isNullish(fieldValue);
+      }
+
+      case 'not_exists': {
+        const fieldValue = getNestedValue(context, rule.field);
+        return isNullish(fieldValue);
+      }
+
       default:
         return false;
     }

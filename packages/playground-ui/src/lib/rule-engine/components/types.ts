@@ -107,8 +107,12 @@ export const OPERATOR_LABELS: Record<ConditionOperator, string> = {
   not_contains: 'not contains',
   greater_than: 'greater than',
   less_than: 'less than',
+  greater_than_or_equal: 'greater than or equal',
+  less_than_or_equal: 'less than or equal',
   in: 'in',
   not_in: 'not in',
+  exists: 'exists',
+  not_exists: 'not exists',
 };
 
 /**
@@ -121,6 +125,10 @@ export const OPERATORS: ConditionOperator[] = [
   'not_contains',
   'greater_than',
   'less_than',
+  'greater_than_or_equal',
+  'less_than_or_equal',
   'in',
   'not_in',
+  'exists',
+  'not_exists',
 ];

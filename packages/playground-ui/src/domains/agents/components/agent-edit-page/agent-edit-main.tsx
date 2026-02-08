@@ -28,7 +28,7 @@ export function AgentEditMain({ form, readOnly = false }: AgentEditMainProps) {
 
   // Convert single instruction string to a block array for the preview dialog
   const instructionBlocks = useMemo<InstructionBlock[]>(
-    () => [{ id: 'single-instruction', content: instructions, rules: [] }],
+    () => [{ id: 'single-instruction', type: 'prompt_block', content: instructions, rules: undefined }],
     [instructions],
   );
 

@@ -321,6 +321,154 @@ describe('isEligible', () => {
     });
   });
 
+  describe('greater_than_or_equal operator', () => {
+    it.each([
+      [2, 1, true],
+      [1, 2, false],
+      [5, 5, true],
+      [0, -1, true],
+      [-1, 0, false],
+      [3.5, 2.5, true],
+      [3.5, 3.5, true],
+      ['b', 'a', true],
+      ['a', 'a', true],
+      ['a', 'b', false],
+      [true, false, false], // booleans not comparable
+      [10, '5', false], // mixed types not comparable
+      [undefined, 0, false],
+      [null, 0, false],
+      [NaN, 0, false],
+      [new Date('2024-01-01'), new Date('2023-12-31'), true],
+      [new Date('2024-01-01'), new Date('2024-01-01'), true],
+      [new Date('2023-12-31'), new Date('2024-01-01'), false],
+    ])("when context value is '%s' and rule value is '%s', returns %s", (contextValue, ruleValue, expected) => {
+      const rules: Rule[] = [
+        {
+          operator: 'greater_than_or_equal',
+          field: 'value',
+          value: ruleValue,
+        },
+      ];
+
+      const context: RuleContext = { value: contextValue };
+
+      expect(isEligible(rules, context)).toBe(expected);
+    });
+  });
+
+  describe('less_than_or_equal operator', () => {
+    it.each([
+      [1, 2, true],
+      [2, 1, false],
+      [5, 5, true],
+      [-1, 0, true],
+      [0, -1, false],
+      [2.5, 3.5, true],
+      [3.5, 3.5, true],
+      ['a', 'b', true],
+      ['a', 'a', true],
+      ['b', 'a', false],
+      [false, true, false], // booleans not comparable
+      ['5', 10, false], // mixed types not comparable
+      [null, 0, false],
+      [0, null, false],
+      [NaN, 0, false],
+      [new Date('2023-12-31'), new Date('2024-01-01'), true],
+      [new Date('2024-01-01'), new Date('2024-01-01'), true],
+      [new Date('2024-01-01'), new Date('2023-12-31'), false],
+    ])("when context value is '%s' and rule value is '%s', returns %s", (contextValue, ruleValue, expected) => {
+      const rules: Rule[] = [
+        {
+          operator: 'less_than_or_equal',
+          field: 'value',
+          value: ruleValue,
+        },
+      ];
+
+      const context: RuleContext = { value: contextValue };
+
+      expect(isEligible(rules, context)).toBe(expected);
+    });
+  });
+
+  describe('exists operator', () => {
+    it.each([
+      ['hello', true],
+      [42, true],
+      [0, true],
+      [false, true],
+      ['', true],
+      [[], true],
+      [{}, true],
+      [null, false],
+      [undefined, false],
+    ])("when context value is '%s', returns %s", (contextValue, expected) => {
+      const rules: Rule[] = [
+        {
+          operator: 'exists',
+          field: 'value',
+        },
+      ];
+
+      const context: RuleContext = contextValue === undefined ? {} : { value: contextValue };
+
+      expect(isEligible(rules, context)).toBe(expected);
+    });
+
+    it('returns false for missing nested field', () => {
+      const rules: Rule[] = [{ operator: 'exists', field: 'user.email' }];
+      const context: RuleContext = { user: { name: 'John' } };
+
+      expect(isEligible(rules, context)).toBe(false);
+    });
+
+    it('returns true for present nested field', () => {
+      const rules: Rule[] = [{ operator: 'exists', field: 'user.email' }];
+      const context: RuleContext = { user: { email: 'test@example.com' } };
+
+      expect(isEligible(rules, context)).toBe(true);
+    });
+  });
+
+  describe('not_exists operator', () => {
+    it.each([
+      ['hello', false],
+      [42, false],
+      [0, false],
+      [false, false],
+      ['', false],
+      [[], false],
+      [{}, false],
+      [null, true],
+      [undefined, true],
+    ])("when context value is '%s', returns %s", (contextValue, expected) => {
+      const rules: Rule[] = [
+        {
+          operator: 'not_exists',
+          field: 'value',
+        },
+      ];
+
+      const context: RuleContext = contextValue === undefined ? {} : { value: contextValue };
+
+      expect(isEligible(rules, context)).toBe(expected);
+    });
+
+    it('returns true for missing nested field', () => {
+      const rules: Rule[] = [{ operator: 'not_exists', field: 'user.email' }];
+      const context: RuleContext = { user: { name: 'John' } };
+
+      expect(isEligible(rules, context)).toBe(true);
+    });
+
+    it('returns false for present nested field', () => {
+      const rules: Rule[] = [{ operator: 'not_exists', field: 'user.email' }];
+      const context: RuleContext = { user: { email: 'test@example.com' } };
+
+      expect(isEligible(rules, context)).toBe(false);
+    });
+  });
+
   describe('empty rules', () => {
     it('returns true when rules array is empty', () => {
       const rules: Rule[] = [];
