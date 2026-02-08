@@ -5657,6 +5657,244 @@ describe('Full Async Buffering Flow', () => {
     expect(remaining).toHaveLength(2);
   });
 
+  describe('partial activation: oldest-first ordering with various ratios and uneven chunks', () => {
+    // Helper: set up storage with given chunks, activate, and return result + remaining
+    async function setupAndActivate(opts: {
+      chunks: Array<{ cycleId: string; messageTokens: number; observationTokens: number; obs: string }>;
+      activationRatio: number;
+      messageTokensThreshold: number;
+    }) {
+      const storage = createInMemoryStorage();
+      const threadId = `partial-${crypto.randomUUID()}`;
+      const resourceId = `res-${crypto.randomUUID()}`;
+
+      await storage.saveThread({
+        thread: { id: threadId, resourceId, title: 'test', createdAt: new Date(), updatedAt: new Date(), metadata: {} },
+      });
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        lookupKey: `thread:${threadId}`,
+        observedTimezone: 'UTC',
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      const recordId = record!.id;
+
+      for (let i = 0; i < opts.chunks.length; i++) {
+        const c = opts.chunks[i]!;
+        await storage.updateBufferedObservations({
+          id: recordId,
+          chunk: {
+            observations: c.obs,
+            tokenCount: c.observationTokens,
+            messageIds: [`msg-${i}`],
+            messageTokens: c.messageTokens,
+            lastObservedAt: new Date(Date.UTC(2025, 0, 1, 8 + i)),
+            cycleId: c.cycleId,
+          },
+        });
+      }
+
+      const result = await storage.swapBufferedToActive({
+        id: recordId,
+        activationRatio: opts.activationRatio,
+        messageTokensThreshold: opts.messageTokensThreshold,
+      });
+
+      const afterRecord = await storage.getObservationalMemory(threadId, resourceId);
+      const remaining = afterRecord?.bufferedObservationChunks ?? [];
+
+      return { result, remaining };
+    }
+
+    it('even chunks, ratio 0.6: activates 3 of 5 oldest chunks', async () => {
+      // 5 chunks of 10k each. threshold=50k, ratio=0.6 → target=30k
+      // After 3 chunks: 30k (exactly on target) → activates 3
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 0: project setup' },
+        { cycleId: 'c-1', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 1: schema design' },
+        { cycleId: 'c-2', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 2: API endpoints' },
+        { cycleId: 'c-3', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 3: frontend' },
+        { cycleId: 'c-4', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 4: deployment' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.6,
+        messageTokensThreshold: 50000,
+      });
+
+      expect(result.chunksActivated).toBe(3);
+      expect(result.messageTokensActivated).toBe(30000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2']);
+      expect(result.observations).toContain('Chunk 0');
+      expect(result.observations).toContain('Chunk 2');
+      expect(result.observations).not.toContain('Chunk 3');
+
+      expect(remaining).toHaveLength(2);
+      expect(remaining[0].cycleId).toBe('c-3');
+      expect(remaining[1].cycleId).toBe('c-4');
+    });
+
+    it('uneven chunks, ratio 0.6: biases under target', async () => {
+      // Chunks: 8k, 15k, 12k, 7k, 6k (total 48k). threshold=50k, ratio=0.6 → target=30k
+      // After 1: 8k  (under, distance=22k)
+      // After 2: 23k (under, distance=7k)  ← best under
+      // After 3: 35k (over, distance=5k)
+      // Best under = 2 chunks (23k). Algorithm prefers under over over.
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0: small early messages' },
+        { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1: big tool call results' },
+        { cycleId: 'c-2', messageTokens: 12000, observationTokens: 250, obs: 'Chunk 2: medium conversation' },
+        { cycleId: 'c-3', messageTokens: 7000, observationTokens: 120, obs: 'Chunk 3: short follow-up' },
+        { cycleId: 'c-4', messageTokens: 6000, observationTokens: 100, obs: 'Chunk 4: final exchange' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.6,
+        messageTokensThreshold: 50000,
+      });
+
+      // 2 chunks = 23k (under target of 30k), 3 chunks = 35k (over).
+      // Algorithm prefers the under boundary.
+      expect(result.chunksActivated).toBe(2);
+      expect(result.messageTokensActivated).toBe(23000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
+      expect(result.observations).toContain('Chunk 0');
+      expect(result.observations).toContain('Chunk 1');
+      expect(result.observations).not.toContain('Chunk 2');
+
+      expect(remaining).toHaveLength(3);
+      expect(remaining[0].cycleId).toBe('c-2');
+      expect(remaining[1].cycleId).toBe('c-3');
+      expect(remaining[2].cycleId).toBe('c-4');
+    });
+
+    it('uneven chunks, ratio 0.4: activates fewer oldest chunks', async () => {
+      // Same uneven chunks. threshold=50k, ratio=0.4 → target=20k
+      // After 1: 8k  (under, distance=12k)
+      // After 2: 23k (over, distance=3k)
+      // Best under = 1 chunk (8k). 2 chunks = 23k (over).
+      // Algorithm prefers the under boundary: 1 chunk.
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0: small early messages' },
+        { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1: big tool call results' },
+        { cycleId: 'c-2', messageTokens: 12000, observationTokens: 250, obs: 'Chunk 2: medium conversation' },
+        { cycleId: 'c-3', messageTokens: 7000, observationTokens: 120, obs: 'Chunk 3: short follow-up' },
+        { cycleId: 'c-4', messageTokens: 6000, observationTokens: 100, obs: 'Chunk 4: final exchange' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.4,
+        messageTokensThreshold: 50000,
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(8000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+
+      expect(remaining).toHaveLength(4);
+      expect(remaining[0].cycleId).toBe('c-1');
+    });
+
+    it('uneven chunks, high ratio 0.9: activates most but not all', async () => {
+      // Same uneven chunks (total 48k). threshold=50k, ratio=0.9 → target=45k
+      // After 1: 8k  (under)
+      // After 2: 23k (under)
+      // After 3: 35k (under)
+      // After 4: 42k (under, distance=3k) ← best under
+      // After 5: 48k (over, distance=3k)
+      // Both boundaries at distance=3k, but algorithm prefers under.
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1' },
+        { cycleId: 'c-2', messageTokens: 12000, observationTokens: 250, obs: 'Chunk 2' },
+        { cycleId: 'c-3', messageTokens: 7000, observationTokens: 120, obs: 'Chunk 3' },
+        { cycleId: 'c-4', messageTokens: 6000, observationTokens: 100, obs: 'Chunk 4' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.9,
+        messageTokensThreshold: 50000,
+      });
+
+      expect(result.chunksActivated).toBe(4);
+      expect(result.messageTokensActivated).toBe(42000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3']);
+
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-4');
+    });
+
+    it('one huge first chunk exceeds target: still activates just 1 (biased over)', async () => {
+      // Chunks: 35k, 5k, 5k, 3k. threshold=50k, ratio=0.3 → target=15k
+      // After 1: 35k (over, only option)
+      // No under boundary exists → activates 1 chunk (the over one)
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 35000, observationTokens: 500, obs: 'Chunk 0: massive tool output' },
+        { cycleId: 'c-1', messageTokens: 5000, observationTokens: 100, obs: 'Chunk 1' },
+        { cycleId: 'c-2', messageTokens: 5000, observationTokens: 100, obs: 'Chunk 2' },
+        { cycleId: 'c-3', messageTokens: 3000, observationTokens: 50, obs: 'Chunk 3' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.3,
+        messageTokensThreshold: 50000,
+      });
+
+      // Only boundary is at chunk 1 (35k) which is over target (15k).
+      // But it's the closest to target, so activates 1.
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(35000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+
+      expect(remaining).toHaveLength(3);
+      expect(remaining[0].cycleId).toBe('c-1');
+    });
+
+    it('ratio 1.0: activates all chunks', async () => {
+      // Uneven chunks. ratio=1.0 → target=50k, total=48k (all under)
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1' },
+        { cycleId: 'c-2', messageTokens: 12000, observationTokens: 250, obs: 'Chunk 2' },
+        { cycleId: 'c-3', messageTokens: 7000, observationTokens: 120, obs: 'Chunk 3' },
+        { cycleId: 'c-4', messageTokens: 6000, observationTokens: 100, obs: 'Chunk 4' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 1.0,
+        messageTokensThreshold: 50000,
+      });
+
+      expect(result.chunksActivated).toBe(5);
+      expect(result.messageTokensActivated).toBe(48000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3', 'c-4']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('single chunk: always activates it regardless of ratio', async () => {
+      const chunks = [{ cycleId: 'c-only', messageTokens: 12000, observationTokens: 200, obs: 'The only chunk' }];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.3,
+        messageTokensThreshold: 50000,
+      });
+
+      // target=15k, chunk is 12k (under) → activates it
+      expect(result.chunksActivated).toBe(1);
+      expect(result.activatedCycleIds).toEqual(['c-only']);
+      expect(remaining).toHaveLength(0);
+    });
+  });
+
   // ===========================================================================
   // Critical Async Buffering Scenarios
   // ===========================================================================
