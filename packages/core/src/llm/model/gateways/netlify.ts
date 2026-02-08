@@ -7,6 +7,7 @@ import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
+import { MASTRA_USER_AGENT } from './constants.js';
 
 interface NetlifyProviderResponse {
   token_env_var: string;
@@ -205,7 +206,7 @@ export class NetlifyGateway extends MastraModelGateway {
           baseURL: `${baseURL}/v1/`,
           headers: {
             'anthropic-version': '2023-06-01',
-            'user-agent': 'anthropic/',
+            'User-Agent': MASTRA_USER_AGENT,
             ...(headers ? headers : {}),
           },
         })(modelId);

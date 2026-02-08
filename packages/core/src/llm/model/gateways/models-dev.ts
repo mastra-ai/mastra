@@ -15,7 +15,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
-import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
 
 interface ModelsDevProviderInfo {
   id: string;
@@ -211,7 +211,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           apiKey,
         }).chat(modelId);
       case 'anthropic':
-        return createAnthropic({ apiKey })(modelId);
+        return createAnthropic({ apiKey, headers: { 'User-Agent': MASTRA_USER_AGENT } })(modelId);
       case 'mistral':
         return createMistral({ apiKey })(modelId);
       case 'groq':
@@ -238,7 +238,7 @@ export class ModelsDevGateway extends MastraModelGateway {
       case 'moonshotai-cn': {
         // moonshotai uses Anthropic-compatible API endpoint
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-        return createAnthropic({ apiKey, baseURL })(modelId);
+        return createAnthropic({ apiKey, baseURL, headers: { 'User-Agent': MASTRA_USER_AGENT } })(modelId);
       }
       default: {
         // Check if this provider uses a specific SDK package (e.g., kimi-for-coding uses @ai-sdk/anthropic)
@@ -247,7 +247,7 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         if (npm === '@ai-sdk/anthropic') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createAnthropic({ apiKey, baseURL })(modelId);
+          return createAnthropic({ apiKey, baseURL, headers: { 'User-Agent': MASTRA_USER_AGENT } })(modelId);
         }
 
         if (npm === '@ai-sdk/openai') {
