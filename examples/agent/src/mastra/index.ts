@@ -1,4 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
+import { registerApiRoute } from '@mastra/core/server';
+import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 
 import { mastraAuth, rbacProvider } from './auth';
@@ -59,6 +61,7 @@ const config = {
   bundler: {
     sourcemap: true,
   },
+  editor: new MastraEditor(),
   server: {
     auth: mastraAuth,
     rbac: rbacProvider,
@@ -68,4 +71,5 @@ const config = {
 
 export const mastra = new Mastra({
   ...config,
+  editor: new MastraEditor(),
 });

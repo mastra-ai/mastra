@@ -5,7 +5,6 @@ import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
@@ -18,7 +17,7 @@ import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
-import { useExperimentalFeatures } from '@/lib/experimental-features/hooks/use-experimental-features';
+import { useIsCmsAvailable } from '@/domains/cms';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
@@ -30,9 +29,9 @@ export interface AgentsTableProps {
 export function AgentsTable({ agents, isLoading, error, onCreateClick }: AgentsTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
+  const { isCmsAvailable } = useIsCmsAvailable();
   const projectData: AgentTableData[] = useMemo(() => Object.values(agents), [agents]);
-  const columns = useMemo(() => getColumns(experimentalFeaturesEnabled), [experimentalFeaturesEnabled]);
+  const columns = useMemo(() => getColumns(isCmsAvailable), [isCmsAvailable]);
   const filteredData = useMemo(
     () => projectData.filter(agent => agent.name.toLowerCase().includes(search.toLowerCase())),
     [projectData, search],
@@ -155,7 +154,7 @@ const EmptyAgentsTable = ({ onCreateClick }: EmptyAgentsTableProps) => (
               <Icon>
                 <Plus />
               </Icon>
-              Create Agent
+              Create an agent
             </Button>
           )}
           <Button

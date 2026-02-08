@@ -1,5 +1,32 @@
 # @mastra/deployer
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed bundling of workspace packages in monorepo setups. ([#12645](https://github.com/mastra-ai/mastra/pull/12645))
+
+  **What was fixed:**
+  - Bundles now correctly include workspace packages with hyphenated names
+  - Workspace TypeScript sources compile correctly when resolved through workspace symlinks
+  - Transitive workspace dependencies are included when the entry point is generated
+
+  **Why this happened:**
+
+  Earlier workspace resolution logic skipped some workspace paths and virtual entries, so those dependencies were missed.
+
+- Updated dependencies [[`90f7894`](https://github.com/mastra-ai/mastra/commit/90f7894568dc9481f40a4d29672234fae23090bb), [`8109aee`](https://github.com/mastra-ai/mastra/commit/8109aeeab758e16cd4255a6c36f044b70eefc6a6), [`8109aee`](https://github.com/mastra-ai/mastra/commit/8109aeeab758e16cd4255a6c36f044b70eefc6a6), [`d917195`](https://github.com/mastra-ai/mastra/commit/d917195995422dff39ee46a516fe7f7205158858)]:
+  - @mastra/core@1.2.1-alpha.0
+  - @mastra/server@1.2.1-alpha.0
+
+## 1.2.0
+
+### Patch Changes
+
+- Updated dependencies [[`e6fc281`](https://github.com/mastra-ai/mastra/commit/e6fc281896a3584e9e06465b356a44fe7faade65), [`97be6c8`](https://github.com/mastra-ai/mastra/commit/97be6c8963130fca8a664fcf99d7b3a38e463595), [`2770921`](https://github.com/mastra-ai/mastra/commit/2770921eec4d55a36b278d15c3a83f694e462ee5), [`b1695db`](https://github.com/mastra-ai/mastra/commit/b1695db2d7be0c329d499619c7881899649188d0), [`b18ec79`](https://github.com/mastra-ai/mastra/commit/b18ec79ce6e632c62a8c13bc8ba4ce7438d9ce0c), [`5fe1fe0`](https://github.com/mastra-ai/mastra/commit/5fe1fe0109faf2c87db34b725d8a4571a594f80e), [`a2a91b2`](https://github.com/mastra-ai/mastra/commit/a2a91b2e42f51778f8f53ffb90abf88bf7470d63), [`4133d48`](https://github.com/mastra-ai/mastra/commit/4133d48eaa354cdb45920dc6265732ffbc96788d), [`5dd01cc`](https://github.com/mastra-ai/mastra/commit/5dd01cce68d61874aa3ecbd91ee17884cfd5aca2), [`13e0a2a`](https://github.com/mastra-ai/mastra/commit/13e0a2a2bcec01ff4d701274b3727d5e907a6a01), [`f6673b8`](https://github.com/mastra-ai/mastra/commit/f6673b893b65b7d273ad25ead42e990704cc1e17), [`cd6be8a`](https://github.com/mastra-ai/mastra/commit/cd6be8ad32741cd41cabf508355bb31b71e8a5bd), [`9eb4e8e`](https://github.com/mastra-ai/mastra/commit/9eb4e8e39efbdcfff7a40ff2ce07ce2714c65fa8), [`c987384`](https://github.com/mastra-ai/mastra/commit/c987384d6c8ca844a9701d7778f09f5a88da7f9f), [`cb8cc12`](https://github.com/mastra-ai/mastra/commit/cb8cc12bfadd526aa95a01125076f1da44e4afa7), [`aa37c84`](https://github.com/mastra-ai/mastra/commit/aa37c84d29b7db68c72517337932ef486c316275), [`62f5d50`](https://github.com/mastra-ai/mastra/commit/62f5d5043debbba497dacb7ab008fe86b38b8de3), [`47eba72`](https://github.com/mastra-ai/mastra/commit/47eba72f0397d0d14fbe324b97940c3d55e5a525)]:
+  - @mastra/core@1.2.0
+  - @mastra/server@1.2.0
+
 ## 1.2.0-alpha.1
 
 ### Patch Changes

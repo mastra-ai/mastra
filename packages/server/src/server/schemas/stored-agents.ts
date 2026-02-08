@@ -52,13 +52,61 @@ const scorerConfigSchema = z.object({
 });
 
 /**
+ * Rule and RuleGroup schemas for conditional prompt block evaluation.
+ */
+const ruleSchema = z.object({
+  field: z.string(),
+  operator: z.enum([
+    'equals',
+    'not_equals',
+    'contains',
+    'not_contains',
+    'greater_than',
+    'less_than',
+    'greater_than_or_equal',
+    'less_than_or_equal',
+    'in',
+    'not_in',
+    'exists',
+    'not_exists',
+  ]),
+  value: z.unknown(),
+});
+
+type RuleGroupZod = z.ZodType<{ operator: 'AND' | 'OR'; conditions: (z.infer<typeof ruleSchema> | RuleGroupInput)[] }>;
+type RuleGroupInput = z.infer<RuleGroupZod>;
+
+const ruleGroupSchema: RuleGroupZod = z.lazy(() =>
+  z.object({
+    operator: z.enum(['AND', 'OR']),
+    conditions: z.array(z.union([ruleSchema, ruleGroupSchema])),
+  }),
+);
+
+/**
+ * Agent instruction block schema for prompt-block-based instructions.
+ */
+const agentInstructionBlockSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('text'), content: z.string() }),
+  z.object({ type: z.literal('prompt_block_ref'), id: z.string() }),
+  z.object({ type: z.literal('prompt_block'), content: z.string(), rules: ruleGroupSchema.optional() }),
+]);
+
+/**
+ * Instructions can be a plain string or an array of instruction blocks (text + prompt_block references).
+ */
+export const instructionsSchema = z
+  .union([z.string(), z.array(agentInstructionBlockSchema)])
+  .describe('System instructions for the agent (string or array of instruction blocks)');
+
+/**
  * Agent snapshot config fields (name, description, instructions, model, tools, etc.)
  * These live in version snapshots, not on the thin agent record.
  */
 const snapshotConfigSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
-  instructions: z.string().describe('System instructions for the agent'),
+  instructions: instructionsSchema,
   model: z
     .object({
       provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
@@ -91,20 +139,31 @@ const agentMetadataSchema = z.object({
 /**
  * POST /stored/agents - Create stored agent body
  * Flat union of agent-record fields + config fields
+ * The id is optional — if not provided, it will be derived from the agent name via slugify.
  */
 export const createStoredAgentBodySchema = z
   .object({
-    id: z.string().describe('Unique identifier for the agent'),
+    id: z.string().optional().describe('Unique identifier for the agent. If not provided, derived from name.'),
     authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
     metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
   })
   .merge(snapshotConfigSchema);
 
 /**
+ * Snapshot config schema for updates where nullable fields (like memory) can be set to null to clear them.
+ */
+const snapshotConfigUpdateSchema = snapshotConfigSchema.extend({
+  memory: z
+    .union([serializedMemoryConfigSchema, z.null()])
+    .optional()
+    .describe('Memory configuration object (SerializedMemoryConfig), or null to disable memory'),
+});
+
+/**
  * PATCH /stored/agents/:storedAgentId - Update stored agent body
  * Optional metadata-level fields + optional config fields
  */
-export const updateStoredAgentBodySchema = agentMetadataSchema.partial().merge(snapshotConfigSchema.partial());
+export const updateStoredAgentBodySchema = agentMetadataSchema.partial().merge(snapshotConfigUpdateSchema.partial());
 
 // ============================================================================
 // Response Schemas
@@ -126,7 +185,7 @@ export const storedAgentSchema = z.object({
   // Version snapshot config fields (resolved from active version)
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
-  instructions: z.string().describe('System instructions for the agent'),
+  instructions: instructionsSchema,
   model: z
     .object({
       provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
@@ -195,6 +254,29 @@ export const updateStoredAgentResponseSchema = z.union([
 export const deleteStoredAgentResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
+});
+
+// ============================================================================
+// Preview Instructions Schemas
+// ============================================================================
+
+/**
+ * POST /stored/agents/preview-instructions - Preview resolved instructions
+ */
+export const previewInstructionsBodySchema = z.object({
+  blocks: z.array(agentInstructionBlockSchema).describe('Array of instruction blocks to resolve'),
+  context: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .default({})
+    .describe('Request context for variable interpolation and rule evaluation'),
+});
+
+/**
+ * Response for POST /stored/agents/preview-instructions
+ */
+export const previewInstructionsResponseSchema = z.object({
+  result: z.string().describe('The resolved instructions string'),
 });
 
 /**

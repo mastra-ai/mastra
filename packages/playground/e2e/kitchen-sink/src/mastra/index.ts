@@ -1,5 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
+import { MastraEditor } from '@mastra/editor';
 import { storage } from './storage';
 
 import { weatherAgent, omAgent, omAdaptiveAgent } from './agents';
@@ -17,6 +18,7 @@ export const mastra = new Mastra({
     level: 'error',
   }),
   storage,
+  editor: new MastraEditor(),
   mcpServers: {
     simpleMcpServer,
   },

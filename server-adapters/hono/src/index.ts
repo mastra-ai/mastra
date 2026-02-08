@@ -27,6 +27,7 @@ export type HonoVariables = {
   abortSignal: AbortSignal;
   taskStore: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
+  cachedBody?: unknown;
 };
 
 export type HonoBindings = {};
@@ -55,6 +56,22 @@ export interface HonoApp {
 export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context> {
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
+      // Patch req.json() to prevent "Body is unusable" errors when the body is read multiple times
+      // e.g. by middleware and then by an agent.
+      const originalJson = c.req.json.bind(c.req);
+      let jsonPromise: Promise<any> | undefined;
+
+      c.req.json = () => {
+        if (!jsonPromise) {
+          jsonPromise = originalJson().then(body => {
+            // Cache in context if needed explicitly, though the promise memoization handles the reuse
+            c.set('cachedBody', body);
+            return body;
+          });
+        }
+        return jsonPromise;
+      };
+
       // Parse request context from request body and add to context
 
       let bodyRequestContext: Record<string, any> | undefined;
@@ -67,8 +84,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // Only parse if content-type is JSON and body is not empty
         if (contentType?.includes('application/json') && contentLength !== '0') {
           try {
-            const clonedReq = c.req.raw.clone();
-            const body = (await clonedReq.json()) as { requestContext?: Record<string, any> };
+            const body = (await c.req.raw.clone().json()) as { requestContext?: Record<string, any> };
             if (body.requestContext) {
               bodyRequestContext = body.requestContext;
             }

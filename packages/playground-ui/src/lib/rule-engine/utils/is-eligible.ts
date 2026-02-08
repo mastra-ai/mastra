@@ -2,6 +2,8 @@ import { Rule, RuleContext } from '../types';
 
 const isString = (value: unknown): value is string => typeof value === 'string';
 
+const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean';
+
 const isNumber = (value: unknown): value is number => typeof value === 'number' && !Number.isNaN(value);
 
 const areBothNumbers = (a: unknown, b: unknown): boolean => isNumber(a) && isNumber(b);
@@ -16,6 +18,26 @@ const areBothDates = (a: unknown, b: unknown): boolean => isDate(a) && isDate(b)
  * Checks if a value is null or undefined.
  */
 const isNullish = (value: unknown): value is null | undefined => typeof value === 'undefined' || value === null;
+
+/**
+ * Coerces a rule value to match the context value's type.
+ * Handles string-to-boolean and string-to-number coercion for form inputs.
+ */
+const coerceRuleValue = (ruleValue: unknown, contextValue: unknown): unknown => {
+  if (isString(ruleValue)) {
+    // When context is boolean and rule is string 'true'/'false', coerce to boolean
+    if (isBoolean(contextValue)) {
+      if (ruleValue === 'true') return true;
+      if (ruleValue === 'false') return false;
+    }
+    // When context is number and rule is numeric string, coerce to number
+    if (isNumber(contextValue)) {
+      const parsed = Number(ruleValue);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+  }
+  return ruleValue;
+};
 
 /**
  * Gets a nested value from an object using dot notation.
@@ -56,12 +78,15 @@ export const isEligible = (rules: Rule[], context: RuleContext): boolean => {
   if (rules.length === 0) return true;
 
   return rules.every(rule => {
+    const contextValue = getNestedValue(context, rule.field);
+    const coercedRuleValue = coerceRuleValue(rule.value, contextValue);
+
     switch (rule.operator) {
       case 'equals':
-        return getNestedValue(context, rule.field) === rule.value;
+        return contextValue === coercedRuleValue;
 
       case 'not_equals':
-        return getNestedValue(context, rule.field) !== rule.value;
+        return contextValue !== coercedRuleValue;
 
       case 'greater_than': {
         const fieldValue = getNestedValue(context, rule.field);
