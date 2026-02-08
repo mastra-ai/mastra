@@ -359,13 +359,17 @@ export class AgentLegacyHandler {
             threadObject = existingThread;
           }
         } else {
+          // saveThread: true ensures the thread is persisted to the database immediately.
+          // This is required because output processors (like MessageHistory) may call
+          // saveMessages() before after(), and some storage backends (like PostgresStore)
+          // validate that the thread exists before saving messages.
           threadObject = await memory.createThread({
             threadId,
             metadata: thread.metadata,
             title: thread.title,
             memoryConfig,
             resourceId,
-            saveThread: false,
+            saveThread: true,
           });
         }
 
