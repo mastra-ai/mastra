@@ -1,0 +1,250 @@
+---
+title: "Using Electron | Desktop Apps"
+description: "Learn how to build a desktop chat application with Electron and Mastra"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Using Electron
+
+[Electron](https://www.electronjs.org/) is a framework for building cross-platform desktop applications with web technologies. In this guide, you'll connect an Electron app to a Mastra backend server to create a desktop chat interface.
+
+The Electron app uses [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) to handle chat interactions via HTTP with the Mastra server.
+
+## Integration Guide
+
+Run Mastra as a standalone server and connect your Electron app's renderer process to its API endpoints.
+
+<Steps>
+
+<StepItem>
+
+Set up your directory structure. A possible directory structure could look like this:
+
+```bash
+project-root
+├── mastra-server
+│   ├── src
+│   │   └── mastra
+│   └── package.json
+└── electron-chat
+    └── package.json
+```
+
+Bootstrap your Mastra server:
+
+```bash
+npx create-mastra@latest
+```
+
+This command will launch an interactive wizard to help you scaffold a new Mastra project, including prompting you for a project name and setting up basic configurations. Follow the prompts to create your server project.
+
+Navigate to your newly created Mastra server directory:
+
+```bash
+cd mastra-server # Replace with the actual directory name you provided
+```
+
+:::note
+
+Ensure that you have set the appropriate environment variables for your LLM provider in the `.env` file.
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+Create a chat route for the Electron frontend by using the `chatRoute()` helper from `@mastra/ai-sdk`. Add it to your Mastra project:
+
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest
+```
+
+In your `src/mastra/index.ts` file, register the chat route:
+
+```typescript title="src/mastra/index.ts" {2,7-13}
+import { Mastra } from '@mastra/core/mastra';
+import { chatRoute } from '@mastra/ai-sdk';
+// Rest of the imports...
+
+export const mastra = new Mastra({
+  // Rest of the configuration...
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId'
+      })
+    ]
+  }
+});
+```
+
+This will make all agents available in AI SDK-compatible formats, including the `weatherAgent` at the endpoint `/chat/weatherAgent`.
+
+:::info
+
+If the Electron renderer's requests are blocked by CORS (common in development when the renderer loads from a different origin), add a `cors` configuration:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  // Rest of the configuration...
+  server: {
+    cors: {
+      origin: "*",
+      allowMethods: ["*"],
+      allowHeaders: ["*"],
+    },
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId'
+      })
+    ]
+  }
+});
+```
+
+For production deployments, restrict the CORS origin to your application's actual origin.
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+Run the Mastra server using the following command:
+
+```bash npm2yarn
+npm run dev
+```
+
+By default, the Mastra server will run on `http://localhost:4111`. Keep this server running for the next steps where we'll set up the Electron app to connect to it.
+
+</StepItem>
+
+<StepItem>
+
+Go up one directory to your project root.
+
+```bash
+cd ..
+```
+
+Scaffold a new Electron app using [electron-vite](https://electron-vite.org/):
+
+```bash npm2yarn
+npm create @electron-vite -- electron-chat
+```
+
+When prompted, select **React** and **TypeScript**.
+
+Navigate to the new project:
+
+```bash
+cd electron-chat
+```
+
+</StepItem>
+
+<StepItem>
+
+Install the AI SDK packages:
+
+```bash npm2yarn
+npm install @ai-sdk/react ai
+```
+
+</StepItem>
+
+<StepItem>
+
+Open `src/renderer/src/App.tsx` and replace its contents with the chat component:
+
+```tsx title="src/renderer/src/App.tsx"
+import { useState } from 'react'
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
+
+const MASTRA_URL = 'http://localhost:4111'
+
+export default function App() {
+  const [input, setInput] = useState('')
+
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: `${MASTRA_URL}/chat/weatherAgent`,
+    }),
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!input.trim()) return
+    sendMessage({ text: input })
+    setInput('')
+  }
+
+  return (
+    <div style={{ maxWidth: 720, margin: '0 auto', padding: 16, height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <h1>Mastra Chat</h1>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {messages.map((message) => (
+          <div key={message.id} style={{ marginBottom: 12 }}>
+            <strong>{message.role === 'user' ? 'You' : 'Agent'}:</strong>
+            {message.parts.map((part, i) => {
+              if (part.type === 'text') {
+                return <p key={i}>{part.text}</p>
+              }
+              if (part.type?.startsWith('tool-')) {
+                return <pre key={i}>{JSON.stringify(part, null, 2)}</pre>
+              }
+              return null
+            })}
+          </div>
+        ))}
+      </div>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 8 }}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask about the weather..."
+          disabled={status !== 'ready'}
+          style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #ccc' }}
+        />
+        <button type="submit" disabled={status !== 'ready'}>
+          Send
+        </button>
+      </form>
+    </div>
+  )
+}
+```
+
+This connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the Mastra server's `/chat/weatherAgent` endpoint. Messages are sent as HTTP requests and streamed back in AI SDK format. Replace `weatherAgent` with whatever agent ID you configured in your Mastra server.
+
+</StepItem>
+
+<StepItem>
+
+Make sure the Mastra server is still running. In a separate terminal, start the Electron app:
+
+```bash npm2yarn
+npm run dev
+```
+
+An Electron window opens with the chat interface. Type a message and you should see the agent respond.
+
+</StepItem>
+
+</Steps>
+
+## How it works
+
+The Electron main process creates a `BrowserWindow` that loads the React renderer. The renderer uses `useChat()` from `@ai-sdk/react` with a `DefaultChatTransport` configured to send requests to the Mastra server's chat endpoint. This is the same pattern used in a standard [React + Vite](/guides/getting-started/vite-react) app — Electron adds the desktop shell around it.
+
+## Next steps
+
+- Learn more about [agents](/docs/agents/overview)
+- Give your agent its own [tools](/docs/agents/using-tools)
+- Add [memory](/docs/agents/agent-memory) to your agent for persistent conversations
+- Explore the [AI SDK UI guide](/guides/build-your-ui/ai-sdk-ui) for advanced streaming patterns

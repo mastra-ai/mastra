@@ -87,6 +87,11 @@ const sidebars = {
           id: 'build-your-ui/assistant-ui',
           label: 'Assistant UI',
         },
+        {
+          type: 'doc',
+          id: 'build-your-ui/electron',
+          label: 'Electron',
+        },
       ],
     },
     {

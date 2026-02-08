@@ -1,0 +1,25 @@
+{
+  "name": "examples-electron-chat",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "^2.0.39",
+    "ai": "^5.0.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^4.5.0",
+    "electron": "^35.0.0",
+    "electron-vite": "^3.1.0",
+    "typescript": "^5.9.3"
+  }
+}
