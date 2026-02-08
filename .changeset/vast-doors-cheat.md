@@ -5,7 +5,9 @@
 Added a new `@mastra/azure` vector store package for Azure AI Search.
 
 - Supports index creation, updates, deletes, and similarity search operations.
-- Adds filtering support and integration tests for real Azure AI Search behavior.
+- Supports filtering in vector queries for more precise retrieval.
+
+**Why:** This adds an official Azure AI Search vector adapter so teams using Azure can integrate with Mastra's vector-store APIs without custom adapters.
 
 **Usage**
 
