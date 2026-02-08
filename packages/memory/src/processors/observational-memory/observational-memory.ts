@@ -2289,9 +2289,9 @@ ${suggestedResponse}
    * Calculate all threshold-related values for observation decision making.
    */
   private calculateObservationThresholds(
-    _allMessages: MastraDBMessage[],
-    unobservedMessages: MastraDBMessage[],
-    pendingTokens: number,
+    allMessages: MastraDBMessage[],
+    _unobservedMessages: MastraDBMessage[],
+    _pendingTokens: number,
     otherThreadTokens: number,
     currentObservationTokens: number,
     _record?: ObservationalMemoryRecord,
@@ -2301,13 +2301,17 @@ ${suggestedResponse}
     effectiveObservationTokensThreshold: number;
     isSharedBudget: boolean;
   } {
-    // For threshold checking, we use UNOBSERVED messages only.
-    // After activation, messages marked as observed (via lastObservedAt or observedMessageIds)
-    // are excluded, so the threshold correctly reflects what still needs observation.
-    const currentSessionTokens = this.tokenCounter.countMessages(unobservedMessages);
+    // For threshold checking, count ALL messages currently in the context window.
+    // With async buffering, observed messages may remain in context until the next
+    // turn (they're only removed at step 0). Using unobserved-only would undercount
+    // the actual context size, preventing threshold triggers and causing overflow.
+    const contextWindowTokens = this.tokenCounter.countMessages(allMessages);
 
-    // Total pending = unobserved in-context tokens + persisted pending + other threads
-    const totalPendingTokens = Math.max(0, pendingTokens + currentSessionTokens + otherThreadTokens);
+    // Total pending = all in-context tokens + other threads
+    // Note: we don't add record.pendingMessageTokens here because that's a DB artifact
+    // for cross-request state tracking. The allMessages already includes everything
+    // currently in the context window.
+    const totalPendingTokens = Math.max(0, contextWindowTokens + otherThreadTokens);
 
     const threshold = this.calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
 
@@ -2462,19 +2466,18 @@ ${suggestedResponse}
       const freshAllMessages = messageList.get.all.db();
       let freshUnobservedMessages = this.getUnobservedMessages(freshAllMessages, freshRecord);
 
-      // Re-check threshold inside the lock. Another thread sharing this resource
-      // may have already observed, advancing lastObservedAt and reducing the
-      // other-threads token count.
-      const freshCurrentTokens = this.tokenCounter.countMessages(freshUnobservedMessages);
-      const freshPending = freshRecord.pendingMessageTokens ?? 0;
+      // Re-check threshold inside the lock using all context window tokens.
+      // After activation, observed messages may still be in context (removed at next step 0),
+      // so we count everything to get the true context size.
+      const freshContextTokens = this.tokenCounter.countMessages(freshAllMessages);
       let freshOtherThreadTokens = 0;
       if (this.scope === 'resource' && resourceId) {
         const freshOtherContext = await this.loadOtherThreadsContext(resourceId, threadId);
         freshOtherThreadTokens = freshOtherContext ? this.tokenCounter.countString(freshOtherContext) : 0;
       }
-      const freshTotal = freshPending + freshCurrentTokens + freshOtherThreadTokens;
+      const freshTotal = freshContextTokens + freshOtherThreadTokens;
       omDebug(
-        `[OM:threshold] handleThresholdReached (inside lock): freshTotal=${freshTotal}, threshold=${threshold}, freshUnobserved=${freshUnobservedMessages.length}, freshPending=${freshPending}, freshOtherThreadTokens=${freshOtherThreadTokens}, freshCurrentTokens=${freshCurrentTokens}`,
+        `[OM:threshold] handleThresholdReached (inside lock): freshTotal=${freshTotal}, threshold=${threshold}, freshUnobserved=${freshUnobservedMessages.length}, freshOtherThreadTokens=${freshOtherThreadTokens}, freshCurrentTokens=${freshContextTokens}`,
       );
       if (freshTotal < threshold) {
         omDebug(`[OM:threshold] freshTotal < threshold, bailing out`);
@@ -2923,17 +2926,15 @@ NOTE: Any messages following this system reminder are newer than your memories.
       if (bufferedChunks.length > 0) {
         // Compute threshold to check if activation is warranted
         const allMsgsForCheck = messageList.get.all.db();
-        const unobservedForCheck = this.getUnobservedMessages(allMsgsForCheck, record);
         const otherThreadTokensForCheck = unobservedContextBlocks
           ? this.tokenCounter.countString(unobservedContextBlocks)
           : 0;
         const currentObsTokensForCheck = record.observationTokenCount ?? 0;
-        const pendingForCheck = record.pendingMessageTokens ?? 0;
         const { totalPendingTokens: step0PendingTokens, threshold: step0Threshold } =
           this.calculateObservationThresholds(
             allMsgsForCheck,
-            unobservedForCheck,
-            pendingForCheck,
+            [], // unobserved not needed for threshold calculation
+            0, // pendingTokens not needed — allMessages covers context
             otherThreadTokensForCheck,
             currentObsTokensForCheck,
             record,
@@ -2945,7 +2946,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
         // but activating already-buffered chunks is cheap (no LLM call) and prevents chunks
         // from piling up in single-step turns that never reach step > 0.
         omDebug(
-          `[OM:step0-activation] pendingTokens=${step0PendingTokens}, threshold=${step0Threshold}, blockAfter=${this.observationConfig.blockAfter}, shouldActivate=${step0PendingTokens >= step0Threshold}, allMsgs=${allMsgsForCheck.length}, unobserved=${unobservedForCheck.length}`,
+          `[OM:step0-activation] pendingTokens=${step0PendingTokens}, threshold=${step0Threshold}, blockAfter=${this.observationConfig.blockAfter}, shouldActivate=${step0PendingTokens >= step0Threshold}, allMsgs=${allMsgsForCheck.length}`,
         );
 
         if (step0PendingTokens >= step0Threshold) {
@@ -3009,12 +3010,11 @@ NOTE: Any messages following this system reminder are newer than your memories.
       const unobservedMessages = this.getUnobservedMessages(allMessages, record);
       const otherThreadTokens = unobservedContextBlocks ? this.tokenCounter.countString(unobservedContextBlocks) : 0;
       const currentObservationTokens = record.observationTokenCount ?? 0;
-      const pendingTokens = record.pendingMessageTokens ?? 0;
 
       const thresholds = this.calculateObservationThresholds(
         allMessages,
         unobservedMessages,
-        pendingTokens,
+        0, // pendingTokens not needed — allMessages covers context
         otherThreadTokens,
         currentObservationTokens,
         record,
@@ -3034,7 +3034,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
           `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}`,
         );
         if (shouldTrigger) {
-          this.startAsyncBufferedObservation(record, threadId, unobservedMessages, lockKey, writer);
+          this.startAsyncBufferedObservation(record, threadId, unobservedMessages, lockKey, writer, totalPendingTokens);
         }
       } else if (this.isAsyncObservationEnabled()) {
         // Above threshold but we still need to check async buffering:
@@ -3045,7 +3045,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
           `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}`,
         );
         if (shouldTrigger) {
-          this.startAsyncBufferedObservation(record, threadId, unobservedMessages, lockKey, writer);
+          this.startAsyncBufferedObservation(record, threadId, unobservedMessages, lockKey, writer, totalPendingTokens);
         }
       }
 
@@ -3744,11 +3744,15 @@ ${formattedMessages}
     unobservedMessages: MastraDBMessage[],
     lockKey: string,
     writer?: ProcessorStreamWriter,
+    contextWindowTokens?: number,
   ): void {
     const bufferKey = this.getObservationBufferKey(lockKey);
 
-    // Update the last buffered boundary (in-memory for current instance)
-    const currentTokens = this.tokenCounter.countMessages(unobservedMessages) + (record.pendingMessageTokens ?? 0);
+    // Update the last buffered boundary (in-memory for current instance).
+    // Use contextWindowTokens (all messages in context) to match the scale of
+    // totalPendingTokens passed to shouldTriggerAsyncObservation.
+    const currentTokens =
+      contextWindowTokens ?? this.tokenCounter.countMessages(unobservedMessages) + (record.pendingMessageTokens ?? 0);
     ObservationalMemory.lastBufferedBoundary.set(bufferKey, currentTokens);
 
     // Set persistent flag so new instances (created per request) know buffering is in progress
