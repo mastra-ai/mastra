@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { remove } from 'fs-extra/esm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -82,32 +82,7 @@ describe('DevBundler', () => {
     process.exit = originalExit;
   });
 
-  describe('prepare - public files (issue #5121)', () => {
-    it('should copy public directory files to output during prepare', async () => {
-      // Mimic real layout: project root has src/mastra/ and .mastra/ as siblings
-      const projectRoot = '.test-public-tmp';
-      const mastraDir = join(projectRoot, 'src', 'mastra');
-      const publicDir = join(mastraDir, 'public');
-      const dotMastraPath = join(projectRoot, '.mastra');
-
-      try {
-        // Create a mock mastra project with a worker file in public/
-        mkdirSync(publicDir, { recursive: true });
-        writeFileSync(join(publicDir, 'scanWorker.js'), '// CPU-intensive worker');
-
-        const devBundler = new DevBundler(undefined, mastraDir);
-
-        // prepare() cleans .mastra/ and rebuilds the output directory
-        await devBundler.prepare(dotMastraPath);
-
-        // After prepare(), public files should be available in .mastra/output/
-        // so that Worker threads can reference them via import.meta.url
-        expect(existsSync(join(dotMastraPath, 'output', 'scanWorker.js'))).toBe(true);
-      } finally {
-        await remove(projectRoot);
-      }
-    });
-
+  describe('prepare (issue #5121)', () => {
     it('should handle missing public directory gracefully', async () => {
       // If the user has no public/ dir, prepare() should not fail
       const projectRoot = '.test-no-public-tmp';

@@ -56,11 +56,6 @@ export class DevBundler extends Bundler {
     await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
       overwrite: true,
     });
-
-    // Copy public files (e.g., worker thread scripts) to output directory
-    if (this.mastraDir) {
-      await this.copyPublic(this.mastraDir, outputDirectory);
-    }
   }
 
   protected async copyPublic(mastraDir: string, outputDirectory: string) {
