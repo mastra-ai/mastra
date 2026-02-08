@@ -42,7 +42,6 @@ import {
   sensitiveTopicBlocker,
   stepLoggerProcessor,
 } from './processors/index';
-import { MastraEditor } from '@mastra/editor';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',

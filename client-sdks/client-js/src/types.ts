@@ -215,6 +215,7 @@ export interface GetWorkflowResponse {
       resumeSchema: string;
       suspendSchema: string;
       stateSchema: string;
+      metadata?: Record<string, unknown>;
     };
   };
   allSteps: {
@@ -227,6 +228,7 @@ export interface GetWorkflowResponse {
       suspendSchema: string;
       stateSchema: string;
       isWorkflow: boolean;
+      metadata?: Record<string, unknown>;
     };
   };
   stepGraph: Workflow['serializedStepGraph'];
@@ -769,7 +771,8 @@ export interface ListStoredAgentsResponse {
  * Flat union of agent-record fields and config fields.
  */
 export interface CreateStoredAgentParams {
-  id: string;
+  /** Unique identifier for the agent. If not provided, derived from name via slugify. */
+  id?: string;
   authorId?: string;
   metadata?: Record<string, unknown>;
   name: string;

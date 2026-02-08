@@ -87,7 +87,9 @@ const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
 
 export function WorkflowStreamToAISDKTransformer({
   includeTextStreamParts,
-}: { includeTextStreamParts?: boolean } = {}) {
+  sendReasoning,
+  sendSources,
+}: { includeTextStreamParts?: boolean; sendReasoning?: boolean; sendSources?: boolean } = {}) {
   const bufferedWorkflows = new Map<
     string,
     {
@@ -119,7 +121,10 @@ export function WorkflowStreamToAISDKTransformer({
       });
     },
     transform(chunk, controller) {
-      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, includeTextStreamParts);
+      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, includeTextStreamParts, {
+        sendReasoning,
+        sendSources,
+      });
       if (transformed) controller.enqueue(transformed);
     },
   });
@@ -418,6 +423,7 @@ export function transformWorkflow<OUTPUT>(
   >,
   isNested?: boolean,
   includeTextStreamParts?: boolean,
+  streamOptions?: { sendReasoning?: boolean; sendSources?: boolean },
 ) {
   switch (payload.type) {
     case 'workflow-start':
@@ -520,6 +526,8 @@ export function transformWorkflow<OUTPUT>(
 
         const transformedChunk = convertFullStreamChunkToUIMessageStream({
           part: part as any,
+          sendReasoning: streamOptions?.sendReasoning,
+          sendSources: streamOptions?.sendSources,
           onError(error) {
             return safeParseErrorObject(error);
           },

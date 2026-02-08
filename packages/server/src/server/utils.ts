@@ -86,6 +86,7 @@ function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
       stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
       isWorkflow: step.component === 'WORKFLOW',
       component: step.component,
+      metadata: step.metadata,
     };
 
     if (step.component === 'WORKFLOW' && step.steps) {
@@ -130,6 +131,7 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
           ? stringify(zodToJsonSchema(step.requestContextSchema))
           : undefined,
         component: step.component,
+        metadata: step.metadata,
       };
       return acc;
     }, {}),

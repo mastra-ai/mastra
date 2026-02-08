@@ -21,6 +21,8 @@ export type WorkflowStreamHandlerOptions = {
   workflowId: string;
   params: WorkflowStreamHandlerParams;
   includeTextStreamParts?: boolean;
+  sendReasoning?: boolean;
+  sendSources?: boolean;
 };
 
 /**
@@ -50,6 +52,8 @@ export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
   workflowId,
   params,
   includeTextStreamParts = true,
+  sendReasoning = false,
+  sendSources = false,
 }: WorkflowStreamHandlerOptions): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
   const { runId, resourceId, inputData, resumeData, requestContext, ...rest } = params;
 
@@ -66,16 +70,25 @@ export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
 
   return createUIMessageStream<UI_MESSAGE>({
     execute: async ({ writer }) => {
-      for await (const part of toAISdkV5Stream(stream, { from: 'workflow', includeTextStreamParts })) {
+      for await (const part of toAISdkV5Stream(stream, {
+        from: 'workflow',
+        includeTextStreamParts,
+        sendReasoning,
+        sendSources,
+      })) {
         writer.write(part as InferUIMessageChunk<UI_MESSAGE>);
       }
     },
   });
 }
 
-export type WorkflowRouteOptions =
+export type WorkflowRouteOptions = {
+  sendReasoning?: boolean;
+  sendSources?: boolean;
+} & (
   | { path: `${string}:workflowId${string}`; workflow?: never; includeTextStreamParts?: boolean }
-  | { path: string; workflow: string; includeTextStreamParts?: boolean };
+  | { path: string; workflow: string; includeTextStreamParts?: boolean }
+);
 
 /**
  * Creates a workflow route handler for streaming workflow execution using the AI SDK format.
@@ -104,6 +117,8 @@ export function workflowRoute({
   path = '/api/workflows/:workflowId/stream',
   workflow,
   includeTextStreamParts = true,
+  sendReasoning = false,
+  sendSources = false,
 }: WorkflowRouteOptions): ReturnType<typeof registerApiRoute> {
   if (!workflow && !path.includes('/:workflowId')) {
     throw new Error('Path must include :workflowId to route to the correct workflow or pass the workflow explicitly');
@@ -192,6 +207,8 @@ export function workflowRoute({
           requestContext: contextRequestContext || params.requestContext,
         },
         includeTextStreamParts,
+        sendReasoning,
+        sendSources,
       });
 
       return createUIMessageStreamResponse({ stream: uiMessageStream });

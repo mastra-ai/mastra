@@ -1,3 +1,5 @@
+import slugify from '@sindresorhus/slugify';
+
 import { HTTPException } from '../http-exception';
 import {
   storedAgentIdPathParams,
@@ -9,6 +11,8 @@ import {
   createStoredAgentResponseSchema,
   updateStoredAgentResponseSchema,
   deleteStoredAgentResponseSchema,
+  previewInstructionsBodySchema,
+  previewInstructionsResponseSchema,
 } from '../schemas/stored-agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
@@ -116,7 +120,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({
     mastra,
-    id,
+    id: providedId,
     authorId,
     metadata,
     name,
@@ -143,6 +147,15 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+      }
+
+      // Derive ID from name if not explicitly provided
+      const id = providedId || slugify(name);
+
+      if (!id) {
+        throw new HTTPException(400, {
+          message: 'Could not derive agent ID from name. Please provide an explicit id.',
+        });
       }
 
       // Check if agent with this ID already exists
@@ -365,6 +378,36 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {
       return handleError(error, 'Error deleting stored agent');
+    }
+  },
+});
+
+/**
+ * POST /stored/agents/preview-instructions - Preview resolved instructions
+ */
+export const PREVIEW_INSTRUCTIONS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/stored/agents/preview-instructions',
+  responseType: 'json',
+  bodySchema: previewInstructionsBodySchema,
+  responseSchema: previewInstructionsResponseSchema,
+  summary: 'Preview resolved instructions',
+  description:
+    'Resolves an array of instruction blocks against a request context, evaluating rules, fetching prompt block references, and rendering template variables. Returns the final concatenated instruction string.',
+  tags: ['Stored Agents'],
+  requiresAuth: true,
+  handler: async ({ mastra, blocks, context }) => {
+    try {
+      const editor = mastra.getEditor();
+      if (!editor) {
+        throw new HTTPException(500, { message: 'Editor is not configured' });
+      }
+
+      const result = await editor.previewInstructions(blocks, context ?? {});
+
+      return { result };
+    } catch (error) {
+      return handleError(error, 'Error previewing instructions');
     }
   },
 });
