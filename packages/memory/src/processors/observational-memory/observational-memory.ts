@@ -2648,22 +2648,18 @@ ${suggestedResponse}
         messageList.removeByIds(idsToRemove);
       }
     } else if (observedMessageIds && observedMessageIds.length > 0) {
-      // Activation-based cleanup: DON'T remove messages mid-stream
-      // When buffered observations are activated mid-turn, the assistant response
-      // is still being streamed. We can't remove it from context because:
-      // 1. The AI SDK still has a reference to it
-      // 2. New tokens are being written to it
-      //
-      // Instead, we only save messages to DB (marking them as persisted).
-      // The actual removal from context happens at step 0 of the NEXT turn
-      // via filterAlreadyObservedMessages, which checks observedMessageIds.
-
+      // Activation-based cleanup: remove observed messages from context.
+      // Each LLM step is a fresh request — processInputStep prepares the context
+      // window before each call. Removing observed messages here ensures the next
+      // step sees a trimmed context with observations instead of raw messages.
       const observedSet = new Set(observedMessageIds);
       const messagesToSave: MastraDBMessage[] = [];
+      const idsToRemove: string[] = [];
 
       for (const msg of allMsgs) {
         if (msg?.id && msg.id !== 'om-continuation' && observedSet.has(msg.id)) {
           messagesToSave.push(msg);
+          idsToRemove.push(msg.id);
         }
       }
 
@@ -2672,10 +2668,10 @@ ${suggestedResponse}
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
       }
 
-      // Note: Messages are NOT removed from context here, and we do NOT clear
-      // input/response tracking. The assistant is still streaming — new content
-      // needs to remain tracked so processOutputResult can save it.
-      return;
+      // Remove observed messages from context
+      if (idsToRemove.length > 0) {
+        messageList.removeByIds(idsToRemove);
+      }
     } else {
       // No marker found — fall back to source-based clearing
       const newInput = messageList.clear.input.db();
