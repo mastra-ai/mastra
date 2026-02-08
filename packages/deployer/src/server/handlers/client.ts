@@ -41,14 +41,17 @@ const cleanReqId = (id: string) => {
 
 export async function handleTriggerClientsRefresh(c: Context) {
   let requestId = (await c.req.json())['refreshId'];
+
   if (requestId) {
     refreshRequestId = requestId;
     cleanReqId(requestId);
   }
 
+  let data = `data: refresh${requestId ? '-' + requestId : ''}\n\n`;
+
   clients.forEach(controller => {
     try {
-      controller.enqueue('data: refresh\n\n');
+      controller.enqueue(data);
     } catch {
       clients.delete(controller);
     }

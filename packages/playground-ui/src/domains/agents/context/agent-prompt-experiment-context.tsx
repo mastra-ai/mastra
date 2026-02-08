@@ -39,10 +39,10 @@ export const AgentPromptExperimentProvider = ({
   useEffect(() => {
     let storedPrompt = localStorage.getItem(`agent-prompt-experiment-${agentId}`);
 
-    const lastPromtOriginal = getPrompt('original');
+    const lastPromptOriginal = getPrompt('original');
 
     //reflect the prompt from code change , overrides browser saved data
-    if (lastPromtOriginal != initialPromptText) {
+    if (lastPromptOriginal !== initialPromptText) {
       storePrompt('original', initialPromptText);
       storePrompt('local', initialPromptText);
       storedPrompt = initialPromptText;
