@@ -12,6 +12,7 @@
   "include": [
     "src/main/**/*",
     "src/preload/**/*",
+    "src/mastra/**/*",
     "electron.vite.config.ts"
   ]
 }

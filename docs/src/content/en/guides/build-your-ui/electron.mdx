@@ -20,35 +20,21 @@ Run Mastra as a standalone server and connect your Electron app's renderer proce
 
 <StepItem>
 
-Set up your directory structure. A possible directory structure could look like this:
-
-```bash
-project-root
-├── mastra-server
-│   ├── src
-│   │   └── mastra
-│   └── package.json
-└── electron-chat
-    └── package.json
-```
-
 Bootstrap your Mastra server:
 
 ```bash
 npx create-mastra@latest
 ```
 
-This command will launch an interactive wizard to help you scaffold a new Mastra project, including prompting you for a project name and setting up basic configurations. Follow the prompts to create your server project.
-
-Navigate to your newly created Mastra server directory:
+Follow the prompts to create your server project, then navigate into it:
 
 ```bash
-cd mastra-server # Replace with the actual directory name you provided
+cd my-mastra-app
 ```
 
 :::note
 
-Ensure that you have set the appropriate environment variables for your LLM provider in the `.env` file.
+Set the appropriate environment variables for your LLM provider in the `.env` file.
 
 :::
 
@@ -56,32 +42,57 @@ Ensure that you have set the appropriate environment variables for your LLM prov
 
 <StepItem>
 
-Create a chat route for the Electron frontend by using the `chatRoute()` helper from `@mastra/ai-sdk`. Add it to your Mastra project:
+Install `@mastra/ai-sdk` to add a chat route for the Electron frontend:
 
 ```bash npm2yarn
 npm install @mastra/ai-sdk@latest
 ```
 
-In your `src/mastra/index.ts` file, register the chat route:
+In your `src/mastra/index.ts` file, register your agents and the chat route. Make sure agents are passed in the `agents` config — without this, the chat endpoint won't find any agents:
 
-```typescript title="src/mastra/index.ts" {2,7-13}
+```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra';
 import { chatRoute } from '@mastra/ai-sdk';
-// Rest of the imports...
+import { myAgent } from './agents/my-agent';
 
 export const mastra = new Mastra({
-  // Rest of the configuration...
+  agents: { myAgent },
   server: {
     apiRoutes: [
       chatRoute({
-        path: '/chat/:agentId'
-      })
-    ]
-  }
+        path: '/chat/:agentId',
+      }),
+    ],
+  },
 });
 ```
 
-This will make all agents available in AI SDK-compatible formats, including the `weatherAgent` at the endpoint `/chat/weatherAgent`.
+This exposes your agent at `/chat/myAgent`.
+
+:::note
+
+If your agent uses `Memory`, you also need a storage provider:
+
+```typescript title="src/mastra/index.ts"
+import { LibSQLStore } from '@mastra/libsql';
+
+export const mastra = new Mastra({
+  agents: { myAgent },
+  storage: new LibSQLStore({
+    id: 'my-app',
+    url: 'file:mastra.db',
+  }),
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId',
+      }),
+    ],
+  },
+});
+```
+
+:::
 
 :::info
 
@@ -89,7 +100,7 @@ If the Electron renderer's requests are blocked by CORS (common in development w
 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
-  // Rest of the configuration...
+  // ...
   server: {
     cors: {
       origin: "*",
@@ -98,10 +109,10 @@ export const mastra = new Mastra({
     },
     apiRoutes: [
       chatRoute({
-        path: '/chat/:agentId'
-      })
-    ]
-  }
+        path: '/chat/:agentId',
+      }),
+    ],
+  },
 });
 ```
 
@@ -113,25 +124,19 @@ For production deployments, restrict the CORS origin to your application's actua
 
 <StepItem>
 
-Run the Mastra server using the following command:
+Start the Mastra server:
 
 ```bash npm2yarn
 npm run dev
 ```
 
-By default, the Mastra server will run on `http://localhost:4111`. Keep this server running for the next steps where we'll set up the Electron app to connect to it.
+By default, the server runs on `http://localhost:4111`. Keep it running for the next steps.
 
 </StepItem>
 
 <StepItem>
 
-Go up one directory to your project root.
-
-```bash
-cd ..
-```
-
-Scaffold a new Electron app using [electron-vite](https://electron-vite.org/):
+In a separate directory, scaffold a new Electron app using [electron-vite](https://electron-vite.org/):
 
 ```bash npm2yarn
 npm create @electron-vite -- electron-chat
@@ -173,7 +178,7 @@ export default function App() {
 
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
-      api: `${MASTRA_URL}/chat/weatherAgent`,
+      api: `${MASTRA_URL}/chat/myAgent`,
     }),
   })
 
@@ -207,7 +212,7 @@ export default function App() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about the weather..."
+          placeholder="Type a message..."
           disabled={status !== 'ready'}
           style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #ccc' }}
         />
@@ -220,7 +225,7 @@ export default function App() {
 }
 ```
 
-This connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the Mastra server's `/chat/weatherAgent` endpoint. Messages are sent as HTTP requests and streamed back in AI SDK format. Replace `weatherAgent` with whatever agent ID you configured in your Mastra server.
+This connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the Mastra server's `/chat/myAgent` endpoint. Messages are sent as HTTP requests and streamed back in AI SDK format. Replace `myAgent` with whatever agent key you used in your `agents` config.
 
 </StepItem>
 
@@ -241,6 +246,10 @@ An Electron window opens with the chat interface. Type a message and you should 
 ## How It Works
 
 The Electron main process creates a `BrowserWindow` that loads the React renderer. The renderer uses `useChat()` from `@ai-sdk/react` with a `DefaultChatTransport` configured to send requests to the Mastra server's chat endpoint. This is the same pattern used in a standard [React + Vite](/guides/getting-started/vite-react) app — Electron adds the desktop shell around it.
+
+## Example
+
+See the full working example in the [electron-chat](https://github.com/mastra-ai/mastra/tree/main/examples/electron-chat) directory.
 
 ## Next Steps
 
