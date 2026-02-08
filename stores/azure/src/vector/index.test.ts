@@ -265,6 +265,22 @@ describe('AzureAISearchVector Unit Tests', () => {
         }),
       ]);
     });
+
+    it('should apply deleteFilter before upsert', async () => {
+      const deleteVectorsSpy = vi.spyOn(azureVector, 'deleteVectors').mockResolvedValue();
+
+      await azureVector.upsert({
+        indexName: 'test-index',
+        vectors: [[0.1, 0.2, 0.3]],
+        metadata: [{ type: 'document' }],
+        deleteFilter: { eq: { type: 'document' } },
+      });
+
+      expect(deleteVectorsSpy).toHaveBeenCalledWith({
+        indexName: 'test-index',
+        filter: { eq: { type: 'document' } },
+      });
+    });
   });
 
   describe('query', () => {
@@ -333,12 +349,6 @@ describe('AzureAISearchVector Unit Tests', () => {
 
   describe('updateVector', () => {
     beforeEach(() => {
-      mockSearchClientInstance.getDocument.mockResolvedValue({
-        id: 'doc1',
-        content: 'old content',
-        metadata: '{"category":"old"}',
-      });
-
       mockSearchClientInstance.mergeDocuments.mockResolvedValue({
         results: [{ succeeded: true, key: 'doc1' }],
       });
@@ -360,8 +370,27 @@ describe('AzureAISearchVector Unit Tests', () => {
           id: 'doc1',
           vector: newVector,
           metadata: JSON.stringify({ category: 'new' }),
-          content: 'old content',
         }),
+      ]);
+    });
+
+    it('should update vectors by filter', async () => {
+      const mockResults = (async function* () {
+        yield { document: { id: 'doc1' }, score: 1 };
+        yield { document: { id: 'doc2' }, score: 1 };
+      })();
+
+      mockSearchClientInstance.search.mockResolvedValue({ results: mockResults });
+
+      await azureVector.updateVector({
+        indexName: 'test-index',
+        filter: { eq: { category: 'old' } },
+        update: { metadata: { category: 'new' } },
+      });
+
+      expect(mockSearchClientInstance.mergeDocuments).toHaveBeenCalledWith([
+        { id: 'doc1', metadata: JSON.stringify({ category: 'new' }) },
+        { id: 'doc2', metadata: JSON.stringify({ category: 'new' }) },
       ]);
     });
   });
@@ -392,6 +421,39 @@ describe('AzureAISearchVector Unit Tests', () => {
         indexName: 'test-index',
         id: 'non-existent',
       });
+    });
+  });
+
+  describe('deleteVectors', () => {
+    beforeEach(() => {
+      mockSearchClientInstance.deleteDocuments.mockResolvedValue({
+        results: [{ succeeded: true, key: 'doc1' }],
+      });
+    });
+
+    it('should delete vectors by ids', async () => {
+      await azureVector.deleteVectors({
+        indexName: 'test-index',
+        ids: ['doc1', 'doc2'],
+      });
+
+      expect(mockSearchClientInstance.deleteDocuments).toHaveBeenCalledWith([{ id: 'doc1' }, { id: 'doc2' }]);
+    });
+
+    it('should delete vectors by filter', async () => {
+      const mockResults = (async function* () {
+        yield { document: { id: 'doc1' }, score: 1 };
+        yield { document: { id: 'doc2' }, score: 1 };
+      })();
+
+      mockSearchClientInstance.search.mockResolvedValue({ results: mockResults });
+
+      await azureVector.deleteVectors({
+        indexName: 'test-index',
+        filter: { eq: { category: 'books' } },
+      });
+
+      expect(mockSearchClientInstance.deleteDocuments).toHaveBeenCalledWith([{ id: 'doc1' }, { id: 'doc2' }]);
     });
   });
 
@@ -488,6 +550,13 @@ describe('AzureAISearchVector Unit Tests', () => {
           ge: { publishDate: date },
         });
         expect(result).toBe(`publishDate ge ${date.toISOString()}`);
+      });
+
+      it('should translate Mastra-style operators', () => {
+        const result = translator.translate({
+          $and: [{ category: { $eq: 'books' } }, { price: { $gt: 10 } }],
+        });
+        expect(result).toBe("(category eq 'books' and price gt 10)");
       });
     });
   });

@@ -1,3 +1,5 @@
+import type { VectorFilter } from '@mastra/core/vector/filter';
+
 // Filter type definitions for Azure AI Search
 
 // Standard filterable fields in Azure AI Search documents
@@ -35,18 +37,18 @@ export interface AzureAISearchFields {
  * };
  * ```
  */
-export interface AzureAISearchVectorFilter {
+export interface AzureAISearchLegacyFilter {
   /** Raw OData filter string */
   $filter?: string;
 
   /** Logical AND operation */
-  and?: AzureAISearchVectorFilter[];
+  and?: AzureAISearchLegacyFilter[];
 
   /** Logical OR operation */
-  or?: AzureAISearchVectorFilter[];
+  or?: AzureAISearchLegacyFilter[];
 
   /** Logical NOT operation */
-  not?: AzureAISearchVectorFilter;
+  not?: AzureAISearchLegacyFilter;
 
   /** Equality comparison - supports category and other string fields */
   eq?: Partial<AzureAISearchFields> & Record<string, any>;
@@ -90,6 +92,8 @@ export interface AzureAISearchVectorFilter {
   };
 }
 
+export type AzureAISearchVectorFilter = AzureAISearchLegacyFilter | VectorFilter;
+
 /**
  * Translates Mastra vector filters to Azure AI Search OData filter syntax
  */
@@ -104,35 +108,44 @@ export class AzureAISearchFilterTranslator {
       return undefined;
     }
 
+    const filterRecord = filter as Record<string, any>;
+
     // If raw $filter is provided, use it directly
-    if (filter.$filter) {
-      return filter.$filter;
+    if (typeof filterRecord.$filter === 'string') {
+      return filterRecord.$filter;
     }
 
-    const translated = this.translateFilter(filter).trim();
+    const translated = this.isMastraFilterSyntax(filterRecord)
+      ? this.translateMastraFilter(filterRecord).trim()
+      : this.translateLegacyFilter(filterRecord as AzureAISearchLegacyFilter).trim();
+
     return translated.length > 0 ? translated : undefined;
   }
 
-  private translateFilter(filter: AzureAISearchVectorFilter): string {
+  private isMastraFilterSyntax(filter: Record<string, any>): boolean {
+    return Object.keys(filter).some(key => key.startsWith('$') && key !== '$filter');
+  }
+
+  private translateLegacyFilter(filter: AzureAISearchLegacyFilter): string {
     const conditions: string[] = [];
 
     // Handle logical operations
     if (filter.and) {
-      const andConditions = filter.and.map(f => this.translateFilter(f)).filter(Boolean);
+      const andConditions = filter.and.map(f => this.translateLegacyFilter(f)).filter(Boolean);
       if (andConditions.length > 0) {
         conditions.push(`(${andConditions.join(' and ')})`);
       }
     }
 
     if (filter.or) {
-      const orConditions = filter.or.map(f => this.translateFilter(f)).filter(Boolean);
+      const orConditions = filter.or.map(f => this.translateLegacyFilter(f)).filter(Boolean);
       if (orConditions.length > 0) {
         conditions.push(`(${orConditions.join(' or ')})`);
       }
     }
 
     if (filter.not) {
-      const notCondition = this.translateFilter(filter.not);
+      const notCondition = this.translateLegacyFilter(filter.not);
       if (notCondition) {
         conditions.push(`not (${notCondition})`);
       }
@@ -188,6 +201,92 @@ export class AzureAISearchFilterTranslator {
     }
 
     return conditions.join(' and ');
+  }
+
+  private translateMastraFilter(filter: Record<string, any>): string {
+    const conditions: string[] = [];
+
+    for (const [key, value] of Object.entries(filter)) {
+      if (key === '$and' && Array.isArray(value)) {
+        const andConditions = value.map(item => this.translateMastraFilter(item)).filter(Boolean);
+        if (andConditions.length > 0) {
+          conditions.push(`(${andConditions.join(' and ')})`);
+        }
+        continue;
+      }
+
+      if (key === '$or' && Array.isArray(value)) {
+        const orConditions = value.map(item => this.translateMastraFilter(item)).filter(Boolean);
+        if (orConditions.length > 0) {
+          conditions.push(`(${orConditions.join(' or ')})`);
+        }
+        continue;
+      }
+
+      if (key === '$not' && typeof value === 'object' && value !== null) {
+        const notCondition = this.translateMastraFilter(value);
+        if (notCondition) {
+          conditions.push(`not (${notCondition})`);
+        }
+        continue;
+      }
+
+      if (key.startsWith('$')) {
+        continue;
+      }
+
+      conditions.push(...this.translateMastraFieldCondition(key, value));
+    }
+
+    return conditions.join(' and ');
+  }
+
+  private translateMastraFieldCondition(field: string, value: any): string[] {
+    if (value === null || value === undefined || typeof value !== 'object' || Array.isArray(value)) {
+      return [`${this.escapeFieldName(field)} eq ${this.formatValue(value)}`];
+    }
+
+    const conditions: string[] = [];
+    for (const [operator, operatorValue] of Object.entries(value)) {
+      switch (operator) {
+        case '$eq':
+          conditions.push(`${this.escapeFieldName(field)} eq ${this.formatValue(operatorValue)}`);
+          break;
+        case '$ne':
+          conditions.push(`${this.escapeFieldName(field)} ne ${this.formatValue(operatorValue)}`);
+          break;
+        case '$gt':
+          conditions.push(`${this.escapeFieldName(field)} gt ${this.formatValue(operatorValue)}`);
+          break;
+        case '$gte':
+          conditions.push(`${this.escapeFieldName(field)} ge ${this.formatValue(operatorValue)}`);
+          break;
+        case '$lt':
+          conditions.push(`${this.escapeFieldName(field)} lt ${this.formatValue(operatorValue)}`);
+          break;
+        case '$lte':
+          conditions.push(`${this.escapeFieldName(field)} le ${this.formatValue(operatorValue)}`);
+          break;
+        case '$in':
+          if (Array.isArray(operatorValue) && operatorValue.length > 0) {
+            const list = operatorValue.map(v => this.formatValue(v)).join(', ');
+            conditions.push(`${this.escapeFieldName(field)} in (${list})`);
+          }
+          break;
+        case '$nin':
+          if (Array.isArray(operatorValue) && operatorValue.length > 0) {
+            const list = operatorValue.map(v => this.formatValue(v)).join(', ');
+            conditions.push(`not (${this.escapeFieldName(field)} in (${list}))`);
+          }
+          break;
+        case '$exists':
+          conditions.push(`${this.escapeFieldName(field)} ${operatorValue ? 'ne' : 'eq'} null`);
+          break;
+        default:
+          break;
+      }
+    }
+    return conditions;
   }
 
   private translateComparison(comparison: Record<string, any>, operator: string): string[] {

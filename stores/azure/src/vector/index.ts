@@ -79,6 +79,14 @@ const METRIC_MAPPING = {
 
 export type AzureAISearchQueryVectorParams = QueryVectorParams<AzureAISearchVectorFilter>;
 
+type AzureAISearchUpsertParams = UpsertVectorParams & { deleteFilter?: AzureAISearchVectorFilter };
+type AzureAISearchUpdateParams = UpdateVectorParams & { filter?: AzureAISearchVectorFilter };
+type AzureAISearchDeleteVectorsParams = {
+  indexName: string;
+  ids?: string[];
+  filter?: AzureAISearchVectorFilter;
+};
+
 /**
  * Extended index creation parameters for Azure AI Search specific features
  */
@@ -570,8 +578,18 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
    * @returns Array of IDs of the upserted vectors
    * @throws {MastraError} When upsert operation fails
    */
-  async upsert({ indexName, vectors, metadata = [], ids }: UpsertVectorParams): Promise<string[]> {
+  async upsert({
+    indexName,
+    vectors,
+    metadata = [],
+    ids,
+    deleteFilter,
+  }: AzureAISearchUpsertParams): Promise<string[]> {
     try {
+      if (deleteFilter) {
+        await this.deleteVectors({ indexName, filter: deleteFilter });
+      }
+
       // Get index info to validate vector dimensions and detect vector field
       const indexInfo = await this.describeIndex({ indexName });
       this.validateVectorDimensions(vectors, indexInfo.dimension);
@@ -847,10 +865,18 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
    * @param update - Object containing vector and/or metadata updates
    * @throws {MastraError} When update operation fails
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+  async updateVector({ indexName, id, filter, update }: AzureAISearchUpdateParams): Promise<void> {
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
+      }
+
+      if (!id && !filter) {
+        throw new Error('Either id or filter must be provided');
+      }
+
+      if (id && filter) {
+        throw new Error('Cannot provide both id and filter');
       }
 
       const searchClient = this.getSearchClient(indexName);
@@ -858,28 +884,42 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       // Get vector field name
       const vectorFieldName = await this.getVectorFieldName(indexName);
 
-      // Get existing document
-      const existingDoc = (await searchClient.getDocument(id)) as any;
-      if (!existingDoc) {
-        throw new Error(`Document with ID ${id} not found`);
-      }
-
       // Validate vector dimension if updating vector
       if (update.vector) {
         const indexInfo = await this.describeIndex({ indexName });
         this.validateVectorDimensions([update.vector], indexInfo.dimension);
       }
 
-      // Prepare updated document using dynamic vector field
-      const updatedDoc: any = {
-        id,
-        [vectorFieldName]: update.vector || existingDoc[vectorFieldName],
-        metadata: update.metadata ? JSON.stringify(update.metadata) : existingDoc.metadata,
-        content: update.metadata?.content || existingDoc.content || '',
-      };
+      let targetIds: string[];
+      if (id) {
+        targetIds = [id];
+      } else {
+        if (!filter || Object.keys(filter).length === 0) {
+          throw new Error('Filter cannot be empty');
+        }
+        targetIds = await this.findIdsByFilter(indexName, filter);
+      }
+
+      if (targetIds.length === 0) {
+        return;
+      }
+
+      const updatedDocs = targetIds.map(targetId => {
+        const updatedDoc: any = { id: targetId };
+        if (update.vector) {
+          updatedDoc[vectorFieldName] = update.vector;
+        }
+        if (update.metadata) {
+          updatedDoc.metadata = JSON.stringify(update.metadata);
+          if (typeof update.metadata.content === 'string') {
+            updatedDoc.content = update.metadata.content;
+          }
+        }
+        return updatedDoc;
+      });
 
       // Merge documents (update operation)
-      await searchClient.mergeDocuments([updatedDoc]);
+      await searchClient.mergeDocuments(updatedDocs);
     } catch (error) {
       throw new MastraError(
         {
@@ -887,6 +927,55 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, id },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Deletes multiple vectors by IDs or metadata filter.
+   */
+  async deleteVectors({ indexName, ids, filter }: AzureAISearchDeleteVectorsParams): Promise<void> {
+    try {
+      if (ids && filter) {
+        throw new Error('Cannot specify both ids and filter');
+      }
+
+      if (!ids && !filter) {
+        throw new Error('Either ids or filter must be provided');
+      }
+
+      let idsToDelete: string[];
+      if (ids) {
+        if (ids.length === 0) {
+          throw new Error('Cannot delete with empty ids array');
+        }
+        idsToDelete = ids;
+      } else {
+        if (!filter || Object.keys(filter).length === 0) {
+          throw new Error('Cannot delete with empty filter');
+        }
+        idsToDelete = await this.findIdsByFilter(indexName, filter);
+      }
+
+      if (idsToDelete.length === 0) {
+        return;
+      }
+
+      const searchClient = this.getSearchClient(indexName);
+      await searchClient.deleteDocuments(idsToDelete.map(id => ({ id })) as any);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_AZURE_AI_SEARCH_DELETE_VECTORS_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            idsCount: ids?.length || 0,
+            hasFilter: !!filter,
+          },
         },
         error,
       );
@@ -940,6 +1029,27 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   private transformFilter(filter?: AzureAISearchVectorFilter): string | undefined {
     const translator = new AzureAISearchFilterTranslator();
     return translator.translate(filter);
+  }
+
+  /**
+   * Finds document IDs matching a filter.
+   */
+  private async findIdsByFilter(indexName: string, filter: AzureAISearchVectorFilter): Promise<string[]> {
+    const searchClient = this.getSearchClient(indexName);
+    const odataFilter = this.transformFilter(filter);
+    const searchResults = await searchClient.search('*', {
+      filter: odataFilter,
+      top: 1000,
+      select: ['id'],
+    } as any);
+
+    const ids: string[] = [];
+    for await (const result of searchResults.results) {
+      if (result.document?.id) {
+        ids.push(result.document.id);
+      }
+    }
+    return ids;
   }
 
   /**
