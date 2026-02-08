@@ -607,15 +607,15 @@ describe('Tool Tracing Context Injection', () => {
     expect(result).toEqual({ result: 'processed: test' });
   });
 
-  it('should not inject tracingContext when agentSpan is not available', async () => {
-    let receivedTracingContext: any = undefined;
+  it('should inject tracingContext when agentSpan is not available', async () => {
+    let receivedTracingSpan: any = undefined;
 
     const testTool = createTool({
       id: 'no-tracing-tool',
       description: 'Test tool without agent span',
       inputSchema: z.object({ message: z.string() }),
       execute: async (inputData, context) => {
-        receivedTracingContext = context?.tracingContext;
+        receivedTracingSpan = context?.tracingContext?.currentSpan;
         return { result: `processed: ${inputData.message}` };
       },
     });
@@ -639,8 +639,8 @@ describe('Tool Tracing Context Injection', () => {
     const builtTool = builder.build();
     const result = await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
 
-    // Verify tracingContext was injected but currentSpan is undefined
-    expect(receivedTracingContext).toEqual({ currentSpan: undefined });
+    // Verify span is created
+    expect(receivedTracingSpan).toBeTruthy();
     expect(result).toEqual({ result: 'processed: test' });
   });
 
