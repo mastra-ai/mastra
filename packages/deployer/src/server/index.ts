@@ -385,7 +385,15 @@ export async function createHonoServer(
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
       const escapeForHtml = (json: string): string => {
-        return json.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+        return json
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "\\'")
+          .replace(/\n/g, '\\n')
+          .replace(/\r/g, '\\r')
+          .replace(/</g, '\\u003c')
+          .replace(/>/g, '\\u003e')
+          .replace(/\u2028/g, '\\u2028')
+          .replace(/\u2029/g, '\\u2029');
       };
 
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);

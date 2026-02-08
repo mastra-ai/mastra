@@ -375,6 +375,11 @@ export async function dev({
 
   const loadedEnv = await bundler.loadEnvVars();
 
+  // Clear any prior presets to avoid cross-run leakage
+  requestContextPresetsJson = undefined;
+  loadedEnv.delete('MASTRA_REQUEST_CONTEXT_PRESETS');
+  delete process.env.MASTRA_REQUEST_CONTEXT_PRESETS;
+
   // spread loadedEnv into process.env
   for (const [key, value] of loadedEnv.entries()) {
     process.env[key] = value;

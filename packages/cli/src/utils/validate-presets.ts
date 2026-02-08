@@ -41,11 +41,20 @@ export async function loadAndValidatePresets(presetsPath: string): Promise<strin
 
 /**
  * Escapes a JSON string for safe embedding in HTML/JavaScript.
- * Handles backslashes, single quotes, and newlines.
+ * Handles backslashes, single quotes, newlines, carriage returns,
+ * script-breaking sequences, and Unicode line terminators.
  *
  * @param json - JSON string to escape
  * @returns Escaped string safe for HTML embedding
  */
 export function escapeJsonForHtml(json: string): string {
-  return json.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+  return json
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
