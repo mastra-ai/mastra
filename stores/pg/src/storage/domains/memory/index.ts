@@ -2242,8 +2242,11 @@ export class MemoryPG extends MemoryStorage {
         };
       }
 
-      // Calculate target message tokens to activate based on threshold * ratio
-      const targetMessageTokens = input.messageTokensThreshold * input.activationRatio;
+      // Calculate target message tokens to activate based on new formula:
+      // retentionFloor = threshold * (1 - ratio) represents tokens to keep as raw messages
+      // targetMessageTokens = max(0, currentPending - retentionFloor) represents tokens to activate
+      const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
+      const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
 
       // Find the closest chunk boundary to the target, biased under
       let cumulativeMessageTokens = 0;

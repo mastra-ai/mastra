@@ -243,6 +243,7 @@ describe('Storage Operations', () => {
         id: initial.id,
         activationRatio: 1, // 100% as 0-1 float
         messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
         lastObservedAt: new Date(),
       });
 
@@ -281,6 +282,7 @@ describe('Storage Operations', () => {
         id: initial.id,
         activationRatio: 1, // 100% as 0-1 float
         messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
         lastObservedAt: beforeSwap,
       });
 
@@ -1853,6 +1855,7 @@ describe('Scenario: Buffering Flow', () => {
       id: record.id,
       activationRatio: 1, // 100% as 0-1 float
       messageTokensThreshold: 100000,
+      currentPendingTokens: 100000,
       lastObservedAt: swapTime,
     });
 
@@ -3119,6 +3122,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         activationRatio: 1,
         messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
         lastObservedAt: new Date('2026-02-05T12:00:00Z'),
       });
 
@@ -3187,6 +3191,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         activationRatio: 0.5,
         messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
         lastObservedAt: new Date('2026-02-05T12:00:00Z'),
       });
 
@@ -3228,6 +3233,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         activationRatio: 0.1,
         messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
         lastObservedAt: new Date('2026-02-05T12:00:00Z'),
       });
 
@@ -3248,6 +3254,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         activationRatio: 1,
         messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
         lastObservedAt: new Date(),
       });
 
@@ -3280,6 +3287,7 @@ describe('Async Buffering Storage Operations', () => {
         id: initial.id,
         activationRatio: 1,
         messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
         lastObservedAt: new Date('2026-02-05T12:00:00Z'),
       });
 
@@ -4280,6 +4288,7 @@ describe('Async Buffering Processor Logic', () => {
         id: record.id,
         activationRatio: 0.5,
         messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
         lastObservedAt: new Date(),
       });
 
@@ -4316,6 +4325,7 @@ describe('Async Buffering Processor Logic', () => {
         id: record.id,
         activationRatio: 1,
         messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
         lastObservedAt: new Date(),
       });
 
@@ -4368,6 +4378,7 @@ describe('Async Buffering Processor Logic', () => {
         id: record.id,
         activationRatio: 1,
         messageTokensThreshold: 100000,
+        currentPendingTokens: 100000,
       });
 
       const final = await storage.getObservationalMemory('thread-1', 'resource-1');
@@ -5641,11 +5652,12 @@ describe('Full Async Buffering Flow', () => {
     expect(chunks).toHaveLength(4);
 
     // Activate with ratio 0.5 → should activate ~2000 out of 4000 message tokens
-    // Target = 4000 * 0.5 = 2000. Closest boundary: 2 chunks (exactly 2000).
+    // Target = 4000 - 4000 * 0.5 = 2000. Closest boundary: 2 chunks (exactly 2000).
     const result = await storage.swapBufferedToActive({
       id: recordId,
       activationRatio: 0.5,
       messageTokensThreshold: 4000,
+      currentPendingTokens: 4000,
     });
 
     // Should activate exactly 2 chunks (2000 message tokens = 50% of 4000)
@@ -5702,6 +5714,7 @@ describe('Full Async Buffering Flow', () => {
         id: recordId,
         activationRatio: opts.activationRatio,
         messageTokensThreshold: opts.messageTokensThreshold,
+        currentPendingTokens: opts.messageTokensThreshold,
       });
 
       const afterRecord = await storage.getObservationalMemory(threadId, resourceId);

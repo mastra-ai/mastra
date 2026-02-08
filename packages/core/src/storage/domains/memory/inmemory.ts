@@ -928,8 +928,11 @@ export class InMemoryMemory extends MemoryStorage {
       };
     }
 
-    // Calculate target message tokens to activate based on threshold * ratio
-    const targetMessageTokens = input.messageTokensThreshold * activationRatio;
+    // Calculate target: how many message tokens to remove so that
+    // (1 - activationRatio) * threshold worth of raw messages remain.
+    // e.g., ratio=0.8, threshold=5000, pending=6000 → remove 6000 - 1000 = 5000
+    const retentionFloor = input.messageTokensThreshold * (1 - activationRatio);
+    const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
 
     // Find the closest chunk boundary to the target, biased under
     let cumulativeMessageTokens = 0;

@@ -704,10 +704,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     chunks: BufferedObservationChunk[],
     activationRatio: number,
     messageTokensThreshold: number,
+    currentPendingTokens: number,
   ): number {
     if (chunks.length === 0) return 0;
 
-    const targetMessageTokens = messageTokensThreshold * activationRatio;
+    const retentionFloor = messageTokensThreshold * (1 - activationRatio);
+    const targetMessageTokens = Math.max(0, currentPendingTokens - retentionFloor);
 
     // Find the closest chunk boundary to the target, biased under
     let cumulativeMessageTokens = 0;
@@ -2389,6 +2391,7 @@ ${suggestedResponse}
         bufferedChunks,
         this.observationConfig.bufferActivation ?? 1,
         this.getMaxThreshold(this.observationConfig.messageTokens),
+        totalPendingTokens,
       );
 
       // Determine observation buffering status
@@ -2531,7 +2534,7 @@ ${suggestedResponse}
           `[OM:threshold] tryActivation: chunksAvailable=${chunksAfterWait.length}, isBufferingObs=${recordAfterWait.isBufferingObservation}`,
         );
 
-        activationResult = await this.tryActivateBufferedObservations(recordAfterWait, lockKey, writer);
+        activationResult = await this.tryActivateBufferedObservations(recordAfterWait, lockKey, freshTotal, writer);
         omDebug(`[OM:threshold] activationResult: success=${activationResult.success}`);
         if (activationResult.success) {
           // Activation succeeded - the buffered observations are now active.
@@ -2696,18 +2699,13 @@ ${suggestedResponse}
         `[OM:cleanupActivation] observedSet=${[...observedSet].map(id => id.slice(0, 8)).join(',')}, matched=${idsToRemove.length}, idsToRemove=${idsToRemove.map(id => id.slice(0, 8)).join(',')}`,
       );
 
-      // Remove observed messages from context FIRST, before saveMessagesWithSealedIdTracking
-      // which may mutate msg.id for sealed messages (causing removeByIds to miss them).
+      // Remove activated messages from context. No need to re-save — these were
+      // already persisted by handlePerStepSave or runAsyncBufferedObservation.
       if (idsToRemove.length > 0) {
         messageList.removeByIds(idsToRemove);
         omDebug(
           `[OM:cleanupActivation] removed ${idsToRemove.length} messages, remaining=${messageList.get.all.db().length}`,
         );
-      }
-
-      // Save observed messages to DB (without markers, since this is activation-based)
-      if (messagesToSave.length > 0) {
-        await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
       }
     } else {
       // No marker found — fall back to source-based clearing
@@ -3001,7 +2999,12 @@ NOTE: Any messages following this system reminder are newer than your memories.
         );
 
         if (step0PendingTokens >= step0Threshold) {
-          const activationResult = await this.tryActivateBufferedObservations(record, lockKey, writer);
+          const activationResult = await this.tryActivateBufferedObservations(
+            record,
+            lockKey,
+            step0PendingTokens,
+            writer,
+          );
 
           if (activationResult.success && activationResult.updatedRecord) {
             record = activationResult.updatedRecord;
@@ -4127,6 +4130,7 @@ ${formattedMessages}
   private async tryActivateBufferedObservations(
     record: ObservationalMemoryRecord,
     lockKey: string,
+    currentPendingTokens: number,
     writer?: ProcessInputStepArgs['writer'],
   ): Promise<{
     success: boolean;
@@ -4178,6 +4182,7 @@ ${formattedMessages}
       id: freshRecord.id,
       activationRatio,
       messageTokensThreshold,
+      currentPendingTokens,
     });
     omDebug(
       `[OM:tryActivate] swapResult: chunksActivated=${activationResult.chunksActivated}, tokensActivated=${activationResult.messageTokensActivated}, obsTokensActivated=${activationResult.observationTokensActivated}, activatedCycleIds=${activationResult.activatedCycleIds.join(',')}`,

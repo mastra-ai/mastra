@@ -746,17 +746,22 @@ export interface UpdateBufferedObservationsInput {
 export interface SwapBufferedToActiveInput {
   id: string;
   /**
-   * Ratio of the message token threshold to activate (0-1 float).
-   * Combined with `messageTokensThreshold`, this determines the target:
-   * `targetMessageTokens = messageTokensThreshold * activationRatio`.
+   * Ratio controlling how much context to retain after activation (0-1 float).
+   * `1 - activationRatio` is the fraction of the threshold to keep as raw messages.
+   * Target tokens to remove = `currentPendingTokens - messageTokensThreshold * (1 - activationRatio)`.
    * Chunks are selected by boundary, biased under the target.
    */
   activationRatio: number;
   /**
    * The message token threshold (e.g., observation.messageTokens config value).
-   * Used with `activationRatio` to compute the activation target in absolute tokens.
+   * Used with `activationRatio` to compute the retention floor.
    */
   messageTokensThreshold: number;
+  /**
+   * Current total pending message tokens in the context window.
+   * Used to compute how many tokens need to be removed to reach the retention floor.
+   */
+  currentPendingTokens: number;
   /**
    * Optional timestamp to use as lastObservedAt after swap.
    * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
