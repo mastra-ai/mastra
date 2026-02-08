@@ -92,7 +92,9 @@ describe('buildConstraintName', () => {
 // Constraint names used in the PG store
 // ---------------------------------------------------------------------------
 describe('production constraint names', () => {
-  const WORKFLOW_SNAPSHOT_BASE = 'mastra_wf_snapshot_wf_name_run_id_key';
+  // The canonical base name is the original long form.  buildConstraintName
+  // only truncates when a schema prefix pushes it past the 63-byte limit.
+  const WORKFLOW_SNAPSHOT_BASE = 'mastra_workflow_snapshot_workflow_name_run_id_key';
   const SPANS_PK_BASE = 'mastra_ai_spans_traceid_spanid_pk';
 
   it('generates valid names without a schema', () => {
@@ -109,7 +111,8 @@ describe('production constraint names', () => {
     const wf = buildConstraintName({ baseName: WORKFLOW_SNAPSHOT_BASE, schemaName: 'myapp' });
     const spans = buildConstraintName({ baseName: SPANS_PK_BASE, schemaName: 'myapp' });
 
-    expect(wf).toBe('myapp_mastra_wf_snapshot_wf_name_run_id_key');
+    // The full name fits within 63 bytes, so no truncation occurs.
+    expect(wf).toBe('myapp_mastra_workflow_snapshot_workflow_name_run_id_key');
     expect(spans).toBe('myapp_mastra_ai_spans_traceid_spanid_pk');
     expect(Buffer.byteLength(wf, 'utf-8')).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
     expect(Buffer.byteLength(spans, 'utf-8')).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
@@ -136,20 +139,12 @@ describe('backward compatibility', () => {
    * where constraintPrefix = schemaName ? `${schemaName}_` : ''.
    *
    * No truncation or lowercasing was applied, so names could exceed the 63-byte
-   * PG limit.  With this PR, names are explicitly truncated and lowercased.
-   *
-   * The SQL that creates or checks for constraints uses IF NOT EXISTS with
-   * lower() on both the old and new names, so the migration path is:
-   *   1. Existing databases with old (short-schema) names: the old constraint
-   *      is found by its lowercased name and no duplicate is created.
-   *   2. Existing databases with long-schema names that PG silently truncated:
-   *      the new code produces the same truncated form, so lookups succeed.
+   * PG limit.  With this PR, names are explicitly truncated and lowercased, and
+   * we keep the original long base name so existing databases are detected
+   * correctly by the IF NOT EXISTS checks.
    */
 
   it('produces lowercase names that match what pg_constraint stores for unquoted identifiers', () => {
-    // PostgreSQL folds unquoted identifiers to lowercase.  Verify our names
-    // are already lowercase so a direct comparison with pg_constraint.conname
-    // works without additional lower() wrapping.
     const name = buildConstraintName({
       baseName: 'Mastra_AI_Spans_TraceId_SpanId_PK',
       schemaName: 'MySchema',
@@ -157,59 +152,135 @@ describe('backward compatibility', () => {
     expect(name).toBe(name.toLowerCase());
   });
 
-  it('no-schema spans constraint matches the old convention (lowercased)', () => {
-    // Old: 'mastra_ai_spans_traceid_spanid_pk' (no prefix, already lowercase)
-    // New: buildConstraintName({ baseName: 'mastra_ai_spans_traceid_spanid_pk' })
+  it('no-schema workflow snapshot constraint matches the pre-PR name', () => {
+    // Before this PR: 'mastra_workflow_snapshot_workflow_name_run_id_key'
+    // After this PR:  buildConstraintName with the same base name
+    const newName = buildConstraintName({
+      baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
+    });
+    const oldName = 'mastra_workflow_snapshot_workflow_name_run_id_key';
+    expect(newName).toBe(oldName.toLowerCase());
+  });
+
+  it('short-schema workflow snapshot constraint matches the pre-PR name', () => {
+    // Old: 'myapp_mastra_workflow_snapshot_workflow_name_run_id_key' (55 chars, fits)
+    const newName = buildConstraintName({
+      baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
+      schemaName: 'myapp',
+    });
+    const oldName = 'myapp_mastra_workflow_snapshot_workflow_name_run_id_key';
+    expect(newName).toBe(oldName.toLowerCase());
+    expect(Buffer.byteLength(newName, 'utf-8')).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
+  });
+
+  it('no-schema spans constraint matches the pre-PR name', () => {
     const newName = buildConstraintName({ baseName: 'mastra_ai_spans_traceid_spanid_pk' });
     const oldName = 'mastra_ai_spans_traceid_spanid_pk';
     expect(newName).toBe(oldName.toLowerCase());
   });
 
-  it('short schema spans constraint matches the old convention (lowercased)', () => {
-    // Old: 'myapp_mastra_ai_spans_traceid_spanid_pk'
-    // New: buildConstraintName({ baseName: '...', schemaName: 'myapp' })
+  it('short-schema spans constraint matches the pre-PR name', () => {
     const newName = buildConstraintName({ baseName: 'mastra_ai_spans_traceid_spanid_pk', schemaName: 'myapp' });
     const oldName = 'myapp_mastra_ai_spans_traceid_spanid_pk';
     expect(newName).toBe(oldName.toLowerCase());
   });
 
   it('long schema names are truncated to 63 bytes, matching PostgreSQL silent truncation', () => {
-    // If the old code produced a name > 63 bytes, PostgreSQL would silently
-    // truncate it.  The new code truncates explicitly, yielding the same
-    // effective name stored in pg_constraint.
     const longSchema = 'a_very_long_schema_name_that_pushes_the_limit';
     const baseName = 'mastra_ai_spans_traceid_spanid_pk';
     const fullUntruncated = `${longSchema}_${baseName}`.toLowerCase();
 
     const newName = buildConstraintName({ baseName, schemaName: longSchema });
 
-    // Both should start with the same prefix (up to 63 bytes)
     expect(Buffer.byteLength(newName, 'utf-8')).toBeLessThanOrEqual(63);
     expect(fullUntruncated.startsWith(newName)).toBe(true);
   });
 
-  it('workflow snapshot base name was shortened but still generates valid constraints', () => {
-    // The workflow snapshot base name was shortened from
-    // 'mastra_workflow_snapshot_workflow_name_run_id_key' to
-    // 'mastra_wf_snapshot_wf_name_run_id_key' to leave more headroom for
-    // schema prefixes.  Verify the new base name still fits comfortably.
-    const newBase = 'mastra_wf_snapshot_wf_name_run_id_key';
-    expect(Buffer.byteLength(newBase, 'utf-8')).toBeLessThan(POSTGRES_IDENTIFIER_MAX_LENGTH);
+  it('long schema + workflow snapshot truncates consistently with what PG stored', () => {
+    // Schema long enough that the combined name exceeds 63 bytes.
+    // PostgreSQL would have silently truncated; our code now does the same.
+    const longSchema = 'long_production_schema';
+    const baseName = 'mastra_workflow_snapshot_workflow_name_run_id_key';
+    const fullUntruncated = `${longSchema}_${baseName}`.toLowerCase();
 
-    // Even with a 20-char schema the combined name is under 63 bytes.
-    const withSchema = buildConstraintName({ baseName: newBase, schemaName: 'twenty_char_schema__' });
-    expect(Buffer.byteLength(withSchema, 'utf-8')).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
+    const newName = buildConstraintName({ baseName, schemaName: longSchema });
+
+    expect(Buffer.byteLength(newName, 'utf-8')).toBeLessThanOrEqual(63);
+    // The truncated name is a prefix of the full (untruncated) name.
+    expect(fullUntruncated.startsWith(newName)).toBe(true);
   });
 
   it('SQL lookups using lower() find constraints regardless of case in the original name', () => {
-    // Simulates the lower($1) pattern used in the SQL queries.
-    // If a constraint was somehow stored with mixed case, lower() normalizes it.
     const mixedCase = buildConstraintName({
       baseName: 'Mastra_AI_Spans_TraceId_SpanId_PK',
       schemaName: 'MyApp',
     });
-    // The function should have already lowercased, but verify the SQL pattern
-    // would also work: lower(mixedCase) === pg_constraint.conname
     expect(mixedCase.toLowerCase()).toBe(mixedCase);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Legacy shortened name detection
+// ---------------------------------------------------------------------------
+describe('legacy shortened constraint name', () => {
+  /**
+   * Between the initial PR and this follow-up, some databases may have been
+   * created with the shortened base name 'mastra_wf_snapshot_wf_name_run_id_key'.
+   * The SQL now checks for both the canonical (long) name and this legacy
+   * shortened name so that neither case triggers a duplicate constraint error.
+   */
+
+  it('legacy shortened name differs from the canonical name', () => {
+    const canonical = buildConstraintName({
+      baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
+    });
+    const legacy = buildConstraintName({
+      baseName: 'mastra_wf_snapshot_wf_name_run_id_key',
+    });
+    expect(canonical).not.toBe(legacy);
+  });
+
+  it('both canonical and legacy names fit within 63 bytes without a schema', () => {
+    const canonical = buildConstraintName({
+      baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
+    });
+    const legacy = buildConstraintName({
+      baseName: 'mastra_wf_snapshot_wf_name_run_id_key',
+    });
+    expect(Buffer.byteLength(canonical, 'utf-8')).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
+    expect(Buffer.byteLength(legacy, 'utf-8')).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
+  });
+
+  it('both canonical and legacy names fit with a short schema prefix', () => {
+    const canonical = buildConstraintName({
+      baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
+      schemaName: 'myapp',
+    });
+    const legacy = buildConstraintName({
+      baseName: 'mastra_wf_snapshot_wf_name_run_id_key',
+      schemaName: 'myapp',
+    });
+    expect(Buffer.byteLength(canonical, 'utf-8')).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
+    expect(Buffer.byteLength(legacy, 'utf-8')).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
+  });
+
+  it('canonical name with a 13+ char schema gets truncated but legacy name does not', () => {
+    // Demonstrates why the legacy (shorter) name exists — it gives more headroom.
+    // 'fifteen_chars__' (15 chars) + '_' (1) + base (49) = 65 > 63, so truncated.
+    const schema = 'fifteen_chars__';
+    const canonical = buildConstraintName({
+      baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
+      schemaName: schema,
+    });
+    const legacy = buildConstraintName({
+      baseName: 'mastra_wf_snapshot_wf_name_run_id_key',
+      schemaName: schema,
+    });
+
+    expect(Buffer.byteLength(canonical, 'utf-8')).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
+    expect(Buffer.byteLength(legacy, 'utf-8')).toBeLessThanOrEqual(POSTGRES_IDENTIFIER_MAX_LENGTH);
+    // The canonical name had to be truncated, but the legacy one fits as-is.
+    expect(canonical.length).toBe(POSTGRES_IDENTIFIER_MAX_LENGTH);
+    expect(legacy.length).toBeLessThan(POSTGRES_IDENTIFIER_MAX_LENGTH);
   });
 });

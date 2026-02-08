@@ -194,7 +194,18 @@ function generateTableSQL({
   const finalColumns = [...columns, ...timeZColumns].join(',\n');
   // Sanitize schema name before using it in constraint names to ensure valid SQL identifiers
   const parsedSchemaName = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+  // Use the original (long) base name so existing databases that already have
+  // the constraint under this name are detected by the IF NOT EXISTS check.
+  // buildConstraintName will truncate only when a schema prefix pushes the
+  // combined name past the 63-byte Postgres limit.
   const workflowSnapshotConstraint = buildConstraintName({
+    baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
+    schemaName: parsedSchemaName || undefined,
+  });
+  // Legacy shortened name — used during a brief window between the initial PR
+  // and this follow-up.  We check for it so databases that ran with the
+  // shortened name are also detected and we don't try to add a duplicate.
+  const workflowSnapshotLegacyConstraint = buildConstraintName({
     baseName: 'mastra_wf_snapshot_wf_name_run_id_key',
     schemaName: parsedSchemaName || undefined,
   });
@@ -216,6 +227,10 @@ function generateTableSQL({
                 SELECT 1 FROM pg_constraint WHERE conname = lower('${workflowSnapshotConstraint}')
               ) AND NOT EXISTS (
                 SELECT 1 FROM pg_indexes WHERE indexname = lower('${workflowSnapshotConstraint}')
+              ) AND NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = lower('${workflowSnapshotLegacyConstraint}')
+              ) AND NOT EXISTS (
+                SELECT 1 FROM pg_indexes WHERE indexname = lower('${workflowSnapshotLegacyConstraint}')
               ) THEN
                 ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
                 ADD CONSTRAINT ${workflowSnapshotConstraint}
