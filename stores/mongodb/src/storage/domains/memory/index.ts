@@ -1160,6 +1160,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         typeof doc.lastBufferedAtTokens === 'number'
           ? doc.lastBufferedAtTokens
           : parseInt(String(doc.lastBufferedAtTokens ?? '0'), 10) || 0,
+      lastBufferedAtTime: doc.lastBufferedAtTime ? new Date(doc.lastBufferedAtTime) : null,
       config: doc.config || {},
       metadata: doc.metadata || undefined,
       observedMessageIds: doc.observedMessageIds || undefined,
@@ -1235,6 +1236,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         isBufferingObservation: false,
         isBufferingReflection: false,
         lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         config: input.config,
         observedTimezone: input.observedTimezone,
       };
@@ -1261,6 +1263,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         isBufferingObservation: false,
         isBufferingReflection: false,
         lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         observedTimezone: input.observedTimezone || null,
         createdAt: now,
         updatedAt: now,
@@ -1353,6 +1356,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         isBufferingObservation: false,
         isBufferingReflection: false,
         lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         config: input.currentRecord.config,
         metadata: input.currentRecord.metadata,
         observedTimezone: input.currentRecord.observedTimezone,
@@ -1380,6 +1384,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         isBufferingObservation: false,
         isBufferingReflection: false,
         lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         observedTimezone: record.observedTimezone || null,
         createdAt: now,
         updatedAt: now,
@@ -1620,11 +1625,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       };
 
       // Use $push to append chunk to array atomically
+      const $set: Record<string, any> = { updatedAt: new Date() };
+      if (input.lastBufferedAtTime) {
+        $set.lastBufferedAtTime = input.lastBufferedAtTime;
+      }
       const result = await collection.updateOne(
         { id: input.id },
         {
           $push: { bufferedObservationChunks: newChunk as any },
-          $set: { updatedAt: new Date() },
+          $set,
         },
       );
 

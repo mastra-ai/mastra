@@ -625,6 +625,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private static lastBufferedBoundary = new Map<string, number>();
 
   /**
+   * Track the timestamp cursor for buffered messages.
+   * STATIC: Shared across all instances so each buffer only observes messages
+   * newer than the previous buffer's boundary.
+   * Key format: "obs:{lockKey}"
+   */
+  private static lastBufferedAtTime = new Map<string, Date>();
+
+  /**
    * Tracks cycleId for in-flight buffered reflections.
    * STATIC: Shared across instances so we can match cycleId at activation time.
    * Key format: "refl:{lockKey}"
@@ -3100,10 +3108,14 @@ NOTE: Any messages following this system reminder are newer than your memories.
       // Re-fetch record to capture any changes from observation/activation/reflection
       const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
 
-      // Recompute unobserved tokens using the fresh record (updated lastObservedAt)
-      const allMessages = messageList.get.all.db();
-      const freshUnobserved = this.getUnobservedMessages(allMessages, freshRecord);
-      const freshUnobservedTokens = this.tokenCounter.countMessages(freshUnobserved);
+      // Count tokens from messages actually in the context window.
+      // We use messageList directly rather than getUnobservedMessages because after
+      // activation, lastObservedAt advances to the chunk's timestamp which incorrectly
+      // filters out messages that weren't part of the chunk but predate it.
+      // messageList already has activated messages removed (step 1c), so it accurately
+      // represents what's still in context.
+      const contextMessages = messageList.get.all.db();
+      const freshUnobservedTokens = this.tokenCounter.countMessages(contextMessages);
       const otherThreadTokens = unobservedContextBlocks ? this.tokenCounter.countString(unobservedContextBlocks) : 0;
       const currentObservationTokens = freshRecord.observationTokenCount ?? 0;
 
@@ -3788,23 +3800,46 @@ ${formattedMessages}
       return;
     }
 
-    // Re-calculate unobserved messages using fresh record state
-    // excludeBuffered=true so we only buffer messages that haven't already been buffered
-    const freshUnobservedMessages = this.getUnobservedMessages(unobservedMessages, freshRecord, {
+    // Determine the buffer cursor — the timestamp boundary beyond which we look for new messages.
+    // Start from the static map (in-process), fall back to DB record (survives restarts).
+    let bufferCursor = ObservationalMemory.lastBufferedAtTime.get(bufferKey) ?? freshRecord.lastBufferedAtTime ?? null;
+
+    // Advance the cursor if lastObservedAt is newer (e.g. sync observation ran after the last buffer)
+    if (freshRecord.lastObservedAt) {
+      const lastObserved = new Date(freshRecord.lastObservedAt);
+      if (!bufferCursor || lastObserved > bufferCursor) {
+        bufferCursor = lastObserved;
+      }
+    }
+
+    // Filter messages to only those newer than the buffer cursor.
+    // This prevents re-buffering messages that were already included in a previous chunk,
+    // even if their IDs were mutated by saveMessagesWithSealedIdTracking.
+    let candidateMessages = this.getUnobservedMessages(unobservedMessages, freshRecord, {
       excludeBuffered: true,
     });
+    const preFilterCount = candidateMessages.length;
+    if (bufferCursor) {
+      candidateMessages = candidateMessages.filter(msg => {
+        if (!msg.createdAt) return true; // include messages without timestamps
+        return new Date(msg.createdAt) > bufferCursor;
+      });
+    }
+
+    omDebug(
+      `[OM:bufferCursor] cursor=${bufferCursor?.toISOString() ?? 'null'}, unobserved=${unobservedMessages.length}, afterExcludeBuffered=${preFilterCount}, afterCursorFilter=${candidateMessages.length}`,
+    );
 
     // Check if there's enough content to buffer
     const bufferTokens = this.observationConfig.bufferTokens ?? 5000;
     const minNewTokens = bufferTokens / 2;
-    const newTokens = this.tokenCounter.countMessages(freshUnobservedMessages);
+    const newTokens = this.tokenCounter.countMessages(candidateMessages);
 
     if (newTokens < minNewTokens) {
       return; // Not enough new content to buffer
     }
 
-    // Use the fresh unobserved messages (excludes already-buffered ones)
-    const messagesToBuffer = freshUnobservedMessages;
+    const messagesToBuffer = candidateMessages;
 
     // Seal the messages being buffered to prevent new parts from being added.
     // This ensures that any streaming content after this point goes to new messages,
@@ -3843,6 +3878,12 @@ ${formattedMessages}
 
     try {
       await this.doAsyncBufferedObservation(freshRecord, threadId, messagesToBuffer, cycleId, startedAt, writer);
+
+      // Update the buffer cursor so the next buffer only sees messages newer than this one.
+      // Uses the same timestamp logic as the chunk's lastObservedAt (max message timestamp + 1ms).
+      const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
+      const cursor = new Date(maxTs.getTime() + 1);
+      ObservationalMemory.lastBufferedAtTime.set(bufferKey, cursor);
     } catch (error) {
       // Emit buffering failed marker
       if (writer) {
@@ -3920,6 +3961,7 @@ ${formattedMessages}
         messageTokens,
         lastObservedAt,
       },
+      lastBufferedAtTime: lastObservedAt,
     });
 
     // Emit buffering end marker

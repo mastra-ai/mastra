@@ -4518,6 +4518,7 @@ describe('Full Async Buffering Flow', () => {
     // Clear static maps to avoid cross-test pollution
     (ObservationalMemory as any).asyncBufferingOps.clear();
     (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
     (ObservationalMemory as any).reflectionBufferCycleIds.clear();
 
     const storage = createInMemoryStorage();

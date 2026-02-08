@@ -155,6 +155,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   isBufferingObservation: { type: 'boolean', nullable: false },
   isBufferingReflection: { type: 'boolean', nullable: false },
   lastBufferedAtTokens: { type: 'integer', nullable: false },
+  lastBufferedAtTime: { type: 'timestamp', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };

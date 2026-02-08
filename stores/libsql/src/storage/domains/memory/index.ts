@@ -97,6 +97,7 @@ export class MemoryLibSQL extends MemoryStorage {
           'isBufferingObservation',
           'isBufferingReflection',
           'lastBufferedAtTokens',
+          'lastBufferedAtTime',
         ],
       });
     }
@@ -1428,6 +1429,7 @@ export class MemoryLibSQL extends MemoryStorage {
         typeof row.lastBufferedAtTokens === 'number'
           ? row.lastBufferedAtTokens
           : parseInt(String(row.lastBufferedAtTokens ?? '0'), 10) || 0,
+      lastBufferedAtTime: row.lastBufferedAtTime ? new Date(String(row.lastBufferedAtTime)) : null,
       config: row.config ? JSON.parse(row.config) : {},
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
       observedMessageIds: row.observedMessageIds ? JSON.parse(row.observedMessageIds) : undefined,
@@ -1510,6 +1512,7 @@ export class MemoryLibSQL extends MemoryStorage {
         isBufferingObservation: false,
         isBufferingReflection: false,
         lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         config: input.config,
         observedTimezone: input.observedTimezone,
       };
@@ -1520,9 +1523,9 @@ export class MemoryLibSQL extends MemoryStorage {
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
-          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens",
+          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
           "observedTimezone", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           id,
           lookupKey,
@@ -1544,6 +1547,7 @@ export class MemoryLibSQL extends MemoryStorage {
           false, // isBufferingObservation
           false, // isBufferingReflection
           0, // lastBufferedAtTokens
+          null, // lastBufferedAtTime
           input.observedTimezone || null,
           now.toISOString(),
           now.toISOString(),
@@ -1640,6 +1644,7 @@ export class MemoryLibSQL extends MemoryStorage {
         isBufferingObservation: false,
         isBufferingReflection: false,
         lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         config: input.currentRecord.config,
         metadata: input.currentRecord.metadata,
         observedTimezone: input.currentRecord.observedTimezone,
@@ -1651,9 +1656,9 @@ export class MemoryLibSQL extends MemoryStorage {
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
-          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens",
+          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
           "observedTimezone", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           id,
           lookupKey,
@@ -1675,6 +1680,7 @@ export class MemoryLibSQL extends MemoryStorage {
           false, // isBufferingObservation
           false, // isBufferingReflection
           0, // lastBufferedAtTokens
+          null, // lastBufferedAtTime
           record.observedTimezone || null,
           now.toISOString(),
           now.toISOString(),
@@ -1942,12 +1948,14 @@ export class MemoryLibSQL extends MemoryStorage {
 
       const newChunks = [...existingChunks, newChunk];
 
+      const lastBufferedAtTime = input.lastBufferedAtTime ? input.lastBufferedAtTime.toISOString() : null;
       const result = await this.#client.execute({
         sql: `UPDATE "${OM_TABLE}" SET
           "bufferedObservationChunks" = ?,
+          "lastBufferedAtTime" = COALESCE(?, "lastBufferedAtTime"),
           "updatedAt" = ?
         WHERE id = ?`,
-        args: [JSON.stringify(newChunks), nowStr, input.id],
+        args: [JSON.stringify(newChunks), lastBufferedAtTime, nowStr, input.id],
       });
 
       if (result.rowsAffected === 0) {

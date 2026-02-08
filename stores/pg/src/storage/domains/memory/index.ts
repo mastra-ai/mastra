@@ -133,6 +133,7 @@ export class MemoryPG extends MemoryStorage {
           'isBufferingObservation',
           'isBufferingReflection',
           'lastBufferedAtTokens',
+          'lastBufferedAtTime',
         ],
       });
     }
@@ -1603,6 +1604,7 @@ export class MemoryPG extends MemoryStorage {
         typeof row.lastBufferedAtTokens === 'number'
           ? row.lastBufferedAtTokens
           : parseInt(String(row.lastBufferedAtTokens ?? '0'), 10) || 0,
+      lastBufferedAtTime: row.lastBufferedAtTime ? new Date(String(row.lastBufferedAtTime)) : null,
       config: row.config ? (typeof row.config === 'string' ? JSON.parse(row.config) : row.config) : {},
       metadata: row.metadata ? (typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata) : undefined,
       observedMessageIds: row.observedMessageIds
@@ -1695,6 +1697,7 @@ export class MemoryPG extends MemoryStorage {
         isBufferingObservation: false,
         isBufferingReflection: false,
         lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         config: input.config,
         observedTimezone: input.observedTimezone,
       };
@@ -1710,9 +1713,9 @@ export class MemoryPG extends MemoryStorage {
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
-          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens",
+          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
           "observedTimezone", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
         [
           id,
           lookupKey,
@@ -1736,6 +1739,7 @@ export class MemoryPG extends MemoryStorage {
           false, // isBufferingObservation
           false, // isBufferingReflection
           0, // lastBufferedAtTokens
+          null, // lastBufferedAtTime
           input.observedTimezone || null,
           nowStr, // createdAt
           nowStr, // createdAtZ
@@ -1844,6 +1848,7 @@ export class MemoryPG extends MemoryStorage {
         isBufferingObservation: false,
         isBufferingReflection: false,
         lastBufferedAtTokens: 0,
+        lastBufferedAtTime: null,
         config: input.currentRecord.config,
         metadata: input.currentRecord.metadata,
         observedTimezone: input.currentRecord.observedTimezone,
@@ -1861,9 +1866,9 @@ export class MemoryPG extends MemoryStorage {
           "activeObservations", "activeObservationsPendingUpdate",
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
-          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens",
+          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
           "observedTimezone", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
         [
           id,
           lookupKey,
@@ -1887,6 +1892,7 @@ export class MemoryPG extends MemoryStorage {
           false, // isBufferingObservation
           false, // isBufferingReflection
           0, // lastBufferedAtTokens
+          null, // lastBufferedAtTime
           record.observedTimezone || null,
           nowStr, // createdAt
           nowStr, // createdAtZ
@@ -2155,13 +2161,15 @@ export class MemoryPG extends MemoryStorage {
       };
 
       // Append chunk to existing array using JSONB concatenation
+      const lastBufferedAtTime = input.lastBufferedAtTime ? input.lastBufferedAtTime.toISOString() : null;
       const result = await this.#db.client.query(
         `UPDATE ${tableName} SET
           "bufferedObservationChunks" = COALESCE("bufferedObservationChunks", '[]'::jsonb) || $1::jsonb,
-          "updatedAt" = $2,
-          "updatedAtZ" = $3
-        WHERE id = $4`,
-        [JSON.stringify([newChunk]), nowStr, nowStr, input.id],
+          "lastBufferedAtTime" = COALESCE($2, "lastBufferedAtTime"),
+          "updatedAt" = $3,
+          "updatedAtZ" = $4
+        WHERE id = $5`,
+        [JSON.stringify([newChunk]), lastBufferedAtTime, nowStr, nowStr, input.id],
       );
 
       if (result.rowCount === 0) {

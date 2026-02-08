@@ -838,6 +838,7 @@ export class InMemoryMemory extends MemoryStorage {
       isBufferingObservation: false,
       isBufferingReflection: false,
       lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
       // Configuration
       config,
       // Timezone used for observation date formatting
@@ -900,6 +901,10 @@ export class InMemoryMemory extends MemoryStorage {
     // Add chunk to the array
     const existingChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
     record.bufferedObservationChunks = [...existingChunks, newChunk];
+
+    if (input.lastBufferedAtTime) {
+      record.lastBufferedAtTime = input.lastBufferedAtTime;
+    }
 
     record.updatedAt = new Date();
   }
@@ -1039,6 +1044,7 @@ export class InMemoryMemory extends MemoryStorage {
       isBufferingObservation: false,
       isBufferingReflection: false,
       lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
       // Timezone used for observation date formatting
       observedTimezone: currentRecord.observedTimezone,
       // Extensible metadata (optional)
