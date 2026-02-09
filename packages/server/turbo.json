@@ -26,7 +26,7 @@
       "outputs": ["dist/docs/**"]
     },
     "build": {
-      "dependsOn": ["build:patch-commonjs", "build:lib", "build:docs"],
+      "dependsOn": ["build:patch-commonjs", "build:lib"],
       "inputs": ["package.json"]
     },
     "test": {

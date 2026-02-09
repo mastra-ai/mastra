@@ -11,7 +11,7 @@
       "outputs": ["dist/docs/**"]
     },
     "build": {
-      "dependsOn": ["build:lib", "build:docs"]
+      "dependsOn": ["build:lib"]
     }
   }
 }
