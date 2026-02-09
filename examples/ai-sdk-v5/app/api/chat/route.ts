@@ -1,16 +1,16 @@
+import { handleChatStream } from "@mastra/ai-sdk";
+import { createUIMessageStreamResponse } from "ai";
+
 import { mastra } from "@/src/mastra";
 
-const myAgent = mastra.getAgent("weatherAgent");
 export async function POST(req: Request) {
-  const { messages } = await req.json();
+  const params = await req.json();
 
-  const stream = await myAgent.stream(messages, {
-    format: "aisdk",
-    memory: {
-      thread: "2",
-      resource: "1",
-    },
+  const stream = await handleChatStream({
+    mastra,
+    agentId: "weatherAgent",
+    params,
   });
 
-  return stream.toUIMessageStreamResponse();
+  return createUIMessageStreamResponse({ stream });
 }

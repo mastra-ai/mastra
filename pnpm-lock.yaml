@@ -2668,8 +2668,8 @@ importers:
         specifier: ^0.2.2
         version: 0.2.2(@standard-schema/spec@1.1.0)(hono@4.11.7)
       '@hono/swagger-ui':
-        specifier: ^0.5.2
-        version: 0.5.2(hono@4.11.7)
+        specifier: ^0.5.3
+        version: 0.5.3(hono@4.11.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -4000,8 +4000,8 @@ importers:
         specifier: ^1.19.9
         version: 1.19.9(hono@4.11.7)
       '@hono/swagger-ui':
-        specifier: ^0.5.2
-        version: 0.5.2(hono@4.11.7)
+        specifier: ^0.5.3
+        version: 0.5.3(hono@4.11.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -9341,10 +9341,10 @@ packages:
       '@standard-schema/spec': ^1.0.0
       hono: '>=3.9.0'
 
-  '@hono/swagger-ui@0.5.2':
-    resolution: {integrity: sha512-7wxLKdb8h7JTdZ+K8DJNE3KXQMIpJejkBTQjrYlUWF28Z1PGOKw6kUykARe5NTfueIN37jbyG/sBYsbzXzG53A==}
+  '@hono/swagger-ui@0.5.3':
+    resolution: {integrity: sha512-Hn90DOOJ62ICJQplQvCDVpi9Jcn6EhtRaiffyJIS53wA5RmRLtMCDQGVc0bor8vQD7JIwpkweWjs+3cycp+IvA==}
     peerDependencies:
-      hono: '*'
+      hono: '>=4.0.0'
 
   '@hookform/resolvers@3.10.0':
     resolution: {integrity: sha512-79Dv+3mDF7i+2ajj7SkypSKHhl1cbln1OGavqrsF7p6mbUv11xpqpacPsGDCTRvCSjEEIez2ef1NveSVL3b0Ag==}
@@ -27671,7 +27671,7 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       hono: 4.11.7
 
-  '@hono/swagger-ui@0.5.2(hono@4.11.7)':
+  '@hono/swagger-ui@0.5.3(hono@4.11.7)':
     dependencies:
       hono: 4.11.7
 
