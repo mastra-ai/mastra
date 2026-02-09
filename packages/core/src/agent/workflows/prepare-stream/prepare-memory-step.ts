@@ -102,6 +102,26 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         };
       }
 
+      // Check if memory is disabled via the enabled flag
+      // Merge the provided memoryConfig with the Memory instance's config to get the effective config
+      const effectiveMemoryConfig = memory.getMergedThreadConfig(memoryConfig);
+      if (effectiveMemoryConfig.enabled === false) {
+        // Memory is disabled - skip thread creation and memory context setup
+        messageList.add(options.messages, 'input');
+        const { tripwire } = await capabilities.runInputProcessors({
+          requestContext,
+          tracingContext,
+          messageList,
+          inputProcessorOverrides: options.inputProcessors,
+        });
+        return {
+          threadExists: false,
+          thread: undefined,
+          messageList,
+          tripwire,
+        };
+      }
+
       if (!thread?.id || !resourceId) {
         const mastraError = new MastraError({
           id: 'AGENT_MEMORY_MISSING_RESOURCE_ID',
