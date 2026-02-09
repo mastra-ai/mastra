@@ -576,7 +576,7 @@
       "permanent": true
     },
     {
-      "source": "/guides/deployment/",
+      "source": "/guides/deployment",
       "destination": "/guides",
       "permanent": true
     },
