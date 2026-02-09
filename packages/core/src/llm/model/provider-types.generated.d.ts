@@ -159,6 +159,7 @@ export type ProviderModelsMap = {
     'ministral-3:8b',
     'mistral-large-3:675b',
     'nemotron-3-nano:30b',
+    'qwen3-coder-next',
     'qwen3-coder:480b',
     'qwen3-next:80b',
     'qwen3-vl:235b',
@@ -1247,7 +1248,6 @@ export type ProviderModelsMap = {
     'gemini-3-pro',
     'glm-4.6',
     'glm-4.7',
-    'glm-4.7-free',
     'gpt-5',
     'gpt-5-codex',
     'gpt-5-nano',
@@ -1263,7 +1263,6 @@ export type ProviderModelsMap = {
     'kimi-k2.5-free',
     'minimax-m2.1',
     'minimax-m2.1-free',
-    'qwen3-coder',
     'trinity-large-preview-free',
   ];
   readonly fastrouter: readonly [
@@ -1794,6 +1793,7 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo',
     'moonshotai/Kimi-K2-Instruct',
     'moonshotai/Kimi-K2-Thinking',
+    'moonshotai/Kimi-K2.5',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.7',
