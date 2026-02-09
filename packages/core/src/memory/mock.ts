@@ -183,7 +183,7 @@ export class MockMemory extends MastraMemory {
               });
             }
 
-            if (thread.resourceId && thread.resourceId !== resourceId) {
+            if (thread.resourceId && resourceId && thread.resourceId !== resourceId) {
               throw new Error(
                 `Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`,
               );
