@@ -129,7 +129,7 @@ describe('agent.clearCache', () => {
     expect(mastra.getAgent('codeAgent')).toBeDefined();
 
     // Debug log should indicate all cached agents were cleared
-    expect(debugSpy).toHaveBeenCalledWith('[clearStoredAgentCache] Cleared all cached agents');
+    expect(debugSpy).toHaveBeenCalledWith('[clearCache] Cleared all cached agents');
   });
 
   it('should do nothing if editor is not registered with Mastra', () => {
