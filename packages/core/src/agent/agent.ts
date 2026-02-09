@@ -152,7 +152,7 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: MastraVoice;
-  #workspace?: DynamicArgument<Workspace>;
+  #workspace?: DynamicArgument<Workspace | undefined>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
@@ -788,17 +788,24 @@ export class Agent<
   }
 
   /**
-   * Checks if this agent has its own workspace configured.
+   * Checks if this agent has its own workspace configured (static or dynamic).
    *
-   * @example
-   * ```typescript
-   * if (agent.hasOwnWorkspace()) {
-   *   const workspace = await agent.getWorkspace();
-   * }
-   * ```
+   * @deprecated Use {@link hasStaticWorkspace} to check for eagerly-available workspaces,
+   * or just call {@link getWorkspace} which handles both static and dynamic cases.
+   * This method returns true for dynamic workspace functions that may not produce
+   * a workspace without proper request context.
    */
   public hasOwnWorkspace(): boolean {
     return Boolean(this.#workspace);
+  }
+
+  /**
+   * Checks if this agent has a static (non-function) workspace that can be resolved
+   * without request context. Dynamic workspace functions return false here since they
+   * depend on request-time context and may return undefined.
+   */
+  public hasStaticWorkspace(): boolean {
+    return Boolean(this.#workspace) && typeof this.#workspace !== 'function';
   }
 
   /**
@@ -819,34 +826,20 @@ export class Agent<
   }: { requestContext?: RequestContext } = {}): Promise<Workspace | undefined> {
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
-      let resolvedWorkspace: Workspace;
-
       if (typeof this.#workspace !== 'function') {
-        resolvedWorkspace = this.#workspace;
-      } else {
-        const result = this.#workspace({ requestContext, mastra: this.#mastra });
-        resolvedWorkspace = await Promise.resolve(result);
+        return this.#workspace;
+      }
 
-        if (!resolvedWorkspace) {
-          const mastraError = new MastraError({
-            id: 'AGENT_GET_WORKSPACE_FUNCTION_EMPTY_RETURN',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-            details: {
-              agentName: this.name,
-            },
-            text: `[Agent:${this.name}] - Function-based workspace returned empty value`,
-          });
-          this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
-          throw mastraError;
-        }
+      const result = this.#workspace({ requestContext, mastra: this.#mastra });
+      const resolvedWorkspace = await Promise.resolve(result);
 
-        // Auto-register dynamically created workspace with Mastra for lookup via listWorkspaces()/getWorkspaceById()
-        // This follows the same pattern as static workspace registration in Mastra.addAgent()
-        if (this.#mastra) {
-          this.#mastra.addWorkspace(resolvedWorkspace);
-        }
+      if (!resolvedWorkspace) {
+        return undefined;
+      }
+
+      // Auto-register dynamically created workspace with Mastra for lookup via listWorkspaces()/getWorkspaceById()
+      if (this.#mastra) {
+        this.#mastra.addWorkspace(resolvedWorkspace);
       }
 
       return resolvedWorkspace;

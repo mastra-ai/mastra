@@ -190,62 +190,86 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
         };
       }> = [];
 
-      const seenIds = new Set<string>();
+      // Prefer the workspace registry (newer @mastra/core with 'workspace-registry' feature).
+      // This avoids calling dynamic workspace functions without proper request context.
+      // Dynamic workspaces get lazily registered during agent execution (stream/generate).
+      if (typeof mastra.listWorkspaces === 'function') {
+        const registeredWorkspaces = mastra.listWorkspaces();
+        for (const [, ws] of Object.entries(registeredWorkspaces) as [string, Workspace][]) {
+          workspaces.push({
+            id: ws.id,
+            name: ws.name,
+            status: ws.status,
+            source: 'mastra',
+            capabilities: {
+              hasFilesystem: !!ws.filesystem,
+              hasSandbox: !!ws.sandbox,
+              canBM25: ws.canBM25,
+              canVector: ws.canVector,
+              canHybrid: ws.canHybrid,
+              hasSkills: !!ws.skills,
+            },
+            safety: {
+              readOnly: ws.filesystem?.readOnly ?? false,
+            },
+          });
+        }
+      } else {
+        // Fallback for older @mastra/core without workspace registry:
+        // Check global workspace and loop through agents
+        const seenIds = new Set<string>();
+        const globalWorkspace = mastra.getWorkspace?.();
+        if (globalWorkspace) {
+          seenIds.add(globalWorkspace.id);
+          workspaces.push({
+            id: globalWorkspace.id,
+            name: globalWorkspace.name,
+            status: globalWorkspace.status,
+            source: 'mastra',
+            capabilities: {
+              hasFilesystem: !!globalWorkspace.filesystem,
+              hasSandbox: !!globalWorkspace.sandbox,
+              canBM25: globalWorkspace.canBM25,
+              canVector: globalWorkspace.canVector,
+              canHybrid: globalWorkspace.canHybrid,
+              hasSkills: !!globalWorkspace.skills,
+            },
+            safety: {
+              readOnly: globalWorkspace.filesystem?.readOnly ?? false,
+            },
+          });
+        }
 
-      // Get workspace from Mastra instance
-      const globalWorkspace = mastra.getWorkspace?.();
-      if (globalWorkspace) {
-        seenIds.add(globalWorkspace.id);
-        workspaces.push({
-          id: globalWorkspace.id,
-          name: globalWorkspace.name,
-          status: globalWorkspace.status,
-          source: 'mastra',
-          capabilities: {
-            hasFilesystem: !!globalWorkspace.filesystem,
-            hasSandbox: !!globalWorkspace.sandbox,
-            canBM25: globalWorkspace.canBM25,
-            canVector: globalWorkspace.canVector,
-            canHybrid: globalWorkspace.canHybrid,
-            hasSkills: !!globalWorkspace.skills,
-          },
-          safety: {
-            readOnly: globalWorkspace.filesystem?.readOnly ?? false,
-          },
-        });
-      }
-
-      // Get workspaces from agents
-      const agents = mastra.listAgents?.() ?? {};
-      for (const [agentId, agent] of Object.entries(agents)) {
-        if (agent.hasOwnWorkspace?.()) {
-          try {
-            const agentWorkspace = await agent.getWorkspace?.();
-            if (agentWorkspace && !seenIds.has(agentWorkspace.id)) {
-              seenIds.add(agentWorkspace.id);
-              workspaces.push({
-                id: agentWorkspace.id,
-                name: agentWorkspace.name,
-                status: agentWorkspace.status,
-                source: 'agent',
-                agentId,
-                agentName: agent.name,
-                capabilities: {
-                  hasFilesystem: !!agentWorkspace.filesystem,
-                  hasSandbox: !!agentWorkspace.sandbox,
-                  canBM25: agentWorkspace.canBM25,
-                  canVector: agentWorkspace.canVector,
-                  canHybrid: agentWorkspace.canHybrid,
-                  hasSkills: !!agentWorkspace.skills,
-                },
-                safety: {
-                  readOnly: agentWorkspace.filesystem?.readOnly ?? false,
-                },
-              });
+        const agents = mastra.listAgents?.() ?? {};
+        for (const [agentId, agent] of Object.entries(agents)) {
+          if ((agent as any).hasOwnWorkspace?.()) {
+            try {
+              const agentWorkspace = await (agent as any).getWorkspace?.();
+              if (agentWorkspace && !seenIds.has(agentWorkspace.id)) {
+                seenIds.add(agentWorkspace.id);
+                workspaces.push({
+                  id: agentWorkspace.id,
+                  name: agentWorkspace.name,
+                  status: agentWorkspace.status,
+                  source: 'agent',
+                  agentId,
+                  agentName: (agent as any).name,
+                  capabilities: {
+                    hasFilesystem: !!agentWorkspace.filesystem,
+                    hasSandbox: !!agentWorkspace.sandbox,
+                    canBM25: agentWorkspace.canBM25,
+                    canVector: agentWorkspace.canVector,
+                    canHybrid: agentWorkspace.canHybrid,
+                    hasSkills: !!agentWorkspace.skills,
+                  },
+                  safety: {
+                    readOnly: agentWorkspace.filesystem?.readOnly ?? false,
+                  },
+                });
+              }
+            } catch {
+              continue;
             }
-          } catch {
-            // Skip agents with dynamic workspaces that fail without thread context
-            continue;
           }
         }
       }
