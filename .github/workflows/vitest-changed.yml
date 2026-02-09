@@ -604,15 +604,15 @@ jobs:
       - name: Determine test status
         id: status
         run: |
-          # Check if any of the test jobs failed
-          if [[ "${{ needs.test.result }}" == "failure" ]] || \
-             [[ "${{ needs.e2e-test.result }}" == "failure" ]] || \
-             [[ "${{ needs.memory-integration.result }}" == "failure" ]] || \
-             [[ "${{ needs.mcp-integration.result }}" == "failure" ]] || \
-             [[ "${{ needs.agent-builder-integration.result }}" == "failure" ]] || \
-             [[ "${{ needs.observability-test.result }}" == "failure" ]]; then
+          # Check if any of the test jobs failed or were cancelled
+          if [[ "${{ needs.test.result }}" =~ ^(failure|cancelled)$ ]] || \
+             [[ "${{ needs.e2e-test.result }}" =~ ^(failure|cancelled)$ ]] || \
+             [[ "${{ needs.memory-integration.result }}" =~ ^(failure|cancelled)$ ]] || \
+             [[ "${{ needs.mcp-integration.result }}" =~ ^(failure|cancelled)$ ]] || \
+             [[ "${{ needs.agent-builder-integration.result }}" =~ ^(failure|cancelled)$ ]] || \
+             [[ "${{ needs.observability-test.result }}" =~ ^(failure|cancelled)$ ]]; then
             echo "status=failure" >> $GITHUB_OUTPUT
-            echo "description=Some tests failed" >> $GITHUB_OUTPUT
+            echo "description=Some tests failed or were cancelled" >> $GITHUB_OUTPUT
           else
             echo "status=success" >> $GITHUB_OUTPUT
             echo "description=All tests passed" >> $GITHUB_OUTPUT
