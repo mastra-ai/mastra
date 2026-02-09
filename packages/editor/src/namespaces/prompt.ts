@@ -20,6 +20,10 @@ export class EditorPromptNamespace extends CrudEditorNamespace<
   StorageListPromptBlocksResolvedOutput,
   StorageResolvedPromptBlockType
 > {
+  protected override onCacheEvict(id: string): void {
+    this.mastra?.removePromptBlock(id);
+  }
+
   protected async getStorageAdapter(): Promise<
     StorageAdapter<
       StorageCreatePromptBlockInput,
@@ -36,12 +40,12 @@ export class EditorPromptNamespace extends CrudEditorNamespace<
     if (!store) throw new Error('Prompt blocks storage domain is not available');
 
     return {
-      create: input => store.createPromptBlock({ promptBlock: input }),
-      getByIdResolved: id => store.getPromptBlockByIdResolved({ id }),
-      update: input => store.updatePromptBlock(input),
-      delete: id => store.deletePromptBlock({ id }),
-      list: args => store.listPromptBlocks(args),
-      listResolved: args => store.listPromptBlocksResolved(args),
+      create: input => store.create({ promptBlock: input }),
+      getByIdResolved: id => store.getByIdResolved(id),
+      update: input => store.update(input),
+      delete: id => store.delete(id),
+      list: args => store.list(args),
+      listResolved: args => store.listResolved(args),
     };
   }
 

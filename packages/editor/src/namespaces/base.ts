@@ -71,7 +71,7 @@ export abstract class CrudEditorNamespace<
   TResolved,
   THydrated = TResolved,
 > extends EditorNamespace {
-  #cache = new Map<string, THydrated>();
+  private _cache = new Map<string, THydrated>();
 
   /**
    * Each subclass must provide a storage adapter that maps
@@ -90,6 +90,14 @@ export abstract class CrudEditorNamespace<
     return resolved as unknown as THydrated;
   }
 
+  /**
+   * Hook called when an entity is evicted from the cache (on delete, update, or clearCache).
+   * Override in subclasses to also remove the entity from the Mastra runtime registry.
+   */
+  protected onCacheEvict(_id: string): void {
+    // Default: no-op. Subclasses override to clean up runtime registries.
+  }
+
   async create(input: TCreateInput): Promise<THydrated> {
     this.ensureRegistered();
     const adapter = await this.getStorageAdapter();
@@ -99,7 +107,7 @@ export abstract class CrudEditorNamespace<
       throw new Error(`Failed to resolve entity ${input.id} after creation`);
     }
     const hydrated = await this.hydrate(resolved);
-    this.#cache.set(input.id, hydrated);
+    this._cache.set(input.id, hydrated);
     return hydrated;
   }
 
@@ -109,7 +117,7 @@ export abstract class CrudEditorNamespace<
     // Only use the cache for default (latest) version requests
     const isVersionRequest = options?.versionId || options?.versionNumber;
     if (!isVersionRequest) {
-      const cached = this.#cache.get(id);
+      const cached = this._cache.get(id);
       if (cached) {
         this.logger?.debug(`[getById] Cache hit for "${id}"`);
         return cached;
@@ -125,7 +133,7 @@ export abstract class CrudEditorNamespace<
 
     // Only cache default (latest) version
     if (!isVersionRequest) {
-      this.#cache.set(id, hydrated);
+      this._cache.set(id, hydrated);
     }
     return hydrated;
   }
@@ -134,13 +142,14 @@ export abstract class CrudEditorNamespace<
     this.ensureRegistered();
     const adapter = await this.getStorageAdapter();
     await adapter.update(input);
-    this.#cache.delete(input.id);
+    this._cache.delete(input.id);
+    this.onCacheEvict(input.id);
     const resolved = await adapter.getByIdResolved(input.id);
     if (!resolved) {
       throw new Error(`Failed to resolve entity ${input.id} after update`);
     }
     const hydrated = await this.hydrate(resolved);
-    this.#cache.set(input.id, hydrated);
+    this._cache.set(input.id, hydrated);
     return hydrated;
   }
 
@@ -148,7 +157,8 @@ export abstract class CrudEditorNamespace<
     this.ensureRegistered();
     const adapter = await this.getStorageAdapter();
     await adapter.delete(id);
-    this.#cache.delete(id);
+    this._cache.delete(id);
+    this.onCacheEvict(id);
   }
 
   async list(args?: TListInput): Promise<TListOutput> {
@@ -169,10 +179,14 @@ export abstract class CrudEditorNamespace<
    */
   clearCache(id?: string): void {
     if (id) {
-      this.#cache.delete(id);
+      this._cache.delete(id);
+      this.onCacheEvict(id);
       this.logger?.debug(`[clearCache] Cleared cache for "${id}"`);
     } else {
-      this.#cache.clear();
+      for (const cachedId of Array.from(this._cache.keys())) {
+        this.onCacheEvict(cachedId);
+      }
+      this._cache.clear();
       this.logger?.debug('[clearCache] Cleared all cached entities');
     }
   }

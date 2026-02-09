@@ -20,6 +20,10 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
   StorageListScorerDefinitionsResolvedOutput,
   StorageResolvedScorerDefinitionType
 > {
+  protected override onCacheEvict(id: string): void {
+    this.mastra?.removeScorer(id);
+  }
+
   protected async getStorageAdapter(): Promise<
     StorageAdapter<
       StorageCreateScorerDefinitionInput,
@@ -36,12 +40,12 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
     if (!store) throw new Error('Scorer definitions storage domain is not available');
 
     return {
-      create: input => store.createScorerDefinition({ scorerDefinition: input }),
-      getByIdResolved: id => store.getScorerDefinitionByIdResolved({ id }),
-      update: input => store.updateScorerDefinition(input),
-      delete: id => store.deleteScorerDefinition({ id }),
-      list: args => store.listScorerDefinitions(args),
-      listResolved: args => store.listScorerDefinitionsResolved(args),
+      create: input => store.create({ scorerDefinition: input }),
+      getByIdResolved: id => store.getByIdResolved(id),
+      update: input => store.update(input),
+      delete: id => store.delete(id),
+      list: args => store.list(args),
+      listResolved: args => store.listResolved(args),
     };
   }
 

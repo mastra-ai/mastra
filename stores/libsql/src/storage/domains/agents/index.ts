@@ -16,8 +16,6 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
-  StorageListAgentsResolvedOutput,
-  StorageResolvedAgentType,
   AgentVersion,
   CreateVersionInput,
   ListVersionsInput,
@@ -256,7 +254,7 @@ export class AgentsLibSQL extends AgentsStorage {
     };
   }
 
-  async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
+  async getById(id: string): Promise<StorageAgentType | null> {
     try {
       const result = await this.#db.select<Record<string, any>>({
         tableName: TABLE_AGENTS,
@@ -277,7 +275,8 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
-  async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+  async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    const { agent } = input;
     try {
       const now = new Date();
 
@@ -310,7 +309,7 @@ export class AgentsLibSQL extends AgentsStorage {
       });
 
       // 3. Return the thin agent record (activeVersionId remains null, status remains 'draft')
-      const created = await this.getAgentById({ id: agent.id });
+      const created = await this.getById(agent.id);
       if (!created) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'CREATE_AGENT', 'NOT_FOUND_AFTER_CREATE'),
@@ -338,10 +337,11 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
-  async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
+  async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
+    const { id, ...updates } = input;
     try {
       // First, get the existing agent
-      const existingAgent = await this.getAgentById({ id });
+      const existingAgent = await this.getById(id);
       if (!existingAgent) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_AGENT', 'NOT_FOUND'),
@@ -436,7 +436,7 @@ export class AgentsLibSQL extends AgentsStorage {
       }
 
       // Return the updated agent
-      const updatedAgent = await this.getAgentById({ id });
+      const updatedAgent = await this.getById(id);
       if (!updatedAgent) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_AGENT', 'NOT_FOUND_AFTER_UPDATE'),
@@ -464,10 +464,10 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
-  async deleteAgent({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       // Delete all versions for this agent first
-      await this.deleteVersionsByAgentId(id);
+      await this.deleteVersionsByParentId(id);
 
       // Then delete the agent
       await this.#db.delete({
@@ -487,7 +487,7 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
-  async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+  async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     const { page = 0, perPage: perPageInput, orderBy } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -542,107 +542,6 @@ export class AgentsLibSQL extends AgentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_AGENTS', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
-  }
-
-  async listAgentsResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsResolvedOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
-    const { field, direction } = this.parseOrderBy(orderBy);
-
-    if (page < 0) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LIBSQL', 'LIST_AGENTS_RESOLVED', 'INVALID_PAGE'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { page },
-        },
-        new Error('page must be >= 0'),
-      );
-    }
-
-    const perPage = normalizePerPage(perPageInput, 100);
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-
-    try {
-      // Get total count
-      const total = await this.#db.selectTotalCount({ tableName: TABLE_AGENTS });
-
-      if (total === 0) {
-        return {
-          agents: [],
-          total: 0,
-          page,
-          perPage: perPageForResponse,
-          hasMore: false,
-        };
-      }
-
-      // Get paginated agents using selectMany (which handles JSONB columns correctly)
-      const limitValue = perPageInput === false ? total : perPage;
-      const agents = await this.#db.selectMany<StorageAgentType>({
-        tableName: TABLE_AGENTS,
-        orderBy: `"${field}" ${direction}`,
-        limit: limitValue,
-        offset,
-      });
-
-      // For each agent, resolve the version configuration
-      const resolvedAgents = await Promise.all(
-        agents.map(async agent => {
-          let version: AgentVersion | null = null;
-
-          // Get the active version if set
-          if (agent.activeVersionId) {
-            version = await this.getVersion(agent.activeVersionId);
-          }
-
-          // If no active version, get the latest version
-          if (!version) {
-            version = await this.getLatestVersion(agent.id);
-          }
-
-          // If no version found, return thin agent
-          if (!version) {
-            return agent as StorageResolvedAgentType;
-          }
-
-          // Return fully resolved agent with version data
-          return {
-            ...agent,
-            name: version.name,
-            description: version.description,
-            instructions: version.instructions,
-            model: version.model,
-            tools: version.tools,
-            defaultOptions: version.defaultOptions,
-            workflows: version.workflows,
-            agents: version.agents,
-            integrationTools: version.integrationTools,
-            inputProcessors: version.inputProcessors,
-            outputProcessors: version.outputProcessors,
-            memory: version.memory,
-            scorers: version.scorers,
-          } as StorageResolvedAgentType;
-        }),
-      );
-
-      return {
-        agents: resolvedAgents,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : offset + perPage < total,
-      };
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LIBSQL', 'LIST_AGENTS_RESOLVED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -879,14 +778,14 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
-  async deleteVersionsByAgentId(agentId: string): Promise<void> {
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
       // Get all version IDs for this agent
       const versions = await this.#db.selectMany<{ id: string }>({
         tableName: TABLE_AGENT_VERSIONS,
         whereClause: {
           sql: 'WHERE agentId = ?',
-          args: [agentId],
+          args: [entityId],
         },
       });
 
@@ -903,7 +802,7 @@ export class AgentsLibSQL extends AgentsStorage {
           id: createStorageErrorId('LIBSQL', 'DELETE_VERSIONS_BY_AGENT_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { agentId },
+          details: { agentId: entityId },
         },
         error,
       );

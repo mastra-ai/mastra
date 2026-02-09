@@ -37,18 +37,15 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   // Scorer Definition CRUD Methods
   // ==========================================================================
 
-  async getScorerDefinitionById({ id }: { id: string }): Promise<StorageScorerDefinitionType | null> {
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: getScorerDefinitionById called for ${id}`);
+  async getById(id: string): Promise<StorageScorerDefinitionType | null> {
+    this.logger.debug(`InMemoryScorerDefinitionsStorage: getById called for ${id}`);
     const scorer = this.db.scorerDefinitions.get(id);
     return scorer ? this.deepCopyScorer(scorer) : null;
   }
 
-  async createScorerDefinition({
-    scorerDefinition,
-  }: {
-    scorerDefinition: StorageCreateScorerDefinitionInput;
-  }): Promise<StorageScorerDefinitionType> {
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: createScorerDefinition called for ${scorerDefinition.id}`);
+  async create(input: { scorerDefinition: StorageCreateScorerDefinitionInput }): Promise<StorageScorerDefinitionType> {
+    const { scorerDefinition } = input;
+    this.logger.debug(`InMemoryScorerDefinitionsStorage: create called for ${scorerDefinition.id}`);
 
     if (this.db.scorerDefinitions.has(scorerDefinition.id)) {
       throw new Error(`Scorer definition with id ${scorerDefinition.id} already exists`);
@@ -85,11 +82,9 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     return this.deepCopyScorer(newScorer);
   }
 
-  async updateScorerDefinition({
-    id,
-    ...updates
-  }: StorageUpdateScorerDefinitionInput): Promise<StorageScorerDefinitionType> {
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: updateScorerDefinition called for ${id}`);
+  async update(input: StorageUpdateScorerDefinitionInput): Promise<StorageScorerDefinitionType> {
+    const { id, ...updates } = input;
+    this.logger.debug(`InMemoryScorerDefinitionsStorage: update called for ${id}`);
 
     const existingScorer = this.db.scorerDefinitions.get(id);
     if (!existingScorer) {
@@ -182,19 +177,19 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     return this.deepCopyScorer(updatedScorer);
   }
 
-  async deleteScorerDefinition({ id }: { id: string }): Promise<void> {
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: deleteScorerDefinition called for ${id}`);
+  async delete(id: string): Promise<void> {
+    this.logger.debug(`InMemoryScorerDefinitionsStorage: delete called for ${id}`);
     // Idempotent delete
     this.db.scorerDefinitions.delete(id);
     // Also delete all versions for this scorer definition
-    await this.deleteVersionsByScorerDefinitionId(id);
+    await this.deleteVersionsByParentId(id);
   }
 
-  async listScorerDefinitions(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
+  async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: listScorerDefinitions called`);
+    this.logger.debug(`InMemoryScorerDefinitionsStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -359,14 +354,14 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     this.db.scorerDefinitionVersions.delete(id);
   }
 
-  async deleteVersionsByScorerDefinitionId(scorerDefinitionId: string): Promise<void> {
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
     this.logger.debug(
-      `InMemoryScorerDefinitionsStorage: deleteVersionsByScorerDefinitionId called for scorer definition ${scorerDefinitionId}`,
+      `InMemoryScorerDefinitionsStorage: deleteVersionsByParentId called for scorer definition ${entityId}`,
     );
 
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.scorerDefinitionVersions.entries()) {
-      if (version.scorerDefinitionId === scorerDefinitionId) {
+      if (version.scorerDefinitionId === entityId) {
         idsToDelete.push(id);
       }
     }

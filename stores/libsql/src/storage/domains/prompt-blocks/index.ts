@@ -60,7 +60,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
   // Prompt Block CRUD
   // ==========================================================================
 
-  async getPromptBlockById({ id }: { id: string }): Promise<StoragePromptBlockType | null> {
+  async getById(id: string): Promise<StoragePromptBlockType | null> {
     try {
       const result = await this.#client.execute({
         sql: `SELECT ${buildSelectColumns(TABLE_PROMPT_BLOCKS)} FROM "${TABLE_PROMPT_BLOCKS}" WHERE id = ?`,
@@ -80,11 +80,8 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
     }
   }
 
-  async createPromptBlock({
-    promptBlock,
-  }: {
-    promptBlock: StorageCreatePromptBlockInput;
-  }): Promise<StoragePromptBlockType> {
+  async create(input: { promptBlock: StorageCreatePromptBlockInput }): Promise<StoragePromptBlockType> {
+    const { promptBlock } = input;
     try {
       const now = new Date();
 
@@ -135,9 +132,10 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
     }
   }
 
-  async updatePromptBlock({ id, ...updates }: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+  async update(input: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+    const { id, ...updates } = input;
     try {
-      const existing = await this.getPromptBlockById({ id });
+      const existing = await this.getById(id);
       if (!existing) {
         throw new Error(`Prompt block with id ${id} not found`);
       }
@@ -206,7 +204,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       }
 
       // Fetch and return updated block
-      const updated = await this.getPromptBlockById({ id });
+      const updated = await this.getById(id);
       if (!updated) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND_AFTER_UPDATE'),
@@ -230,9 +228,9 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
     }
   }
 
-  async deletePromptBlock({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
-      await this.deleteVersionsByBlockId(id);
+      await this.deleteVersionsByParentId(id);
       await this.#client.execute({
         sql: `DELETE FROM "${TABLE_PROMPT_BLOCKS}" WHERE "id" = ?`,
         args: [id],
@@ -249,7 +247,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
     }
   }
 
-  async listPromptBlocks(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
+  async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
     try {
       const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -499,11 +497,11 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
     }
   }
 
-  async deleteVersionsByBlockId(blockId: string): Promise<void> {
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
       await this.#client.execute({
         sql: `DELETE FROM "${TABLE_PROMPT_BLOCK_VERSIONS}" WHERE "blockId" = ?`,
-        args: [blockId],
+        args: [entityId],
       });
     } catch (error) {
       throw new MastraError(

@@ -46,7 +46,7 @@ export const LIST_STORED_SCORERS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Scorer definitions storage domain is not available' });
       }
 
-      const result = await scorerStore.listScorerDefinitionsResolved({
+      const result = await scorerStore.listResolved({
         page,
         perPage,
         orderBy,
@@ -88,7 +88,7 @@ export const GET_STORED_SCORER_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Scorer definitions storage domain is not available' });
       }
 
-      const scorer = await scorerStore.getScorerDefinitionByIdResolved({ id: storedScorerId });
+      const scorer = await scorerStore.getByIdResolved(storedScorerId);
 
       if (!scorer) {
         throw new HTTPException(404, { message: `Stored scorer definition with id ${storedScorerId} not found` });
@@ -150,12 +150,12 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
       }
 
       // Check if scorer definition with this ID already exists
-      const existing = await scorerStore.getScorerDefinitionById({ id });
+      const existing = await scorerStore.getById(id);
       if (existing) {
         throw new HTTPException(409, { message: `Scorer definition with id ${id} already exists` });
       }
 
-      await scorerStore.createScorerDefinition({
+      await scorerStore.create({
         scorerDefinition: {
           id,
           authorId,
@@ -172,7 +172,7 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
       });
 
       // Return the resolved scorer definition (thin record + version config)
-      const resolved = await scorerStore.getScorerDefinitionByIdResolved({ id });
+      const resolved = await scorerStore.getByIdResolved(id);
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created scorer definition' });
       }
@@ -227,14 +227,14 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
       }
 
       // Check if scorer definition exists
-      const existing = await scorerStore.getScorerDefinitionById({ id: storedScorerId });
+      const existing = await scorerStore.getById(storedScorerId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored scorer definition with id ${storedScorerId} not found` });
       }
 
       // Update the scorer definition with both metadata-level and config-level fields
       // The storage layer handles separating these into record updates vs new-version creation
-      await scorerStore.updateScorerDefinition({
+      await scorerStore.update({
         id: storedScorerId,
         authorId,
         metadata,
@@ -249,7 +249,7 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
       });
 
       // Return the resolved scorer definition with the updated config
-      const resolved = await scorerStore.getScorerDefinitionByIdResolved({ id: storedScorerId });
+      const resolved = await scorerStore.getByIdResolved(storedScorerId);
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve updated scorer definition' });
       }
@@ -288,12 +288,12 @@ export const DELETE_STORED_SCORER_ROUTE = createRoute({
       }
 
       // Check if scorer definition exists
-      const existing = await scorerStore.getScorerDefinitionById({ id: storedScorerId });
+      const existing = await scorerStore.getById(storedScorerId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored scorer definition with id ${storedScorerId} not found` });
       }
 
-      await scorerStore.deleteScorerDefinition({ id: storedScorerId });
+      await scorerStore.delete(storedScorerId);
 
       return { success: true, message: `Scorer definition ${storedScorerId} deleted successfully` };
     } catch (error) {

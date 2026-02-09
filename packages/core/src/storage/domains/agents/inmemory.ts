@@ -37,14 +37,15 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   // Agent CRUD Methods
   // ==========================================================================
 
-  async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
-    this.logger.debug(`InMemoryAgentsStorage: getAgentById called for ${id}`);
+  async getById(id: string): Promise<StorageAgentType | null> {
+    this.logger.debug(`InMemoryAgentsStorage: getById called for ${id}`);
     const agent = this.db.agents.get(id);
     return agent ? this.deepCopyAgent(agent) : null;
   }
 
-  async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
-    this.logger.debug(`InMemoryAgentsStorage: createAgent called for ${agent.id}`);
+  async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    const { agent } = input;
+    this.logger.debug(`InMemoryAgentsStorage: create called for ${agent.id}`);
 
     if (this.db.agents.has(agent.id)) {
       throw new Error(`Agent with id ${agent.id} already exists`);
@@ -81,8 +82,9 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     return this.deepCopyAgent(newAgent);
   }
 
-  async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
-    this.logger.debug(`InMemoryAgentsStorage: updateAgent called for ${id}`);
+  async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
+    const { id, ...updates } = input;
+    this.logger.debug(`InMemoryAgentsStorage: update called for ${id}`);
 
     const existingAgent = this.db.agents.get(id);
     if (!existingAgent) {
@@ -183,19 +185,19 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     return this.deepCopyAgent(updatedAgent);
   }
 
-  async deleteAgent({ id }: { id: string }): Promise<void> {
-    this.logger.debug(`InMemoryAgentsStorage: deleteAgent called for ${id}`);
+  async delete(id: string): Promise<void> {
+    this.logger.debug(`InMemoryAgentsStorage: delete called for ${id}`);
     // Idempotent delete - no-op if agent doesn't exist
     this.db.agents.delete(id);
     // Also delete all versions for this agent
-    await this.deleteVersionsByAgentId(id);
+    await this.deleteVersionsByParentId(id);
   }
 
-  async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+  async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
-    this.logger.debug(`InMemoryAgentsStorage: listAgents called`);
+    this.logger.debug(`InMemoryAgentsStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -350,12 +352,12 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     this.db.agentVersions.delete(id);
   }
 
-  async deleteVersionsByAgentId(agentId: string): Promise<void> {
-    this.logger.debug(`InMemoryAgentsStorage: deleteVersionsByAgentId called for agent ${agentId}`);
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
+    this.logger.debug(`InMemoryAgentsStorage: deleteVersionsByParentId called for agent ${entityId}`);
 
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.agentVersions.entries()) {
-      if (version.agentId === agentId) {
+      if (version.agentId === entityId) {
         idsToDelete.push(id);
       }
     }

@@ -539,7 +539,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should store and retrieve a simple agent', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'test-agent',
           name: 'Test Agent',
@@ -558,7 +558,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should handle agent with tools', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'tool-agent',
           name: 'Tool Agent',
@@ -582,7 +582,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should handle agent with workflows', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'workflow-agent',
           name: 'Workflow Agent',
@@ -606,7 +606,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should handle agent with nested agents', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'parent-agent',
           name: 'Parent Agent',
@@ -630,7 +630,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should handle agent with scorers', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      const createdAgent = await agentsStore?.createAgent({
+      const createdAgent = await agentsStore?.create({
         agent: {
           id: 'scored-agent',
           name: 'Scored Agent',
@@ -644,7 +644,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Activate the version
       if (createdAgent && 'versionId' in createdAgent) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'scored-agent',
           activeVersionId: createdAgent.versionId as string,
         });
@@ -671,7 +671,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should handle agent with processors', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      const created = await agentsStore?.createAgent({
+      const created = await agentsStore?.create({
         agent: {
           id: 'processor-agent',
           name: 'Processor Agent',
@@ -684,7 +684,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Activate version
       if (created && 'versionId' in created) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'processor-agent',
           activeVersionId: created.versionId as string,
         });
@@ -711,7 +711,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should store and retrieve a complex agent with all primitives', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      const created = await agentsStore?.createAgent({
+      const created = await agentsStore?.create({
         agent: {
           id: 'all-primitives-agent',
           name: 'All Primitives Agent',
@@ -739,7 +739,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Activate version
       if (created && 'versionId' in created) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'all-primitives-agent',
           activeVersionId: created.versionId as string,
         });
@@ -774,7 +774,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const agentsStore = await storage.getStore('agents');
 
       // Create an agent with weather tool - use weather-mock model which includes tool calls
-      const created = await agentsStore?.createAgent({
+      const created = await agentsStore?.create({
         agent: {
           id: 'executable-agent',
           name: 'Executable Agent',
@@ -786,7 +786,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Activate the version
       if (created && 'versionId' in created) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'executable-agent',
           activeVersionId: created.versionId as string,
         });
@@ -825,7 +825,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const agentsStore = await storage.getStore('agents');
 
       // Create initial version
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'versioned-agent',
           name: 'Version 1',
@@ -835,7 +835,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       // Update to create new version
-      await agentsStore?.updateAgent({
+      await agentsStore?.update({
         id: 'versioned-agent',
         name: 'Version 2',
         instructions: 'You are version 2',
@@ -846,7 +846,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const versionsAfterUpdate = await agentsStore?.listVersions({ agentId: 'versioned-agent' });
       const latestVersion = versionsAfterUpdate?.versions[0]; // Versions are ordered by createdAt DESC
       if (latestVersion) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'versioned-agent',
           activeVersionId: latestVersion.id,
         });
@@ -874,7 +874,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const agentsStore = await storage.getStore('agents');
 
       // Create initial version
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'numbered-version-agent',
           name: 'Version 1',
@@ -884,7 +884,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       // Update to create new version
-      await agentsStore?.updateAgent({
+      await agentsStore?.update({
         id: 'numbered-version-agent',
         name: 'Version 2',
         instructions: 'You are version 2',
@@ -913,7 +913,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Create multiple agents
       for (let i = 1; i <= 5; i++) {
-        const createdAgent = await agentsStore?.createAgent({
+        const createdAgent = await agentsStore?.create({
           agent: {
             id: `list-agent-${i}`,
             name: `List Agent ${i}`,
@@ -925,7 +925,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         // Get the first version that was created and activate it
         const versions = await agentsStore?.listVersions({ agentId: `list-agent-${i}` });
         if (versions?.versions[0]) {
-          await agentsStore?.updateAgent({
+          await agentsStore?.update({
             id: `list-agent-${i}`,
             activeVersionId: versions.versions[0].id,
           });
@@ -966,7 +966,7 @@ describe('MastraEditor with LibSQL Integration', () => {
           'All raw agents:',
           rawAgents.agents.map(a => ({
             id: a.id,
-            model: a.model,
+            status: a.status,
             activeVersionId: a.activeVersionId,
           })),
         );
@@ -977,7 +977,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should return raw agent data when requested', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      const createdAgent = await agentsStore?.createAgent({
+      const createdAgent = await agentsStore?.create({
         agent: {
           id: 'raw-list-agent',
           name: 'Raw List Agent',
@@ -990,7 +990,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Activate the first version
       const versions = await agentsStore?.listVersions({ agentId: 'raw-list-agent' });
       if (versions?.versions[0]) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'raw-list-agent',
           activeVersionId: versions.versions[0].id,
         });
@@ -1012,7 +1012,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should cache and clear cached agents', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'cached-agent',
           name: 'Cached Agent',
@@ -1026,7 +1026,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(agent1?.name).toBe('Cached Agent');
 
       // Update the agent in storage
-      await agentsStore?.updateAgent({
+      await agentsStore?.update({
         id: 'cached-agent',
         name: 'Updated Cached Agent',
       });
@@ -1035,7 +1035,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const versionsAfterUpdate = await agentsStore?.listVersions({ agentId: 'cached-agent' });
       const latestVersion = versionsAfterUpdate?.versions[0]; // Versions are ordered by createdAt DESC
       if (latestVersion) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'cached-agent',
           activeVersionId: latestVersion.id,
         });
@@ -1057,7 +1057,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const agentsStore = await storage.getStore('agents');
 
       // Create multiple agents
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'cache-test-1',
           name: 'Cache Test 1',
@@ -1066,7 +1066,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'cache-test-2',
           name: 'Cache Test 2',
@@ -1083,7 +1083,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       await editor.agent.clearCache();
 
       // Verify cache is cleared by updating and retrieving
-      await agentsStore?.updateAgent({
+      await agentsStore?.update({
         id: 'cache-test-1',
         name: 'Updated 1',
       });
@@ -1091,13 +1091,13 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Activate the new version
       const versions1 = await agentsStore?.listVersions({ agentId: 'cache-test-1' });
       if (versions1?.versions[0]) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'cache-test-1',
           activeVersionId: versions1.versions[0].id,
         });
       }
 
-      await agentsStore?.updateAgent({
+      await agentsStore?.update({
         id: 'cache-test-2',
         name: 'Updated 2',
       });
@@ -1105,7 +1105,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Activate the new version
       const versions2 = await agentsStore?.listVersions({ agentId: 'cache-test-2' });
       if (versions2?.versions[0]) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'cache-test-2',
           activeVersionId: versions2.versions[0].id,
         });
@@ -1123,7 +1123,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should handle missing tools gracefully', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'missing-tools-agent',
           name: 'Missing Tools Agent',
@@ -1143,7 +1143,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should handle missing workflows gracefully', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'missing-workflows-agent',
           name: 'Missing Workflows Agent',
@@ -1161,7 +1161,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should handle missing nested agents gracefully', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'missing-agents-agent',
           name: 'Missing Agents Agent',
@@ -1179,7 +1179,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should handle invalid model configuration', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'invalid-model-agent',
           name: 'Invalid Model Agent',
@@ -1196,7 +1196,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should register stored agents with Mastra', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      const createdAgent = await agentsStore?.createAgent({
+      const createdAgent = await agentsStore?.create({
         agent: {
           id: 'registered-agent',
           name: 'Registered Agent',
@@ -1208,7 +1208,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Activate the first version
       const versions = await agentsStore?.listVersions({ agentId: 'registered-agent' });
       if (versions?.versions[0]) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'registered-agent',
           activeVersionId: versions.versions[0].id,
         });
@@ -1230,7 +1230,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should store and use defaultOptions in agent execution', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      const created = await agentsStore?.createAgent({
+      const created = await agentsStore?.create({
         agent: {
           id: 'default-options-agent',
           name: 'Default Options Agent',
@@ -1261,7 +1261,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Activate version
       if (created && 'versionId' in created) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'default-options-agent',
           activeVersionId: created.versionId as string,
         });
@@ -1310,7 +1310,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const agentsStore = await storage.getStore('agents');
 
       // Create an agent with static memory configuration
-      const created = await agentsStore?.createAgent({
+      const created = await agentsStore?.create({
         agent: {
           id: 'memory-agent',
           name: 'Memory Agent',
@@ -1332,7 +1332,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Activate version
       if (created && 'versionId' in created) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'memory-agent',
           activeVersionId: created.versionId as string,
         });
@@ -1434,7 +1434,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should handle streaming with stored agents', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'streaming-agent',
           name: 'Streaming Agent',
@@ -1447,7 +1447,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Activate version
       const versions = await agentsStore?.listVersions({ agentId: 'streaming-agent' });
       if (versions?.versions[0]) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'streaming-agent',
           activeVersionId: versions.versions[0].id,
         });
@@ -1467,7 +1467,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should handle multiple tool calls in a single step', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'multi-tool-agent',
           name: 'Multi Tool Agent',
@@ -1483,7 +1483,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Activate version
       const versions = await agentsStore?.listVersions({ agentId: 'multi-tool-agent' });
       if (versions?.versions[0]) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'multi-tool-agent',
           activeVersionId: versions.versions[0].id,
         });
@@ -1502,7 +1502,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     it('should work with agents that have metadata', async () => {
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'metadata-agent',
           name: 'Metadata Agent',
@@ -1536,7 +1536,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const agentsStore = await storage.getStore('agents');
 
       // Create an agent with vector memory
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'vector-memory-agent',
           name: 'Vector Memory Agent',
@@ -1612,7 +1612,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Create a stored agent that uses prompt block instructions
       const agentsStore = await storage.getStore('agents');
-      const created = await agentsStore?.createAgent({
+      const created = await agentsStore?.create({
         agent: {
           id: 'prompt-block-agent',
           name: 'Prompt Block Agent',
@@ -1626,7 +1626,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       if (created && 'versionId' in created) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'prompt-block-agent',
           activeVersionId: created.versionId as string,
         });
@@ -1739,7 +1739,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Create stored agent with prompt block instructions
       const agentsStore = await storage.getStore('agents');
-      const created = await agentsStore?.createAgent({
+      const created = await agentsStore?.create({
         agent: {
           id: 'dynamic-agent',
           name: 'Dynamic Agent',
@@ -1753,7 +1753,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       if (created && 'versionId' in created) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'dynamic-agent',
           activeVersionId: created.versionId as string,
         });
@@ -1803,7 +1803,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const agentsStore = await storage.getStore('agents');
 
       // Agent with plain string instructions — backward compatible
-      const created = await agentsStore?.createAgent({
+      const created = await agentsStore?.create({
         agent: {
           id: 'string-instructions-agent',
           name: 'String Instructions Agent',
@@ -1813,7 +1813,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       if (created && 'versionId' in created) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'string-instructions-agent',
           activeVersionId: created.versionId as string,
         });
@@ -2011,7 +2011,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Create an agent that references this block
       const agentsStore = await storage.getStore('agents');
-      const created = await agentsStore?.createAgent({
+      const created = await agentsStore?.create({
         agent: {
           id: 'updatable-agent',
           name: 'Updatable Agent',
@@ -2024,7 +2024,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       if (created && 'versionId' in created) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'updatable-agent',
           activeVersionId: created.versionId as string,
         });
@@ -2073,7 +2073,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Create an agent referencing both blocks
       const agentsStore = await storage.getStore('agents');
-      const created = await agentsStore?.createAgent({
+      const created = await agentsStore?.create({
         agent: {
           id: 'deletion-test-agent',
           name: 'Deletion Test Agent',
@@ -2086,7 +2086,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       if (created && 'versionId' in created) {
-        await agentsStore?.updateAgent({
+        await agentsStore?.update({
           id: 'deletion-test-agent',
           activeVersionId: created.versionId as string,
         });

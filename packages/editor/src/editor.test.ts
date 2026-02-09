@@ -39,7 +39,7 @@ describe('agent.clearCache', () => {
   it('should clear agent from Editor cache and Mastra registry when agentId is provided', async () => {
     const storage = new InMemoryStore();
     const agentsStore = await storage.getStore('agents');
-    await agentsStore?.createAgent({
+    await agentsStore?.create({
       agent: {
         id: 'cache-test-agent',
         name: 'Cache Test Agent',
@@ -84,7 +84,7 @@ describe('agent.clearCache', () => {
   it('should clear all agents from Editor cache but not Mastra registry when no agentId', async () => {
     const storage = new InMemoryStore();
     const agentsStore = await storage.getStore('agents');
-    await agentsStore?.createAgent({
+    await agentsStore?.create({
       agent: {
         id: 'cache-test-agent-1',
         name: 'Cache Test Agent 1',
@@ -145,7 +145,7 @@ describe('agent.clearCache', () => {
     const agentsStore = await storage.getStore('agents');
 
     // Create agent
-    await agentsStore?.createAgent({
+    await agentsStore?.create({
       agent: {
         id: 'reloadable-agent',
         name: 'Test Agent',
@@ -208,7 +208,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should return an Agent instance by default', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
 
       const editor = new MastraEditor();
       const mastra = new Mastra({
@@ -227,7 +227,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should expose raw config via toRawConfig()', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
 
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
@@ -246,7 +246,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should resolve tools from registered tools', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
 
       const editor = new MastraEditor();
       const mastra = new Mastra({
@@ -264,7 +264,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should warn when referenced tool is not registered', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
 
       const warnSpy = vi.fn();
       const editor = new MastraEditor({
@@ -293,7 +293,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should throw error when model config is invalid', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'invalid-model-agent',
           name: 'Invalid Model Agent',
@@ -311,7 +311,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should return specific version when versionId is provided', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
 
       // Get the version that was created
       const versions = await agentsStore?.listVersions({ agentId: 'stored-agent-1' });
@@ -334,7 +334,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should return specific version when versionNumber is provided', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
 
       const editor = new MastraEditor();
       const mastra = new Mastra({
@@ -353,7 +353,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should expose raw config via toRawConfig() when fetching a specific version', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
 
       // Get the version that was created
       const versions = await agentsStore?.listVersions({ agentId: 'stored-agent-1' });
@@ -396,8 +396,8 @@ describe('Stored Agents via MastraEditor', () => {
     it('should return raw agent configs', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
-      await agentsStore?.createAgent({ agent: sampleStoredAgent2 });
+      await agentsStore?.create({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent2 });
 
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
@@ -416,7 +416,7 @@ describe('Stored Agents via MastraEditor', () => {
 
       // Create 25 agents
       for (let i = 0; i < 25; i++) {
-        await agentsStore?.createAgent({
+        await agentsStore?.create({
           agent: {
             ...sampleStoredAgent,
             id: `agent-${i}`,
@@ -442,7 +442,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should create agent with correct model string format', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
 
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
@@ -456,7 +456,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should resolve workflows from stored config', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           ...sampleStoredAgent,
           id: 'agent-with-workflow',
@@ -488,7 +488,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should resolve sub-agents from stored config', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           ...sampleStoredAgent,
           id: 'agent-with-sub-agent',
@@ -520,7 +520,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should pass defaultOptions to created agent', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
 
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
@@ -534,7 +534,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should resolve memory config when editor is available', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           ...sampleStoredAgent,
           id: 'agent-with-memory',
@@ -559,7 +559,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should return Agent from getById with generate method', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
@@ -574,7 +574,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should expose raw config via toRawConfig() with storage fields', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
@@ -591,7 +591,7 @@ describe('Stored Agents via MastraEditor', () => {
     it('should return raw agent configs from list()', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
-      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.create({ agent: sampleStoredAgent });
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
@@ -653,7 +653,7 @@ describe('Stored Agents via MastraEditor', () => {
         metadata: { version: '2.0', feature: 'full-test' },
       };
 
-      await agentsStore?.createAgent({ agent: fullStoredAgent });
+      await agentsStore?.create({ agent: fullStoredAgent });
 
       const editor = new MastraEditor();
       const mastra = new Mastra({
@@ -694,7 +694,7 @@ describe('Stored Agents via MastraEditor', () => {
         },
       };
 
-      await agentsStore?.createAgent({ agent: storedAgentWithScorers });
+      await agentsStore?.create({ agent: storedAgentWithScorers });
 
       const editor = new MastraEditor();
       const mastra = new Mastra({
@@ -729,7 +729,7 @@ describe('Stored Agents via MastraEditor', () => {
         },
       };
 
-      await agentsStore?.createAgent({ agent: storedAgent });
+      await agentsStore?.create({ agent: storedAgent });
 
       const editor = new MastraEditor();
       const mastra = new Mastra({
@@ -763,7 +763,7 @@ describe('Stored Agents via MastraEditor', () => {
         scorers: { 'missing-scorer': {} },
       };
 
-      await agentsStore?.createAgent({ agent: storedAgent });
+      await agentsStore?.create({ agent: storedAgent });
 
       const warnSpy = vi.fn();
       const editor = new MastraEditor({

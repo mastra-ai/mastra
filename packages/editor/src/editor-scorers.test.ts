@@ -89,7 +89,7 @@ class ScorerMockGateway extends MastraModelGateway {
     return {
       mock: {
         name: 'Mock Provider',
-        models: [...this.models.keys()],
+        models: Array.from(this.models.keys()),
         apiKeyEnvVar: 'MOCK_API_KEY',
         gateway: 'models.dev',
       },
@@ -516,7 +516,7 @@ describe('resolveStoredScorers with DB fallback', () => {
     });
 
     const agentsStore = await storage.getStore('agents');
-    await agentsStore?.createAgent({
+    await agentsStore?.create({
       agent: {
         id: 'agent-with-db-scorer',
         name: 'Agent With DB Scorer',
@@ -558,7 +558,7 @@ describe('resolveStoredScorers with DB fallback', () => {
     });
 
     const agentsStore = await storage.getStore('agents');
-    await agentsStore?.createAgent({
+    await agentsStore?.create({
       agent: {
         id: 'agent-prefers-db',
         name: 'Agent Prefers DB',
@@ -599,7 +599,7 @@ describe('resolveStoredScorers with DB fallback', () => {
     await storage.init();
 
     const agentsStore = await storage.getStore('agents');
-    await agentsStore?.createAgent({
+    await agentsStore?.create({
       agent: {
         id: 'agent-with-ghost-scorer',
         name: 'Agent With Ghost Scorer',
@@ -640,7 +640,7 @@ describe('resolveStoredScorers with DB fallback', () => {
     });
 
     const agentsStore = await storage.getStore('agents');
-    await agentsStore?.createAgent({
+    await agentsStore?.create({
       agent: {
         id: 'agent-mixed-scorers',
         name: 'Agent Mixed Scorers',
@@ -921,7 +921,7 @@ describe('End-to-end scorer storage and execution flow', () => {
 
     // 2. Create a stored agent that references the scorer
     const agentsStore = await storage.getStore('agents');
-    await agentsStore?.createAgent({
+    await agentsStore?.create({
       agent: {
         id: 'agent-with-updatable-scorer',
         name: 'Agent With Updatable Scorer',

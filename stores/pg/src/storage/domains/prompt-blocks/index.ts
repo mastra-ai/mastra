@@ -101,7 +101,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
   // Prompt Block CRUD Methods
   // ==========================================================================
 
-  async getPromptBlockById({ id }: { id: string }): Promise<StoragePromptBlockType | null> {
+  async getById(id: string): Promise<StoragePromptBlockType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
       const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
@@ -124,11 +124,8 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     }
   }
 
-  async createPromptBlock({
-    promptBlock,
-  }: {
-    promptBlock: StorageCreatePromptBlockInput;
-  }): Promise<StoragePromptBlockType> {
+  async create(input: { promptBlock: StorageCreatePromptBlockInput }): Promise<StoragePromptBlockType> {
+    const { promptBlock } = input;
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
@@ -198,11 +195,12 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     }
   }
 
-  async updatePromptBlock({ id, ...updates }: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+  async update(input: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+    const { id, ...updates } = input;
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
 
-      const existingBlock = await this.getPromptBlockById({ id });
+      const existingBlock = await this.getById(id);
       if (!existingBlock) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND'),
@@ -310,7 +308,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         );
       }
 
-      const updatedBlock = await this.getPromptBlockById({ id });
+      const updatedBlock = await this.getById(id);
       if (!updatedBlock) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND_AFTER_UPDATE'),
@@ -335,10 +333,10 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     }
   }
 
-  async deletePromptBlock({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
-      await this.deleteVersionsByBlockId(id);
+      await this.deleteVersionsByParentId(id);
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
       throw new MastraError(
@@ -353,7 +351,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     }
   }
 
-  async listPromptBlocks(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
+  async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -660,20 +658,20 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     }
   }
 
-  async deleteVersionsByBlockId(blockId: string): Promise<void> {
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
       const tableName = getTableName({
         indexName: TABLE_PROMPT_BLOCK_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "blockId" = $1`, [blockId]);
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "blockId" = $1`, [entityId]);
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_PROMPT_BLOCK_VERSIONS_BY_BLOCK_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { blockId },
+          details: { blockId: entityId },
         },
         error,
       );

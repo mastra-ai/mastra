@@ -55,11 +55,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     if (!store) throw new Error('Agents storage domain is not available');
 
     return {
-      create: input => store.createAgent({ agent: input }),
+      create: input => store.create({ agent: input }),
       getByIdResolved: async (id, options) => {
         if (options?.versionId || options?.versionNumber) {
           // Fetch the agent metadata first
-          const agent = await store.getAgentById({ id });
+          const agent = await store.getById(id);
           if (!agent) return null;
 
           // Fetch the specific version
@@ -72,12 +72,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           const { id: _vId, agentId: _aId, versionNumber: _vn, changedFields: _cf, changeMessage: _cm, createdAt: _ca, ...snapshotConfig } = version;
           return { ...agent, ...snapshotConfig } as StorageResolvedAgentType;
         }
-        return store.getAgentByIdResolved({ id });
+        return store.getByIdResolved(id);
       },
-      update: input => store.updateAgent(input),
-      delete: id => store.deleteAgent({ id }),
-      list: args => store.listAgents(args),
-      listResolved: args => store.listAgentsResolved(args),
+      update: input => store.update(input),
+      delete: id => store.delete(id),
+      list: args => store.list(args),
+      listResolved: args => store.listResolved(args),
     };
   }
 
@@ -88,17 +88,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return this.createAgentFromStoredConfig(storedAgent);
   }
 
-  /**
-   * Override clearCache to also remove the agent from the Mastra registry.
-   */
-  override clearCache(agentId?: string): void {
-    super.clearCache(agentId);
-
-    if (!this.mastra) return;
-
-    if (agentId) {
-      this.mastra.removeAgent(agentId);
-    }
+  protected override onCacheEvict(id: string): void {
+    this.mastra?.removeAgent(id);
   }
 
   // ============================================================================
@@ -303,7 +294,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       // DB takes priority: try stored scorer definitions first
       if (scorerStore) {
         try {
-          const storedDef = await scorerStore.getScorerDefinitionByIdResolved({ id: scorerKey });
+          const storedDef = await scorerStore.getByIdResolved(scorerKey);
           if (storedDef) {
             const scorer = this.editor.scorer.resolve(storedDef);
             if (scorer) {

@@ -122,7 +122,7 @@ export class MongoDBScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   // Scorer Definition CRUD
   // ==========================================================================
 
-  async getScorerDefinitionById({ id }: { id: string }): Promise<StorageScorerDefinitionType | null> {
+  async getById(id: string): Promise<StorageScorerDefinitionType | null> {
     try {
       const collection = await this.getCollection(TABLE_SCORER_DEFINITIONS);
       const result = await collection.findOne<any>({ id });
@@ -145,11 +145,8 @@ export class MongoDBScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     }
   }
 
-  async createScorerDefinition({
-    scorerDefinition,
-  }: {
-    scorerDefinition: StorageCreateScorerDefinitionInput;
-  }): Promise<StorageScorerDefinitionType> {
+  async create(input: { scorerDefinition: StorageCreateScorerDefinitionInput }): Promise<StorageScorerDefinitionType> {
+    const { scorerDefinition } = input;
     try {
       const collection = await this.getCollection(TABLE_SCORER_DEFINITIONS);
 
@@ -216,10 +213,8 @@ export class MongoDBScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     }
   }
 
-  async updateScorerDefinition({
-    id,
-    ...updates
-  }: StorageUpdateScorerDefinitionInput): Promise<StorageScorerDefinitionType> {
+  async update(input: StorageUpdateScorerDefinitionInput): Promise<StorageScorerDefinitionType> {
+    const { id, ...updates } = input;
     try {
       const collection = await this.getCollection(TABLE_SCORER_DEFINITIONS);
 
@@ -330,10 +325,10 @@ export class MongoDBScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     }
   }
 
-  async deleteScorerDefinition({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       // Delete all versions first
-      await this.deleteVersionsByScorerDefinitionId(id);
+      await this.deleteVersionsByParentId(id);
 
       // Then delete the scorer definition
       const collection = await this.getCollection(TABLE_SCORER_DEFINITIONS);
@@ -351,7 +346,7 @@ export class MongoDBScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     }
   }
 
-  async listScorerDefinitions(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
+  async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
     try {
       const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -630,7 +625,7 @@ export class MongoDBScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     }
   }
 
-  async deleteVersionsByScorerDefinitionId(scorerDefinitionId: string): Promise<void> {
+  async deleteVersionsByParentId(scorerDefinitionId: string): Promise<void> {
     try {
       const collection = await this.getCollection(TABLE_SCORER_DEFINITION_VERSIONS);
       await collection.deleteMany({ scorerDefinitionId });

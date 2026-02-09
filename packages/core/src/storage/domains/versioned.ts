@@ -157,17 +157,17 @@ export abstract class VersionedStorageDomain<
   protected abstract readonly versionMetadataFields: string[];
 
   // ==========================================================================
-  // Entity CRUD (abstract — implemented by each domain subclass)
+  // Entity CRUD (abstract — implemented by concrete store classes)
   // ==========================================================================
 
-  abstract getEntityById(id: string): Promise<TEntity | null>;
-  abstract createEntity(input: TCreateInput): Promise<TEntity>;
-  abstract updateEntity(input: TUpdateInput): Promise<TEntity>;
-  abstract deleteEntity(id: string): Promise<void>;
-  abstract listEntities(args?: TListInput): Promise<TListOutput>;
+  abstract getById(id: string): Promise<TEntity | null>;
+  abstract create(input: TCreateInput): Promise<TEntity>;
+  abstract update(input: TUpdateInput): Promise<TEntity>;
+  abstract delete(id: string): Promise<void>;
+  abstract list(args?: TListInput): Promise<TListOutput>;
 
   // ==========================================================================
-  // Version methods (abstract — implemented by store adapters)
+  // Version methods (abstract — implemented by concrete store classes)
   // ==========================================================================
 
   abstract createVersion(input: TCreateVersion): Promise<TVersion>;
@@ -176,7 +176,7 @@ export abstract class VersionedStorageDomain<
   abstract getLatestVersion(entityId: string): Promise<TVersion | null>;
   abstract listVersions(input: TListVersionsInput): Promise<TListVersionsOutput>;
   abstract deleteVersion(id: string): Promise<void>;
-  abstract deleteVersionsByEntityId(entityId: string): Promise<void>;
+  abstract deleteVersionsByParentId(entityId: string): Promise<void>;
   abstract countVersions(entityId: string): Promise<number>;
 
   // ==========================================================================
@@ -202,8 +202,8 @@ export abstract class VersionedStorageDomain<
   /**
    * Resolves an entity by merging its thin record with the active (or latest) version config.
    */
-  async getEntityByIdResolved(id: string): Promise<TResolved | null> {
-    const entity = await this.getEntityById(id);
+  async getByIdResolved(id: string): Promise<TResolved | null> {
+    const entity = await this.getById(id);
 
     if (!entity) {
       return null;
@@ -215,8 +215,8 @@ export abstract class VersionedStorageDomain<
   /**
    * Lists entities with version resolution.
    */
-  async listEntitiesResolved(args?: TListInput): Promise<TListResolvedOutput> {
-    const result = await this.listEntities(args);
+  async listResolved(args?: TListInput): Promise<TListResolvedOutput> {
+    const result = await this.list(args);
 
     const entities = (result as Record<string, unknown>)[this.listKey] as TEntity[];
     const resolved = await Promise.all(entities.map(entity => this.resolveEntity(entity)));

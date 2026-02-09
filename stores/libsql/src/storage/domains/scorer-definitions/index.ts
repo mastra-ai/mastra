@@ -74,7 +74,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
   // Scorer Definition CRUD
   // ==========================================================================
 
-  async getScorerDefinitionById({ id }: { id: string }): Promise<StorageScorerDefinitionType | null> {
+  async getById(id: string): Promise<StorageScorerDefinitionType | null> {
     try {
       const result = await this.#client.execute({
         sql: `SELECT ${buildSelectColumns(TABLE_SCORER_DEFINITIONS)} FROM "${TABLE_SCORER_DEFINITIONS}" WHERE id = ?`,
@@ -94,11 +94,8 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
     }
   }
 
-  async createScorerDefinition({
-    scorerDefinition,
-  }: {
-    scorerDefinition: StorageCreateScorerDefinitionInput;
-  }): Promise<StorageScorerDefinitionType> {
+  async create(input: { scorerDefinition: StorageCreateScorerDefinitionInput }): Promise<StorageScorerDefinitionType> {
+    const { scorerDefinition } = input;
     try {
       const now = new Date();
 
@@ -149,12 +146,10 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
     }
   }
 
-  async updateScorerDefinition({
-    id,
-    ...updates
-  }: StorageUpdateScorerDefinitionInput): Promise<StorageScorerDefinitionType> {
+  async update(input: StorageUpdateScorerDefinitionInput): Promise<StorageScorerDefinitionType> {
+    const { id, ...updates } = input;
     try {
-      const existing = await this.getScorerDefinitionById({ id });
+      const existing = await this.getById(id);
       if (!existing) {
         throw new Error(`Scorer definition with id ${id} not found`);
       }
@@ -223,7 +218,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
       }
 
       // Fetch and return updated scorer definition
-      const updated = await this.getScorerDefinitionById({ id });
+      const updated = await this.getById(id);
       if (!updated) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_SCORER_DEFINITION', 'NOT_FOUND_AFTER_UPDATE'),
@@ -247,9 +242,9 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
     }
   }
 
-  async deleteScorerDefinition({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
-      await this.deleteVersionsByScorerDefinitionId(id);
+      await this.deleteVersionsByParentId(id);
       await this.#client.execute({
         sql: `DELETE FROM "${TABLE_SCORER_DEFINITIONS}" WHERE "id" = ?`,
         args: [id],
@@ -266,7 +261,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
     }
   }
 
-  async listScorerDefinitions(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
+  async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
     try {
       const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -520,11 +515,11 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
     }
   }
 
-  async deleteVersionsByScorerDefinitionId(scorerDefinitionId: string): Promise<void> {
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
       await this.#client.execute({
         sql: `DELETE FROM "${TABLE_SCORER_DEFINITION_VERSIONS}" WHERE "scorerDefinitionId" = ?`,
-        args: [scorerDefinitionId],
+        args: [entityId],
       });
     } catch (error) {
       throw new MastraError(

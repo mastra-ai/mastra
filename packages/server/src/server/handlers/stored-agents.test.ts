@@ -51,12 +51,12 @@ interface MockStoredAgent {
 
 // Define the mock agents store interface
 interface MockAgentsStore {
-  createAgent: ReturnType<typeof vi.fn>;
-  getAgentById: ReturnType<typeof vi.fn>;
-  getAgentByIdResolved: ReturnType<typeof vi.fn>;
-  listAgentsResolved: ReturnType<typeof vi.fn>;
-  updateAgent: ReturnType<typeof vi.fn>;
-  deleteAgent: ReturnType<typeof vi.fn>;
+  create: ReturnType<typeof vi.fn>;
+  getById: ReturnType<typeof vi.fn>;
+  getByIdResolved: ReturnType<typeof vi.fn>;
+  listResolved: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
   getLatestVersion: ReturnType<typeof vi.fn>;
   getVersion: ReturnType<typeof vi.fn>;
   createVersion: ReturnType<typeof vi.fn>;
@@ -65,20 +65,20 @@ interface MockAgentsStore {
 
 function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Map()): MockAgentsStore {
   return {
-    createAgent: vi.fn().mockImplementation(async ({ agent }: { agent: MockStoredAgent }) => {
+    create: vi.fn().mockImplementation(async ({ agent }: { agent: MockStoredAgent }) => {
       if (agentsData.has(agent.id)) {
         throw new Error('Agent already exists');
       }
       agentsData.set(agent.id, agent);
       return agent;
     }),
-    getAgentById: vi.fn().mockImplementation(async ({ id }: { id: string }) => {
+    getById: vi.fn().mockImplementation(async (id: string) => {
       return agentsData.get(id) || null;
     }),
-    getAgentByIdResolved: vi.fn().mockImplementation(async ({ id }: { id: string }) => {
+    getByIdResolved: vi.fn().mockImplementation(async (id: string) => {
       return agentsData.get(id) || null;
     }),
-    listAgentsResolved: vi.fn().mockImplementation(
+    listResolved: vi.fn().mockImplementation(
       async ({
         page = 1,
         perPage = 20,
@@ -118,7 +118,7 @@ function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Ma
         };
       },
     ),
-    updateAgent: vi.fn().mockImplementation(async (updates: Partial<MockStoredAgent> & { id: string }) => {
+    update: vi.fn().mockImplementation(async (updates: Partial<MockStoredAgent> & { id: string }) => {
       const existing = agentsData.get(updates.id);
       if (!existing) return null;
 
@@ -133,7 +133,7 @@ function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Ma
       agentsData.set(updates.id, updated);
       return updated;
     }),
-    deleteAgent: vi.fn().mockImplementation(async ({ id }: { id: string }) => {
+    delete: vi.fn().mockImplementation(async (id: string) => {
       return agentsData.delete(id);
     }),
     getLatestVersion: vi.fn().mockImplementation(async (agentId: string) => {
@@ -459,7 +459,7 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toMatchObject(agentData);
-      expect(mockAgentsStore.createAgent).toHaveBeenCalledWith({
+      expect(mockAgentsStore.create).toHaveBeenCalledWith({
         agent: expect.objectContaining({
           id: 'new-agent',
           name: 'New Agent',
@@ -480,7 +480,7 @@ describe('Stored Agents Handlers', () => {
         id: 'my-cool-agent',
         name: 'My Cool Agent',
       });
-      expect(mockAgentsStore.createAgent).toHaveBeenCalledWith({
+      expect(mockAgentsStore.create).toHaveBeenCalledWith({
         agent: expect.objectContaining({
           id: 'my-cool-agent',
           name: 'My Cool Agent',
@@ -603,7 +603,7 @@ describe('Stored Agents Handlers', () => {
       });
 
       // Verify the storage update was called with null memory
-      expect(mockAgentsStore.updateAgent).toHaveBeenCalledWith(
+      expect(mockAgentsStore.update).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'memory-test',
           memory: null,
@@ -663,7 +663,7 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toEqual({ success: true, message: 'Agent delete-test deleted successfully' });
-      expect(mockAgentsStore.deleteAgent).toHaveBeenCalledWith({ id: 'delete-test' });
+      expect(mockAgentsStore.delete).toHaveBeenCalledWith('delete-test');
       expect(mockAgentsData.has('delete-test')).toBe(false);
       expect(mockEditor.agent.clearCache).toHaveBeenCalledWith('delete-test');
     });

@@ -115,7 +115,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
   // Scorer Definition CRUD Methods
   // ==========================================================================
 
-  async getScorerDefinitionById({ id }: { id: string }): Promise<StorageScorerDefinitionType | null> {
+  async getById(id: string): Promise<StorageScorerDefinitionType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_SCORER_DEFINITIONS, schemaName: getSchemaName(this.#schema) });
       const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
@@ -138,11 +138,8 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
     }
   }
 
-  async createScorerDefinition({
-    scorerDefinition,
-  }: {
-    scorerDefinition: StorageCreateScorerDefinitionInput;
-  }): Promise<StorageScorerDefinitionType> {
+  async create(input: { scorerDefinition: StorageCreateScorerDefinitionInput }): Promise<StorageScorerDefinitionType> {
+    const { scorerDefinition } = input;
     try {
       const tableName = getTableName({ indexName: TABLE_SCORER_DEFINITIONS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
@@ -215,14 +212,12 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
     }
   }
 
-  async updateScorerDefinition({
-    id,
-    ...updates
-  }: StorageUpdateScorerDefinitionInput): Promise<StorageScorerDefinitionType> {
+  async update(input: StorageUpdateScorerDefinitionInput): Promise<StorageScorerDefinitionType> {
+    const { id, ...updates } = input;
     try {
       const tableName = getTableName({ indexName: TABLE_SCORER_DEFINITIONS, schemaName: getSchemaName(this.#schema) });
 
-      const existingScorer = await this.getScorerDefinitionById({ id });
+      const existingScorer = await this.getById(id);
       if (!existingScorer) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_SCORER_DEFINITION', 'NOT_FOUND'),
@@ -330,7 +325,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         );
       }
 
-      const updatedScorer = await this.getScorerDefinitionById({ id });
+      const updatedScorer = await this.getById(id);
       if (!updatedScorer) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_SCORER_DEFINITION', 'NOT_FOUND_AFTER_UPDATE'),
@@ -355,10 +350,10 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
     }
   }
 
-  async deleteScorerDefinition({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       const tableName = getTableName({ indexName: TABLE_SCORER_DEFINITIONS, schemaName: getSchemaName(this.#schema) });
-      await this.deleteVersionsByScorerDefinitionId(id);
+      await this.deleteVersionsByParentId(id);
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
       throw new MastraError(
@@ -373,7 +368,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
     }
   }
 
-  async listScorerDefinitions(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
+  async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -685,20 +680,20 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
     }
   }
 
-  async deleteVersionsByScorerDefinitionId(scorerDefinitionId: string): Promise<void> {
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
       const tableName = getTableName({
         indexName: TABLE_SCORER_DEFINITION_VERSIONS,
         schemaName: getSchemaName(this.#schema),
       });
-      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "scorerDefinitionId" = $1`, [scorerDefinitionId]);
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "scorerDefinitionId" = $1`, [entityId]);
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_SCORER_DEFINITION_VERSIONS_BY_SCORER_DEFINITION_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { scorerDefinitionId },
+          details: { scorerDefinitionId: entityId },
         },
         error,
       );
