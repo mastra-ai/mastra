@@ -1248,7 +1248,6 @@ export type ProviderModelsMap = {
     'gemini-3-pro',
     'glm-4.6',
     'glm-4.7',
-    'glm-4.7-free',
     'gpt-5',
     'gpt-5-codex',
     'gpt-5-nano',
@@ -1264,7 +1263,6 @@ export type ProviderModelsMap = {
     'kimi-k2.5-free',
     'minimax-m2.1',
     'minimax-m2.1-free',
-    'qwen3-coder',
     'trinity-large-preview-free',
   ];
   readonly fastrouter: readonly [
