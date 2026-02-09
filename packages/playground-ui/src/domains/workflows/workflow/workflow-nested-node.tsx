@@ -152,7 +152,7 @@ export function WorkflowNestedNode({
                   step.foreachProgress.iterationStatus === 'failed' ? 'bg-accent2' : 'bg-accent1',
                 )}
                 style={{
-                  width: `${(step.foreachProgress.completedCount / step.foreachProgress.totalCount) * 100}%`,
+                  width: `${step.foreachProgress.totalCount > 0 ? (step.foreachProgress.completedCount / step.foreachProgress.totalCount) * 100 : 0}%`,
                 }}
               />
             </div>
