@@ -14,9 +14,28 @@ import type {
   SharedMemoryConfig,
 } from '@mastra/core';
 
+import type { RequestContext } from '@mastra/core/request-context';
+
+import type {
+  AgentInstructionBlock,
+  StorageCreatePromptBlockInput,
+  StorageUpdatePromptBlockInput,
+  StorageListPromptBlocksInput,
+  StorageListPromptBlocksOutput,
+  StorageResolvedPromptBlockType,
+  StorageListPromptBlocksResolvedOutput,
+} from '@mastra/core/storage';
+import type { PromptBlocksStorage } from '@mastra/core/storage';
+
 import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 
+import { resolveInstructionBlocks } from './instruction-builder';
+
 export type { MastraEditorConfig };
+
+export { renderTemplate } from './template-engine';
+export { evaluateRuleGroup } from './rule-evaluator';
+export { resolveInstructionBlocks } from './instruction-builder';
 
 export class MastraEditor implements IMastraEditor {
   private logger?: Logger;
@@ -47,6 +66,17 @@ export class MastraEditor implements IMastraEditor {
     const agentsStore = await storage.getStore('agents');
     if (!agentsStore) throw new Error('Agents storage domain is not available');
     return agentsStore;
+  }
+
+  /**
+   * Get the prompt blocks storage domain from the Mastra storage.
+   */
+  private async getPromptBlocksStore(): Promise<PromptBlocksStorage> {
+    const storage = this.mastra!.getStorage();
+    if (!storage) throw new Error('Storage is not configured');
+    const promptBlocksStore = await storage.getStore('promptBlocks');
+    if (!promptBlocksStore) throw new Error('Prompt blocks storage domain is not available');
+    return promptBlocksStore;
   }
 
   /**
@@ -152,7 +182,6 @@ export class MastraEditor implements IMastraEditor {
       if (agentCache) {
         const cached = agentCache.get(id);
         if (cached) {
-          this.logger?.debug(`[getStoredAgentById] Returning cached agent "${id}"`);
           return cached;
         }
         this.logger?.debug(`[getStoredAgentById] Cache miss for agent "${id}", fetching from storage`);
@@ -235,21 +264,111 @@ export class MastraEditor implements IMastraEditor {
     };
   }
 
+  // ==========================================================================
+  // Prompt Block CRUD Methods
+  // ==========================================================================
+
+  /**
+   * Create a new prompt block with an initial version.
+   */
+  public async createPromptBlock(input: StorageCreatePromptBlockInput): Promise<StorageResolvedPromptBlockType> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getPromptBlocksStore();
+    await store.createPromptBlock({ promptBlock: input });
+    const resolved = await store.getPromptBlockByIdResolved({ id: input.id });
+    if (!resolved) {
+      throw new Error(`Failed to resolve prompt block ${input.id} after creation`);
+    }
+    return resolved;
+  }
+
+  /**
+   * Get a prompt block by ID, resolved with its active version.
+   */
+  public async getPromptBlock(id: string): Promise<StorageResolvedPromptBlockType | null> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getPromptBlocksStore();
+    return store.getPromptBlockByIdResolved({ id });
+  }
+
+  /**
+   * Update a prompt block, creating a new version with the changes.
+   */
+  public async updatePromptBlock(input: StorageUpdatePromptBlockInput): Promise<StorageResolvedPromptBlockType> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getPromptBlocksStore();
+    await store.updatePromptBlock(input);
+    const resolved = await store.getPromptBlockByIdResolved({ id: input.id });
+    if (!resolved) {
+      throw new Error(`Failed to resolve prompt block ${input.id} after update`);
+    }
+    return resolved;
+  }
+
+  /**
+   * Delete a prompt block and all its versions.
+   */
+  public async deletePromptBlock(id: string): Promise<void> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getPromptBlocksStore();
+    await store.deletePromptBlock({ id });
+  }
+
+  /**
+   * List prompt blocks with optional pagination and filtering.
+   */
+  public async listPromptBlocks(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getPromptBlocksStore();
+    return store.listPromptBlocks(args);
+  }
+
+  /**
+   * List prompt blocks resolved with their active version config.
+   */
+  public async listPromptBlocksResolved(
+    args?: StorageListPromptBlocksInput,
+  ): Promise<StorageListPromptBlocksResolvedOutput> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getPromptBlocksStore();
+    return store.listPromptBlocksResolved(args);
+  }
+
+  /**
+   * Preview the resolved instructions for a given set of instruction blocks and context.
+   * Useful for UI preview endpoints.
+   */
+  public async previewInstructions(blocks: AgentInstructionBlock[], context: Record<string, unknown>): Promise<string> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getPromptBlocksStore();
+    return resolveInstructionBlocks(blocks, context, { promptBlocksStorage: store });
+  }
+
   /**
    * Clear the stored agent cache for a specific agent ID, or all cached agents.
+   * When clearing a specific agent, also removes it from Mastra's agent registry
+   * so that fresh data is loaded on next access.
    */
   public clearStoredAgentCache(agentId?: string): void {
     if (!this.mastra) return;
 
     const agentCache = this.mastra.getStoredAgentCache();
-    if (!agentCache) return;
 
     if (agentId) {
-      agentCache.delete(agentId);
-      this.logger?.debug(`[clearStoredAgentCache] Cleared cache for agent "${agentId}"`);
+      // Clear from Editor's cache
+      if (agentCache) {
+        agentCache.delete(agentId);
+      }
+      // Also remove from Mastra's agent registry so fresh data is loaded
+      this.mastra.removeAgent(agentId);
+      this.logger?.debug(`[clearStoredAgentCache] Cleared cache and registry for agent "${agentId}"`);
     } else {
-      agentCache.clear();
+      // Clear all from cache
+      if (agentCache) {
+        agentCache.clear();
+      }
       this.logger?.debug('[clearStoredAgentCache] Cleared all cached agents');
+      // Note: Don't clear all agents from Mastra registry as that would remove code-defined agents
     }
   }
 
@@ -270,10 +389,6 @@ export class MastraEditor implements IMastraEditor {
     const workflows = this.resolveStoredWorkflows(storedAgent.workflows);
     const agents = this.resolveStoredAgents(storedAgent.agents);
     const memory = this.resolveStoredMemory(storedAgent.memory);
-    console.log(
-      `[createAgentFromStoredConfig] Resolved memory: ${memory ? 'Memory instance created' : 'No memory'} for agent \"${storedAgent.id}\"`,
-      { memory },
-    );
     const scorers = this.resolveStoredScorers(storedAgent.scorers);
     const inputProcessors = this.resolveStoredInputProcessors(storedAgent.inputProcessors);
     const outputProcessors = this.resolveStoredOutputProcessors(storedAgent.outputProcessors);
@@ -292,12 +407,15 @@ export class MastraEditor implements IMastraEditor {
     // Extract additional options from defaultOptions
     const defaultOptions = storedAgent.defaultOptions;
 
+    // Resolve instructions: string is backward compatible, AgentInstructionBlock[] needs dynamic resolution
+    const instructions = this.resolveStoredInstructions(storedAgent.instructions);
+
     // Create agent instance with resolved dependencies
     const agent = new Agent({
       id: storedAgent.id,
       name: storedAgent.name,
       description: storedAgent.description,
-      instructions: storedAgent.instructions,
+      instructions: instructions ?? '',
       model,
       memory,
       tools,
@@ -324,6 +442,37 @@ export class MastraEditor implements IMastraEditor {
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent \"${storedAgent.id}\"`);
 
     return agent;
+  }
+
+  /**
+   * Resolve stored instructions to a value compatible with the Agent constructor.
+   * - `string` → pass through as-is (backward compatible)
+   * - `AgentInstructionBlock[]` → wrap in a DynamicArgument function that resolves at runtime
+   * - `undefined` → return undefined
+   */
+  private resolveStoredInstructions(
+    instructions: string | AgentInstructionBlock[] | undefined,
+  ):
+    | string
+    | (({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) => Promise<string>)
+    | undefined {
+    if (instructions === undefined || instructions === null) {
+      return undefined;
+    }
+
+    // Backward compatible: plain string instructions
+    if (typeof instructions === 'string') {
+      return instructions;
+    }
+
+    // AgentInstructionBlock[] → wrap in a DynamicArgument function
+    const blocks = instructions;
+    return async ({ requestContext }: { requestContext: RequestContext; mastra?: Mastra }) => {
+      const store = await this.getPromptBlocksStore();
+      // Convert RequestContext to a plain record for template interpolation and rule evaluation
+      const context = requestContext.toJSON();
+      return resolveInstructionBlocks(blocks, context, { promptBlocksStorage: store });
+    };
   }
 
   /**
@@ -421,7 +570,6 @@ export class MastraEditor implements IMastraEditor {
    * Uses @mastra/memory Memory class to instantiate from serialized config.
    */
   private resolveStoredMemory(memoryConfig?: SerializedMemoryConfig): MastraMemory | undefined {
-    this.logger?.debug(`[resolveStoredMemory] Called with config:`, { memoryConfig });
     if (!memoryConfig) {
       this.logger?.debug(`[resolveStoredMemory] No memory config provided`);
       return undefined;
@@ -443,9 +591,34 @@ export class MastraEditor implements IMastraEditor {
         }
       }
 
+      // Check if semantic recall is requested but no vector store is available
+      if (memoryConfig.options?.semanticRecall && (!vector || !memoryConfig.embedder)) {
+        // Log a warning about the semantic recall requirement
+        this.logger?.warn(
+          'Semantic recall is enabled but no vector store or embedder are configured. ' +
+            'Creating memory without semantic recall. ' +
+            'To use semantic recall, configure a vector store and embedder in your Mastra instance.',
+        );
+
+        // Create memory config without semantic recall
+        const adjustedOptions = { ...memoryConfig.options, semanticRecall: false };
+        const sharedConfig: SharedMemoryConfig = {
+          storage: this.mastra.getStorage(),
+          vector,
+          options: adjustedOptions,
+          embedder: memoryConfig.embedder,
+          embedderOptions: memoryConfig.embedderOptions,
+        };
+
+        const memoryInstance = new Memory(sharedConfig);
+        return memoryInstance;
+      }
+
       // Construct the full memory config
+      const storage = this.mastra.getStorage();
+
       const sharedConfig: SharedMemoryConfig = {
-        storage: this.mastra.getStorage(),
+        storage: storage,
         vector,
         options: memoryConfig.options,
         embedder: memoryConfig.embedder,
@@ -453,7 +626,8 @@ export class MastraEditor implements IMastraEditor {
       };
 
       // Instantiate Memory class
-      return new Memory(sharedConfig);
+      const memoryInstance = new Memory(sharedConfig);
+      return memoryInstance;
     } catch (error) {
       this.logger?.error('Failed to resolve memory from config', { error });
       return undefined;

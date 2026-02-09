@@ -1,5 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
+import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { z } from 'zod';
@@ -100,6 +101,7 @@ const config = {
   bundler: {
     sourcemap: true,
   },
+  editor: new MastraEditor(),
   server: {
     build: {
       swaggerUI: true,
@@ -217,4 +219,5 @@ const config = {
 
 export const mastra = new Mastra({
   ...config,
+  editor: new MastraEditor(),
 });

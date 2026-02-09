@@ -17,6 +17,12 @@ describe('isEligible', () => {
       [true, true, true],
       [true, false, false],
       [false, false, true],
+      ['true', true, true], // String(true) from form input vs boolean true - coerced to boolean
+      ['false', false, true], // String(false) from form input vs boolean false - coerced to boolean
+      ['1', 1, true], // String(1) from form input vs number 1 - coerced to number
+      ['42', 42, true], // String(42) from form input vs number 42 - coerced to number
+      ['3.14', 3.14, true], // String float from form input vs number - coerced to number
+      ['-5', -5, true], // Negative string number from form input - coerced to number
       [{}, {}, false],
       [[], [], false],
       [[1, 2], [1, 2], false],

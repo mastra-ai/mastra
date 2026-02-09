@@ -215,6 +215,7 @@ export interface GetWorkflowResponse {
       resumeSchema: string;
       suspendSchema: string;
       stateSchema: string;
+      metadata?: Record<string, unknown>;
     };
   };
   allSteps: {
@@ -227,6 +228,7 @@ export interface GetWorkflowResponse {
       suspendSchema: string;
       stateSchema: string;
       isWorkflow: boolean;
+      metadata?: Record<string, unknown>;
     };
   };
   stepGraph: Workflow['serializedStepGraph'];
@@ -612,40 +614,131 @@ export interface TimeTravelParams {
 // ============================================================================
 
 /**
+ * Semantic recall configuration for vector-based memory retrieval
+ */
+export interface SemanticRecallConfig {
+  topK: number;
+  messageRange: number | { before: number; after: number };
+  scope?: 'thread' | 'resource';
+  threshold?: number;
+  indexName?: string;
+}
+
+/**
+ * Title generation configuration
+ */
+export type TitleGenerationConfig =
+  | boolean
+  | {
+      model: string; // Model ID in format provider/model-name
+      instructions?: string;
+    };
+
+/**
+ * Serialized memory configuration matching SerializedMemoryConfig from @mastra/core
+ *
+ * Note: When semanticRecall is enabled, both `vector` (string, not false) and `embedder` must be configured.
+ */
+export interface SerializedMemoryConfig {
+  /**
+   * Vector database identifier. Required when semanticRecall is enabled.
+   * Set to false to explicitly disable vector search.
+   */
+  vector?: string | false;
+  options?: {
+    readOnly?: boolean;
+    lastMessages?: number | false;
+    /**
+     * Semantic recall configuration. When enabled (true or object),
+     * requires both `vector` and `embedder` to be configured.
+     */
+    semanticRecall?: boolean | SemanticRecallConfig;
+    generateTitle?: TitleGenerationConfig;
+  };
+  /**
+   * Embedding model ID in the format "provider/model"
+   * (e.g., "openai/text-embedding-3-small")
+   * Required when semanticRecall is enabled.
+   */
+  embedder?: string;
+  /**
+   * Options to pass to the embedder
+   */
+  embedderOptions?: Record<string, unknown>;
+}
+
+/**
+ * Default options for agent execution (serializable subset of AgentExecutionOptionsBase)
+ */
+export interface DefaultOptions {
+  runId?: string;
+  savePerStep?: boolean;
+  maxSteps?: number;
+  activeTools?: string[];
+  maxProcessorRetries?: number;
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
+  modelSettings?: {
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+    topK?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    stopSequences?: string[];
+    seed?: number;
+    maxRetries?: number;
+  };
+  returnScorerData?: boolean;
+  tracingOptions?: {
+    traceName?: string;
+    attributes?: Record<string, unknown>;
+    spanId?: string;
+    traceId?: string;
+  };
+  requireToolApproval?: boolean;
+  autoResumeSuspendedTools?: boolean;
+  toolCallConcurrency?: number;
+  includeRawChunks?: boolean;
+  [key: string]: unknown; // Allow additional provider-specific options
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
-  sampling?: {
-    type: 'ratio' | 'count';
-    rate?: number;
-    count?: number;
-  };
+  sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
 }
 
 /**
  * Stored agent data returned from API
  */
 export interface StoredAgentResponse {
+  // Thin agent record fields
   id: string;
   status: string;
   activeVersionId?: string;
   authorId?: string;
-  name: string;
-  description?: string;
-  instructions: string;
-  model: Record<string, unknown>;
-  tools?: string[];
-  integrationTools?: string[];
-  defaultOptions?: Record<string, unknown>;
-  workflows?: string[];
-  agents?: string[];
-  inputProcessors?: Record<string, unknown>[];
-  outputProcessors?: Record<string, unknown>[];
-  memory?: Record<string, unknown>;
-  scorers?: Record<string, StoredAgentScorerConfig>;
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  // Version snapshot config fields (resolved from active version)
+  name: string;
+  description?: string;
+  instructions: string;
+  model: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  tools?: string[];
+  defaultOptions?: DefaultOptions;
+  workflows?: string[];
+  agents?: string[];
+  integrationTools?: string[];
+  inputProcessors?: string[];
+  outputProcessors?: string[];
+  memory?: SerializedMemoryConfig;
+  scorers?: Record<string, StoredAgentScorerConfig>;
 }
 
 /**
@@ -658,6 +751,8 @@ export interface ListStoredAgentsParams {
     field?: 'createdAt' | 'updatedAt';
     direction?: 'ASC' | 'DESC';
   };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -672,25 +767,46 @@ export interface ListStoredAgentsResponse {
 }
 
 /**
+ * Parameters for cloning an agent to a stored agent
+ */
+export interface CloneAgentParams {
+  /** ID for the cloned agent. If not provided, derived from agent ID. */
+  newId?: string;
+  /** Name for the cloned agent. Defaults to "{name} (Clone)". */
+  newName?: string;
+  /** Additional metadata for the cloned agent. */
+  metadata?: Record<string, unknown>;
+  /** Author identifier for the cloned agent. */
+  authorId?: string;
+  /** Request context for resolving dynamic agent configuration (instructions, model, tools, etc.) */
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+/**
  * Parameters for creating a stored agent.
  * Flat union of agent-record fields and config fields.
  */
 export interface CreateStoredAgentParams {
-  id: string;
+  /** Unique identifier for the agent. If not provided, derived from name via slugify. */
+  id?: string;
   authorId?: string;
   metadata?: Record<string, unknown>;
   name: string;
   description?: string;
   instructions: string;
-  model: Record<string, unknown>;
+  model: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
   tools?: string[];
-  defaultOptions?: Record<string, unknown>;
+  defaultOptions?: DefaultOptions;
   workflows?: string[];
   agents?: string[];
   integrationTools?: string[];
-  inputProcessors?: Record<string, unknown>[];
-  outputProcessors?: Record<string, unknown>[];
-  memory?: Record<string, unknown>;
+  inputProcessors?: string[];
+  outputProcessors?: string[];
+  memory?: SerializedMemoryConfig;
   scorers?: Record<string, StoredAgentScorerConfig>;
 }
 
@@ -703,15 +819,19 @@ export interface UpdateStoredAgentParams {
   name?: string;
   description?: string;
   instructions?: string;
-  model?: Record<string, unknown>;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
   tools?: string[];
-  defaultOptions?: Record<string, unknown>;
+  defaultOptions?: DefaultOptions;
   workflows?: string[];
   agents?: string[];
   integrationTools?: string[];
-  inputProcessors?: Record<string, unknown>[];
-  outputProcessors?: Record<string, unknown>[];
-  memory?: Record<string, unknown>;
+  inputProcessors?: string[];
+  outputProcessors?: string[];
+  memory?: SerializedMemoryConfig;
   scorers?: Record<string, StoredAgentScorerConfig>;
 }
 
@@ -734,15 +854,19 @@ export interface AgentVersionResponse {
   name: string;
   description?: string;
   instructions: string;
-  model: Record<string, unknown>;
+  model: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
   tools?: string[];
-  defaultOptions?: Record<string, unknown>;
+  defaultOptions?: DefaultOptions;
   workflows?: string[];
   agents?: string[];
   integrationTools?: string[];
-  inputProcessors?: Record<string, unknown>[];
-  outputProcessors?: Record<string, unknown>[];
-  memory?: Record<string, unknown>;
+  inputProcessors?: string[];
+  outputProcessors?: string[];
+  memory?: SerializedMemoryConfig;
   scorers?: Record<string, StoredAgentScorerConfig>;
   changedFields?: string[];
   changeMessage?: string;
@@ -1229,6 +1353,35 @@ export interface GetMemoryConfigResponseExtended {
       reflectionModel?: string;
     };
   };
+}
+
+// ============================================================================
+// Vector & Embedder Types
+// ============================================================================
+
+/**
+ * Response for listing available vector stores
+ */
+export interface ListVectorsResponse {
+  vectors: Array<{
+    name: string;
+    id: string;
+    type: string;
+  }>;
+}
+
+/**
+ * Response for listing available embedding models
+ */
+export interface ListEmbeddersResponse {
+  embedders: Array<{
+    id: string;
+    provider: string;
+    name: string;
+    description: string;
+    dimensions: number;
+    maxInputTokens: number;
+  }>;
 }
 
 // ============================================================================
