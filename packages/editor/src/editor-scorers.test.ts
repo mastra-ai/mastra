@@ -613,9 +613,7 @@ describe('resolveStoredScorers with DB fallback', () => {
 
     const agent = await warnEditor.agent.getById('agent-with-ghost-scorer');
     expect(agent).toBeInstanceOf(Agent);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('not found in registry or storage'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('not found in registry or storage'));
   });
 
   it('should resolve multiple scorers mixing registry and DB', async () => {

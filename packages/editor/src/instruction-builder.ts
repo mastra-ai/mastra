@@ -46,9 +46,7 @@ export async function resolveInstructionBlocks(
   const resolvedBlocksMap = new Map<string, StorageResolvedPromptBlockType>();
   if (blockIds.length > 0) {
     // Fetch all blocks in parallel
-    const fetchResults = await Promise.all(
-      blockIds.map(id => deps.promptBlocksStorage.getByIdResolved(id)),
-    );
+    const fetchResults = await Promise.all(blockIds.map(id => deps.promptBlocksStorage.getByIdResolved(id)));
     for (let i = 0; i < blockIds.length; i++) {
       const result = fetchResults[i];
       if (result) {

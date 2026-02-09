@@ -69,7 +69,15 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
           if (!version) return null;
 
-          const { id: _vId, agentId: _aId, versionNumber: _vn, changedFields: _cf, changeMessage: _cm, createdAt: _ca, ...snapshotConfig } = version;
+          const {
+            id: _vId,
+            agentId: _aId,
+            versionNumber: _vn,
+            changedFields: _cf,
+            changeMessage: _cm,
+            createdAt: _ca,
+            ...snapshotConfig
+          } = version;
           return { ...agent, ...snapshotConfig } as StorageResolvedAgentType;
         }
         return store.getByIdResolved(id);
@@ -282,7 +290,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
   }
 
-  private async resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): Promise<MastraScorers | undefined> {
+  private async resolveStoredScorers(
+    storedScorers?: Record<string, StorageScorerConfig>,
+  ): Promise<MastraScorers | undefined> {
     if (!storedScorers || Object.keys(storedScorers).length === 0) return undefined;
     if (!this.mastra) return undefined;
 

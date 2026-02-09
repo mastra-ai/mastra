@@ -81,33 +81,35 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
           model,
           instructions: storedScorer.instructions,
         },
-      }).generateScore({
-        description: `Score the output on a scale of ${min} to ${max}`,
-        createPrompt: ({ run }) => {
-          const input = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
-          const output = typeof run.output === 'string' ? run.output : JSON.stringify(run.output);
-          return `Evaluate the following interaction and provide a score between ${min} and ${max}.
+      })
+        .generateScore({
+          description: `Score the output on a scale of ${min} to ${max}`,
+          createPrompt: ({ run }) => {
+            const input = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
+            const output = typeof run.output === 'string' ? run.output : JSON.stringify(run.output);
+            return `Evaluate the following interaction and provide a score between ${min} and ${max}.
 
 Input: ${input}
 
 Output: ${output}
 
 Provide your score as a JSON object with a "score" field containing a number between ${min} and ${max}.`;
-        },
-      }).generateReason({
-        description: 'Explain the reasoning behind the score',
-        createPrompt: ({ run, score }) => {
-          const input = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
-          const output = typeof run.output === 'string' ? run.output : JSON.stringify(run.output);
-          return `You scored the following interaction ${score} out of ${max}.
+          },
+        })
+        .generateReason({
+          description: 'Explain the reasoning behind the score',
+          createPrompt: ({ run, score }) => {
+            const input = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
+            const output = typeof run.output === 'string' ? run.output : JSON.stringify(run.output);
+            return `You scored the following interaction ${score} out of ${max}.
 
 Input: ${input}
 
 Output: ${output}
 
 Explain your reasoning for this score in a clear, concise paragraph.`;
-        },
-      });
+          },
+        });
 
       if (this.mastra) {
         scorer.__registerMastra(this.mastra);
@@ -119,7 +121,7 @@ Explain your reasoning for this score in a clear, concise paragraph.`;
     // Preset types — not yet supported
     this.logger?.warn(
       `Stored scorer "${storedScorer.id}" has type "${storedScorer.type}" which is a preset type. ` +
-      `Preset instantiation from stored config is not yet supported.`,
+        `Preset instantiation from stored config is not yet supported.`,
     );
     return null;
   }

@@ -9,7 +9,13 @@ export type { MastraEditorConfig };
 export { renderTemplate } from './template-engine';
 export { evaluateRuleGroup } from './rule-evaluator';
 export { resolveInstructionBlocks } from './instruction-builder';
-export { EditorNamespace, CrudEditorNamespace, EditorAgentNamespace, EditorPromptNamespace, EditorScorerNamespace } from './namespaces';
+export {
+  EditorNamespace,
+  CrudEditorNamespace,
+  EditorAgentNamespace,
+  EditorPromptNamespace,
+  EditorScorerNamespace,
+} from './namespaces';
 export type { StorageAdapter } from './namespaces';
 
 export class MastraEditor implements IMastraEditor {
@@ -39,5 +45,4 @@ export class MastraEditor implements IMastraEditor {
       this.__logger = mastra.getLogger();
     }
   }
-
 }

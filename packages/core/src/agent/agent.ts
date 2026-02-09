@@ -1673,9 +1673,9 @@ export class Agent<
       authorId: options.authorId,
     };
 
-    await agentsStore.createAgent({ agent: createInput });
+    await agentsStore.create({ agent: createInput });
 
-    const resolved = await agentsStore.getAgentByIdResolved({ id: options.newId });
+    const resolved = await agentsStore.getByIdResolved(options.newId);
     if (!resolved) {
       const mastraError = new MastraError({
         id: 'AGENT_CLONE_FAILED_TO_RESOLVE',
