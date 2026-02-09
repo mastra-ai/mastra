@@ -191,7 +191,8 @@ export class Agent<
    */
   constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
     super({ component: RegisteredLogger.AGENT });
-
+    // eslint-disable-next-line no-console
+    console.log('agent constructor...');
     this.name = config.name;
     this.id = config.id ?? config.name;
     this.source = 'code';
