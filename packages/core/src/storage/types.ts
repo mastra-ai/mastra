@@ -379,7 +379,7 @@ export interface StorageAgentType {
   /** Unique, immutable identifier */
   id: string;
   /** Agent status: 'draft' on creation, 'published' when a version is activated */
-  status: string;
+  status: 'draft' | 'published' | 'archived';
   /** FK to agent_versions.id - the currently active version */
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
@@ -424,7 +424,7 @@ export type StorageUpdateAgentInput = {
   /** FK to agent_versions.id - the currently active version */
   activeVersionId?: string;
   /** Agent status: 'draft' or 'published' */
-  status?: string;
+  status?: 'draft' | 'published' | 'archived';
 } & Partial<Omit<StorageAgentSnapshotType, 'memory'>> & {
     /** Memory configuration object, or null to disable memory */
     memory?: SerializedMemoryConfig | null;
@@ -557,7 +557,7 @@ export type StorageUpdatePromptBlockInput = {
   /** FK to prompt_block_versions.id — the currently active version */
   activeVersionId?: string;
   /** Block status */
-  status?: string;
+  status?: 'draft' | 'published' | 'archived';
 } & Partial<StoragePromptBlockSnapshotType>;
 
 export type StorageListPromptBlocksInput = {
@@ -695,7 +695,7 @@ export type StorageUpdateScorerDefinitionInput = {
   /** FK to scorer_definition_versions.id - the currently active version */
   activeVersionId?: string;
   /** Scorer status */
-  status?: string;
+  status?: 'draft' | 'published' | 'archived';
 } & Partial<StorageScorerDefinitionSnapshotType>;
 
 export type StorageListScorerDefinitionsInput = {
