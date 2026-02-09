@@ -145,7 +145,7 @@ export class MountManager {
         existing.config = updates.config;
         existing.configHash = this.hashConfig(updates.config);
       }
-      if (updates.error !== undefined) {
+      if ('error' in updates) {
         existing.error = updates.error;
       }
     } else if (updates.filesystem) {

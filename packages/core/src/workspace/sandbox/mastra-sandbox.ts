@@ -200,7 +200,11 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     // Process any pending mounts after successful start
     // Mount failures are tracked individually in MountManager and
     // shouldn't mark the sandbox itself as errored
-    await this.mounts?.processPending();
+    try {
+      await this.mounts?.processPending();
+    } catch {
+      // Unexpected errors in mount processing shouldn't affect sandbox status
+    }
   }
 
   /**
@@ -259,6 +263,9 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       return;
     }
 
+    // Wait for in-flight start before stopping
+    if (this._startPromise) await this._startPromise.catch(() => {});
+
     // Stop already in progress - return existing promise
     if (this._stopPromise) {
       return this._stopPromise;
@@ -315,6 +322,10 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     if (this.status === 'destroyed') {
       return;
     }
+
+    // Wait for in-flight start/stop before destroying
+    if (this._startPromise) await this._startPromise.catch(() => {});
+    if (this._stopPromise) await this._stopPromise.catch(() => {});
 
     // Destroy already in progress - return existing promise
     if (this._destroyPromise) {

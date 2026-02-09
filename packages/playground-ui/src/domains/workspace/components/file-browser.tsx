@@ -131,6 +131,7 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
 
 function formatBytes(bytes?: number): string {
   if (bytes === undefined || bytes === null) return '';
+  if (bytes < 0) return '-' + formatBytes(-bytes);
   if (bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -389,10 +390,13 @@ export function FileBrowser({
             <AlertDialog.Action
               disabled={isDeleting}
               onClick={async () => {
-                if (deleteTarget && onDelete) {
-                  await onDelete(deleteTarget);
+                try {
+                  if (deleteTarget && onDelete) {
+                    await onDelete(deleteTarget);
+                  }
+                } finally {
+                  setDeleteTarget(null);
                 }
-                setDeleteTarget(null);
               }}
             >
               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

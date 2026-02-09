@@ -242,7 +242,7 @@ export const SandboxExecutionBadge = ({
   // Priority: error > final result > streaming output
   // Once we have a final result or error, prefer that over incomplete streaming
   const outputContent = errorMessage
-    ? `Error: ${errorMessage}`
+    ? `Error: ${errorMessage}${finalResult?.stdout || finalResult?.stderr ? '\n\n' + [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n') : ''}`
     : finalResult
       ? [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n')
       : hasStreamingOutput

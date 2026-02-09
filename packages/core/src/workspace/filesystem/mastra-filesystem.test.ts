@@ -104,6 +104,7 @@ class TestFilesystem extends MastraFilesystem {
     const content = this.files.get(path);
     return {
       name: path.split('/').pop() || '',
+      path,
       type: 'file',
       size: content?.length || 0,
       createdAt: new Date(),

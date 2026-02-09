@@ -77,7 +77,7 @@ export class MountError extends SandboxError {
     public readonly mountPath: string,
     details?: Record<string, unknown>,
   ) {
-    super(message, 'MOUNT_ERROR', { mountPath, ...details });
+    super(message, 'MOUNT_ERROR', { ...details, mountPath });
     this.name = 'MountError';
   }
 }

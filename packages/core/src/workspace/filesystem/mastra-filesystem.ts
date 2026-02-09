@@ -219,6 +219,14 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
    * Internal destroy execution - handles status.
    */
   private async _executeDestroy(): Promise<void> {
+    // Wait for any in-progress init to complete before destroying
+    if (this._initPromise) {
+      try {
+        await this._initPromise;
+      } catch {
+        // Ignore init errors — we're destroying anyway
+      }
+    }
     this.status = 'destroying';
 
     try {

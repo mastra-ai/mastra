@@ -633,7 +633,7 @@ Examples:
 Usage:
 - Verify parent directories exist before running commands that create files or directories.
 - Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
-- Commands timeout after 30 seconds by default. Use the timeout parameter for longer operations.
+- Use the timeout parameter to limit execution time. Behavior when omitted depends on the sandbox provider.
 - Use cwd to set the working directory, or commands run from the sandbox default.`,
         requireApproval: executeCommandConfig.requireApproval,
         inputSchema: z.object({
@@ -642,9 +642,7 @@ Usage:
           timeout: z
             .number()
             .nullish()
-            .describe(
-              'Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.',
-            ),
+            .describe('Maximum execution time in milliseconds. Example: 60000 for 1 minute.'),
           cwd: z.string().nullish().describe('Working directory for the command'),
         }),
         outputSchema: z.object({
