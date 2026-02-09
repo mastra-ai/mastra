@@ -204,7 +204,10 @@ export const SandboxExecutionBadge = ({
     if (result.error?.message) return result.error.message;
     if (typeof result.error === 'string') return result.error;
     // Only treat result.message as an error when there's an explicit failure signal
-    if (result.message && (result.success === false || (typeof result.exitCode === 'number' && result.exitCode !== 0))) {
+    if (
+      result.message &&
+      (result.success === false || (typeof result.exitCode === 'number' && result.exitCode !== 0))
+    ) {
       return result.message;
     }
 

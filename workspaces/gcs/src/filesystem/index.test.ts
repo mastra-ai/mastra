@@ -637,9 +637,7 @@ describe('GCSFilesystem SDK Operations', () => {
   describe('rmdir()', () => {
     it('throws if non-recursive and directory is not empty', async () => {
       // readdir returns files
-      mockBucket.getFiles.mockResolvedValueOnce([
-        [{ name: 'dir/file.txt', metadata: { size: 100 } }],
-      ]);
+      mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'dir/file.txt', metadata: { size: 100 } }]]);
 
       await expect(fs.rmdir('/dir')).rejects.toThrow('Directory not empty');
     });
