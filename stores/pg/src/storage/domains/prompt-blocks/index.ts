@@ -243,7 +243,8 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         const changedFields = SNAPSHOT_FIELDS.filter(
           field =>
             field in configFields &&
-            configFields[field as keyof typeof configFields] !== latestConfig[field as keyof typeof latestConfig],
+            JSON.stringify(configFields[field as keyof typeof configFields]) !==
+              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
         );
 
         if (changedFields.length > 0) {
