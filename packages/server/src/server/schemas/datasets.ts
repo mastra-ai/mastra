@@ -19,17 +19,17 @@ export const datasetIdPathParams = z.object({
   datasetId: z.string().describe('Unique identifier for the dataset'),
 });
 
-export const runIdPathParams = z.object({
-  runId: z.string().describe('Unique identifier for the run'),
+export const experimentIdPathParams = z.object({
+  experimentId: z.string().describe('Unique identifier for the experiment'),
 });
 
 export const itemIdPathParams = z.object({
   itemId: z.string().describe('Unique identifier for the dataset item'),
 });
 
-export const datasetAndRunIdPathParams = z.object({
+export const datasetAndExperimentIdPathParams = z.object({
   datasetId: z.string().describe('Unique identifier for the dataset'),
-  runId: z.string().describe('Unique identifier for the run'),
+  experimentId: z.string().describe('Unique identifier for the experiment'),
 });
 
 export const datasetAndItemIdPathParams = z.object({
@@ -85,7 +85,7 @@ export const updateItemBodySchema = z.object({
   context: z.record(z.string(), z.unknown()).optional().describe('Additional context'),
 });
 
-export const triggerRunBodySchema = z.object({
+export const triggerExperimentBodySchema = z.object({
   targetType: z.enum(['agent', 'workflow', 'scorer']).describe('Type of target to run against'),
   targetId: z.string().describe('ID of the target'),
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
@@ -93,9 +93,9 @@ export const triggerRunBodySchema = z.object({
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
 });
 
-export const compareRunsBodySchema = z.object({
-  runIdA: z.string().describe('ID of baseline run'),
-  runIdB: z.string().describe('ID of candidate run'),
+export const compareExperimentsBodySchema = z.object({
+  experimentIdA: z.string().describe('ID of baseline experiment'),
+  experimentIdB: z.string().describe('ID of candidate experiment'),
   thresholds: z
     .record(
       z.string(),
@@ -137,8 +137,8 @@ export const datasetItemResponseSchema = z.object({
   updatedAt: z.coerce.date(),
 });
 
-// Run entity schema
-export const runResponseSchema = z.object({
+// Experiment entity schema
+export const experimentResponseSchema = z.object({
   id: z.string(),
   datasetId: z.string(),
   datasetVersion: z.coerce.date(),
@@ -163,10 +163,10 @@ export const scorerResultSchema = z.object({
   error: z.string().nullable(),
 });
 
-// Run result entity schema
-export const runResultResponseSchema = z.object({
+// Experiment result entity schema
+export const experimentResultResponseSchema = z.object({
   id: z.string(),
-  runId: z.string(),
+  experimentId: z.string(),
   itemId: z.string(),
   itemVersion: z.coerce.date(),
   input: z.unknown(),
@@ -227,10 +227,10 @@ export const comparisonResponseSchema = z.object({
   warnings: z.array(z.string()),
 });
 
-// Run summary schema (returned by trigger run)
-// Note: completedAt is nullable for pending/running runs (async trigger)
-export const runSummaryResponseSchema = z.object({
-  runId: z.string(),
+// Experiment summary schema (returned by trigger experiment)
+// Note: completedAt is nullable for pending/running experiments (async trigger)
+export const experimentSummaryResponseSchema = z.object({
+  experimentId: z.string(),
   status: z.enum(['pending', 'running', 'completed', 'failed']),
   totalItems: z.number(),
   succeededCount: z.number(),
@@ -276,13 +276,13 @@ export const listItemsResponseSchema = z.object({
   pagination: paginationInfoSchema,
 });
 
-export const listRunsResponseSchema = z.object({
-  runs: z.array(runResponseSchema),
+export const listExperimentsResponseSchema = z.object({
+  experiments: z.array(experimentResponseSchema),
   pagination: paginationInfoSchema,
 });
 
-export const listResultsResponseSchema = z.object({
-  results: z.array(runResultResponseSchema),
+export const listExperimentResultsResponseSchema = z.object({
+  results: z.array(experimentResultResponseSchema),
   pagination: paginationInfoSchema,
 });
 

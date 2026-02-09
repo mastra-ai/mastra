@@ -4,22 +4,22 @@ import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Spinner } from '@/ds/components/Spinner';
 import { ScoreDelta } from './score-delta';
-import { useCompareRuns } from '../../hooks/use-compare-runs';
-import type { CompareRunsResponse } from '@mastra/client-js';
+import { useCompareExperiments } from '../../hooks/use-compare-experiments';
+import type { CompareExperimentsResponse } from '@mastra/client-js';
 
 interface ComparisonViewProps {
   datasetId: string;
-  runIdA: string;
-  runIdB: string;
+  experimentIdA: string;
+  experimentIdB: string;
 }
 
 /**
- * Side-by-side comparison of two dataset runs.
+ * Side-by-side comparison of two dataset experiments.
  * Shows version mismatch warning, per-scorer stats, and per-item score deltas.
  */
-export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProps) {
-  const { data, isLoading, error } = useCompareRuns(datasetId, runIdA, runIdB);
-  const comparison = data as CompareRunsResponse | undefined;
+export function ComparisonView({ datasetId, experimentIdA, experimentIdB }: ComparisonViewProps) {
+  const { data, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
+  const comparison = data as CompareExperimentsResponse | undefined;
 
   if (isLoading) {
     return (
@@ -51,7 +51,7 @@ export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProp
         <Alert variant="warning">
           <AlertTitle>Version mismatch</AlertTitle>
           <AlertDescription as="p">
-            These runs used different dataset versions. Results may not be directly comparable.
+            These experiments used different dataset versions. Results may not be directly comparable.
           </AlertDescription>
         </Alert>
       )}
@@ -78,8 +78,8 @@ export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProp
           <Table size="small">
             <Thead className="sticky top-0">
               <Th>Scorer</Th>
-              <Th>Run A (Baseline)</Th>
-              <Th>Run B</Th>
+              <Th>Experiment A (Baseline)</Th>
+              <Th>Experiment B</Th>
               <Th>Delta</Th>
               <Th>Status</Th>
             </Thead>
@@ -126,11 +126,11 @@ export function ComparisonView({ datasetId, runIdA, runIdB }: ComparisonViewProp
               ))}
             </Thead>
             <Tbody>
-              {comparison.items.map((item: { itemId: string; inBothRuns: boolean; scoresA: Record<string, number | null>; scoresB: Record<string, number | null> }) => (
+              {comparison.items.map((item: { itemId: string; inBothExperiments: boolean; scoresA: Record<string, number | null>; scoresB: Record<string, number | null> }) => (
                 <Row key={item.itemId}>
                   <TxtCell>{truncate(item.itemId, 16)}</TxtCell>
                   <Cell>
-                    {item.inBothRuns ? (
+                    {item.inBothExperiments ? (
                       <span className="text-green-500 text-sm">Yes</span>
                     ) : (
                       <span className="text-amber-500 text-sm">No</span>

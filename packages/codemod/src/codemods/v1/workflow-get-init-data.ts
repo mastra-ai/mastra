@@ -33,8 +33,9 @@ export default createTransformer((fileInfo, api, options, context) => {
     })
     .forEach(path => {
       const callExpr = path.value;
-      // Skip if already has type arguments
-      if (callExpr.typeArguments) {
+      // Skip if already has type arguments (check both typeArguments and typeParameters for compatibility)
+      // @ts-expect-error - typeParameters may exist on CallExpression in some parsers
+      if (callExpr.typeArguments || callExpr.typeParameters) {
         return;
       }
 

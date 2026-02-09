@@ -1,2 +1,2 @@
-export * from './run';
+export * from './experiment';
 export * from './validation';

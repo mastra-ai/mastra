@@ -2,8 +2,8 @@
 export * from './hooks/use-datasets';
 export * from './hooks/use-dataset-items';
 export * from './hooks/use-dataset-item-versions';
-export * from './hooks/use-dataset-runs';
-export * from './hooks/use-compare-runs';
+export * from './hooks/use-dataset-experiments';
+export * from './hooks/use-compare-experiments';
 export * from './hooks/use-dataset-versions';
 
 // Mutation hooks
@@ -36,7 +36,7 @@ export { EmptyDatasetsTable } from './components/empty-datasets-table';
 // Dataset detail components
 export { DatasetDetail } from './components/dataset-detail/dataset-detail';
 export { DatasetItemList } from './components/dataset-detail/items-list';
-export { RunHistory } from './components/dataset-detail/run-history';
+export { ExperimentHistory } from './components/dataset-detail/experiment-history';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';
 export { EditItemDialog } from './components/edit-item-dialog';
@@ -57,10 +57,10 @@ export { CSVImportDialog } from './components/csv-import';
 // JSON import components
 export { JSONImportDialog } from './components/json-import';
 
-// Run trigger components
-export { RunTriggerDialog } from './components/run-trigger/run-trigger-dialog';
-export { TargetSelector, type TargetType } from './components/run-trigger/target-selector';
-export { ScorerSelector } from './components/run-trigger/scorer-selector';
+// Experiment trigger components
+export { ExperimentTriggerDialog } from './components/experiment-trigger/experiment-trigger-dialog';
+export { TargetSelector, type TargetType } from './components/experiment-trigger/target-selector';
+export { ScorerSelector } from './components/experiment-trigger/scorer-selector';
 
 // Experiment components
 export {

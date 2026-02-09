@@ -14,8 +14,8 @@ export type DatasetHeaderProps = {
   onEditClick?: () => void;
   onDuplicateClick?: () => void;
   onDeleteClick?: () => void;
-  runTriggerSlot?: React.ReactNode;
-  onRunClick?: () => void;
+  experimentTriggerSlot?: React.ReactNode;
+  onExperimentClick?: () => void;
   className?: string;
 };
 
@@ -30,8 +30,8 @@ export function DatasetHeader({
   onEditClick,
   onDuplicateClick,
   onDeleteClick,
-  runTriggerSlot,
-  onRunClick,
+  experimentTriggerSlot,
+  onExperimentClick,
   className,
 }: DatasetHeaderProps) {
   return (
@@ -53,10 +53,10 @@ export function DatasetHeader({
       </MainHeader.Column>
       <MainHeader.Column>
         <ButtonsGroup>
-          {runTriggerSlot ? (
-            runTriggerSlot
-          ) : onRunClick ? (
-            <Button variant="outline" size="sm" onClick={onRunClick}>
+          {experimentTriggerSlot ? (
+            experimentTriggerSlot
+          ) : onExperimentClick ? (
+            <Button variant="outline" size="sm" onClick={onExperimentClick}>
               <Play />
               Run Experiment
             </Button>

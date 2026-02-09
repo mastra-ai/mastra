@@ -19,12 +19,16 @@ import type {
   TABLE_DATASET_VERSIONS,
   TABLE_RUNS,
   TABLE_RUN_RESULTS,
-  TABLE_DATASET_RUNS,
-  TABLE_DATASET_RUN_RESULTS,
+  TABLE_DATASET_EXPERIMENTS,
+  TABLE_DATASET_EXPERIMENT_RESULTS,
+  TABLE_PROMPT_BLOCKS,
+  TABLE_PROMPT_BLOCK_VERSIONS,
   SpanRecord,
   StorageAgentType,
+  StoragePromptBlockType,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
+import type { PromptBlockVersion } from '@mastra/core/storage/domains/prompt-blocks';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type Cloudflare from 'cloudflare';
 
@@ -126,8 +130,10 @@ export type RecordTypes = {
   [TABLE_DATASET_VERSIONS]: Record<string, any>;
   [TABLE_RUNS]: Record<string, any>;
   [TABLE_RUN_RESULTS]: Record<string, any>;
-  [TABLE_DATASET_RUNS]: Record<string, any>;
-  [TABLE_DATASET_RUN_RESULTS]: Record<string, any>;
+  [TABLE_DATASET_EXPERIMENTS]: Record<string, any>;
+  [TABLE_DATASET_EXPERIMENT_RESULTS]: Record<string, any>;
+  [TABLE_PROMPT_BLOCKS]: StoragePromptBlockType;
+  [TABLE_PROMPT_BLOCK_VERSIONS]: PromptBlockVersion;
 };
 
 export type ListOptions = {

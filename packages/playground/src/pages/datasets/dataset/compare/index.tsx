@@ -16,10 +16,10 @@ import {
 function DatasetCompare() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const [searchParams] = useSearchParams();
-  const runIdA = searchParams.get('runA') ?? '';
-  const runIdB = searchParams.get('runB') ?? '';
+  const experimentIdA = searchParams.get('experimentA') ?? '';
+  const experimentIdB = searchParams.get('experimentB') ?? '';
 
-  if (!datasetId || !runIdA || !runIdB) {
+  if (!datasetId || !experimentIdA || !experimentIdB) {
     return (
       <MainContentLayout>
         <Header>
@@ -34,15 +34,16 @@ function DatasetCompare() {
               <Icon>
                 <GitCompare />
               </Icon>
-              Compare Runs
+              Compare Experiments
             </Crumb>
           </Breadcrumb>
         </Header>
         <MainContentContent>
           <div className="text-neutral4 text-center py-8">
-            <p>Select two runs to compare.</p>
+            <p>Select two experiments to compare.</p>
             <p className="text-sm mt-2">
-              Use the URL format: /datasets/{'{datasetId}'}/compare?runA={'{runIdA}'}&runB={'{runIdB}'}
+              Use the URL format: /datasets/{'{datasetId}'}/compare?experimentA={'{experimentIdA}'}&experimentB=
+              {'{experimentIdB}'}
             </p>
           </div>
         </MainContentContent>
@@ -67,7 +68,7 @@ function DatasetCompare() {
             <Icon>
               <GitCompare />
             </Icon>
-            Compare Runs
+            Compare Experiments
           </Crumb>
         </Breadcrumb>
         <HeaderAction>
@@ -83,12 +84,12 @@ function DatasetCompare() {
       <MainContentContent>
         <div className="max-w-[100rem] w-full px-12 mx-auto grid content-start gap-8">
           <PageHeader
-            title="Compare Runs"
-            description={`Comparing ${runIdA.slice(0, 8)} vs ${runIdB.slice(0, 8)}`}
+            title="Compare Experiments"
+            description={`Comparing ${experimentIdA.slice(0, 8)} vs ${experimentIdB.slice(0, 8)}`}
             icon={<GitCompare />}
           />
 
-          <ComparisonView datasetId={datasetId} runIdA={runIdA} runIdB={runIdB} />
+          <ComparisonView datasetId={datasetId} experimentIdA={experimentIdA} experimentIdB={experimentIdB} />
         </div>
       </MainContentContent>
     </MainContentLayout>

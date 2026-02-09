@@ -767,11 +767,28 @@ export interface ListStoredAgentsResponse {
 }
 
 /**
+ * Parameters for cloning an agent to a stored agent
+ */
+export interface CloneAgentParams {
+  /** ID for the cloned agent. If not provided, derived from agent ID. */
+  newId?: string;
+  /** Name for the cloned agent. Defaults to "{name} (Clone)". */
+  newName?: string;
+  /** Additional metadata for the cloned agent. */
+  metadata?: Record<string, unknown>;
+  /** Author identifier for the cloned agent. */
+  authorId?: string;
+  /** Request context for resolving dynamic agent configuration (instructions, model, tools, etc.) */
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+/**
  * Parameters for creating a stored agent.
  * Flat union of agent-record fields and config fields.
  */
 export interface CreateStoredAgentParams {
-  id: string;
+  /** Unique identifier for the agent. If not provided, derived from name via slugify. */
+  id?: string;
   authorId?: string;
   metadata?: Record<string, unknown>;
   name: string;
@@ -1435,7 +1452,7 @@ export interface Dataset {
   updatedAt: string | Date;
 }
 
-export interface DatasetRun {
+export interface DatasetExperiment {
   id: string;
   datasetId: string;
   datasetVersion: string | Date;
@@ -1451,9 +1468,9 @@ export interface DatasetRun {
   updatedAt: string | Date;
 }
 
-export interface DatasetRunResult {
+export interface DatasetExperimentResult {
   id: string;
-  runId: string;
+  experimentId: string;
   itemId: string;
   itemVersion: string | Date;
   input: unknown;
@@ -1521,7 +1538,7 @@ export interface BulkDeleteDatasetItemsParams {
   itemIds: string[];
 }
 
-export interface TriggerDatasetRunParams {
+export interface TriggerDatasetExperimentParams {
   datasetId: string;
   targetType: 'agent' | 'workflow' | 'scorer';
   targetId: string;
@@ -1530,10 +1547,10 @@ export interface TriggerDatasetRunParams {
   maxConcurrency?: number;
 }
 
-export interface CompareRunsParams {
+export interface CompareExperimentsParams {
   datasetId: string;
-  runIdA: string;
-  runIdB: string;
+  experimentIdA: string;
+  experimentIdB: string;
   thresholds?: Record<
     string,
     {
@@ -1565,9 +1582,9 @@ export interface DatasetVersionResponse {
   createdAt: string | Date;
 }
 
-export interface CompareRunsResponse {
-  runA: { id: string; datasetVersion: string | Date };
-  runB: { id: string; datasetVersion: string | Date };
+export interface CompareExperimentsResponse {
+  experimentA: { id: string; datasetVersion: string | Date };
+  experimentB: { id: string; datasetVersion: string | Date };
   versionMismatch: boolean;
   hasRegression: boolean;
   scorers: Record<
@@ -1582,7 +1599,7 @@ export interface CompareRunsResponse {
   >;
   items: Array<{
     itemId: string;
-    inBothRuns: boolean;
+    inBothExperiments: boolean;
     scoresA: Record<string, number | null>;
     scoresB: Record<string, number | null>;
   }>;

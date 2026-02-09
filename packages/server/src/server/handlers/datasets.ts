@@ -1,10 +1,15 @@
-import { runDataset, compareRuns, SchemaValidationError, SchemaUpdateValidationError } from '@mastra/core/datasets';
+import {
+  runExperiment,
+  compareExperiments,
+  SchemaValidationError,
+  SchemaUpdateValidationError,
+} from '@mastra/core/datasets';
 import type { StoragePagination } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
 import {
   datasetIdPathParams,
-  datasetAndRunIdPathParams,
+  datasetAndExperimentIdPathParams,
   datasetAndItemIdPathParams,
   datasetItemVersionPathParams,
   paginationQuerySchema,
@@ -13,19 +18,19 @@ import {
   updateDatasetBodySchema,
   addItemBodySchema,
   updateItemBodySchema,
-  triggerRunBodySchema,
-  compareRunsBodySchema,
+  triggerExperimentBodySchema,
+  compareExperimentsBodySchema,
   bulkAddItemsBodySchema,
   bulkDeleteItemsBodySchema,
   datasetResponseSchema,
   datasetItemResponseSchema,
-  runResponseSchema,
-  runSummaryResponseSchema,
+  experimentResponseSchema,
+  experimentSummaryResponseSchema,
   comparisonResponseSchema,
   listDatasetsResponseSchema,
   listItemsResponseSchema,
-  listRunsResponseSchema,
-  listResultsResponseSchema,
+  listExperimentsResponseSchema,
+  listExperimentResultsResponseSchema,
   listDatasetVersionsResponseSchema,
   listItemVersionsResponseSchema,
   itemVersionResponseSchema,
@@ -452,18 +457,18 @@ export const DELETE_ITEM_ROUTE = createRoute({
 });
 
 // ============================================================================
-// Run Operations Routes (nested under datasets)
+// Experiment Operations Routes (nested under datasets)
 // ============================================================================
 
-export const LIST_RUNS_ROUTE = createRoute({
+export const LIST_EXPERIMENTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/datasets/:datasetId/runs',
+  path: '/datasets/:datasetId/experiments',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
   queryParamSchema: paginationQuerySchema,
-  responseSchema: listRunsResponseSchema,
-  summary: 'List runs for dataset',
-  description: 'Returns a paginated list of runs for the dataset',
+  responseSchema: listExperimentsResponseSchema,
+  summary: 'List experiments for dataset',
+  description: 'Returns a paginated list of experiments for the dataset',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
@@ -488,25 +493,25 @@ export const LIST_RUNS_ROUTE = createRoute({
 
       const result = await runsStore.listRuns({ datasetId, pagination });
       return {
-        runs: result.runs,
+        experiments: result.runs,
         pagination: result.pagination,
       };
     } catch (error) {
-      return handleError(error, 'Error listing runs');
+      return handleError(error, 'Error listing experiments');
     }
   },
 });
 
-export const TRIGGER_RUN_ROUTE = createRoute({
+export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
   method: 'POST',
-  path: '/datasets/:datasetId/runs',
+  path: '/datasets/:datasetId/experiments',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
-  bodySchema: triggerRunBodySchema,
-  responseSchema: runSummaryResponseSchema,
-  summary: 'Trigger a new run',
+  bodySchema: triggerExperimentBodySchema,
+  responseSchema: experimentSummaryResponseSchema,
+  summary: 'Trigger a new experiment',
   description:
-    'Triggers a new run of the dataset against the specified target. Returns immediately with pending status; execution happens in background.',
+    'Triggers a new experiment on the dataset against the specified target. Returns immediately with pending status; execution happens in background.',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
@@ -578,11 +583,11 @@ export const TRIGGER_RUN_ROUTE = createRoute({
         totalItems: items.length,
       });
 
-      // Spawn runDataset() without await - fire and forget
-      // The runDataset function will update run status to 'running' then 'completed'/'failed'
+      // Spawn runExperiment() without await - fire and forget
+      // The runExperiment function will update run status to 'running' then 'completed'/'failed'
       void (async () => {
         try {
-          await runDataset(mastra, {
+          await runExperiment(mastra, {
             datasetId,
             targetType,
             targetId,
@@ -594,7 +599,7 @@ export const TRIGGER_RUN_ROUTE = createRoute({
           });
         } catch (err) {
           // Log error and update run status to failed
-          console.error(`[runDataset] Background execution failed for run ${runId}:`, err);
+          console.error(`[runExperiment] Background execution failed for experiment ${runId}:`, err);
           try {
             await runsStore.updateRun({
               id: runId,
@@ -602,14 +607,14 @@ export const TRIGGER_RUN_ROUTE = createRoute({
               completedAt: new Date(),
             });
           } catch (updateErr) {
-            console.error(`[runDataset] Failed to update run status to failed:`, updateErr);
+            console.error(`[runExperiment] Failed to update run status to failed:`, updateErr);
           }
         }
       })();
 
       // Return immediately with pending status
       return {
-        runId,
+        experimentId: runId,
         status: 'pending' as const,
         totalItems: items.length,
         succeededCount: 0,
@@ -619,22 +624,22 @@ export const TRIGGER_RUN_ROUTE = createRoute({
         results: [],
       };
     } catch (error) {
-      return handleError(error, 'Error triggering run');
+      return handleError(error, 'Error triggering experiment');
     }
   },
 });
 
-export const GET_RUN_ROUTE = createRoute({
+export const GET_EXPERIMENT_ROUTE = createRoute({
   method: 'GET',
-  path: '/datasets/:datasetId/runs/:runId',
+  path: '/datasets/:datasetId/experiments/:experimentId',
   responseType: 'json',
-  pathParamSchema: datasetAndRunIdPathParams,
-  responseSchema: runResponseSchema.nullable(),
-  summary: 'Get run by ID',
-  description: 'Returns details for a specific run',
+  pathParamSchema: datasetAndExperimentIdPathParams,
+  responseSchema: experimentResponseSchema.nullable(),
+  summary: 'Get experiment by ID',
+  description: 'Returns details for a specific experiment',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, runId }) => {
+  handler: async ({ mastra, datasetId, experimentId }) => {
     try {
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
       const runsStore = await mastra.getStorage()?.getStore('runs');
@@ -648,30 +653,30 @@ export const GET_RUN_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
 
-      const run = await runsStore.getRunById({ id: runId });
+      const run = await runsStore.getRunById({ id: experimentId });
       if (!run || run.datasetId !== datasetId) {
-        throw new HTTPException(404, { message: `Run not found: ${runId}` });
+        throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
       }
 
       return run;
     } catch (error) {
-      return handleError(error, 'Error getting run');
+      return handleError(error, 'Error getting experiment');
     }
   },
 });
 
-export const LIST_RESULTS_ROUTE = createRoute({
+export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   method: 'GET',
-  path: '/datasets/:datasetId/runs/:runId/results',
+  path: '/datasets/:datasetId/experiments/:experimentId/results',
   responseType: 'json',
-  pathParamSchema: datasetAndRunIdPathParams,
+  pathParamSchema: datasetAndExperimentIdPathParams,
   queryParamSchema: paginationQuerySchema,
-  responseSchema: listResultsResponseSchema,
-  summary: 'List run results',
-  description: 'Returns a paginated list of results for the run',
+  responseSchema: listExperimentResultsResponseSchema,
+  summary: 'List experiment results',
+  description: 'Returns a paginated list of results for the experiment',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, runId, ...params }) => {
+  handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     try {
       const { page, perPage } = params;
       const pagination: StoragePagination = {
@@ -691,19 +696,19 @@ export const LIST_RESULTS_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
 
-      // Check if run exists and belongs to dataset
-      const run = await runsStore.getRunById({ id: runId });
+      // Check if experiment exists and belongs to dataset
+      const run = await runsStore.getRunById({ id: experimentId });
       if (!run || run.datasetId !== datasetId) {
-        throw new HTTPException(404, { message: `Run not found: ${runId}` });
+        throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
       }
 
-      const result = await runsStore.listResults({ runId, pagination });
+      const result = await runsStore.listResults({ runId: experimentId, pagination });
       return {
-        results: result.results,
+        results: result.results.map(({ runId: experimentId, ...rest }) => ({ experimentId, ...rest })),
         pagination: result.pagination,
       };
     } catch (error) {
-      return handleError(error, 'Error listing run results');
+      return handleError(error, 'Error listing experiment results');
     }
   },
 });
@@ -712,22 +717,22 @@ export const LIST_RESULTS_ROUTE = createRoute({
 // Analytics Routes (nested under datasets)
 // ============================================================================
 
-export const COMPARE_RUNS_ROUTE = createRoute({
+export const COMPARE_EXPERIMENTS_ROUTE = createRoute({
   method: 'POST',
   path: '/datasets/:datasetId/compare',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
-  bodySchema: compareRunsBodySchema,
+  bodySchema: compareExperimentsBodySchema,
   responseSchema: comparisonResponseSchema,
-  summary: 'Compare two runs',
-  description: 'Compares two runs to detect score regressions',
+  summary: 'Compare two experiments',
+  description: 'Compares two experiments to detect score regressions',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
-      const { runIdA, runIdB, thresholds } = params as {
-        runIdA: string;
-        runIdB: string;
+      const { experimentIdA, experimentIdB, thresholds } = params as {
+        experimentIdA: string;
+        experimentIdB: string;
         thresholds?: Record<string, { value: number; direction?: 'higher-is-better' | 'lower-is-better' }>;
       };
 
@@ -743,34 +748,34 @@ export const COMPARE_RUNS_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
 
-      // Validate both runs belong to the dataset (or warn)
+      // Validate both experiments belong to the dataset (or warn)
       const [runA, runB] = await Promise.all([
-        runsStore.getRunById({ id: runIdA }),
-        runsStore.getRunById({ id: runIdB }),
+        runsStore.getRunById({ id: experimentIdA }),
+        runsStore.getRunById({ id: experimentIdB }),
       ]);
 
       if (!runA) {
-        throw new HTTPException(404, { message: `Run A not found: ${runIdA}` });
+        throw new HTTPException(404, { message: `Experiment A not found: ${experimentIdA}` });
       }
       if (!runB) {
-        throw new HTTPException(404, { message: `Run B not found: ${runIdB}` });
+        throw new HTTPException(404, { message: `Experiment B not found: ${experimentIdB}` });
       }
 
-      // Compare runs
-      const result = await compareRuns(mastra, {
-        runIdA,
-        runIdB,
+      // Compare experiments
+      const result = await compareExperiments(mastra, {
+        runIdA: experimentIdA,
+        runIdB: experimentIdB,
         thresholds,
       });
 
-      // Add warning if runs are from different datasets
+      // Add warning if experiments are from different datasets
       if (runA.datasetId !== datasetId || runB.datasetId !== datasetId) {
-        result.warnings.push('One or both runs belong to a different dataset than the comparison endpoint');
+        result.warnings.push('One or both experiments belong to a different dataset than the comparison endpoint');
       }
 
       return result;
     } catch (error) {
-      return handleError(error, 'Error comparing runs');
+      return handleError(error, 'Error comparing experiments');
     }
   },
 });

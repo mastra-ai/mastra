@@ -44,7 +44,7 @@ type LinkComponentPaths = {
 
   datasetLink: (datasetId: string) => string;
   datasetItemLink: (datasetId: string, itemId: string) => string;
-  datasetRunLink: (datasetId: string, runId: string) => string;
+  datasetExperimentLink: (datasetId: string, experimentId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -79,7 +79,7 @@ const LinkComponentContext = createContext<{
     workflowRunLink: () => '',
     datasetLink: () => '',
     datasetItemLink: () => '',
-    datasetRunLink: () => '',
+    datasetExperimentLink: () => '',
   },
 });
 

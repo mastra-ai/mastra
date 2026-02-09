@@ -1,10 +1,10 @@
-import { DatasetRun } from '@mastra/client-js';
+import { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@/ds/components/Badge';
 import { cn } from '@/lib/utils';
 import { CheckIcon, ClockIcon, TimerIcon, XIcon } from 'lucide-react';
 
 export interface ExperimentStatsProps {
-  run: DatasetRun;
+  experiment: DatasetExperiment;
   className?: string;
 }
 
@@ -17,9 +17,9 @@ const statusIconMap: Record<RunStatus, React.ReactNode> = {
   failed: <XIcon />,
 };
 
-export function ExperimentStats({ run, className }: ExperimentStatsProps) {
-  const status = run.status as RunStatus;
-  const pendingCount = run.totalItems - run.succeededCount - run.failedCount;
+export function ExperimentStats({ experiment, className }: ExperimentStatsProps) {
+  const status = experiment.status as RunStatus;
+  const pendingCount = experiment.totalItems - experiment.succeededCount - experiment.failedCount;
 
   return (
     <div className={cn('grid justify-items-end gap-3', className)}>
@@ -34,7 +34,7 @@ export function ExperimentStats({ run, className }: ExperimentStatsProps) {
         >
           {statusIconMap[status]}
         </span>
-        {run.status}
+        {experiment.status}
       </div>
       <div
         className={cn(
@@ -44,13 +44,13 @@ export function ExperimentStats({ run, className }: ExperimentStatsProps) {
         )}
       >
         <span>
-          Total: <b>{run.totalItems}</b>
+          Total: <b>{experiment.totalItems}</b>
         </span>
         <span>
-          Succeeded: <b>{run.succeededCount}</b>
+          Succeeded: <b>{experiment.succeededCount}</b>
         </span>
         <span>
-          Failed: <b>{run.failedCount}</b>
+          Failed: <b>{experiment.failedCount}</b>
         </span>
         {(status === 'pending' || status === 'running') && (
           <span>
@@ -60,8 +60,8 @@ export function ExperimentStats({ run, className }: ExperimentStatsProps) {
       </div>
 
       {/* <div className="flex items-center gap-1.5 text-ui text-neutral4">
-        <span className="text-neutral3">{run.targetType}:</span>
-        <span className="text-neutral5 font-mono">{run.targetId}</span>
+        <span className="text-neutral3">{experiment.targetType}:</span>
+        <span className="text-neutral5 font-mono">{experiment.targetId}</span>
       </div> */}
     </div>
   );
