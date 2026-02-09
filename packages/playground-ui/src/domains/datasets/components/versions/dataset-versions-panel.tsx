@@ -28,7 +28,7 @@ export function DatasetVersionsPanel({
   onVersionSelect,
   activeVersion,
 }: DatasetVersionsPanelProps) {
-  const { data: versions, isLoading } = useDatasetVersions(datasetId);
+  const { data: versions, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useDatasetVersions(datasetId);
 
   const handleVersionClick = (version: DatasetVersion) => {
     onVersionSelect?.(version);
@@ -86,6 +86,17 @@ export function DatasetVersionsPanel({
                   );
                 })}
               </ItemList.Items>
+              {hasNextPage && (
+                <Button
+                  variant="secondary"
+                  size="default"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="w-full mt-2"
+                >
+                  {isFetchingNextPage ? 'Loading...' : 'Load More'}
+                </Button>
+              )}
             </ItemList.Scroller>
           </ItemList>
         )}

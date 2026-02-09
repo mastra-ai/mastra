@@ -1,5 +1,5 @@
 import { useMastraClient } from '@mastra/react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 export interface DatasetItemVersion {
   id: string;
@@ -19,23 +19,28 @@ export interface DatasetItemVersion {
   isLatest: boolean;
 }
 
+const PER_PAGE = 5;
+
 /**
- * Hook to fetch dataset item versions from the API.
+ * Hook to fetch dataset item versions from the API with infinite pagination.
  */
-export const useDatasetItemVersions = (
-  datasetId: string,
-  itemId: string,
-  pagination?: { page?: number; perPage?: number },
-) => {
+export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
   const client = useMastraClient();
 
-  return useQuery({
-    queryKey: ['dataset-item-versions', datasetId, itemId, pagination],
-    queryFn: async (): Promise<DatasetItemVersion[]> => {
-      const response = await client.listDatasetItemVersions(datasetId, itemId, pagination);
-      // Transform API response to include isLatest flag and version alias
-      const versions = response?.versions ?? [];
-      return versions.map((v, index) => ({
+  return useInfiniteQuery({
+    queryKey: ['dataset-item-versions', datasetId, itemId],
+    queryFn: async ({ pageParam }) => {
+      return client.listDatasetItemVersions(datasetId, itemId, { page: pageParam, perPage: PER_PAGE });
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _, lastPageParam) => {
+      if (lastPage?.pagination?.hasMore) {
+        return lastPageParam + 1;
+      }
+      return undefined;
+    },
+    select: data => {
+      return data.pages.flatMap(page => page?.versions ?? []).map((v, index) => ({
         id: v.id,
         itemId: v.itemId,
         datasetId: v.datasetId,
