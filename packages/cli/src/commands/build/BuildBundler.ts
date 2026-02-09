@@ -14,8 +14,6 @@ export class BuildBundler extends Bundler {
     this.studio = studio ?? false;
     // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
     this.platform = process.versions?.bun ? 'neutral' : 'node';
-    // eslint-disable-next-line no-console
-    console.log('good change...');
   }
 
   protected async getUserBundlerOptions(

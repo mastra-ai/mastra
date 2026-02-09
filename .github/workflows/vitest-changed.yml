@@ -584,3 +584,45 @@ jobs:
 
       - name: Merge reports
         run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests
+
+  pr-status:
+    name: PR Status
+    runs-on: ubuntu-latest
+    needs: [test, e2e-test, memory-integration, mcp-integration, agent-builder-integration, observability-test]
+    if: always() && github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: read
+      statuses: write
+
+    steps:
+      - name: Checkout trusted actions from base branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_branch == '0.x' && '0.x' || 'main' }}
+          sparse-checkout: .github/workflows/shared-actions
+
+      - name: Determine test status
+        id: status
+        run: |
+          # Check if any of the test jobs failed
+          if [[ "${{ needs.test.result }}" == "failure" ]] || \
+             [[ "${{ needs.e2e-test.result }}" == "failure" ]] || \
+             [[ "${{ needs.memory-integration.result }}" == "failure" ]] || \
+             [[ "${{ needs.mcp-integration.result }}" == "failure" ]] || \
+             [[ "${{ needs.agent-builder-integration.result }}" == "failure" ]] || \
+             [[ "${{ needs.observability-test.result }}" == "failure" ]]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "description=Some tests failed" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "description=All tests passed" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set PR status
+        uses: ./.github/workflows/shared-actions/set-pr-status
+        with:
+          status: ${{ steps.status.outputs.status }}
+          context: 'Full Test Suite'
+          description: ${{ steps.status.outputs.description }}
+          sha: ${{ github.event.workflow_run.head_sha }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
