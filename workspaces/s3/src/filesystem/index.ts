@@ -393,7 +393,7 @@ export class S3Filesystem extends MastraFilesystem {
       endpoint: this.endpoint,
       forcePathStyle: this.forcePathStyle,
       // Skip signing for anonymous access (public buckets)
-      ...(hasCredentials ? {} : { signer: { sign: async (request: unknown) => request } }),
+      ...(hasCredentials ? {} : { signer: { sign: async (request: any) => request } }),
     });
 
     return this._client;

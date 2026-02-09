@@ -311,66 +311,66 @@ export function FileBrowser({
           </div>
         ) : (
           <TooltipProvider>
-          <ul>
-            {/* Parent directory link */}
-            {currentPath !== '/' && (
-              <li>
-                <button
-                  onClick={() => {
-                    const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
-                    onNavigate(parentPath);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface4 transition-colors text-left"
-                >
-                  <FolderOpen className="h-4 w-4 text-amber-400" />
-                  <span className="text-sm text-icon5">..</span>
-                </button>
-              </li>
-            )}
-            {sortedEntries.map(entry => {
-              const mountLabel = entry.mount?.displayName || entry.mount?.provider;
-
-              return (
-                <li key={entry.name} className="group">
-                  <div className="flex items-center hover:bg-surface4 transition-colors">
-                    <button
-                      onClick={() => handleEntryClick(entry)}
-                      className="flex-1 flex items-center gap-3 px-4 py-2 text-left"
-                    >
-                      {getFileIcon(entry)}
-                      <span className="text-sm text-icon6 flex-1 truncate">{entry.name}</span>
-                      {entry.mount &&
-                        mountLabel &&
-                        (entry.mount.description ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
-                                {mountLabel}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>{entry.mount.description}</TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">{mountLabel}</span>
-                        ))}
-                      {entry.type === 'file' && entry.size !== undefined && (
-                        <span className="text-xs text-icon3 tabular-nums">{formatBytes(entry.size)}</span>
-                      )}
-                    </button>
-                    {onDelete && (
-                      <button
-                        onClick={() => handleDelete(entry)}
-                        aria-label={`Delete ${entry.name}`}
-                        className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 text-icon3 transition-all"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
+            <ul>
+              {/* Parent directory link */}
+              {currentPath !== '/' && (
+                <li>
+                  <button
+                    onClick={() => {
+                      const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
+                      onNavigate(parentPath);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface4 transition-colors text-left"
+                  >
+                    <FolderOpen className="h-4 w-4 text-amber-400" />
+                    <span className="text-sm text-icon5">..</span>
+                  </button>
                 </li>
-              );
-            })}
-          </ul>
+              )}
+              {sortedEntries.map(entry => {
+                const mountLabel = entry.mount?.displayName || entry.mount?.provider;
+
+                return (
+                  <li key={entry.name} className="group">
+                    <div className="flex items-center hover:bg-surface4 transition-colors">
+                      <button
+                        onClick={() => handleEntryClick(entry)}
+                        className="flex-1 flex items-center gap-3 px-4 py-2 text-left"
+                      >
+                        {getFileIcon(entry)}
+                        <span className="text-sm text-icon6 flex-1 truncate">{entry.name}</span>
+                        {entry.mount &&
+                          mountLabel &&
+                          (entry.mount.description ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
+                                  {mountLabel}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>{entry.mount.description}</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">{mountLabel}</span>
+                          ))}
+                        {entry.type === 'file' && entry.size !== undefined && (
+                          <span className="text-xs text-icon3 tabular-nums">{formatBytes(entry.size)}</span>
+                        )}
+                      </button>
+                      {onDelete && (
+                        <button
+                          onClick={() => handleDelete(entry)}
+                          aria-label={`Delete ${entry.name}`}
+                          className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 text-icon3 transition-all"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           </TooltipProvider>
         )}
       </div>

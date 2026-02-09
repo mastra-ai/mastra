@@ -595,8 +595,24 @@ describe('GCSFilesystem SDK Operations', () => {
 
   describe('copyFile()', () => {
     it('calls srcFile.copy(destFile) with distinct file objects', async () => {
-      const destFile = { copy: vi.fn(), download: vi.fn(), save: vi.fn(), delete: vi.fn(), exists: vi.fn(), getMetadata: vi.fn(), name: 'dest.txt' };
-      const srcFile = { copy: vi.fn().mockResolvedValueOnce(undefined), download: vi.fn(), save: vi.fn(), delete: vi.fn(), exists: vi.fn(), getMetadata: vi.fn(), name: 'src.txt' };
+      const destFile = {
+        copy: vi.fn(),
+        download: vi.fn(),
+        save: vi.fn(),
+        delete: vi.fn(),
+        exists: vi.fn(),
+        getMetadata: vi.fn(),
+        name: 'dest.txt',
+      };
+      const srcFile = {
+        copy: vi.fn().mockResolvedValueOnce(undefined),
+        download: vi.fn(),
+        save: vi.fn(),
+        delete: vi.fn(),
+        exists: vi.fn(),
+        getMetadata: vi.fn(),
+        name: 'src.txt',
+      };
       mockBucket.file.mockImplementation((key: string) => (key === 'src.txt' ? srcFile : destFile));
 
       await fs.copyFile('/src.txt', '/dest.txt');
