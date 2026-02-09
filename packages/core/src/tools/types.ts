@@ -268,6 +268,7 @@ export interface ToolAction<
   TContext extends ToolExecutionContext<TSuspend, TResume, any> = ToolExecutionContext<TSuspend, TResume>,
   TId extends string = string,
   TRequestContext extends Record<string, any> | unknown = unknown,
+  TSchemaOutInput = TSchemaOut,
 > {
   id: TId;
   description: string;
@@ -291,9 +292,9 @@ export interface ToolAction<
   // Second parameter: unified execution context with all metadata
   // Returns: The expected output OR a validation error if input validation fails
   // Note: When no outputSchema is provided, returns any to allow property access
-  // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
+  // Note: TSchemaOutInput is the pre-transform type of outputSchema — Zod transforms are applied during validation
   // Note: { error?: never } enables inline type narrowing with 'error' in result checks
-  execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError>;
+  execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOutInput | ValidationError>;
   mastra?: Mastra;
   requireApproval?: boolean;
   /**
