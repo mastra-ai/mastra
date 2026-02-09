@@ -1354,29 +1354,17 @@ Notes:
       await this.embedClonedMessages(result.clonedMessages, config);
     }
 
-    // Copy working memory from source thread to cloned thread
+    // Copy working memory from source thread to cloned thread.
+    // Thread-scoped: always copy since each thread has its own working memory.
+    // Resource-scoped: only copy when the clone uses a different resourceId (same resourceId shares memory naturally).
     if (config.workingMemory?.enabled) {
       const scope = config.workingMemory.scope || 'resource';
       const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
       const sourceResourceId = sourceThread?.resourceId;
+      const shouldCopy =
+        scope === 'thread' || (scope === 'resource' && args.resourceId && args.resourceId !== sourceResourceId);
 
-      if (scope === 'thread') {
-        // Thread-scoped: read from source thread metadata, write to cloned thread
-        const sourceWm = await this.getWorkingMemory({
-          threadId: args.sourceThreadId,
-          resourceId: sourceResourceId,
-          memoryConfig,
-        });
-        if (sourceWm) {
-          await this.updateWorkingMemory({
-            threadId: result.thread.id,
-            resourceId: result.thread.resourceId,
-            workingMemory: sourceWm,
-            memoryConfig,
-          });
-        }
-      } else if (scope === 'resource' && args.resourceId && args.resourceId !== sourceResourceId) {
-        // Resource-scoped with a different resourceId: copy from source resource to new resource
+      if (shouldCopy) {
         const sourceWm = await this.getWorkingMemory({
           threadId: args.sourceThreadId,
           resourceId: sourceResourceId,
@@ -1391,7 +1379,6 @@ Notes:
           });
         }
       }
-      // Resource-scoped with same resourceId: no action needed, working memory is shared
     }
 
     return result;
