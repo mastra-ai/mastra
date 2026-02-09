@@ -38,6 +38,7 @@ import type { ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
 import { isZodType } from '../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import { validateCron } from './cron';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type {
@@ -64,6 +65,7 @@ import type {
   StreamEvent,
   SubsetOf,
   TimeTravelContext,
+  ScheduleConfig,
   WorkflowConfig,
   WorkflowEngineType,
   WorkflowOptions,
@@ -1328,6 +1330,7 @@ export class Workflow<
   };
 
   #mastra?: Mastra;
+  #schedule?: ScheduleConfig<TInput>;
 
   #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> = new Map();
 
@@ -1344,6 +1347,7 @@ export class Workflow<
     steps,
     options = {},
     type,
+    schedule,
   }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
@@ -1381,6 +1385,13 @@ export class Workflow<
     this.engineType = 'default';
 
     this.#runs = new Map();
+
+    if (schedule) {
+      if (!validateCron(schedule.cron)) {
+        throw new Error(`Invalid cron expression "${schedule.cron}" for workflow "${id}"`);
+      }
+      this.#schedule = schedule;
+    }
   }
 
   get runs() {
@@ -1393,6 +1404,10 @@ export class Workflow<
 
   get options() {
     return this.#options;
+  }
+
+  get schedule(): ScheduleConfig<TInput> | undefined {
+    return this.#schedule;
   }
 
   __registerMastra(mastra: Mastra) {
