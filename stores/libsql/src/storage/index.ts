@@ -7,12 +7,22 @@ import { AgentsLibSQL } from './domains/agents';
 import { DatasetsLibSQL } from './domains/datasets';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
+import { PromptBlocksLibSQL } from './domains/prompt-blocks';
 import { RunsLibSQL } from './domains/runs';
 import { ScoresLibSQL } from './domains/scores';
 import { WorkflowsLibSQL } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { AgentsLibSQL, DatasetsLibSQL, MemoryLibSQL, ObservabilityLibSQL, RunsLibSQL, ScoresLibSQL, WorkflowsLibSQL };
+export {
+  AgentsLibSQL,
+  DatasetsLibSQL,
+  MemoryLibSQL,
+  ObservabilityLibSQL,
+  RunsLibSQL,
+  ScoresLibSQL,
+  WorkflowsLibSQL,
+  PromptBlocksLibSQL,
+};
 export type { LibSQLDomainConfig } from './db';
 
 /**
@@ -135,6 +145,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const agents = new AgentsLibSQL(domainConfig);
     const datasets = new DatasetsLibSQL(domainConfig);
     const runs = new RunsLibSQL(domainConfig);
+    const promptBlocks = new PromptBlocksLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -144,6 +155,7 @@ export class LibSQLStore extends MastraCompositeStore {
       agents,
       datasets,
       runs,
+      promptBlocks,
     };
   }
 }
