@@ -1,41 +1,33 @@
 ---
-title: "MastraAuthBetterAuth Class | Auth"
-description: "Documentation for the MastraAuthBetterAuth class, which authenticates Mastra applications using Better Auth, a self-hosted open-source authentication framework."
+title: MastraAuthBetterAuth Class
+description: Authenticate your Mastra server using Better Auth (self-hosted, open-source auth).
 packages:
   - "@mastra/auth-better-auth"
-  - "better-auth"
-  - "@mastra/client-js"
-  - "@mastra/core"
+sidebar_label: Better Auth
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
-# MastraAuthBetterAuth Class
-
-The `MastraAuthBetterAuth` class provides authentication for Mastra using Better Auth. It verifies incoming requests using Better Auth's session system and integrates with the Mastra server using the `auth` option.
-
-Better Auth is a self-hosted, open-source authentication framework that gives you full control over your authentication system. It supports multiple authentication methods including email/password, OAuth, magic links, and more.
+The `MastraAuthBetterAuth` class provides authentication for Mastra using Better Auth. It verifies incoming requests using your Better Auth instance and integrates with the Mastra server via the `server.auth` option.
 
 ## Prerequisites
 
-This example uses Better Auth authentication. Make sure to set up a Better Auth instance with a supported database provider and configure your `.env` file appropriately.
+This example uses Better Auth. Make sure your Better Auth instance is configured and your environment variables are set.
 
 ```env title=".env"
-DATABASE_URL=postgresql://user:password@localhost/mastra
+# Required by Better Auth
+BETTER_AUTH_SECRET=...   # at least 32 chars
 BETTER_AUTH_URL=http://localhost:3000
-BETTER_AUTH_SECRET=your-secret-key
+
+# Example DB URL used by the snippet below (adjust for your setup)
+DATABASE_URL=postgres://...
 ```
 
-:::note
+> Better Auth recommends setting `baseURL` explicitly (or via `BETTER_AUTH_URL`) for security and stability.
 
-For more information on setting up Better Auth, visit the [Better Auth documentation](https://better-auth.com).
-
-:::
+If you haven't mounted Better Auth's handler yet (so your app can sign users in / create sessions), follow Better Auth's installation guide to mount the `/api/auth/*` route (or your configured base path).
 
 ## Installation
 
-Before you can use the `MastraAuthBetterAuth` class you have to install the `@mastra/auth-better-auth` package along with Better Auth:
+Install the Mastra provider package and Better Auth:
 
 ```bash
 npm install @mastra/auth-better-auth better-auth
@@ -43,213 +35,91 @@ npm install @mastra/auth-better-auth better-auth
 
 ## Usage example
 
-```typescript {2,6-18} title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { MastraAuthBetterAuth } from "@mastra/auth-better-auth";
+```ts
 import { betterAuth } from "better-auth";
+import { MastraAuthBetterAuth } from "@mastra/auth-better-auth";
+import { Mastra } from "@mastra/core";
 
-// Create your Better Auth instance
+// 1) Create your Better Auth instance
 const auth = betterAuth({
   database: {
     provider: "postgresql",
-    url: process.env.DATABASE_URL,
+    url: process.env.DATABASE_URL!,
   },
   emailAndPassword: {
     enabled: true,
   },
-  baseURL: process.env.BETTER_AUTH_URL,
-  secret: process.env.BETTER_AUTH_SECRET,
 });
 
-export const mastra = new Mastra({
+// 2) Create the Mastra auth provider
+const mastraAuth = new MastraAuthBetterAuth({
+  auth,
+});
+
+// 3) Use with Mastra
+const mastra = new Mastra({
   server: {
-    auth: new MastraAuthBetterAuth({
-      auth,
-    }),
+    auth: mastraAuth,
   },
 });
 ```
 
-:::info
+## Configuration options
 
-The default `authorizeUser` method allows all authenticated users with a valid session. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
+| Option          | Type | Required | Description |
+| --------------- | ---- | -------- | ----------- |
+| `auth` | `Auth` | Yes | Your Better Auth instance created via `betterAuth({ ... })` |
+| `name` | `string` | No | Custom provider name (default: `"better-auth"`) |
+| `authorizeUser` | `(user, request) => Promise<boolean>` | No | Custom authorization logic |
+| `public` | `string[]` | No | Public routes that don't require authentication |
+| `protected` | `string[]` | No | Protected routes that require authentication |
 
-Visit [MastraAuthBetterAuth](/reference/auth/better-auth) for all available configuration options.
+## Custom authorization
 
-:::
+```ts
+const mastraAuth = new MastraAuthBetterAuth({
+  auth,
+  async authorizeUser(user) {
+    // Example: only allow verified emails
+    return user?.user?.emailVerified === true;
+  },
+});
+```
+
+## Route configuration
+
+```ts
+const mastraAuth = new MastraAuthBetterAuth({
+  auth,
+  public: ["/health", "/api/status"],
+  protected: ["/api/*", "/admin/*"],
+});
+```
 
 ## Client-side setup
 
-When using Better Auth, you'll need to retrieve the session token from Better Auth on the client side and pass it to your Mastra requests.
+When auth is enabled, requests to Mastra's built-in routes require authentication. In practice, that means your client needs to send whatever credential your Better Auth setup uses for authenticated requests.
 
-### Retrieving the session token
+If you're using `MastraClient`, configure it to send an `Authorization: Bearer <token>` header (how you obtain the token depends on your Better Auth setup):
 
-Use the Better Auth client to authenticate users and retrieve their session token:
-
-```typescript title="lib/auth.ts"
-import { createAuthClient } from "better-auth/client";
-
-export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL,
-});
-
-export const getSessionToken = async () => {
-  const session = await authClient.getSession();
-  return session?.session?.token;
-};
-```
-
-:::note
-
-Refer to the [Better Auth client documentation](https://better-auth.com/docs/client) for more authentication methods and configuration options.
-
-:::
-
-## Configuring `MastraClient`
-
-When `auth` is enabled, all requests made with `MastraClient` must include a valid Better Auth session token in the `Authorization` header:
-
-```typescript {6} title="lib/mastra/mastra-client.ts"
+```ts
 import { MastraClient } from "@mastra/client-js";
-import { getSessionToken } from "./auth";
 
-export const getMastraClient = async () => {
-  const token = await getSessionToken();
-  
-  return new MastraClient({
-    baseUrl: "https://<mastra-api-url>",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-};
-```
-
-:::info
-
-The token must be prefixed with `Bearer` in the Authorization header.
-
-Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
-
-:::
-
-### Making authenticated requests
-
-Once `MastraClient` is configured with the Better Auth session token, you can send authenticated requests:
-
-<Tabs>
-  <TabItem value="react" label="React">
-
-    ```tsx title="src/components/test-agent.tsx"
-    "use client";
-
-    import { useEffect, useState } from "react";
-    import { authClient } from "@/lib/auth";
-    import { MastraClient } from "@mastra/client-js";
-
-    export const TestAgent = () => {
-      const [session, setSession] = useState(null);
-
-      useEffect(() => {
-        (async () => {
-          const session = await authClient.getSession();
-          setSession(session);
-        })();
-      }, []);
-
-      async function handleClick() {
-        if (!session?.session?.token) {
-          console.error("No session token available");
-          return;
-        }
-
-        const client = new MastraClient({
-          baseUrl: "http://localhost:4111",
-          headers: {
-            Authorization: `Bearer ${session.session.token}`,
-          },
-        });
-
-        const weatherAgent = client.getAgent("weatherAgent");
-        const response = await weatherAgent.generate("What's the weather like in New York");
-
-        console.log({ response });
-      }
-
-      return <button onClick={handleClick}>Test Agent</button>;
-    };
-    ```
-
-  </TabItem>
-  <TabItem value="curl" label="cURL">
-
-    ```bash
-    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
-      -H "Content-Type: application/json" \
-      -H "Authorization: Bearer <your-better-auth-session-token>" \
-      -d '{
-        "messages": "Weather in London"
-      }'
-    ```
-
-  </TabItem>
-</Tabs>
-
-## Advanced Configuration
-
-### Custom authorization
-
-You can provide a custom `authorizeUser` function to implement more sophisticated authorization logic:
-
-```typescript title="src/mastra/index.ts"
-const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthBetterAuth({
-      auth,
-      authorizeUser: async (user) => {
-        // Only allow users with specific email domains
-        return user.user.email?.endsWith("@company.com") ?? false;
-      },
-    }),
+export const mastraClient = new MastraClient({
+  baseUrl: "http://localhost:4111",
+  headers: {
+    Authorization: `Bearer ${accessToken}`,
   },
 });
 ```
 
-### Multiple authentication methods
+## Troubleshooting
 
-Better Auth supports various authentication methods. You can configure multiple methods in your Better Auth instance:
+* **401/403 on every request**: confirm your Better Auth handler is mounted and your app can create a valid session/token.
+* **Base URL issues**: set `baseURL` in `betterAuth({ ... })` or set `BETTER_AUTH_URL`.
+* **DB connection errors**: verify `DATABASE_URL` and database provider configuration.
 
-```typescript title="src/mastra/index.ts"
-const auth = betterAuth({
-  database: {
-    provider: "postgresql",
-    url: process.env.DATABASE_URL,
-  },
-  emailAndPassword: {
-    enabled: true,
-  },
-  socialProviders: {
-    github: {
-      clientId: process.env.GITHUB_CLIENT_ID,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    },
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    },
-  },
-  baseURL: process.env.BETTER_AUTH_URL,
-  secret: process.env.BETTER_AUTH_SECRET,
-});
-```
+## Further reading
 
-## Supported Databases
-
-Better Auth supports multiple databases:
-
-- PostgreSQL
-- MySQL
-- SQLite
-- MongoDB (via Mongoose adapter)
-
-See [Better Auth Database Configuration](https://better-auth.com/docs/database) for more details.
+* Better Auth docs (installation + options)
+* Mastra Auth Overview
