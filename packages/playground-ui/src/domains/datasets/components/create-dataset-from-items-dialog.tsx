@@ -53,6 +53,7 @@ export function CreateDatasetFromItemsDialog({
           datasetId: dataset.id,
           input: item.input,
           expectedOutput: item.expectedOutput,
+          context: item.context as Record<string, unknown> | undefined,
         });
         setProgress(i + 1);
       }

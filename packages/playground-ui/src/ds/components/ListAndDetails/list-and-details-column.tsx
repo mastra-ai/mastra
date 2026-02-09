@@ -1,18 +1,21 @@
 import { cn } from '@/lib/utils';
+import { ListAndDetails } from './list-and-details';
 
 export type ListAndDetailsColumnProps = {
   children?: React.ReactNode;
-  isTopFixed?: boolean;
+  type?: 'list' | 'details' | 'secondDetails';
 };
 
-export function ListAndDetailsColumn({ children, isTopFixed }: ListAndDetailsColumnProps): React.JSX.Element {
+export function ListAndDetailsColumn({ children }: ListAndDetailsColumnProps): React.JSX.Element {
   return (
-    <div
-      className={cn('overflow-y-auto grid gap-6 content-start', {
-        'grid-rows-[auto_1fr]': isTopFixed,
-      })}
-    >
-      {children}
+    <div className="COLUMN flex [&:first-of-type>.SEPARATOR]:hidden overflow-y-auto min-w-[35rem] w-full ">
+      <ListAndDetails.Separator className="SEPARATOR" />
+      <div
+        className={cn('COLUMN-INNER overflow-y-auto grid w-full gap-8 content-start px-[1.5vw]')}
+        // style={{ border: '2px dashed gray' }}
+      >
+        {children}
+      </div>
     </div>
   );
 }

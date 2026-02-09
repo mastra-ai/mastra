@@ -44,6 +44,7 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
     version,
     maxConcurrency = 5,
     signal,
+    itemTimeout,
     runId: providedRunId,
   } = config;
 
@@ -125,8 +126,15 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
         const itemStartedAt = new Date();
         const perfStart = performance.now();
 
+        // Compose per-item signal (timeout + run-level abort)
+        let itemSignal: AbortSignal | undefined = signal;
+        if (itemTimeout) {
+          const timeoutSignal = AbortSignal.timeout(itemTimeout);
+          itemSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+        }
+
         // Execute target
-        const execResult = await executeTarget(target, targetType, item);
+        const execResult = await executeTarget(target, targetType, item, { signal: itemSignal });
 
         const latency = performance.now() - perfStart;
         const itemCompletedAt = new Date();
@@ -167,21 +175,25 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
 
         // Persist result with scores (if storage available)
         if (runsStore) {
-          await runsStore.addResult({
-            runId,
-            itemId: item.id,
-            itemVersion: item.version,
-            input: item.input,
-            output: execResult.output,
-            expectedOutput: item.expectedOutput ?? null,
-            latency,
-            error: execResult.error,
-            startedAt: itemStartedAt,
-            completedAt: itemCompletedAt,
-            retryCount: 0,
-            traceId: execResult.traceId,
-            scores: itemScores,
-          });
+          try {
+            await runsStore.addResult({
+              runId,
+              itemId: item.id,
+              itemVersion: item.version,
+              input: item.input,
+              output: execResult.output,
+              expectedOutput: item.expectedOutput ?? null,
+              latency,
+              error: execResult.error,
+              startedAt: itemStartedAt,
+              completedAt: itemCompletedAt,
+              retryCount: 0,
+              traceId: execResult.traceId,
+              scores: itemScores,
+            });
+          } catch (persistError) {
+            console.warn(`Failed to persist result for item ${item.id}:`, persistError);
+          }
         }
 
         results.push({
@@ -191,8 +203,8 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
       },
       { concurrency: maxConcurrency },
     );
-  } catch (error) {
-    // Handle abort or other fatal errors
+  } catch {
+    // Handle abort or other fatal errors — return partial summary instead of throwing
     const completedAt = new Date();
 
     if (runsStore) {
@@ -205,11 +217,16 @@ export async function runDataset(mastra: Mastra, config: RunConfig): Promise<Run
       });
     }
 
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw error; // Re-throw abort
-    }
-
-    throw error;
+    return {
+      runId,
+      status: 'failed' as const,
+      totalItems: items.length,
+      succeededCount,
+      failedCount,
+      startedAt,
+      completedAt,
+      results,
+    };
   }
 
   // 7. Finalize run record
