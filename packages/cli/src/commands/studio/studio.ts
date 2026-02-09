@@ -13,6 +13,7 @@ interface StudioOptions {
   serverPort?: string | number;
   serverProtocol?: string;
   serverApiPrefix?: string;
+  authHeader?: string;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -63,7 +64,21 @@ export async function studio(
   }
 }
 
-const createServer = (builtStudioPath: string, options: StudioOptions) => {
+/**
+ * Escapes a string value for safe injection into a JavaScript string literal within an HTML script tag.
+ * Handles backslashes, single quotes, angle brackets, and control characters.
+ */
+export function escapeForHtmlScript(value: string): string {
+  return String(value)
+    .replace(/\\/g, '\\\\') // Escape backslashes first
+    .replace(/'/g, "\\'") // Escape single quotes
+    .replace(/</g, '\\x3c') // Escape < to prevent script tag injection
+    .replace(/>/g, '\\x3e') // Escape > to prevent script tag injection
+    .replace(/\n/g, '\\n') // Escape newlines
+    .replace(/\r/g, '\\r'); // Escape carriage returns
+}
+
+export const createServer = (builtStudioPath: string, options: StudioOptions) => {
   const indexHtmlPath = join(builtStudioPath, 'index.html');
   const basePath = '';
 
@@ -75,10 +90,11 @@ const createServer = (builtStudioPath: string, options: StudioOptions) => {
     .replaceAll('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
     .replaceAll('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http')
     .replaceAll('%%MASTRA_API_PREFIX%%', options.serverApiPrefix || '/api')
+    .replaceAll('%%MASTRA_AUTH_HEADER%%', escapeForHtmlScript(options.authHeader ?? ''))
     .replaceAll('%%MASTRA_EXPERIMENTAL_FEATURES%%', experimentalFeatures)
     .replaceAll('%%MASTRA_CLOUD_API_ENDPOINT%%', '')
     .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '')
-    .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '');
+    .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', escapeForHtmlScript(process.env.MASTRA_TELEMETRY_DISABLED ?? ''));
 
   const server = http.createServer((req, res) => {
     const url = req.url || basePath;

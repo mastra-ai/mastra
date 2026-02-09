@@ -91,6 +91,33 @@ By default, Studio runs at http://localhost:4111. You can change the [`host`](/r
 
 Furthermore, Mastra supports local HTTPS development through the [`--https`](/reference/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). Visit the [HTTPS reference](/reference/configuration#serverhttps) to learn more.
 
+### Connecting to Remote Servers
+
+The `mastra studio` command supports connecting to remote Mastra servers with custom API routes and authentication:
+
+```bash
+# Connect to a server with a custom API prefix
+mastra studio --server-host myapp.vercel.app --server-api-prefix /api/v1
+
+# Connect with authentication
+mastra studio --server-host production.example.com --auth-header "Authorization: Bearer your-token"
+
+# Combine options
+mastra studio \
+  --server-host api.example.com \
+  --server-port 443 \
+  --server-protocol https \
+  --server-api-prefix /api/v2 \
+  --auth-header "x-api-key: your-api-key"
+```
+
+**Available options:**
+- `--server-host <host>` - Host of the Mastra API server (default: localhost)
+- `--server-port <port>` - Port of the Mastra API server (default: 4111)
+- `--server-protocol <protocol>` - Protocol of the Mastra API server (default: http)
+- `--server-api-prefix <prefix>` - API route prefix of the Mastra server (default: /api)
+- `--auth-header <header>` - Auth header to include with requests (format: "name: value")
+
 ## Next steps
 
 - Learn more about Mastra's suggested [project structure](/docs/getting-started/project-structure).
