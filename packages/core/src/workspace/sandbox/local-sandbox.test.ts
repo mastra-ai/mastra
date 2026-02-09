@@ -4,9 +4,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { IsolationUnavailableError } from './errors';
 import { LocalSandbox } from './local-sandbox';
 import { detectIsolation, isIsolationAvailable, isSeatbeltAvailable, isBwrapAvailable } from './native-sandbox';
-import { IsolationUnavailableError } from './sandbox';
 
 describe('LocalSandbox', () => {
   let tempDir: string;
@@ -43,7 +43,7 @@ describe('LocalSandbox', () => {
       expect(defaultSandbox.provider).toBe('local');
       expect(defaultSandbox.name).toBe('LocalSandbox');
       expect(defaultSandbox.id).toBeDefined();
-      expect(defaultSandbox.status).toBe('stopped');
+      expect(defaultSandbox.status).toBe('pending');
       // Default working directory is .sandbox/ in cwd
       expect(defaultSandbox.workingDirectory).toBe(path.join(process.cwd(), '.sandbox'));
     });
@@ -65,7 +65,7 @@ describe('LocalSandbox', () => {
   // ===========================================================================
   describe('lifecycle', () => {
     it('should start successfully', async () => {
-      expect(sandbox.status).toBe('stopped');
+      expect(sandbox.status).toBe('pending');
 
       await sandbox.start();
 
@@ -83,7 +83,7 @@ describe('LocalSandbox', () => {
       await sandbox.start();
       await sandbox.destroy();
 
-      expect(sandbox.status).toBe('stopped');
+      expect(sandbox.status).toBe('destroyed');
     });
 
     it('should report ready status', async () => {

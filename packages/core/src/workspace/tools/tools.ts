@@ -642,7 +642,6 @@ Usage:
           timeout: z
             .number()
             .nullish()
-            .default(30000)
             .describe(
               'Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.',
             ),
@@ -672,7 +671,7 @@ Usage:
           const startedAt = Date.now();
           try {
             const result = await workspace.sandbox!.executeCommand!(command, args ?? [], {
-              timeout: timeout ?? 30000,
+              timeout: timeout ?? undefined,
               cwd: cwd ?? undefined,
               // Stream stdout/stderr as tool-output chunks for proper UI integration
               onStdout: async (data: string) => {

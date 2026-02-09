@@ -443,6 +443,7 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
           name: entry.name,
           type: entry.type,
           size: entry.size,
+          mount: entry.mount,
         })),
       };
     } catch (error) {

@@ -3,6 +3,7 @@ export * from './workspace';
 
 // Built-in Providers
 export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';
+export { CompositeFilesystem, type CompositeFilesystemConfig } from './filesystem';
 export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Base Classes for External Providers
@@ -17,6 +18,9 @@ export {
   SandboxTimeoutError,
   SandboxNotReadyError,
   IsolationUnavailableError,
+  MountError,
+  MountNotSupportedError,
+  FilesystemNotMountableError,
   type SandboxOperation,
 } from './sandbox';
 
@@ -40,8 +44,21 @@ export type {
   CopyOptions,
 } from './filesystem';
 
+// Mount types (provider-specific configs are in their respective packages)
+export type { FilesystemMountConfig, MountResult, FilesystemIcon } from './filesystem';
+
 // Sandbox
-export type { WorkspaceSandbox, ExecutionResult, CommandResult, ExecuteCommandOptions, SandboxInfo } from './sandbox';
+export { MountManager } from './sandbox';
+export type {
+  WorkspaceSandbox,
+  ExecutionResult,
+  CommandResult,
+  ExecuteCommandOptions,
+  SandboxInfo,
+  SandboxLifecycleHook,
+  MastraSandboxOptions,
+} from './sandbox';
+export type { MountManagerConfig, MountFn, OnMountHook, OnMountResult } from './sandbox';
 
 // Native Sandbox
 export type { IsolationBackend, NativeSandboxConfig, SandboxDetectionResult } from './sandbox';
