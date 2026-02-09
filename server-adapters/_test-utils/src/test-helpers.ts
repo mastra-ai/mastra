@@ -454,10 +454,14 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
   });
 
-  // Mock getEditor to return an object with previewInstructions for stored agents routes
+  // Mock getEditor to return an object with namespaced methods for stored agents routes
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
-    previewInstructions: vi.fn().mockResolvedValue('resolved instructions preview'),
-    clearStoredAgentCache: vi.fn(),
+    prompt: {
+      preview: vi.fn().mockResolvedValue('resolved instructions preview'),
+    },
+    agent: {
+      clearCache: vi.fn(),
+    },
   } as any);
 
   await mockWorkflowRun(workflow);

@@ -24,25 +24,44 @@ import type {
   StorageListPromptBlocksOutput,
   StorageResolvedPromptBlockType,
   StorageListPromptBlocksResolvedOutput,
+  StorageCreateScorerDefinitionInput,
+  StorageUpdateScorerDefinitionInput,
+  StorageListScorerDefinitionsInput,
+  StorageListScorerDefinitionsOutput,
+  StorageResolvedScorerDefinitionType,
+  StorageListScorerDefinitionsResolvedOutput,
 } from '@mastra/core/storage';
 import type { PromptBlocksStorage } from '@mastra/core/storage';
+import type { ScorerDefinitionsStorage } from '@mastra/core/storage';
+
+import { createScorer } from '@mastra/core/evals';
+import type { MastraScorer } from '@mastra/core/evals';
 
 import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 
 import { resolveInstructionBlocks } from './instruction-builder';
+import { EditorAgentNamespace, EditorPromptNamespace, EditorScorerNamespace } from './namespaces';
 
 export type { MastraEditorConfig };
 
 export { renderTemplate } from './template-engine';
 export { evaluateRuleGroup } from './rule-evaluator';
 export { resolveInstructionBlocks } from './instruction-builder';
+export { EditorAgentNamespace, EditorPromptNamespace, EditorScorerNamespace } from './namespaces';
 
 export class MastraEditor implements IMastraEditor {
   private logger?: Logger;
   private mastra?: Mastra;
 
+  public readonly agent: EditorAgentNamespace;
+  public readonly prompt: EditorPromptNamespace;
+  public readonly scorer: EditorScorerNamespace;
+
   constructor(config?: MastraEditorConfig) {
     this.logger = config?.logger;
+    this.agent = new EditorAgentNamespace(this);
+    this.prompt = new EditorPromptNamespace(this);
+    this.scorer = new EditorScorerNamespace(this);
   }
 
   /**
@@ -77,6 +96,17 @@ export class MastraEditor implements IMastraEditor {
     const promptBlocksStore = await storage.getStore('promptBlocks');
     if (!promptBlocksStore) throw new Error('Prompt blocks storage domain is not available');
     return promptBlocksStore;
+  }
+
+  /**
+   * Get the scorer definitions storage domain from the Mastra storage.
+   */
+  private async getScorerDefinitionsStore(): Promise<ScorerDefinitionsStorage> {
+    const storage = this.mastra!.getStorage();
+    if (!storage) throw new Error('Storage is not configured');
+    const scorerDefinitionsStore = await storage.getStore('scorerDefinitions');
+    if (!scorerDefinitionsStore) throw new Error('Scorer definitions storage domain is not available');
+    return scorerDefinitionsStore;
   }
 
   /**
@@ -198,7 +228,7 @@ export class MastraEditor implements IMastraEditor {
       return storedAgent;
     }
 
-    const agent = this.createAgentFromStoredConfig(storedAgent);
+    const agent = await this.createAgentFromStoredConfig(storedAgent);
 
     // Cache the agent for future requests
     const agentCache = this.mastra.getStoredAgentCache();
@@ -251,8 +281,10 @@ export class MastraEditor implements IMastraEditor {
     }
 
     // Transform stored configs into Agent instances
-    const agents = result.agents.map((storedAgent: StorageResolvedAgentType) =>
-      this.createAgentFromStoredConfig(storedAgent),
+    const agents = await Promise.all(
+      result.agents.map((storedAgent: StorageResolvedAgentType) =>
+        this.createAgentFromStoredConfig(storedAgent),
+      ),
     );
 
     return {
@@ -334,6 +366,76 @@ export class MastraEditor implements IMastraEditor {
     return store.listPromptBlocksResolved(args);
   }
 
+  // ==========================================================================
+  // Scorer Definition CRUD Methods
+  // ==========================================================================
+
+  /**
+   * Create a new stored scorer definition with an initial version.
+   */
+  public async createScorerDefinition(input: StorageCreateScorerDefinitionInput): Promise<StorageResolvedScorerDefinitionType> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getScorerDefinitionsStore();
+    await store.createScorerDefinition({ scorerDefinition: input });
+    const resolved = await store.getScorerDefinitionByIdResolved({ id: input.id });
+    if (!resolved) {
+      throw new Error(`Failed to resolve scorer definition ${input.id} after creation`);
+    }
+    return resolved;
+  }
+
+  /**
+   * Get a stored scorer definition by ID, resolved with its active version.
+   */
+  public async getScorerDefinition(id: string): Promise<StorageResolvedScorerDefinitionType | null> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getScorerDefinitionsStore();
+    return store.getScorerDefinitionByIdResolved({ id });
+  }
+
+  /**
+   * Update a stored scorer definition, creating a new version with the changes.
+   */
+  public async updateScorerDefinition(input: StorageUpdateScorerDefinitionInput): Promise<StorageResolvedScorerDefinitionType> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getScorerDefinitionsStore();
+    await store.updateScorerDefinition(input);
+    const resolved = await store.getScorerDefinitionByIdResolved({ id: input.id });
+    if (!resolved) {
+      throw new Error(`Failed to resolve scorer definition ${input.id} after update`);
+    }
+    return resolved;
+  }
+
+  /**
+   * Delete a stored scorer definition and all its versions.
+   */
+  public async deleteScorerDefinition(id: string): Promise<void> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getScorerDefinitionsStore();
+    await store.deleteScorerDefinition({ id });
+  }
+
+  /**
+   * List stored scorer definitions with optional pagination and filtering.
+   */
+  public async listScorerDefinitions(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getScorerDefinitionsStore();
+    return store.listScorerDefinitions(args);
+  }
+
+  /**
+   * List stored scorer definitions resolved with their active version config.
+   */
+  public async listScorerDefinitionsResolved(
+    args?: StorageListScorerDefinitionsInput,
+  ): Promise<StorageListScorerDefinitionsResolvedOutput> {
+    if (!this.mastra) throw new Error('MastraEditor is not registered with a Mastra instance');
+    const store = await this.getScorerDefinitionsStore();
+    return store.listScorerDefinitionsResolved(args);
+  }
+
   /**
    * Preview the resolved instructions for a given set of instruction blocks and context.
    * Useful for UI preview endpoints.
@@ -377,7 +479,7 @@ export class MastraEditor implements IMastraEditor {
    * Resolves all stored references (tools, workflows, agents, memory, scorers)
    * and registers the agent with the Mastra instance.
    */
-  private createAgentFromStoredConfig(storedAgent: StorageResolvedAgentType): Agent {
+  private async createAgentFromStoredConfig(storedAgent: StorageResolvedAgentType): Promise<Agent> {
     if (!this.mastra) {
       throw new Error('MastraEditor is not registered with a Mastra instance');
     }
@@ -389,7 +491,7 @@ export class MastraEditor implements IMastraEditor {
     const workflows = this.resolveStoredWorkflows(storedAgent.workflows);
     const agents = this.resolveStoredAgents(storedAgent.agents);
     const memory = this.resolveStoredMemory(storedAgent.memory);
-    const scorers = this.resolveStoredScorers(storedAgent.scorers);
+    const scorers = await this.resolveStoredScorers(storedAgent.scorers);
     const inputProcessors = this.resolveStoredInputProcessors(storedAgent.inputProcessors);
     const outputProcessors = this.resolveStoredOutputProcessors(storedAgent.outputProcessors);
 
@@ -636,8 +738,10 @@ export class MastraEditor implements IMastraEditor {
 
   /**
    * Resolve stored scorer configs to MastraScorers instances.
+   * First checks the Mastra in-memory registry (code-defined scorers),
+   * then falls back to stored scorer definitions in the database.
    */
-  private resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): MastraScorers | undefined {
+  private async resolveStoredScorers(storedScorers?: Record<string, StorageScorerConfig>): Promise<MastraScorers | undefined> {
     if (!storedScorers || Object.keys(storedScorers).length === 0) {
       return undefined;
     }
@@ -647,9 +751,30 @@ export class MastraEditor implements IMastraEditor {
     }
 
     const resolvedScorers: MastraScorers = {};
+    const storage = this.mastra.getStorage();
+    const scorerStore = storage ? await storage.getStore('scorerDefinitions') : null;
 
     for (const [scorerKey, scorerConfig] of Object.entries(storedScorers)) {
-      // Try to find the scorer in registered scorers by key
+      // DB takes priority: try stored scorer definitions first
+      if (scorerStore) {
+        try {
+          const storedDef = await scorerStore.getScorerDefinitionByIdResolved({ id: scorerKey });
+          if (storedDef) {
+            const scorer = this.createScorerFromStoredConfig(storedDef);
+            if (scorer) {
+              resolvedScorers[scorerKey] = {
+                scorer,
+                sampling: scorerConfig.sampling,
+              };
+              continue;
+            }
+          }
+        } catch {
+          // Fall through to registry lookup
+        }
+      }
+
+      // Fall back to registry scorers by key, then by ID
       try {
         const scorer = this.mastra.getScorer(scorerKey);
         resolvedScorers[scorerKey] = {
@@ -657,7 +782,6 @@ export class MastraEditor implements IMastraEditor {
           sampling: scorerConfig.sampling,
         };
       } catch {
-        // Try by ID
         try {
           const scorer = this.mastra.getScorerById(scorerKey);
           resolvedScorers[scorerKey] = {
@@ -665,12 +789,90 @@ export class MastraEditor implements IMastraEditor {
             sampling: scorerConfig.sampling,
           };
         } catch {
-          this.logger?.warn(`Scorer "${scorerKey}" referenced in stored agent but not registered in Mastra`);
+          this.logger?.warn(`Scorer "${scorerKey}" referenced in stored agent but not found in registry or storage`);
         }
       }
     }
 
     return Object.keys(resolvedScorers).length > 0 ? resolvedScorers : undefined;
+  }
+
+  /**
+   * Create a MastraScorer instance from a stored scorer definition.
+   * Supports:
+   * - 'llm-judge': Creates a scorer with a single LLM call using custom instructions
+   * - Preset types (e.g., 'bias', 'toxicity'): Not yet supported, returns null
+   */
+  public createScorerFromStoredConfig(
+    storedScorer: StorageResolvedScorerDefinitionType,
+  ): MastraScorer<any, any, any, any> | null {
+    if (storedScorer.type === 'llm-judge') {
+      if (!storedScorer.instructions) {
+        this.logger?.warn(`Stored scorer "${storedScorer.id}" is llm-judge but has no instructions`);
+        return null;
+      }
+
+      const modelConfig = storedScorer.model;
+      if (!modelConfig?.provider || !modelConfig?.name) {
+        this.logger?.warn(`Stored scorer "${storedScorer.id}" has no valid model configuration`);
+        return null;
+      }
+
+      const model = `${modelConfig.provider}/${modelConfig.name}`;
+      const min = storedScorer.scoreRange?.min ?? 0;
+      const max = storedScorer.scoreRange?.max ?? 1;
+
+      const scorer = createScorer({
+        id: storedScorer.id,
+        name: storedScorer.name,
+        description: storedScorer.description || `Custom LLM judge scorer: ${storedScorer.name}`,
+        type: 'agent',
+        judge: {
+          model,
+          instructions: storedScorer.instructions,
+        },
+      }).generateScore({
+        description: `Score the output on a scale of ${min} to ${max}`,
+        createPrompt: ({ run }) => {
+          const input = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
+          const output = typeof run.output === 'string' ? run.output : JSON.stringify(run.output);
+          return `Evaluate the following interaction and provide a score between ${min} and ${max}.
+
+Input: ${input}
+
+Output: ${output}
+
+Provide your score as a JSON object with a "score" field containing a number between ${min} and ${max}.`;
+        },
+      }).generateReason({
+        description: 'Explain the reasoning behind the score',
+        createPrompt: ({ run, score }) => {
+          const input = typeof run.input === 'string' ? run.input : JSON.stringify(run.input);
+          const output = typeof run.output === 'string' ? run.output : JSON.stringify(run.output);
+          return `You scored the following interaction ${score} out of ${max}.
+
+Input: ${input}
+
+Output: ${output}
+
+Explain your reasoning for this score in a clear, concise paragraph.`;
+        },
+      });
+
+      // Register mastra instance with the scorer if available
+      if (this.mastra) {
+        scorer.__registerMastra(this.mastra);
+      }
+
+      return scorer;
+    }
+
+    // Preset types — not yet supported
+    this.logger?.warn(
+      `Stored scorer "${storedScorer.id}" has type "${storedScorer.type}" which is a preset type. ` +
+      `Preset instantiation from stored config is not yet supported.`,
+    );
+    return null;
   }
 
   /**

@@ -548,7 +548,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      const retrievedAgent = await editor.getStoredAgentById('test-agent');
+      const retrievedAgent = await editor.agent.getById('test-agent');
 
       expect(retrievedAgent).toBeInstanceOf(Agent);
       expect(retrievedAgent?.id).toBe('test-agent');
@@ -568,7 +568,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      const retrievedAgent = await editor.getStoredAgentById('tool-agent');
+      const retrievedAgent = await editor.agent.getById('tool-agent');
 
       expect(retrievedAgent).toBeInstanceOf(Agent);
       expect(retrievedAgent?.id).toBe('tool-agent');
@@ -592,7 +592,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      const retrievedAgent = await editor.getStoredAgentById('workflow-agent');
+      const retrievedAgent = await editor.agent.getById('workflow-agent');
 
       expect(retrievedAgent).toBeInstanceOf(Agent);
       expect(retrievedAgent?.id).toBe('workflow-agent');
@@ -616,7 +616,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      const retrievedAgent = await editor.getStoredAgentById('parent-agent');
+      const retrievedAgent = await editor.agent.getById('parent-agent');
 
       expect(retrievedAgent).toBeInstanceOf(Agent);
       expect(retrievedAgent?.id).toBe('parent-agent');
@@ -650,7 +650,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const retrievedAgent = await editor.getStoredAgentById('scored-agent');
+      const retrievedAgent = await editor.agent.getById('scored-agent');
 
       expect(retrievedAgent).toBeInstanceOf(Agent);
       expect(retrievedAgent?.id).toBe('scored-agent');
@@ -690,7 +690,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const retrievedAgent = await editor.getStoredAgentById('processor-agent');
+      const retrievedAgent = await editor.agent.getById('processor-agent');
 
       expect(retrievedAgent).toBeInstanceOf(Agent);
 
@@ -745,7 +745,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const retrievedAgent = await editor.getStoredAgentById('all-primitives-agent');
+      const retrievedAgent = await editor.agent.getById('all-primitives-agent');
 
       expect(retrievedAgent).toBeInstanceOf(Agent);
       expect(retrievedAgent?.id).toBe('all-primitives-agent');
@@ -792,7 +792,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const retrievedAgent = await editor.getStoredAgentById('executable-agent');
+      const retrievedAgent = await editor.agent.getById('executable-agent');
 
       // Add the agent to mastra instance so it can resolve models
       if (retrievedAgent) {
@@ -853,7 +853,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       }
 
       // Retrieve latest version (should be version 2)
-      const latestAgent = await editor.getStoredAgentById('versioned-agent');
+      const latestAgent = await editor.agent.getById('versioned-agent');
       expect(latestAgent?.name).toBe('Version 2');
 
       // Retrieve specific version
@@ -861,7 +861,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       const firstVersion = versions?.versions.find(v => v.versionNumber === 1);
 
       if (firstVersion) {
-        const version1Agent = await editor.getStoredAgentById('versioned-agent', {
+        const version1Agent = await editor.agent.getById('versioned-agent', {
           versionId: firstVersion.id,
         });
         expect(version1Agent?.name).toBe('Version 1');
@@ -895,12 +895,12 @@ describe('MastraEditor with LibSQL Integration', () => {
       const versions = await agentsStore?.listVersions({ agentId: 'numbered-version-agent' });
 
       // Retrieve by version number
-      const version1Agent = await editor.getStoredAgentById('numbered-version-agent', {
+      const version1Agent = await editor.agent.getById('numbered-version-agent', {
         versionNumber: 1,
       });
       expect(version1Agent?.name).toBe('Version 1');
 
-      const version2Agent = await editor.getStoredAgentById('numbered-version-agent', {
+      const version2Agent = await editor.agent.getById('numbered-version-agent', {
         versionNumber: 2,
       });
       expect(version2Agent?.name).toBe('Version 2');
@@ -933,7 +933,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       }
 
       // First, check raw agents to debug
-      const rawAgents = await editor.listStoredAgents({ returnRaw: true });
+      const rawAgents = await editor.agent.list({ returnRaw: true });
 
       // Only consider agents that we created in this test
       const testAgentIds = ['list-agent-1', 'list-agent-2', 'list-agent-3', 'list-agent-4', 'list-agent-5'];
@@ -944,7 +944,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       }
 
       // List with pagination
-      const page1 = await editor.listStoredAgents({ pageSize: 3 });
+      const page1 = await editor.agent.list({ pageSize: 3 });
       expect(page1.agents).toHaveLength(3);
       expect(page1.hasMore).toBe(true);
       // Don't check exact total - there might be agents from other tests
@@ -952,7 +952,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Get page 2 (0-based, so page: 1 is the second page)
       try {
-        const page2 = await editor.listStoredAgents({
+        const page2 = await editor.agent.list({
           pageSize: 3,
           page: 1,
         });
@@ -961,7 +961,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       } catch (error) {
         console.error('Error listing page 2:', error);
         // List all raw agents to debug
-        const rawAgents = await editor.listStoredAgents({ returnRaw: true });
+        const rawAgents = await editor.agent.list({ returnRaw: true });
         console.log(
           'All raw agents:',
           rawAgents.agents.map(a => ({
@@ -996,7 +996,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const rawResult = await editor.listStoredAgents({ returnRaw: true });
+      const rawResult = await editor.agent.list({ returnRaw: true });
 
       expect(rawResult.agents[0]).not.toBeInstanceOf(Agent);
       expect(rawResult.agents[0]?.id).toBe('raw-list-agent');
@@ -1023,7 +1023,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       // First retrieval (should cache)
-      const agent1 = await editor.getStoredAgentById('cached-agent');
+      const agent1 = await editor.agent.getById('cached-agent');
       expect(agent1?.name).toBe('Cached Agent');
 
       // Update the agent in storage
@@ -1043,14 +1043,14 @@ describe('MastraEditor with LibSQL Integration', () => {
       }
 
       // Retrieve again (should get cached version)
-      const agent2 = await editor.getStoredAgentById('cached-agent');
+      const agent2 = await editor.agent.getById('cached-agent');
       expect(agent2?.name).toBe('Cached Agent');
 
       // Clear cache
-      await editor.clearStoredAgentCache('cached-agent');
+      await editor.agent.clearCache('cached-agent');
 
       // Retrieve again (should get updated version)
-      const agent3 = await editor.getStoredAgentById('cached-agent');
+      const agent3 = await editor.agent.getById('cached-agent');
       expect(agent3?.name).toBe('Updated Cached Agent');
     });
 
@@ -1077,11 +1077,11 @@ describe('MastraEditor with LibSQL Integration', () => {
       });
 
       // Retrieve to cache
-      await editor.getStoredAgentById('cache-test-1');
-      await editor.getStoredAgentById('cache-test-2');
+      await editor.agent.getById('cache-test-1');
+      await editor.agent.getById('cache-test-2');
 
       // Clear all cache
-      await editor.clearStoredAgentCache();
+      await editor.agent.clearCache();
 
       // Verify cache is cleared by updating and retrieving
       await agentsStore?.updateAgent({
@@ -1112,8 +1112,8 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const agent1 = await editor.getStoredAgentById('cache-test-1');
-      const agent2 = await editor.getStoredAgentById('cache-test-2');
+      const agent1 = await editor.agent.getById('cache-test-1');
+      const agent2 = await editor.agent.getById('cache-test-2');
 
       expect(agent1?.name).toBe('Updated 1');
       expect(agent2?.name).toBe('Updated 2');
@@ -1134,7 +1134,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      const agent = await editor.getStoredAgentById('missing-tools-agent');
+      const agent = await editor.agent.getById('missing-tools-agent');
 
       expect(agent).toBeInstanceOf(Agent);
       const tools = await agent?.listTools();
@@ -1154,7 +1154,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      const agent = await editor.getStoredAgentById('missing-workflows-agent');
+      const agent = await editor.agent.getById('missing-workflows-agent');
 
       expect(agent).toBeInstanceOf(Agent);
     });
@@ -1172,7 +1172,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      const agent = await editor.getStoredAgentById('missing-agents-agent');
+      const agent = await editor.agent.getById('missing-agents-agent');
 
       expect(agent).toBeInstanceOf(Agent);
     });
@@ -1189,7 +1189,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      await expect(editor.getStoredAgentById('invalid-model-agent')).rejects.toThrow('invalid model configuration');
+      await expect(editor.agent.getById('invalid-model-agent')).rejects.toThrow('invalid model configuration');
     });
   });
 
@@ -1215,7 +1215,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const agent = await editor.getStoredAgentById('registered-agent');
+      const agent = await editor.agent.getById('registered-agent');
 
       // Check that the agent can be retrieved and is properly configured
       expect(agent).toBeDefined();
@@ -1268,7 +1268,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const retrievedAgent = await editor.getStoredAgentById('default-options-agent');
+      const retrievedAgent = await editor.agent.getById('default-options-agent');
 
       // Add to mastra
       if (retrievedAgent) {
@@ -1278,7 +1278,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(retrievedAgent).toBeInstanceOf(Agent);
 
       // Verify defaultOptions are preserved in storage
-      const rawAgent = await editor.getStoredAgentById('default-options-agent', { returnRaw: true });
+      const rawAgent = await editor.agent.getById('default-options-agent', { returnRaw: true });
       expect(rawAgent?.defaultOptions).toEqual({
         maxSteps: 5,
         tracingOptions: {
@@ -1338,7 +1338,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const retrievedAgent = await editor.getStoredAgentById('memory-agent');
+      const retrievedAgent = await editor.agent.getById('memory-agent');
 
       expect(retrievedAgent).toBeInstanceOf(Agent);
       expect(retrievedAgent?.id).toBe('memory-agent');
@@ -1346,7 +1346,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Check that the agent was created with memory configuration
       // The actual memory instance would be resolved by the editor when creating the agent
-      const rawAgent = (await editor.getStoredAgentById('memory-agent', { returnRaw: true })) as any;
+      const rawAgent = (await editor.agent.getById('memory-agent', { returnRaw: true })) as any;
       expect(rawAgent?.memory).toEqual({
         vector: 'libsql-vector-db',
         // embedder: 'openai/text-embedding-3-small',
@@ -1452,7 +1452,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const agent = await editor.getStoredAgentById('streaming-agent');
+      const agent = await editor.agent.getById('streaming-agent');
       mastra.addAgent(agent!, 'streaming-agent');
 
       // Test streaming
@@ -1488,7 +1488,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const agent = await editor.getStoredAgentById('multi-tool-agent');
+      const agent = await editor.agent.getById('multi-tool-agent');
       mastra.addAgent(agent!, 'multi-tool-agent');
 
       const result = await agent?.generate('Get weather for all our users', {
@@ -1518,7 +1518,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      const rawAgent = await editor.getStoredAgentById('metadata-agent', { returnRaw: true });
+      const rawAgent = await editor.agent.getById('metadata-agent', { returnRaw: true });
 
       expect(rawAgent?.metadata).toEqual({
         version: '2.0',
@@ -1558,7 +1558,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      const rawAgent = await editor.getStoredAgentById('vector-memory-agent', { returnRaw: true });
+      const rawAgent = await editor.agent.getById('vector-memory-agent', { returnRaw: true });
 
       expect(rawAgent?.memory).toEqual({
         vector: 'chroma-vector-db',
@@ -1581,7 +1581,7 @@ describe('MastraEditor with LibSQL Integration', () => {
   describe('Prompt Block Instructions E2E', () => {
     it('should create prompt blocks and use them as agent instructions', async () => {
       // Create prompt blocks via the editor
-      const greetingBlock = await editor.createPromptBlock({
+      const greetingBlock = await editor.prompt.create({
         id: 'greeting-block',
         name: 'Greeting Block',
         description: 'A greeting prompt block',
@@ -1593,7 +1593,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(greetingBlock.name).toBe('Greeting Block');
       expect(greetingBlock.content).toBe('You are a helpful assistant called {{agentName}}.');
 
-      const behaviorBlock = await editor.createPromptBlock({
+      const behaviorBlock = await editor.prompt.create({
         id: 'behavior-block',
         name: 'Behavior Block',
         description: 'A behavior prompt block',
@@ -1604,8 +1604,8 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(behaviorBlock.id).toBe('behavior-block');
 
       // Publish both blocks
-      await editor.updatePromptBlock({ id: 'greeting-block', status: 'published' });
-      await editor.updatePromptBlock({ id: 'behavior-block', status: 'published' });
+      await editor.prompt.update({ id: 'greeting-block', status: 'published' });
+      await editor.prompt.update({ id: 'behavior-block', status: 'published' });
 
       // Create a stored agent that uses prompt block instructions
       const agentsStore = await storage.getStore('agents');
@@ -1630,10 +1630,10 @@ describe('MastraEditor with LibSQL Integration', () => {
       }
 
       // Clear the agent cache so it re-resolves
-      editor.clearStoredAgentCache('prompt-block-agent');
+      editor.agent.clearCache('prompt-block-agent');
 
       // Retrieve the agent via editor — this triggers resolveStoredInstructions
-      const retrievedAgent = await editor.getStoredAgentById('prompt-block-agent');
+      const retrievedAgent = await editor.agent.getById('prompt-block-agent');
       expect(retrievedAgent).toBeInstanceOf(Agent);
 
       // The instructions should be a function (DynamicArgument) since they contain prompt blocks
@@ -1653,7 +1653,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should resolve instructions differently based on requestContext', async () => {
       // Create a conditional prompt block with rules
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'admin-block',
         name: 'Admin Instructions',
         description: 'Instructions for admin users',
@@ -1663,9 +1663,9 @@ describe('MastraEditor with LibSQL Integration', () => {
           conditions: [{ field: 'user.role', operator: 'equals', value: 'admin' }],
         },
       });
-      await editor.updatePromptBlock({ id: 'admin-block', status: 'published' });
+      await editor.prompt.update({ id: 'admin-block', status: 'published' });
 
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'guest-block',
         name: 'Guest Instructions',
         description: 'Instructions for guest users',
@@ -1675,18 +1675,18 @@ describe('MastraEditor with LibSQL Integration', () => {
           conditions: [{ field: 'user.role', operator: 'equals', value: 'guest' }],
         },
       });
-      await editor.updatePromptBlock({ id: 'guest-block', status: 'published' });
+      await editor.prompt.update({ id: 'guest-block', status: 'published' });
 
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'base-block',
         name: 'Base Instructions',
         description: 'Base instructions',
         content: 'You are a helpful assistant. The user is {{user.name}}.',
       });
-      await editor.updatePromptBlock({ id: 'base-block', status: 'published' });
+      await editor.prompt.update({ id: 'base-block', status: 'published' });
 
       // Preview instructions for an admin context
-      const adminInstructions = await editor.previewInstructions(
+      const adminInstructions = await editor.prompt.preview(
         [
           { type: 'prompt_block_ref', id: 'base-block' },
           { type: 'prompt_block_ref', id: 'admin-block' },
@@ -1700,7 +1700,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(adminInstructions).not.toContain('The user is a guest');
 
       // Preview instructions for a guest context
-      const guestInstructions = await editor.previewInstructions(
+      const guestInstructions = await editor.prompt.preview(
         [
           { type: 'prompt_block_ref', id: 'base-block' },
           { type: 'prompt_block_ref', id: 'admin-block' },
@@ -1716,14 +1716,14 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should execute agent.generate() with dynamic instructions from prompt blocks', async () => {
       // Create prompt blocks
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'system-block',
         name: 'System Block',
         content: 'You are {{assistant.name}}, a {{assistant.specialty}} assistant.',
       });
-      await editor.updatePromptBlock({ id: 'system-block', status: 'published' });
+      await editor.prompt.update({ id: 'system-block', status: 'published' });
 
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'auth-block',
         name: 'Authenticated User Block',
         content: 'The authenticated user is {{user.name}} ({{user.email}}).',
@@ -1732,7 +1732,7 @@ describe('MastraEditor with LibSQL Integration', () => {
           conditions: [{ field: 'user.isAuthenticated', operator: 'equals', value: true }],
         },
       });
-      await editor.updatePromptBlock({ id: 'auth-block', status: 'published' });
+      await editor.prompt.update({ id: 'auth-block', status: 'published' });
 
       // Create stored agent with prompt block instructions
       const agentsStore = await storage.getStore('agents');
@@ -1756,10 +1756,10 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      editor.clearStoredAgentCache('dynamic-agent');
+      editor.agent.clearCache('dynamic-agent');
 
       // Generate with authenticated user context
-      const agent = await editor.getStoredAgentById('dynamic-agent');
+      const agent = await editor.agent.getById('dynamic-agent');
       expect(agent).toBeInstanceOf(Agent);
 
       const authCtx = new RequestContext([
@@ -1778,8 +1778,8 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(authResult.text).toContain('Always respond in French.');
 
       // Generate with unauthenticated user context — auth block should be excluded
-      editor.clearStoredAgentCache('dynamic-agent');
-      const agent2 = await editor.getStoredAgentById('dynamic-agent');
+      editor.agent.clearCache('dynamic-agent');
+      const agent2 = await editor.agent.getById('dynamic-agent');
 
       const unauthCtx = new RequestContext([
         ['assistant', { name: 'WeatherBot', specialty: 'weather' }],
@@ -1816,7 +1816,7 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const retrievedAgent = await editor.getStoredAgentById('string-instructions-agent');
+      const retrievedAgent = await editor.agent.getById('string-instructions-agent');
       expect(retrievedAgent).toBeInstanceOf(Agent);
 
       const result = await retrievedAgent!.generate('Hello!');
@@ -1825,15 +1825,15 @@ describe('MastraEditor with LibSQL Integration', () => {
     });
 
     it('should handle mixed text and prompt_block instructions with variable interpolation', async () => {
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'persona-block',
         name: 'Persona',
         content: 'You are {{persona.name}}, who works as a {{persona.job}}.',
       });
-      await editor.updatePromptBlock({ id: 'persona-block', status: 'published' });
+      await editor.prompt.update({ id: 'persona-block', status: 'published' });
 
       // Preview with context
-      const result = await editor.previewInstructions(
+      const result = await editor.prompt.preview(
         [
           { type: 'prompt_block_ref', id: 'persona-block' },
           { type: 'text', content: 'Help the user with their {{topic || "general"}} questions.' },
@@ -1852,21 +1852,21 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should skip unpublished prompt blocks', async () => {
       // Create a draft block (default status)
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'draft-block',
         name: 'Draft Block',
         content: 'This is a draft block that should not appear.',
       });
       // Do NOT publish it
 
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'published-block',
         name: 'Published Block',
         content: 'This is a published block.',
       });
-      await editor.updatePromptBlock({ id: 'published-block', status: 'published' });
+      await editor.prompt.update({ id: 'published-block', status: 'published' });
 
-      const result = await editor.previewInstructions(
+      const result = await editor.prompt.preview(
         [
           { type: 'prompt_block_ref', id: 'draft-block' },
           { type: 'prompt_block_ref', id: 'published-block' },
@@ -1879,7 +1879,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     });
 
     it('should skip prompt blocks whose rules do not match', async () => {
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'premium-block',
         name: 'Premium Features',
         content: 'You can access premium features like advanced analytics.',
@@ -1888,9 +1888,9 @@ describe('MastraEditor with LibSQL Integration', () => {
           conditions: [{ field: 'subscription', operator: 'equals', value: 'premium' }],
         },
       });
-      await editor.updatePromptBlock({ id: 'premium-block', status: 'published' });
+      await editor.prompt.update({ id: 'premium-block', status: 'published' });
 
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'free-block',
         name: 'Free Features',
         content: 'You can only access basic features.',
@@ -1899,10 +1899,10 @@ describe('MastraEditor with LibSQL Integration', () => {
           conditions: [{ field: 'subscription', operator: 'equals', value: 'free' }],
         },
       });
-      await editor.updatePromptBlock({ id: 'free-block', status: 'published' });
+      await editor.prompt.update({ id: 'free-block', status: 'published' });
 
       // Premium user
-      const premiumResult = await editor.previewInstructions(
+      const premiumResult = await editor.prompt.preview(
         [
           { type: 'prompt_block_ref', id: 'premium-block' },
           { type: 'prompt_block_ref', id: 'free-block' },
@@ -1914,7 +1914,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(premiumResult).not.toContain('basic features');
 
       // Free user
-      const freeResult = await editor.previewInstructions(
+      const freeResult = await editor.prompt.preview(
         [
           { type: 'prompt_block_ref', id: 'premium-block' },
           { type: 'prompt_block_ref', id: 'free-block' },
@@ -1927,7 +1927,7 @@ describe('MastraEditor with LibSQL Integration', () => {
     });
 
     it('should handle OR rules correctly', async () => {
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'staff-block',
         name: 'Staff Block',
         content: 'You can manage internal resources.',
@@ -1939,22 +1939,22 @@ describe('MastraEditor with LibSQL Integration', () => {
           ],
         },
       });
-      await editor.updatePromptBlock({ id: 'staff-block', status: 'published' });
+      await editor.prompt.update({ id: 'staff-block', status: 'published' });
 
       // Admin gets it
-      const adminResult = await editor.previewInstructions([{ type: 'prompt_block_ref', id: 'staff-block' }], {
+      const adminResult = await editor.prompt.preview([{ type: 'prompt_block_ref', id: 'staff-block' }], {
         role: 'admin',
       });
       expect(adminResult).toContain('manage internal resources');
 
       // Moderator gets it
-      const modResult = await editor.previewInstructions([{ type: 'prompt_block_ref', id: 'staff-block' }], {
+      const modResult = await editor.prompt.preview([{ type: 'prompt_block_ref', id: 'staff-block' }], {
         role: 'moderator',
       });
       expect(modResult).toContain('manage internal resources');
 
       // Regular user does not get it
-      const userResult = await editor.previewInstructions([{ type: 'prompt_block_ref', id: 'staff-block' }], {
+      const userResult = await editor.prompt.preview([{ type: 'prompt_block_ref', id: 'staff-block' }], {
         role: 'user',
       });
       expect(userResult).not.toContain('manage internal resources');
@@ -1962,31 +1962,31 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should handle prompt block versioning', async () => {
       // Create initial version
-      const block = await editor.createPromptBlock({
+      const block = await editor.prompt.create({
         id: 'versioned-block',
         name: 'Versioned Block',
         content: 'Version 1 content',
       });
-      await editor.updatePromptBlock({ id: 'versioned-block', status: 'published' });
+      await editor.prompt.update({ id: 'versioned-block', status: 'published' });
 
       // Verify initial content
-      const v1 = await editor.previewInstructions([{ type: 'prompt_block_ref', id: 'versioned-block' }], {});
+      const v1 = await editor.prompt.preview([{ type: 'prompt_block_ref', id: 'versioned-block' }], {});
       expect(v1).toBe('Version 1 content');
 
       // Update content (creates a new version)
-      await editor.updatePromptBlock({
+      await editor.prompt.update({
         id: 'versioned-block',
         content: 'Version 2 content',
       });
 
       // Verify updated content
-      const v2 = await editor.previewInstructions([{ type: 'prompt_block_ref', id: 'versioned-block' }], {});
+      const v2 = await editor.prompt.preview([{ type: 'prompt_block_ref', id: 'versioned-block' }], {});
       expect(v2).toBe('Version 2 content');
     });
 
     it('should gracefully handle missing prompt blocks', async () => {
       // Reference a non-existent block — should be skipped
-      const result = await editor.previewInstructions(
+      const result = await editor.prompt.preview(
         [
           { type: 'text', content: 'Always be helpful.' },
           { type: 'prompt_block_ref', id: 'non-existent-block' },
@@ -1999,12 +1999,12 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should reflect prompt block updates in subsequent agent.generate() calls', async () => {
       // Create a prompt block with initial content
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'updatable-block',
         name: 'Updatable Block',
         content: 'You specialize in {{topic || "general knowledge"}}.',
       });
-      await editor.updatePromptBlock({ id: 'updatable-block', status: 'published' });
+      await editor.prompt.update({ id: 'updatable-block', status: 'published' });
 
       // Create an agent that references this block
       const agentsStore = await storage.getStore('agents');
@@ -2029,7 +2029,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Get the agent once — we'll reuse the same instance to prove
       // prompt block content is resolved at runtime, not at agent creation time
-      const agent = await editor.getStoredAgentById('updatable-agent');
+      const agent = await editor.agent.getById('updatable-agent');
       const ctx = new RequestContext([['topic', 'astronomy']]);
 
       // First generate — should reflect v1 content
@@ -2038,7 +2038,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(result1.text).toContain('Be concise.');
 
       // Update the prompt block content — no cache clearing needed
-      await editor.updatePromptBlock({
+      await editor.prompt.update({
         id: 'updatable-block',
         content: 'You are an expert in {{topic || "general knowledge"}}. Always cite sources.',
       });
@@ -2054,19 +2054,19 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should silently skip a deleted prompt block during agent.generate()', async () => {
       // Create two prompt blocks
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'keep-block',
         name: 'Keep Block',
         content: 'You are a helpful assistant.',
       });
-      await editor.updatePromptBlock({ id: 'keep-block', status: 'published' });
+      await editor.prompt.update({ id: 'keep-block', status: 'published' });
 
-      await editor.createPromptBlock({
+      await editor.prompt.create({
         id: 'delete-me-block',
         name: 'Delete Me Block',
         content: 'You also handle scheduling tasks.',
       });
-      await editor.updatePromptBlock({ id: 'delete-me-block', status: 'published' });
+      await editor.prompt.update({ id: 'delete-me-block', status: 'published' });
 
       // Create an agent referencing both blocks
       const agentsStore = await storage.getStore('agents');
@@ -2090,7 +2090,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       }
 
       // Get the agent once — we'll reuse the same instance
-      const agent = await editor.getStoredAgentById('deletion-test-agent');
+      const agent = await editor.agent.getById('deletion-test-agent');
 
       // First generate — both blocks should be present
       const result1 = await agent!.generate('Hello');
@@ -2098,7 +2098,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(result1.text).toContain('You also handle scheduling tasks.');
 
       // Delete one of the blocks — no cache clearing needed
-      await editor.deletePromptBlock('delete-me-block');
+      await editor.prompt.delete('delete-me-block');
 
       // Second generate with the SAME agent instance — deleted block should be silently skipped
       // because prompt blocks are resolved from storage at runtime
@@ -2109,7 +2109,7 @@ describe('MastraEditor with LibSQL Integration', () => {
 
     it('should handle prompt block CRUD lifecycle', async () => {
       // Create
-      const block = await editor.createPromptBlock({
+      const block = await editor.prompt.create({
         id: 'lifecycle-block',
         name: 'Lifecycle Block',
         content: 'Initial content',
@@ -2120,13 +2120,13 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(block.authorId).toBe('author-1');
 
       // Read
-      const retrieved = await editor.getPromptBlock('lifecycle-block');
+      const retrieved = await editor.prompt.getById('lifecycle-block');
       expect(retrieved).toBeDefined();
       expect(retrieved!.name).toBe('Lifecycle Block');
       expect(retrieved!.content).toBe('Initial content');
 
       // Update
-      const updated = await editor.updatePromptBlock({
+      const updated = await editor.prompt.update({
         id: 'lifecycle-block',
         content: 'Updated content',
         name: 'Updated Block',
@@ -2135,20 +2135,20 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(updated.name).toBe('Updated Block');
 
       // List
-      const list = await editor.listPromptBlocks();
+      const list = await editor.prompt.list();
       expect(list.promptBlocks.length).toBeGreaterThanOrEqual(1);
       expect(list.promptBlocks.some(b => b.id === 'lifecycle-block')).toBe(true);
 
       // List resolved
-      const listResolved = await editor.listPromptBlocksResolved();
+      const listResolved = await editor.prompt.listResolved();
       expect(listResolved.promptBlocks.length).toBeGreaterThanOrEqual(1);
       const resolvedBlock = listResolved.promptBlocks.find(b => b.id === 'lifecycle-block');
       expect(resolvedBlock).toBeDefined();
       expect(resolvedBlock!.content).toBe('Updated content');
 
       // Delete
-      await editor.deletePromptBlock('lifecycle-block');
-      const deleted = await editor.getPromptBlock('lifecycle-block');
+      await editor.prompt.delete('lifecycle-block');
+      const deleted = await editor.prompt.getById('lifecycle-block');
       expect(deleted).toBeNull();
     });
   });

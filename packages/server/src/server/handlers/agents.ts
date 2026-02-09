@@ -533,7 +533,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   if (!agent) {
     logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
     try {
-      agent = (await mastra.getEditor()?.getStoredAgentById(agentId)) ?? null;
+      agent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -739,7 +739,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
         let storedAgentsResult;
         try {
-          storedAgentsResult = await editor?.listStoredAgents();
+          storedAgentsResult = await editor?.agent.list();
         } catch (error) {
           console.error('Error listing stored agents:', error);
           storedAgentsResult = null;

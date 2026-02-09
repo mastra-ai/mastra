@@ -1,1 +1,7 @@
-export type { IMastraEditor, MastraEditorConfig } from './types';
+export type {
+  IMastraEditor,
+  MastraEditorConfig,
+  IEditorAgentNamespace,
+  IEditorPromptNamespace,
+  IEditorScorerNamespace,
+} from './types';

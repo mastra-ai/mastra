@@ -322,7 +322,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       // Clear the cached agent instance so the next request gets the updated config
       const editor = mastra.getEditor();
       if (editor) {
-        editor.clearStoredAgentCache(storedAgentId);
+        editor.agent.clearCache(storedAgentId);
       }
 
       // Return the resolved agent with the updated activeVersionId
@@ -373,7 +373,7 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       await agentsStore.deleteAgent({ id: storedAgentId });
 
       // Clear the cached agent instance
-      mastra.getEditor()?.clearStoredAgentCache(storedAgentId);
+      mastra.getEditor()?.agent.clearCache(storedAgentId);
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {
@@ -403,7 +403,7 @@ export const PREVIEW_INSTRUCTIONS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Editor is not configured' });
       }
 
-      const result = await editor.previewInstructions(blocks, context ?? {});
+      const result = await editor.prompt.preview(blocks, context ?? {});
 
       return { result };
     } catch (error) {

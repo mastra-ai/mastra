@@ -35,7 +35,7 @@ const sampleStoredAgent2 = {
   model: { provider: 'anthropic', name: 'claude-3' },
 };
 
-describe('clearStoredAgentCache', () => {
+describe('agent.clearCache', () => {
   it('should clear agent from Editor cache and Mastra registry when agentId is provided', async () => {
     const storage = new InMemoryStore();
     const agentsStore = await storage.getStore('agents');
@@ -65,14 +65,14 @@ describe('clearStoredAgentCache', () => {
     });
 
     // Load agent - this caches it and registers with Mastra
-    const agent = await editor.getStoredAgentById('cache-test-agent');
+    const agent = await editor.agent.getById('cache-test-agent');
     expect(agent).toBeInstanceOf(Agent);
 
     // Verify agent is in Mastra registry
     expect(mastra.getAgentById('cache-test-agent')).toBeDefined();
 
     // Clear the cache for this specific agent
-    editor.clearStoredAgentCache('cache-test-agent');
+    editor.agent.clearCache('cache-test-agent');
 
     // Verify agent was removed from Mastra registry
     expect(() => mastra.getAgentById('cache-test-agent')).toThrow();
@@ -120,10 +120,10 @@ describe('clearStoredAgentCache', () => {
     });
 
     // Load stored agent - this caches it
-    await editor.getStoredAgentById('cache-test-agent-1');
+    await editor.agent.getById('cache-test-agent-1');
 
     // Clear all from cache
-    editor.clearStoredAgentCache();
+    editor.agent.clearCache();
 
     // Code-defined agent should still exist in Mastra registry
     expect(mastra.getAgent('codeAgent')).toBeDefined();
@@ -136,8 +136,8 @@ describe('clearStoredAgentCache', () => {
     const editor = new MastraEditor();
 
     // Should not throw
-    expect(() => editor.clearStoredAgentCache('some-id')).not.toThrow();
-    expect(() => editor.clearStoredAgentCache()).not.toThrow();
+    expect(() => editor.agent.clearCache('some-id')).not.toThrow();
+    expect(() => editor.agent.clearCache()).not.toThrow();
   });
 
   it('should allow re-registering agent with Mastra after cache clear', async () => {
@@ -158,18 +158,18 @@ describe('clearStoredAgentCache', () => {
     const mastra = new Mastra({ storage, editor });
 
     // Load agent first time - this registers it with Mastra
-    const agent1 = await editor.getStoredAgentById('reloadable-agent');
+    const agent1 = await editor.agent.getById('reloadable-agent');
     expect(agent1?.name).toBe('Test Agent');
     expect(mastra.getAgentById('reloadable-agent')).toBeDefined();
 
     // Clear cache - this removes from both cache and Mastra registry
-    editor.clearStoredAgentCache('reloadable-agent');
+    editor.agent.clearCache('reloadable-agent');
 
     // Agent should no longer be in Mastra registry
     expect(() => mastra.getAgentById('reloadable-agent')).toThrow();
 
     // Load agent again - should successfully re-register with Mastra
-    const agent2 = await editor.getStoredAgentById('reloadable-agent');
+    const agent2 = await editor.agent.getById('reloadable-agent');
     expect(agent2).toBeInstanceOf(Agent);
     expect(agent2?.name).toBe('Test Agent');
 
@@ -179,11 +179,11 @@ describe('clearStoredAgentCache', () => {
 });
 
 describe('Stored Agents via MastraEditor', () => {
-  describe('getStoredAgentById', () => {
+  describe('agent.getById', () => {
     it('should throw error when editor is not registered with Mastra', async () => {
       const editor = new MastraEditor();
 
-      await expect(editor.getStoredAgentById('test-id')).rejects.toThrow(
+      await expect(editor.agent.getById('test-id')).rejects.toThrow(
         'MastraEditor is not registered with a Mastra instance',
       );
     });
@@ -192,7 +192,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ editor });
 
-      await expect(editor.getStoredAgentById('test-id')).rejects.toThrow('Storage is not configured');
+      await expect(editor.agent.getById('test-id')).rejects.toThrow('Storage is not configured');
     });
 
     it('should return null when agent is not found', async () => {
@@ -200,7 +200,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.getStoredAgentById('non-existent');
+      const result = await editor.agent.getById('non-existent');
 
       expect(result).toBeNull();
     });
@@ -217,7 +217,7 @@ describe('Stored Agents via MastraEditor', () => {
         editor,
       });
 
-      const result = await editor.getStoredAgentById('stored-agent-1');
+      const result = await editor.agent.getById('stored-agent-1');
 
       expect(result).toBeInstanceOf(Agent);
       expect(result?.id).toBe('stored-agent-1');
@@ -232,7 +232,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.getStoredAgentById('stored-agent-1', { returnRaw: true });
+      const result = await editor.agent.getById('stored-agent-1', { returnRaw: true });
 
       expect(result).not.toBeInstanceOf(Agent);
       expect(result?.id).toBe('stored-agent-1');
@@ -253,7 +253,7 @@ describe('Stored Agents via MastraEditor', () => {
         editor,
       });
 
-      const agent = await editor.getStoredAgentById('stored-agent-1');
+      const agent = await editor.agent.getById('stored-agent-1');
 
       expect(agent).toBeInstanceOf(Agent);
       // The agent should have the tool resolved
@@ -281,7 +281,7 @@ describe('Stored Agents via MastraEditor', () => {
         editor,
       });
 
-      await editor.getStoredAgentById('stored-agent-1');
+      await editor.agent.getById('stored-agent-1');
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Tool "test-tool" referenced in stored agent but not registered'),
@@ -303,7 +303,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      await expect(editor.getStoredAgentById('invalid-model-agent')).rejects.toThrow('invalid model configuration');
+      await expect(editor.agent.getById('invalid-model-agent')).rejects.toThrow('invalid model configuration');
     });
 
     it('should return specific version when versionId is provided', async () => {
@@ -322,7 +322,7 @@ describe('Stored Agents via MastraEditor', () => {
         editor,
       });
 
-      const agent = await editor.getStoredAgentById('stored-agent-1', { versionId });
+      const agent = await editor.agent.getById('stored-agent-1', { versionId });
 
       expect(agent).toBeInstanceOf(Agent);
       expect(agent?.id).toBe('stored-agent-1');
@@ -341,7 +341,7 @@ describe('Stored Agents via MastraEditor', () => {
         editor,
       });
 
-      const agent = await editor.getStoredAgentById('stored-agent-1', { versionNumber: 1 });
+      const agent = await editor.agent.getById('stored-agent-1', { versionNumber: 1 });
 
       expect(agent).toBeInstanceOf(Agent);
       expect(agent?.id).toBe('stored-agent-1');
@@ -360,7 +360,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.getStoredAgentById('stored-agent-1', { returnRaw: true, versionId });
+      const result = await editor.agent.getById('stored-agent-1', { returnRaw: true, versionId });
 
       expect(result).not.toBeInstanceOf(Agent);
       expect(result?.id).toBe('stored-agent-1');
@@ -369,12 +369,12 @@ describe('Stored Agents via MastraEditor', () => {
     });
   });
 
-  describe('listStoredAgents', () => {
+  describe('agent.list', () => {
     it('should throw error when storage is not configured', async () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ editor });
 
-      await expect(editor.listStoredAgents()).rejects.toThrow('Storage is not configured');
+      await expect(editor.agent.list()).rejects.toThrow('Storage is not configured');
     });
 
     it('should return empty list when no agents exist', async () => {
@@ -382,7 +382,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.listStoredAgents();
+      const result = await editor.agent.list();
 
       expect(result.agents).toEqual([]);
       expect(result.total).toBe(0);
@@ -398,7 +398,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.listStoredAgents();
+      const result = await editor.agent.list();
 
       expect(result.agents).toHaveLength(2);
       expect(result.agents[0]).toBeInstanceOf(Agent);
@@ -415,7 +415,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.listStoredAgents({ returnRaw: true });
+      const result = await editor.agent.list({ returnRaw: true });
 
       expect(result.agents).toHaveLength(2);
       expect(result.agents[0]).not.toBeInstanceOf(Agent);
@@ -441,7 +441,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.listStoredAgents({ page: 0, pageSize: 10 });
+      const result = await editor.agent.list({ page: 0, pageSize: 10 });
 
       expect(result.agents).toHaveLength(10);
       expect(result.total).toBe(25);
@@ -460,7 +460,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const agent = await editor.getStoredAgentById('stored-agent-1');
+      const agent = await editor.agent.getById('stored-agent-1');
 
       expect(agent).toBeInstanceOf(Agent);
       expect(agent?.id).toBe('stored-agent-1');
@@ -490,7 +490,7 @@ describe('Stored Agents via MastraEditor', () => {
       });
       const mastra = new Mastra({ storage, editor });
 
-      await editor.getStoredAgentById('agent-with-workflow');
+      await editor.agent.getById('agent-with-workflow');
 
       // Should warn about unregistered workflow
       expect(warnSpy).toHaveBeenCalledWith(
@@ -522,7 +522,7 @@ describe('Stored Agents via MastraEditor', () => {
       });
       const mastra = new Mastra({ storage, editor });
 
-      await editor.getStoredAgentById('agent-with-sub-agent');
+      await editor.agent.getById('agent-with-sub-agent');
 
       // Should warn about unregistered sub-agent
       expect(warnSpy).toHaveBeenCalledWith(
@@ -538,7 +538,7 @@ describe('Stored Agents via MastraEditor', () => {
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const agent = await editor.getStoredAgentById('stored-agent-1');
+      const agent = await editor.agent.getById('stored-agent-1');
 
       expect(agent).toBeInstanceOf(Agent);
       // The agent should have defaultOptions set
@@ -563,20 +563,20 @@ describe('Stored Agents via MastraEditor', () => {
       const mastra = new Mastra({ storage, editor });
 
       // Editor CAN resolve memory (via @mastra/memory), so this should succeed
-      const agent = await editor.getStoredAgentById('agent-with-memory');
+      const agent = await editor.agent.getById('agent-with-memory');
       expect(agent).toBeInstanceOf(Agent);
     });
   });
 
   describe('Type inference', () => {
-    it('should have correct return type for getStoredAgentById without raw option', async () => {
+    it('should have correct return type for agent.getById without raw option', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
       await agentsStore?.createAgent({ agent: sampleStoredAgent });
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.getStoredAgentById('stored-agent-1');
+      const result = await editor.agent.getById('stored-agent-1');
 
       // TypeScript should infer: Agent | null
       if (result) {
@@ -585,14 +585,14 @@ describe('Stored Agents via MastraEditor', () => {
       }
     });
 
-    it('should have correct return type for getStoredAgentById with returnRaw: true', async () => {
+    it('should have correct return type for agent.getById with returnRaw: true', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
       await agentsStore?.createAgent({ agent: sampleStoredAgent });
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.getStoredAgentById('stored-agent-1', { returnRaw: true });
+      const result = await editor.agent.getById('stored-agent-1', { returnRaw: true });
 
       // TypeScript should infer: StorageResolvedAgentType | null
       if (result) {
@@ -602,14 +602,14 @@ describe('Stored Agents via MastraEditor', () => {
       }
     });
 
-    it('should have correct return type for listStoredAgents without raw option', async () => {
+    it('should have correct return type for agent.list without raw option', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
       await agentsStore?.createAgent({ agent: sampleStoredAgent });
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.listStoredAgents();
+      const result = await editor.agent.list();
 
       // TypeScript should infer: { agents: Agent[], ... }
       for (const agent of result.agents) {
@@ -617,14 +617,14 @@ describe('Stored Agents via MastraEditor', () => {
       }
     });
 
-    it('should have correct return type for listStoredAgents with returnRaw: true', async () => {
+    it('should have correct return type for agent.list with returnRaw: true', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
       await agentsStore?.createAgent({ agent: sampleStoredAgent });
       const editor = new MastraEditor();
       const mastra = new Mastra({ storage, editor });
 
-      const result = await editor.listStoredAgents({ returnRaw: true });
+      const result = await editor.agent.list({ returnRaw: true });
 
       // TypeScript should infer: { agents: StorageResolvedAgentType[], ... }
       for (const agent of result.agents) {
@@ -694,7 +694,7 @@ describe('Stored Agents via MastraEditor', () => {
         editor,
       });
 
-      const agent = await editor.getStoredAgentById('full-agent');
+      const agent = await editor.agent.getById('full-agent');
 
       // Verify agent was created
       expect(agent).toBeInstanceOf(Agent);
@@ -733,7 +733,7 @@ describe('Stored Agents via MastraEditor', () => {
         editor,
       });
 
-      const agent = await editor.getStoredAgentById('agent-with-scorers');
+      const agent = await editor.agent.getById('agent-with-scorers');
 
       expect(agent).toBeInstanceOf(Agent);
       expect(agent?.id).toBe('agent-with-scorers');
@@ -768,7 +768,7 @@ describe('Stored Agents via MastraEditor', () => {
         editor,
       });
 
-      const agent = await editor.getStoredAgentById('agent-with-id-ref');
+      const agent = await editor.agent.getById('agent-with-id-ref');
 
       expect(agent).toBeInstanceOf(Agent);
     });
@@ -808,7 +808,7 @@ describe('Stored Agents via MastraEditor', () => {
       });
       const mastra = new Mastra({ storage, editor });
 
-      const agent = await editor.getStoredAgentById('agent-with-missing-refs');
+      const agent = await editor.agent.getById('agent-with-missing-refs');
 
       expect(agent).toBeInstanceOf(Agent);
 

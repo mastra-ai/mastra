@@ -211,14 +211,22 @@ function createMockStorage(agentsStore?: MockAgentsStore): MockStorage {
 }
 
 interface MockEditor {
-  clearStoredAgentCache: ReturnType<typeof vi.fn>;
-  previewInstructions: ReturnType<typeof vi.fn>;
+  agent: {
+    clearCache: ReturnType<typeof vi.fn>;
+  };
+  prompt: {
+    preview: ReturnType<typeof vi.fn>;
+  };
 }
 
 function createMockEditor(): MockEditor {
   return {
-    clearStoredAgentCache: vi.fn(),
-    previewInstructions: vi.fn().mockResolvedValue('resolved instructions'),
+    agent: {
+      clearCache: vi.fn(),
+    },
+    prompt: {
+      preview: vi.fn().mockResolvedValue('resolved instructions'),
+    },
   };
 }
 
@@ -548,7 +556,7 @@ describe('Stored Agents Handlers', () => {
         authorId: 'original-author', // Should remain unchanged
       });
 
-      expect(mockEditor.clearStoredAgentCache).toHaveBeenCalledWith('update-test');
+      expect(mockEditor.agent.clearCache).toHaveBeenCalledWith('update-test');
     });
 
     it('should throw 404 when agent does not exist', async () => {
@@ -657,7 +665,7 @@ describe('Stored Agents Handlers', () => {
       expect(result).toEqual({ success: true, message: 'Agent delete-test deleted successfully' });
       expect(mockAgentsStore.deleteAgent).toHaveBeenCalledWith({ id: 'delete-test' });
       expect(mockAgentsData.has('delete-test')).toBe(false);
-      expect(mockEditor.clearStoredAgentCache).toHaveBeenCalledWith('delete-test');
+      expect(mockEditor.agent.clearCache).toHaveBeenCalledWith('delete-test');
     });
 
     it('should throw 404 when agent does not exist', async () => {
@@ -683,7 +691,7 @@ describe('Stored Agents Handlers', () => {
       ];
       const context = { name: 'World' };
 
-      mockEditor.previewInstructions.mockResolvedValue('Hello World\n\nResolved block content');
+      mockEditor.prompt.preview.mockResolvedValue('Hello World\n\nResolved block content');
 
       const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
         ...createTestContext(mockMastra),
@@ -692,13 +700,13 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toEqual({ result: 'Hello World\n\nResolved block content' });
-      expect(mockEditor.previewInstructions).toHaveBeenCalledWith(blocks, context);
+      expect(mockEditor.prompt.preview).toHaveBeenCalledWith(blocks, context);
     });
 
     it('should pass empty context when none provided', async () => {
       const blocks = [{ type: 'text' as const, content: 'Static content' }];
 
-      mockEditor.previewInstructions.mockResolvedValue('Static content');
+      mockEditor.prompt.preview.mockResolvedValue('Static content');
 
       const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
         ...createTestContext(mockMastra),
@@ -707,7 +715,7 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toEqual({ result: 'Static content' });
-      expect(mockEditor.previewInstructions).toHaveBeenCalledWith(blocks, {});
+      expect(mockEditor.prompt.preview).toHaveBeenCalledWith(blocks, {});
     });
 
     it('should throw 500 when editor is not configured', async () => {
@@ -741,7 +749,7 @@ describe('Stored Agents Handlers', () => {
       ];
       const context = { user: { role: 'admin' } };
 
-      mockEditor.previewInstructions.mockResolvedValue('You are an admin assistant');
+      mockEditor.prompt.preview.mockResolvedValue('You are an admin assistant');
 
       const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
         ...createTestContext(mockMastra),
@@ -750,12 +758,12 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toEqual({ result: 'You are an admin assistant' });
-      expect(mockEditor.previewInstructions).toHaveBeenCalledWith(blocks, context);
+      expect(mockEditor.prompt.preview).toHaveBeenCalledWith(blocks, context);
     });
 
     it('should handle editor errors gracefully', async () => {
       const blocks = [{ type: 'text' as const, content: 'Hello' }];
-      mockEditor.previewInstructions.mockRejectedValue(new Error('Block resolution failed'));
+      mockEditor.prompt.preview.mockRejectedValue(new Error('Block resolution failed'));
 
       try {
         await PREVIEW_INSTRUCTIONS_ROUTE.handler({

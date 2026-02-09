@@ -9,4 +9,10 @@ export type { ToolAction } from './tools';
 export type { Workflow } from './workflows';
 export type { MastraScorers, ScoringSamplingConfig } from './evals';
 export type { StorageResolvedAgentType, StorageScorerConfig } from './storage';
-export type { IMastraEditor, MastraEditorConfig } from './editor';
+export type {
+  IMastraEditor,
+  MastraEditorConfig,
+  IEditorAgentNamespace,
+  IEditorPromptNamespace,
+  IEditorScorerNamespace,
+} from './editor';
