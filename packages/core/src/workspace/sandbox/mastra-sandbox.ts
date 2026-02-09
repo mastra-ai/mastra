@@ -32,6 +32,26 @@ import { MountManager } from './mount-manager';
 import type { WorkspaceSandbox } from './sandbox';
 
 /**
+ * Lifecycle hook that fires during sandbox state transitions.
+ * Receives the sandbox instance so users can call `executeCommand`, read files, etc.
+ */
+export type SandboxLifecycleHook = (args: { sandbox: WorkspaceSandbox }) => void | Promise<void>;
+
+/**
+ * Options for the MastraSandbox base class constructor.
+ * Providers extend this to add their own options while inheriting lifecycle hooks.
+ */
+export interface MastraSandboxOptions {
+  name: string;
+  /** Called after the sandbox reaches 'running' status */
+  onStart?: SandboxLifecycleHook;
+  /** Called before the sandbox stops */
+  onStop?: SandboxLifecycleHook;
+  /** Called before the sandbox is destroyed */
+  onDestroy?: SandboxLifecycleHook;
+}
+
+/**
  * Abstract base class for sandbox providers with logger support.
  *
  * Providers that extend this class automatically receive the Mastra logger
@@ -97,8 +117,17 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   /** Promise for destroy() to prevent race conditions from concurrent calls */
   protected _destroyPromise?: Promise<void>;
 
-  constructor(options: { name: string }) {
+  /** Lifecycle callbacks */
+  private readonly _onStart?: SandboxLifecycleHook;
+  private readonly _onStop?: SandboxLifecycleHook;
+  private readonly _onDestroy?: SandboxLifecycleHook;
+
+  constructor(options: MastraSandboxOptions) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
+
+    this._onStart = options.onStart;
+    this._onStop = options.onStop;
+    this._onDestroy = options.onDestroy;
 
     // Automatically create MountManager if subclass implements mount()
     if (this.mount) {
@@ -151,6 +180,9 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     try {
       await this._doStart();
       this.status = 'running';
+
+      // Fire onStart callback after sandbox is running
+      await this._onStart?.({ sandbox: this });
 
       // Process any pending mounts after successful start
       await this.mounts?.processPending();
@@ -238,6 +270,9 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     this.status = 'stopping';
 
     try {
+      // Fire onStop callback before stopping
+      await this._onStop?.({ sandbox: this });
+
       await this._doStop();
       this.status = 'stopped';
     } catch (error) {
@@ -292,6 +327,9 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     this.status = 'destroying';
 
     try {
+      // Fire onDestroy callback before destroying
+      await this._onDestroy?.({ sandbox: this });
+
       await this._doDestroy();
       this.status = 'destroyed';
     } catch (error) {

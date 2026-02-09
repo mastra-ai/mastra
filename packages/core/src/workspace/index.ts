@@ -49,7 +49,15 @@ export type { FilesystemMountConfig, MountResult, FilesystemIcon } from './files
 
 // Sandbox
 export { MountManager } from './sandbox';
-export type { WorkspaceSandbox, ExecutionResult, CommandResult, ExecuteCommandOptions, SandboxInfo } from './sandbox';
+export type {
+  WorkspaceSandbox,
+  ExecutionResult,
+  CommandResult,
+  ExecuteCommandOptions,
+  SandboxInfo,
+  SandboxLifecycleHook,
+  MastraSandboxOptions,
+} from './sandbox';
 export type { MountManagerConfig, MountFn, OnMountHook, OnMountResult } from './sandbox';
 
 // Native Sandbox

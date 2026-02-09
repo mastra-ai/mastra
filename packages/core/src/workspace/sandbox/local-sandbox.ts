@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import type { ProviderStatus } from '../lifecycle';
 import { IsolationUnavailableError } from './errors';
 import { MastraSandbox } from './mastra-sandbox';
+import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
 import type { SandboxInfo, ExecuteCommandOptions, CommandResult } from './types';
@@ -95,7 +96,7 @@ function execWithStreaming(
 /**
  * Local sandbox provider configuration.
  */
-export interface LocalSandboxOptions {
+export interface LocalSandboxOptions extends Pick<MastraSandboxOptions, 'onStart' | 'onStop' | 'onDestroy'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /** Working directory for command execution */
@@ -205,7 +206,7 @@ export class LocalSandbox extends MastraSandbox {
   }
 
   constructor(options: LocalSandboxOptions = {}) {
-    super({ name: 'LocalSandbox' });
+    super({ name: 'LocalSandbox', onStart: options.onStart, onStop: options.onStop, onDestroy: options.onDestroy });
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
     // Default working directory is .sandbox/ in cwd - isolated from seatbelt profiles

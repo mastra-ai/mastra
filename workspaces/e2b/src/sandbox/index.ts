@@ -16,6 +16,7 @@ import type {
   FilesystemMountConfig,
   ProviderStatus,
   MountManager,
+  MastraSandboxOptions,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
@@ -39,7 +40,7 @@ export type SandboxRuntime = 'node' | 'python' | 'bash' | 'ruby' | 'go' | 'rust'
 /**
  * E2B sandbox provider configuration.
  */
-export interface E2BSandboxOptions {
+export interface E2BSandboxOptions extends Pick<MastraSandboxOptions, 'onStart' | 'onStop' | 'onDestroy'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /**
@@ -136,7 +137,7 @@ export class E2BSandbox extends MastraSandbox {
   private _templatePreparePromise?: Promise<string>;
 
   constructor(options: E2BSandboxOptions = {}) {
-    super({ name: 'E2BSandbox' });
+    super({ name: 'E2BSandbox', onStart: options.onStart, onStop: options.onStop, onDestroy: options.onDestroy });
 
     this.id = options.id ?? this.generateId();
     this.timeout = options.timeout ?? 300_000; // 5 minutes;
