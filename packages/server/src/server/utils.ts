@@ -228,6 +228,18 @@ export class WorkflowRegistry {
   }
 }
 
+/**
+ * Converts a string to a URL-friendly slug.
+ * Lowercases, replaces non-alphanumeric characters with hyphens,
+ * collapses consecutive hyphens, and trims leading/trailing hyphens.
+ */
+export function toSlug(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 export function convertInstructionsToString(message: SystemMessage): string {
   if (!message) {
     return '';
