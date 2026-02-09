@@ -10,10 +10,11 @@ import type { ToolsInput } from '../types';
 /**
  * Tests for working memory tool injection and context propagation.
  *
- * The updateWorkingMemory tool requires threadId, resourceId, and a Memory
- * instance to function. When agent.stream() is called without memory options
- * (no thread context), memory tools must NOT be injected — otherwise the
- * model may call the tool and trigger a runtime error.
+ * The updateWorkingMemory tool requires a Memory instance and either threadId
+ * (for thread-scoped) or resourceId (for resource-scoped) to function.
+ * When agent.stream() is called without memory options (no thread or resource
+ * context), memory tools must NOT be injected — otherwise the model may call
+ * the tool and trigger a runtime error.
  */
 describe('Working memory tool context propagation', () => {
   function getToolNames(
@@ -296,7 +297,7 @@ describe('Working memory tool context propagation', () => {
     expect(savedWorkingMemory).toContain('found');
   });
 
-  it('should NOT inject memory tools when no thread context is provided', async () => {
+  it('should NOT inject memory tools when no thread or resource context is provided', async () => {
     const toolNames: string[] = [];
     const mockModel = createSimpleMockModel(names => toolNames.push(...names));
 

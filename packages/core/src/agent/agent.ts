@@ -2000,9 +2000,9 @@ export class Agent<
     // Get memory tools if available
     const memory = await this.getMemory({ requestContext });
 
-    // Skip memory tools if there's no thread context — they require threadId to function
-    if (!threadId) {
-      this.logger.debug(`[Agent:${this.name}] - Skipping memory tools (no thread context)`, { runId });
+    // Skip memory tools if there's no usable context — thread-scoped needs threadId, resource-scoped needs resourceId
+    if (!threadId && !resourceId) {
+      this.logger.debug(`[Agent:${this.name}] - Skipping memory tools (no thread or resource context)`, { runId });
       return convertedMemoryTools;
     }
 
