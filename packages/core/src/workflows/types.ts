@@ -715,6 +715,18 @@ export type WorkflowStreamResult<TState, TInput, TOutput, TSteps extends Step<st
       };
     };
 
+/**
+ * Configuration for scheduling a workflow on a cron interval.
+ */
+export type ScheduleConfig<TInput = unknown> = {
+  /** Cron expression in standard 5-field syntax (minute hour day-of-month month day-of-week) */
+  cron: string;
+  /** Default input data for each scheduled run */
+  inputData?: TInput;
+  /** Human-readable description of the schedule */
+  description?: string;
+};
+
 export type WorkflowConfig<
   TWorkflowId extends string,
   TState,
@@ -744,6 +756,8 @@ export type WorkflowConfig<
   options?: WorkflowOptions;
   /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
   type?: WorkflowType;
+  /** Optional cron schedule for recurring execution */
+  schedule?: ScheduleConfig<TInput>;
 };
 
 /**
