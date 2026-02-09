@@ -190,7 +190,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
         };
       }> = [];
 
-      // Prefer the workspace registry (newer @mastra/core with 'workspace-registry' feature).
+      // Prefer the workspace registry if available (duck-type check for newer @mastra/core).
       // This avoids calling dynamic workspace functions without proper request context.
       // Dynamic workspaces get lazily registered during agent execution (stream/generate).
       if (typeof mastra.listWorkspaces === 'function') {
