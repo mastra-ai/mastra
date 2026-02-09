@@ -10,6 +10,10 @@ export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
+export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
+export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
+export const TABLE_PROMPT_BLOCKS = 'mastra_prompt_blocks';
+export const TABLE_PROMPT_BLOCK_VERSIONS = 'mastra_prompt_block_versions';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -19,7 +23,10 @@ export type TABLE_NAMES =
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
-  | typeof TABLE_AGENTS;
+  | typeof TABLE_AGENTS
+  | typeof TABLE_AGENT_VERSIONS
+  | typeof TABLE_PROMPT_BLOCKS
+  | typeof TABLE_PROMPT_BLOCK_VERSIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -88,23 +95,88 @@ export const OLD_SPAN_SCHEMA: Record<string, StorageColumn> = {
 
 export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  name: { type: 'text', nullable: false },
-  description: { type: 'text', nullable: true },
-  instructions: { type: 'text', nullable: false }, // System instructions for the agent
-  model: { type: 'jsonb', nullable: false }, // Model configuration (provider, name, etc.)
-  tools: { type: 'jsonb', nullable: true }, // Serialized tool references/configurations
-  defaultOptions: { type: 'jsonb', nullable: true }, // Default options for generate/stream calls
-  workflows: { type: 'jsonb', nullable: true }, // Workflow references (IDs or configurations)
-  agents: { type: 'jsonb', nullable: true }, // Sub-agent references (IDs or configurations)
-  inputProcessors: { type: 'jsonb', nullable: true }, // Input processor configurations
-  outputProcessors: { type: 'jsonb', nullable: true }, // Output processor configurations
-  memory: { type: 'jsonb', nullable: true }, // Memory configuration
-  scorers: { type: 'jsonb', nullable: true }, // Scorer configurations
+  status: { type: 'text', nullable: false }, // 'draft' or 'published'
+  activeVersionId: { type: 'text', nullable: true }, // FK to agent_versions.id
+  authorId: { type: 'text', nullable: true }, // Author identifier for multi-tenant filtering
   metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
+export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true }, // UUID
+  agentId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  // Agent config fields
+  name: { type: 'text', nullable: false }, // Agent display name
+  description: { type: 'text', nullable: true },
+  instructions: { type: 'text', nullable: false },
+  model: { type: 'jsonb', nullable: false },
+  tools: { type: 'jsonb', nullable: true },
+  defaultOptions: { type: 'jsonb', nullable: true },
+  workflows: { type: 'jsonb', nullable: true },
+  agents: { type: 'jsonb', nullable: true },
+  integrationTools: { type: 'jsonb', nullable: true },
+  inputProcessors: { type: 'jsonb', nullable: true },
+  outputProcessors: { type: 'jsonb', nullable: true },
+  memory: { type: 'jsonb', nullable: true },
+  scorers: { type: 'jsonb', nullable: true },
+  // Version metadata
+  changedFields: { type: 'jsonb', nullable: true }, // Array of field names
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const PROMPT_BLOCKS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
+  activeVersionId: { type: 'text', nullable: true }, // FK to prompt_block_versions.id
+  authorId: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const PROMPT_BLOCK_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  blockId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  content: { type: 'text', nullable: false },
+  rules: { type: 'jsonb', nullable: true },
+  changedFields: { type: 'jsonb', nullable: true },
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  lookupKey: { type: 'text', nullable: false }, // 'resource:{resourceId}' or 'thread:{threadId}'
+  scope: { type: 'text', nullable: false }, // 'resource' or 'thread'
+  resourceId: { type: 'text', nullable: true },
+  threadId: { type: 'text', nullable: true },
+  activeObservations: { type: 'text', nullable: false }, // JSON array of observations
+  activeObservationsPendingUpdate: { type: 'text', nullable: true }, // JSON array, used during updates
+  originType: { type: 'text', nullable: false }, // 'initialization', 'observation', or 'reflection'
+  config: { type: 'text', nullable: false }, // JSON object
+  generationCount: { type: 'integer', nullable: false },
+  lastObservedAt: { type: 'timestamp', nullable: true },
+  lastReflectionAt: { type: 'timestamp', nullable: true },
+  pendingMessageTokens: { type: 'integer', nullable: false }, // Token count
+  totalTokensObserved: { type: 'integer', nullable: false }, // Running total of all observed tokens
+  observationTokenCount: { type: 'integer', nullable: false }, // Current observation size in tokens
+  isObserving: { type: 'boolean', nullable: false },
+  isReflecting: { type: 'boolean', nullable: false },
+  observedMessageIds: { type: 'jsonb', nullable: true }, // JSON array of message IDs already observed
+  observedTimezone: { type: 'text', nullable: true }, // Timezone used for Observer date formatting (e.g., "America/Los_Angeles")
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+/**
+ * Schema definitions for all core tables.
+ */
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -167,4 +239,15 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
+  [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+  [TABLE_PROMPT_BLOCKS]: PROMPT_BLOCKS_SCHEMA,
+  [TABLE_PROMPT_BLOCK_VERSIONS]: PROMPT_BLOCK_VERSIONS_SCHEMA,
+};
+
+/**
+ * Schema for the observational memory table.
+ * Exported separately as OM is optional and not part of TABLE_NAMES.
+ */
+export const OBSERVATIONAL_MEMORY_TABLE_SCHEMA = {
+  [TABLE_OBSERVATIONAL_MEMORY]: OBSERVATIONAL_MEMORY_SCHEMA,
 };

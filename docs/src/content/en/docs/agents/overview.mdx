@@ -31,7 +31,7 @@ An introduction to agents, and how they compare to workflows on [YouTube (7 minu
 
 Add the Mastra core package to your project:
 
-```bash
+```bash npm2yarn
 npm install @mastra/core@latest
 ```
 
@@ -142,6 +142,14 @@ export const mastra = new Mastra({
   agents: { testAgent },
 });
 ```
+
+### Registering subagents
+
+You can register subagents within an agent. They'll be executed as tools from the parent agent. Read the [using agents as tools](/docs/agents/using-tools#using-agents-as-tools) documentation to learn more.
+
+### Registering subworkflows
+
+You can register subworkflows within an agent. They'll be executed as tools from the parent agent. Read the [using workflows as tools](/docs/agents/using-tools#using-workflows-as-tools) documentation to learn more.
 
 ## Referencing an agent
 
@@ -333,6 +341,12 @@ export const testAgent = new Agent({
 :::info
 
 See [Request Context](/docs/server/request-context) for more information.
+
+:::
+
+:::tip
+
+For type-safe request context schema validation, see [Schema Validation](/docs/server/request-context#schema-validation).
 
 :::
 

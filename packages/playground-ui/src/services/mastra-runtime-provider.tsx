@@ -14,9 +14,10 @@ import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-
 import { MastraClient, UIMessageWithMetadata } from '@mastra/client-js';
 import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
-import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
+import { MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
-import { useAgentPromptExperiment } from '@/domains/agents/context';
+import { useAgentPromptExperiment, useObservationalMemoryContext } from '@/domains/agents/context';
+import { useQueryClient } from '@tanstack/react-query';
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {
@@ -71,6 +72,147 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
     });
 
   return Promise.all(promises);
+};
+
+/**
+ * Converts a data-om-* part to dynamic-tool format so toAssistantUIMessage can transform it.
+ * The ToolFallback component will detect the om-observation-* prefix and render ObservationMarkerBadge.
+ *
+ * Input: { type: 'data-om-observation-start', data: {...} }
+ * Output: { type: 'dynamic-tool', toolCallId, toolName: 'om-observation-start', input: {...}, output: {...}, state: 'output-available' }
+ */
+const OM_TOOL_NAME = 'mastra-memory-om-observation';
+
+/**
+ * Combines data-om-* parts in a message into single tool calls by cycleId.
+ * - start marker creates a tool call in 'input-available' (loading) state
+ * - end/failed marker with same cycleId updates it to 'output-available' (complete) state
+ * If both start and end exist for the same cycleId, only the final state is kept.
+ * The tool call is placed at the position of the START marker to preserve order.
+ *
+ * Note: cycleId is unique per observation cycle, while recordId is constant for the entire
+ * memory record. Using cycleId ensures each observation cycle gets its own UI element.
+ */
+const convertOmPartsInMastraMessage = (message: MastraUIMessage): MastraUIMessage => {
+  if (!message || !Array.isArray(message.parts)) {
+    return message;
+  }
+
+  // First pass: collect all OM parts grouped by cycleId
+  const omPartsByCycleId = new Map<string, { start?: any; end?: any; failed?: any }>();
+
+  for (const part of message.parts) {
+    if (part.type === 'data-om-observation-start') {
+      const cycleId = part.data?.cycleId;
+      if (cycleId) {
+        const existing = omPartsByCycleId.get(cycleId) || {};
+        existing.start = part;
+        omPartsByCycleId.set(cycleId, existing);
+      }
+    } else if (part.type === 'data-om-observation-end') {
+      const cycleId = part.data?.cycleId;
+      if (cycleId) {
+        const existing = omPartsByCycleId.get(cycleId) || {};
+        existing.end = part;
+        omPartsByCycleId.set(cycleId, existing);
+      }
+    } else if (part.type === 'data-om-observation-failed') {
+      const cycleId = part.data?.cycleId;
+      if (cycleId) {
+        const existing = omPartsByCycleId.get(cycleId) || {};
+        existing.failed = part;
+        omPartsByCycleId.set(cycleId, existing);
+      }
+    }
+  }
+
+  // Second pass: build new parts array, replacing start markers with merged tool calls
+  // and removing end/failed markers (they're merged into the start position)
+  const convertedParts: any[] = [];
+  const processedCycleIds = new Set<string>();
+
+  for (const part of message.parts) {
+    const cycleId = (part as any).data?.cycleId;
+
+    if (part.type === 'data-om-observation-start' && cycleId && !processedCycleIds.has(cycleId)) {
+      // Replace start marker with merged tool call
+      const parts = omPartsByCycleId.get(cycleId)!;
+      const startData = parts.start?.data || {};
+      const endData = parts.end?.data || {};
+      const failedData = parts.failed?.data || {};
+
+      const isFailed = !!parts.failed;
+      const isComplete = !!parts.end;
+      const isDisconnected = isComplete && !!endData.disconnectedAt;
+      const isLoading = !isFailed && !isComplete;
+
+      const mergedData = {
+        ...startData,
+        ...(isComplete ? endData : {}),
+        ...(isFailed ? failedData : {}),
+        _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : isComplete ? 'complete' : 'loading',
+      };
+
+      convertedParts.push({
+        type: 'dynamic-tool',
+        toolCallId: `om-observation-${cycleId}`,
+        toolName: OM_TOOL_NAME,
+        input: mergedData,
+        output: isLoading
+          ? undefined
+          : {
+              status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
+              omData: mergedData,
+            },
+        state: isLoading ? 'input-available' : 'output-available',
+      });
+
+      processedCycleIds.add(cycleId);
+    } else if (
+      (part.type === 'data-om-observation-end' || part.type === 'data-om-observation-failed') &&
+      cycleId &&
+      !processedCycleIds.has(cycleId)
+    ) {
+      // Handle end/failed markers that don't have a corresponding start (e.g., disconnected state)
+      const parts = omPartsByCycleId.get(cycleId);
+      if (parts && !parts.start) {
+        // No start marker - this is likely a disconnected observation
+        const endData = parts.end?.data || {};
+        const failedData = parts.failed?.data || {};
+        const isFailed = !!parts.failed;
+        const isDisconnected = !!endData.disconnectedAt;
+
+        const mergedData = {
+          ...(parts.end ? endData : failedData),
+          _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
+        };
+
+        convertedParts.push({
+          type: 'dynamic-tool',
+          toolCallId: `om-observation-${cycleId}`,
+          toolName: OM_TOOL_NAME,
+          input: mergedData,
+          output: {
+            status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
+            omData: mergedData,
+          },
+          state: 'output-available',
+        });
+
+        processedCycleIds.add(cycleId);
+      }
+      // Skip if already processed or has a start marker (will be merged there)
+      continue;
+    } else {
+      // Keep non-OM parts as-is
+      convertedParts.push(part);
+    }
+  }
+
+  return {
+    ...message,
+    parts: convertedParts,
+  };
 };
 
 const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
@@ -146,6 +288,11 @@ const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
               text: part.text,
             };
           }
+
+          // Keep data-om-* parts as-is - they'll be converted by convertOmPartsInMastraMessage later
+          if (part.type?.startsWith('data-om-')) {
+            return part;
+          }
         })
         .filter(Boolean);
 
@@ -177,9 +324,9 @@ export function MastraRuntimeProvider({
   const { prompt: instructions } = useAgentPromptExperiment();
   const { settings: tracingSettings } = useTracingSettings();
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
-  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() =>
-    memory ? initializeMessageState(initialLegacyMessages || []) : [],
-  );
+  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() => {
+    return memory ? initializeMessageState(initialLegacyMessages || []) : [];
+  });
 
   const {
     messages,
@@ -202,6 +349,125 @@ export function MastraRuntimeProvider({
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
+  const queryClient = useQueryClient();
+  const { setIsObservingFromStream, setIsReflectingFromStream, signalObservationsUpdated, setStreamProgress } =
+    useObservationalMemoryContext();
+
+  // Helper to signal observation/reflection started (from streaming)
+  const handleObservationStart = (operationType?: string) => {
+    if (operationType === 'reflection') {
+      setIsReflectingFromStream(true);
+    } else {
+      setIsObservingFromStream(true);
+    }
+  };
+
+  // Helper to update progress from streamed data-om-progress parts
+  const handleProgressUpdate = (data: any) => {
+    // Ignore progress from a different thread (e.g., if user switched threads mid-stream)
+    if (data.threadId && data.threadId !== threadId) {
+      return;
+    }
+    setStreamProgress({
+      pendingTokens: data.pendingTokens,
+      messageTokens: data.messageTokens,
+      messageTokensPercent: data.messageTokensPercent,
+      observationTokens: data.observationTokens,
+      observationTokensThreshold: data.observationTokensThreshold,
+      observationTokensPercent: data.observationTokensPercent,
+      willObserve: data.willObserve,
+      recordId: data.recordId,
+      threadId: data.threadId,
+      stepNumber: data.stepNumber,
+    });
+  };
+
+  // Helper to refresh OM sidebar when observation/reflection completes
+  const refreshObservationalMemory = (operationType?: string) => {
+    if (operationType === 'reflection') {
+      setIsReflectingFromStream(false);
+    } else {
+      setIsObservingFromStream(false);
+    }
+    setStreamProgress(null); // Clear progress when observation completes
+    signalObservationsUpdated();
+    // Invalidate both the OM data and status queries to trigger refetch
+    queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+    queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+  };
+
+  // Helper to mark in-progress OM markers as disconnected in messages
+  const markOmMarkersAsDisconnected = (msgs: any[]) => {
+    console.log('[OM DEBUG] markOmMarkersAsDisconnected called with', msgs.length, 'messages');
+    return msgs.map((msg, msgIdx) => {
+      if (msg.role !== 'assistant') return msg;
+
+      // Handle both 'parts' (v2/v3) and 'content' (legacy) message formats
+      const partsKey = msg.parts ? 'parts' : msg.content ? 'content' : null;
+      if (!partsKey || !Array.isArray(msg[partsKey])) return msg;
+
+      let foundOmMarker = false;
+      const updatedParts = msg[partsKey].map((part: any) => {
+        // Check for raw data-om-observation-start parts (before conversion to tool-call)
+        if (part.type === 'data-om-observation-start') {
+          foundOmMarker = true;
+          console.log('[OM DEBUG] Found data-om-observation-start, marking as disconnected');
+          // Convert to a disconnected end marker
+          return {
+            type: 'data-om-observation-end',
+            data: {
+              ...part.data,
+              disconnectedAt: new Date().toISOString(),
+              _state: 'disconnected',
+            },
+          };
+        }
+        // Also check for already-converted tool-call format
+        if (part.type === 'tool-call' && part.toolName === 'mastra-memory-om-observation') {
+          const omData = part.metadata?.omData || part.args;
+          // If it's in loading state (no completedAt, failedAt, or disconnectedAt), mark as disconnected
+          if (!omData?.completedAt && !omData?.failedAt && !omData?.disconnectedAt) {
+            foundOmMarker = true;
+            console.log('[OM DEBUG] Found tool-call OM marker, marking as disconnected');
+            return {
+              ...part,
+              metadata: {
+                ...part.metadata,
+                omData: {
+                  ...omData,
+                  disconnectedAt: new Date().toISOString(),
+                  _state: 'disconnected',
+                },
+              },
+            };
+          }
+        }
+        return part;
+      });
+
+      if (foundOmMarker) {
+        console.log('[OM DEBUG] Returning updated message with', updatedParts.length, 'parts');
+      }
+      return { ...msg, [partsKey]: updatedParts };
+    });
+  };
+
+  // Helper to reset OM streaming state when stream is interrupted
+  // (user cancel, network error, process exit, etc.)
+  const resetObservationalMemoryStreamState = () => {
+    console.log('[OM DEBUG] resetObservationalMemoryStreamState called');
+    setIsObservingFromStream(false);
+    setIsReflectingFromStream(false);
+    setStreamProgress(null);
+
+    // Mark any in-progress observation markers as disconnected
+    setMessages(prev => markOmMarkersAsDisconnected(prev));
+    setLegacyMessages(prev => markOmMarkersAsDisconnected(prev));
+
+    // Refresh to get latest state from server
+    queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+    queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+  };
 
   const {
     frequencyPenalty,
@@ -220,11 +486,6 @@ export function MastraRuntimeProvider({
     requireToolApproval,
   } = settings?.modelSettings ?? {};
   const toolCallIdToName = useRef<Record<string, string>>({});
-
-  const requestContextInstance = new RequestContext();
-  Object.entries(requestContext ?? {}).forEach(([key, value]) => {
-    requestContextInstance.set(key, value);
-  });
 
   const modelSettingsArgs = {
     frequencyPenalty,
@@ -267,7 +528,18 @@ export function MastraRuntimeProvider({
 
     const agent = clientWithAbort.getAgent(agentId);
 
+    const requestContextInstance = new RequestContext();
+    Object.entries(requestContext ?? {}).forEach(([key, value]) => {
+      requestContextInstance.set(key, value);
+    });
+
     try {
+      console.log(
+        '[OM DEBUG] try block started, isSupportedModel:',
+        isSupportedModel,
+        'chatWithNetwork:',
+        chatWithNetwork,
+      );
       if (isSupportedModel) {
         if (chatWithNetwork) {
           await sendMessage({
@@ -292,6 +564,24 @@ export function MastraRuntimeProvider({
 
               if (chunk.type === 'network-execution-event-step-finish') {
                 refreshThreadList?.();
+              }
+
+              // Signal observation/reflection started (for sidebar status)
+              if ((chunk as any).type === 'data-om-observation-start') {
+                handleObservationStart((chunk as any).data?.operationType);
+              }
+
+              // Update progress from streamed data-om-progress parts
+              if ((chunk as any).type === 'data-om-progress') {
+                handleProgressUpdate((chunk as any).data);
+              }
+
+              // Refresh OM sidebar when observation/reflection completes (if OM chunks are passed through network mode)
+              if (
+                (chunk as any).type === 'data-om-observation-end' ||
+                (chunk as any).type === 'data-om-observation-failed'
+              ) {
+                refreshObservationalMemory((chunk as any).data?.operationType);
               }
             },
           });
@@ -334,6 +624,21 @@ export function MastraRuntimeProvider({
                 ) {
                   refreshWorkingMemory?.();
                 }
+
+                // Signal observation started (for sidebar status)
+                if (chunk.type === 'data-om-observation-start') {
+                  handleObservationStart((chunk as any).data?.operationType);
+                }
+
+                // Update progress from streamed data-om-progress parts
+                if (chunk.type === 'data-om-progress') {
+                  handleProgressUpdate((chunk as any).data);
+                }
+
+                // Refresh OM sidebar when observation completes
+                if (chunk.type === 'data-om-observation-end' || chunk.type === 'data-om-observation-failed') {
+                  refreshObservationalMemory((chunk as any).data?.operationType);
+                }
               },
               signal: controller.signal,
             });
@@ -352,7 +657,6 @@ export function MastraRuntimeProvider({
               },
               ...attachments,
             ],
-            runId: agentId,
             frequencyPenalty,
             presencePenalty,
             maxRetries,
@@ -470,7 +774,6 @@ export function MastraRuntimeProvider({
               },
               ...attachments,
             ],
-            runId: agentId,
             frequencyPenalty,
             presencePenalty,
             maxRetries,
@@ -685,11 +988,13 @@ export function MastraRuntimeProvider({
         refreshThreadList?.();
       }, 500);
     } catch (error: any) {
+      console.log('[OM DEBUG] catch block entered, error:', error?.name, error?.message);
       console.error('Error occurred in MastraRuntimeProvider', error);
       setIsLegacyRunning(false);
 
       // Handle cancellation gracefully
       if (error.name === 'AbortError') {
+        console.log('[OM DEBUG] AbortError detected, returning early');
         // Don't add an error message for user-initiated cancellation
         return;
       }
@@ -706,8 +1011,11 @@ export function MastraRuntimeProvider({
         ]);
       }
     } finally {
+      console.log('[OM DEBUG] finally block entered');
       // Clean up the abort controller reference
       abortControllerRef.current = null;
+      // Reset OM streaming state in case stream was interrupted mid-observation
+      resetObservationalMemoryStreamState();
     }
   };
 
@@ -716,13 +1024,19 @@ export function MastraRuntimeProvider({
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
       setIsLegacyRunning(false);
+      // Reset OM streaming state in case observation was in progress
+      resetObservationalMemoryStreamState();
       cancelRun?.();
     }
   };
 
   const { adapters, isReady } = useAdapters(agentId);
 
-  const vnextmessages = messages.map(toAssistantUIMessage);
+  // Convert data-om-* parts to dynamic-tool format BEFORE toAssistantUIMessage
+  const vnextmessages = messages.map(msg => {
+    const converted = convertOmPartsInMastraMessage(msg);
+    return toAssistantUIMessage(converted);
+  });
 
   const runtime = useExternalStoreRuntime({
     isRunning: isLegacyRunning || isRunningStream,

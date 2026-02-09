@@ -28,19 +28,25 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       it('should create and retrieve an agent', async () => {
         const agent = createSampleAgent();
 
+        // createAgent returns thin record (no config fields)
         const savedAgent = await agentsStorage.createAgent({ agent });
 
         expect(savedAgent.id).toBe(agent.id);
-        expect(savedAgent.name).toBe(agent.name);
-        expect(savedAgent.instructions).toBe(agent.instructions);
-        expect(savedAgent.model).toEqual(agent.model);
+        expect(savedAgent.status).toBe('draft'); // New behavior: starts as draft
+        expect([null, undefined]).toContain(savedAgent.activeVersionId);
         expect(savedAgent.createdAt).toBeInstanceOf(Date);
         expect(savedAgent.updatedAt).toBeInstanceOf(Date);
 
-        // Retrieve and verify
-        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
-        expect(retrievedAgent).toBeDefined();
-        expect(retrievedAgent?.name).toBe(agent.name);
+        // Config is accessible via getAgentByIdResolved (falls back to latest version)
+        const resolved = await agentsStorage.getAgentByIdResolved({ id: agent.id });
+        expect(resolved).toBeDefined();
+        expect(resolved?.name).toBe(agent.name);
+        expect(resolved?.instructions).toBe(agent.instructions);
+        expect(resolved?.model).toEqual(agent.model);
+
+        // Verify version 1 was created
+        const versionCount = await agentsStorage.countVersions(agent.id);
+        expect(versionCount).toBe(1);
       });
 
       it('should create agent with all optional fields', async () => {
@@ -49,35 +55,41 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         const savedAgent = await agentsStorage.createAgent({ agent });
 
         expect(savedAgent.id).toBe(agent.id);
-        expect(savedAgent.name).toBe(agent.name);
-        expect(savedAgent.description).toBe(agent.description);
-        expect(savedAgent.instructions).toBe(agent.instructions);
-        expect(savedAgent.model).toEqual(agent.model);
-        expect(savedAgent.tools).toEqual(agent.tools);
-        expect(savedAgent.defaultOptions).toEqual(agent.defaultOptions);
-        expect(savedAgent.workflows).toEqual(agent.workflows);
-        expect(savedAgent.agents).toEqual(agent.agents);
-        expect(savedAgent.inputProcessors).toEqual(agent.inputProcessors);
-        expect(savedAgent.outputProcessors).toEqual(agent.outputProcessors);
-        expect(savedAgent.memory).toEqual(agent.memory);
-        expect(savedAgent.scorers).toEqual(agent.scorers);
         expect(savedAgent.metadata).toEqual(agent.metadata);
+
+        // All config fields are accessible via resolved agent
+        const resolved = await agentsStorage.getAgentByIdResolved({ id: agent.id });
+        expect(resolved).toBeDefined();
+        expect(resolved?.name).toBe(agent.name);
+        expect(resolved?.description).toBe(agent.description);
+        expect(resolved?.instructions).toBe(agent.instructions);
+        expect(resolved?.model).toEqual(agent.model);
+        expect(resolved?.tools).toEqual(agent.tools);
+        expect(resolved?.defaultOptions).toEqual(agent.defaultOptions);
+        expect(resolved?.workflows).toEqual(agent.workflows);
+        expect(resolved?.agents).toEqual(agent.agents);
+        expect(resolved?.inputProcessors).toEqual(agent.inputProcessors);
+        expect(resolved?.outputProcessors).toEqual(agent.outputProcessors);
+        expect(resolved?.memory).toEqual(agent.memory);
+        expect(resolved?.scorers).toEqual(agent.scorers);
+        expect(resolved?.metadata).toEqual(agent.metadata);
       });
 
       it('should handle agents with minimal required fields', async () => {
-        const minimalAgent = {
-          id: `agent-minimal-${randomUUID()}`,
+        const minimalAgent = createSampleAgent({
           name: 'Minimal Agent',
           instructions: 'Minimal instructions',
-          model: { provider: 'openai' },
-        };
+          model: { provider: 'openai', name: 'gpt-4' },
+        });
 
         const savedAgent = await agentsStorage.createAgent({ agent: minimalAgent });
 
         expect(savedAgent.id).toBe(minimalAgent.id);
-        expect(savedAgent.name).toBe(minimalAgent.name);
-        expect(savedAgent.description).toBeUndefined();
-        expect(savedAgent.tools).toBeUndefined();
+
+        const resolved = await agentsStorage.getAgentByIdResolved({ id: minimalAgent.id });
+        expect(resolved?.name).toBe('Minimal Agent');
+        expect([null, undefined]).toContain(resolved?.description);
+        expect(resolved?.tools).toBeUndefined();
       });
     });
 
@@ -87,7 +99,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(result).toBeNull();
       });
 
-      it('should retrieve an existing agent by ID', async () => {
+      it('should retrieve an existing agent by ID (thin record)', async () => {
         const agent = createSampleAgent();
         await agentsStorage.createAgent({ agent });
 
@@ -95,89 +107,179 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         expect(retrievedAgent).toBeDefined();
         expect(retrievedAgent?.id).toBe(agent.id);
-        expect(retrievedAgent?.name).toBe(agent.name);
-        expect(retrievedAgent?.instructions).toBe(agent.instructions);
+        expect(retrievedAgent?.status).toBe('draft'); // New behavior
+        // Different stores may use null or undefined for activeVersionId
+        expect([null, undefined]).toContain(retrievedAgent?.activeVersionId); // New behavior
+
+        // Verify thin record has no config fields
+        expect((retrievedAgent as any)?.name).toBeUndefined();
+        expect((retrievedAgent as any)?.instructions).toBeUndefined();
+        expect((retrievedAgent as any)?.model).toBeUndefined();
+      });
+    });
+
+    describe('getAgentByIdResolved', () => {
+      it('should return null for non-existent agent', async () => {
+        const result = await agentsStorage.getAgentByIdResolved({ id: 'non-existent-agent' });
+        expect(result).toBeNull();
+      });
+
+      it('should return agent with config from active version', async () => {
+        const agent = createSampleAgent({
+          name: 'Resolved Agent',
+          instructions: 'Resolve me',
+        });
+        const created = await agentsStorage.createAgent({ agent });
+
+        // Set an active version
+        const versionId = randomUUID();
+        await agentsStorage.createVersion({
+          id: versionId,
+          agentId: agent.id,
+          versionNumber: 2,
+          name: 'Active Version',
+          instructions: 'Active instructions',
+          model: agent.model,
+          changedFields: ['name', 'instructions'],
+          changeMessage: 'Activated version',
+        });
+
+        await agentsStorage.updateAgent({
+          id: agent.id,
+          activeVersionId: versionId,
+        });
+
+        const resolved = await agentsStorage.getAgentByIdResolved({ id: agent.id });
+
+        expect(resolved).toBeDefined();
+        expect(resolved?.id).toBe(agent.id);
+        expect(resolved?.name).toBe('Active Version'); // From active version
+        expect(resolved?.instructions).toBe('Active instructions');
+      });
+
+      it('should fall back to latest version when no active version is set', async () => {
+        const agent = createSampleAgent({
+          name: 'Initial Name',
+          instructions: 'Initial instructions',
+        });
+        await agentsStorage.createAgent({ agent });
+
+        // Create version 2
+        await agentsStorage.createVersion({
+          id: randomUUID(),
+          agentId: agent.id,
+          versionNumber: 2,
+          name: 'Version 2',
+          instructions: 'Version 2 instructions',
+          model: agent.model,
+          changedFields: ['name', 'instructions'],
+          changeMessage: 'Second version',
+        });
+
+        // Create version 3 (latest)
+        await agentsStorage.createVersion({
+          id: randomUUID(),
+          agentId: agent.id,
+          versionNumber: 3,
+          name: 'Latest Version',
+          instructions: 'Latest instructions',
+          model: agent.model,
+          changedFields: ['name', 'instructions'],
+          changeMessage: 'Third version',
+        });
+
+        const resolved = await agentsStorage.getAgentByIdResolved({ id: agent.id });
+
+        expect(resolved).toBeDefined();
+        expect(resolved?.id).toBe(agent.id);
+        expect(resolved?.name).toBe('Latest Version'); // Falls back to latest
+        expect(resolved?.instructions).toBe('Latest instructions');
       });
     });
 
     describe('updateAgent', () => {
-      it('should update agent name', async () => {
-        const agent = createSampleAgent();
-        await agentsStorage.createAgent({ agent });
-
-        const updatedAgent = await agentsStorage.updateAgent({
-          id: agent.id,
-          name: 'Updated Agent Name',
-        });
-
-        expect(updatedAgent.name).toBe('Updated Agent Name');
-        expect(updatedAgent.instructions).toBe(agent.instructions); // Unchanged
-
-        // Verify persistence
-        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
-        expect(retrievedAgent?.name).toBe('Updated Agent Name');
-      });
-
-      it('should update agent instructions', async () => {
-        const agent = createSampleAgent();
-        await agentsStorage.createAgent({ agent });
-
-        const newInstructions = 'You are an updated expert assistant';
-        const updatedAgent = await agentsStorage.updateAgent({
-          id: agent.id,
-          instructions: newInstructions,
-        });
-
-        expect(updatedAgent.instructions).toBe(newInstructions);
-      });
-
-      it('should update agent model', async () => {
-        const agent = createSampleAgent();
-        await agentsStorage.createAgent({ agent });
-
-        const newModel = { provider: 'anthropic', name: 'claude-3-opus' };
-        const updatedAgent = await agentsStorage.updateAgent({
-          id: agent.id,
-          model: newModel,
-        });
-
-        expect(updatedAgent.model).toEqual(newModel);
-      });
-
-      it('should merge metadata on update', async () => {
+      it('should update agent metadata without creating new version', async () => {
         const agent = createSampleAgent({
           metadata: { key1: 'value1', key2: 'value2' },
         });
         await agentsStorage.createAgent({ agent });
+
+        const versionCountBefore = await agentsStorage.countVersions(agent.id);
+        expect(versionCountBefore).toBe(1);
 
         const updatedAgent = await agentsStorage.updateAgent({
           id: agent.id,
           metadata: { key2: 'updated', key3: 'value3' },
         });
 
-        expect(updatedAgent.metadata).toEqual({
-          key1: 'value1',
-          key2: 'updated',
-          key3: 'value3',
-        });
+        const refreshed = await agentsStorage.getAgentById({ id: agent.id });
+        expect(refreshed?.metadata?.key2).toBe('updated');
+        expect(refreshed?.metadata?.key3).toBe('value3');
+
+        // Note: For InMemory adapter, metadata is MERGED
+        // For DB adapters (PG, MongoDB, LibSQL), metadata is REPLACED
+        // This test will need to be adapter-specific or check both behaviors
+        const versionCountAfter = await agentsStorage.countVersions(agent.id);
+        expect(versionCountAfter).toBe(1); // No new version for metadata update
       });
 
-      it('should update multiple fields at once', async () => {
-        const agent = createSampleAgent();
+      it('should create new version when updating config fields', async () => {
+        const agent = createSampleAgent({
+          name: 'Original Name',
+          instructions: 'Original instructions',
+        });
         await agentsStorage.createAgent({ agent });
+
+        const versionCountBefore = await agentsStorage.countVersions(agent.id);
+        expect(versionCountBefore).toBe(1);
+
+        // Update config fields
+        const updatedAgent = await agentsStorage.updateAgent({
+          id: agent.id,
+          name: 'Updated Name',
+          instructions: 'Updated instructions',
+        });
+
+        // Agent status and activeVersionId should remain unchanged
+        expect(updatedAgent.status).toBe('draft');
+        expect([null, undefined]).toContain(updatedAgent.activeVersionId);
+
+        const versionCountAfter = await agentsStorage.countVersions(agent.id);
+        expect(versionCountAfter).toBe(2); // New version created
+
+        // Verify the new version has the updated config
+        const resolved = await agentsStorage.getAgentByIdResolved({ id: agent.id });
+        expect(resolved?.name).toBe('Updated Name');
+        expect(resolved?.instructions).toBe('Updated instructions');
+      });
+
+      it('should update activeVersionId while keeping status draft', async () => {
+        const agent = createSampleAgent();
+        const created = await agentsStorage.createAgent({ agent });
+        const originalVersionId = created.activeVersionId;
+
+        // Create a second version
+        const versionId = randomUUID();
+        await agentsStorage.createVersion({
+          id: versionId,
+          agentId: agent.id,
+          versionNumber: 2,
+          name: 'Updated Agent',
+          instructions: 'Updated instructions',
+          model: { provider: 'openai', name: 'gpt-4' },
+          changedFields: ['name', 'instructions'],
+          changeMessage: 'Test update',
+        });
 
         const updatedAgent = await agentsStorage.updateAgent({
           id: agent.id,
-          name: 'Completely Updated Agent',
-          description: 'New description',
-          instructions: 'New instructions',
-          model: { provider: 'google', name: 'gemini-pro' },
+          activeVersionId: versionId,
         });
 
-        expect(updatedAgent.name).toBe('Completely Updated Agent');
-        expect(updatedAgent.description).toBe('New description');
-        expect(updatedAgent.instructions).toBe('New instructions');
-        expect(updatedAgent.model).toEqual({ provider: 'google', name: 'gemini-pro' });
+        expect(updatedAgent.activeVersionId).toBe(versionId);
+        // Status should remain as 'draft' - publishing is a separate operation
+        expect(updatedAgent.status).toBe('draft');
+        expect(updatedAgent.activeVersionId).not.toBe(originalVersionId);
       });
 
       it('should update updatedAt timestamp', async () => {
@@ -190,7 +292,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         const updatedAgent = await agentsStorage.updateAgent({
           id: agent.id,
-          name: 'Updated Name',
+          metadata: { trigger: 'timestamp-update' },
         });
 
         const updatedAtTime =
@@ -206,20 +308,36 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
     });
 
     describe('deleteAgent', () => {
-      it('should delete an existing agent', async () => {
+      it('should delete an existing agent and all its versions', async () => {
         const agent = createSampleAgent();
         await agentsStorage.createAgent({ agent });
 
-        // Verify it exists
+        // Create additional versions
+        await agentsStorage.createVersion({
+          id: randomUUID(),
+          agentId: agent.id,
+          versionNumber: 2,
+          name: 'Version 2',
+          instructions: 'Version 2 instructions',
+          model: agent.model,
+          changedFields: ['name', 'instructions'],
+          changeMessage: 'Second version',
+        });
+
+        // Verify agent and versions exist
         const beforeDelete = await agentsStorage.getAgentById({ id: agent.id });
         expect(beforeDelete).toBeDefined();
+        const versionCountBefore = await agentsStorage.countVersions(agent.id);
+        expect(versionCountBefore).toBe(2);
 
         // Delete
         await agentsStorage.deleteAgent({ id: agent.id });
 
-        // Verify it's gone
+        // Verify agent and versions are gone
         const afterDelete = await agentsStorage.getAgentById({ id: agent.id });
         expect(afterDelete).toBeNull();
+        const versionCountAfter = await agentsStorage.countVersions(agent.id);
+        expect(versionCountAfter).toBe(0); // All versions deleted
       });
 
       it('should be idempotent when deleting non-existent agent', async () => {
@@ -314,7 +432,8 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         const agent3 = createSampleAgent({ name: 'Third Agent' });
         await agentsStorage.createAgent({ agent: agent3 });
 
-        const result = await agentsStorage.listAgents();
+        // listAgents returns thin records; use listAgentsResolved for names
+        const result = await agentsStorage.listAgentsResolved();
 
         // Default sort is DESC, so newest first
         expect(result.agents[0]?.name).toBe('Third Agent');
@@ -334,7 +453,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         const agent3 = createSampleAgent({ name: 'Third Agent' });
         await agentsStorage.createAgent({ agent: agent3 });
 
-        const result = await agentsStorage.listAgents({
+        const result = await agentsStorage.listAgentsResolved({
           orderBy: { field: 'createdAt', direction: 'ASC' },
         });
 
@@ -366,9 +485,9 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         });
 
         await agentsStorage.createAgent({ agent });
-        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
+        const resolved = await agentsStorage.getAgentByIdResolved({ id: agent.id });
 
-        expect(retrievedAgent?.model).toEqual(agent.model);
+        expect(resolved?.model).toEqual(agent.model);
       });
 
       it('should handle special characters in instructions', async () => {
@@ -382,9 +501,9 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         });
 
         await agentsStorage.createAgent({ agent });
-        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
+        const resolved = await agentsStorage.getAgentByIdResolved({ id: agent.id });
 
-        expect(retrievedAgent?.instructions).toBe(specialInstructions);
+        expect(resolved?.instructions).toBe(specialInstructions);
       });
 
       it('should handle large metadata objects', async () => {
@@ -407,15 +526,14 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(retrievedAgent?.metadata).toEqual(largeMetadata);
       });
 
-      it('should handle concurrent agent updates', async () => {
+      it('should handle concurrent agent metadata updates', async () => {
         const agent = createSampleAgent();
         await agentsStorage.createAgent({ agent });
 
-        // Perform multiple updates concurrently
+        // Perform multiple metadata updates concurrently
         const updates = Array.from({ length: 5 }, (_, i) =>
           agentsStorage.updateAgent({
             id: agent.id,
-            name: `Update ${i}`,
             metadata: { update: i },
           }),
         );
@@ -427,15 +545,45 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(finalAgent).toBeDefined();
       });
 
+      it('should handle mixed metadata and config updates correctly', async () => {
+        const agent = createSampleAgent({
+          name: 'Initial Name',
+          instructions: 'Initial instructions',
+          metadata: { category: 'test' },
+        });
+        await agentsStorage.createAgent({ agent });
+
+        // Mixed update: both metadata and config fields
+        const versionCountBefore = await agentsStorage.countVersions(agent.id);
+        expect(versionCountBefore).toBe(1);
+
+        await agentsStorage.updateAgent({
+          id: agent.id,
+          metadata: { category: 'updated', newField: 'value' }, // metadata update
+          name: 'New Name', // config update
+          instructions: 'New instructions', // config update
+        });
+
+        // Should create a new version for config changes
+        const versionCountAfter = await agentsStorage.countVersions(agent.id);
+        expect(versionCountAfter).toBe(2);
+
+        // Verify both metadata and config updates applied
+        const resolved = await agentsStorage.getAgentByIdResolved({ id: agent.id });
+        expect(resolved?.name).toBe('New Name');
+        expect(resolved?.instructions).toBe('New instructions');
+        // Note: metadata merge/replace behavior is adapter-specific
+      });
+
       it('should handle tools configuration', async () => {
         const tools = ['calculator', 'webSearch', 'codeInterpreter'];
 
         const agent = createSampleAgent({ tools });
 
         await agentsStorage.createAgent({ agent });
-        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
+        const resolved = await agentsStorage.getAgentByIdResolved({ id: agent.id });
 
-        expect(retrievedAgent?.tools).toEqual(tools);
+        expect(resolved?.tools).toEqual(tools);
       });
     });
   });

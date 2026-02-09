@@ -20,6 +20,7 @@ import { SYSTEM_ROUTES } from './system';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
+import { WORKSPACE_ROUTES } from './workspace';
 
 /**
  * Server context fields that are available to route handlers.
@@ -29,9 +30,11 @@ import { WORKFLOWS_ROUTES } from './workflows';
 export type ServerContext = {
   mastra: Mastra;
   requestContext: RequestContext;
-  tools?: ToolsInput;
+  registeredTools?: ToolsInput;
   taskStore?: InMemoryTaskStore;
   abortSignal: AbortSignal;
+  /** The route prefix configured for the server (e.g., '/api') */
+  routePrefix?: string;
 };
 
 /**
@@ -99,6 +102,7 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...VECTORS_ROUTES,
   ...A2A_ROUTES,
   ...AGENT_BUILDER_ROUTES,
+  ...WORKSPACE_ROUTES,
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,

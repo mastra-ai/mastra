@@ -18,6 +18,7 @@ import type {
   ProcessInputStepResult,
   Processor,
   ProcessorMessageResult,
+  ProcessorStreamWriter,
   ProcessorWorkflow,
   RunProcessInputStepArgs,
   RunProcessInputStepResult,
@@ -32,7 +33,9 @@ import type {
  * Used by both legacy processors and workflow processors.
  */
 export class ProcessorState<OUTPUT = undefined> {
-  private accumulatedText = '';
+  private inputAccumulatedText = '';
+  private outputAccumulatedText = '';
+  private outputChunkCount = 0;
   public customState: Record<string, unknown> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
   public span?: Span<SpanType.PROCESSOR_RUN>;
@@ -61,28 +64,43 @@ export class ProcessorState<OUTPUT = undefined> {
         processorIndex: options.processorIndex ?? 0,
       },
       input: {
-        streamParts: [],
-        state: {},
         totalChunks: 0,
       },
     });
   }
 
-  addPart(part: ChunkType<OUTPUT>): void {
+  /** Track incoming chunk (before processor transformation) */
+  addInputPart(part: ChunkType<OUTPUT>): void {
     // Extract text from text-delta chunks for accumulated text
     if (part.type === 'text-delta') {
-      this.accumulatedText += part.payload.text;
+      this.inputAccumulatedText += part.payload.text;
     }
     this.streamParts.push(part);
 
     if (this.span) {
       this.span.input = {
-        streamParts: this.streamParts,
-        state: this.customState,
         totalChunks: this.streamParts.length,
-        accumulatedText: this.accumulatedText,
+        accumulatedText: this.inputAccumulatedText,
       };
     }
+  }
+
+  /** Track outgoing chunk (after processor transformation) */
+  addOutputPart(part: ChunkType<OUTPUT> | null | undefined): void {
+    if (!part) return;
+    this.outputChunkCount++;
+    // Extract text from text-delta chunks for accumulated text
+    if (part.type === 'text-delta') {
+      this.outputAccumulatedText += part.payload.text;
+    }
+  }
+
+  /** Get final output for span */
+  getFinalOutput(): { totalChunks: number; accumulatedText: string } {
+    return {
+      totalChunks: this.outputChunkCount,
+      accumulatedText: this.outputAccumulatedText,
+    };
   }
 }
 
@@ -96,22 +114,45 @@ export class ProcessorRunner {
   public readonly outputProcessors: ProcessorOrWorkflow[];
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
+  /**
+   * Shared processor state that persists across loop iterations.
+   * Used by all processor methods (input and output) to share state.
+   * Keyed by processor ID.
+   */
+  private readonly processorStates: Map<string, ProcessorState>;
 
   constructor({
     inputProcessors,
     outputProcessors,
     logger,
     agentName,
+    processorStates,
   }: {
     inputProcessors?: ProcessorOrWorkflow[];
     outputProcessors?: ProcessorOrWorkflow[];
     logger: IMastraLogger;
     agentName: string;
+    processorStates?: Map<string, ProcessorState>;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
     this.logger = logger;
     this.agentName = agentName;
+    this.processorStates = processorStates ?? new Map();
+  }
+
+  /**
+   * Get or create ProcessorState for the given processor ID.
+   * This state persists across loop iterations and is shared between
+   * all processor methods (input and output).
+   */
+  private getProcessorState(processorId: string): ProcessorState {
+    let state = this.processorStates.get(processorId);
+    if (!state) {
+      state = new ProcessorState();
+      this.processorStates.set(processorId, state);
+    }
+    return state;
   }
 
   /**
@@ -123,13 +164,24 @@ export class ProcessorRunner {
     input: ProcessorStepOutput,
     tracingContext?: TracingContext,
     requestContext?: RequestContext,
+    writer?: ProcessorStreamWriter,
+    abortSignal?: AbortSignal,
   ): Promise<ProcessorStepOutput> {
     // Create a run and start the workflow
     const run = await workflow.createRun();
     const result = await run.start({
-      inputData: input,
+      // Cast to allow processorStates/abortSignal - passed through to workflow processor steps
+      // but not part of the official ProcessorStepOutput schema
+      inputData: {
+        ...input,
+        // Pass the processorStates map so workflow processor steps can access their state
+        processorStates: this.processorStates,
+        // Pass abortSignal so processors can cancel in-flight work
+        abortSignal,
+      } as ProcessorStepOutput,
       tracingContext,
       requestContext,
+      outputWriter: writer ? chunk => writer.custom(chunk) : undefined,
     });
 
     // Check for tripwire status - this means a processor in the workflow called abort()
@@ -184,6 +236,7 @@ export class ProcessorRunner {
     tracingContext?: TracingContext,
     requestContext?: RequestContext,
     retryCount: number = 0,
+    writer?: ProcessorStreamWriter,
   ): Promise<MessageList> {
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
       const allNewMessages = messageList.get.response.db();
@@ -203,6 +256,7 @@ export class ProcessorRunner {
           },
           tracingContext,
           requestContext,
+          writer,
         );
         continue;
       }
@@ -239,13 +293,18 @@ export class ProcessorRunner {
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
 
+      // Get per-processor state that persists across all method calls within this request
+      const processorState = this.getProcessorState(processor.id);
+
       const result = await processMethod({
         messages: processableMessages,
         messageList,
+        state: processorState.customState,
         abort,
         tracingContext: { currentSpan: processorSpan },
         requestContext,
         retryCount,
+        writer,
       });
 
       // Stop recording and get mutations for this processor
@@ -327,8 +386,8 @@ export class ProcessorRunner {
             processorStates.set(workflowId, state);
           }
 
-          // Add the current part to accumulated state
-          state.addPart(processedPart);
+          // Track input chunk (before processor transformation)
+          state.addInputPart(processedPart);
 
           try {
             const result = await this.executeWorkflowAsProcessor(
@@ -349,6 +408,8 @@ export class ProcessorRunner {
             if ('part' in result) {
               processedPart = result.part as ChunkType<OUTPUT> | null | undefined;
             }
+            // Track output chunk (after processor transformation or passthrough)
+            state.addOutputPart(processedPart);
           } catch (error) {
             if (error instanceof TripWire) {
               return {
@@ -379,8 +440,8 @@ export class ProcessorRunner {
               processorStates.set(processor.id, state);
             }
 
-            // Add the current part to accumulated text
-            state.addPart(processedPart);
+            // Track input chunk (before processor transformation)
+            state.addInputPart(processedPart);
 
             const result = await processor.processOutputStream({
               part: processedPart as ChunkType,
@@ -395,12 +456,9 @@ export class ProcessorRunner {
               retryCount,
             });
 
-            if (state.span && !state.span.isEvent) {
-              state.span.output = result;
-            }
-
-            // If result is null, or undefined, don't emit
+            // Track output chunk and update processedPart
             processedPart = result as ChunkType<OUTPUT> | null | undefined;
+            state.addOutputPart(processedPart);
           }
         } catch (error) {
           if (error instanceof TripWire) {
@@ -429,13 +487,8 @@ export class ProcessorRunner {
       if (isFinishChunk) {
         for (const state of processorStates.values()) {
           if (state.span) {
-            // Preserve the existing output (last processed part) and add metadata
-            const finalOutput = {
-              ...state.span.output,
-              totalChunks: state.streamParts.length,
-              finalState: state.customState,
-            };
-            state.span.end({ output: finalOutput });
+            // Set output with accumulated text and chunk count from processor's output
+            state.span.end({ output: state.getFinalOutput() });
           }
         }
       }
@@ -574,9 +627,13 @@ export class ProcessorRunner {
       // Get all system messages to pass to the processor
       const currentSystemMessages = messageList.getAllSystemMessages();
 
+      // Get per-processor state that persists across all method calls within this request
+      const processorState = this.getProcessorState(processor.id);
+
       const result = await processMethod({
         messages: processableMessages,
         systemMessages: currentSystemMessages,
+        state: processorState.customState,
         abort,
         tracingContext: { currentSpan: processorSpan },
         messageList,
@@ -714,7 +771,7 @@ export class ProcessorRunner {
    * @returns The processed MessageList
    */
   async runProcessInputStep(args: RunProcessInputStepArgs): Promise<RunProcessInputStepResult> {
-    const { messageList, stepNumber, steps, tracingContext, requestContext } = args;
+    const { messageList, stepNumber, steps, tracingContext, requestContext, writer } = args;
 
     // Initialize with all provided values - processors will modify this object in order
     const stepInput: RunProcessInputStepResult = {
@@ -749,6 +806,8 @@ export class ProcessorRunner {
           },
           tracingContext,
           requestContext,
+          writer,
+          args.abortSignal,
         );
         Object.assign(stepInput, result);
         continue;
@@ -810,14 +869,22 @@ export class ProcessorRunner {
       messageList.startRecording();
 
       try {
+        // Get per-processor state that persists across all method calls within this request
+        const processorState = this.getProcessorState(processor.id);
+
+        const processMethodArgs = {
+          messageList,
+          ...inputData,
+          state: processorState.customState,
+          abort,
+          tracingContext: { currentSpan: processorSpan },
+          retryCount: args.retryCount ?? 0,
+          writer,
+          abortSignal: args.abortSignal,
+        };
+
         const result = await ProcessorRunner.validateAndFormatProcessInputStepResult(
-          await processMethod({
-            messageList,
-            ...inputData,
-            abort,
-            tracingContext: { currentSpan: processorSpan },
-            retryCount: args.retryCount ?? 0,
-          }),
+          await processMethod(processMethodArgs),
           {
             messageList,
             processor,
@@ -916,6 +983,7 @@ export class ProcessorRunner {
     tracingContext?: TracingContext;
     requestContext?: RequestContext;
     retryCount?: number;
+    writer?: ProcessorStreamWriter;
   }): Promise<MessageList> {
     const {
       steps,
@@ -927,6 +995,7 @@ export class ProcessorRunner {
       tracingContext,
       requestContext,
       retryCount = 0,
+      writer,
     } = args;
 
     // Run through all output processors that have processOutputStep
@@ -954,6 +1023,7 @@ export class ProcessorRunner {
           },
           tracingContext,
           requestContext,
+          writer,
         );
         continue;
       }
@@ -992,6 +1062,9 @@ export class ProcessorRunner {
       // Get all system messages to pass to the processor
       const currentSystemMessages = messageList.getAllSystemMessages();
 
+      // Get or create processor state (persists across steps within a request)
+      const processorState = this.getProcessorState(processor.id);
+
       try {
         const result = await processMethod({
           messages: processableMessages,
@@ -1002,10 +1075,12 @@ export class ProcessorRunner {
           text,
           systemMessages: currentSystemMessages,
           steps,
+          state: processorState.customState,
           abort,
           tracingContext: { currentSpan: processorSpan },
           requestContext,
           retryCount,
+          writer,
         });
 
         // Stop recording and get mutations for this processor

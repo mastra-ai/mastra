@@ -1,6 +1,7 @@
 import './index.css';
 
 export * from './domains/agents/index';
+export * from './domains/llm/index';
 export * from './domains/processors/index';
 export * from './domains/scores/index';
 export * from './domains/tools/index';
@@ -29,6 +30,7 @@ export * from './ds/components/AlertDialog';
 export * from './ds/components/Checkbox';
 export * from './ds/components/Collapsible';
 export * from './ds/components/Combobox';
+export * from './ds/components/Command';
 export * from './ds/components/CopyButton';
 export * from './ds/components/Dialog';
 export * from './ds/components/Entry';
@@ -47,6 +49,7 @@ export * from './ds/components/Slider';
 export * from './ds/components/Spinner';
 export * from './ds/components/Switch';
 export * from './ds/components/Tooltip';
+export * from './ds/components/Truncate';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';
@@ -58,6 +61,7 @@ export * from './ds/components/CombinedButtons';
 export * from './ds/components/DateTimePicker';
 export * from './ds/components/EntryList';
 export * from './ds/components/FormFields';
+export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
 export * from './ds/components/Notification';
@@ -68,6 +72,9 @@ export * from './ds/components/SideDialog';
 export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
 export * from './ds/components/Text';
+export * from './ds/components/JSONSchemaForm';
+export * from './ds/components/ContentBlocks';
+export * from './lib/rule-engine';
 
 // Form utilities (AutoForm)
 export * from './lib/form';
@@ -91,4 +98,9 @@ export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
 export * from './lib/toast';
 export * from './domains/configuration/index';
+export * from './domains/workspace/index';
+export * from './domains/request-context/index';
 export * from './lib/mastra-platform';
+export * from './domains/cms/index';
+export * from './lib/experimental-features';
+export * from './lib/command';

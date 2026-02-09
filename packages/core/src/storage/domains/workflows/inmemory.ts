@@ -1,4 +1,5 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
+import { isPendingMarker } from '../../../workflows/evented/types';
 import { normalizePerPage } from '../../base';
 import type {
   StorageWorkflowRun,
@@ -75,7 +76,59 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    snapshot.context[stepId] = result;
+    // For foreach steps with array outputs, merge the arrays atomically
+    // This handles concurrent iteration completions
+    const existingResult = snapshot.context[stepId];
+    if (
+      existingResult &&
+      'output' in existingResult &&
+      Array.isArray(existingResult.output) &&
+      result &&
+      typeof result === 'object' &&
+      'output' in result &&
+      Array.isArray(result.output)
+    ) {
+      const existingOutput = existingResult.output as unknown[];
+      const newOutput = result.output as unknown[];
+      // ForEach iteration result merge logic:
+      //
+      // When forEach runs with concurrency > 1, multiple iterations execute in parallel.
+      // Each iteration writes its result to the same output array. We need to merge carefully:
+      //
+      // - null in newOutput means "iteration started but not finished" - keep existing result
+      // - non-null in newOutput means "iteration completed" - use the new result
+      // - PendingMarker ({ __mastra_pending__: true }) means "force reset to null"
+      //
+      // The PendingMarker is needed for bulk resume: when resuming suspended iterations,
+      // we must reset them to null before re-running. Without the marker, the merge logic
+      // would preserve the old suspended result (since null means "keep existing").
+      //
+      // Why a string key instead of Symbol? Symbols don't survive JSON serialization.
+      // In distributed execution where state is persisted to storage and loaded by
+      // different engine instances, a Symbol marker would be silently dropped.
+      const mergedOutput = [...existingOutput];
+      for (let i = 0; i < Math.max(existingOutput.length, newOutput.length); i++) {
+        if (i < newOutput.length) {
+          const newVal = newOutput[i];
+          if (isPendingMarker(newVal)) {
+            // PendingMarker: force reset to null (for bulk resume of suspended iterations)
+            mergedOutput[i] = null;
+          } else if (newVal !== null) {
+            // Completed result: always use the new value
+            mergedOutput[i] = newVal;
+          }
+          // null: iteration in progress, keep existing result (from spread above)
+        }
+        // Index beyond newOutput length: keep existing (from spread above)
+      }
+      snapshot.context[stepId] = {
+        ...existingResult,
+        ...(result as any),
+        output: mergedOutput,
+      };
+    } else {
+      snapshot.context[stepId] = result;
+    }
     snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
     this.db.workflows.set(key, {

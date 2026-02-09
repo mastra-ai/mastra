@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { Txt } from '@/ds/components/Txt';
 import { usePlaygroundStore } from '@/store/playground-store';
 import { useCodemirrorTheme } from '@/ds/components/CodeEditor';

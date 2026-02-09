@@ -14,6 +14,7 @@ import {
 import { optionalRunIdSchema } from '../schemas/common';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { validateBody } from './utils';
 
@@ -23,23 +24,29 @@ import { validateBody } from './utils';
 
 export const LIST_TOOLS_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/tools',
+  path: '/tools',
   responseType: 'json',
   responseSchema: listToolsResponseSchema,
   summary: 'List all tools',
   description: 'Returns a list of all available tools in the system',
   tags: ['Tools'],
-  handler: async ({ mastra, tools }) => {
+  requiresAuth: true,
+  handler: async ({ mastra, registeredTools }) => {
     try {
-      const allTools = tools || mastra.listTools() || {};
+      const allTools = registeredTools || mastra.listTools() || {};
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
-          const tool = _tool;
+          // Cast to any since we're serializing to a generic Record<string, any>
+          // and the tool types have varying property availability
+          const tool = _tool as any;
           acc[id] = {
             ...tool,
             inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
             outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+            requestContextSchema: tool.requestContextSchema
+              ? stringify(zodToJsonSchema(tool.requestContextSchema))
+              : undefined,
           };
           return acc;
         },
@@ -55,20 +62,21 @@ export const LIST_TOOLS_ROUTE = createRoute({
 
 export const GET_TOOL_BY_ID_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/tools/:toolId',
+  path: '/tools/:toolId',
   responseType: 'json',
   pathParamSchema: toolIdPathParams,
   responseSchema: serializedToolSchema,
   summary: 'Get tool by ID',
   description: 'Returns details for a specific tool including its schema and configuration',
   tags: ['Tools'],
-  handler: async ({ mastra, tools, toolId }) => {
+  requiresAuth: true,
+  handler: async ({ mastra, registeredTools, toolId }) => {
     try {
       let tool: any;
 
-      // Try explicit tools first, then fallback to mastra
-      if (tools && Object.keys(tools).length > 0) {
-        tool = Object.values(tools).find((t: any) => t.id === toolId);
+      // Try explicit registeredTools first, then fallback to mastra
+      if (registeredTools && Object.keys(registeredTools).length > 0) {
+        tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
       } else {
         tool = mastra.getToolById(toolId);
       }
@@ -81,6 +89,9 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
         ...tool,
         inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
         outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+        requestContextSchema: tool.requestContextSchema
+          ? stringify(zodToJsonSchema(tool.requestContextSchema))
+          : undefined,
       };
 
       return serializedTool;
@@ -92,7 +103,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
 
 export const EXECUTE_TOOL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/tools/:toolId/execute',
+  path: '/tools/:toolId/execute',
   responseType: 'json',
   pathParamSchema: toolIdPathParams,
   queryParamSchema: optionalRunIdSchema,
@@ -101,7 +112,8 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   summary: 'Execute tool',
   description: 'Executes a specific tool with the provided input data',
   tags: ['Tools'],
-  handler: async ({ mastra, runId, toolId, tools, requestContext, ...bodyParams }) => {
+  requiresAuth: true,
+  handler: async ({ mastra, runId, toolId, registeredTools, requestContext, ...bodyParams }) => {
     try {
       if (!toolId) {
         throw new HTTPException(400, { message: 'Tool ID is required' });
@@ -109,9 +121,9 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
 
       let tool: any;
 
-      // Try explicit tools first, then fallback to mastra
-      if (tools && Object.keys(tools).length > 0) {
-        tool = Object.values(tools).find((t: any) => t.id === toolId);
+      // Try explicit registeredTools first, then fallback to mastra
+      if (registeredTools && Object.keys(registeredTools).length > 0) {
+        tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
       } else {
         tool = mastra.getToolById(toolId);
       }
@@ -160,19 +172,20 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
 
 export const GET_AGENT_TOOL_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/agents/:agentId/tools/:toolId',
+  path: '/agents/:agentId/tools/:toolId',
   responseType: 'json',
   pathParamSchema: agentToolPathParams,
   responseSchema: serializedToolSchema,
   summary: 'Get agent tool',
   description: 'Returns details for a specific tool assigned to the agent',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, toolId, requestContext }) => {
     try {
-      const agent = agentId ? mastra.getAgentById(agentId) : null;
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
+      if (!agentId) {
+        throw new HTTPException(400, { message: 'Agent ID is required' });
       }
+      const agent = await getAgentFromSystem({ mastra, agentId });
 
       const agentTools = await agent.listTools({ requestContext });
 
@@ -186,6 +199,9 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
         ...tool,
         inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
         outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+        requestContextSchema: tool.requestContextSchema
+          ? stringify(zodToJsonSchema(tool.requestContextSchema))
+          : undefined,
       };
 
       return serializedTool;
@@ -197,7 +213,7 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
 
 export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/agents/:agentId/tools/:toolId/execute',
+  path: '/agents/:agentId/tools/:toolId/execute',
   responseType: 'json',
   pathParamSchema: agentToolPathParams,
   bodySchema: executeToolBodySchema,
@@ -205,12 +221,13 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   summary: 'Execute agent tool',
   description: 'Executes a specific tool assigned to the agent with the provided input data',
   tags: ['Agents', 'Tools'],
+  requiresAuth: true,
   handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
     try {
-      const agent = agentId ? mastra.getAgentById(agentId) : null;
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+      if (!agentId) {
+        throw new HTTPException(400, { message: 'Agent ID is required' });
       }
+      const agent = await getAgentFromSystem({ mastra, agentId });
 
       const agentTools = await agent.listTools({ requestContext });
 

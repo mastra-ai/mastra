@@ -1,5 +1,31 @@
 # create-mastra
 
+## 1.2.1-alpha.0
+
+## 1.2.0
+
+## 1.2.0-alpha.1
+
+## 1.2.0-alpha.0
+
+## 1.1.0
+
+### Patch Changes
+
+- fix workflow run input caching bug in studio UI ([#11784](https://github.com/mastra-ai/mastra/pull/11784))
+
+## 1.1.0-alpha.3
+
+## 1.1.0-alpha.2
+
+## 1.1.0-alpha.1
+
+## 1.1.0-alpha.0
+
+### Patch Changes
+
+- fix workflow run input caching bug in studio UI ([#11784](https://github.com/mastra-ai/mastra/pull/11784))
+
 ## 1.0.1
 
 ## 1.0.1-alpha.0

@@ -45,25 +45,25 @@ Install the adapter for the framework of your choice.
 <Tabs>
   <TabItem value="express" label="Express">
 
-```bash
+```bash npm2yarn
 npm install @mastra/express@latest
 ```
   </TabItem>
   <TabItem value="hono" label="Hono">
 
-```bash
+```bash npm2yarn
 npm install @mastra/hono@latest
 ```
   </TabItem>
   <TabItem value="fastify" label="Fastify">
 
-```bash
+```bash npm2yarn
 npm install @mastra/fastify@latest
 ```
   </TabItem>
   <TabItem value="koa" label="Koa">
 
-```bash
+```bash npm2yarn
 npm install @mastra/koa@latest
 ```
   </TabItem>
@@ -376,6 +376,7 @@ These options are passed directly to the adapter constructor and are not read fr
 | `bodyLimitOptions` | Body size limit with custom error handler |
 | `streamOptions` | Stream redaction settings |
 | `customRouteAuthConfig` | Per-route auth overrides |
+| `mcpOptions` | MCP transport options (e.g., `serverless: true` for stateless environments) |
 
 ### Not used by adapters
 
@@ -396,6 +397,22 @@ When using adapters, configure these features directly with your framework. For 
 Server adapters register MCP (Model Context Protocol) routes during `registerRoutes()` when MCP servers are configured in your Mastra instance. MCP allows external tools and services to connect to your Mastra server and interact with your agents.
 
 The adapter registers routes for both HTTP and SSE (Server-Sent Events) transports, enabling different client connection patterns.
+
+### Serverless mode
+
+For serverless environments like Cloudflare Workers or Vercel Edge, enable stateless mode via `mcpOptions`:
+
+```typescript
+const server = new MastraServer({
+  app,
+  mastra,
+  mcpOptions: {
+    serverless: true,
+  },
+});
+```
+
+When `serverless: true`, MCP HTTP requests run without session management, making them compatible with stateless execution environments.
 
 See [MCP](/docs/mcp/overview) for configuration details and how to set up MCP servers.
 

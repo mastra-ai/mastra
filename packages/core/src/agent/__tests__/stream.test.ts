@@ -46,9 +46,9 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       let saveCallCount = 0;
       let savedMessages: any[] = [];
 
-      // // @ts-expect-error
+      // // @ts-expect-error - accessing private storage for testing
       // const original = mockMemory._storage.stores.memory.saveMessages;
-      // // @ts-expect-error
+      // // @ts-expect-error - accessing private storage for testing
       // mockMemory._storage.stores.memory.saveMessages = async function (...args) {
       //   saveCallCount++;
       //   return original.apply(this, args);
@@ -359,6 +359,62 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       ).toBe(true);
     });
 
+    // Regression test for https://github.com/mastra-ai/mastra/issues/12566
+    // stream-legacy creates threads with saveThread: false, causing a race condition
+    // where output processors try to save messages before the thread exists in the DB.
+    // The fix (from PR #10881 for /stream) is to use saveThread: true so the thread
+    // is persisted immediately with proper metadata before output processors run.
+    it('should save thread to DB immediately when creating a new thread (Issue #12566)', async () => {
+      const mockMemory = new MockMemory();
+
+      // Intercept memory.createThread to track whether saveThread is true or false.
+      // With the bug, createThread is called with saveThread: false for new threads,
+      // meaning the thread only exists in-memory but not in the DB.
+      let createThreadSaveThreadArg: boolean | undefined = undefined;
+
+      const originalCreateThread = mockMemory.createThread.bind(mockMemory);
+      mockMemory.createThread = async function (args: any) {
+        // Capture the saveThread argument from the first createThread call
+        if (createThreadSaveThreadArg === undefined) {
+          createThreadSaveThreadArg = args.saveThread;
+        }
+        return originalCreateThread(args);
+      };
+
+      const agent = new Agent({
+        id: 'test-agent-12566',
+        name: 'Test Agent 12566',
+        instructions: 'test',
+        model: dummyResponseModel,
+        memory: mockMemory,
+      });
+
+      agent.__setLogger(noopLogger);
+
+      let stream;
+      if (version === 'v1') {
+        stream = await agent.streamLegacy('hello', {
+          threadId: 'thread-12566',
+          resourceId: 'resource-12566',
+        });
+      } else {
+        stream = await agent.stream('hello', {
+          memory: {
+            thread: 'thread-12566',
+            resource: 'resource-12566',
+          },
+        });
+      }
+
+      await stream.consumeStream();
+
+      // createThread must be called with saveThread: true (or default true) so the thread
+      // is persisted to the database immediately. With saveThread: false, the thread is
+      // only in-memory and storage backends like PostgresStore will reject messages
+      // because of foreign key constraints (thread must exist before messages can reference it).
+      expect(createThreadSaveThreadArg).not.toBe(false);
+    });
+
     it.skipIf(version === 'v2' || version === 'v3')(
       'should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)',
       async () => {
@@ -430,9 +486,9 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       const mockMemory = new MockMemory();
       let saveCallCount = 0;
 
-      // @ts-expect-error
+      // @ts-expect-error - accessing private storage for testing
       const original = mockMemory._storage.stores.memory.saveMessages;
-      // @ts-expect-error
+      // @ts-expect-error - accessing private storage for testing
       mockMemory._storage.stores.memory.saveMessages = async function (...args) {
         saveCallCount++;
         return original.apply(this, args);
@@ -476,9 +532,9 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       const mockMemory = new MockMemory();
       let saveCallCount = 0;
 
-      // @ts-expect-error
+      // @ts-expect-error - accessing private storage for testing
       const original = mockMemory._storage.stores.memory.saveMessages;
-      // @ts-expect-error
+      // @ts-expect-error - accessing private storage for testing
       mockMemory._storage.stores.memory.saveMessages = async function (...args) {
         saveCallCount++;
         return original.apply(this, args);
@@ -532,7 +588,6 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       // v1 (legacy): Does not use memory processors, so the old behavior applies where
       // threads are not saved until the request completes successfully.
       const mockMemory = new MockMemory();
-      const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
       const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -609,17 +664,13 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
 
       const thread = await mockMemory.getThreadById({ threadId: 'thread-err-stream' });
 
-      if (version === 'v1') {
-        // v1 (legacy): Thread should NOT exist - old behavior preserved
-        expect(saveThreadSpy).not.toHaveBeenCalled();
-        expect(thread).toBeNull();
-      } else {
-        // v2: Thread should exist (created upfront to prevent race condition)
-        expect(thread).not.toBeNull();
-        expect(thread?.id).toBe('thread-err-stream');
-        // But no messages should be saved since the stream failed
-        expect(saveMessagesSpy).not.toHaveBeenCalled();
-      }
+      // Thread should exist (created upfront to prevent race condition with storage
+      // backends like PostgresStore that validate thread existence before saving messages).
+      // This applies to all versions: v1 was fixed in Issue #12566, v2/v3 in PR #10881.
+      expect(thread).not.toBeNull();
+      expect(thread?.id).toBe('thread-err-stream');
+      // But no messages should be saved since the stream failed
+      expect(saveMessagesSpy).not.toHaveBeenCalled();
     });
   });
 

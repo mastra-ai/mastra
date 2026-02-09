@@ -24,7 +24,7 @@ To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkfl
 
 You can use Mastra's codemod CLI to update your imports automatically:
 
-```shell
+```bash
 npx @mastra/codemod@latest v1/mastra-plural-apis .
 ```
 
@@ -51,7 +51,7 @@ To migrate, update references from `runtimeContext` to `requestContext` in step 
 
 You can use Mastra's codemod CLI to update your imports automatically:
 
-```shell
+```bash
 npx @mastra/codemod@latest v1/runtime-context .
 ```
 
@@ -72,7 +72,7 @@ To migrate, rename method calls from `createRunAsync` to `createRun`.
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
+```bash
 npx @mastra/codemod@latest v1/workflow-create-run-async .
 ```
 
@@ -97,8 +97,34 @@ To migrate, rename `runCount` to `retryCount` in step execution functions.
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
+```bash
 npx @mastra/codemod@latest v1/workflow-run-count .
+```
+
+:::
+
+### `getInitData` returns unknown
+
+The `getInitData` function in the execute function now returns unknown instead of any. You'll need to type it yourself.
+To simply migrate, change `getInitData()` into `getInitData<any>()`
+
+```diff
+  createStep({
+    execute: async ({ getInitData }) => {
+-     const initData = getInitData();
+-     if (initData.key === 'value') {}
++     const initData = getInitData<any>();
++     if (initData.key === 'value') {}
+    },
+  });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```bash
+npx @mastra/codemod@latest v1/workflow-get-init-data .
 ```
 
 :::
@@ -118,7 +144,7 @@ To migrate, rename method calls from `getWorkflowRuns` to `listWorkflowRuns`.
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
+```bash
 npx @mastra/codemod@latest v1/workflow-list-runs .
 ```
 
@@ -246,7 +272,7 @@ See [`Run.stream()`](/reference/streaming/workflows/stream), [`Run.resumeStream(
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
+```bash
 npx @mastra/codemod@latest v1/workflow-stream-vnext .
 ```
 

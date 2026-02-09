@@ -1,12 +1,16 @@
 // anything in this list will use the corresponding ai sdk package instead of using openai-compat endpoints
 export const PROVIDERS_WITH_INSTALLED_PACKAGES = [
   'anthropic',
+  'cerebras',
+  'deepinfra',
   'deepseek',
   'google',
+  'groq',
   'mistral',
   'openai',
   'openrouter',
   'perplexity',
+  'togetherai',
   'xai',
 ];
 

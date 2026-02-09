@@ -1,28 +1,255 @@
 import { Agent } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
 import { Memory } from '@mastra/memory';
-import { openai } from '@ai-sdk/openai';
+import { ObservationalMemory, OBSERVATIONAL_MEMORY_DEFAULTS } from '@mastra/memory/processors';
 import { cachedOpenAI } from '../embeddings/cached-openai-provider';
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 import { join } from 'path';
-import { readdir, readFile, mkdir, writeFile } from 'fs/promises';
-import { existsSync } from 'fs';
+import { readdir, readFile, mkdir, writeFile, stat, appendFile } from 'fs/promises';
+import { appendFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 
-import { BenchmarkStore, BenchmarkVectorStore } from '../storage';
+/**
+ * Parse duration string (e.g., "1h", "30m", "2d") to milliseconds
+ */
+function parseDuration(duration: string): number {
+  const match = duration.match(/^(\d+)(m|h|d)$/);
+  if (!match) {
+    throw new Error(`Invalid duration format: ${duration}. Use format like "1h", "30m", "2d"`);
+  }
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+  switch (unit) {
+    case 'm':
+      return value * 60 * 1000;
+    case 'h':
+      return value * 60 * 60 * 1000;
+    case 'd':
+      return value * 24 * 60 * 60 * 1000;
+    default:
+      throw new Error(`Unknown duration unit: ${unit}`);
+  }
+}
+
+interface FailuresFile {
+  questionIds: string[];
+  runId: string;
+  config: MemoryConfigType;
+  dataset: string;
+  timestamp: string;
+  totalFailed: number;
+  totalQuestions: number;
+}
+
+import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
 import type { EvaluationResult, BenchmarkMetrics, QuestionType, MemoryConfigType, DatasetType } from '../data/types';
-import { getMemoryOptions } from '../config';
-import { makeRetryModel } from '../retry-model';
+import {
+  getMemoryConfig,
+  getMemoryOptions,
+  applyStratifiedSampling,
+  applyCombSampling,
+  type MemoryConfigDefinition,
+} from '../config';
+import { DatasetLoader } from '../data/loader';
+import { reconcileQuestion } from './reconcile';
+import { ObservationSemanticFilter, DateInjector } from '../processors';
+import { fastembed } from '@mastra/fastembed';
+
+// Rate limit configuration
+const RATE_LIMIT_TOKEN_THRESHOLD = 50000; // Pause if remaining tokens below this
+
+// Shared rate limiter state across all workers
+const rateLimiter = {
+  remainingTokens: 999999,
+  remainingRequests: 999999,
+  isWaiting: false,
+  waitPromise: null as Promise<void> | null,
+};
+
+/**
+ * Update rate limiter state from response headers
+ */
+function updateRateLimiterFromResponse(response: any): void {
+  const headers = response?.response?.headers;
+  if (!headers) return;
+
+  rateLimiter.remainingTokens = parseInt(headers['x-ratelimit-remaining-tokens-minute'] || '999999', 10);
+  rateLimiter.remainingRequests = parseInt(headers['x-ratelimit-remaining-requests-minute'] || '999999', 10);
+}
+
+/**
+ * Wait for rate limit to reset (shared across all workers)
+ */
+async function waitForRateLimit(waitSeconds: number, reason: string): Promise<void> {
+  // If already waiting, just join the existing wait
+  if (rateLimiter.isWaiting && rateLimiter.waitPromise) {
+    return rateLimiter.waitPromise;
+  }
+
+  rateLimiter.isWaiting = true;
+  console.log(
+    chalk.yellow(`
+⏳ ${reason}. Waiting ${waitSeconds}s...`),
+  );
+
+  rateLimiter.waitPromise = (async () => {
+    await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
+    rateLimiter.isWaiting = false;
+    rateLimiter.remainingTokens = 999999; // Reset after wait
+    rateLimiter.remainingRequests = 999999;
+    console.log(chalk.green(`✓ Resuming after rate limit pause`));
+  })();
+
+  return rateLimiter.waitPromise;
+}
+
+/**
+ * Check rate limit before making a request
+ */
+async function checkRateLimitBeforeRequest(): Promise<void> {
+  // If already waiting, join the wait
+  if (rateLimiter.isWaiting && rateLimiter.waitPromise) {
+    await rateLimiter.waitPromise;
+    return;
+  }
+
+  // Check if we're approaching limits
+  if (rateLimiter.remainingTokens < RATE_LIMIT_TOKEN_THRESHOLD || rateLimiter.remainingRequests < 5) {
+    await waitForRateLimit(
+      60,
+      `Rate limit approaching (${rateLimiter.remainingTokens} tokens, ${rateLimiter.remainingRequests} requests remaining)`,
+    );
+  }
+}
+
+/**
+ * Wrapper to handle 429 errors with retry
+ */
+async function withRateLimitRetry<T>(
+  fn: () => Promise<T>,
+  spinner?: Ora | { updateStatus: (status: string) => void },
+  maxRetries = 3,
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // Check rate limit before request
+    await checkRateLimitBeforeRequest();
+
+    try {
+      const result = await fn();
+      // Update rate limiter from successful response
+      updateRateLimiterFromResponse(result);
+      return result;
+    } catch (error: any) {
+      // Check if it's a 429 rate limit error (may be nested in MastraError)
+      const is429 =
+        error?.statusCode === 429 ||
+        error?.cause?.statusCode === 429 ||
+        error?.message?.includes('Too Many Requests') ||
+        error?.message?.includes('Rate limit') ||
+        error?.message?.includes('rate_limit');
+
+      // Check if it's a retryable connection error (ECONNRESET, ETIMEDOUT, etc.)
+      const isConnectionError =
+        error?.message?.includes('ECONNRESET') ||
+        error?.message?.includes('ETIMEDOUT') ||
+        error?.message?.includes('ENOTFOUND') ||
+        error?.message?.includes('ECONNREFUSED') ||
+        error?.message?.includes('Cannot connect to API') ||
+        error?.isRetryable === true ||
+        error?.cause?.code === 'ECONNRESET' ||
+        error?.cause?.code === 'ETIMEDOUT';
+
+      if (isConnectionError && !is429) {
+        // Connection error - wait a shorter time and retry
+        const waitTime = 10 + attempt * 5; // 10s, 15s, 20s...
+
+        const updateStatus = (status: string) => {
+          if (spinner && 'updateStatus' in spinner) {
+            spinner.updateStatus(status);
+          } else if (spinner && 'text' in spinner) {
+            spinner.text = status;
+          }
+        };
+        updateStatus(`Connection error - waiting ${waitTime}s (attempt ${attempt + 1}/${maxRetries})...`);
+        console.error(
+          `\n🔌 Connection error (${error?.cause?.code || 'unknown'}) - waiting ${waitTime}s before retry ${attempt + 1}/${maxRetries}`,
+        );
+
+        await waitForRateLimit(waitTime, `Connection error`);
+
+        if (attempt < maxRetries) {
+          continue; // Retry
+        }
+      }
+
+      if (is429) {
+        // Try to extract retry-after from nested error (check various header formats)
+        const headers = error?.responseHeaders || error?.cause?.responseHeaders || {};
+        let retryAfter = 60; // Default to 60 seconds
+
+        if (headers['retry-after']) {
+          retryAfter = parseInt(headers['retry-after'], 10);
+        } else if (headers['x-ratelimit-reset-tokens']) {
+          // Parse OpenAI format like "1m2.251s" or "4ms"
+          const resetStr = headers['x-ratelimit-reset-tokens'];
+          const minutes = resetStr.match(/(\d+)m(?!\s*s)/)?.[1];
+          const seconds = resetStr.match(/(\d+\.?\d*)s/)?.[1];
+          const ms = resetStr.match(/(\d+)ms/)?.[1];
+          retryAfter =
+            parseInt(minutes || '0', 10) * 60 +
+            Math.ceil(parseFloat(seconds || '0')) +
+            Math.ceil(parseInt(ms || '0', 10) / 1000);
+          retryAfter = Math.max(retryAfter, 5); // At least 5 seconds
+        }
+
+        // Add a small buffer to avoid hitting the limit again immediately
+        const waitTime = retryAfter + 5;
+
+        const updateStatus = (status: string) => {
+          if (spinner && 'updateStatus' in spinner) {
+            spinner.updateStatus(status);
+          } else if (spinner && 'text' in spinner) {
+            spinner.text = status;
+          }
+        };
+        updateStatus(`Rate limited (429) - waiting ${waitTime}s (attempt ${attempt + 1}/${maxRetries})...`);
+        console.error(`\n⏳ Rate limited by OpenAI - waiting ${waitTime}s before retry ${attempt + 1}/${maxRetries}`);
+
+        await waitForRateLimit(waitTime, `Rate limited (429 error)`);
+
+        if (attempt < maxRetries) {
+          continue; // Retry
+        }
+      }
+      throw error; // Re-throw if not rate limit or max retries exceeded
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
 
 export interface RunOptions {
   dataset: DatasetType;
   memoryConfig: MemoryConfigType;
-  model: string;
   preparedDataDir?: string;
   outputDir?: string;
   subset?: number;
+  perTypeCount?: number;
+  offset?: number;
   concurrency?: number;
   questionId?: string;
+  questionType?: string;
+  // Comb sampling options
+  combSampleSize?: number;
+  combOffset?: number;
+  combStartOffset?: number;
+  // Skip improved/fixed question evaluation
+  skipFixed?: boolean;
+  // Re-run from failures
+  fromFailures?: string | boolean;
+  olderThan?: string;
+  // Resume a partial run
+  resume?: string | boolean;
 }
 
 interface PreparedQuestionMeta {
@@ -32,56 +259,153 @@ interface PreparedQuestionMeta {
   threadIds: string[];
   memoryConfig: string;
   question: string;
+  improvedQuestion?: string; // Clarified version for vague/ambiguous questions
+  improvedAnswer?: string; // Updated answer for the clarified question (if different)
+  improvementNote?: string; // Notes about why this question failed (for tracking investigated failures)
+  requiresRetry?: boolean; // Eval agent sometimes fails due to poor reasoning, retry once on failure
   answer: string;
   evidenceSessionIds?: string[];
   questionDate?: string;
 }
 
-const retry4o = makeRetryModel(openai('gpt-4o'));
+/**
+ * Normalize model ID to provider/model format for ModelRouterLanguageModel
+ */
+function normalizeModelId(modelId: string): `${string}/${string}` {
+  return (modelId.includes('/') ? modelId : `openai/${modelId}`) as `${string}/${string}`;
+}
 
 export class RunCommand {
   private preparedDataDir: string;
   private outputDir: string;
+  private loader: DatasetLoader;
 
   constructor() {
     this.preparedDataDir = './prepared-data';
     this.outputDir = './results';
+    this.loader = new DatasetLoader();
   }
 
   async run(options: RunOptions): Promise<BenchmarkMetrics> {
-    const runId = `run_${Date.now()}`;
-    const runDir = join(options.outputDir || this.outputDir, options.memoryConfig, runId);
+    // Use existing run ID for resume, or generate new one
+    let runId = options.resume;
+
+    // If --resume is passed without a value (true) or empty string, find the most recent run
+    if (options.resume === true || options.resume === '') {
+      const configDir = join(options.outputDir || this.outputDir, options.memoryConfig);
+      if (existsSync(configDir)) {
+        const runs = (await readdir(configDir))
+          .filter(d => d.startsWith('run_'))
+          .sort()
+          .reverse(); // Most recent first (timestamps sort correctly)
+        if (runs.length > 0) {
+          runId = runs[0];
+          console.log(chalk.yellow(`\n🔍 Auto-detected most recent run: ${runId}\n`));
+        }
+      }
+    }
+
+    // Fall back to new run ID if no resume target found
+    if (!runId || runId === true) {
+      runId = `run_${Date.now()}`;
+    }
+
+    const runDir = join(options.outputDir || this.outputDir, options.memoryConfig, runId as string);
     await mkdir(runDir, { recursive: true });
 
-    console.log(chalk.blue(`\n🚀 Starting LongMemEval benchmark run: ${runId}\n`));
+    // Load existing results if resuming
+    let existingResults: EvaluationResult[] = [];
+    const resultsPath = join(runDir, 'results.jsonl');
+    if (options.resume && existsSync(resultsPath)) {
+      const content = await readFile(resultsPath, 'utf-8');
+      existingResults = content
+        .trim()
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => JSON.parse(line) as EvaluationResult);
+      console.log(chalk.yellow(`\n♻️  Resuming run ${runId} with ${existingResults.length} existing results\n`));
+    }
+    const completedQuestionIds = new Set(existingResults.map(r => r.question_id));
+
+    console.log(
+      chalk.blue(`
+🚀 ${options.resume ? 'Resuming' : 'Starting'} LongMemEval benchmark run: ${runId}
+`),
+    );
+    const configDef = getMemoryConfig(options.memoryConfig);
+
     console.log(chalk.gray(`Dataset: ${options.dataset}`));
-    console.log(chalk.gray(`Model: ${options.model}`));
+    console.log(chalk.gray(`Model: ${configDef.agentModel}`));
     console.log(chalk.gray(`Memory Config: ${options.memoryConfig}`));
     if (options.subset) {
       console.log(chalk.gray(`Subset: ${options.subset} questions`));
     }
     console.log();
 
-    const preparedDir = join(options.preparedDataDir || this.preparedDataDir, options.dataset, options.memoryConfig);
+    // For readOnlyConfig, use the base config's prepared data directly
+    const effectiveConfig =
+      configDef.readOnlyConfig && configDef.baseConfig ? configDef.baseConfig : options.memoryConfig;
+    const preparedDir = join(options.preparedDataDir || this.preparedDataDir, options.dataset, effectiveConfig);
+
+    // For readOnlyConfig, create a separate output directory for debug files
+    // This prevents writing to the base config's prepared data
+    const outputDir = configDef.readOnlyConfig
+      ? join(options.preparedDataDir || this.preparedDataDir, options.dataset, options.memoryConfig)
+      : preparedDir;
 
     if (!existsSync(preparedDir)) {
-      throw new Error(`Prepared data not found at: ${preparedDir}\nPlease run 'longmemeval prepare' first.`);
+      throw new Error(`Prepared data not found at: ${preparedDir}
+Please run 'longmemeval prepare' first.`);
     }
 
-    // Load prepared questions
+    if (configDef.readOnlyConfig && configDef.baseConfig) {
+      console.log(chalk.gray(`Using prepared data from: ${configDef.baseConfig}`));
+    }
+
+    // Load original dataset to get correct question order
     const spinner = ora('Loading prepared data...').start();
+    const originalQuestions = await this.loader.loadDataset(options.dataset);
+    const questionIdOrder = new Map(originalQuestions.map((q, i) => [q.question_id, i]));
+
+    // Load prepared questions
     const questionDirs = await readdir(preparedDir);
     const preparedQuestions: PreparedQuestionMeta[] = [];
 
     let skippedCount = 0;
     let failedCount = 0;
+    let reconciledCount = 0;
     for (const questionDir of questionDirs) {
       const questionPath = join(preparedDir, questionDir);
       const metaPath = join(questionPath, 'meta.json');
       const progressPath = join(questionPath, 'progress.json');
 
       // Check if question has been prepared
-      if (existsSync(metaPath)) {
+      let hasMetaJson = existsSync(metaPath);
+
+      // If no meta.json and this is a derived config (non-readOnly), try to reconcile from base
+      if (!hasMetaJson && configDef.baseConfig && !configDef.readOnlyConfig) {
+        const baseDir = join(options.preparedDataDir || this.preparedDataDir, options.dataset, configDef.baseConfig);
+        const baseQuestionDir = join(baseDir, questionDir);
+        const baseMetaPath = join(baseQuestionDir, 'meta.json');
+
+        if (existsSync(baseMetaPath)) {
+          spinner.text = `Reconciling ${questionDir} from ${configDef.baseConfig}...`;
+          const result = await reconcileQuestion({
+            questionId: questionDir,
+            targetConfig: options.memoryConfig,
+            preparedDataDir: options.preparedDataDir || this.preparedDataDir,
+            dataset: options.dataset,
+            model: configDef.omModel ?? undefined,
+          });
+
+          if (result.copied) {
+            reconciledCount++;
+            hasMetaJson = true;
+          }
+        }
+      }
+
+      if (hasMetaJson) {
         // Check if there's an incomplete or failed preparation
         if (existsSync(progressPath)) {
           const progress = JSON.parse(await readFile(progressPath, 'utf-8'));
@@ -100,48 +424,251 @@ export class RunCommand {
       }
     }
 
+    // Sort prepared questions to match original dataset order
+    preparedQuestions.sort((a, b) => {
+      const orderA = questionIdOrder.get(a.questionId) ?? Infinity;
+      const orderB = questionIdOrder.get(b.questionId) ?? Infinity;
+      return orderA - orderB;
+    });
+
+    const statusParts: string[] = [];
+    if (reconciledCount > 0) statusParts.push(`${reconciledCount} reconciled`);
+    if (skippedCount > 0) statusParts.push(`${skippedCount} incomplete`);
+    if (failedCount > 0) statusParts.push(`${failedCount} failed`);
+
     spinner.succeed(
-      `Loaded ${preparedQuestions.length} prepared questions${skippedCount > 0 || failedCount > 0 ? ` (${skippedCount} incomplete, ${failedCount} failed)` : ''}`,
+      `Loaded ${preparedQuestions.length} prepared questions${statusParts.length > 0 ? ` (${statusParts.join(', ')})` : ''}`,
     );
 
     if (skippedCount > 0) {
       console.log(
         chalk.yellow(
-          `\n⚠️  ${skippedCount} question${skippedCount > 1 ? 's' : ''} skipped due to incomplete preparation.`,
+          `
+⚠️  ${skippedCount} question${skippedCount > 1 ? 's' : ''} skipped due to incomplete preparation.`,
         ),
       );
-      console.log(chalk.gray(`   Run 'prepare' command to complete preparation.\n`));
+      console.log(
+        chalk.gray(`   Run 'prepare' command to complete preparation.
+`),
+      );
     }
 
     if (failedCount > 0) {
       console.log(
-        chalk.red(`\n⚠️  ${failedCount} question${failedCount > 1 ? 's' : ''} skipped due to failed preparation.`),
+        chalk.red(`
+⚠️  ${failedCount} question${failedCount > 1 ? 's' : ''} skipped due to failed preparation.`),
       );
-      console.log(chalk.gray(`   Check error logs and re-run 'prepare' command.\n`));
+      console.log(
+        chalk.gray(`   Check error logs and re-run 'prepare' command.
+`),
+      );
     }
 
     // Filter by questionId if specified
     let questionsToProcess = preparedQuestions;
-    if (options.questionId) {
+
+    // Handle --from-failures option
+    if (options.fromFailures) {
+      let failuresPath = typeof options.fromFailures === 'string' ? options.fromFailures : '';
+
+      // Handle flag with no value (true) or "latest" - find the most recent failures.json for this config
+      if (options.fromFailures === true || options.fromFailures === 'latest') {
+        const resultsDir = join(options.outputDir || this.outputDir, options.memoryConfig);
+        if (!existsSync(resultsDir)) {
+          throw new Error(`No results directory found for config: ${options.memoryConfig}`);
+        }
+
+        const runDirs = (await readdir(resultsDir))
+          .filter(d => d.startsWith('run_'))
+          .sort()
+          .reverse(); // Most recent first
+
+        let latestFailuresPath: string | null = null;
+        for (const runDir of runDirs) {
+          const candidatePath = join(resultsDir, runDir, 'failures.json');
+          if (existsSync(candidatePath)) {
+            latestFailuresPath = candidatePath;
+            break;
+          }
+        }
+
+        if (!latestFailuresPath) {
+          throw new Error(`No failures.json found in any run for config: ${options.memoryConfig}`);
+        }
+        failuresPath = latestFailuresPath;
+        console.log(chalk.gray(`Found latest failures: ${failuresPath}\n`));
+      }
+
+      // Load failures.json and filter to those question IDs
+      if (!existsSync(failuresPath)) {
+        throw new Error(`Failures file not found: ${failuresPath}`);
+      }
+      const fromFailuresData = JSON.parse(await readFile(failuresPath, 'utf-8')) as FailuresFile;
+      const failedIds = new Set(fromFailuresData.questionIds);
+      questionsToProcess = preparedQuestions.filter(q => failedIds.has(q.questionId));
+
+      if (questionsToProcess.length === 0) {
+        throw new Error(`No matching questions found for ${fromFailuresData.questionIds.length} failed IDs`);
+      }
+
+      // Filter by --older-than if specified (check meta.json mtime)
+      let skippedRecentCount = 0;
+      if (options.olderThan) {
+        const maxAgeMs = parseDuration(options.olderThan);
+        const cutoffTime = Date.now() - maxAgeMs;
+
+        const filteredQuestions: PreparedQuestionMeta[] = [];
+        for (const q of questionsToProcess) {
+          const metaPath = join(preparedDir, q.questionId, 'meta.json');
+          if (existsSync(metaPath)) {
+            const metaStat = await stat(metaPath);
+            if (metaStat.mtimeMs > cutoffTime) {
+              // Recently prepared, skip
+              skippedRecentCount++;
+              continue;
+            }
+          }
+          filteredQuestions.push(q);
+        }
+        questionsToProcess = filteredQuestions;
+
+        if (questionsToProcess.length === 0) {
+          console.log(
+            chalk.green(
+              `\n✓ All ${skippedRecentCount} failed questions were recently prepared (within ${options.olderThan})`,
+            ),
+          );
+          console.log(chalk.gray(`  Nothing to re-run.\n`));
+          // Return empty metrics
+          return {
+            total_questions: 0,
+            correct_answers: 0,
+            overall_accuracy: 0,
+            accuracy_by_type: {},
+            abstention_accuracy: 0,
+          };
+        }
+      }
+
+      console.log(
+        chalk.yellow(`\n🔄 Running ${questionsToProcess.length} failed questions from: ${options.fromFailures}`),
+      );
+      console.log(chalk.gray(`   Run ID: ${fromFailuresData.runId}`));
+      console.log(
+        chalk.gray(`   Original failures: ${fromFailuresData.totalFailed}/${fromFailuresData.totalQuestions}`),
+      );
+      if (skippedRecentCount > 0) {
+        console.log(chalk.gray(`   Skipped ${skippedRecentCount} recently prepared (within ${options.olderThan})`));
+      }
+      console.log();
+    } else if (options.questionId) {
       questionsToProcess = preparedQuestions.filter(q => q.questionId === options.questionId);
       if (questionsToProcess.length === 0) {
         throw new Error(`Question with ID "${options.questionId}" not found in prepared data`);
       }
-      console.log(chalk.yellow(`\nFocusing on question: ${options.questionId}\n`));
-    } else if (options.subset) {
-      // Apply subset if requested
-      questionsToProcess = preparedQuestions.slice(0, options.subset);
       console.log(
-        chalk.gray(`\nApplying subset: ${options.subset} questions from ${preparedQuestions.length} total\n`),
+        chalk.yellow(`
+Focusing on question: ${options.questionId}
+`),
       );
+    } else {
+      // Filter by question type(s) if specified (supports comma-separated)
+      if (options.questionType) {
+        const requestedTypes = options.questionType.split(',').map(t => t.trim());
+        const availableTypes = [...new Set(preparedQuestions.map(q => q.questionType))].sort();
+
+        // Validate all requested types exist
+        const invalidTypes = requestedTypes.filter(t => !availableTypes.includes(t));
+        if (invalidTypes.length > 0) {
+          throw new Error(
+            `Invalid question type(s): ${invalidTypes.join(', ')}. Available types: ${availableTypes.join(', ')}`,
+          );
+        }
+
+        questionsToProcess = preparedQuestions.filter(q => requestedTypes.includes(q.questionType));
+        if (questionsToProcess.length === 0) {
+          throw new Error(
+            `No questions found with type(s) "${options.questionType}". Available types: ${availableTypes.join(', ')}`,
+          );
+        }
+        console.log(
+          chalk.yellow(`
+Filtering to question type${requestedTypes.length > 1 ? 's' : ''}: ${requestedTypes.join(', ')} (${questionsToProcess.length} questions)
+`),
+        );
+      }
+      // Apply stratified sampling if perTypeCount is set (only if not filtering by type)
+      if (options.perTypeCount && !options.questionType) {
+        console.log(
+          chalk.gray(`
+Applying stratified sampling (${options.perTypeCount} per type):`),
+        );
+        // Map prepared questions to include question_type for sampling
+        const withTypes = preparedQuestions.map(q => ({
+          ...q,
+          question_id: q.questionId,
+          question_type: q.questionType,
+        }));
+        const sampled = applyStratifiedSampling(withTypes, options.perTypeCount);
+        questionsToProcess = sampled.map(q => {
+          const { question_id, question_type, ...rest } = q;
+          return rest as (typeof preparedQuestions)[0];
+        });
+      }
+
+      // Apply comb sampling if combSampleSize is set (works with -t type filter)
+      if (options.combSampleSize) {
+        const combOffset = options.combOffset ?? 10;
+        const startOffset = options.combStartOffset ?? 0;
+        console.log(
+          chalk.gray(`
+Applying comb sampling (${options.combSampleSize} per type, offset=${combOffset}, start=${startOffset}):`),
+        );
+        // Map prepared questions to include question_type for sampling
+        const withTypes = questionsToProcess.map(q => ({
+          ...q,
+          question_id: q.questionId,
+          question_type: q.questionType,
+        }));
+        const sampled = applyCombSampling(withTypes, options.combSampleSize, combOffset, startOffset);
+        questionsToProcess = sampled.map(q => {
+          const { question_id, question_type, ...rest } = q;
+          return rest as (typeof preparedQuestions)[0];
+        });
+      }
+
+      // Apply offset and subset
+      const totalBeforeSlice = questionsToProcess.length;
+      const offset = options.offset || 0;
+      if (offset > 0) {
+        questionsToProcess = questionsToProcess.slice(offset);
+      }
+      if (options.subset) {
+        questionsToProcess = questionsToProcess.slice(0, options.subset);
+      }
+      if (offset > 0 || options.subset) {
+        console.log(
+          chalk.gray(`Processing questions ${offset + 1}-${offset + questionsToProcess.length} of ${totalBeforeSlice}${options.questionType ? ` ${options.questionType}` : ''} total
+`),
+        );
+      }
     }
 
     console.log(
-      chalk.yellow(`\nEvaluating ${questionsToProcess.length} question${questionsToProcess.length !== 1 ? 's' : ''}\n`),
+      chalk.yellow(`
+Evaluating ${questionsToProcess.length} question${questionsToProcess.length !== 1 ? 's' : ''}
+`),
     );
 
+    // Filter out already-completed questions (for resume)
+    const remainingQuestions = questionsToProcess.filter(q => !completedQuestionIds.has(q.questionId));
+    if (options.resume && remainingQuestions.length < questionsToProcess.length) {
+      console.log(
+        chalk.yellow(`Skipping ${questionsToProcess.length - remainingQuestions.length} already-completed questions`),
+      );
+    }
+
     // Process questions with concurrency control
-    const results: EvaluationResult[] = [];
     const concurrency = options.concurrency || 5;
     const questionSpinner = ora('Evaluating questions...').start();
 
@@ -153,16 +680,19 @@ export class RunCommand {
     const activeEvaluations = new Map<number, { questionId: string; status: string }>();
 
     // Function to update progress display
+    const totalToProcess = remainingQuestions.length;
     let lastText = '';
     const updateProgress = () => {
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       const rate = elapsed > 0 ? completedCount / elapsed : 0;
-      const remaining = rate > 0 ? Math.round((questionsToProcess.length - completedCount) / rate) : 0;
+      const remaining = rate > 0 ? Math.round((totalToProcess - completedCount) / rate) : 0;
 
-      let progressText = `Overall: ${completedCount}/${questionsToProcess.length} (${inProgressCount} in progress, ${Math.round(rate * 60)} q/min, ~${remaining}s remaining)`;
+      let progressText = `Overall: ${completedCount}/${totalToProcess} (${inProgressCount} in progress, ${Math.round(rate * 60)} q/min, ~${remaining}s remaining)`;
 
       if (activeEvaluations.size > 0 && concurrency > 1) {
-        progressText += '\n\nActive evaluations:';
+        progressText += `
+
+Active evaluations:`;
 
         // Sort active evaluations by completion status
         const sortedEvaluations = Array.from(activeEvaluations.entries())
@@ -180,7 +710,8 @@ export class RunCommand {
 
         sortedEvaluations.forEach(({ index, info, progress }) => {
           const percentage = (progress * 100).toFixed(0);
-          progressText += `\n  [${index + 1}] ${info.questionId} - ${info.status} (${percentage}%)`;
+          progressText += `
+  [${index + 1}] ${info.questionId} - ${info.status} (${percentage}%)`;
         });
       }
 
@@ -191,12 +722,10 @@ export class RunCommand {
     };
 
     // Create a queue of questions to evaluate
-    const questionQueue = [...questionsToProcess];
+    const questionQueue = [...remainingQuestions];
 
     // Function to process next question from queue
-    const processNextQuestion = async (slotIndex: number): Promise<EvaluationResult[]> => {
-      const workerResults: EvaluationResult[] = [];
-
+    const processNextQuestion = async (slotIndex: number): Promise<void> => {
       while (questionQueue.length > 0) {
         const meta = questionQueue.shift();
         if (!meta) break;
@@ -208,8 +737,10 @@ export class RunCommand {
         const result = await this.evaluateQuestion(
           meta,
           preparedDir,
-          retry4o.model,
+          outputDir,
+          normalizeModelId(configDef.agentModel ?? 'gpt-4o'),
           options,
+          configDef,
           concurrency > 1
             ? {
                 updateStatus: (status: string) => {
@@ -240,15 +771,25 @@ export class RunCommand {
             console.log(chalk.yellow(`  Expected: "${meta.answer}"`));
           }
 
+          // Show improved result if applicable
+          if (result.improved_question) {
+            console.log(
+              chalk.cyan(`  ↳ improved:`),
+              chalk[result.improved_is_correct ? 'green' : 'red'](`${result.improved_is_correct ? '✓' : '✗'}`),
+            );
+            // if (!result.improved_is_correct) {
+            console.log(chalk.gray(`    Q: "${result.improved_question}"`));
+            console.log(chalk.gray(`    A: "${result.improved_hypothesis}"`));
+            // }
+          }
+
           // Re-render the spinner
           questionSpinner.render();
         }
 
-        // Don't update progress here - let the periodic timer handle it
-        workerResults.push(result);
+        // Append result to JSONL file immediately (crash-safe incremental save)
+        await appendFile(resultsPath, JSON.stringify(result) + '\n');
       }
-
-      return workerResults;
     };
 
     // Set up periodic progress updates
@@ -257,28 +798,38 @@ export class RunCommand {
     // Create worker slots
     const workers = Array.from({ length: concurrency }, (_, i) => processNextQuestion(i));
 
-    // Wait for all workers to complete and collect results
-    const workerResults = await Promise.all(workers);
-
-    // Process results from all workers
-    for (const workerResultArray of workerResults) {
-      results.push(...workerResultArray);
-    }
+    // Wait for all workers to complete
+    await Promise.all(workers);
 
     // Clear the interval
     clearInterval(progressInterval);
 
-    questionSpinner.succeed(`Evaluated ${results.length} questions`);
+    questionSpinner.succeed(`Evaluated ${totalToProcess} questions`);
+
+    // Load all results from JSONL file (includes existing + new)
+    const allResultsContent = await readFile(resultsPath, 'utf-8');
+    const allResults = allResultsContent
+      .trim()
+      .split('\n')
+      .filter(line => line.trim())
+      .map(line => JSON.parse(line) as EvaluationResult);
 
     // Calculate metrics
-    console.log(chalk.blue('\n📊 Calculating metrics...\n'));
-    const metrics = this.calculateMetrics(results);
+    console.log(
+      chalk.blue(`
+📊 Calculating metrics...
+`),
+    );
+    const metrics = this.calculateMetrics(allResults);
 
-    // Save results
-    await this.saveResults(runDir, results, metrics, options);
+    // Save final metrics and failures (results.jsonl already saved incrementally)
+    await this.saveFinalResults(runDir, allResults, metrics, options);
 
-    // Display results
-    this.displayMetrics(metrics, options);
+    // Display uninvestigated failures first (questions for investigation)
+    this.displayUninvestigatedFailures(allResults);
+
+    // Display results summary at the end
+    this.displayMetrics(metrics, options, configDef);
 
     return metrics;
   }
@@ -286,8 +837,10 @@ export class RunCommand {
   private async evaluateQuestion(
     meta: PreparedQuestionMeta,
     preparedDir: string,
-    modelProvider: any,
+    outputDir: string,
+    agentModelId: `${string}/${string}`,
     options: RunOptions,
+    configDef: MemoryConfigDefinition,
     spinner?: Ora | { updateStatus: (status: string) => void },
   ): Promise<EvaluationResult> {
     const questionStart = Date.now();
@@ -305,11 +858,20 @@ export class RunCommand {
 
     // Load the prepared storage and vector store
     const questionDir = join(preparedDir, meta.questionId);
-    const benchmarkStore = new BenchmarkStore('read');
+    // Separate output directory for debug files (prevents writing to base config for readOnlyConfig)
+    const questionOutputDir = join(outputDir, meta.questionId);
     const benchmarkVectorStore = new BenchmarkVectorStore('read');
 
-    await benchmarkStore.init();
-    await benchmarkStore.hydrate(join(questionDir, 'db.json'));
+    const memoryOptions = getMemoryOptions(options.memoryConfig);
+    const usesObservationalMemory = configDef.usesObservationalMemory;
+
+    // Only load BenchmarkStore for non-OM configs (OM uses PersistableInMemoryMemory)
+    let benchmarkStore: BenchmarkStore | undefined;
+    if (!usesObservationalMemory) {
+      benchmarkStore = new BenchmarkStore('read');
+      await benchmarkStore.init();
+      await benchmarkStore.hydrate(join(questionDir, 'db.json'));
+    }
 
     // Hydrate vector store if it exists
     const vectorPath = join(questionDir, 'vector.json');
@@ -318,47 +880,237 @@ export class RunCommand {
       updateStatus(`Loading vector embeddings for ${meta.questionId}...`);
     }
 
-    const memoryOptions = getMemoryOptions(options.memoryConfig);
+    // Create memory with the hydrated stores (for non-OM configs)
+    // Note: BenchmarkStore is outdated and doesn't fully implement MastraStorage
+    // Using 'as any' as a workaround since OM configs use PersistableInMemoryMemory instead
+    const memory = usesObservationalMemory
+      ? undefined
+      : new Memory({
+          storage: benchmarkStore as any,
+          vector: benchmarkVectorStore,
+          embedder: cachedOpenAI.embedding('text-embedding-3-small'),
+          options: memoryOptions.options,
+        });
 
-    // Create memory with the hydrated stores
-    const memory = new Memory({
-      storage: benchmarkStore,
-      vector: benchmarkVectorStore,
-      embedder: cachedOpenAI.embedding('text-embedding-3-small'),
-      options: memoryOptions.options,
-    });
+    // Create observational memory processor if using OM config
+    let observationalMemory: ObservationalMemory | undefined;
+    let omStorage: PersistableInMemoryMemory | undefined;
+
+    if (usesObservationalMemory) {
+      // Use PersistableInMemoryMemory for ObservationalMemory
+      omStorage = new PersistableInMemoryMemory({ readOnly: true });
+
+      // Hydrate OM storage from prepared data
+      const omPath = join(questionDir, 'om.json');
+      if (existsSync(omPath)) {
+        await omStorage.hydrate(omPath);
+        updateStatus(`Loaded OM data for ${meta.questionId}...`);
+      }
+
+      observationalMemory = new ObservationalMemory({
+        obscureThreadIds: true, // can't show answer_x in context when we put the thread id in xml tags
+        storage: omStorage,
+        observation: {
+          // model: retry4o.model,
+          messageTokens: OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
+          recognizePatterns: false,
+        },
+        reflection: {
+          // model: retry4o.model,
+          observationTokens: OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
+          recognizePatterns: false,
+        },
+        scope: 'resource',
+      });
+    }
+
+    // Create observation semantic filter if using RAG config
+    let observationRagFilter: ObservationSemanticFilter | undefined;
+    const usesObservationRag = configDef.usesObservationRag;
+
+    if (usesObservationRag && usesObservationalMemory) {
+      // Use a shared cache directory for embeddings (content-based, reusable across configs)
+      // Subdirectory by model name for future multi-model support
+      const embeddingsCacheDir = join(preparedDir, '..', '.embeddings-cache', 'fastembed-small');
+      observationRagFilter = new ObservationSemanticFilter({
+        embedder: fastembed.small,
+        topK: configDef.ragTopK ?? 50,
+        // minSimilarity: 0.4,
+        includeCurrentTask: false,
+        includeSuggestedResponse: false,
+        includePatterns: false,
+        cacheDir: embeddingsCacheDir,
+        preferenceBoost: configDef.ragPreferenceBoost ?? false,
+      });
+    }
 
     // Create agent with the specified model
     const agentInstructions = `You are a helpful assistant with access to extensive conversation history. 
-When answering questions, carefully review the conversation history to identify and use any relevant user preferences, interests, or specific details they have mentioned.
-For example, if the user previously mentioned they prefer a specific software, tool, or approach, tailor your recommendations to match their stated preferences.
-Be specific rather than generic when the user has expressed clear preferences in past conversations. If there is a clear preference, focus in on that, and do not add additional irrelevant information.`;
+When answering questions, carefully review the conversation history to identify and use any relevant user preferences, interests, or specific details they have mentioned.`;
+
+    // Ensure output directory exists for readOnlyConfig
+    if (!existsSync(questionOutputDir)) {
+      mkdirSync(questionOutputDir, { recursive: true });
+    }
+    const omDebugPath = join(questionOutputDir, 'om.md');
+
+    // Create date injector processor if we have a question date
+    // This injects the date into the user message in official LongMemEval format:
+    // "Current Date: {date}\nQuestion: {question}"
+    const dateInjector = meta.questionDate ? new DateInjector({ date: meta.questionDate }) : null;
 
     const agent = new Agent({
       id: 'longmemeval-agent',
       name: 'LongMemEval Agent',
-      model: modelProvider,
-      instructions: agentInstructions,
+      model: agentModelId,
+      instructions: [
+        { role: 'system', content: agentInstructions },
+        // prevent openai prompt caching
+        {
+          role: 'system',
+          content: `
+cache: ${Math.random()}`,
+        },
+      ],
+      // tools: observationalMemory
+      //   ? {
+      //       recall: observationalMemory?.getRecallTool(),
+      //     }
+      //   : undefined,
       memory,
+      // For OM, use processors instead of memory
+      // OM handles message loading itself via cursor-based loadUnobservedMessages
+      // MessageHistory must come first in output to save messages before OM observes them
+      inputProcessors: usesObservationalMemory
+        ? [
+            observationalMemory!,
+            // Add RAG filter after OM if enabled - it will filter OM's injected observations
+            ...(observationRagFilter ? [observationRagFilter] : []),
+            // Inject date into user message in official LongMemEval format
+            // Placed BEFORE RAG so the date is part of the RAG query (more authentic to benchmark)
+            // Can be moved after RAG to experiment with ordering
+            ...(dateInjector ? [dateInjector] : []),
+            {
+              id: 'debug',
+              processInputStep: args => {
+                // Check tagged OM messages first, then fall back to all system messages
+                // (RAG filter replaces tagged messages with untagged ones)
+                let omm = args.messageList.getSystemMessages(`observational-memory`);
+                const taggedCount = omm.length;
+                if (!omm.length) {
+                  // RAG filter may have replaced tagged messages - get all system messages
+                  omm = args.messageList.getAllSystemMessages();
+                }
+                // Find the message with observations (contains <observations> tag)
+                const observationsMsg = omm.find(m => {
+                  const content = typeof m.content === 'string' ? m.content : '';
+                  return content.includes('<observations>');
+                });
+                const msgToWrite = observationsMsg || omm[0];
+                if (msgToWrite?.content) {
+                  const content =
+                    typeof msgToWrite.content === 'string' ? msgToWrite.content : JSON.stringify(msgToWrite.content);
+                  writeFileSync(
+                    omDebugPath,
+                    `[Debug: tagged=${taggedCount}, total=${omm.length}, hasObservations=${!!observationsMsg}]
+
+` +
+                      content +
+                      `
+
+${JSON.stringify(args.messageList.get.all.core(), null, 2)}
+
+${JSON.stringify(args.requestContext?.get('MastraMemory') || {}, null, 2)}`,
+                  );
+                }
+                return args.messageList;
+              },
+            },
+          ]
+        : undefined,
+      outputProcessors: usesObservationalMemory
+        ? [
+            {
+              id: 'debug-output',
+              processOutputResult: args => {
+                const responses = args.messageList.get.response.v1();
+                if (existsSync(omDebugPath)) {
+                  appendFileSync(
+                    omDebugPath,
+                    `
+${JSON.stringify(responses, null, 2)}`,
+                  );
+                }
+                return args.messageList;
+              },
+            },
+          ]
+        : undefined,
     });
 
     // Create a fresh thread for the evaluation question
     const evalThreadId = `eval_${meta.questionId}_${Date.now()}`;
 
+    // Parse questionDate for relative time annotations in OM context
+    // Format: "2023/05/30 (Tue) 10:18"
+    let questionDate: Date | undefined;
+    if (meta.questionDate) {
+      const match = meta.questionDate.match(/^(\d{4})\/(\d{2})\/(\d{2}).*?(\d{2}):(\d{2})/);
+      if (match) {
+        const [, year, month, day, hour, minute] = match;
+        questionDate = new Date(
+          parseInt(year),
+          parseInt(month) - 1, // JS months are 0-indexed
+          parseInt(day),
+          parseInt(hour),
+          parseInt(minute),
+        );
+      }
+    }
+
+    // Create request context with currentDate for OM relative time annotations
+    // Also set MastraMemory context so ObservationalMemory processor can find threadId/resourceId
+    const requestContext = new RequestContext([
+      ['currentDate', questionDate ?? new Date()],
+      ['MastraMemory', { thread: { id: evalThreadId }, resourceId: meta.resourceId }],
+    ]);
+
     updateStatus(`${meta.threadIds.length} sessions, ${options.memoryConfig}`);
 
-    const response = await agent.generate(meta.question, {
-      threadId: evalThreadId,
-      resourceId: meta.resourceId,
-      temperature: 0,
-      context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
-    });
+    let response = await withRateLimitRetry(
+      () =>
+        agent.generate(meta.question, {
+          threadId: evalThreadId,
+          resourceId: meta.resourceId,
+          requestContext,
+          modelSettings: {
+            temperature: 0,
+          },
+          context: [],
+        }),
+      spinner,
+    );
 
+    // Track token usage from the main question
+    let usage = response.totalUsage ?? response.usage;
+
+    console.log(
+      response.text +
+        `
+
+`,
+    );
+
+    const evalModelId = normalizeModelId(configDef.evalModel ?? 'openai/gpt-4o');
     const evalAgent = new Agent({
       id: 'longmemeval-metric-agent',
       name: 'LongMemEval Metric Agent',
-      model: retry4o.model,
-      instructions: 'You are an evaluation assistant. Answer questions precisely and concisely.',
+      model: evalModelId,
+      // Official LongMemEval uses no system prompt for the judge - just the per-question-type
+      // prompts sent as user messages. Keeping empty to match official methodology.
+      // Old instructions (non-standard):
+      // 'You are an evaluation assistant. Answer questions precisely and concisely. Any answer to a question you see where the answer contains "I dont know", but the answer is also stated, is correct. Give leeway for conversion units. If the answer is 1.5 hours, but the given answer is 90 minutes, that is also correct. If the response contains the answer plus additional information, that is correct too.',
+      instructions: '',
     });
 
     const metric = new LongMemEvalMetric({
@@ -372,17 +1124,145 @@ Be specific rather than generic when the user has expressed clear preferences in
       answer: meta.answer,
     });
 
-    const result = await metric.measure(input, response.text);
-    const isCorrect = result.score === 1;
+    const result = await withRateLimitRetry(() => metric.measure(input, response.text), spinner);
+    let isCorrect = result.score === 1;
+
+    // Check if there's an improved version - if so, we'll only retry that one
+    const hasImprovedVersion = !!(meta.improvedQuestion || meta.improvedAnswer);
+
+    // Retry failed evaluations: always at least 1 retry, up to 5 if requiresRetry is set
+    // Only retry vanilla if there's NO improved version (otherwise we retry the improved one)
+    let retryCount = 0;
+    const maxRetries = meta.requiresRetry || hasImprovedVersion ? 2 : 0;
+    while (!isCorrect && !hasImprovedVersion && retryCount < maxRetries) {
+      retryCount++;
+      updateStatus(`Retry ${retryCount}/${maxRetries} for ${meta.questionId}...`);
+
+      const retryThreadId = `eval_retry_${meta.questionId}_${retryCount}_${Date.now()}`;
+      const retryResponse = await withRateLimitRetry(
+        () =>
+          agent.generate(meta.question, {
+            threadId: retryThreadId,
+            resourceId: meta.resourceId,
+            requestContext,
+            modelSettings: {
+              temperature: 0,
+            },
+          }),
+        spinner,
+      );
+
+      const retryResult = await withRateLimitRetry(() => metric.measure(input, retryResponse.text), spinner);
+      if (retryResult.score === 1) {
+        isCorrect = true;
+        // Update response to the successful retry for logging
+        response = retryResponse;
+        // Update usage to the successful retry
+        usage = retryResponse.totalUsage ?? retryResponse.usage;
+      }
+    }
+    const didRetry = retryCount > 0;
+
+    // Run improved evaluation if improved question OR improved answer exists (unless --no-fixed)
+    let improvedQuestion: string | undefined;
+    let improvedAnswer: string | undefined;
+    let improvedHypothesis: string | undefined;
+    let improvedIsCorrect: boolean | undefined;
+    let improvedUsage: typeof usage | undefined;
+
+    if (!options.skipFixed) {
+      // Normalize: if only improvedAnswer exists, copy the original question to improvedQuestion
+      // This simplifies the logic - we always run a "fixed" evaluation if either field is set
+      improvedQuestion = meta.improvedQuestion ?? (meta.improvedAnswer ? meta.question : undefined);
+      improvedAnswer = meta.improvedAnswer ?? meta.answer;
+    }
+
+    if (improvedQuestion) {
+      // If the improved question is the same as the original (only answer changed),
+      // reuse the vanilla response. Otherwise, run a new query.
+      if (improvedQuestion === meta.question) {
+        improvedHypothesis = response.text;
+      } else {
+        updateStatus(`Running improved question for ${meta.questionId}...`);
+
+        // Create a separate thread for the improved question evaluation
+        const improvedThreadId = `eval_improved_${meta.questionId}_${Date.now()}`;
+
+        const improvedResponse = await withRateLimitRetry(
+          () =>
+            agent.generate(improvedQuestion, {
+              threadId: improvedThreadId,
+              resourceId: meta.resourceId,
+              requestContext,
+              modelSettings: {
+                temperature: 0,
+              },
+            }),
+          spinner,
+        );
+
+        improvedHypothesis = improvedResponse.text;
+        improvedUsage = improvedResponse.totalUsage ?? improvedResponse.usage;
+      }
+
+      const improvedInput = JSON.stringify({
+        question: improvedQuestion,
+        answer: improvedAnswer,
+      });
+
+      const improvedResult = await withRateLimitRetry(
+        () => metric.measure(improvedInput, improvedHypothesis!),
+        spinner,
+      );
+      improvedIsCorrect = improvedResult.score === 1;
+
+      // Retry improved version: always retry at least once, up to 5 times if requiresRetry is set
+      const improvedMaxRetries = meta.requiresRetry ? maxRetries : 1;
+      let improvedRetryCount = 0;
+      while (!improvedIsCorrect && improvedRetryCount < improvedMaxRetries) {
+        improvedRetryCount++;
+        updateStatus(`Retry improved ${improvedRetryCount}/${improvedMaxRetries} for ${meta.questionId}...`);
+
+        const retryThreadId = `eval_improved_retry_${meta.questionId}_${improvedRetryCount}_${Date.now()}`;
+        const retryResponse = await withRateLimitRetry(
+          () =>
+            agent.generate(improvedQuestion, {
+              threadId: retryThreadId,
+              resourceId: meta.resourceId,
+              requestContext,
+              modelSettings: {
+                temperature: 0,
+              },
+              // Date is injected via DateInjector processor in official LongMemEval format
+            }),
+          spinner,
+        );
+
+        const retryResult = await withRateLimitRetry(() => metric.measure(improvedInput, retryResponse.text), spinner);
+        if (retryResult.score === 1) {
+          improvedIsCorrect = true;
+          improvedHypothesis = retryResponse.text;
+          // Update improved usage to the successful retry
+          improvedUsage = retryResponse.totalUsage ?? retryResponse.usage;
+        }
+      }
+    }
 
     const elapsed = ((Date.now() - questionStart) / 1000).toFixed(1);
 
     const isOraSpinner = spinner && 'clear' in spinner;
     if (isOraSpinner) {
+      // Show vanilla result (with retry indicator if applicable)
+      const retryIndicator = didRetry
+        ? isCorrect
+          ? chalk.yellow(` (retry ${retryCount}/${maxRetries} ✓)`)
+          : chalk.gray(` (retry ${retryCount}/${maxRetries} ✗)`)
+        : '';
       console.log(
         chalk.blue(`▶ ${meta.questionId}`),
         chalk.gray(`(${meta.questionType})`),
         chalk[isCorrect ? 'green' : 'red'](`${isCorrect ? '✓' : '✗'}`),
+        retryIndicator,
         chalk.gray(`${elapsed}s`),
       );
       if (!isCorrect) {
@@ -390,42 +1270,120 @@ Be specific rather than generic when the user has expressed clear preferences in
         console.log(chalk.gray(`  A: "${response.text}"`));
         console.log(chalk.yellow(`  Expected: "${meta.answer}"`));
       }
+
+      // Show improved result if applicable
+      if (improvedQuestion) {
+        // Show whether it's an improved question or just improved answer
+        const label = meta.improvedQuestion ? 'improved Q' : 'improved A';
+        console.log(
+          chalk.cyan(`  ↳ ${label}:`),
+          chalk[improvedIsCorrect ? 'green' : 'red'](`${improvedIsCorrect ? '✓' : '✗'}`),
+        );
+        console.log(chalk.gray(`    Q: "${improvedQuestion}"`));
+        console.log(chalk.gray(`    A: "${improvedHypothesis}"`));
+        if (!improvedIsCorrect) {
+          console.log(chalk.yellow(`    Expected: "${improvedAnswer}"`));
+        }
+      }
     }
+
+    // Track when improved version performs worse than original
+    const improvedRegression = isCorrect && improvedQuestion !== undefined && !improvedIsCorrect;
 
     return {
       question_id: meta.questionId,
+      question: meta.question,
+      expected_answer: meta.answer,
       hypothesis: response.text,
       question_type: meta.questionType as QuestionType,
       is_correct: isCorrect,
+      improved_question: improvedQuestion,
+      improved_hypothesis: improvedHypothesis,
+      improved_is_correct: improvedIsCorrect,
+      has_improvement_info: !!(meta.improvedQuestion || meta.improvedAnswer || meta.improvementNote),
+      improved_regression: improvedRegression,
+      usage:
+        usage && usage.inputTokens !== undefined
+          ? {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens ?? 0,
+              totalTokens: usage.totalTokens ?? usage.inputTokens + (usage.outputTokens ?? 0),
+            }
+          : undefined,
+      improved_usage:
+        improvedUsage && improvedUsage.inputTokens !== undefined
+          ? {
+              inputTokens: improvedUsage.inputTokens,
+              outputTokens: improvedUsage.outputTokens ?? 0,
+              totalTokens: improvedUsage.totalTokens ?? improvedUsage.inputTokens + (improvedUsage.outputTokens ?? 0),
+            }
+          : undefined,
     };
   }
 
-  private async saveResults(
+  private async saveFinalResults(
     runDir: string,
     results: EvaluationResult[],
     metrics: BenchmarkMetrics,
     options: RunOptions,
   ): Promise<void> {
-    // Save raw results
-    const resultsPath = join(runDir, 'results.jsonl');
-    const resultsContent = results.map(r => JSON.stringify(r)).join('\n');
-    await writeFile(resultsPath, resultsContent);
+    // Note: results.jsonl is already saved incrementally during the run
+
+    // Save failures.json for re-preparation
+    // Only include questions where BOTH original and improved failed (or no improved version exists)
+    const failedQuestionIds = results
+      .filter(r => {
+        // If original passed, not a failure
+        if (r.is_correct) return false;
+        // If there's an improved version and it passed, not a failure
+        if (r.improved_question !== undefined && r.improved_is_correct) return false;
+        // Both failed (or no improved version)
+        return true;
+      })
+      .map(r => r.question_id);
+    if (failedQuestionIds.length > 0) {
+      const failuresPath = join(runDir, 'failures.json');
+      const failuresData = {
+        questionIds: failedQuestionIds,
+        runId: runDir.split('/').pop(),
+        config: options.memoryConfig,
+        dataset: options.dataset,
+        timestamp: new Date().toISOString(),
+        totalFailed: failedQuestionIds.length,
+        totalQuestions: results.length,
+      };
+      await writeFile(failuresPath, JSON.stringify(failuresData, null, 2));
+      console.log(chalk.gray(`Failures saved to: ${failuresPath}`));
+    }
 
     // Save metrics
     const metricsPath = join(runDir, 'metrics.json');
+    const metricsConfigDef = getMemoryConfig(options.memoryConfig);
     const metricsData = {
       ...metrics,
       config: {
         dataset: options.dataset,
-        model: options.model,
+        model: metricsConfigDef.agentModel,
         memoryConfig: options.memoryConfig,
         subset: options.subset,
+        // Store OM config for reproducibility
+        ...(metricsConfigDef.usesObservationalMemory && {
+          observationalMemoryConfig: {
+            scope: 'resource',
+            messageTokens: OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
+            observationTokens: OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
+            recognizePatterns: false,
+          },
+        }),
       },
       timestamp: new Date().toISOString(),
     };
     await writeFile(metricsPath, JSON.stringify(metricsData, null, 2));
 
-    console.log(chalk.gray(`\nResults saved to: ${runDir}`));
+    console.log(
+      chalk.gray(`
+Results saved to: ${runDir}`),
+    );
   }
 
   private calculateMetrics(results: EvaluationResult[]): BenchmarkMetrics {
@@ -437,15 +1395,33 @@ Be specific rather than generic when the user has expressed clear preferences in
       correct_answers: 0,
       abstention_correct: 0,
       abstention_total: 0,
+      // "Fixed" metrics - uses improved_is_correct where available, otherwise is_correct
+      improved_accuracy: undefined,
+      improved_correct: 0,
+      improved_total: 0,
+      fixed_accuracy_by_type: {} as Record<QuestionType, { correct: number; total: number; accuracy: number }>,
+      fixed_overall_accuracy: undefined,
     };
+
+    // Check if any results have improved questions
+    const hasAnyImprovedQuestions = results.some(r => r.improved_question !== undefined);
 
     // Calculate overall metrics
     for (const result of results) {
+      // Vanilla metrics (original question only)
       if (result.is_correct) {
         metrics.correct_answers++;
       }
 
-      // Track by question type
+      // Track how many questions have improved versions
+      if (result.improved_question !== undefined) {
+        metrics.improved_total = (metrics.improved_total || 0) + 1;
+        if (result.improved_is_correct) {
+          metrics.improved_correct = (metrics.improved_correct || 0) + 1;
+        }
+      }
+
+      // Track by question type (vanilla)
       if (result.question_type) {
         const type = result.question_type;
         if (!metrics.accuracy_by_type[type]) {
@@ -454,6 +1430,21 @@ Be specific rather than generic when the user has expressed clear preferences in
         metrics.accuracy_by_type[type].total++;
         if (result.is_correct) {
           metrics.accuracy_by_type[type].correct++;
+        }
+
+        // Track "fixed" metrics by type (use improved result if available, otherwise vanilla)
+        if (hasAnyImprovedQuestions) {
+          if (!metrics.fixed_accuracy_by_type![type]) {
+            metrics.fixed_accuracy_by_type![type] = { correct: 0, total: 0, accuracy: 0 };
+          }
+          metrics.fixed_accuracy_by_type![type].total++;
+
+          // Fixed score: correct if EITHER original OR improved passes
+          // This ensures we don't penalize when improved question regresses
+          const isCorrectFixed = result.is_correct || (result.improved_is_correct ?? false);
+          if (isCorrectFixed) {
+            metrics.fixed_accuracy_by_type![type].correct++;
+          }
         }
       }
 
@@ -464,9 +1455,27 @@ Be specific rather than generic when the user has expressed clear preferences in
           metrics.abstention_correct = (metrics.abstention_correct || 0) + 1;
         }
       }
+
+      // Aggregate token usage
+      if (result.usage) {
+        if (!metrics.total_usage) {
+          metrics.total_usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+        }
+        metrics.total_usage.inputTokens += result.usage.inputTokens;
+        metrics.total_usage.outputTokens += result.usage.outputTokens;
+        metrics.total_usage.totalTokens += result.usage.totalTokens;
+      }
+      if (result.improved_usage) {
+        if (!metrics.improved_total_usage) {
+          metrics.improved_total_usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+        }
+        metrics.improved_total_usage.inputTokens += result.improved_usage.inputTokens;
+        metrics.improved_total_usage.outputTokens += result.improved_usage.outputTokens;
+        metrics.improved_total_usage.totalTokens += result.improved_usage.totalTokens;
+      }
     }
 
-    // Calculate per-type accuracies first
+    // Calculate per-type accuracies (vanilla)
     for (const type in metrics.accuracy_by_type) {
       const typeMetrics = metrics.accuracy_by_type[type as QuestionType];
       if (typeMetrics) {
@@ -474,40 +1483,54 @@ Be specific rather than generic when the user has expressed clear preferences in
       }
     }
 
+    // Calculate per-type accuracies (fixed)
+    if (hasAnyImprovedQuestions && metrics.fixed_accuracy_by_type) {
+      for (const type in metrics.fixed_accuracy_by_type) {
+        const typeMetrics = metrics.fixed_accuracy_by_type[type as QuestionType];
+        if (typeMetrics) {
+          typeMetrics.accuracy = typeMetrics.total > 0 ? typeMetrics.correct / typeMetrics.total : 0;
+        }
+      }
+    }
+
     if (metrics.abstention_total && metrics.abstention_total > 0) {
       metrics.abstention_accuracy = (metrics.abstention_correct || 0) / metrics.abstention_total;
     }
 
-    // Calculate overall accuracy as average of all question type accuracies (excluding abstention)
+    // Calculate overall accuracy as average of all question type accuracies (vanilla)
     const allTypeAccuracies = Object.values(metrics.accuracy_by_type).map(t => t.accuracy);
-
-    // Debug: Log the exact values being averaged
-    console.log('\nDebug - Question type accuracies being averaged:');
-    Object.entries(metrics.accuracy_by_type).forEach(([type, data]) => {
-      console.log(`  ${type}: ${data.accuracy} (${data.correct}/${data.total})`);
-    });
-    console.log(`  Sum: ${allTypeAccuracies.reduce((sum, acc) => sum + acc, 0)}`);
-    console.log(`  Count: ${allTypeAccuracies.length}`);
-
     metrics.overall_accuracy =
       allTypeAccuracies.length > 0
         ? allTypeAccuracies.reduce((sum, acc) => sum + acc, 0) / allTypeAccuracies.length
         : 0;
 
-    console.log(`  Calculated overall: ${metrics.overall_accuracy}`);
-    console.log(`  As percentage: ${(metrics.overall_accuracy * 100).toFixed(10)}%\n`);
+    // Calculate fixed overall accuracy
+    if (hasAnyImprovedQuestions && metrics.fixed_accuracy_by_type) {
+      const fixedTypeAccuracies = Object.values(metrics.fixed_accuracy_by_type).map(t => t.accuracy);
+      metrics.fixed_overall_accuracy =
+        fixedTypeAccuracies.length > 0
+          ? fixedTypeAccuracies.reduce((sum, acc) => sum + acc, 0) / fixedTypeAccuracies.length
+          : 0;
+    }
 
     return metrics;
   }
 
-  private displayMetrics(metrics: BenchmarkMetrics, options?: RunOptions): void {
-    console.log(chalk.bold('\n📊 Benchmark Results\n'));
+  private displayMetrics(metrics: BenchmarkMetrics, options?: RunOptions, configDef?: MemoryConfigDefinition): void {
+    console.log(
+      chalk.bold(`
+📊 Benchmark Results
+`),
+    );
 
     // Display configuration if provided
     if (options) {
-      console.log(chalk.bold('Configuration:\n'));
+      console.log(
+        chalk.bold(`Configuration:
+`),
+      );
       console.log(chalk.gray('Dataset:'), chalk.cyan(options.dataset));
-      console.log(chalk.gray('Model:'), chalk.cyan(options.model));
+      console.log(chalk.gray('Model:'), chalk.cyan(configDef?.agentModel ?? 'gpt-4o'));
       console.log(chalk.gray('Memory Config:'), chalk.cyan(options.memoryConfig));
       if (options.subset) {
         console.log(chalk.gray('Subset:'), chalk.cyan(`${options.subset} questions`));
@@ -519,37 +1542,131 @@ Be specific rather than generic when the user has expressed clear preferences in
       console.log();
     }
 
+    // Check if we have fixed metrics to display
+    const hasFixedMetrics = metrics.fixed_accuracy_by_type && Object.keys(metrics.fixed_accuracy_by_type).length > 0;
+
     // Question type breakdown
     console.log(chalk.bold('Accuracy by Question Type:'));
 
     // Sort question types alphabetically
     const sortedTypes = Object.entries(metrics.accuracy_by_type).sort(([a], [b]) => a.localeCompare(b));
 
-    // Display regular question types
+    // Helper to create progress bar
+    const createBar = (accuracy: number, length: number = 20) => {
+      const filledLength = Math.round(accuracy * length);
+      return '█'.repeat(filledLength) + '░'.repeat(length - filledLength);
+    };
+
+    // Helper to get color based on accuracy
+    const getColor = (accuracy: number) => (accuracy >= 0.8 ? 'green' : accuracy >= 0.6 ? 'yellow' : 'red');
+
+    // Display regular question types (vanilla)
     for (const [type, typeMetrics] of sortedTypes) {
       const { correct, total, accuracy } = typeMetrics;
-      const typeColor = accuracy >= 0.8 ? 'green' : accuracy >= 0.6 ? 'yellow' : 'red';
-
-      // Create a simple progress bar
-      const barLength = 20;
-      const filledLength = Math.round(accuracy * barLength);
-      const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
+      const typeColor = getColor(accuracy);
 
       console.log(
         chalk.gray(`  ${type.padEnd(25)}:`),
         chalk[typeColor](`${(accuracy * 100).toFixed(1).padStart(5)}%`),
-        chalk.gray(`[${bar}]`),
+        chalk.gray(`[${createBar(accuracy)}]`),
         chalk.gray(`(${correct}/${total})`),
       );
+
+      // If we have fixed metrics, show the fixed version right after
+      if (hasFixedMetrics && metrics.fixed_accuracy_by_type![type as QuestionType]) {
+        const fixedTypeMetrics = metrics.fixed_accuracy_by_type![type as QuestionType];
+        const fixedColor = getColor(fixedTypeMetrics.accuracy);
+        console.log(
+          chalk.gray(`  ${(type + ' (fixed)').padEnd(25)}:`),
+          chalk[fixedColor](`${(fixedTypeMetrics.accuracy * 100).toFixed(1).padStart(5)}%`),
+          chalk.gray(`[${createBar(fixedTypeMetrics.accuracy)}]`),
+          chalk.gray(`(${fixedTypeMetrics.correct}/${fixedTypeMetrics.total})`),
+        );
+      }
     }
 
     console.log();
-    const accuracyColor =
-      metrics.overall_accuracy >= 0.8 ? 'green' : metrics.overall_accuracy >= 0.6 ? 'yellow' : 'red';
+
+    // Overall accuracy (vanilla)
+    const accuracyColor = getColor(metrics.overall_accuracy);
     console.log(
-      chalk.bold('Overall Accuracy:'),
+      chalk.bold('Overall Accuracy:        '),
       chalk[accuracyColor](`${(metrics.overall_accuracy * 100).toFixed(2)}%`),
       chalk.gray(`(average of ${Object.keys(metrics.accuracy_by_type).length} question types)`),
     );
+
+    // Overall accuracy (fixed) - shown if any improved questions exist
+    if (hasFixedMetrics && metrics.fixed_overall_accuracy !== undefined) {
+      const fixedAccuracyColor = getColor(metrics.fixed_overall_accuracy);
+      console.log(
+        chalk.bold('Overall Accuracy (fixed):'),
+        chalk[fixedAccuracyColor](`${(metrics.fixed_overall_accuracy * 100).toFixed(2)}%`),
+        chalk.gray(`(${metrics.improved_total} questions clarified)`),
+      );
+    }
+
+    // Token usage summary
+    if (metrics.total_usage) {
+      console.log();
+      console.log(chalk.bold('Token Usage:'));
+      const formatTokens = (n: number) => n.toLocaleString();
+      console.log(
+        chalk.gray('  Input tokens: '),
+        chalk.cyan(formatTokens(metrics.total_usage.inputTokens)),
+        chalk.gray(
+          `(avg ${formatTokens(Math.round(metrics.total_usage.inputTokens / metrics.total_questions))}/question)`,
+        ),
+      );
+      console.log(chalk.gray('  Output tokens:'), chalk.cyan(formatTokens(metrics.total_usage.outputTokens)));
+      console.log(chalk.gray('  Total tokens: '), chalk.cyan(formatTokens(metrics.total_usage.totalTokens)));
+
+      if (metrics.improved_total_usage) {
+        console.log(
+          chalk.gray('  Improved input tokens: '),
+          chalk.cyan(formatTokens(metrics.improved_total_usage.inputTokens)),
+        );
+      }
+    }
+  }
+
+  private displayUninvestigatedFailures(results: EvaluationResult[]): void {
+    // Find failures that have no improvement info (not yet investigated)
+    const uninvestigatedFailures = results.filter(r => r.is_correct === false && !r.has_improvement_info);
+
+    if (uninvestigatedFailures.length === 0) {
+      return;
+    }
+
+    console.log(
+      chalk.yellow(`
+🔍 Failures for Investigation (${uninvestigatedFailures.length})
+`),
+    );
+    console.log(
+      chalk.gray('These questions failed and have no improved_question, improved_answer, or improvement_note:\n'),
+    );
+
+    // Group by question type for easier review
+    const byType = new Map<string, EvaluationResult[]>();
+    for (const result of uninvestigatedFailures) {
+      const type = result.question_type || 'unknown';
+      if (!byType.has(type)) {
+        byType.set(type, []);
+      }
+      byType.get(type)!.push(result);
+    }
+
+    // Display grouped by type
+    for (const [type, failures] of Array.from(byType.entries()).sort(([a], [b]) => a.localeCompare(b))) {
+      console.log(chalk.cyan(`  ${type}:`));
+      for (const result of failures) {
+        console.log(chalk.gray(`    - ${result.question_id}`));
+        console.log(chalk.gray(`      Q: "${result.question}"`));
+        console.log(chalk.gray(`      A: "${result.hypothesis}"`));
+        console.log(chalk.yellow(`      Expected: "${result.expected_answer}"`));
+      }
+    }
+
+    console.log();
   }
 }

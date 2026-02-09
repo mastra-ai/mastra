@@ -1,0 +1,44 @@
+{
+  "name": "examples-unified-workspace",
+  "type": "module",
+  "private": true,
+  "description": "Example demonstrating the unified Workspace API with filesystem, skills, and search",
+  "version": "0.0.1",
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.0",
+    "@ai-sdk/provider": "^3.0.0",
+    "@mastra/core": "latest",
+    "@mastra/fastembed": "^1.0.0",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "ai": "^6.0.1",
+    "mastra": "latest",
+    "typescript": "^5.8.3",
+    "zod": "^3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/client-js": "link:../../client-sdks/client-js",
+      "@mastra/observability": "link:../../observability/mastra",
+      "@mastra/fastembed": "link:../../packages/fastembed",
+      "mastra": "link:../../packages/cli"
+    }
+  },
+  "scripts": {
+    "demo": "npx tsx src/demo/index.ts",
+    "demo:filesystem": "npx tsx src/demo/index.ts --type filesystem",
+    "demo:skills": "npx tsx src/demo/index.ts --type skills",
+    "demo:workspace": "npx tsx src/demo/index.ts --type workspace",
+    "demo:agents": "npx tsx src/demo/index.ts --type agents",
+    "demo:safety": "npx tsx src/demo/index.ts --type safety",
+    "mastra:build": "mastra build",
+    "mastra:dev": "mastra dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0"
+}

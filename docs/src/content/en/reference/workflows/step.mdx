@@ -133,10 +133,23 @@ const agentStep = createStep(testAgent, {
       required: false,
     },
     {
+      name: "requestContextSchema",
+      type: "z.ZodType<any>",
+      description:
+        "Zod schema for validating request context values. When provided, the context is validated before the step's execute() runs, failing the step if validation fails.",
+      required: false,
+    },
+    {
       name: "execute",
       type: "(params: ExecuteParams) => Promise<any>",
       description: "Async function containing step logic",
       required: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "Optional key-value pairs for storing additional step information. Values must be serializable (no functions, circular references, etc.).",
+      required: false,
     },
   ]}
 />
