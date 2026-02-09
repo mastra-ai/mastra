@@ -30,6 +30,7 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
       'echo "deb https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list && ' +
         'curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add - && ' +
         'sudo apt-get update && sudo apt-get install -y gcsfuse',
+      { timeoutMs: 120_000 },
     );
   }
 
@@ -67,13 +68,21 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
 
   logger.debug(`${LOG_PREFIX} Mounting GCS:`, mountCmd);
 
-  const result = await sandbox.commands.run(mountCmd);
-  logger.debug(`${LOG_PREFIX} gcsfuse result:`, {
-    exitCode: result.exitCode,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  });
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to mount GCS bucket: ${result.stderr || result.stdout}`);
+  try {
+    const result = await sandbox.commands.run(mountCmd);
+    logger.debug(`${LOG_PREFIX} gcsfuse result:`, {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to mount GCS bucket: ${result.stderr || result.stdout}`);
+    }
+  } catch (error: unknown) {
+    const errorObj = error as { result?: { exitCode: number; stdout: string; stderr: string } };
+    const stderr = errorObj.result?.stderr || '';
+    const stdout = errorObj.result?.stdout || '';
+    logger.error(`${LOG_PREFIX} gcsfuse error:`, { stderr, stdout, error: String(error) });
+    throw new Error(`Failed to mount GCS bucket: ${stderr || stdout || error}`);
   }
 }

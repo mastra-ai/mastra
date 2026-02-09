@@ -775,8 +775,10 @@ describe('S3Filesystem SDK Operations', () => {
     it('throws on error without force option', async () => {
       // isDirectory check → not a directory
       mockSend.mockResolvedValueOnce({ Contents: [] });
-      // DeleteObjectCommand fails
-      mockSend.mockRejectedValueOnce(new Error('delete failed'));
+      // DeleteObjectCommand fails with NoSuchKey (simulating AWS SDK error)
+      const err = new Error('The specified key does not exist.');
+      err.name = 'NoSuchKey';
+      mockSend.mockRejectedValueOnce(err);
 
       await expect(fs.deleteFile('/test.txt')).rejects.toThrow(/test\.txt/);
     });
@@ -799,7 +801,9 @@ describe('S3Filesystem SDK Operations', () => {
     });
 
     it('throws FileNotFoundError when source missing', async () => {
-      mockSend.mockRejectedValueOnce(new Error('NoSuchKey'));
+      const err = new Error('The specified key does not exist.');
+      err.name = 'NoSuchKey';
+      mockSend.mockRejectedValueOnce(err);
 
       await expect(fs.copyFile('/missing.txt', '/dest.txt')).rejects.toThrow(/missing\.txt/);
     });

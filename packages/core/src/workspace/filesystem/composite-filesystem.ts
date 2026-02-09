@@ -201,16 +201,34 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
 
   async init(): Promise<void> {
     this.status = 'initializing';
+    const errors: Error[] = [];
     for (const fs of this._mounts.values()) {
-      if (fs.init) await fs.init();
+      try {
+        if (fs.init) await fs.init();
+      } catch (e) {
+        errors.push(e instanceof Error ? e : new Error(String(e)));
+      }
+    }
+    if (errors.length > 0) {
+      this.status = 'error';
+      throw new AggregateError(errors, 'Some filesystems failed to initialize');
     }
     this.status = 'ready';
   }
 
   async destroy(): Promise<void> {
     this.status = 'destroying';
+    const errors: Error[] = [];
     for (const fs of this._mounts.values()) {
-      if (fs.destroy) await fs.destroy();
+      try {
+        if (fs.destroy) await fs.destroy();
+      } catch (e) {
+        errors.push(e instanceof Error ? e : new Error(String(e)));
+      }
+    }
+    if (errors.length > 0) {
+      this.status = 'error';
+      throw new AggregateError(errors, 'Some filesystems failed to destroy');
     }
     this.status = 'destroyed';
   }

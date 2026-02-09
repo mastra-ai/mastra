@@ -203,7 +203,10 @@ export const SandboxExecutionBadge = ({
     // Direct error property
     if (result.error?.message) return result.error.message;
     if (typeof result.error === 'string') return result.error;
-    if (result.message) return result.message;
+    // Only treat result.message as an error when there's an explicit failure signal
+    if (result.message && (result.success === false || (typeof result.exitCode === 'number' && result.exitCode !== 0))) {
+      return result.message;
+    }
 
     // If command failed (non-zero exit, success=false) and has stderr but no stdout
     if (result.success === false && result.stderr && !result.stdout) {

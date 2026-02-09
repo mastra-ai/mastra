@@ -77,6 +77,7 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
     }, 120000); // Allow 2 minutes for sandbox startup
 
     afterAll(async () => {
+      if (!sandbox) return;
       if (cleanupSandbox) {
         await cleanupSandbox(sandbox);
       } else if (sandbox.destroy) {

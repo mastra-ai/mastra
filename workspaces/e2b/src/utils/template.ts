@@ -97,7 +97,7 @@ export const MOUNTABLE_TEMPLATE_VERSION = 'v1';
  */
 export function createDefaultMountableTemplate(): MountableTemplateResult {
   const aptPackages = ['s3fs', 'fuse'];
-  const config = { aptPackages };
+  const config = { version: MOUNTABLE_TEMPLATE_VERSION, aptPackages };
 
   const hash = createHash('sha256')
     .update(JSON.stringify(config, Object.keys(config).sort()))

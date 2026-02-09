@@ -183,13 +183,15 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
 
       // Fire onStart callback after sandbox is running
       await this._onStart?.({ sandbox: this });
-
-      // Process any pending mounts after successful start
-      await this.mounts?.processPending();
     } catch (error) {
       this.status = 'error';
       throw error;
     }
+
+    // Process any pending mounts after successful start
+    // Mount failures are tracked individually in MountManager and
+    // shouldn't mark the sandbox itself as errored
+    await this.mounts?.processPending();
   }
 
   /**

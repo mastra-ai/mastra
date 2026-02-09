@@ -4,7 +4,7 @@
  * Creates tests that verify filesystem and sandbox work together.
  */
 
-import { describe, beforeAll, afterAll, it, expect } from 'vitest';
+import { describe, beforeAll, beforeEach, afterAll, it, expect } from 'vitest';
 
 import { generateTestPath } from '../test-helpers';
 
@@ -77,20 +77,22 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
       }
     }, 60000);
 
-    // Helper to get test context.
-    // The test path is generated once per getContext() call so that all
-    // references within a single test point to the same directory.
-    const getContext = () => {
-      const testPath = generateTestPath('int-test');
-      return {
-        setup,
-        getTestPath: () => testPath,
-        mountPath,
-        testTimeout,
-        fastOnly,
-        sandboxPathsAligned,
-      };
-    };
+    // Generate a unique path per test so that afterEach cleanup and the
+    // test body always reference the same directory.
+    let currentTestPath: string;
+
+    beforeEach(() => {
+      currentTestPath = generateTestPath('int-test');
+    });
+
+    const getContext = () => ({
+      setup,
+      getTestPath: () => currentTestPath,
+      mountPath,
+      testTimeout,
+      fastOnly,
+      sandboxPathsAligned,
+    });
 
     // Register scenario tests
     // Note: Individual tests guard against missing mounts/features

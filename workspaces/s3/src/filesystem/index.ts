@@ -458,8 +458,12 @@ export class S3Filesystem extends MastraFilesystem {
     let existing = '';
     try {
       existing = (await this.readFile(path, { encoding: 'utf-8' })) as string;
-    } catch {
-      // File doesn't exist, start fresh
+    } catch (error) {
+      if (error instanceof FileNotFoundError) {
+        // File doesn't exist, start fresh
+      } else {
+        throw error;
+      }
     }
 
     const appendContent = typeof content === 'string' ? content : Buffer.from(content).toString('utf-8');
@@ -483,10 +487,12 @@ export class S3Filesystem extends MastraFilesystem {
           Key: this.toKey(path),
         }),
       );
-    } catch {
-      if (!options?.force) {
+    } catch (error: unknown) {
+      if (options?.force) return;
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'NoSuchKey') {
         throw new FileNotFoundError(path);
       }
+      throw error;
     }
   }
 
@@ -501,8 +507,11 @@ export class S3Filesystem extends MastraFilesystem {
           Key: this.toKey(dest),
         }),
       );
-    } catch {
-      throw new FileNotFoundError(src);
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'NoSuchKey') {
+        throw new FileNotFoundError(src);
+      }
+      throw error;
     }
   }
 

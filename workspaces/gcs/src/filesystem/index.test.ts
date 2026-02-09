@@ -638,7 +638,7 @@ describe('GCSFilesystem SDK Operations', () => {
     it('throws if non-recursive and directory is not empty', async () => {
       // readdir returns files
       mockBucket.getFiles.mockResolvedValueOnce([
-        [{ name: 'dir/file.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 100 }]) }],
+        [{ name: 'dir/file.txt', metadata: { size: 100 } }],
       ]);
 
       await expect(fs.rmdir('/dir')).rejects.toThrow('Directory not empty');
@@ -657,8 +657,8 @@ describe('GCSFilesystem SDK Operations', () => {
     it('returns files with metadata', async () => {
       mockBucket.getFiles.mockResolvedValueOnce([
         [
-          { name: 'file1.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 100 }]) },
-          { name: 'file2.js', getMetadata: vi.fn().mockResolvedValue([{ size: 200 }]) },
+          { name: 'file1.txt', metadata: { size: 100 } },
+          { name: 'file2.js', metadata: { size: 200 } },
         ],
       ]);
 
@@ -673,8 +673,8 @@ describe('GCSFilesystem SDK Operations', () => {
     it('infers directories from nested paths in non-recursive mode', async () => {
       mockBucket.getFiles.mockResolvedValueOnce([
         [
-          { name: 'subdir/file.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 50 }]) },
-          { name: 'top.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 10 }]) },
+          { name: 'subdir/file.txt', metadata: { size: 50 } },
+          { name: 'top.txt', metadata: { size: 10 } },
         ],
       ]);
 
@@ -687,8 +687,8 @@ describe('GCSFilesystem SDK Operations', () => {
     it('recognizes directory markers (trailing slash)', async () => {
       mockBucket.getFiles.mockResolvedValueOnce([
         [
-          { name: 'mydir/', getMetadata: vi.fn().mockResolvedValue([{ size: 0 }]) },
-          { name: 'file.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 50 }]) },
+          { name: 'mydir/', metadata: { size: 0 } },
+          { name: 'file.txt', metadata: { size: 50 } },
         ],
       ]);
 
@@ -701,8 +701,8 @@ describe('GCSFilesystem SDK Operations', () => {
     it('filters by extension', async () => {
       mockBucket.getFiles.mockResolvedValueOnce([
         [
-          { name: 'a.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 1 }]) },
-          { name: 'b.ts', getMetadata: vi.fn().mockResolvedValue([{ size: 2 }]) },
+          { name: 'a.txt', metadata: { size: 1 } },
+          { name: 'b.ts', metadata: { size: 2 } },
         ],
       ]);
 
@@ -715,8 +715,8 @@ describe('GCSFilesystem SDK Operations', () => {
     it('deduplicates directory entries', async () => {
       mockBucket.getFiles.mockResolvedValueOnce([
         [
-          { name: 'dir/a.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 1 }]) },
-          { name: 'dir/b.txt', getMetadata: vi.fn().mockResolvedValue([{ size: 2 }]) },
+          { name: 'dir/a.txt', metadata: { size: 1 } },
+          { name: 'dir/b.txt', metadata: { size: 2 } },
         ],
       ]);
 
