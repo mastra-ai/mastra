@@ -21570,46 +21570,6 @@ describe('Workflow', () => {
       expect(receivedState?.counter).toBe(10);
     });
 
-    it('should include stack trace in error passed to onError callback', async () => {
-      let receivedError: any = undefined;
-
-      const failingStep = createStep({
-        id: 'failing-step',
-        execute: async () => {
-          throw new Error('Step execution failed with stack');
-        },
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-stack-trace-onError-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        steps: [failingStep],
-        options: {
-          onError: errorInfo => {
-            receivedError = errorInfo.error;
-          },
-        },
-      });
-      workflow.then(failingStep).commit();
-
-      const mastra = new Mastra({
-        workflows: { 'test-stack-trace-onError-workflow': workflow },
-        storage: testStorage,
-      });
-
-      const run = await mastra.getWorkflow('test-stack-trace-onError-workflow').createRun();
-      await run.start({ inputData: {} });
-
-      expect(receivedError).toBeDefined();
-      expect(receivedError.message).toBe('Step execution failed with stack');
-      // The error passed to onError should include a stack trace for debugging
-      expect(receivedError.stack).toBeDefined();
-      expect(receivedError.stack).toContain('Step execution failed with stack');
-    });
-
     it('should log step execution errors via the Mastra logger', async () => {
       const mockLogger = {
         debug: vi.fn(),

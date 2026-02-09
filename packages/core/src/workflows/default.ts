@@ -478,14 +478,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const outputError = (lastOutput as StepFailure<any, any, any, any>)?.error;
     const errorSource = error || outputError;
     const errorInstance = getErrorFromUnknown(errorSource, {
+      serializeStack: false,
       fallbackMessage: 'Unknown workflow error',
     });
-    // Always include stack in the result error so it's available in onError callbacks for debugging
-    const json = errorInstance.toJSON();
-    if (!json.stack && errorInstance.stack) {
-      json.stack = errorInstance.stack;
-    }
-    return json;
+    return errorInstance.toJSON();
   }
 
   protected async fmtReturnValue<TOutput>(

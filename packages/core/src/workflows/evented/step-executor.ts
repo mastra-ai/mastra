@@ -257,6 +257,7 @@ export class StepExecutor extends MastraBase {
       const endedAt = Date.now();
 
       const errorInstance = getErrorFromUnknown(error, {
+        serializeStack: false,
         fallbackMessage: 'Unknown step execution error',
       });
 
