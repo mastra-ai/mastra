@@ -13,14 +13,14 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ai-sdk/openai": "^2.0.44",
+    "@ai-sdk/openai": "^2.0.89",
     "@mastra/core": "monorepo-test",
     "@inner/inner-tools": "workspace:*",
     "@inner/hello-world": "workspace:*",
     "date-fns": "^4.1.0",
-    "lodash": "^4.17.21",
-    "hono": "^4.9.10",
-    "unicorn-magic": "0.3.0",
+    "lodash": "^4.17.23",
+    "hono": "^4.11.7",
+    "unicorn-magic": "0.4.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {

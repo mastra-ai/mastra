@@ -787,9 +787,9 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
 
           // Show popular agents first with "Show all" option
           const initialSelection = await p.multiselect({
-            message: 'Select agent(s) to install skills for:',
+            message: `Select agent(s) to install skills for ${color.dim('(use arrow keys / space bar)')}`,
             options: [...POPULAR_AGENTS, { value: '__show_all__', label: '+ Show all agents (29 more)' }],
-            initialValues: ['claude-code', 'codex', 'opencode', 'cursor'],
+            initialValues: ['claude-code', 'cursor'],
             required: true,
           });
 
@@ -805,7 +805,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             const preSelected = selectedAgents.filter(a => a !== '__show_all__');
 
             const fullSelection = await p.multiselect({
-              message: 'Select agent(s) to install skills for:',
+              message: `Select agent(s) to install skills for ${color.dim('(use arrow keys / space bar)')}`,
               options: ALL_AGENTS,
               initialValues: preSelected,
               required: true,
@@ -960,7 +960,20 @@ export function generateAgentsMarkdown({ skills, mcpServer }: { skills?: string[
   let content = `# AGENTS.md
 
 This document provides guidance for AI coding agents working in this repository.
+`;
 
+  // Add critical Mastra skill section if skills were installed
+  if (hasSkills) {
+    content += `
+## CRITICAL: Mastra Skill Required
+
+**BEFORE doing ANYTHING with Mastra code or answering Mastra questions, load the Mastra skill FIRST.**
+
+See [Mastra Skills section](#mastra-skills) for loading instructions.
+`;
+  }
+
+  content += `
 ## Project Overview
 
 This is a **Mastra** project written in TypeScript. Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
@@ -1036,7 +1049,13 @@ ${skills
   )
   .join('\n')}
 
-### Using Skills
+### Loading Skills
+
+1. **Load the Mastra skill FIRST** - Use \`/mastra\` command or Skill tool
+2. **Never rely on cached knowledge** - Mastra APIs change frequently between versions
+3. **Always verify against current docs** - The skill provides up-to-date documentation
+
+**Why this matters:** Your training data about Mastra is likely outdated. Constructor signatures, APIs, and patterns change rapidly. Loading the skill ensures you use current, correct APIs.
 
 Skills are automatically available to agents in your project once installed. Agents can access and use these skills without additional configuration.
 

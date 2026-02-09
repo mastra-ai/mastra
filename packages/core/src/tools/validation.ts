@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
-import { isZodArray, isZodObject } from '../utils/zod-utils';
+import { getZodTypeName, isZodArray, isZodObject, unwrapZodType } from '../utils/zod-utils';
 
 /**
  * Keys that should be redacted from error messages to prevent sensitive data leakage.
@@ -232,6 +232,84 @@ function convertUndefinedToNull(input: unknown): unknown {
 }
 
 /**
+ * Coerces stringified JSON values in object properties when the schema expects
+ * an array or object but the LLM returned a JSON string.
+ *
+ * Some LLMs (e.g., GLM4.7) return stringified JSON for array/object parameters:
+ *   { "args": "[\"parse_excel.py\"]" }
+ * instead of:
+ *   { "args": ["parse_excel.py"] }
+ *
+ * This function walks the top-level properties of a plain object and attempts
+ * to JSON.parse string values when the schema expects a non-string type.
+ * (GitHub #12757)
+ *
+ * @param schema The Zod schema to check field types against
+ * @param input The input to process
+ * @returns The input with stringified JSON values coerced, or the original input
+ */
+function coerceStringifiedJsonValues(schema: SchemaWithValidation<unknown>, input: unknown): unknown {
+  // Only process plain objects with object schemas
+  if (!isPlainObject(input)) {
+    return input;
+  }
+
+  const unwrapped = unwrapZodType(schema as any);
+  if (!isZodObject(unwrapped)) {
+    return input;
+  }
+
+  const shape = (unwrapped as any).shape;
+  if (!shape || typeof shape !== 'object') {
+    return input;
+  }
+
+  let changed = false;
+  const result: Record<string, unknown> = { ...input };
+
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+
+    const fieldSchema = shape[key];
+    if (!fieldSchema) {
+      continue;
+    }
+
+    // Unwrap the field schema to find the base type
+    const baseFieldSchema = unwrapZodType(fieldSchema);
+
+    // Only attempt coercion if the schema expects a non-string type
+    // and the string looks like it could be JSON (starts with [ or {)
+    if (getZodTypeName(baseFieldSchema) === 'ZodString') {
+      continue;
+    }
+
+    const trimmed = value.trim();
+    if (
+      (isZodArray(baseFieldSchema) && trimmed.startsWith('[')) ||
+      (isZodObject(baseFieldSchema) && trimmed.startsWith('{'))
+    ) {
+      try {
+        const parsed = JSON.parse(value);
+        if (
+          (isZodArray(baseFieldSchema) && Array.isArray(parsed)) ||
+          (isZodObject(baseFieldSchema) && isPlainObject(parsed))
+        ) {
+          result[key] = parsed;
+          changed = true;
+        }
+      } catch {
+        // Not valid JSON, leave as-is
+      }
+    }
+  }
+
+  return changed ? result : input;
+}
+
+/**
  * Validates raw input data against a Zod schema.
  *
  * @param schema The Zod schema to validate against
@@ -262,7 +340,11 @@ export function validateToolInput<T = any>(
   // 3. First validation attempt with null values preserved. This handles .nullable()
   //    schemas correctly (where null is a valid value).
   //
-  // 4. If validation fails, retry with null values stripped from object properties.
+  // 4. If validation fails, retry with stringified JSON values coerced to their
+  //    proper types. Some LLMs (e.g. GLM4.7) return JSON arrays/objects as strings.
+  //    (GitHub #12757)
+  //
+  // 5. If validation still fails, retry with null values stripped from object properties.
   //    This handles LLMs (e.g. Gemini) that send null for .optional() fields, where
   //    Zod expects undefined, not null. (GitHub #12362)
 
@@ -278,7 +360,18 @@ export function validateToolInput<T = any>(
     return { data: validation.data };
   }
 
-  // Step 4: Retry with null values stripped (GitHub #12362)
+  // Step 4: Retry with stringified JSON values coerced (GitHub #12757)
+  // LLMs like GLM4.7 send stringified JSON for array/object parameters, e.g.
+  // { "args": "[\"file.py\"]" } instead of { "args": ["file.py"] }.
+  const coercedInput = coerceStringifiedJsonValues(schema, normalizedInput);
+  if (coercedInput !== normalizedInput) {
+    const coercedValidation = schema.safeParse(coercedInput);
+    if (coercedValidation.success) {
+      return { data: coercedValidation.data };
+    }
+  }
+
+  // Step 5: Retry with null values stripped (GitHub #12362)
   // LLMs like Gemini send null for optional fields, but Zod's .optional() only
   // accepts undefined, not null. By stripping nullish values and retrying, we
   // handle this case without breaking .nullable() schemas that passed in step 3.
@@ -290,7 +383,7 @@ export function validateToolInput<T = any>(
     return { data: retryValidation.data };
   }
 
-  // Both attempts failed - return the original (non-stripped) error since it's
+  // All attempts failed - return the original (non-stripped) error since it's
   // more informative about what the schema actually expects
   const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 

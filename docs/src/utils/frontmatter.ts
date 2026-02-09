@@ -10,6 +10,7 @@ export interface ParsedPackage {
 
 export interface ParsedFrontMatter {
   title?: string
+  description?: string
   packages?: ParsedPackage[]
   packagesFieldLine?: number
 }
@@ -109,6 +110,12 @@ export function parseFrontMatterYAML(content: string, startLine: number): Parsed
     const titleMatch = line.match(/^title:\s*["']?(.+?)["']?\s*$/)
     if (titleMatch) {
       result.title = titleMatch[1]
+    }
+
+    // Check for "description:" key
+    const descriptionMatch = line.match(/^description:\s*["']?(.+?)["']?\s*$/)
+    if (descriptionMatch) {
+      result.description = descriptionMatch[1]
     }
 
     // Check for "packages:" key

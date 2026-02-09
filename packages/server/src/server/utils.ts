@@ -86,6 +86,7 @@ function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
       stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
       isWorkflow: step.component === 'WORKFLOW',
       component: step.component,
+      metadata: step.metadata,
     };
 
     if (step.component === 'WORKFLOW' && step.steps) {
@@ -130,6 +131,7 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
           ? stringify(zodToJsonSchema(step.requestContextSchema))
           : undefined,
         component: step.component,
+        metadata: step.metadata,
       };
       return acc;
     }, {}),
@@ -224,6 +226,18 @@ export class WorkflowRegistry {
   static getRegisteredWorkflowIds(): string[] {
     return Object.keys(this.additionalWorkflows);
   }
+}
+
+/**
+ * Converts a string to a URL-friendly slug.
+ * Lowercases, replaces non-alphanumeric characters with hyphens,
+ * collapses consecutive hyphens, and trims leading/trailing hyphens.
+ */
+export function toSlug(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 export function convertInstructionsToString(message: SystemMessage): string {
