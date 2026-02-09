@@ -7,8 +7,6 @@ export default defineConfig({
       '!packages/_config',
       '!packages/_types-builder',
       '!packages/_vendored',
-      '!packages/create-mastra',
-      '!packages/fastembed',
       '!packages/playground',
       '!packages/playground-ui',
       'stores/*',
