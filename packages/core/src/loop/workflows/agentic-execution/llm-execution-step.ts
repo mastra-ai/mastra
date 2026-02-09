@@ -1136,6 +1136,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }),
       );
 
+      // Remove rejected response messages from the messageList before the next iteration.
+      // Without this, the LLM sees the rejected assistant response in its prompt on retry,
+      // which confuses models and often causes empty text responses.
+      if (shouldRetry) {
+        messageList.removeByIds([messageId]);
+      }
+
       // Build retry feedback text if retrying
       // This will be passed through workflow state to survive the system message reset
       const retryFeedbackText =

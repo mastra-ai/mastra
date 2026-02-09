@@ -145,6 +145,10 @@ program
   .description('Start your built Mastra application')
   .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
   .option('-e, --env <env>', 'Custom env file to include in the start')
+  .option(
+    '-c, --custom-args <args>',
+    'Comma-separated list of custom arguments to pass to the Node.js process. IE: --require=newrelic',
+  )
   .action(startProject);
 
 program
