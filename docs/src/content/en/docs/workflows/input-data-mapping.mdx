@@ -5,48 +5,6 @@ packages:
   - "@mastra/core"
 ---
 
-# Input Data Mapping
-
-Input data mapping allows explicit mapping of values for the inputs of the next step. These values can come from a number of sources:
-
-- The outputs of a previous step
-- The request context
-- A constant value
-- The initial input of the workflow
-
-## Mapping with `.map()`
-
-In this example the `output` from `step1` is transformed to match the `inputSchema` required for the `step2`. The value from `step1` is available using the `inputData` parameter of the `.map` function.
-
-![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
-
-```typescript {9} title="src/mastra/workflows/test-workflow.ts"
-const step1 = createStep({...});
-const step2 = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-  .then(step1)
-  .map(async ({ inputData }) => {
-    const { value } = inputData;
-    return {
-      output: `new ${value}`
-    };
-  })
-  .then(step2)
-  .commit();
-```
-
-## Using `inputData`
-
-Use `inputData` to access the full output of the previous step:
-
-```typescript {3} title="src/mastra/workflows/test-workflow.ts"
-  .then(step1)
-  .map(({ inputData }) => {
-    console.log(inputData);
-  })
-```
-
 ## Using `getStepResult()`
 
 Use `getStepResult` to access the full output of a specific step by referencing the step's instance:
