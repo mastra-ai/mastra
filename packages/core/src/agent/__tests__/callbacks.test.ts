@@ -247,7 +247,6 @@ function callbackTests(version: 'v1' | 'v2') {
       }
     });
   });
-
 }
 
 callbackTests('v1');

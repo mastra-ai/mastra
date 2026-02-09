@@ -1242,7 +1242,6 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
       });
     });
   }
-
 }
 
 saveAndErrorTests('v1');
