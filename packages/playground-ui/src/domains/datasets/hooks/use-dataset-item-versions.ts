@@ -19,7 +19,7 @@ export interface DatasetItemVersion {
   isLatest: boolean;
 }
 
-const PER_PAGE = 10;
+const PER_PAGE = 5;
 
 /**
  * Hook to fetch dataset item versions from the API with infinite pagination.
