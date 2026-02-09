@@ -66,8 +66,12 @@ export function sanitizeV5UIMessages(
         }
 
         // Filter out empty text parts to handle legacy data from before this filtering was implemented
+        // But preserve them if they are the only parts (legitimate placeholder messages)
         if (p.type === 'text' && (!('text' in p) || p.text === '' || p.text?.trim() === '')) {
-          return false;
+          const hasNonEmptyParts = m.parts.some(
+            part => !(part.type === 'text' && (!('text' in part) || part.text === '' || part.text?.trim() === '')),
+          );
+          if (hasNonEmptyParts) return false;
         }
 
         if (!AIV5.isToolUIPart(p)) return true;
