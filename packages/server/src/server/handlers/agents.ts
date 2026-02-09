@@ -41,10 +41,13 @@ import {
   approveNetworkToolCallBodySchema,
   declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
+import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema } from '../schemas/workspace';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
+
+import { toSlug } from '../utils';
 
 import { handleError } from './error';
 import {
@@ -804,6 +807,46 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
       return result;
     } catch (error) {
       return handleError(error, 'Error getting agent');
+    }
+  },
+});
+
+/**
+ * POST /agents/:agentId/clone - Clone an agent to a stored agent
+ */
+export const CLONE_AGENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/clone',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: z.object({
+    newId: z.string().optional().describe('ID for the cloned agent. If not provided, derived from agent ID.'),
+    newName: z.string().optional().describe('Name for the cloned agent. Defaults to "{name} (Clone)".'),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    authorId: z.string().optional(),
+  }),
+  responseSchema: createStoredAgentResponseSchema,
+  summary: 'Clone agent',
+  description: 'Clones a code-defined or stored agent to a new stored agent in the database',
+  tags: ['Agents'],
+  requiresAuth: true,
+  handler: async ({ agentId, mastra, newId, newName, metadata, authorId, requestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      const cloneId = toSlug(newId || `${agentId}-clone`);
+
+      const result = await agent.cloneAgent({
+        newId: cloneId,
+        newName,
+        metadata,
+        authorId,
+        requestContext,
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error cloning agent');
     }
   },
 });

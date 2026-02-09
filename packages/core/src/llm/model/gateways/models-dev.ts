@@ -31,13 +31,12 @@ interface ModelsDevResponse {
   [providerId: string]: ModelsDevProviderInfo;
 }
 
-// Special cases: providers that are OpenAI-compatible but have their own SDKs
-// These providers work with OpenAI-compatible endpoints even though models.dev
-// might list them with their own SDK packages
+// Provider-specific overrides for URL, npm package, and other config.
+// These take priority over what models.dev returns (e.g. correct base URLs, SDK packages).
 // This constant is ONLY used during generation in fetchProviders() to determine
 // which providers from models.dev should be included in the registry.
 // At runtime, buildUrl() and buildHeaders() use the pre-generated PROVIDER_REGISTRY instead.
-const OPENAI_COMPATIBLE_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
+const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   mistral: {
     url: 'https://api.mistral.ai/v1',
   },
@@ -94,7 +93,7 @@ export class ModelsDevGateway extends MastraModelGateway {
       const isOpenAICompatible =
         providerInfo.npm === '@ai-sdk/openai-compatible' ||
         providerInfo.npm === '@ai-sdk/gateway' || // Vercel AI Gateway is OpenAI-compatible
-        normalizedId in OPENAI_COMPATIBLE_OVERRIDES;
+        normalizedId in PROVIDER_OVERRIDES;
 
       // these have their ai sdk provider package installed and don't use openai-compat
       const hasInstalledPackage = PROVIDERS_WITH_INSTALLED_PACKAGES.includes(providerId);
@@ -110,8 +109,8 @@ export class ModelsDevGateway extends MastraModelGateway {
           .map(([modelId]) => modelId)
           .sort();
 
-        // Get the API URL from the provider info or overrides
-        const url = providerInfo.api || OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.url;
+        // Get the API URL - overrides take priority over models.dev data
+        const url = PROVIDER_OVERRIDES[normalizedId]?.url || providerInfo.api;
 
         // Skip if we don't have a URL
         if (!hasInstalledPackage && !url) {
@@ -124,7 +123,7 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         // Determine the API key header (special case for Anthropic)
         const apiKeyHeader = !hasInstalledPackage
-          ? OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.apiKeyHeader || 'Authorization'
+          ? PROVIDER_OVERRIDES[normalizedId]?.apiKeyHeader || 'Authorization'
           : undefined;
 
         providerConfigs[normalizedId] = {
@@ -136,12 +135,14 @@ export class ModelsDevGateway extends MastraModelGateway {
           docUrl: providerInfo.doc, // Include documentation URL if available
           gateway: `models.dev`,
           // Only store npm when it's a non-default SDK (not openai-compatible/gateway) to keep the registry small
+          // Overrides take priority (e.g., moonshotai uses @ai-sdk/anthropic, not the openai-compatible listed in models.dev)
           npm:
-            providerInfo.npm &&
+            PROVIDER_OVERRIDES[normalizedId]?.npm ||
+            (providerInfo.npm &&
             providerInfo.npm !== '@ai-sdk/openai-compatible' &&
             providerInfo.npm !== '@ai-sdk/gateway'
               ? providerInfo.npm
-              : undefined,
+              : undefined),
         };
       }
     }

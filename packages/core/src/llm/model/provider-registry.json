@@ -10,7 +10,7 @@
       "gateway": "models.dev"
     },
     "moonshotai-cn": {
-      "url": "https://api.moonshot.cn/v1",
+      "url": "https://api.moonshot.cn/anthropic/v1",
       "apiKeyEnvVar": "MOONSHOT_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Moonshot AI (China)",
@@ -23,7 +23,8 @@
         "kimi-k2.5"
       ],
       "docUrl": "https://platform.moonshot.cn/docs/api/chat",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "firmware": {
       "url": "https://app.firmware.ai/api/v1",
@@ -77,7 +78,7 @@
       "gateway": "models.dev"
     },
     "moonshotai": {
-      "url": "https://api.moonshot.ai/v1",
+      "url": "https://api.moonshot.ai/anthropic/v1",
       "apiKeyEnvVar": "MOONSHOT_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Moonshot AI",
@@ -90,7 +91,8 @@
         "kimi-k2.5"
       ],
       "docUrl": "https://platform.moonshot.ai/docs/api/chat",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "302ai": {
       "url": "https://api.302.ai/v1",
@@ -214,6 +216,7 @@
         "ministral-3:8b",
         "mistral-large-3:675b",
         "nemotron-3-nano:30b",
+        "qwen3-coder-next",
         "qwen3-coder:480b",
         "qwen3-next:80b",
         "qwen3-vl:235b",
@@ -1867,6 +1870,7 @@
         "anthropic/claude-opus-4",
         "anthropic/claude-opus-4.1",
         "anthropic/claude-opus-4.5",
+        "anthropic/claude-opus-4.6",
         "anthropic/claude-sonnet-4",
         "anthropic/claude-sonnet-4.5",
         "arcee-ai/trinity-large-preview:free",
@@ -1981,6 +1985,7 @@
         "openai/gpt-oss-20b:free",
         "openai/gpt-oss-safeguard-20b",
         "openai/o4-mini",
+        "openrouter/pony-alpha",
         "openrouter/sherlock-dash-alpha",
         "openrouter/sherlock-think-alpha",
         "qwen/qwen-2.5-coder-32b-instruct",
@@ -2025,6 +2030,7 @@
         "x-ai/grok-4-fast",
         "x-ai/grok-4.1-fast",
         "x-ai/grok-code-fast-1",
+        "xiaomi/mimo-v2-flash",
         "z-ai/glm-4.5",
         "z-ai/glm-4.5-air",
         "z-ai/glm-4.5-air:free",
@@ -2051,6 +2057,7 @@
         "anthropic/claude-opus-4",
         "anthropic/claude-opus-4.1",
         "anthropic/claude-opus-4.5",
+        "anthropic/claude-opus-4.6",
         "anthropic/claude-sonnet-4",
         "anthropic/claude-sonnet-4.5",
         "baidu/ernie-5.0-thinking-preview",
@@ -2211,6 +2218,7 @@
         "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
         "moonshotai/Kimi-K2-Instruct",
         "moonshotai/Kimi-K2-Thinking",
+        "moonshotai/Kimi-K2.5",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
         "zai-org/GLM-4.7",
@@ -2947,6 +2955,7 @@
       "ministral-3:8b",
       "mistral-large-3:675b",
       "nemotron-3-nano:30b",
+      "qwen3-coder-next",
       "qwen3-coder:480b",
       "qwen3-next:80b",
       "qwen3-vl:235b",
@@ -4283,6 +4292,7 @@
       "anthropic/claude-opus-4",
       "anthropic/claude-opus-4.1",
       "anthropic/claude-opus-4.5",
+      "anthropic/claude-opus-4.6",
       "anthropic/claude-sonnet-4",
       "anthropic/claude-sonnet-4.5",
       "arcee-ai/trinity-large-preview:free",
@@ -4397,6 +4407,7 @@
       "openai/gpt-oss-20b:free",
       "openai/gpt-oss-safeguard-20b",
       "openai/o4-mini",
+      "openrouter/pony-alpha",
       "openrouter/sherlock-dash-alpha",
       "openrouter/sherlock-think-alpha",
       "qwen/qwen-2.5-coder-32b-instruct",
@@ -4441,6 +4452,7 @@
       "x-ai/grok-4-fast",
       "x-ai/grok-4.1-fast",
       "x-ai/grok-code-fast-1",
+      "xiaomi/mimo-v2-flash",
       "z-ai/glm-4.5",
       "z-ai/glm-4.5-air",
       "z-ai/glm-4.5-air:free",
@@ -4458,6 +4470,7 @@
       "anthropic/claude-opus-4",
       "anthropic/claude-opus-4.1",
       "anthropic/claude-opus-4.5",
+      "anthropic/claude-opus-4.6",
       "anthropic/claude-sonnet-4",
       "anthropic/claude-sonnet-4.5",
       "baidu/ernie-5.0-thinking-preview",
@@ -4578,6 +4591,7 @@
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
       "moonshotai/Kimi-K2-Instruct",
       "moonshotai/Kimi-K2-Thinking",
+      "moonshotai/Kimi-K2.5",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
       "zai-org/GLM-4.7",

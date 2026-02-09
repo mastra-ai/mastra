@@ -321,17 +321,11 @@ const sidebars = {
           type: 'doc',
           id: 'server/server-adapters',
           label: 'Server Adapters',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
           id: 'server/custom-adapters',
           label: 'Custom Adapters',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',

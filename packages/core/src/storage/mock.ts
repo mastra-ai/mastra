@@ -4,6 +4,7 @@ import { InMemoryAgentsStorage } from './domains/agents/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
+import { InMemoryPromptBlocksStorage } from './domains/prompt-blocks/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
 /**
@@ -50,6 +51,7 @@ export class InMemoryStore extends MastraCompositeStore {
       scores: new ScoresInMemory({ db: this.#db }),
       observability: new ObservabilityInMemory({ db: this.#db }),
       agents: new InMemoryAgentsStorage({ db: this.#db }),
+      promptBlocks: new InMemoryPromptBlocksStorage({ db: this.#db }),
     };
   }
 

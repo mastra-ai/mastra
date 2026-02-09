@@ -865,6 +865,19 @@ export class Mastra<
       .catch(err => {
         this.#logger?.debug(`Failed to register processor workflows for agent ${agentKey}:`, err);
       });
+
+    // Register scorers from the agent to the Mastra instance
+    // This makes agent-level scorers discoverable via mastra.getScorer()/getScorerById()
+    mastraAgent
+      .listScorers()
+      .then(scorers => {
+        for (const [, entry] of Object.entries(scorers || {})) {
+          this.addScorer(entry.scorer);
+        }
+      })
+      .catch(err => {
+        this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
+      });
   }
 
   /**
