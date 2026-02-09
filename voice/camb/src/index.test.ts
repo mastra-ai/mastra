@@ -17,11 +17,7 @@ describe('CambVoice', () => {
   const outputDir = path.join(process.cwd(), 'test-outputs');
 
   beforeAll(() => {
-    try {
-      mkdirSync(outputDir, { recursive: true });
-    } catch (err) {
-      console.error(`Failed to create output directory: ${err}`);
-    }
+    mkdirSync(outputDir, { recursive: true });
   });
 
   it('should list available speakers', async () => {
@@ -69,6 +65,12 @@ describe('CambVoice', () => {
       chunks.push(Buffer.from(chunk));
     }
     const audioBuffer = Buffer.concat(chunks);
+    expect(audioBuffer.length).toBeGreaterThan(44);
+
+    // Verify WAV header
+    expect(audioBuffer.toString('ascii', 0, 4)).toBe('RIFF');
+    expect(audioBuffer.toString('ascii', 8, 12)).toBe('WAVE');
+
     await writeFile(outputPath, audioBuffer);
 
     const stats = await fsStat(outputPath);

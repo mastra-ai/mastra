@@ -34,7 +34,11 @@ export class CambVoice extends MastraVoice {
 
     this.apiKey = apiKey;
     this.model = speechModel?.name ?? DEFAULT_MODEL;
-    this.defaultVoiceId = speaker ? parseInt(speaker, 10) : DEFAULT_VOICE_ID;
+    const parsedSpeaker = speaker ? parseInt(speaker, 10) : DEFAULT_VOICE_ID;
+    if (Number.isNaN(parsedSpeaker)) {
+      throw new Error(`Invalid speaker ID "${speaker}": must be a numeric string`);
+    }
+    this.defaultVoiceId = parsedSpeaker;
     this.outputFormat = speechModel?.outputFormat ?? DEFAULT_OUTPUT_FORMAT;
   }
 
@@ -58,6 +62,9 @@ export class CambVoice extends MastraVoice {
     }
 
     const voiceId = options?.speaker ? parseInt(options.speaker, 10) : this.defaultVoiceId;
+    if (Number.isNaN(voiceId)) {
+      throw new Error(`Invalid speaker ID "${options?.speaker}": must be a numeric string`);
+    }
 
     const payload: Record<string, unknown> = {
       text,
