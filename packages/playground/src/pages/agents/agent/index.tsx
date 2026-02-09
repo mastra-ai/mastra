@@ -18,6 +18,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
+import type { StorageThreadType } from '@mastra/core/memory';
 
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 
@@ -70,6 +71,28 @@ function Agent() {
 
   const { data: allThreads } = useThreads({ agentId: agentId!, isMemoryEnabled: !!memory?.result });
 
+  useEffect(() => {
+    if (!agentId || !allThreads) return;
+
+    const existingResourceIds = new Set<string>([agentId, selectedResourceId]);
+    for (const t of allThreads as StorageThreadType[]) {
+      existingResourceIds.add(t.resourceId);
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setResourceHistory(prev => {
+      const cleaned = prev.filter(id => existingResourceIds.has(id));
+      if (cleaned.length !== prev.length) {
+        try {
+          localStorage.setItem(`mastra-agent-resource-history-${agentId}`, JSON.stringify(cleaned));
+        } catch {
+          // ignore localStorage failures
+        }
+      }
+      return cleaned.length !== prev.length ? cleaned : prev;
+    });
+  }, [agentId, allThreads, selectedResourceId]);
+
   const availableResourceIds = useMemo<string[]>(() => {
     const ids = new Set<string>();
 
@@ -86,8 +109,8 @@ function Agent() {
 
     // Best-effort discovery from all threads (when supported by server)
     if (allThreads) {
-      for (const t of allThreads as Array<{ resourceId: string }>) {
-        if (t?.resourceId && t.resourceId !== agentId) ids.add(t.resourceId);
+      for (const t of allThreads as StorageThreadType[]) {
+        if (t.resourceId !== agentId) ids.add(t.resourceId);
       }
     }
 

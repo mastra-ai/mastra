@@ -19,9 +19,20 @@ test.describe('resourceId selection', () => {
 
   test('resourceId persists in localStorage', async ({ page }) => {
     await page.goto('/agents/weatherAgent/chat/1234');
-    await page.evaluate(() => {
-      localStorage.setItem('mastra-agent-resource-weatherAgent', 'custom-resource');
-    });
+
+    // Open the ResourceIdSelector popover
+    const selectorTrigger = page.locator('[class*="Combobox"]').first();
+    await selectorTrigger.click();
+
+    // Type a custom resource value and create it
+    const input = page.locator('input[placeholder="Search or create new..."]');
+    await input.fill('custom-resource');
+    await page.keyboard.press('Enter');
+
+    // Wait for navigation after resource change
+    await page.waitForURL(/\/agents\/weatherAgent\/chat\/.*\?new=true/);
+
+    // Reload and verify localStorage persistence
     await page.reload();
     const storedValue = await page.evaluate(() => localStorage.getItem('mastra-agent-resource-weatherAgent'));
     expect(storedValue).toBe('custom-resource');

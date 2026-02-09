@@ -68,6 +68,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
 
       if (error && typeof error === 'object' && 'status' in error && (error as any).status === 403) {
         console.warn('Working memory: thread belongs to different resource, skipping');
+        setWorkingMemoryData(null);
         setIsLoading(false);
         return;
       }
