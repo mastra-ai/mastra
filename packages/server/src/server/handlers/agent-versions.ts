@@ -422,9 +422,10 @@ export async function handleAutoVersioning<TAgent>(
 
   // Build the full snapshot config for the new version:
   // Start with the previous version's config and overlay the provided changes
+  // Convert null values to undefined (null means "remove this field")
   const fullConfig: Record<string, unknown> = previousConfig ? { ...previousConfig } : {};
   for (const [key, value] of Object.entries(configFields)) {
-    fullConfig[key] = value;
+    fullConfig[key] = value === null ? undefined : value;
   }
 
   // Create version with retry logic for race conditions

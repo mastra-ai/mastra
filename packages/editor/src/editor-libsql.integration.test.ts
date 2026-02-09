@@ -4,6 +4,7 @@ import { Agent, Mastra } from '@mastra/core';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
+import { RequestContext } from '@mastra/core/request-context';
 import { MastraEditor } from './index';
 import { randomUUID } from 'crypto';
 import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -39,19 +40,25 @@ const createMockLLM = (responses: { text?: string; toolCall?: any }[] = []) => {
   let responseIndex = 0;
 
   return new MockLanguageModelV2({
-    doGenerate: async () => {
+    doGenerate: async (args: any) => {
       const response = responses[responseIndex] || { text: 'Default response' };
 
       if (responseIndex < responses.length - 1) {
         responseIndex++;
       }
 
+      // Extract system prompt from the prompt array to include in the response
+      const systemPrompt = args.prompt
+        ?.filter((m: any) => m.role === 'system')
+        .map((m: any) => m.content)
+        .join('\n');
+
       const content: any[] = [];
 
       if (response.text) {
         content.push({
           type: 'text',
-          text: response.text,
+          text: systemPrompt ? `[system: ${systemPrompt}] ${response.text}` : response.text,
         });
       }
 
@@ -1568,6 +1575,581 @@ describe('MastraEditor with LibSQL Integration', () => {
           },
         },
       });
+    });
+  });
+
+  describe('Prompt Block Instructions E2E', () => {
+    it('should create prompt blocks and use them as agent instructions', async () => {
+      // Create prompt blocks via the editor
+      const greetingBlock = await editor.createPromptBlock({
+        id: 'greeting-block',
+        name: 'Greeting Block',
+        description: 'A greeting prompt block',
+        content: 'You are a helpful assistant called {{agentName}}.',
+      });
+
+      expect(greetingBlock).toBeDefined();
+      expect(greetingBlock.id).toBe('greeting-block');
+      expect(greetingBlock.name).toBe('Greeting Block');
+      expect(greetingBlock.content).toBe('You are a helpful assistant called {{agentName}}.');
+
+      const behaviorBlock = await editor.createPromptBlock({
+        id: 'behavior-block',
+        name: 'Behavior Block',
+        description: 'A behavior prompt block',
+        content: 'Always be polite and concise in your responses.',
+      });
+
+      expect(behaviorBlock).toBeDefined();
+      expect(behaviorBlock.id).toBe('behavior-block');
+
+      // Publish both blocks
+      await editor.updatePromptBlock({ id: 'greeting-block', status: 'published' });
+      await editor.updatePromptBlock({ id: 'behavior-block', status: 'published' });
+
+      // Create a stored agent that uses prompt block instructions
+      const agentsStore = await storage.getStore('agents');
+      const created = await agentsStore?.createAgent({
+        agent: {
+          id: 'prompt-block-agent',
+          name: 'Prompt Block Agent',
+          instructions: [
+            { type: 'prompt_block_ref', id: 'greeting-block' },
+            { type: 'text', content: 'The user is called {{userName}}.' },
+            { type: 'prompt_block_ref', id: 'behavior-block' },
+          ],
+          model: { provider: 'mock', name: 'mock-model' },
+        },
+      });
+
+      if (created && 'versionId' in created) {
+        await agentsStore?.updateAgent({
+          id: 'prompt-block-agent',
+          activeVersionId: created.versionId as string,
+        });
+      }
+
+      // Clear the agent cache so it re-resolves
+      editor.clearStoredAgentCache('prompt-block-agent');
+
+      // Retrieve the agent via editor — this triggers resolveStoredInstructions
+      const retrievedAgent = await editor.getStoredAgentById('prompt-block-agent');
+      expect(retrievedAgent).toBeInstanceOf(Agent);
+
+      // The instructions should be a function (DynamicArgument) since they contain prompt blocks
+      // Verify by calling generate with a requestContext
+      const ctx = new RequestContext([
+        ['agentName', 'TestBot'],
+        ['userName', 'Alice'],
+      ]);
+
+      const result = await retrievedAgent!.generate('Hello!', {
+        requestContext: ctx,
+      });
+
+      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
+    });
+
+    it('should resolve instructions differently based on requestContext', async () => {
+      // Create a conditional prompt block with rules
+      await editor.createPromptBlock({
+        id: 'admin-block',
+        name: 'Admin Instructions',
+        description: 'Instructions for admin users',
+        content: 'The user is an admin. You can share sensitive information.',
+        rules: {
+          operator: 'AND',
+          conditions: [{ field: 'user.role', operator: 'equals', value: 'admin' }],
+        },
+      });
+      await editor.updatePromptBlock({ id: 'admin-block', status: 'published' });
+
+      await editor.createPromptBlock({
+        id: 'guest-block',
+        name: 'Guest Instructions',
+        description: 'Instructions for guest users',
+        content: 'The user is a guest. Only share public information.',
+        rules: {
+          operator: 'AND',
+          conditions: [{ field: 'user.role', operator: 'equals', value: 'guest' }],
+        },
+      });
+      await editor.updatePromptBlock({ id: 'guest-block', status: 'published' });
+
+      await editor.createPromptBlock({
+        id: 'base-block',
+        name: 'Base Instructions',
+        description: 'Base instructions',
+        content: 'You are a helpful assistant. The user is {{user.name}}.',
+      });
+      await editor.updatePromptBlock({ id: 'base-block', status: 'published' });
+
+      // Preview instructions for an admin context
+      const adminInstructions = await editor.previewInstructions(
+        [
+          { type: 'prompt_block_ref', id: 'base-block' },
+          { type: 'prompt_block_ref', id: 'admin-block' },
+          { type: 'prompt_block_ref', id: 'guest-block' },
+        ],
+        { user: { role: 'admin', name: 'AdminUser' } },
+      );
+
+      expect(adminInstructions).toContain('You are a helpful assistant. The user is AdminUser.');
+      expect(adminInstructions).toContain('The user is an admin. You can share sensitive information.');
+      expect(adminInstructions).not.toContain('The user is a guest');
+
+      // Preview instructions for a guest context
+      const guestInstructions = await editor.previewInstructions(
+        [
+          { type: 'prompt_block_ref', id: 'base-block' },
+          { type: 'prompt_block_ref', id: 'admin-block' },
+          { type: 'prompt_block_ref', id: 'guest-block' },
+        ],
+        { user: { role: 'guest', name: 'GuestUser' } },
+      );
+
+      expect(guestInstructions).toContain('You are a helpful assistant. The user is GuestUser.');
+      expect(guestInstructions).not.toContain('The user is an admin');
+      expect(guestInstructions).toContain('The user is a guest. Only share public information.');
+    });
+
+    it('should execute agent.generate() with dynamic instructions from prompt blocks', async () => {
+      // Create prompt blocks
+      await editor.createPromptBlock({
+        id: 'system-block',
+        name: 'System Block',
+        content: 'You are {{assistant.name}}, a {{assistant.specialty}} assistant.',
+      });
+      await editor.updatePromptBlock({ id: 'system-block', status: 'published' });
+
+      await editor.createPromptBlock({
+        id: 'auth-block',
+        name: 'Authenticated User Block',
+        content: 'The authenticated user is {{user.name}} ({{user.email}}).',
+        rules: {
+          operator: 'AND',
+          conditions: [{ field: 'user.isAuthenticated', operator: 'equals', value: true }],
+        },
+      });
+      await editor.updatePromptBlock({ id: 'auth-block', status: 'published' });
+
+      // Create stored agent with prompt block instructions
+      const agentsStore = await storage.getStore('agents');
+      const created = await agentsStore?.createAgent({
+        agent: {
+          id: 'dynamic-agent',
+          name: 'Dynamic Agent',
+          instructions: [
+            { type: 'prompt_block_ref', id: 'system-block' },
+            { type: 'prompt_block_ref', id: 'auth-block' },
+            { type: 'text', content: 'Always respond in {{language || "English"}}.' },
+          ],
+          model: { provider: 'mock', name: 'mock-model' },
+        },
+      });
+
+      if (created && 'versionId' in created) {
+        await agentsStore?.updateAgent({
+          id: 'dynamic-agent',
+          activeVersionId: created.versionId as string,
+        });
+      }
+
+      editor.clearStoredAgentCache('dynamic-agent');
+
+      // Generate with authenticated user context
+      const agent = await editor.getStoredAgentById('dynamic-agent');
+      expect(agent).toBeInstanceOf(Agent);
+
+      const authCtx = new RequestContext([
+        ['assistant', { name: 'WeatherBot', specialty: 'weather' }],
+        ['user', { isAuthenticated: true, name: 'John', email: 'john@example.com' }],
+        ['language', 'French'],
+      ]);
+
+      const authResult = await agent!.generate('What is the weather?', {
+        requestContext: authCtx,
+      });
+
+      // Verify the resolved system prompt includes all matching blocks with interpolated variables
+      expect(authResult.text).toContain('You are WeatherBot, a weather assistant.');
+      expect(authResult.text).toContain('The authenticated user is John (john@example.com).');
+      expect(authResult.text).toContain('Always respond in French.');
+
+      // Generate with unauthenticated user context — auth block should be excluded
+      editor.clearStoredAgentCache('dynamic-agent');
+      const agent2 = await editor.getStoredAgentById('dynamic-agent');
+
+      const unauthCtx = new RequestContext([
+        ['assistant', { name: 'WeatherBot', specialty: 'weather' }],
+        ['user', { isAuthenticated: false, name: 'Anonymous' }],
+      ]);
+
+      const unauthResult = await agent2!.generate('What is the weather?', {
+        requestContext: unauthCtx,
+      });
+
+      // Verify auth block is excluded and language falls back to default
+      expect(unauthResult.text).toContain('You are WeatherBot, a weather assistant.');
+      expect(unauthResult.text).not.toContain('The authenticated user is');
+      expect(unauthResult.text).toContain('Always respond in English.');
+    });
+
+    it('should handle backward compatible string instructions alongside prompt blocks', async () => {
+      const agentsStore = await storage.getStore('agents');
+
+      // Agent with plain string instructions — backward compatible
+      const created = await agentsStore?.createAgent({
+        agent: {
+          id: 'string-instructions-agent',
+          name: 'String Instructions Agent',
+          instructions: 'You are a simple assistant with string instructions.',
+          model: { provider: 'mock', name: 'mock-model' },
+        },
+      });
+
+      if (created && 'versionId' in created) {
+        await agentsStore?.updateAgent({
+          id: 'string-instructions-agent',
+          activeVersionId: created.versionId as string,
+        });
+      }
+
+      const retrievedAgent = await editor.getStoredAgentById('string-instructions-agent');
+      expect(retrievedAgent).toBeInstanceOf(Agent);
+
+      const result = await retrievedAgent!.generate('Hello!');
+      expect(result).toBeDefined();
+      expect(result.text).toContain('You are a simple assistant with string instructions.');
+    });
+
+    it('should handle mixed text and prompt_block instructions with variable interpolation', async () => {
+      await editor.createPromptBlock({
+        id: 'persona-block',
+        name: 'Persona',
+        content: 'You are {{persona.name}}, who works as a {{persona.job}}.',
+      });
+      await editor.updatePromptBlock({ id: 'persona-block', status: 'published' });
+
+      // Preview with context
+      const result = await editor.previewInstructions(
+        [
+          { type: 'prompt_block_ref', id: 'persona-block' },
+          { type: 'text', content: 'Help the user with their {{topic || "general"}} questions.' },
+          { type: 'text', content: 'Be {{tone || "friendly"}} in your responses.' },
+        ],
+        {
+          persona: { name: 'Dr. Smith', job: 'data scientist' },
+          topic: 'machine learning',
+        },
+      );
+
+      expect(result).toContain('You are Dr. Smith, who works as a data scientist.');
+      expect(result).toContain('Help the user with their machine learning questions.');
+      expect(result).toContain('Be friendly in your responses.'); // fallback used
+    });
+
+    it('should skip unpublished prompt blocks', async () => {
+      // Create a draft block (default status)
+      await editor.createPromptBlock({
+        id: 'draft-block',
+        name: 'Draft Block',
+        content: 'This is a draft block that should not appear.',
+      });
+      // Do NOT publish it
+
+      await editor.createPromptBlock({
+        id: 'published-block',
+        name: 'Published Block',
+        content: 'This is a published block.',
+      });
+      await editor.updatePromptBlock({ id: 'published-block', status: 'published' });
+
+      const result = await editor.previewInstructions(
+        [
+          { type: 'prompt_block_ref', id: 'draft-block' },
+          { type: 'prompt_block_ref', id: 'published-block' },
+        ],
+        {},
+      );
+
+      expect(result).not.toContain('draft block');
+      expect(result).toContain('This is a published block.');
+    });
+
+    it('should skip prompt blocks whose rules do not match', async () => {
+      await editor.createPromptBlock({
+        id: 'premium-block',
+        name: 'Premium Features',
+        content: 'You can access premium features like advanced analytics.',
+        rules: {
+          operator: 'AND',
+          conditions: [{ field: 'subscription', operator: 'equals', value: 'premium' }],
+        },
+      });
+      await editor.updatePromptBlock({ id: 'premium-block', status: 'published' });
+
+      await editor.createPromptBlock({
+        id: 'free-block',
+        name: 'Free Features',
+        content: 'You can only access basic features.',
+        rules: {
+          operator: 'AND',
+          conditions: [{ field: 'subscription', operator: 'equals', value: 'free' }],
+        },
+      });
+      await editor.updatePromptBlock({ id: 'free-block', status: 'published' });
+
+      // Premium user
+      const premiumResult = await editor.previewInstructions(
+        [
+          { type: 'prompt_block_ref', id: 'premium-block' },
+          { type: 'prompt_block_ref', id: 'free-block' },
+        ],
+        { subscription: 'premium' },
+      );
+
+      expect(premiumResult).toContain('advanced analytics');
+      expect(premiumResult).not.toContain('basic features');
+
+      // Free user
+      const freeResult = await editor.previewInstructions(
+        [
+          { type: 'prompt_block_ref', id: 'premium-block' },
+          { type: 'prompt_block_ref', id: 'free-block' },
+        ],
+        { subscription: 'free' },
+      );
+
+      expect(freeResult).not.toContain('advanced analytics');
+      expect(freeResult).toContain('basic features');
+    });
+
+    it('should handle OR rules correctly', async () => {
+      await editor.createPromptBlock({
+        id: 'staff-block',
+        name: 'Staff Block',
+        content: 'You can manage internal resources.',
+        rules: {
+          operator: 'OR',
+          conditions: [
+            { field: 'role', operator: 'equals', value: 'admin' },
+            { field: 'role', operator: 'equals', value: 'moderator' },
+          ],
+        },
+      });
+      await editor.updatePromptBlock({ id: 'staff-block', status: 'published' });
+
+      // Admin gets it
+      const adminResult = await editor.previewInstructions([{ type: 'prompt_block_ref', id: 'staff-block' }], {
+        role: 'admin',
+      });
+      expect(adminResult).toContain('manage internal resources');
+
+      // Moderator gets it
+      const modResult = await editor.previewInstructions([{ type: 'prompt_block_ref', id: 'staff-block' }], {
+        role: 'moderator',
+      });
+      expect(modResult).toContain('manage internal resources');
+
+      // Regular user does not get it
+      const userResult = await editor.previewInstructions([{ type: 'prompt_block_ref', id: 'staff-block' }], {
+        role: 'user',
+      });
+      expect(userResult).not.toContain('manage internal resources');
+    });
+
+    it('should handle prompt block versioning', async () => {
+      // Create initial version
+      const block = await editor.createPromptBlock({
+        id: 'versioned-block',
+        name: 'Versioned Block',
+        content: 'Version 1 content',
+      });
+      await editor.updatePromptBlock({ id: 'versioned-block', status: 'published' });
+
+      // Verify initial content
+      const v1 = await editor.previewInstructions([{ type: 'prompt_block_ref', id: 'versioned-block' }], {});
+      expect(v1).toBe('Version 1 content');
+
+      // Update content (creates a new version)
+      await editor.updatePromptBlock({
+        id: 'versioned-block',
+        content: 'Version 2 content',
+      });
+
+      // Verify updated content
+      const v2 = await editor.previewInstructions([{ type: 'prompt_block_ref', id: 'versioned-block' }], {});
+      expect(v2).toBe('Version 2 content');
+    });
+
+    it('should gracefully handle missing prompt blocks', async () => {
+      // Reference a non-existent block — should be skipped
+      const result = await editor.previewInstructions(
+        [
+          { type: 'text', content: 'Always be helpful.' },
+          { type: 'prompt_block_ref', id: 'non-existent-block' },
+        ],
+        {},
+      );
+
+      expect(result).toBe('Always be helpful.');
+    });
+
+    it('should reflect prompt block updates in subsequent agent.generate() calls', async () => {
+      // Create a prompt block with initial content
+      await editor.createPromptBlock({
+        id: 'updatable-block',
+        name: 'Updatable Block',
+        content: 'You specialize in {{topic || "general knowledge"}}.',
+      });
+      await editor.updatePromptBlock({ id: 'updatable-block', status: 'published' });
+
+      // Create an agent that references this block
+      const agentsStore = await storage.getStore('agents');
+      const created = await agentsStore?.createAgent({
+        agent: {
+          id: 'updatable-agent',
+          name: 'Updatable Agent',
+          instructions: [
+            { type: 'prompt_block_ref', id: 'updatable-block' },
+            { type: 'text', content: 'Be concise.' },
+          ],
+          model: { provider: 'mock', name: 'mock-model' },
+        },
+      });
+
+      if (created && 'versionId' in created) {
+        await agentsStore?.updateAgent({
+          id: 'updatable-agent',
+          activeVersionId: created.versionId as string,
+        });
+      }
+
+      // Get the agent once — we'll reuse the same instance to prove
+      // prompt block content is resolved at runtime, not at agent creation time
+      const agent = await editor.getStoredAgentById('updatable-agent');
+      const ctx = new RequestContext([['topic', 'astronomy']]);
+
+      // First generate — should reflect v1 content
+      const result1 = await agent!.generate('Tell me something.', { requestContext: ctx });
+      expect(result1.text).toContain('You specialize in astronomy.');
+      expect(result1.text).toContain('Be concise.');
+
+      // Update the prompt block content — no cache clearing needed
+      await editor.updatePromptBlock({
+        id: 'updatable-block',
+        content: 'You are an expert in {{topic || "general knowledge"}}. Always cite sources.',
+      });
+
+      // Second generate with the SAME agent instance — should reflect v2 content
+      // because prompt blocks are resolved from storage at runtime
+      const result2 = await agent!.generate('Tell me something.', { requestContext: ctx });
+      expect(result2.text).toContain('You are an expert in astronomy. Always cite sources.');
+      expect(result2.text).toContain('Be concise.');
+      // Verify old content is gone
+      expect(result2.text).not.toContain('You specialize in');
+    });
+
+    it('should silently skip a deleted prompt block during agent.generate()', async () => {
+      // Create two prompt blocks
+      await editor.createPromptBlock({
+        id: 'keep-block',
+        name: 'Keep Block',
+        content: 'You are a helpful assistant.',
+      });
+      await editor.updatePromptBlock({ id: 'keep-block', status: 'published' });
+
+      await editor.createPromptBlock({
+        id: 'delete-me-block',
+        name: 'Delete Me Block',
+        content: 'You also handle scheduling tasks.',
+      });
+      await editor.updatePromptBlock({ id: 'delete-me-block', status: 'published' });
+
+      // Create an agent referencing both blocks
+      const agentsStore = await storage.getStore('agents');
+      const created = await agentsStore?.createAgent({
+        agent: {
+          id: 'deletion-test-agent',
+          name: 'Deletion Test Agent',
+          instructions: [
+            { type: 'prompt_block_ref', id: 'keep-block' },
+            { type: 'prompt_block_ref', id: 'delete-me-block' },
+          ],
+          model: { provider: 'mock', name: 'mock-model' },
+        },
+      });
+
+      if (created && 'versionId' in created) {
+        await agentsStore?.updateAgent({
+          id: 'deletion-test-agent',
+          activeVersionId: created.versionId as string,
+        });
+      }
+
+      // Get the agent once — we'll reuse the same instance
+      const agent = await editor.getStoredAgentById('deletion-test-agent');
+
+      // First generate — both blocks should be present
+      const result1 = await agent!.generate('Hello');
+      expect(result1.text).toContain('You are a helpful assistant.');
+      expect(result1.text).toContain('You also handle scheduling tasks.');
+
+      // Delete one of the blocks — no cache clearing needed
+      await editor.deletePromptBlock('delete-me-block');
+
+      // Second generate with the SAME agent instance — deleted block should be silently skipped
+      // because prompt blocks are resolved from storage at runtime
+      const result2 = await agent!.generate('Hello');
+      expect(result2.text).toContain('You are a helpful assistant.');
+      expect(result2.text).not.toContain('scheduling tasks');
+    });
+
+    it('should handle prompt block CRUD lifecycle', async () => {
+      // Create
+      const block = await editor.createPromptBlock({
+        id: 'lifecycle-block',
+        name: 'Lifecycle Block',
+        content: 'Initial content',
+        authorId: 'author-1',
+        metadata: { category: 'test' },
+      });
+      expect(block.id).toBe('lifecycle-block');
+      expect(block.authorId).toBe('author-1');
+
+      // Read
+      const retrieved = await editor.getPromptBlock('lifecycle-block');
+      expect(retrieved).toBeDefined();
+      expect(retrieved!.name).toBe('Lifecycle Block');
+      expect(retrieved!.content).toBe('Initial content');
+
+      // Update
+      const updated = await editor.updatePromptBlock({
+        id: 'lifecycle-block',
+        content: 'Updated content',
+        name: 'Updated Block',
+      });
+      expect(updated.content).toBe('Updated content');
+      expect(updated.name).toBe('Updated Block');
+
+      // List
+      const list = await editor.listPromptBlocks();
+      expect(list.promptBlocks.length).toBeGreaterThanOrEqual(1);
+      expect(list.promptBlocks.some(b => b.id === 'lifecycle-block')).toBe(true);
+
+      // List resolved
+      const listResolved = await editor.listPromptBlocksResolved();
+      expect(listResolved.promptBlocks.length).toBeGreaterThanOrEqual(1);
+      const resolvedBlock = listResolved.promptBlocks.find(b => b.id === 'lifecycle-block');
+      expect(resolvedBlock).toBeDefined();
+      expect(resolvedBlock!.content).toBe('Updated content');
+
+      // Delete
+      await editor.deletePromptBlock('lifecycle-block');
+      const deleted = await editor.getPromptBlock('lifecycle-block');
+      expect(deleted).toBeNull();
     });
   });
 });

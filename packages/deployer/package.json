@@ -121,8 +121,8 @@
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.9",
-    "@hono/standard-validator": "^0.2.1",
-    "@hono/swagger-ui": "^0.5.2",
+    "@hono/standard-validator": "^0.2.2",
+    "@hono/swagger-ui": "^0.5.3",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
