@@ -137,11 +137,17 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         try {
           toolCallInput = JSON.parse(value.input);
         } catch (error) {
-          console.error('Error converting tool call input to JSON', {
-            error,
-            input: value.input,
-          });
-          toolCallInput = undefined;
+          const repaired = tryRepairJson(value.input);
+          if (repaired) {
+            console.warn('[JSON Repair] Fixed malformed JSON for tool:', value.toolName);
+            toolCallInput = repaired;
+          } else {
+            console.error('Error converting tool call input to JSON', {
+              error,
+              input: value.input,
+            });
+            toolCallInput = undefined;
+          }
         }
       }
 
@@ -567,4 +573,30 @@ function normalizeFinishReason(
 
   // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
   return finishReason === 'unknown' ? 'other' : finishReason;
+}
+
+/**
+ * Attempts to repair common JSON errors produced by LLM providers (e.g., Kimi/K2).
+ *
+ * Handles these common malformations:
+ * - Single quotes instead of double quotes: {'key':'val'} -> {"key":"val"}
+ * - Missing opening quote before property name: {"a":"b",c":"d"} -> {"a":"b","c":"d"}
+ * - Fully unquoted property names: {command:"ls"} -> {"command":"ls"}
+ * - Trailing commas: {"a":1,} -> {"a":1}
+ *
+ * Returns the parsed object on success, or null if repair fails.
+ */
+export function tryRepairJson(input: string): Record<string, any> | null {
+  let repaired = input.trim();
+
+  repaired = repaired.replace(/'/g, '"');
+  repaired = repaired.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)"\s*:/g, '$1"$2":');
+  repaired = repaired.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+
+  try {
+    return JSON.parse(repaired);
+  } catch {
+    return null;
+  }
 }
