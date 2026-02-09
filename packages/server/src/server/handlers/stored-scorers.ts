@@ -1,5 +1,3 @@
-import slugify from '@sindresorhus/slugify';
-
 import { HTTPException } from '../http-exception';
 import {
   storedScorerIdPathParams,
@@ -13,6 +11,7 @@ import {
   deleteStoredScorerResponseSchema,
 } from '../schemas/stored-scorers';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { toSlug } from '../utils';
 
 import { handleError } from './error';
 
@@ -141,7 +140,7 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
       }
 
       // Derive ID from name if not explicitly provided
-      const id = providedId || slugify(name);
+      const id = providedId || toSlug(name);
 
       if (!id) {
         throw new HTTPException(400, {
