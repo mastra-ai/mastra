@@ -1,5 +1,5 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -26,7 +26,8 @@ describe('onIterationComplete Hook Integration', () => {
 
     // Create model that generates tool call then responds
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent',
       instructions: 'You use tools and respond',
       model: new MockLanguageModelV2({
         doGenerate: async () => {
@@ -119,6 +120,7 @@ describe('onIterationComplete Hook Integration', () => {
       tools: {
         simpleTool,
       },
+      memory: new MockMemory(),
     });
 
     const mastra = new Mastra({
@@ -126,7 +128,6 @@ describe('onIterationComplete Hook Integration', () => {
         'test-agent': agent,
       },
       storage: new InMemoryStore(),
-      memory: new MockMemory(),
     });
 
     const testAgent = mastra.getAgent('test-agent');
@@ -160,7 +161,8 @@ describe('onIterationComplete Hook Integration', () => {
     });
 
     const agent = new Agent({
-      name: 'counter-agent',
+      id: 'counter-agent',
+      name: 'Counter Agent',
       instructions: 'You keep calling the counter tool',
       model: new MockLanguageModelV2({
         doGenerate: async () => {
@@ -222,6 +224,7 @@ describe('onIterationComplete Hook Integration', () => {
       tools: {
         simpleTool,
       },
+      memory: new MockMemory(),
     });
 
     const mastra = new Mastra({
@@ -229,7 +232,6 @@ describe('onIterationComplete Hook Integration', () => {
         'counter-agent': agent,
       },
       storage: new InMemoryStore(),
-      memory: new MockMemory(),
     });
 
     const testAgent = mastra.getAgent('counter-agent');
@@ -257,7 +259,8 @@ describe('onIterationComplete Hook Integration', () => {
     let callCount = 0;
 
     const agent = new Agent({
-      name: 'feedback-agent',
+      id: 'feedback-agent',
+      name: 'Feedback Agent',
       instructions: 'You respond to feedback',
       model: new MockLanguageModelV2({
         doGenerate: async ({ prompt }) => {
@@ -265,8 +268,8 @@ describe('onIterationComplete Hook Integration', () => {
 
           // Check if feedback was added to messages
           const messages = Array.isArray(prompt) ? prompt : [prompt];
-          const feedbackMsg = messages.find((m: any) =>
-            typeof m.content === 'string' && m.content.includes('Please improve')
+          const feedbackMsg = messages.find(
+            (m: any) => typeof m.content === 'string' && m.content.includes('Please improve'),
           );
           if (feedbackMsg) {
             feedbackMessages.push((feedbackMsg as any).content);
@@ -297,8 +300,8 @@ describe('onIterationComplete Hook Integration', () => {
 
           // Check if feedback was added to messages
           const messages = Array.isArray(prompt) ? prompt : [prompt];
-          const feedbackMsg = messages.find((m: any) =>
-            typeof m.content === 'string' && m.content.includes('Please improve')
+          const feedbackMsg = messages.find(
+            (m: any) => typeof m.content === 'string' && m.content.includes('Please improve'),
           );
           if (feedbackMsg) {
             feedbackMessages.push((feedbackMsg as any).content);
@@ -341,6 +344,7 @@ describe('onIterationComplete Hook Integration', () => {
           };
         },
       }),
+      memory: new MockMemory(),
     });
 
     const mastra = new Mastra({
@@ -348,7 +352,6 @@ describe('onIterationComplete Hook Integration', () => {
         'feedback-agent': agent,
       },
       storage: new InMemoryStore(),
-      memory: new MockMemory(),
     });
 
     const testAgent = mastra.getAgent('feedback-agent');
@@ -356,7 +359,7 @@ describe('onIterationComplete Hook Integration', () => {
     let iterationCount = 0;
     await testAgent.generate('Generate response', {
       maxSteps: 3,
-      onIterationComplete: (ctx: IterationCompleteContext) => {
+      onIterationComplete: () => {
         iterationCount++;
         if (iterationCount === 1) {
           // Add feedback after first iteration
@@ -373,5 +376,63 @@ describe('onIterationComplete Hook Integration', () => {
     // Note: The feedback mechanism works but verifying it in mocks is complex
     // The main verification is that the hook runs without error
     expect(iterationCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should accept onIterationComplete configuration without errors', async () => {
+    const hookMock = vi.fn(() => ({ continue: true }));
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test agent',
+      instructions: 'Test agent',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Response',
+          content: [{ type: 'text', text: 'Response' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Response' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      }),
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: {
+        'test-agent': agent,
+      },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('test-agent');
+
+    // This should not throw an error
+    const result = await testAgent.generate('Test', {
+      maxSteps: 1,
+      onIterationComplete: hookMock,
+    });
+
+    expect(result).toBeDefined();
+    expect(result.text).toBe('Response');
+
+    // Hook should be called after the iteration
+    expect(hookMock).toHaveBeenCalled();
   });
 });

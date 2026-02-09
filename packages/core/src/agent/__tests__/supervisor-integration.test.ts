@@ -6,7 +6,7 @@ import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
-import type { DelegationCompleteContext, DelegationStartContext, IterationCompleteContext } from '../agent.types';
+import type { DelegationCompleteContext, IterationCompleteContext } from '../agent.types';
 
 /**
  * Integration tests for the supervisor pattern with delegation hooks.
@@ -216,6 +216,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         tools: {
           simpleTool,
         },
+        memory: new MockMemory(),
       });
 
       const mastra = new Mastra({
@@ -223,7 +224,6 @@ describe('Supervisor Pattern Integration Tests', () => {
           'test-agent': agent,
         },
         storage: new InMemoryStore(),
-        memory: new MockMemory(),
       });
 
       const testAgent = mastra.getAgent('test-agent');
@@ -258,7 +258,8 @@ describe('Supervisor Pattern Integration Tests', () => {
       });
 
       const agent = new Agent({
-        name: 'agent-with-bail',
+        id: 'agent-with-bail',
+        name: 'Agent with Bail',
         instructions: 'You use critical tools',
         model: new MockLanguageModelV2({
           doGenerate: async () => ({
@@ -313,6 +314,7 @@ describe('Supervisor Pattern Integration Tests', () => {
         tools: {
           criticalTool,
         },
+        memory: new MockMemory(),
       });
 
       const mastra = new Mastra({
@@ -320,7 +322,6 @@ describe('Supervisor Pattern Integration Tests', () => {
           'agent-with-bail': agent,
         },
         storage: new InMemoryStore(),
-        memory: new MockMemory(),
       });
 
       const testAgent = mastra.getAgent('agent-with-bail');
@@ -351,10 +352,10 @@ describe('Supervisor Pattern Integration Tests', () => {
     it('should accept all delegation hook options', async () => {
       const delegationConfig = {
         bailStrategy: 'first' as const,
-        onDelegationStart: vi.fn((ctx: DelegationStartContext) => {
+        onDelegationStart: vi.fn(() => {
           return { proceed: true };
         }),
-        onDelegationComplete: vi.fn((ctx: DelegationCompleteContext) => {
+        onDelegationComplete: vi.fn(() => {
           return undefined;
         }),
         contextFilter: {
@@ -365,7 +366,8 @@ describe('Supervisor Pattern Integration Tests', () => {
       };
 
       const agent = new Agent({
-        name: 'configured-agent',
+        id: 'configured-agent',
+        name: 'Configured Agent',
         instructions: 'Test agent',
         model: new MockLanguageModelV2({
           doGenerate: async () => ({
@@ -393,6 +395,7 @@ describe('Supervisor Pattern Integration Tests', () => {
             ]),
           }),
         }),
+        memory: new MockMemory(),
       });
 
       const mastra = new Mastra({
@@ -400,7 +403,6 @@ describe('Supervisor Pattern Integration Tests', () => {
           'configured-agent': agent,
         },
         storage: new InMemoryStore(),
-        memory: new MockMemory(),
       });
 
       const testAgent = mastra.getAgent('configured-agent');
@@ -417,12 +419,13 @@ describe('Supervisor Pattern Integration Tests', () => {
     });
 
     it('should accept iteration complete hook configuration', async () => {
-      const iterationHook = vi.fn((ctx: IterationCompleteContext) => {
+      const iterationHook = vi.fn(() => {
         return { continue: true };
       });
 
       const agent = new Agent({
-        name: 'iteration-agent',
+        id: 'iteration-agent',
+        name: 'Iteration Agent',
         instructions: 'Test agent',
         model: new MockLanguageModelV2({
           doGenerate: async () => ({
@@ -450,6 +453,7 @@ describe('Supervisor Pattern Integration Tests', () => {
             ]),
           }),
         }),
+        memory: new MockMemory(),
       });
 
       const mastra = new Mastra({
@@ -457,7 +461,6 @@ describe('Supervisor Pattern Integration Tests', () => {
           'iteration-agent': agent,
         },
         storage: new InMemoryStore(),
-        memory: new MockMemory(),
       });
 
       const testAgent = mastra.getAgent('iteration-agent');
@@ -467,9 +470,20 @@ describe('Supervisor Pattern Integration Tests', () => {
         onIterationComplete: iterationHook,
       });
 
-      // Hook may be called depending on execution flow
-      // This test primarily verifies the configuration is accepted without errors
-      expect(iterationHook).toHaveBeenCalledTimes(0); // No iterations needed for simple response
+      // Hook should be called once for the iteration that completed with 'stop'
+      expect(iterationHook).toHaveBeenCalledTimes(1);
+      const hookCall = iterationHook.mock.calls[0][0];
+      expect(hookCall).toMatchObject({
+        iteration: 1,
+        text: 'Response',
+        isFinal: true,
+        finishReason: 'stop',
+        agentId: 'iteration-agent',
+        toolCalls: [],
+        toolResults: [],
+      });
+      expect(hookCall.messages).toBeDefined();
+      expect(hookCall.messages.length).toBe(2); // user message + assistant response
     });
   });
 });
