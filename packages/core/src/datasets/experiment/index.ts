@@ -45,6 +45,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     maxConcurrency = 5,
     signal,
     itemTimeout,
+    maxRetries = 0,
     runId: providedRunId,
   } = config;
 
@@ -110,14 +111,19 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // 6. Execute items with p-map
   let succeededCount = 0;
   let failedCount = 0;
-  const results: ItemWithScores[] = [];
+  // Pre-allocate for deterministic ordering (results[i] matches items[i])
+  const results: ItemWithScores[] = new Array(items.length);
+
+  // Throttled progress updates
+  const PROGRESS_UPDATE_INTERVAL = 2000;
+  let lastProgressUpdate = 0;
 
   try {
     const pMap = (await import('p-map')).default;
 
     await pMap(
-      items,
-      async item => {
+      items.map((item, idx) => ({ item, idx })),
+      async ({ item, idx }) => {
         // Check for cancellation
         if (signal?.aborted) {
           throw new DOMException('Aborted', 'AbortError');
@@ -133,8 +139,26 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           itemSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
         }
 
-        // Execute target
-        const execResult = await executeTarget(target, targetType, item, { signal: itemSignal });
+        // Retry loop
+        let retryCount = 0;
+        let execResult = await executeTarget(target, targetType, item, { signal: itemSignal });
+
+        while (execResult.error && retryCount < maxRetries) {
+          // Don't retry abort errors
+          if (execResult.error.toLowerCase().includes('abort')) break;
+
+          retryCount++;
+          const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
+          const jitter = delay * 0.2 * Math.random();
+          await new Promise(r => setTimeout(r, delay + jitter));
+
+          // Re-check cancellation before retry
+          if (signal?.aborted) {
+            throw new DOMException('Aborted', 'AbortError');
+          }
+
+          execResult = await executeTarget(target, targetType, item, { signal: itemSignal });
+        }
 
         const latency = performance.now() - perfStart;
         const itemCompletedAt = new Date();
@@ -157,7 +181,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           error: execResult.error,
           startedAt: itemStartedAt,
           completedAt: itemCompletedAt,
-          retryCount: 0,
+          retryCount,
         };
 
         // Run scorers (inline, after target completes)
@@ -187,25 +211,42 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               error: execResult.error,
               startedAt: itemStartedAt,
               completedAt: itemCompletedAt,
-              retryCount: 0,
+              retryCount,
               traceId: execResult.traceId,
               scores: itemScores,
             });
           } catch (persistError) {
             console.warn(`Failed to persist result for item ${item.id}:`, persistError);
           }
+
+          // Throttled progress update
+          const now = Date.now();
+          if (now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL) {
+            lastProgressUpdate = now;
+            try {
+              await runsStore.updateRun({
+                id: runId,
+                succeededCount,
+                failedCount,
+              });
+            } catch {
+              // Non-fatal — progress updates are best-effort
+            }
+          }
         }
 
-        results.push({
+        // Store at original index for deterministic ordering
+        results[idx] = {
           ...itemResult,
           scores: itemScores,
-        });
+        };
       },
       { concurrency: maxConcurrency },
     );
   } catch {
     // Handle abort or other fatal errors — return partial summary instead of throwing
     const completedAt = new Date();
+    const skippedCount = items.length - succeededCount - failedCount;
 
     if (runsStore) {
       await runsStore.updateRun({
@@ -223,15 +264,18 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       totalItems: items.length,
       succeededCount,
       failedCount,
+      skippedCount,
+      completedWithErrors: false,
       startedAt,
       completedAt,
-      results,
+      results: results.filter(Boolean),
     };
   }
 
   // 7. Finalize run record
   const completedAt = new Date();
   const status = failedCount === items.length ? 'failed' : 'completed';
+  const completedWithErrors = status === 'completed' && failedCount > 0;
 
   if (runsStore) {
     await runsStore.updateRun({
@@ -249,6 +293,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     totalItems: items.length,
     succeededCount,
     failedCount,
+    skippedCount: 0,
+    completedWithErrors,
     startedAt,
     completedAt,
     results,

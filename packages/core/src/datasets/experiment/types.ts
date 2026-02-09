@@ -21,6 +21,8 @@ export interface ExperimentConfig {
   signal?: AbortSignal;
   /** Per-item execution timeout in milliseconds. Default: no timeout. */
   itemTimeout?: number;
+  /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */
+  maxRetries?: number;
   /** Pre-created experiment ID (for async trigger - skips run creation) */
   runId?: string;
 }
@@ -89,6 +91,10 @@ export interface ExperimentSummary {
   succeededCount: number;
   /** Number of items that failed */
   failedCount: number;
+  /** Number of items skipped (e.g. due to abort) */
+  skippedCount: number;
+  /** True if run completed but some items failed */
+  completedWithErrors: boolean;
   /** When the experiment started */
   startedAt: Date;
   /** When the experiment completed */

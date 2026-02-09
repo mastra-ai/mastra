@@ -48,44 +48,49 @@ export async function runScorersForItem(
 ): Promise<ScorerResult[]> {
   if (scorers.length === 0) return [];
 
-  const results: ScorerResult[] = [];
+  const settled = await Promise.allSettled(
+    scorers.map(async scorer => {
+      const result = await runScorerSafe(scorer, item, output, scorerInput, scorerOutput);
 
-  for (const scorer of scorers) {
-    const result = await runScorerSafe(scorer, item, output, scorerInput, scorerOutput);
-    results.push(result);
-
-    // Persist score if storage available and score was computed
-    if (storage && result.score !== null) {
-      try {
-        await validateAndSaveScore(storage, {
-          scorerId: scorer.id,
-          score: result.score,
-          reason: result.reason ?? undefined,
-          input: item.input,
-          output,
-          additionalContext: item.context,
-          entityType: targetType.toUpperCase(),
-          entityId: targetId,
-          source: 'TEST',
-          runId,
-          scorer: {
-            id: scorer.id,
-            name: scorer.name,
-            description: scorer.description ?? '',
-          },
-          entity: {
-            id: targetId,
-            name: targetId,
-          },
-        });
-      } catch (saveError) {
-        // Log but don't fail - score persistence is best-effort
-        console.warn(`Failed to save score for scorer ${scorer.id}:`, saveError);
+      // Persist score if storage available and score was computed
+      if (storage && result.score !== null) {
+        try {
+          await validateAndSaveScore(storage, {
+            scorerId: scorer.id,
+            score: result.score,
+            reason: result.reason ?? undefined,
+            input: item.input,
+            output,
+            additionalContext: item.context,
+            entityType: targetType.toUpperCase(),
+            entityId: targetId,
+            source: 'TEST',
+            runId,
+            scorer: {
+              id: scorer.id,
+              name: scorer.name,
+              description: scorer.description ?? '',
+            },
+            entity: {
+              id: targetId,
+              name: targetId,
+            },
+          });
+        } catch (saveError) {
+          // Log but don't fail - score persistence is best-effort
+          console.warn(`Failed to save score for scorer ${scorer.id}:`, saveError);
+        }
       }
-    }
-  }
 
-  return results;
+      return result;
+    }),
+  );
+
+  return settled.map((s, i) =>
+    s.status === 'fulfilled'
+      ? s.value
+      : { scorerId: scorers[i]!.id, scorerName: scorers[i]!.name, score: null, reason: null, error: String(s.reason) },
+  );
 }
 
 /**
