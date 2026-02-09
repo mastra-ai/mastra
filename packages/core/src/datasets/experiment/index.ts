@@ -2,10 +2,10 @@ import type { Mastra } from '../../mastra';
 import { executeTarget } from './executor';
 import type { Target } from './executor';
 import { resolveScorers, runScorersForItem } from './scorer';
-import type { RunConfig, RunSummary, ItemWithScores, ItemResult } from './types';
+import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
 // Re-export types and helpers
-export type { RunConfig, RunSummary, ItemWithScores, ItemResult, ScorerResult } from './types';
+export type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult, ScorerResult } from './types';
 export { executeTarget, type Target, type ExecutionResult } from './executor';
 export { resolveScorers, runScorersForItem } from './scorer';
 
@@ -13,19 +13,19 @@ export { resolveScorers, runScorersForItem } from './scorer';
 export * from './analytics';
 
 /**
- * Run a dataset against a target with optional scoring.
+ * Run a dataset experiment against a target with optional scoring.
  *
  * Executes all items in the dataset concurrently (up to maxConcurrency) against
  * the specified target (agent or workflow). Optionally applies scorers to each
  * result and persists both results and scores to storage.
  *
  * @param mastra - Mastra instance for storage and target resolution
- * @param config - Run configuration
- * @returns RunSummary with results and scores
+ * @param config - Experiment configuration
+ * @returns ExperimentSummary with results and scores
  *
  * @example
  * ```typescript
- * const summary = await runDataset(mastra, {
+ * const summary = await runExperiment(mastra, {
  *   datasetId: 'my-dataset',
  *   targetType: 'agent',
  *   targetId: 'my-agent',
@@ -35,7 +35,7 @@ export * from './analytics';
  * console.log(`${summary.succeededCount}/${summary.totalItems} succeeded`);
  * ```
  */
-export async function runDataset(mastra: Mastra, config: RunConfig): Promise<RunSummary> {
+export async function runExperiment(mastra: Mastra, config: ExperimentConfig): Promise<ExperimentSummary> {
   const {
     datasetId,
     targetType,

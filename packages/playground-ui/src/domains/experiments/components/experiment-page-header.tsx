@@ -1,7 +1,7 @@
 'use client';
 
 import { format } from 'date-fns';
-import { DatasetRun } from '@mastra/client-js';
+import { DatasetExperiment } from '@mastra/client-js';
 import { PlayCircle, Calendar1Icon, CrosshairIcon } from 'lucide-react';
 import { MainHeader } from '@/ds/components/MainHeader';
 import { CopyButton } from '@/ds/components/CopyButton';
@@ -13,34 +13,34 @@ import { useScorers } from '../../scores/hooks/use-scorers';
 import { ExperimentStats } from './experiment-stats';
 
 export type ExperimentPageHeaderProps = {
-  runId: string;
-  run: DatasetRun;
+  experimentId: string;
+  experiment: DatasetExperiment;
 };
 
-export function ExperimentPageHeader({ runId, run }: ExperimentPageHeaderProps) {
+export function ExperimentPageHeader({ experimentId, experiment }: ExperimentPageHeaderProps) {
   const { Link, paths } = useLinkComponent();
   const { data: agents } = useAgents();
   const { data: workflows } = useWorkflows();
   const { data: scorers } = useScorers();
 
   const getTargetPath = () => {
-    switch (run.targetType) {
+    switch (experiment.targetType) {
       case 'agent':
-        return paths.agentLink(run.targetId);
+        return paths.agentLink(experiment.targetId);
       case 'workflow':
-        return paths.workflowLink(run.targetId);
+        return paths.workflowLink(experiment.targetId);
       case 'scorer':
-        return paths.scorerLink(run.targetId);
+        return paths.scorerLink(experiment.targetId);
       default:
         return '#';
     }
   };
 
   const getTargetName = () => {
-    const targetId = run.targetId;
+    const targetId = experiment.targetId;
     if (!targetId) return targetId;
 
-    switch (run.targetType) {
+    switch (experiment.targetType) {
       case 'agent':
         return agents?.[targetId]?.name ?? targetId;
       case 'workflow':
@@ -57,15 +57,15 @@ export function ExperimentPageHeader({ runId, run }: ExperimentPageHeaderProps) 
       <MainHeader.Column>
         <MainHeader.Title>
           <PlayCircle />
-          {runId} {runId && <CopyButton content={runId} />}
+          {experimentId} {experimentId && <CopyButton content={experimentId} />}
         </MainHeader.Title>
         <MainHeader.Description>
           <TextAndIcon>
-            <Calendar1Icon /> Created at {format(new Date(run.createdAt), "MMM d, yyyy 'at' h:mm a")}
+            <Calendar1Icon /> Created at {format(new Date(experiment.createdAt), "MMM d, yyyy 'at' h:mm a")}
           </TextAndIcon>
-          {run.completedAt && (
+          {experiment.completedAt && (
             <TextAndIcon>
-              <Calendar1Icon /> Completed at {format(new Date(run.completedAt), "MMM d, yyyy 'at' h:mm a")}
+              <Calendar1Icon /> Completed at {format(new Date(experiment.completedAt), "MMM d, yyyy 'at' h:mm a")}
             </TextAndIcon>
           )}
         </MainHeader.Description>
@@ -77,7 +77,7 @@ export function ExperimentPageHeader({ runId, run }: ExperimentPageHeaderProps) 
         </MainHeader.Description>
       </MainHeader.Column>
       <MainHeader.Column>
-        <ExperimentStats run={run} />
+        <ExperimentStats experiment={experiment} />
       </MainHeader.Column>
     </MainHeader>
   );

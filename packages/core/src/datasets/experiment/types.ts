@@ -2,9 +2,9 @@ import type { MastraScorer } from '../../evals/base';
 import type { TargetType, RunStatus } from '../../storage/types';
 
 /**
- * Configuration for running a dataset against a target.
+ * Configuration for running a dataset experiment against a target.
  */
-export interface RunConfig {
+export interface ExperimentConfig {
   /** ID of the dataset to run */
   datasetId: string;
   /** Type of target to execute against */
@@ -21,7 +21,7 @@ export interface RunConfig {
   signal?: AbortSignal;
   /** Per-item execution timeout in milliseconds. Default: no timeout. */
   itemTimeout?: number;
-  /** Pre-created run ID (for async trigger - skips run creation) */
+  /** Pre-created experiment ID (for async trigger - skips run creation) */
   runId?: string;
 }
 
@@ -76,12 +76,12 @@ export interface ItemWithScores extends ItemResult {
 }
 
 /**
- * Summary of an entire dataset run.
+ * Summary of an entire dataset experiment.
  */
-export interface RunSummary {
-  /** Unique ID of this run */
+export interface ExperimentSummary {
+  /** Unique ID of this experiment */
   runId: string;
-  /** Final status of the run */
+  /** Final status of the experiment */
   status: RunStatus;
   /** Total number of items in the dataset */
   totalItems: number;
@@ -89,9 +89,9 @@ export interface RunSummary {
   succeededCount: number;
   /** Number of items that failed */
   failedCount: number;
-  /** When the run started */
+  /** When the experiment started */
   startedAt: Date;
-  /** When the run completed */
+  /** When the experiment completed */
   completedAt: Date;
   /** All item results with their scores */
   results: ItemWithScores[];

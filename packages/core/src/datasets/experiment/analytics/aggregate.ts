@@ -1,8 +1,8 @@
 /**
- * Run Analytics Aggregation Helpers
+ * Experiment Analytics Aggregation Helpers
  *
  * Pure functions for computing statistics from raw score data.
- * Used by compareRuns to build ScorerStats and detect regressions.
+ * Used by compareExperiments to build ScorerStats and detect regressions.
  */
 
 import type { ScoreRowData } from '../../../evals/types';
@@ -85,7 +85,7 @@ export function computeScorerStats(scores: ScoreRowData[], passThreshold: number
 /**
  * Determine if a score delta represents a regression.
  *
- * @param delta - Score difference (run B - run A)
+ * @param delta - Score difference (experiment B - experiment A)
  * @param threshold - Absolute threshold for regression detection
  * @param direction - Score direction ('higher-is-better' or 'lower-is-better')
  * @returns True if delta represents a regression

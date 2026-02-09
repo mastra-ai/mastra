@@ -1,7 +1,7 @@
 /**
- * Run Analytics Types
+ * Experiment Analytics Types
  *
- * Types for comparing runs and computing aggregate statistics.
+ * Types for comparing experiments and computing aggregate statistics.
  * Supports regression detection for CI/CD quality gates.
  */
 
@@ -10,7 +10,7 @@
 // ============================================================================
 
 /**
- * Aggregate statistics for a single scorer across a run.
+ * Aggregate statistics for a single scorer across an experiment.
  */
 export interface ScorerStats {
   /** Items with null score / total items */
@@ -34,12 +34,12 @@ export interface ScorerStats {
 // ============================================================================
 
 /**
- * Per-scorer comparison between two runs.
+ * Per-scorer comparison between two experiments.
  */
 export interface ScorerComparison {
-  /** Stats from run A (baseline) */
+  /** Stats from experiment A (baseline) */
   statsA: ScorerStats;
-  /** Stats from run B (candidate) */
+  /** Stats from experiment B (candidate) */
   statsB: ScorerStats;
   /** avgScore difference: statsB.avgScore - statsA.avgScore */
   delta: number;
@@ -55,11 +55,11 @@ export interface ScorerComparison {
 export interface ItemComparison {
   /** Dataset item ID */
   itemId: string;
-  /** Whether item exists in both runs */
+  /** Whether item exists in both experiments */
   inBothRuns: boolean;
-  /** Scores from run A by scorer ID (null if no score) */
+  /** Scores from experiment A by scorer ID (null if no score) */
   scoresA: Record<string, number | null>;
-  /** Scores from run B by scorer ID (null if no score) */
+  /** Scores from experiment B by scorer ID (null if no score) */
   scoresB: Record<string, number | null>;
 }
 
@@ -67,17 +67,17 @@ export interface ItemComparison {
  * Top-level comparison result.
  */
 export interface ComparisonResult {
-  /** Run A metadata */
+  /** Experiment A metadata */
   runA: {
     id: string;
     datasetVersion: Date;
   };
-  /** Run B metadata */
+  /** Experiment B metadata */
   runB: {
     id: string;
     datasetVersion: Date;
   };
-  /** True if runs used different dataset versions */
+  /** True if experiments used different dataset versions */
   versionMismatch: boolean;
   /** True if any scorer regressed (for CI quick check) */
   hasRegression: boolean;
@@ -104,12 +104,12 @@ export interface ScorerThreshold {
 }
 
 /**
- * Configuration for compareRuns function.
+ * Configuration for compareExperiments function.
  */
-export interface CompareRunsConfig {
-  /** ID of run A (baseline) */
+export interface CompareExperimentsConfig {
+  /** ID of experiment A (baseline) */
   runIdA: string;
-  /** ID of run B (candidate) */
+  /** ID of experiment B (candidate) */
   runIdB: string;
   /**
    * Per-scorer thresholds for regression detection.

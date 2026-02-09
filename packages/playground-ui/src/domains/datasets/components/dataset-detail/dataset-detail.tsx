@@ -3,11 +3,11 @@ import { useDebounce } from 'use-debounce';
 import { DatasetItem } from '@mastra/client-js';
 import { useDataset } from '../../hooks/use-datasets';
 import { useDatasetItems } from '../../hooks/use-dataset-items';
-import { useDatasetRuns } from '../../hooks/use-dataset-runs';
+import { useDatasetExperiments } from '../../hooks/use-dataset-experiments';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { ItemsMasterDetail } from './items-master-detail';
-import { RunHistory } from './run-history';
+import { ExperimentHistory } from './experiment-history';
 import { DatasetHeader } from './dataset-header';
 import { CSVImportDialog } from '../csv-import';
 import { JSONImportDialog } from '../json-import';
@@ -22,26 +22,26 @@ import { toast } from '@/lib/toast';
 
 export interface DatasetDetailProps {
   datasetId: string;
-  onRunClick?: () => void;
+  onExperimentClick?: () => void;
   onEditClick?: () => void;
   onDeleteClick?: () => void;
   onAddItemClick?: () => void;
-  runTriggerSlot?: React.ReactNode;
+  experimentTriggerSlot?: React.ReactNode;
   onNavigateToDataset?: (datasetId: string) => void;
   // Controlled mode: parent manages version state
   activeDatasetVersion?: Date | string | null;
   onVersionSelect?: (version: DatasetVersion | null) => void;
 }
 
-type TabValue = 'items' | 'runs';
+type TabValue = 'items' | 'experiments';
 
 export function DatasetDetail({
   datasetId,
-  onRunClick,
+  onExperimentClick,
   onEditClick,
   onDeleteClick,
   onAddItemClick,
-  runTriggerSlot,
+  experimentTriggerSlot,
   onNavigateToDataset,
   activeDatasetVersion: controlledVersion,
   onVersionSelect: onVersionSelectProp,
@@ -74,10 +74,10 @@ export function DatasetDetail({
     isFetchingNextPage,
     hasNextPage,
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
-  const { data: runsData, isLoading: isRunsLoading } = useDatasetRuns(datasetId);
+  const { data: experimentsData, isLoading: isExperimentsLoading } = useDatasetExperiments(datasetId);
   const { deleteItems } = useDatasetMutations();
 
-  const runs = runsData?.runs ?? [];
+  const experiments = experimentsData?.experiments ?? [];
 
   // Item selection handlers
   const handleItemSelect = (itemId: string) => {
@@ -170,8 +170,8 @@ export function DatasetDetail({
               onEditClick={onEditClick}
               onDuplicateClick={() => setDuplicateDialogOpen(true)}
               onDeleteClick={onDeleteClick}
-              runTriggerSlot={runTriggerSlot}
-              onRunClick={onRunClick}
+              experimentTriggerSlot={experimentTriggerSlot}
+              onExperimentClick={onExperimentClick}
             />
 
             {/* Content with tabs */}
@@ -184,7 +184,7 @@ export function DatasetDetail({
               >
                 <TabList>
                   <Tab value="items">Items ({items.length})</Tab>
-                  <Tab value="runs">Run History ({runs.length})</Tab>
+                  <Tab value="experiments">Experiment History ({experiments.length})</Tab>
                 </TabList>
 
                 <TabContent value="items" className="grid overflow-auto mt-4">
@@ -214,8 +214,8 @@ export function DatasetDetail({
                   />
                 </TabContent>
 
-                <TabContent value="runs" className="grid overflow-auto">
-                  <RunHistory runs={runs} isLoading={isRunsLoading} datasetId={datasetId} />
+                <TabContent value="experiments" className="grid overflow-auto">
+                  <ExperimentHistory experiments={experiments} isLoading={isExperimentsLoading} datasetId={datasetId} />
                 </TabContent>
               </Tabs>
             </div>

@@ -207,11 +207,11 @@ async function executeWorkflow(workflow: Workflow, item: DatasetItem): Promise<E
   }
 
   if (result.status === 'suspended') {
-    return { output: null, error: 'Workflow suspended - not yet supported in dataset runs', traceId };
+    return { output: null, error: 'Workflow suspended - not yet supported in dataset experiments', traceId };
   }
 
   if (result.status === 'paused') {
-    return { output: null, error: 'Workflow paused - not yet supported in dataset runs', traceId };
+    return { output: null, error: 'Workflow paused - not yet supported in dataset experiments', traceId };
   }
 
   // Exhaustive check - should never reach here

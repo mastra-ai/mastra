@@ -6,7 +6,7 @@ import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
 import { RunsInMemory } from '../../../storage/domains/runs/inmemory';
 import { executeTarget } from '../executor';
-import { runDataset } from '../index';
+import { runExperiment } from '../index';
 
 // Mock isSupportedLanguageModel at module level
 vi.mock('../../../agent', async importOriginal => {
@@ -96,7 +96,7 @@ describe('P0 Regression', () => {
 
   // T-A: Abort returns partial summary (not throw)
   describe('Bug A: Abort returns partial summary', () => {
-    it('resolves with partial RunSummary when aborted mid-run', async () => {
+    it('resolves with partial ExperimentSummary when aborted mid-run', async () => {
       await setupDataset(10);
       const agent = createMockAgent({ delayMs: 200 });
       setupMastra(agent);
@@ -106,7 +106,7 @@ describe('P0 Regression', () => {
       // Abort after ~300ms — some items should have completed
       setTimeout(() => controller.abort(), 300);
 
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'test-agent',
@@ -169,7 +169,7 @@ describe('P0 Regression', () => {
 
       setupMastra(hangingAgent);
 
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'hanging-agent',
@@ -205,7 +205,7 @@ describe('P0 Regression', () => {
 
       const controller = new AbortController();
 
-      await runDataset(mastra, {
+      await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'spy-agent',
@@ -230,7 +230,7 @@ describe('P0 Regression', () => {
       // Override runsStorage.addResult to throw
       runsStorage.addResult = vi.fn().mockRejectedValue(new Error('DB down'));
 
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'test-agent',

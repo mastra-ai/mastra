@@ -5,7 +5,7 @@ import type {
   UpdateDatasetParams,
   AddDatasetItemParams,
   UpdateDatasetItemParams,
-  TriggerDatasetRunParams,
+  TriggerDatasetExperimentParams,
   BulkAddDatasetItemsParams,
   BulkDeleteDatasetItemsParams,
 } from '@mastra/client-js';
@@ -99,10 +99,10 @@ export const useDatasetMutations = () => {
     },
   });
 
-  const triggerRun = useMutation({
-    mutationFn: (params: TriggerDatasetRunParams) => client.triggerDatasetRun(params),
+  const triggerExperiment = useMutation({
+    mutationFn: (params: TriggerDatasetExperimentParams) => client.triggerDatasetExperiment(params),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['dataset-runs', variables.datasetId] });
+      queryClient.invalidateQueries({ queryKey: ['dataset-experiments', variables.datasetId] });
     },
   });
 
@@ -116,6 +116,6 @@ export const useDatasetMutations = () => {
     deleteItems,
     bulkAddItems,
     bulkDeleteItems,
-    triggerRun,
+    triggerExperiment,
   };
 };

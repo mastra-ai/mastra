@@ -65,17 +65,17 @@ import type {
   ListEmbeddersResponse,
   Dataset,
   DatasetItem,
-  DatasetRun,
-  DatasetRunResult,
+  DatasetExperiment,
+  DatasetExperimentResult,
   CreateDatasetParams,
   UpdateDatasetParams,
   AddDatasetItemParams,
   UpdateDatasetItemParams,
   BulkAddDatasetItemsParams,
   BulkDeleteDatasetItemsParams,
-  TriggerDatasetRunParams,
-  CompareRunsParams,
-  CompareRunsResponse,
+  TriggerDatasetExperimentParams,
+  CompareExperimentsParams,
+  CompareExperimentsResponse,
   DatasetItemVersionResponse,
   DatasetVersionResponse,
 } from './types';
@@ -1095,52 +1095,52 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
-  // Dataset Runs
+  // Dataset Experiments
   // ============================================================================
 
   /**
-   * Lists runs for a dataset
+   * Lists experiments for a dataset
    */
-  public listDatasetRuns(
+  public listDatasetExperiments(
     datasetId: string,
     pagination?: { page?: number; perPage?: number },
-  ): Promise<{ runs: DatasetRun[]; pagination: PaginationInfo }> {
+  ): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
     if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
     if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
     const qs = searchParams.toString();
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}/runs${qs ? `?${qs}` : ''}`);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments${qs ? `?${qs}` : ''}`);
   }
 
   /**
-   * Gets a single dataset run by ID
+   * Gets a single dataset experiment by ID
    */
-  public getDatasetRun(datasetId: string, runId: string): Promise<DatasetRun> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}/runs/${encodeURIComponent(runId)}`);
+  public getDatasetExperiment(datasetId: string, experimentId: string): Promise<DatasetExperiment> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`);
   }
 
   /**
-   * Lists results for a dataset run
+   * Lists results for a dataset experiment
    */
-  public listDatasetRunResults(
+  public listDatasetExperimentResults(
     datasetId: string,
-    runId: string,
+    experimentId: string,
     pagination?: { page?: number; perPage?: number },
-  ): Promise<{ results: DatasetRunResult[]; pagination: PaginationInfo }> {
+  ): Promise<{ results: DatasetExperimentResult[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
     if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
     if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
     const qs = searchParams.toString();
     return this.request(
-      `/datasets/${encodeURIComponent(datasetId)}/runs/${encodeURIComponent(runId)}/results${qs ? `?${qs}` : ''}`,
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results${qs ? `?${qs}` : ''}`,
     );
   }
 
   /**
-   * Triggers a new dataset run
+   * Triggers a new dataset experiment
    */
-  public triggerDatasetRun(params: TriggerDatasetRunParams): Promise<{
-    runId: string;
+  public triggerDatasetExperiment(params: TriggerDatasetExperimentParams): Promise<{
+    experimentId: string;
     status: 'pending' | 'running' | 'completed' | 'failed';
     totalItems: number;
     succeededCount: number;
@@ -1168,16 +1168,16 @@ export class MastraClient extends BaseResource {
     }>;
   }> {
     const { datasetId, ...body } = params;
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}/runs`, {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments`, {
       method: 'POST',
       body,
     });
   }
 
   /**
-   * Compares two dataset runs for regression detection
+   * Compares two dataset experiments for regression detection
    */
-  public compareRuns(params: CompareRunsParams): Promise<CompareRunsResponse> {
+  public compareExperiments(params: CompareExperimentsParams): Promise<CompareExperimentsResponse> {
     const { datasetId, ...body } = params;
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/compare`, {
       method: 'POST',

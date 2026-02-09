@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { DatasetRunResult } from '@mastra/client-js';
+import { DatasetExperimentResult } from '@mastra/client-js';
 
 import { ListAndDetails } from '@/ds/components/ListAndDetails/list-and-details';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
@@ -11,12 +11,12 @@ import { ExperimentResultTracePanel } from './experiment-result-trace-panel';
 import { ExperimentResultsList } from './experiment-results-list';
 
 export type ExperimentResultsListAndDetailsProps = {
-  results: DatasetRunResult[];
+  results: DatasetExperimentResult[];
   isLoading: boolean;
 };
 
 /**
- * Master-detail layout for run results.
+ * Master-detail layout for experiment results.
  * Shows results list on left, result detail panel on right when a result is selected.
  */
 export function ExperimentResultsListAndDetails({ results, isLoading }: ExperimentResultsListAndDetailsProps) {

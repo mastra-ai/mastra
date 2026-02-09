@@ -1,10 +1,10 @@
 import { Check, X } from 'lucide-react';
-import { DatasetRunResult } from '@mastra/client-js';
+import { DatasetExperimentResult } from '@mastra/client-js';
 import { ItemList } from '@/ds/components/ItemList';
 import { Badge } from '@/ds/components/Badge';
 
 export type ExperimentResultsListProps = {
-  results: DatasetRunResult[];
+  results: DatasetExperimentResult[];
   isLoading: boolean;
   featuredResultId: string | null;
   onResultClick: (resultId: string) => void;

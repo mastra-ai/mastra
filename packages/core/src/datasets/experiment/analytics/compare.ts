@@ -1,14 +1,20 @@
 /**
- * Run Comparison
+ * Experiment Comparison
  *
- * Compare two runs to detect score regressions.
+ * Compare two experiments to detect score regressions.
  * Returns per-scorer deltas and per-item score diffs.
  */
 
 import type { ScoreRowData } from '../../../evals/types';
 import type { Mastra } from '../../../mastra';
 import { computeScorerStats, isRegression } from './aggregate';
-import type { CompareRunsConfig, ComparisonResult, ItemComparison, ScorerComparison, ScorerThreshold } from './types';
+import type {
+  CompareExperimentsConfig,
+  ComparisonResult,
+  ItemComparison,
+  ScorerComparison,
+  ScorerThreshold,
+} from './types';
 
 /**
  * Default threshold when not specified: no tolerance for regression.
@@ -24,7 +30,7 @@ const DEFAULT_THRESHOLD: ScorerThreshold = {
 const DEFAULT_PASS_THRESHOLD = 0.5;
 
 /**
- * Compare two runs to detect score regressions.
+ * Compare two experiments to detect score regressions.
  *
  * @param mastra - Mastra instance for storage access
  * @param config - Comparison configuration
@@ -32,7 +38,7 @@ const DEFAULT_PASS_THRESHOLD = 0.5;
  *
  * @example
  * ```typescript
- * const result = await compareRuns(mastra, {
+ * const result = await compareExperiments(mastra, {
  *   runIdA: 'baseline-run-id',
  *   runIdB: 'candidate-run-id',
  *   thresholds: {
@@ -46,7 +52,7 @@ const DEFAULT_PASS_THRESHOLD = 0.5;
  * }
  * ```
  */
-export async function compareRuns(mastra: Mastra, config: CompareRunsConfig): Promise<ComparisonResult> {
+export async function compareExperiments(mastra: Mastra, config: CompareExperimentsConfig): Promise<ComparisonResult> {
   const { runIdA, runIdB, thresholds = {} } = config;
   const warnings: string[] = [];
 
@@ -66,7 +72,7 @@ export async function compareRuns(mastra: Mastra, config: CompareRunsConfig): Pr
     throw new Error('ScoresStorage not configured.');
   }
 
-  // 2. Load both runs
+  // 2. Load both experiments
   const [runA, runB] = await Promise.all([runsStore.getRunById({ id: runIdA }), runsStore.getRunById({ id: runIdB })]);
 
   if (!runA) {
@@ -84,28 +90,28 @@ export async function compareRuns(mastra: Mastra, config: CompareRunsConfig): Pr
     );
   }
 
-  // 4. Load results for both runs
+  // 4. Load results for both experiments
   const [resultsA, resultsB] = await Promise.all([
     runsStore.listResults({ runId: runIdA, pagination: { page: 0, perPage: false } }),
     runsStore.listResults({ runId: runIdB, pagination: { page: 0, perPage: false } }),
   ]);
 
-  // 5. Load scores for both runs
+  // 5. Load scores for both experiments
   const [scoresA, scoresB] = await Promise.all([
     scoresStore.listScoresByRunId({ runId: runIdA, pagination: { page: 0, perPage: false } }),
     scoresStore.listScoresByRunId({ runId: runIdB, pagination: { page: 0, perPage: false } }),
   ]);
 
-  // 6. Handle empty runs
+  // 6. Handle empty experiments
   if (resultsA.results.length === 0 && resultsB.results.length === 0) {
-    warnings.push('Both runs have no results.');
+    warnings.push('Both experiments have no results.');
     return buildEmptyResult(runA, runB, versionMismatch, warnings);
   }
   if (resultsA.results.length === 0) {
-    warnings.push('Run A has no results.');
+    warnings.push('Experiment A has no results.');
   }
   if (resultsB.results.length === 0) {
-    warnings.push('Run B has no results.');
+    warnings.push('Experiment B has no results.');
   }
 
   // 7. Find overlapping items
@@ -114,7 +120,7 @@ export async function compareRuns(mastra: Mastra, config: CompareRunsConfig): Pr
   const overlappingItemIds = [...itemIdsA].filter(id => itemIdsB.has(id));
 
   if (overlappingItemIds.length === 0) {
-    warnings.push('No overlapping items between runs.');
+    warnings.push('No overlapping items between experiments.');
   }
 
   // 8. Group scores by scorer and item

@@ -2,10 +2,10 @@ import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
-  TABLE_DATASET_RUNS,
-  TABLE_DATASET_RUN_RESULTS,
-  DATASET_RUNS_SCHEMA,
-  DATASET_RUN_RESULTS_SCHEMA,
+  TABLE_DATASET_EXPERIMENTS,
+  TABLE_DATASET_EXPERIMENT_RESULTS,
+  DATASET_EXPERIMENTS_SCHEMA,
+  DATASET_EXPERIMENT_RESULTS_SCHEMA,
   RunsStorage,
   calculatePagination,
   normalizePerPage,
@@ -39,13 +39,16 @@ export class RunsLibSQL extends RunsStorage {
   }
 
   async init(): Promise<void> {
-    await this.#db.createTable({ tableName: TABLE_DATASET_RUNS, schema: DATASET_RUNS_SCHEMA });
-    await this.#db.createTable({ tableName: TABLE_DATASET_RUN_RESULTS, schema: DATASET_RUN_RESULTS_SCHEMA });
+    await this.#db.createTable({ tableName: TABLE_DATASET_EXPERIMENTS, schema: DATASET_EXPERIMENTS_SCHEMA });
+    await this.#db.createTable({
+      tableName: TABLE_DATASET_EXPERIMENT_RESULTS,
+      schema: DATASET_EXPERIMENT_RESULTS_SCHEMA,
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.#db.deleteData({ tableName: TABLE_DATASET_RUN_RESULTS });
-    await this.#db.deleteData({ tableName: TABLE_DATASET_RUNS });
+    await this.#db.deleteData({ tableName: TABLE_DATASET_EXPERIMENT_RESULTS });
+    await this.#db.deleteData({ tableName: TABLE_DATASET_EXPERIMENTS });
   }
 
   // Helper to transform row to Run
@@ -96,7 +99,7 @@ export class RunsLibSQL extends RunsStorage {
       const nowIso = now.toISOString();
 
       await this.#db.insert({
-        tableName: TABLE_DATASET_RUNS,
+        tableName: TABLE_DATASET_EXPERIMENTS,
         record: {
           id,
           datasetId: input.datasetId,
@@ -181,7 +184,7 @@ export class RunsLibSQL extends RunsStorage {
       values.push(input.id);
 
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_DATASET_RUNS} SET ${updates.join(', ')} WHERE id = ?`,
+        sql: `UPDATE ${TABLE_DATASET_EXPERIMENTS} SET ${updates.join(', ')} WHERE id = ?`,
         args: values,
       });
 
@@ -210,7 +213,7 @@ export class RunsLibSQL extends RunsStorage {
   async getRunById(args: { id: string }): Promise<Run | null> {
     try {
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_RUNS)} FROM ${TABLE_DATASET_RUNS} WHERE id = ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_EXPERIMENTS)} FROM ${TABLE_DATASET_EXPERIMENTS} WHERE id = ?`,
         args: [args.id],
       });
       return result.rows?.[0] ? this.transformRunRow(result.rows[0] as Record<string, unknown>) : null;
@@ -243,7 +246,7 @@ export class RunsLibSQL extends RunsStorage {
 
       // Get total count
       const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM ${TABLE_DATASET_RUNS} ${whereClause}`,
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_DATASET_EXPERIMENTS} ${whereClause}`,
         args: queryParams,
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
@@ -261,7 +264,7 @@ export class RunsLibSQL extends RunsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_RUNS)} FROM ${TABLE_DATASET_RUNS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_EXPERIMENTS)} FROM ${TABLE_DATASET_EXPERIMENTS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
 
@@ -290,11 +293,11 @@ export class RunsLibSQL extends RunsStorage {
     try {
       // Delete results first (foreign key semantics)
       await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_DATASET_RUN_RESULTS} WHERE runId = ?`,
+        sql: `DELETE FROM ${TABLE_DATASET_EXPERIMENT_RESULTS} WHERE runId = ?`,
         args: [args.id],
       });
       await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_DATASET_RUNS} WHERE id = ?`,
+        sql: `DELETE FROM ${TABLE_DATASET_EXPERIMENTS} WHERE id = ?`,
         args: [args.id],
       });
     } catch (error) {
@@ -318,7 +321,7 @@ export class RunsLibSQL extends RunsStorage {
       const scores = input.scores ?? [];
 
       await this.#db.insert({
-        tableName: TABLE_DATASET_RUN_RESULTS,
+        tableName: TABLE_DATASET_EXPERIMENT_RESULTS,
         record: {
           id,
           runId: input.runId,
@@ -370,7 +373,7 @@ export class RunsLibSQL extends RunsStorage {
   async getResultById(args: { id: string }): Promise<RunResult | null> {
     try {
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_RUN_RESULTS)} FROM ${TABLE_DATASET_RUN_RESULTS} WHERE id = ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_EXPERIMENT_RESULTS)} FROM ${TABLE_DATASET_EXPERIMENT_RESULTS} WHERE id = ?`,
         args: [args.id],
       });
       return result.rows?.[0] ? this.transformResultRow(result.rows[0] as Record<string, unknown>) : null;
@@ -398,7 +401,7 @@ export class RunsLibSQL extends RunsStorage {
 
       // Get total count
       const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM ${TABLE_DATASET_RUN_RESULTS} ${whereClause}`,
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_DATASET_EXPERIMENT_RESULTS} ${whereClause}`,
         args: queryParams,
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
@@ -416,7 +419,7 @@ export class RunsLibSQL extends RunsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_RUN_RESULTS)} FROM ${TABLE_DATASET_RUN_RESULTS} ${whereClause} ORDER BY startedAt ASC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_EXPERIMENT_RESULTS)} FROM ${TABLE_DATASET_EXPERIMENT_RESULTS} ${whereClause} ORDER BY startedAt ASC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
 
@@ -444,7 +447,7 @@ export class RunsLibSQL extends RunsStorage {
   async deleteResultsByRunId(args: { runId: string }): Promise<void> {
     try {
       await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_DATASET_RUN_RESULTS} WHERE runId = ?`,
+        sql: `DELETE FROM ${TABLE_DATASET_EXPERIMENT_RESULTS} WHERE runId = ?`,
         args: [args.runId],
       });
     } catch (error) {

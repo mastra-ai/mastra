@@ -8,23 +8,27 @@ import {
   Crumb,
   Spinner,
   useDataset,
-  useDatasetRun,
-  useDatasetRunResults,
+  useDatasetExperiment,
+  useDatasetExperimentResults,
   ExperimentResultsListAndDetails,
   ExperimentPageHeader,
 } from '@mastra/playground-ui';
 
-function DatasetRunPage() {
-  const { datasetId, runId } = useParams<{ datasetId: string; runId: string }>();
+function DatasetExperimentPage() {
+  const { datasetId, experimentId } = useParams<{ datasetId: string; experimentId: string }>();
 
   const { data: dataset } = useDataset(datasetId ?? '');
-  const { data: run, isLoading: runLoading, error: runError } = useDatasetRun(datasetId!, runId!);
-  const { data: resultsData, isLoading: resultsLoading } = useDatasetRunResults({
+  const {
+    data: experiment,
+    isLoading: experimentLoading,
+    error: experimentError,
+  } = useDatasetExperiment(datasetId!, experimentId!);
+  const { data: resultsData, isLoading: resultsLoading } = useDatasetExperimentResults({
     datasetId: datasetId!,
-    runId: runId!,
-    runStatus: run?.status,
+    experimentId: experimentId!,
+    experimentStatus: experiment?.status,
   });
-  if (runLoading) {
+  if (experimentLoading) {
     return (
       <MainContentLayout>
         <div className="flex items-center justify-center h-full">
@@ -34,11 +38,11 @@ function DatasetRunPage() {
     );
   }
 
-  if (runError || !run) {
+  if (experimentError || !experiment) {
     return (
       <MainContentLayout>
         <div className="text-red-500 p-4">
-          Error loading run: {runError instanceof Error ? runError.message : 'Unknown error'}
+          Error loading experiment: {experimentError instanceof Error ? experimentError.message : 'Unknown error'}
         </div>
       </MainContentLayout>
     );
@@ -64,14 +68,14 @@ function DatasetRunPage() {
             <Icon>
               <PlayCircle />
             </Icon>
-            Run
+            Experiment
           </Crumb>
         </Breadcrumb>
       </Header>
 
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
-          <ExperimentPageHeader runId={runId!} run={run} />
+          <ExperimentPageHeader experimentId={experimentId!} experiment={experiment} />
           <ExperimentResultsListAndDetails results={results} isLoading={resultsLoading} />
         </div>
       </div>
@@ -79,5 +83,5 @@ function DatasetRunPage() {
   );
 }
 
-export { DatasetRunPage };
-export default DatasetRunPage;
+export { DatasetExperimentPage };
+export default DatasetExperimentPage;

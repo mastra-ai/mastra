@@ -1044,7 +1044,7 @@ export interface BulkDeleteItemsInput {
 }
 
 // ============================================
-// Run Types (Dataset Experiment Runs)
+// Experiment Types (Dataset Experiments)
 // ============================================
 
 export type RunStatus = 'pending' | 'running' | 'completed' | 'failed';

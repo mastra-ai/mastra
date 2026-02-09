@@ -6,7 +6,7 @@ import {
   MainContentLayout,
   MainContentContent,
   DatasetDetail,
-  RunTriggerDialog,
+  ExperimentTriggerDialog,
   AddItemDialog,
   EditDatasetDialog,
   DeleteDatasetDialog,
@@ -23,7 +23,7 @@ function DatasetPage() {
   const navigate = useNavigate();
 
   // Dialog states
-  const [runDialogOpen, setRunDialogOpen] = useState(false);
+  const [experimentDialogOpen, setExperimentDialogOpen] = useState(false);
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -47,9 +47,8 @@ function DatasetPage() {
     );
   }
 
-  const handleRunSuccess = (runId: string) => {
-    // Navigate to the run detail page
-    navigate(`/datasets/${datasetId}/runs/${runId}`);
+  const handleExperimentSuccess = (experimentId: string) => {
+    navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
   };
 
   const handleDeleteSuccess = () => {
@@ -83,20 +82,20 @@ function DatasetPage() {
           onDeleteItem={handleDeleteItem}
           activeDatasetVersion={activeVersion}
           onVersionSelect={handleVersionSelect}
-          runTriggerSlot={
-            <Button variant="standard" size="default" onClick={() => setRunDialogOpen(true)}>
+          experimentTriggerSlot={
+            <Button variant="standard" size="default" onClick={() => setExperimentDialogOpen(true)}>
               <Play />
               {activeVersion ? `Run on ${format(new Date(activeVersion), 'MMM d, yyyy')}` : 'Run Experiment'}
             </Button>
           }
         />
 
-        <RunTriggerDialog
+        <ExperimentTriggerDialog
           datasetId={datasetId}
           version={activeVersion ?? undefined}
-          open={runDialogOpen}
-          onOpenChange={setRunDialogOpen}
-          onSuccess={handleRunSuccess}
+          open={experimentDialogOpen}
+          onOpenChange={setExperimentDialogOpen}
+          onSuccess={handleExperimentSuccess}
         />
 
         <AddItemDialog datasetId={datasetId} open={addItemDialogOpen} onOpenChange={setAddItemDialogOpen} />

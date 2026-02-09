@@ -1,6 +1,6 @@
 'use client';
 
-import { DatasetRunResult } from '@mastra/client-js';
+import { DatasetExperimentResult } from '@mastra/client-js';
 import { Section } from '@/ds/components/Section';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { CopyButton } from '@/ds/components/CopyButton';
@@ -20,7 +20,7 @@ import { MainHeader } from '@/ds/components/MainHeader';
 import { Button, ButtonsGroup } from '@/index';
 
 export type ExperimentResultPanelProps = {
-  result: DatasetRunResult;
+  result: DatasetExperimentResult;
   onPrevious?: () => void;
   onNext?: () => void;
   onClose: () => void;

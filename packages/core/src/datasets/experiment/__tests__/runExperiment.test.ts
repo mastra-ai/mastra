@@ -5,7 +5,7 @@ import type { MastraCompositeStore, StorageDomains } from '../../../storage/base
 import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
 import { RunsInMemory } from '../../../storage/domains/runs/inmemory';
-import { runDataset } from '../index';
+import { runExperiment } from '../index';
 
 // Mock agent that returns predictable output
 // Note: specificationVersion must be 'v2' or 'v3' for isSupportedLanguageModel to return true
@@ -32,7 +32,7 @@ const createMockScorer = (scorerId: string, scorerName: string): MastraScorer<an
   })),
 });
 
-describe('runDataset', () => {
+describe('runExperiment', () => {
   let db: InMemoryDB;
   let datasetsStorage: DatasetsInMemory;
   let runsStorage: RunsInMemory;
@@ -92,7 +92,7 @@ describe('runDataset', () => {
 
   describe('basic execution', () => {
     it('executes all items and returns summary', async () => {
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'test-agent',
@@ -107,7 +107,7 @@ describe('runDataset', () => {
     });
 
     it('includes item details in results', async () => {
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'test-agent',
@@ -126,7 +126,7 @@ describe('runDataset', () => {
 
   describe('status transitions', () => {
     it('creates run with pending status then transitions to completed', async () => {
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'test-agent',
@@ -163,7 +163,7 @@ describe('runDataset', () => {
       (mastra.getAgent as ReturnType<typeof vi.fn>).mockReturnValue(flakyAgent);
       (mastra.getAgentById as ReturnType<typeof vi.fn>).mockReturnValue(flakyAgent);
 
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'flaky-agent',
@@ -188,7 +188,7 @@ describe('runDataset', () => {
       (mastra.getAgent as ReturnType<typeof vi.fn>).mockReturnValue(failingAgent);
       (mastra.getAgentById as ReturnType<typeof vi.fn>).mockReturnValue(failingAgent);
 
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'failing-agent',
@@ -201,7 +201,7 @@ describe('runDataset', () => {
 
     it('throws for non-existent dataset', async () => {
       await expect(
-        runDataset(mastra, {
+        runExperiment(mastra, {
           datasetId: 'non-existent',
           targetType: 'agent',
           targetId: 'test-agent',
@@ -214,7 +214,7 @@ describe('runDataset', () => {
       (mastra.getAgentById as ReturnType<typeof vi.fn>).mockReturnValue(null);
 
       await expect(
-        runDataset(mastra, {
+        runExperiment(mastra, {
           datasetId,
           targetType: 'agent',
           targetId: 'missing-agent',
@@ -227,7 +227,7 @@ describe('runDataset', () => {
     it('applies scorers and includes results', async () => {
       const mockScorer = createMockScorer('accuracy', 'Accuracy');
 
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'test-agent',
@@ -248,7 +248,7 @@ describe('runDataset', () => {
         run: vi.fn().mockRejectedValue(new Error('Scorer crashed')),
       };
 
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'test-agent',
@@ -272,7 +272,7 @@ describe('runDataset', () => {
       };
       const workingScorer = createMockScorer('working', 'Working Scorer');
 
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'test-agent',
@@ -304,7 +304,7 @@ describe('runDataset', () => {
       // Abort immediately
       controller.abort();
 
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'test-agent',
@@ -335,7 +335,7 @@ describe('runDataset', () => {
       (mastra.getAgent as ReturnType<typeof vi.fn>).mockReturnValue(slowAgent);
       (mastra.getAgentById as ReturnType<typeof vi.fn>).mockReturnValue(slowAgent);
 
-      await runDataset(mastra, {
+      await runExperiment(mastra, {
         datasetId,
         targetType: 'agent',
         targetId: 'slow-agent',
@@ -367,7 +367,7 @@ describe('runDataset', () => {
       (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(mockWorkflow);
       (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(mockWorkflow);
 
-      const result = await runDataset(mastra, {
+      const result = await runExperiment(mastra, {
         datasetId,
         targetType: 'workflow',
         targetId: 'test-workflow',
@@ -417,7 +417,7 @@ describe('runDataset', () => {
         return null;
       });
 
-      const runResult = await runDataset(mastra, {
+      const runResult = await runExperiment(mastra, {
         datasetId: scorerDataset.id,
         targetId: 'target-scorer',
         targetType: 'scorer',

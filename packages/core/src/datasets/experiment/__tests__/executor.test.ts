@@ -236,7 +236,7 @@ describe('executeTarget', () => {
       });
 
       expect(result.output).toBeNull();
-      expect(result.error).toBe('Workflow suspended - not yet supported in dataset runs');
+      expect(result.error).toBe('Workflow suspended - not yet supported in dataset experiments');
     });
 
     it('returns not-yet-supported error on paused status', async () => {
@@ -255,7 +255,7 @@ describe('executeTarget', () => {
       });
 
       expect(result.output).toBeNull();
-      expect(result.error).toBe('Workflow paused - not yet supported in dataset runs');
+      expect(result.error).toBe('Workflow paused - not yet supported in dataset experiments');
     });
 
     it('handles empty object input', async () => {

@@ -16,29 +16,29 @@ import { Button } from '@/ds/components/Button';
 import { Spinner } from '@/ds/components/Spinner';
 import { toast } from 'sonner';
 
-export interface RunTriggerDialogProps {
+export interface ExperimentTriggerDialogProps {
   datasetId: string;
   version?: Date | string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess?: (runId: string) => void;
+  onSuccess?: (experimentId: string) => void;
 }
 
-export function RunTriggerDialog({ datasetId, version, open, onOpenChange, onSuccess }: RunTriggerDialogProps) {
+export function ExperimentTriggerDialog({ datasetId, version, open, onOpenChange, onSuccess }: ExperimentTriggerDialogProps) {
   const [targetType, setTargetType] = useState<TargetType | ''>('');
   const [targetId, setTargetId] = useState<string>('');
   const [selectedScorers, setSelectedScorers] = useState<string[]>([]);
 
-  const { triggerRun } = useDatasetMutations();
+  const { triggerExperiment } = useDatasetMutations();
 
   const canRun = targetType && targetId;
-  const isRunning = triggerRun.isPending;
+  const isRunning = triggerExperiment.isPending;
 
   const handleRun = async () => {
     if (!canRun) return;
 
     try {
-      const result = await triggerRun.mutateAsync({
+      const result = await triggerExperiment.mutateAsync({
         datasetId,
         targetType,
         targetId,
@@ -46,17 +46,16 @@ export function RunTriggerDialog({ datasetId, version, open, onOpenChange, onSuc
         version,
       });
 
-      toast.success('Run triggered successfully');
+      toast.success('Experiment triggered successfully');
       onOpenChange(false);
-      // API returns runId, not id (RunSummary type)
-      onSuccess?.((result as unknown as { runId: string }).runId);
+      onSuccess?.(result.experimentId);
 
       // Reset state
       setTargetType('');
       setTargetId('');
       setSelectedScorers([]);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to trigger run';
+      const message = error instanceof Error ? error.message : 'Failed to trigger experiment';
       toast.error(message);
     }
   };
@@ -75,7 +74,7 @@ export function RunTriggerDialog({ datasetId, version, open, onOpenChange, onSuc
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Run Dataset</DialogTitle>
+          <DialogTitle>Run Experiment</DialogTitle>
           <DialogDescription>
             {version
               ? `Execute items from ${format(new Date(version), 'MMM d, yyyy')} version against a target.`

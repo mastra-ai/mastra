@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { DatasetRun } from '@mastra/client-js';
+import { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@/ds/components/Badge';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { useLinkComponent } from '@/lib/framework';
 import { Play } from 'lucide-react';
-import { RunsToolbar } from './runs-toolbar';
+import { ExperimentsToolbar } from './experiments-toolbar';
 
-export interface RunHistoryProps {
-  runs: DatasetRun[];
+export interface ExperimentHistoryProps {
+  experiments: DatasetExperiment[];
   isLoading: boolean;
   datasetId: string;
 }
@@ -30,17 +30,17 @@ const statusLabelMap: Record<RunStatus, string> = {
   failed: 'Failed',
 };
 
-const runsListColumns = [
-  { name: 'runId', label: 'Run ID', size: '6rem' },
+const experimentsListColumns = [
+  { name: 'experimentId', label: 'Experiment ID', size: '6rem' },
   { name: 'target', label: 'Target', size: '1fr' },
   { name: 'status', label: 'Status', size: '6rem' },
   { name: 'date', label: 'Created', size: '10rem' },
 ];
 
 /**
- * Truncate run ID to first 8 characters or until the first dash
+ * Truncate experiment ID to first 8 characters or until the first dash
  */
-function truncateRunId(id: string): string {
+function truncateExperimentId(id: string): string {
   const dashIndex = id.indexOf('-');
   if (dashIndex > 0 && dashIndex <= 8) {
     return id.slice(0, dashIndex);
@@ -48,7 +48,7 @@ function truncateRunId(id: string): string {
   return id.slice(0, 8);
 }
 
-const runsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '2.5rem' }, ...runsListColumns];
+const experimentsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '2.5rem' }, ...experimentsListColumns];
 
 /**
  * Format a date for display
@@ -64,59 +64,59 @@ function formatDate(date: Date | string): string {
   });
 }
 
-export function RunHistory({ runs, isLoading, datasetId }: RunHistoryProps) {
-  const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
+export function ExperimentHistory({ experiments, isLoading, datasetId }: ExperimentHistoryProps) {
+  const [selectedExperimentIds, setSelectedExperimentIds] = useState<string[]>([]);
   const [isSelectionActive, setIsSelectionActive] = useState(false);
   const { navigate } = useLinkComponent();
 
-  const columns = isSelectionActive ? runsListColumnsWithCheckbox : runsListColumns;
+  const columns = isSelectionActive ? experimentsListColumnsWithCheckbox : experimentsListColumns;
 
-  // Toggle run selection for comparison (max 2)
-  const toggleRunSelection = (runId: string) => {
-    setSelectedRunIds(prev => {
-      if (prev.includes(runId)) {
-        return prev.filter(id => id !== runId);
+  // Toggle experiment selection for comparison (max 2)
+  const toggleExperimentSelection = (experimentId: string) => {
+    setSelectedExperimentIds(prev => {
+      if (prev.includes(experimentId)) {
+        return prev.filter(id => id !== experimentId);
       }
-      // Only allow selecting 2 runs max - replace oldest if selecting 3rd
+      // Only allow selecting 2 experiments max - replace oldest if selecting 3rd
       if (prev.length >= 2) {
-        return [prev[1], runId];
+        return [prev[1], experimentId];
       }
-      return [...prev, runId];
+      return [...prev, experimentId];
     });
   };
 
   // Navigate to comparison view
   const handleCompare = () => {
-    if (selectedRunIds.length === 2) {
-      const [runIdA, runIdB] = selectedRunIds;
-      navigate(`/datasets/${datasetId}/compare?runA=${runIdA}&runB=${runIdB}`);
+    if (selectedExperimentIds.length === 2) {
+      const [experimentIdA, experimentIdB] = selectedExperimentIds;
+      navigate(`/datasets/${datasetId}/compare?experimentA=${experimentIdA}&experimentB=${experimentIdB}`);
     }
   };
 
   const handleCancelSelection = () => {
-    setSelectedRunIds([]);
+    setSelectedExperimentIds([]);
     setIsSelectionActive(false);
   };
 
-  const handleRowClick = (runId: string) => {
-    navigate(`/datasets/${datasetId}/runs/${runId}`);
+  const handleRowClick = (experimentId: string) => {
+    navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
   };
 
   if (isLoading) {
-    return <RunHistorySkeleton />;
+    return <ExperimentHistorySkeleton />;
   }
 
-  if (runs.length === 0) {
-    return <EmptyRunHistory />;
+  if (experiments.length === 0) {
+    return <EmptyExperimentHistory />;
   }
 
   return (
     <div className="grid grid-rows-[auto_1fr] gap-4 h-full">
-      <RunsToolbar
-        hasRuns={runs.length > 0}
+      <ExperimentsToolbar
+        hasExperiments={experiments.length > 0}
         onCompareClick={() => setIsSelectionActive(true)}
         isSelectionActive={isSelectionActive}
-        selectedCount={selectedRunIds.length}
+        selectedCount={selectedExperimentIds.length}
         onExecuteCompare={handleCompare}
         onCancelSelection={handleCancelSelection}
       />
@@ -130,18 +130,18 @@ export function RunHistory({ runs, isLoading, datasetId }: RunHistoryProps) {
 
         <ItemList.Scroller>
           <ItemList.Items>
-            {runs.map(run => {
-              const status = run.status as RunStatus;
-              const isSelected = selectedRunIds.includes(run.id);
-              const entry = { id: run.id };
+            {experiments.map(experiment => {
+              const status = experiment.status as RunStatus;
+              const isSelected = selectedExperimentIds.includes(experiment.id);
+              const entry = { id: experiment.id };
 
               return (
-                <ItemList.Row key={run.id} isSelected={isSelected}>
+                <ItemList.Row key={experiment.id} isSelected={isSelected}>
                   <ItemList.RowButton
                     entry={entry}
                     isSelected={isSelected}
                     columns={columns}
-                    onClick={() => handleRowClick(run.id)}
+                    onClick={() => handleRowClick(experiment.id)}
                   >
                     {isSelectionActive && (
                       <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
@@ -150,20 +150,20 @@ export function RunHistory({ runs, isLoading, datasetId }: RunHistoryProps) {
                           onCheckedChange={() => {}}
                           onClick={e => {
                             e.stopPropagation();
-                            toggleRunSelection(run.id);
+                            toggleExperimentSelection(experiment.id);
                           }}
-                          aria-label={`Select run ${run.id}`}
+                          aria-label={`Select experiment ${experiment.id}`}
                         />
                       </div>
                     )}
-                    <ItemList.ItemText>{truncateRunId(run.id)}</ItemList.ItemText>
+                    <ItemList.ItemText>{truncateExperimentId(experiment.id)}</ItemList.ItemText>
                     <ItemList.ItemText>
-                      <span className="text-neutral3">{run.targetType}:</span> {run.targetId}
+                      <span className="text-neutral3">{experiment.targetType}:</span> {experiment.targetId}
                     </ItemList.ItemText>
                     <div>
                       <Badge variant={statusVariantMap[status]}>{statusLabelMap[status]}</Badge>
                     </div>
-                    <ItemList.ItemText>{formatDate(run.createdAt)}</ItemList.ItemText>
+                    <ItemList.ItemText>{formatDate(experiment.createdAt)}</ItemList.ItemText>
                   </ItemList.RowButton>
                 </ItemList.Row>
               );
@@ -175,21 +175,21 @@ export function RunHistory({ runs, isLoading, datasetId }: RunHistoryProps) {
   );
 }
 
-function RunHistorySkeleton() {
+function ExperimentHistorySkeleton() {
   return (
     <div className="grid grid-rows-[auto_1fr] gap-4 h-full">
       <div className="h-9" /> {/* Toolbar placeholder */}
       <ItemList>
-        <ItemList.Header columns={runsListColumns}>
-          {runsListColumns.map(col => (
+        <ItemList.Header columns={experimentsListColumns}>
+          {experimentsListColumns.map(col => (
             <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
           ))}
         </ItemList.Header>
         <ItemList.Items>
           {Array.from({ length: 5 }).map((_, index) => (
             <ItemList.Row key={index}>
-              <ItemList.RowButton columns={runsListColumns}>
-                {runsListColumns.map((_, colIndex) => (
+              <ItemList.RowButton columns={experimentsListColumns}>
+                {experimentsListColumns.map((_, colIndex) => (
                   <ItemList.ItemText key={colIndex} isLoading>
                     Loading...
                   </ItemList.ItemText>
@@ -203,13 +203,13 @@ function RunHistorySkeleton() {
   );
 }
 
-function EmptyRunHistory() {
+function EmptyExperimentHistory() {
   return (
     <div className="flex h-full items-center justify-center py-12">
       <EmptyState
         iconSlot={<Play className="w-8 h-8 text-neutral3" />}
-        titleSlot="No runs yet"
-        descriptionSlot="Trigger a run to evaluate your dataset against an agent, workflow, or scorer."
+        titleSlot="No experiments yet"
+        descriptionSlot="Trigger an experiment to evaluate your dataset against an agent, workflow, or scorer."
       />
     </div>
   );
