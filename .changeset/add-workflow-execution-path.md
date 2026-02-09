@@ -2,21 +2,34 @@
 '@mastra/core': minor
 ---
 
-Add workflow execution path tracking and optimize verbose logs
+Add workflow execution path tracking and optimize execution logs
 
-This change introduces `stepExecutionPath` tracking throughout the workflow execution system to provide visibility into the actual execution path taken during workflow runs. The execution path is now propagated through:
+Workflow results now include a `stepExecutionPath` array showing the IDs of each step that executed during a workflow run. You can use this to understand exactly which path your workflow took.
 
-- Workflow execution context and results
-- Time travel, restart, and resume operations
-- Lifecycle callbacks and step updates
-- Result formatting and persistence
+```ts
+// Before: no execution path in results
+const result = await workflow.execute({ triggerData });
+// result.stepExecutionPath → undefined
 
-Additionally, optimizes workflow output by making step result `payload` fields optional and conditionally removing duplicate payloads when they match the previous step's output. This reduces context usage and produces more compact, user-friendly execution logs while maintaining full execution path visibility.
+// After: stepExecutionPath is available in workflow results
+const result = await workflow.execute({ triggerData });
+console.log(result.stepExecutionPath);
+// → ['step1', 'step2', 'step4'] — the actual steps that ran
+```
+
+`stepExecutionPath` is available in:
+
+- **Workflow results** (`WorkflowResult.stepExecutionPath`) — see which steps ran after execution completes
+- **Execution context** (`ExecutionContext.stepExecutionPath`) — access the path mid-execution inside your steps
+- **Resume and restart operations** — execution path persists across suspend/resume and restart cycles
+
+Workflow execution logs are now more compact and easier to read. Step outputs are no longer duplicated as the next step's input, reducing the size of execution results while maintaining full visibility.
 
 **Key improvements:**
-- Added `stepExecutionPath?: string[]` to ExecutionContext, WorkflowState, WorkflowResult variants, and related types
-- Optimized payload handling to eliminate duplication in execution JSON
-- Enhanced fmtReturnValue to support path-aware payload trimming
-- Extended resume/restart/time-travel payloads to carry execution path information
+- Track which steps executed in your workflows with `stepExecutionPath`
+- Smaller, more readable execution logs with automatic duplicate payload removal
+- Execution path preserved when resuming or restarting workflows
 
 This is particularly beneficial for AI agents and LLM-based workflows where reducing context size improves performance and cost efficiency.
+
+Related: `#8951`
