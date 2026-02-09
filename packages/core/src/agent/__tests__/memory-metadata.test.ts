@@ -1,5 +1,3 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -291,7 +289,6 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
       },
     );
   });
-
 }
 
 memoryMetadataTests('v1');

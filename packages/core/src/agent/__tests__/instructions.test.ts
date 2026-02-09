@@ -1,15 +1,11 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { CoreSystemMessage, LanguageModelV1 } from '@internal/ai-sdk-v4';
+import type { CoreSystemMessage } from '@internal/ai-sdk-v4';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
-import { TestIntegration } from '../../integration/openapi-toolset.mock';
 import { noopLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
-import { createTool } from '../../tools';
 import { delay } from '../../utils';
 import { Agent } from '../agent';
 import { MessageList } from '../message-list/index';
@@ -707,7 +703,6 @@ function instructionTests(version: 'v1' | 'v2') {
       }
     });
   });
-
 }
 
 instructionTests('v1');

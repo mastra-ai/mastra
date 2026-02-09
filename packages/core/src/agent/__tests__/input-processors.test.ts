@@ -1,13 +1,8 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../memory';
-import type { ProcessInputStepArgs } from '../../processors';
 import { RequestContext } from '../../request-context';
-import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
 function inputProcessorTests(version: 'v1' | 'v2') {
@@ -644,7 +639,6 @@ function inputProcessorTests(version: 'v1' | 'v2') {
       });
     });
   });
-
 }
 
 inputProcessorTests('v1');
