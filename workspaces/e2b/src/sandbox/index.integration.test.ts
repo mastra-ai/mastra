@@ -21,7 +21,7 @@ import { E2BSandbox } from './index';
 /**
  * Check if we have S3-compatible credentials.
  */
-const hasS3Credentials = !!(process.env.S3_ACCESS_KEY_ID && process.env.S3_BUCKET);
+const hasS3Credentials = !!(process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY && process.env.S3_BUCKET);
 const hasGCSCredentials = !!(process.env.GCS_SERVICE_ACCOUNT_KEY && process.env.TEST_GCS_BUCKET);
 
 /**

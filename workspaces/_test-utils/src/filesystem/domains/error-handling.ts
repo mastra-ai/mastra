@@ -122,6 +122,7 @@ export function createErrorHandlingTests(getContext: () => TestContext): void {
     describe('Directory errors', () => {
       it('throws when removing non-empty directory without recursive', async () => {
         const { fs, getTestPath } = getContext();
+        if (fs.readOnly) return;
         const path = `${getTestPath()}/non-empty`;
 
         // Create directory with a file so it exists on object stores
@@ -133,6 +134,7 @@ export function createErrorHandlingTests(getContext: () => TestContext): void {
 
       it('throws when reading directory as file', async () => {
         const { fs, getTestPath, capabilities } = getContext();
+        if (fs.readOnly) return;
 
         // Object stores don't support empty directories
         if (!capabilities.supportsEmptyDirectories) return;

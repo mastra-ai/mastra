@@ -207,6 +207,7 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
         async () => {
           const { sandbox, capabilities } = getContext();
           if (!capabilities.supportsConcurrency) return;
+          if (!capabilities.supportsEnvVars) return;
           if (!sandbox.executeCommand) return;
 
           // Run commands that set different env vars

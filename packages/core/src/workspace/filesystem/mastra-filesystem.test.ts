@@ -71,14 +71,14 @@ class TestFilesystem extends MastraFilesystem {
 
   async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
     const content = this.files.get(src);
-    if (content) {
+    if (content !== undefined) {
       this.files.set(dest, content);
     }
   }
 
   async moveFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
     const content = this.files.get(src);
-    if (content) {
+    if (content !== undefined) {
       this.files.set(dest, content);
       this.files.delete(src);
     }

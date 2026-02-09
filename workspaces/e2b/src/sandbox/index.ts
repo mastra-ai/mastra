@@ -211,7 +211,13 @@ export class E2BSandbox extends MastraSandbox {
     this.logger.debug(`${LOG_PREFIX} Mounting "${mountPath}"...`);
 
     // Get mount config - MountManager validates this exists before calling mount()
-    const config = filesystem.getMountConfig?.() as E2BMountConfig;
+    const config = filesystem.getMountConfig?.() as E2BMountConfig | undefined;
+    if (!config) {
+      const error = `Filesystem "${filesystem.id}" does not provide a mount config`;
+      this.logger.error(`${LOG_PREFIX} ${error}`);
+      this.mounts.set(mountPath, { filesystem, state: 'error', error });
+      return { success: false, mountPath, error };
+    }
 
     // Check if already mounted with matching config (e.g., when reconnecting to existing sandbox)
     const existingMount = await this.checkExistingMount(mountPath, config);

@@ -63,6 +63,7 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
     }, 180000); // Allow 3 minutes for setup
 
     afterAll(async () => {
+      if (!setup) return;
       if (cleanupWorkspace) {
         await cleanupWorkspace(setup);
       } else {

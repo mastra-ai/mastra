@@ -318,10 +318,13 @@ export class MountManager {
    * @returns Parsed path and configHash, or null if invalid format
    */
   parseMarkerContent(content: string): { path: string; configHash: string } | null {
-    const [path, configHash] = content.split('|');
-    if (!path || !configHash) {
+    const separatorIndex = content.lastIndexOf('|');
+    if (separatorIndex <= 0) {
       return null;
     }
+    const path = content.slice(0, separatorIndex);
+    const configHash = content.slice(separatorIndex + 1);
+    if (!path || !configHash) return null;
     return { path, configHash };
   }
 
