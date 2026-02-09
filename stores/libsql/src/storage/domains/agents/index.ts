@@ -245,7 +245,7 @@ export class AgentsLibSQL extends AgentsStorage {
   private parseRow(row: any): StorageAgentType {
     return {
       id: row.id as string,
-      status: row.status as string,
+      status: row.status as 'draft' | 'published' | 'archived',
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
