@@ -579,24 +579,49 @@ function normalizeFinishReason(
  * Attempts to repair common JSON errors produced by LLM providers (e.g., Kimi/K2).
  *
  * Handles these common malformations:
- * - Single quotes instead of double quotes: {'key':'val'} -> {"key":"val"}
  * - Missing opening quote before property name: {"a":"b",c":"d"} -> {"a":"b","c":"d"}
  * - Fully unquoted property names: {command:"ls"} -> {"command":"ls"}
  * - Trailing commas: {"a":1,} -> {"a":1}
+ * - Single quotes instead of double quotes: {'key':'val'} -> {"key":"val"}
+ *
+ * Single-quote replacement is applied as a second pass only when structural
+ * fixes alone are insufficient, so apostrophes inside double-quoted values
+ * (e.g. "it's fine") are preserved when possible.
  *
  * Returns the parsed object on success, or null if repair fails.
  */
 export function tryRepairJson(input: string): Record<string, any> | null {
-  let repaired = input.trim();
-
-  repaired = repaired.replace(/'/g, '"');
-  repaired = repaired.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)"\s*:/g, '$1"$2":');
-  repaired = repaired.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
-  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+  const repaired = applyStructuralFixes(input.trim());
 
   try {
     return JSON.parse(repaired);
   } catch {
-    return null;
+    // Structural fixes alone weren't enough — also try single-quote replacement.
+    // This handles {'key':'value'} patterns from some LLM providers.
+    const withDoubleQuotes = applyStructuralFixes(input.trim().replace(/'/g, '"'));
+    try {
+      return JSON.parse(withDoubleQuotes);
+    } catch {
+      return null;
+    }
   }
+}
+
+function applyStructuralFixes(input: string): string {
+  let result = input;
+
+  // Fix missing opening quote before property name (partial quote)
+  // {"a":"b",c":"d"} -> {"a":"b","c":"d"}
+  // Must run before the unquoted-key fix so the trailing " is consumed
+  result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)"\s*:/g, '$1"$2":');
+
+  // Add missing quotes around fully unquoted property names
+  // {command:"value"} -> {"command":"value"}
+  result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+
+  // Remove trailing commas before closing braces/brackets
+  // {"a":1,} -> {"a":1}
+  result = result.replace(/,(\s*[}\]])/g, '$1');
+
+  return result;
 }

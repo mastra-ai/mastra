@@ -470,6 +470,21 @@ describe('tryRepairJson', () => {
     });
   });
 
+  it('should not corrupt apostrophes in double-quoted string values', () => {
+    // Trailing comma is the only issue; apostrophe in value must be preserved
+    expect(tryRepairJson('{"name": "it\'s a test", "value": 1,}')).toEqual({
+      name: "it's a test",
+      value: 1,
+    });
+  });
+
+  it('should not corrupt apostrophes when combined with unquoted keys', () => {
+    expect(tryRepairJson('{message:"it\'s working",count:1}')).toEqual({
+      message: "it's working",
+      count: 1,
+    });
+  });
+
   it('should return null for truncated/incomplete JSON (not repairable)', () => {
     expect(tryRepairJson('{"location": "New York", "unit": "cel')).toBeNull();
     expect(tryRepairJson('{"a": {')).toBeNull();
