@@ -81,6 +81,15 @@ export interface E2BSandboxOptions extends Pick<MastraSandboxOptions, 'onStart' 
   metadata?: Record<string, unknown>;
   /** Supported runtimes (default: ['node', 'python', 'bash']) */
   runtimes?: SandboxRuntime[];
+
+  /** Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var. */
+  domain?: string;
+  /** API URL for self-hosted E2B. Falls back to E2B_API_URL env var. */
+  apiUrl?: string;
+  /** API key for authentication. Falls back to E2B_API_KEY env var. */
+  apiKey?: string;
+  /** Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var. */
+  accessToken?: string;
 }
 
 // =============================================================================
@@ -143,6 +152,7 @@ export class E2BSandbox extends MastraSandbox {
   private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
   private readonly configuredRuntimes: SandboxRuntime[];
+  private readonly connectionOpts: Record<string, string>;
   declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
 
   /** Resolved template ID after building (if needed) */
@@ -160,6 +170,12 @@ export class E2BSandbox extends MastraSandbox {
     this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
     this.configuredRuntimes = options.runtimes ?? ['node', 'python', 'bash'];
+    this.connectionOpts = {
+      ...(options.domain && { domain: options.domain }),
+      ...(options.apiUrl && { apiUrl: options.apiUrl }),
+      ...(options.apiKey && { apiKey: options.apiKey }),
+      ...(options.accessToken && { accessToken: options.accessToken }),
+    };
 
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
@@ -612,6 +628,7 @@ export class E2BSandbox extends MastraSandbox {
 
     try {
       this._sandbox = await Sandbox.betaCreate(resolvedTemplateId, {
+        ...this.connectionOpts,
         autoPause: true,
         metadata: {
           ...this.metadata,
@@ -629,6 +646,7 @@ export class E2BSandbox extends MastraSandbox {
 
         this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
         this._sandbox = await Sandbox.betaCreate(rebuiltTemplateId, {
+          ...this.connectionOpts,
           autoPause: true,
           metadata: {
             ...this.metadata,
@@ -652,7 +670,7 @@ export class E2BSandbox extends MastraSandbox {
   private async buildDefaultTemplate(): Promise<string> {
     const { template, id } = createDefaultMountableTemplate();
     this.logger.debug(`${LOG_PREFIX} Building default mountable template: ${id}...`);
-    const buildResult = await Template.build(template as TemplateClass, id);
+    const buildResult = await Template.build(template as TemplateClass, id, this.connectionOpts);
     this._resolvedTemplateId = buildResult.templateId;
     this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
     return buildResult.templateId;
@@ -677,7 +695,7 @@ export class E2BSandbox extends MastraSandbox {
       const { template, id } = createDefaultMountableTemplate();
 
       // Check if template already exists (cached from previous runs)
-      const exists = await Template.exists(id);
+      const exists = await Template.exists(id, this.connectionOpts);
       if (exists) {
         this.logger.debug(`${LOG_PREFIX} Using cached mountable template: ${id}`);
         this._resolvedTemplateId = id;
@@ -686,7 +704,7 @@ export class E2BSandbox extends MastraSandbox {
 
       // Build the template (first time only)
       this.logger.debug(`${LOG_PREFIX} Building default mountable template: ${id}...`);
-      const buildResult = await Template.build(template as TemplateClass, id);
+      const buildResult = await Template.build(template as TemplateClass, id, this.connectionOpts);
       this._resolvedTemplateId = buildResult.templateId;
       this.logger.debug(`${LOG_PREFIX} Template built and cached: ${buildResult.templateId}`);
       return buildResult.templateId;
@@ -716,7 +734,7 @@ export class E2BSandbox extends MastraSandbox {
 
     // Build the template
     this.logger.debug(`${LOG_PREFIX} Building custom template: ${templateName}...`);
-    const buildResult = await Template.build(template as TemplateClass, templateName);
+    const buildResult = await Template.build(template as TemplateClass, templateName, this.connectionOpts);
     this._resolvedTemplateId = buildResult.templateId;
     this.logger.debug(`${LOG_PREFIX} Template built: ${buildResult.templateId}`);
 
@@ -731,6 +749,7 @@ export class E2BSandbox extends MastraSandbox {
     try {
       // Query E2B for existing sandbox with our logical ID in metadata
       const paginator = Sandbox.list({
+        ...this.connectionOpts,
         query: {
           metadata: { 'mastra-sandbox-id': this.id },
           state: ['running', 'paused'],
@@ -747,7 +766,7 @@ export class E2BSandbox extends MastraSandbox {
         this.logger.debug(
           `${LOG_PREFIX} Found existing sandbox for ${this.id}: ${existingSandbox.sandboxId} (state: ${existingSandbox.state})`,
         );
-        return await Sandbox.connect(existingSandbox.sandboxId);
+        return await Sandbox.connect(existingSandbox.sandboxId, this.connectionOpts);
       }
     } catch (e) {
       this.logger.debug(`${LOG_PREFIX} Error querying for existing sandbox:`, e);

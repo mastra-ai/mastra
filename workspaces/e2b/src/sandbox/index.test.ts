@@ -575,10 +575,11 @@ describe('E2BSandbox Template Handling', () => {
     const sandbox = new E2BSandbox({ template: mockBuilder as any });
     await sandbox.start();
 
-    // Template.build should be called with the builder (and possibly a name)
+    // Template.build should be called with the builder, a name, and connection opts
     expect(Template.build).toHaveBeenCalledWith(
       mockBuilder,
       expect.any(String), // template name
+      expect.any(Object), // connection opts
     );
   });
 
@@ -1687,6 +1688,135 @@ describe('E2BSandbox Internal Methods', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('not empty');
     });
+  });
+});
+
+/**
+ * Self-hosted connection options tests
+ */
+describe('E2BSandbox Self-Hosted Connection Options', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('forwards domain/apiUrl/apiKey/accessToken to Sandbox.betaCreate', async () => {
+    const { Sandbox } = await import('e2b');
+    const sandbox = new E2BSandbox({
+      domain: 'custom.dev',
+      apiUrl: 'http://localhost:3000',
+      apiKey: 'test-key',
+      accessToken: 'test-token',
+    });
+
+    await sandbox.start();
+
+    expect(Sandbox.betaCreate).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        domain: 'custom.dev',
+        apiUrl: 'http://localhost:3000',
+        apiKey: 'test-key',
+        accessToken: 'test-token',
+      }),
+    );
+  });
+
+  it('forwards connection opts to Sandbox.list', async () => {
+    const { Sandbox } = await import('e2b');
+    const sandbox = new E2BSandbox({
+      domain: 'custom.dev',
+      apiKey: 'test-key',
+    });
+
+    await sandbox.start();
+
+    expect(Sandbox.list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: 'custom.dev',
+        apiKey: 'test-key',
+      }),
+    );
+  });
+
+  it('forwards connection opts to Sandbox.connect', async () => {
+    const { Sandbox } = await import('e2b');
+
+    // Mock finding existing sandbox so connect is called
+    (Sandbox.list as any).mockReturnValue({
+      nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox', state: 'running' }]),
+    });
+
+    const sandbox = new E2BSandbox({
+      id: 'connect-test',
+      domain: 'custom.dev',
+      apiKey: 'test-key',
+    });
+
+    await sandbox.start();
+
+    expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.objectContaining({
+      domain: 'custom.dev',
+      apiKey: 'test-key',
+    }));
+
+    // Reset mock
+    (Sandbox.list as any).mockReturnValue({
+      nextItems: vi.fn().mockResolvedValue([]),
+    });
+  });
+
+  it('forwards connection opts to Template.exists and Template.build', async () => {
+    const { Template } = await import('e2b');
+
+    // Template.exists returns false so build is called
+    (Template.exists as any).mockResolvedValue(false);
+
+    const sandbox = new E2BSandbox({
+      domain: 'custom.dev',
+      apiKey: 'test-key',
+    });
+
+    await sandbox.start();
+
+    expect(Template.exists).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        domain: 'custom.dev',
+        apiKey: 'test-key',
+      }),
+    );
+
+    expect(Template.build).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      expect.objectContaining({
+        domain: 'custom.dev',
+        apiKey: 'test-key',
+      }),
+    );
+  });
+
+  it('omits connection opts when not configured', async () => {
+    const { Sandbox, Template } = await import('e2b');
+
+    (Template.exists as any).mockResolvedValue(false);
+
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    // betaCreate should not contain domain/apiUrl/apiKey/accessToken
+    const betaCreateOpts = (Sandbox.betaCreate as any).mock.calls[0][1];
+    expect(betaCreateOpts).not.toHaveProperty('domain');
+    expect(betaCreateOpts).not.toHaveProperty('apiUrl');
+    expect(betaCreateOpts).not.toHaveProperty('apiKey');
+    expect(betaCreateOpts).not.toHaveProperty('accessToken');
+
+    // list should not contain connection opts
+    const listOpts = (Sandbox.list as any).mock.calls[0][0];
+    expect(listOpts).not.toHaveProperty('domain');
+    expect(listOpts).not.toHaveProperty('apiUrl');
+    expect(listOpts).not.toHaveProperty('apiKey');
+    expect(listOpts).not.toHaveProperty('accessToken');
   });
 });
 
