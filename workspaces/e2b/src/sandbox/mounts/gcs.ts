@@ -29,9 +29,14 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
   // Install gcsfuse if not present
   const checkResult = await sandbox.commands.run('which gcsfuse || echo "not found"');
   if (checkResult.stdout.includes('not found')) {
+    // Detect Ubuntu codename for the gcsfuse repo (default to jammy if unknown)
+    const codenameResult = await sandbox.commands.run('lsb_release -cs 2>/dev/null || echo jammy');
+    const codename = codenameResult.stdout.trim() || 'jammy';
+
+    // Use signed-by keyring instead of deprecated apt-key
     await sandbox.commands.run(
-      'echo "deb https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list && ' +
-        'curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add - && ' +
+      'curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/gcsfuse.gpg && ' +
+        `echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-${codename} main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list && ` +
         'sudo apt-get update && sudo apt-get install -y gcsfuse',
       { timeoutMs: 120_000 },
     );

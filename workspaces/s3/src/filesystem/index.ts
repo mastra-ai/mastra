@@ -392,7 +392,10 @@ export class S3Filesystem extends MastraFilesystem {
           { accessKeyId: '', secretAccessKey: '' },
       endpoint: this.endpoint,
       forcePathStyle: this.forcePathStyle,
-      // Skip signing for anonymous access (public buckets)
+      // Skip signing for anonymous access (public buckets).
+      // No-op signer passes the request through unsigned. Uses `any` because
+      // the correct type (HttpRequest from @smithy/types) is not a direct dependency.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ...(hasCredentials ? {} : { signer: { sign: async (request: any) => request } }),
     });
 
