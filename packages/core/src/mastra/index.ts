@@ -879,9 +879,10 @@ export class Mastra<
         this.#logger?.debug(`Failed to register processor workflows for agent ${agentKey}:`, err);
       });
 
-    // Register agent workspace in the workspaces registry for direct lookup
-    // Use .then() to handle async resolution without blocking
-    if (mastraAgent.hasOwnWorkspace?.()) {
+    // Register static agent workspaces in the workspaces registry for direct lookup.
+    // Dynamic (function-based) workspaces are skipped here — they get lazily registered
+    // during agent execution when getWorkspace() is called with proper request context.
+    if (mastraAgent.hasStaticWorkspace?.()) {
       Promise.resolve(mastraAgent.getWorkspace?.())
         .then(workspace => {
           if (workspace) {
