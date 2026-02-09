@@ -521,12 +521,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       base.stepExecutionPath = stepExecutionPath;
 
       // Create a shallow copy of steps to modify without affecting the original reference
-      const optimizedSteps: Record<string, StepResult<any, any, any, any>> = { ...stepResults };
+      const optimizedSteps: Record<string, StepResult<any, any, any, any>> = { ...cleanStepResults };
 
-      let previousOutput = stepResults.input;
+      let previousOutput = cleanStepResults.input;
 
       for (const stepId of stepExecutionPath) {
-        const originalStep = stepResults[stepId];
+        const originalStep = cleanStepResults[stepId];
         if (!originalStep) continue;
 
         // Clone step result to avoid mutating the original object in memory
