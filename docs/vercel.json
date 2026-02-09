@@ -576,11 +576,6 @@
       "permanent": true
     },
     {
-      "source": "/guides/deployment",
-      "destination": "/guides",
-      "permanent": true
-    },
-    {
       "source": "/docs/tools-mcp/advanced-usage",
       "destination": "/docs/agents/using-tools",
       "permanent": true
