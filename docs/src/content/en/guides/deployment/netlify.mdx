@@ -8,21 +8,19 @@ import StepItem from "@site/src/components/StepItem";
 
 # Deploy Mastra to Netlify
 
-In this guide, you'll learn how to deploy a Mastra application with Netlify using `@mastra/deployer-netlify`. The deployer handles packaging, configuration, and deployment by adapting Mastra's output to create an optimized version of your server. At the end you'll have a Mastra application running on Netlify Functions.
-
-## Before you begin
-
-- You'll need an existing Mastra application. If you don't have one yet, follow the [Getting Started guide](/guides/getting-started/quickstart) to create a simple Mastra app.
-- A Netlify account. If you don't have one, sign up at [Netlify](https://www.netlify.com/).
-- Remove any usage of [LibSQLStore](/reference/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash. Netlify Functions use an ephemeral filesystem and cannot persist files.
+Use `@mastra/deployer-netlify` to deploy your mastra server as serverless functions on Netlify. The deployer bundles your code and generates a `.netlify` directory conforming to Netlify's [frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/#netlifyv1functions), ready to deploy.
 
 :::info
 
-You can use and deploy Mastra in different ways: Using its [standalone server](/docs/server/mastra-server), using a [server adapter](/docs/server/server-adapters), or by integrating it with a [web framework](/docs/deployment/web-framework).
-
-This guide assumes you're using the **standalone server** approach. For the other two options, refer to guides that the respective frameworks provide.
+If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
 
 :::
+
+## Before you begin
+
+You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Netlify](https://www.netlify.com/) account.
+
+Netlify Functions use an ephemeral filesystem, so any storage you configure (including observability storage) must be hosted externally. If you're using [LibSQLStore](/reference/storage/libsql) with a file URL, switch to a remotely hosted database.
 
 ## Installation
 
@@ -32,7 +30,7 @@ Add the `@mastra/deployer-netlify` package to your project:
 npm install @mastra/deployer-netlify@latest
 ```
 
-Afterwards, import [`NetlifyDeployer`](/reference/deployer/netlify) and set it as the deployer in your Mastra configuration:
+Import [`NetlifyDeployer`](/reference/deployer/netlify) and set it as the deployer in your Mastra configuration:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
@@ -45,7 +43,7 @@ export const mastra = new Mastra({
 });
 ```
 
-Lastly, create a `netlify.toml` file with the following contents in your project root:
+Create a `netlify.toml` file with the following contents in your project root:
 
 ```toml
 [build]
@@ -61,16 +59,16 @@ After setting up your project, push it to your remote Git provider of choice (e.
 
 Connect your repository to Netlify. During the setup process, Netlify will detect your `netlify.toml` file and set the build command to `mastra build`.
 
-:::warning
+:::note
 
-Do not forget to set your environment variables needed to run your application (e.g. `OPENAI_API_KEY` if you're using OpenAI as the LLM provider).
+Remember to set your environment variables needed to run your application (e.g. your [model provider](/models/providers) API key).
 
 :::
 
 </StepItem>
 <StepItem>
 
-Once you're ready, click the **"Deploy"** button and wait for the first deployment to complete. It'll tell you that one function has been deployed.
+Once you're ready, click the **Deploy** button and wait for the first deployment to complete. It'll tell you that one function has been deployed.
 
 </StepItem>
 <StepItem>
@@ -82,6 +80,17 @@ Since the [Mastra server](/docs/server/mastra-server) prefixes every API endpoin
 :::info
 
 Netlify functions are typically deployed at `https://<random-slug>.netlify.app/.netlify/functions/api`. The `NetlifyDeployer` redirects any request from `/*` to `/.netlify/functions/api/:splat`, so you don't need to include the `.netlify/functions` prefix in your URLs.
+
+:::
+
+</StepItem>
+<StepItem>
+
+You can now call your Mastra endpoints over HTTP.
+
+:::note
+
+Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
 
 :::
 
