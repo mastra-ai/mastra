@@ -139,8 +139,12 @@ export class WorkflowsConvex extends WorkflowsStorage {
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     const { workflowName, fromDate, toDate, perPage, page, resourceId, status } = args;
 
-    let rows = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined);
+    // Use index hint if workflowName is provided - critical for performance
+    const indexHint = workflowName ? { index: 'by_workflow' as const, workflowName } : undefined;
 
+    let rows = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined, indexHint);
+
+    // Apply filters in JavaScript (status requires parsing snapshot JSON)
     if (workflowName) rows = rows.filter(run => run.workflow_name === workflowName);
     if (resourceId) rows = rows.filter(run => run.resourceId === resourceId);
     if (fromDate) rows = rows.filter(run => new Date(run.createdAt).getTime() >= fromDate.getTime());
