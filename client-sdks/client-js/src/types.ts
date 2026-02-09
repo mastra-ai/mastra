@@ -774,6 +774,22 @@ export interface ListStoredAgentsResponse {
 }
 
 /**
+ * Parameters for cloning an agent to a stored agent
+ */
+export interface CloneAgentParams {
+  /** ID for the cloned agent. If not provided, derived from agent ID. */
+  newId?: string;
+  /** Name for the cloned agent. Defaults to "{name} (Clone)". */
+  newName?: string;
+  /** Additional metadata for the cloned agent. */
+  metadata?: Record<string, unknown>;
+  /** Author identifier for the cloned agent. */
+  authorId?: string;
+  /** Request context for resolving dynamic agent configuration (instructions, model, tools, etc.) */
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+/**
  * Parameters for creating a stored agent.
  * Flat union of agent-record fields and config fields.
  */
