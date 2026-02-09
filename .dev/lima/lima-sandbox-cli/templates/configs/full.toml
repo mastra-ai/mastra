@@ -1,0 +1,108 @@
+# Full Stack Template (Node.js + Python + Rust + Go + DuckDB)
+# Created by: lima-sandbox init --template full
+
+project = "my-project"
+
+[vm]
+cpus = 8
+memory = "16GiB"
+disk = "60GiB"
+vmType = "vz"
+
+[tools]
+nodejs = "22"
+python = "3.13"
+rust = "stable"
+go = "1.22"
+duckdb = "1.1.3"
+apt = ["jq", "ripgrep", "fd-find", "htop", "tree"]
+
+[claude]
+install = true
+
+[sync.to]
+default_paths = ["."]
+exclude = [
+    # Node
+    "node_modules/",
+    ".next/",
+    ".nuxt/",
+    # Python
+    ".venv/",
+    "venv/",
+    "__pycache__/",
+    "*.pyc",
+    "*.egg-info/",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    ".ruff_cache/",
+    # Rust
+    "target/",
+    # Go
+    "vendor/",
+    # General
+    ".git/",
+    "dist/",
+    "build/",
+    "coverage/",
+    "*.log",
+    ".env",
+    ".env.local",
+]
+
+[sync.from]
+exclude = [
+    # Node
+    "node_modules/",
+    ".next/",
+    ".nuxt/",
+    # Python
+    ".venv/",
+    "venv/",
+    "__pycache__/",
+    "*.pyc",
+    "*.egg-info/",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    ".ruff_cache/",
+    # Rust
+    "target/",
+    # Go
+    "vendor/",
+    # General
+    ".git/",
+    "dist/",
+    "build/",
+    "coverage/",
+    "*.log",
+    ".DS_Store",
+]
+
+[watch]
+interval = 30
+default_paths = []
+
+[hooks]
+post_sync = """
+# Load all tool paths
+source ~/.nvm/nvm.sh
+export PNPM_HOME="$HOME/.local/share/pnpm"
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PNPM_HOME:$PYENV_ROOT/bin:$HOME/.local/bin:$HOME/.cargo/bin:$HOME/go/bin:$PATH"
+eval "$(pyenv init -)"
+
+echo "Environment ready:"
+echo "  Node: $(node -v)"
+echo "  Python: $(python --version)"
+echo "  Rust: $(rustc --version)"
+echo "  Go: $(go version)"
+echo "  DuckDB: $(duckdb --version)"
+"""
+
+pre_run = """
+source ~/.nvm/nvm.sh
+export PNPM_HOME="$HOME/.local/share/pnpm"
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PNPM_HOME:$PYENV_ROOT/bin:$HOME/.local/bin:$HOME/.cargo/bin:$HOME/go/bin:$PATH"
+eval "$(pyenv init -)"
+"""

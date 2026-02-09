@@ -1,0 +1,34 @@
+# Shared exclusion patterns for lima-cluster sync operations
+# Used by tar (build/update) and rsync (sync/sync-back/watch-back)
+#
+# Lines starting with # are comments (stripped before passing to tar)
+# Blank lines are ignored
+
+# Dependencies
+node_modules/
+
+# Version control
+.git/
+
+# Build artifacts
+dist/
+docs/build/
+docs/.docusaurus/
+*.d.ts
+
+# Logs
+*.log
+
+# Lima-specific
+.dev/lima
+.git-state
+
+# OS/editor junk
+.DS_Store
+*.pyc
+__pycache__/
+
+# Cache/generated directories
+.turbo/
+.opencode/
+.superset/

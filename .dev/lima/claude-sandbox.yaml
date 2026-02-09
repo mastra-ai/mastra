@@ -1,0 +1,113 @@
+# lima/claude-sandbox.yaml
+# Safe-by-default sandbox for Claude Code YOLO mode
+
+vmType: vz # Apple Virtualization.framework (fast, native)
+os: Linux
+arch: aarch64
+
+images:
+  - location: 'https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-arm64.img'
+    arch: aarch64
+
+cpus: 8
+memory: '16GiB'
+disk: '60GiB'
+
+# 🔒 SECURITY: no automatic home directory mount
+mounts: []
+
+# Networking: Use default user-mode networking (vzNAT was too slow)
+# To use shared networking, install socket_vmnet and uncomment:
+# networks:
+#   - lima: shared
+
+# 🔒 SECURITY: no host port forwards by default
+portForwards: []
+
+containerd:
+  system: false
+  user: true
+
+# Cloud-init provisioning
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euxo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+
+      apt-get update
+      apt-get install -y \
+        ca-certificates \
+        curl \
+        git \
+        rsync \
+        build-essential \
+        python3
+
+      echo "System provisioning done for user={{.User}} home={{.Home}}"
+
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -euxo pipefail
+
+      NODE_VERSION="22.13.0"
+      NVM_VERSION="v0.39.7"
+
+      export NVM_DIR="{{.Home}}/.nvm"
+      mkdir -p "$NVM_DIR"
+
+      curl -fsSL "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" | bash
+
+      # Load nvm in this script
+      . "$NVM_DIR/nvm.sh"
+
+      nvm install "${NODE_VERSION}"
+      nvm alias default "${NODE_VERSION}"
+
+      # Update corepack to latest to fix keyid verification bug
+      npm install -g corepack@latest
+
+      # Enable corepack for all package managers
+      corepack enable
+
+      # Install pnpm via standalone installer (more reliable than corepack)
+      curl -fsSL https://get.pnpm.io/install.sh | sh -
+
+      # Add pnpm to PATH for this script
+      export PNPM_HOME="{{.Home}}/.local/share/pnpm"
+      export PATH="$PNPM_HOME:$PATH"
+
+      node -v
+      pnpm -v
+      corepack --version
+
+      echo "User provisioning done: node=$(node -v) pnpm=$(pnpm -v) corepack=$(corepack --version)"
+
+probes:
+  - mode: readiness
+    description: Node and pnpm installed
+    script: |
+      #!/bin/bash
+      set -euxo pipefail
+
+      # Wait for cloud-init to complete and nvm/pnpm to be available
+      timeout 300s bash -c '
+        until [ -f "$HOME/.nvm/nvm.sh" ]; do sleep 5; done
+        source "$HOME/.nvm/nvm.sh"
+        export PNPM_HOME="$HOME/.local/share/pnpm"
+        export PATH="$PNPM_HOME:$PATH"
+        until command -v node && command -v pnpm; do sleep 5; done
+      '
+
+      source "$HOME/.nvm/nvm.sh"
+      export PNPM_HOME="$HOME/.local/share/pnpm"
+      export PATH="$PNPM_HOME:$PATH"
+      node -v
+      pnpm -v
+    hint: |
+      Node/pnpm are not installed yet.
+      Check inside the VM:
+        sudo tail -n 200 /var/log/cloud-init-output.log
+        sudo journalctl -u cloud-final --no-pager | tail -n 200

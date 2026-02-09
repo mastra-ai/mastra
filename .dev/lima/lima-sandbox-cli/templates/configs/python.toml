@@ -1,0 +1,67 @@
+# Python Project Template
+# Created by: lima-sandbox init --template python
+
+project = "my-project"
+
+[vm]
+cpus = 4
+memory = "8GiB"
+disk = "30GiB"
+vmType = "vz"
+
+[tools]
+python = "3.13"
+apt = ["jq", "ripgrep"]
+
+[claude]
+install = true
+
+[sync.to]
+default_paths = ["."]
+exclude = [
+    ".venv/",
+    "venv/",
+    "__pycache__/",
+    "*.pyc",
+    ".git/",
+    "dist/",
+    "build/",
+    "*.egg-info/",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    ".ruff_cache/",
+    "*.log",
+    ".env",
+]
+
+[sync.from]
+exclude = [
+    ".venv/",
+    "venv/",
+    "__pycache__/",
+    "*.pyc",
+    ".git/",
+    "dist/",
+    "build/",
+    "*.egg-info/",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    ".ruff_cache/",
+    "*.log",
+    ".DS_Store",
+]
+
+[hooks]
+post_sync = """
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$HOME/.local/bin:$PATH"
+eval "$(pyenv init -)"
+uv sync
+"""
+
+pre_run = """
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$HOME/.local/bin:$PATH"
+eval "$(pyenv init -)"
+source .venv/bin/activate
+"""

@@ -1,0 +1,59 @@
+# Node.js Project Template
+# Created by: lima-sandbox init --template nodejs
+
+project = "my-project"
+
+[vm]
+cpus = 4
+memory = "8GiB"
+disk = "30GiB"
+vmType = "vz"
+
+[tools]
+nodejs = "22"
+apt = ["jq", "ripgrep"]
+
+[claude]
+install = true
+
+[sync.to]
+default_paths = ["."]
+exclude = [
+    "node_modules/",
+    ".git/",
+    "dist/",
+    "build/",
+    ".next/",
+    ".nuxt/",
+    "coverage/",
+    "*.log",
+    ".env",
+    ".env.local",
+]
+
+[sync.from]
+exclude = [
+    "node_modules/",
+    ".git/",
+    "dist/",
+    "build/",
+    ".next/",
+    ".nuxt/",
+    "coverage/",
+    "*.log",
+    ".DS_Store",
+]
+
+[hooks]
+post_sync = """
+source ~/.nvm/nvm.sh
+export PNPM_HOME="$HOME/.local/share/pnpm"
+export PATH="$PNPM_HOME:$PATH"
+pnpm install
+"""
+
+pre_run = """
+source ~/.nvm/nvm.sh
+export PNPM_HOME="$HOME/.local/share/pnpm"
+export PATH="$PNPM_HOME:$PATH"
+"""
