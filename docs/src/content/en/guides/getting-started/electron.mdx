@@ -54,7 +54,7 @@ export const mastra = new Mastra({
   // Existing config...
   server: {
     cors: {
-      origin: "*",
+      origin: "*", // restrict this to your app's origin in production
       allowMethods: ["*"],
       allowHeaders: ["*"],
     },
