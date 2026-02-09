@@ -100,41 +100,15 @@ jobs:
       matrix:
         project:
           # Core packages
-          - packages/core
-          - packages/rag
-          - packages/evals
+          - packages/*
           # Stores (external API required)
-          - stores/pinecone
-          - stores/astra
-          - stores/cloudflare
-          - stores/cloudflare-d1
-          - stores/vectorize
-          - stores/upstash
-          - stores/turbopuffer
-          # Stores (local/embedded - can run without external services)
-          - stores/libsql
-          - stores/lance
-          - stores/duckdb
-          - stores/chroma
-          - stores/convex
+          - stores/*
           # Voice packages
-          - voice/openai
-          - voice/deepgram
-          - voice/elevenlabs
-          - voice/google
-          - voice/azure
-          - voice/cloudflare
-          - voice/speechify
-          - voice/murf
-          - voice/gladia
-          - voice/playai
-          - voice/sarvam
-          - voice/google-gemini-live-api
-          - voice/openai-realtime-api
+          - voice/*
           # Workflows
-          - workflows/inngest
+          - workflows/*
           # Pubsub
-          - pubsub/google-cloud-pubsub
+          - pubsub/*
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -183,7 +157,7 @@ jobs:
 
       - name: Normalize project name
         id: normalize
-        run: echo "project_id=$(echo '${{ matrix.project }}' | tr '/' '-')" >> $GITHUB_OUTPUT
+        run: echo "project_id=$(echo '${{ matrix.project }}' | tr '/' '-' | tr '*' '_star_')" >> $GITHUB_OUTPUT
 
       - name: Run changed tests (${{ matrix.project }})
         run: |
