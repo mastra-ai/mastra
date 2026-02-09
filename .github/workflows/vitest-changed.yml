@@ -157,7 +157,7 @@ jobs:
 
       - name: Normalize project name
         id: normalize
-        run: echo "project_id=$(echo '${{ matrix.project }}' | tr '/' '-' | tr '*' '_star_')" >> $GITHUB_OUTPUT
+        run: echo "project_id=$(echo '${{ matrix.project }}' | tr '/' '-' | sed 's/\*/_star_/g')" >> $GITHUB_OUTPUT
 
       - name: Run changed tests (${{ matrix.project }})
         run: |
