@@ -4,7 +4,11 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type {
   AgentInstructionBlock,
-  StorageResolvedAgentType,
+  StorageCreateAgentInput,
+  StorageUpdateAgentInput,
+  StorageListAgentsInput,
+  StorageListAgentsOutput,
+  StorageListAgentsResolvedOutput,
   StorageCreatePromptBlockInput,
   StorageUpdatePromptBlockInput,
   StorageListPromptBlocksInput,
@@ -23,37 +27,24 @@ export interface MastraEditorConfig {
   logger?: IMastraLogger;
 }
 
+export interface GetByIdOptions {
+  /** Retrieve a specific version by ID. */
+  versionId?: string;
+  /** Retrieve a specific version by number. */
+  versionNumber?: number;
+}
+
 // ============================================================================
 // Agent Namespace Interface
 // ============================================================================
 
 export interface IEditorAgentNamespace {
-  getById(
-    id: string,
-    options?: { returnRaw?: false; versionId?: string; versionNumber?: number },
-  ): Promise<Agent | null>;
-
-  getById(
-    id: string,
-    options: { returnRaw: true; versionId?: string; versionNumber?: number },
-  ): Promise<StorageResolvedAgentType | null>;
-
-  list(options?: { returnRaw?: false; page?: number; pageSize?: number }): Promise<{
-    agents: Agent[];
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  }>;
-
-  list(options: { returnRaw: true; page?: number; pageSize?: number }): Promise<{
-    agents: StorageResolvedAgentType[];
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  }>;
-
+  create(input: StorageCreateAgentInput): Promise<Agent>;
+  getById(id: string, options?: GetByIdOptions): Promise<Agent | null>;
+  update(input: StorageUpdateAgentInput): Promise<Agent>;
+  delete(id: string): Promise<void>;
+  list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput>;
+  listResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsResolvedOutput>;
   clearCache(agentId?: string): void;
 }
 
@@ -63,11 +54,12 @@ export interface IEditorAgentNamespace {
 
 export interface IEditorPromptNamespace {
   create(input: StorageCreatePromptBlockInput): Promise<StorageResolvedPromptBlockType>;
-  getById(id: string): Promise<StorageResolvedPromptBlockType | null>;
+  getById(id: string, options?: GetByIdOptions): Promise<StorageResolvedPromptBlockType | null>;
   update(input: StorageUpdatePromptBlockInput): Promise<StorageResolvedPromptBlockType>;
   delete(id: string): Promise<void>;
   list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput>;
   listResolved(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksResolvedOutput>;
+  clearCache(id?: string): void;
   preview(blocks: AgentInstructionBlock[], context: Record<string, unknown>): Promise<string>;
 }
 
@@ -77,11 +69,12 @@ export interface IEditorPromptNamespace {
 
 export interface IEditorScorerNamespace {
   create(input: StorageCreateScorerDefinitionInput): Promise<StorageResolvedScorerDefinitionType>;
-  getById(id: string): Promise<StorageResolvedScorerDefinitionType | null>;
+  getById(id: string, options?: GetByIdOptions): Promise<StorageResolvedScorerDefinitionType | null>;
   update(input: StorageUpdateScorerDefinitionInput): Promise<StorageResolvedScorerDefinitionType>;
   delete(id: string): Promise<void>;
   list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput>;
   listResolved(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsResolvedOutput>;
+  clearCache(id?: string): void;
   resolve(storedScorer: StorageResolvedScorerDefinitionType): MastraScorer<any, any, any, any> | null;
 }
 

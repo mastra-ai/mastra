@@ -1,4 +1,3 @@
-import type { Logger, Mastra } from '@mastra/core';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraScorer } from '@mastra/core/evals';
 import type {
@@ -10,71 +9,40 @@ import type {
   StorageListScorerDefinitionsResolvedOutput,
 } from '@mastra/core/storage';
 
-import type { MastraEditor } from '../index';
+import { CrudEditorNamespace } from './base';
+import type { StorageAdapter } from './base';
 
-export class EditorScorerNamespace {
-  constructor(private editor: MastraEditor) {}
-
-  private get mastra(): Mastra | undefined {
-    return this.editor.__mastra;
-  }
-
-  private get logger(): Logger | undefined {
-    return this.editor.__logger;
-  }
-
-  private async getStore() {
+export class EditorScorerNamespace extends CrudEditorNamespace<
+  StorageCreateScorerDefinitionInput,
+  StorageUpdateScorerDefinitionInput,
+  StorageListScorerDefinitionsInput,
+  StorageListScorerDefinitionsOutput,
+  StorageListScorerDefinitionsResolvedOutput,
+  StorageResolvedScorerDefinitionType
+> {
+  protected async getStorageAdapter(): Promise<
+    StorageAdapter<
+      StorageCreateScorerDefinitionInput,
+      StorageUpdateScorerDefinitionInput,
+      StorageListScorerDefinitionsInput,
+      StorageListScorerDefinitionsOutput,
+      StorageListScorerDefinitionsResolvedOutput,
+      StorageResolvedScorerDefinitionType
+    >
+  > {
     const storage = this.mastra!.getStorage();
     if (!storage) throw new Error('Storage is not configured');
     const store = await storage.getStore('scorerDefinitions');
     if (!store) throw new Error('Scorer definitions storage domain is not available');
-    return store;
-  }
 
-  async create(input: StorageCreateScorerDefinitionInput): Promise<StorageResolvedScorerDefinitionType> {
-    this.ensureRegistered();
-    const store = await this.getStore();
-    await store.createScorerDefinition({ scorerDefinition: input });
-    const resolved = await store.getScorerDefinitionByIdResolved({ id: input.id });
-    if (!resolved) {
-      throw new Error(`Failed to resolve scorer definition ${input.id} after creation`);
-    }
-    return resolved;
-  }
-
-  async getById(id: string): Promise<StorageResolvedScorerDefinitionType | null> {
-    this.ensureRegistered();
-    const store = await this.getStore();
-    return store.getScorerDefinitionByIdResolved({ id });
-  }
-
-  async update(input: StorageUpdateScorerDefinitionInput): Promise<StorageResolvedScorerDefinitionType> {
-    this.ensureRegistered();
-    const store = await this.getStore();
-    await store.updateScorerDefinition(input);
-    const resolved = await store.getScorerDefinitionByIdResolved({ id: input.id });
-    if (!resolved) {
-      throw new Error(`Failed to resolve scorer definition ${input.id} after update`);
-    }
-    return resolved;
-  }
-
-  async delete(id: string): Promise<void> {
-    this.ensureRegistered();
-    const store = await this.getStore();
-    await store.deleteScorerDefinition({ id });
-  }
-
-  async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
-    this.ensureRegistered();
-    const store = await this.getStore();
-    return store.listScorerDefinitions(args);
-  }
-
-  async listResolved(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsResolvedOutput> {
-    this.ensureRegistered();
-    const store = await this.getStore();
-    return store.listScorerDefinitionsResolved(args);
+    return {
+      create: input => store.createScorerDefinition({ scorerDefinition: input }),
+      getByIdResolved: id => store.getScorerDefinitionByIdResolved({ id }),
+      update: input => store.updateScorerDefinition(input),
+      delete: id => store.deleteScorerDefinition({ id }),
+      list: args => store.listScorerDefinitions(args),
+      listResolved: args => store.listScorerDefinitionsResolved(args),
+    };
   }
 
   /**
@@ -150,11 +118,5 @@ Explain your reasoning for this score in a clear, concise paragraph.`;
       `Preset instantiation from stored config is not yet supported.`,
     );
     return null;
-  }
-
-  private ensureRegistered(): void {
-    if (!this.editor.__mastra) {
-      throw new Error('MastraEditor is not registered with a Mastra instance');
-    }
   }
 }

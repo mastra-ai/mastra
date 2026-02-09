@@ -183,7 +183,7 @@ export class Agent<
    * ```
    */
   constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
-    super({ component: RegisteredLogger.AGENT });
+    super({ component: RegisteredLogger.AGENT, rawConfig: config.rawConfig });
 
     this.name = config.name;
     this.id = config.id ?? config.name;

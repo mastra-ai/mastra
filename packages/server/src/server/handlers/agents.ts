@@ -747,8 +747,11 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
         if (storedAgentsResult?.agents) {
           // Process each agent individually to avoid one bad agent breaking the whole list
-          for (const agent of storedAgentsResult.agents) {
+          for (const storedAgentConfig of storedAgentsResult.agents) {
             try {
+              const agent = await editor?.agent.getById(storedAgentConfig.id);
+              if (!agent) continue;
+
               const serialized = await formatAgentList({
                 id: agent.id,
                 mastra,
@@ -764,7 +767,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
             } catch (agentError) {
               // Log but continue with other agents
               const logger = mastra.getLogger();
-              logger.warn('Failed to serialize stored agent', { agentId: agent.id, error: agentError });
+              logger.warn('Failed to serialize stored agent', { agentId: storedAgentConfig.id, error: agentError });
             }
           }
         }

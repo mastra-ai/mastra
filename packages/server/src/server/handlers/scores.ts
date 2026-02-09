@@ -71,10 +71,18 @@ async function listScorersFromSystem({
 
   // Process stored agents (database-backed agents)
   try {
-    const storedAgentsResult = await mastra.getEditor()?.agent.list();
+    const editor = mastra.getEditor();
+    const storedAgentsResult = await editor?.agent.list();
     if (storedAgentsResult?.agents) {
-      for (const storedAgent of storedAgentsResult.agents) {
-        await processAgentScorers(storedAgent);
+      for (const storedAgentConfig of storedAgentsResult.agents) {
+        try {
+          const agent = await editor?.agent.getById(storedAgentConfig.id);
+          if (agent) {
+            await processAgentScorers(agent);
+          }
+        } catch {
+          // Skip individual agents that fail to hydrate
+        }
       }
     }
   } catch {

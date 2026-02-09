@@ -933,7 +933,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       }
 
       // First, check raw agents to debug
-      const rawAgents = await editor.agent.list({ returnRaw: true });
+      const rawAgents = await editor.agent.list();
 
       // Only consider agents that we created in this test
       const testAgentIds = ['list-agent-1', 'list-agent-2', 'list-agent-3', 'list-agent-4', 'list-agent-5'];
@@ -944,7 +944,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       }
 
       // List with pagination
-      const page1 = await editor.agent.list({ pageSize: 3 });
+      const page1 = await editor.agent.list({ perPage: 3 });
       expect(page1.agents).toHaveLength(3);
       expect(page1.hasMore).toBe(true);
       // Don't check exact total - there might be agents from other tests
@@ -953,7 +953,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       // Get page 2 (0-based, so page: 1 is the second page)
       try {
         const page2 = await editor.agent.list({
-          pageSize: 3,
+          perPage: 3,
           page: 1,
         });
         expect(page2.agents).toHaveLength(2);
@@ -961,7 +961,7 @@ describe('MastraEditor with LibSQL Integration', () => {
       } catch (error) {
         console.error('Error listing page 2:', error);
         // List all raw agents to debug
-        const rawAgents = await editor.agent.list({ returnRaw: true });
+        const rawAgents = await editor.agent.list();
         console.log(
           'All raw agents:',
           rawAgents.agents.map(a => ({
@@ -996,13 +996,12 @@ describe('MastraEditor with LibSQL Integration', () => {
         });
       }
 
-      const rawResult = await editor.agent.list({ returnRaw: true });
+      const rawResult = await editor.agent.list();
 
       expect(rawResult.agents[0]).not.toBeInstanceOf(Agent);
       expect(rawResult.agents[0]?.id).toBe('raw-list-agent');
-      // Raw data returns ISO date strings, not Date objects
-      expect(typeof rawResult.agents[0]?.createdAt).toBe('string');
-      expect(rawResult.agents[0]?.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      // Raw data returns Date objects from storage
+      expect(rawResult.agents[0]?.createdAt).toBeTruthy();
       // Metadata handling - skip for now due to libsql encoding issues
       const metadata = rawResult.agents[0]?.metadata;
       expect(metadata).toEqual({ custom: 'data' });
@@ -1278,7 +1277,8 @@ describe('MastraEditor with LibSQL Integration', () => {
       expect(retrievedAgent).toBeInstanceOf(Agent);
 
       // Verify defaultOptions are preserved in storage
-      const rawAgent = await editor.agent.getById('default-options-agent', { returnRaw: true });
+      const rawAgentInstance = await editor.agent.getById('default-options-agent');
+      const rawAgent = rawAgentInstance?.toRawConfig();
       expect(rawAgent?.defaultOptions).toEqual({
         maxSteps: 5,
         tracingOptions: {
@@ -1346,7 +1346,8 @@ describe('MastraEditor with LibSQL Integration', () => {
 
       // Check that the agent was created with memory configuration
       // The actual memory instance would be resolved by the editor when creating the agent
-      const rawAgent = (await editor.agent.getById('memory-agent', { returnRaw: true })) as any;
+      const rawAgentInstance = await editor.agent.getById('memory-agent');
+      const rawAgent = rawAgentInstance?.toRawConfig() as any;
       expect(rawAgent?.memory).toEqual({
         vector: 'libsql-vector-db',
         // embedder: 'openai/text-embedding-3-small',
@@ -1518,7 +1519,8 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      const rawAgent = await editor.agent.getById('metadata-agent', { returnRaw: true });
+      const rawAgentInstance = await editor.agent.getById('metadata-agent');
+      const rawAgent = rawAgentInstance?.toRawConfig();
 
       expect(rawAgent?.metadata).toEqual({
         version: '2.0',
@@ -1558,7 +1560,8 @@ describe('MastraEditor with LibSQL Integration', () => {
         },
       });
 
-      const rawAgent = await editor.agent.getById('vector-memory-agent', { returnRaw: true });
+      const rawAgentInstance = await editor.agent.getById('vector-memory-agent');
+      const rawAgent = rawAgentInstance?.toRawConfig();
 
       expect(rawAgent?.memory).toEqual({
         vector: 'chroma-vector-db',

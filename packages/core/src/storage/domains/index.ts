@@ -1,4 +1,5 @@
 export * from './base';
+export * from './versioned';
 export * from './agents';
 export * from './prompt-blocks';
 export * from './scorer-definitions';

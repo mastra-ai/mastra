@@ -960,7 +960,7 @@ describe('End-to-end scorer storage and execution flow', () => {
     });
 
     // 5. Clear the cached agent so re-fetch picks up new scorer
-    mastra.getStoredAgentCache().delete('agent-with-updatable-scorer');
+    editor.agent.clearCache('agent-with-updatable-scorer');
 
     // 6. Re-fetch agent, pull its scorer, and execute — should use v2 config
     const agentV2 = await editor.agent.getById('agent-with-updatable-scorer');

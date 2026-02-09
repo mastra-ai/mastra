@@ -5,7 +5,6 @@ import type {
   Mastra,
   MastraMemory,
   MastraVectorProvider,
-  Logger,
   ToolAction,
   Workflow,
   MastraScorers,
@@ -15,192 +14,90 @@ import type {
   SharedMemoryConfig,
 } from '@mastra/core';
 
+import type {
+  StorageCreateAgentInput,
+  StorageUpdateAgentInput,
+  StorageListAgentsInput,
+  StorageListAgentsOutput,
+  StorageListAgentsResolvedOutput,
+} from '@mastra/core/storage';
+
 import type { RequestContext } from '@mastra/core/request-context';
 import type { AgentInstructionBlock } from '@mastra/core/storage';
 import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 
-import type { MastraEditor } from '../index';
 import { resolveInstructionBlocks } from '../instruction-builder';
+import { CrudEditorNamespace } from './base';
+import type { StorageAdapter } from './base';
 
-export class EditorAgentNamespace {
-  constructor(private editor: MastraEditor) {}
-
-  private get mastra(): Mastra | undefined {
-    return this.editor.__mastra;
-  }
-
-  private get logger(): Logger | undefined {
-    return this.editor.__logger;
-  }
-
-  private async getStore() {
+export class EditorAgentNamespace extends CrudEditorNamespace<
+  StorageCreateAgentInput,
+  StorageUpdateAgentInput,
+  StorageListAgentsInput,
+  StorageListAgentsOutput,
+  StorageListAgentsResolvedOutput,
+  StorageResolvedAgentType,
+  Agent
+> {
+  protected async getStorageAdapter(): Promise<
+    StorageAdapter<
+      StorageCreateAgentInput,
+      StorageUpdateAgentInput,
+      StorageListAgentsInput,
+      StorageListAgentsOutput,
+      StorageListAgentsResolvedOutput,
+      StorageResolvedAgentType
+    >
+  > {
     const storage = this.mastra!.getStorage();
     if (!storage) throw new Error('Storage is not configured');
     const store = await storage.getStore('agents');
     if (!store) throw new Error('Agents storage domain is not available');
-    return store;
-  }
-
-  // ============================================================================
-  // Public API
-  // ============================================================================
-
-  getById(
-    id: string,
-    options?: { returnRaw?: false; versionId?: string; versionNumber?: number },
-  ): Promise<Agent | null>;
-  getById(
-    id: string,
-    options: { returnRaw: true; versionId?: string; versionNumber?: number },
-  ): Promise<StorageResolvedAgentType | null>;
-  async getById(
-    id: string,
-    options?: { returnRaw?: boolean; versionId?: string; versionNumber?: number },
-  ): Promise<Agent | StorageResolvedAgentType | null> {
-    if (!this.mastra) {
-      throw new Error('MastraEditor is not registered with a Mastra instance');
-    }
-
-    const agentsStore = await this.getStore();
-
-    // Handle version resolution
-    if (options?.versionId && options?.versionNumber !== undefined) {
-      this.logger?.warn(`Both versionId and versionNumber provided for agent "${id}". Using versionId.`);
-    }
-
-    if (options?.versionId) {
-      const version = await agentsStore.getVersion(options.versionId);
-      if (!version) return null;
-      if (version.agentId !== id) return null;
-
-      const {
-        id: _versionId,
-        agentId: _agentId,
-        versionNumber: _versionNumber,
-        changedFields: _changedFields,
-        changeMessage: _changeMessage,
-        createdAt: _createdAt,
-        ...snapshotConfig
-      } = version;
-
-      const agentRecord = await agentsStore.getAgentById({ id });
-      if (!agentRecord) return null;
-
-      const { activeVersionId: _activeVersionId, ...agentRecordWithoutActiveVersion } = agentRecord;
-      const resolvedAgent: StorageResolvedAgentType = { ...agentRecordWithoutActiveVersion, ...snapshotConfig };
-      if (options?.returnRaw) return resolvedAgent;
-      return this.createAgentFromStoredConfig(resolvedAgent);
-    }
-
-    if (options?.versionNumber !== undefined) {
-      const version = await agentsStore.getVersionByNumber(id, options.versionNumber);
-      if (!version) return null;
-
-      const {
-        id: _versionId,
-        agentId: _agentId,
-        versionNumber: _versionNumber,
-        changedFields: _changedFields,
-        changeMessage: _changeMessage,
-        createdAt: _createdAt,
-        ...snapshotConfig
-      } = version;
-
-      const agentRecord = await agentsStore.getAgentById({ id });
-      if (!agentRecord) return null;
-
-      const { activeVersionId: _activeVersionId, ...agentRecordWithoutActiveVersion } = agentRecord;
-      const resolvedAgent: StorageResolvedAgentType = { ...agentRecordWithoutActiveVersion, ...snapshotConfig };
-      if (options?.returnRaw) return resolvedAgent;
-      return this.createAgentFromStoredConfig(resolvedAgent);
-    }
-
-    // Default: get current agent config with version resolution
-    if (!options?.returnRaw) {
-      const agentCache = this.mastra.getStoredAgentCache();
-      if (agentCache) {
-        const cached = agentCache.get(id);
-        if (cached) return cached;
-        this.logger?.debug(`[getById] Cache miss for agent "${id}", fetching from storage`);
-      }
-    }
-
-    const storedAgent = await agentsStore.getAgentByIdResolved({ id });
-    if (!storedAgent) return null;
-
-    if (options?.returnRaw) return storedAgent;
-
-    const agent = await this.createAgentFromStoredConfig(storedAgent);
-
-    const agentCache = this.mastra.getStoredAgentCache();
-    if (agentCache) {
-      agentCache.set(id, agent);
-    }
-
-    return agent;
-  }
-
-  list(options?: { returnRaw?: false; page?: number; pageSize?: number }): Promise<{
-    agents: Agent[];
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  }>;
-  list(options: { returnRaw: true; page?: number; pageSize?: number }): Promise<{
-    agents: StorageResolvedAgentType[];
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  }>;
-  async list(options?: { returnRaw?: boolean; page?: number; pageSize?: number }): Promise<{
-    agents: Agent[] | StorageResolvedAgentType[];
-    total: number;
-    page: number;
-    perPage: number | false;
-    hasMore: boolean;
-  }> {
-    if (!this.mastra) {
-      throw new Error('MastraEditor is not registered with a Mastra instance');
-    }
-
-    const agentsStore = await this.getStore();
-    const result = await agentsStore.listAgentsResolved({
-      page: options?.page,
-      perPage: options?.pageSize,
-      orderBy: { field: 'createdAt', direction: 'DESC' },
-    });
-
-    if (options?.returnRaw) return result;
-
-    const agents = await Promise.all(
-      result.agents.map((storedAgent: StorageResolvedAgentType) =>
-        this.createAgentFromStoredConfig(storedAgent),
-      ),
-    );
 
     return {
-      agents,
-      total: result.total,
-      page: result.page,
-      perPage: result.perPage,
-      hasMore: result.hasMore,
+      create: input => store.createAgent({ agent: input }),
+      getByIdResolved: async (id, options) => {
+        if (options?.versionId || options?.versionNumber) {
+          // Fetch the agent metadata first
+          const agent = await store.getAgentById({ id });
+          if (!agent) return null;
+
+          // Fetch the specific version
+          const version = options.versionId
+            ? await store.getVersion(options.versionId)
+            : await store.getVersionByNumber(id, options.versionNumber!);
+
+          if (!version) return null;
+
+          const { id: _vId, agentId: _aId, versionNumber: _vn, changedFields: _cf, changeMessage: _cm, createdAt: _ca, ...snapshotConfig } = version;
+          return { ...agent, ...snapshotConfig } as StorageResolvedAgentType;
+        }
+        return store.getAgentByIdResolved({ id });
+      },
+      update: input => store.updateAgent(input),
+      delete: id => store.deleteAgent({ id }),
+      list: args => store.listAgents(args),
+      listResolved: args => store.listAgentsResolved(args),
     };
   }
 
-  clearCache(agentId?: string): void {
+  /**
+   * Hydrate a stored agent config into a runtime Agent instance.
+   */
+  protected async hydrate(storedAgent: StorageResolvedAgentType): Promise<Agent> {
+    return this.createAgentFromStoredConfig(storedAgent);
+  }
+
+  /**
+   * Override clearCache to also remove the agent from the Mastra registry.
+   */
+  override clearCache(agentId?: string): void {
+    super.clearCache(agentId);
+
     if (!this.mastra) return;
 
-    const agentCache = this.mastra.getStoredAgentCache();
-
     if (agentId) {
-      if (agentCache) agentCache.delete(agentId);
       this.mastra.removeAgent(agentId);
-      this.logger?.debug(`[clearCache] Cleared cache and registry for agent "${agentId}"`);
-    } else {
-      if (agentCache) agentCache.clear();
-      this.logger?.debug('[clearCache] Cleared all cached agents');
     }
   }
 
@@ -248,6 +145,7 @@ export class EditorAgentNamespace {
       mastra: this.mastra,
       inputProcessors,
       outputProcessors,
+      rawConfig: storedAgent as unknown as Record<string, unknown>,
       defaultOptions: {
         maxSteps: defaultOptions?.maxSteps,
         modelSettings: {
