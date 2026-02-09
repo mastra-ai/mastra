@@ -11688,8 +11688,9 @@ describe('Workflow', () => {
       expect(storedError.statusCode).toBe(500);
       expect(storedError.errorCode).toBe('INTERNAL_ERROR');
 
-      // Stack should NOT be in the serialized output (per serializeStack: false)
-      expect(storedError.stack).toBeUndefined();
+      // Stack IS included in serialized output so it survives pubsub transport
+      // and is available in onError callbacks for debugging
+      expect(storedError.stack).toBeDefined();
 
       await mastra.stopEventEngine();
     });

@@ -420,7 +420,7 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
   if (steps) {
     for (const step of Object.values(steps)) {
       if (step.status === 'failed' && 'error' in step && step.error) {
-        step.error = getErrorFromUnknown(step.error, { serializeStack: false });
+        step.error = getErrorFromUnknown(step.error);
       }
     }
   }
