@@ -16,6 +16,6 @@ jobs:
         with:
           fetch-depth: 1
           fetch-tags: false
-          filter: "blob:none"
+          filter: 'blob:none'
           show-progress: false
       - uses: actions/labeler@v6
