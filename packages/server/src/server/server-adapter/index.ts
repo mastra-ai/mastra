@@ -85,6 +85,8 @@ export interface ParsedRequestParams {
 /**
  * Normalizes query parameters from various HTTP framework formats to a consistent structure.
  * Handles both single string values and arrays (for repeated query params like ?tag=a&tag=b).
+ * Reconstructs bracket-notation keys (e.g., `orderBy[field]=createdAt`) into JSON strings
+ * so that z.preprocess JSON.parse can handle them.
  * Filters out non-string values that some frameworks may include.
  *
  * @param rawQuery - Raw query parameters from the HTTP framework (may contain strings, arrays, or nested objects)
@@ -92,8 +94,26 @@ export interface ParsedRequestParams {
  */
 export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<string, QueryParamValue> {
   const queryParams: Record<string, QueryParamValue> = {};
+  // Collect bracket-notation keys: e.g., "orderBy[field]" → parent "orderBy", child "field"
+  const bracketGroups: Record<string, Record<string, string>> = {};
+
   for (const [key, value] of Object.entries(rawQuery)) {
-    if (typeof value === 'string') {
+    const bracketMatch = key.match(/^([^[]+)\[([^\]]+)\]$/);
+    if (bracketMatch) {
+      const parent = bracketMatch[1]!;
+      const child = bracketMatch[2]!;
+      const strValue = Array.isArray(value)
+        ? value.filter((v): v is string => typeof v === 'string')[0]
+        : typeof value === 'string'
+          ? value
+          : undefined;
+      if (strValue !== undefined) {
+        if (!bracketGroups[parent]) {
+          bracketGroups[parent] = {};
+        }
+        bracketGroups[parent]![child] = strValue;
+      }
+    } else if (typeof value === 'string') {
       queryParams[key] = value;
     } else if (Array.isArray(value)) {
       // Filter to only string values (some frameworks include nested objects)
@@ -102,6 +122,14 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
       queryParams[key] = stringValues.length === 1 ? stringValues[0]! : stringValues;
     }
   }
+
+  // Merge bracket groups as JSON strings (only if the parent key wasn't already set directly)
+  for (const [parent, children] of Object.entries(bracketGroups)) {
+    if (!(parent in queryParams)) {
+      queryParams[parent] = JSON.stringify(children);
+    }
+  }
+
   return queryParams;
 }
 
