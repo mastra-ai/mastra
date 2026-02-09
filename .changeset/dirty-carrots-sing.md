@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed `requestContext` not being passed to child spans in `getOrCreateSpan`. When an agent runs inside a workflow, child spans (e.g. `agent_run`) were not enriched with metadata from `requestContext` because it was destructured out of options but never forwarded to `createChildSpan`. Now `requestContext` is correctly passed through, ensuring all spans in a trace have their metadata enriched via the configured `requestContextKeys`. Fixes #12818.
+Fixed a bug where `requestContext` metadata was not propagated to child spans. When using `requestContextKeys`, only root spans were enriched with request context values — child spans (e.g. `agent_run` inside a workflow) were missing them. All spans in a trace are now correctly enriched. Fixes #12818.
