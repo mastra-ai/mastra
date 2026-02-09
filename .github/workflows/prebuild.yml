@@ -21,10 +21,20 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=4096
     permissions:
       pull-requests: read
+      statuses: write
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
+
+      - name: Setup custom action
+        uses: ./.github/workflows/shared-actions/set-pr-status
+        with:
+          status: 'pending'
+          context: 'Full Test Suite'
+          description: 'Waiting for build to complete'
+          sha: ${{ github.event.pull_request.head.sha }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
