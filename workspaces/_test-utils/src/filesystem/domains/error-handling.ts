@@ -101,11 +101,11 @@ export function createErrorHandlingTests(getContext: () => TestContext): void {
         if (!fs.readOnly) return;
 
         // These operations should work on a read-only filesystem
-        // exists() should not throw
-        await expect(fs.exists('/')).resolves.not.toThrow();
+        // exists() should resolve without error
+        await expect(fs.exists('/')).resolves.toBeDefined();
 
-        // readdir() on root should not throw (assuming root exists)
-        await expect(fs.readdir('/')).resolves.not.toThrow();
+        // readdir() on root should resolve without error
+        await expect(fs.readdir('/')).resolves.toBeDefined();
 
         // readFile() should work if a file exists - use try/catch since
         // the file may not exist on a fresh bucket, but it should not

@@ -1,6 +1,6 @@
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
-import { LOG_PREFIX } from './types';
+import { LOG_PREFIX, validateBucketName, validateEndpoint } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -32,6 +32,12 @@ export interface E2BS3MountConfig extends FilesystemMountConfig {
  */
 export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: MountContext): Promise<void> {
   const { sandbox, logger } = ctx;
+
+  // Validate inputs before interpolating into shell commands
+  validateBucketName(config.bucket);
+  if (config.endpoint) {
+    validateEndpoint(config.endpoint);
+  }
 
   // Check if s3fs is installed
   const checkResult = await sandbox.commands.run('which s3fs || echo "not found"');
@@ -122,7 +128,7 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
   logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
   try {
-    const result = await sandbox.commands.run(mountCmd);
+    const result = await sandbox.commands.run(mountCmd, { timeoutMs: 60_000 });
     logger.debug(`${LOG_PREFIX} s3fs result:`, {
       exitCode: result.exitCode,
       stdout: result.stdout,

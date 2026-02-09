@@ -26,6 +26,7 @@ vi.mock('@google-cloud/storage', () => ({
         exists: vi.fn(),
         getMetadata: vi.fn(),
       }),
+      exists: vi.fn().mockResolvedValue([true]),
       getFiles: vi.fn().mockResolvedValue([[]]),
       deleteFiles: vi.fn(),
     }),
@@ -354,7 +355,7 @@ describe('GCSFilesystem SDK Operations', () => {
   /**
    * Helper: configure mock file methods for a test.
    */
-  function configureMockFile(overrides: Record<string, any> = {}) {
+  function configureMockFile(overrides: Record<string, unknown> = {}) {
     for (const [key, value] of Object.entries(overrides)) {
       mockFile[key].mockReset();
       if (value instanceof Error) {
@@ -381,6 +382,7 @@ describe('GCSFilesystem SDK Operations', () => {
     // Create mock bucket
     mockBucket = {
       file: vi.fn().mockReturnValue(mockFile),
+      exists: vi.fn().mockResolvedValue([true]),
       getFiles: vi.fn().mockResolvedValue([[]]),
       deleteFiles: vi.fn().mockResolvedValue(undefined),
     };
@@ -389,7 +391,8 @@ describe('GCSFilesystem SDK Operations', () => {
       bucket: 'test-bucket',
       credentials: { type: 'service_account', project_id: 'test' },
     });
-    // Set up mock bucket directly (avoids Storage constructor issues with vi.mock)
+    // Set up mock bucket directly (avoids Storage constructor issues with vi.mock).
+    // Note: coupled to private field names — update if implementation renames them.
     (fs as any)._storage = {};
     (fs as any)._bucket = mockBucket;
     (fs as any).status = 'ready';
@@ -460,7 +463,7 @@ describe('GCSFilesystem SDK Operations', () => {
 
   describe('writeFile()', () => {
     it('calls file.save with string content as Buffer', async () => {
-      const mockFile = configureMockFile({ save: undefined });
+      configureMockFile({ save: undefined });
 
       await fs.writeFile('/test.txt', 'hello world');
 
@@ -483,6 +486,8 @@ describe('GCSFilesystem SDK Operations', () => {
         expect.objectContaining({ contentType: 'text/html' }),
       );
 
+      // Clear accumulated calls so assertion below only checks the JSON write
+      mockFile.save.mockClear();
       mockFile.save.mockResolvedValueOnce(undefined);
       await fs.writeFile('/data.json', '{}');
       expect(mockFile.save).toHaveBeenCalledWith(
@@ -589,19 +594,19 @@ describe('GCSFilesystem SDK Operations', () => {
   });
 
   describe('copyFile()', () => {
-    it('calls srcFile.copy(destFile)', async () => {
-      const mockFile = mockBucket.file();
-      mockFile.copy.mockResolvedValueOnce(undefined);
+    it('calls srcFile.copy(destFile) with distinct file objects', async () => {
+      const destFile = { copy: vi.fn(), download: vi.fn(), save: vi.fn(), delete: vi.fn(), exists: vi.fn(), getMetadata: vi.fn(), name: 'dest.txt' };
+      const srcFile = { copy: vi.fn().mockResolvedValueOnce(undefined), download: vi.fn(), save: vi.fn(), delete: vi.fn(), exists: vi.fn(), getMetadata: vi.fn(), name: 'src.txt' };
+      mockBucket.file.mockImplementation((key: string) => (key === 'src.txt' ? srcFile : destFile));
 
       await fs.copyFile('/src.txt', '/dest.txt');
 
       expect(mockBucket.file).toHaveBeenCalledWith('src.txt');
       expect(mockBucket.file).toHaveBeenCalledWith('dest.txt');
-      expect(mockFile.copy).toHaveBeenCalled();
+      expect(srcFile.copy).toHaveBeenCalledWith(destFile);
     });
 
     it('throws FileNotFoundError on 404', async () => {
-      const mockFile = mockBucket.file();
       mockFile.copy.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { code: 404 }));
 
       await expect(fs.copyFile('/missing.txt', '/dest.txt')).rejects.toThrow(/missing\.txt/);
@@ -636,8 +641,8 @@ describe('GCSFilesystem SDK Operations', () => {
 
   describe('rmdir()', () => {
     it('throws if non-recursive and directory is not empty', async () => {
-      // readdir returns files
-      mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'dir/file.txt', metadata: { size: 100 } }]]);
+      // getFiles with maxResults:1 returns a file → not empty
+      mockBucket.getFiles.mockResolvedValueOnce([[{ name: 'dir/file.txt' }]]);
 
       await expect(fs.rmdir('/dir')).rejects.toThrow('Directory not empty');
     });

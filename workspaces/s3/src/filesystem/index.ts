@@ -7,6 +7,7 @@ import {
   ListObjectsV2Command,
   DeleteObjectsCommand,
   HeadObjectCommand,
+  HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 
 import type {
@@ -93,6 +94,13 @@ const MIME_TYPES: Record<string, string> = {
 function getMimeType(path: string): string {
   const ext = path.toLowerCase().match(/\.[^.]+$/)?.[0];
   return ext ? (MIME_TYPES[ext] ?? 'application/octet-stream') : 'application/octet-stream';
+}
+
+/** Check if an error is a "not found" error from the S3 SDK. */
+function isNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('name' in error)) return false;
+  const name = (error as { name: string }).name;
+  return name === 'NotFound' || name === 'NoSuchKey' || name === '404';
 }
 
 /**
@@ -385,7 +393,7 @@ export class S3Filesystem extends MastraFilesystem {
       endpoint: this.endpoint,
       forcePathStyle: this.forcePathStyle,
       // Skip signing for anonymous access (public buckets)
-      ...(hasCredentials ? {} : { signer: { sign: async request => request } }),
+      ...(hasCredentials ? {} : { signer: { sign: async (request: unknown) => request } }),
     });
 
     return this._client;
@@ -430,7 +438,7 @@ export class S3Filesystem extends MastraFilesystem {
       }
       return buffer;
     } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'name' in error && error.name === 'NoSuchKey') {
+      if (isNotFoundError(error)) {
         throw new FileNotFoundError(path);
       }
       throw error;
@@ -489,7 +497,7 @@ export class S3Filesystem extends MastraFilesystem {
       );
     } catch (error: unknown) {
       if (options?.force) return;
-      if (error && typeof error === 'object' && 'name' in error && error.name === 'NoSuchKey') {
+      if (isNotFoundError(error)) {
         throw new FileNotFoundError(path);
       }
       throw error;
@@ -503,12 +511,12 @@ export class S3Filesystem extends MastraFilesystem {
       await client.send(
         new CopyObjectCommand({
           Bucket: this.bucket,
-          CopySource: `${this.bucket}/${this.toKey(src)}`,
+          CopySource: `${this.bucket}/${encodeURIComponent(this.toKey(src)).replace(/%2F/g, '/')}`,
           Key: this.toKey(dest),
         }),
       );
     } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'name' in error && error.name === 'NoSuchKey') {
+      if (isNotFoundError(error)) {
         throw new FileNotFoundError(src);
       }
       throw error;
@@ -555,7 +563,7 @@ export class S3Filesystem extends MastraFilesystem {
       );
 
       if (listResponse.Contents && listResponse.Contents.length > 0) {
-        await client.send(
+        const deleteResponse = await client.send(
           new DeleteObjectsCommand({
             Bucket: this.bucket,
             Delete: {
@@ -565,6 +573,9 @@ export class S3Filesystem extends MastraFilesystem {
             },
           }),
         );
+        if (deleteResponse.Errors && deleteResponse.Errors.length > 0) {
+          throw new Error(`Failed to delete ${deleteResponse.Errors.length} object(s) in ${path}`);
+        }
       }
 
       continuationToken = listResponse.NextContinuationToken;
@@ -668,7 +679,8 @@ export class S3Filesystem extends MastraFilesystem {
         }),
       );
       return true;
-    } catch {
+    } catch (error: unknown) {
+      if (!isNotFoundError(error)) throw error;
       // Not a file, check if it's a "directory" (has objects with this prefix)
     }
 
@@ -718,7 +730,8 @@ export class S3Filesystem extends MastraFilesystem {
         createdAt: response.LastModified ?? new Date(),
         modifiedAt: response.LastModified ?? new Date(),
       };
-    } catch {
+    } catch (error: unknown) {
+      if (!isNotFoundError(error)) throw error;
       // Check if it's a directory
       const isDir = await this.isDirectory(path);
       if (isDir) {
@@ -750,7 +763,8 @@ export class S3Filesystem extends MastraFilesystem {
         }),
       );
       return true;
-    } catch {
+    } catch (error: unknown) {
+      if (!isNotFoundError(error)) throw error;
       return false;
     }
   }
@@ -781,8 +795,9 @@ export class S3Filesystem extends MastraFilesystem {
    * Status management is handled by the base class.
    */
   protected override async _doInit(): Promise<void> {
-    // Verify we can access the bucket by creating the client
-    this.getClient();
+    // Verify we can access the bucket
+    const client = this.getClient();
+    await client.send(new HeadBucketCommand({ Bucket: this.bucket }));
   }
 
   /**

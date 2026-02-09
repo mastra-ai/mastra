@@ -1,6 +1,6 @@
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
-import { LOG_PREFIX } from './types';
+import { LOG_PREFIX, validateBucketName } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -22,6 +22,9 @@ export interface E2BGCSMountConfig extends FilesystemMountConfig {
  */
 export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx: MountContext): Promise<void> {
   const { sandbox, logger } = ctx;
+
+  // Validate inputs before interpolating into shell commands
+  validateBucketName(config.bucket);
 
   // Install gcsfuse if not present
   const checkResult = await sandbox.commands.run('which gcsfuse || echo "not found"');
@@ -69,7 +72,7 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
   logger.debug(`${LOG_PREFIX} Mounting GCS:`, mountCmd);
 
   try {
-    const result = await sandbox.commands.run(mountCmd);
+    const result = await sandbox.commands.run(mountCmd, { timeoutMs: 60_000 });
     logger.debug(`${LOG_PREFIX} gcsfuse result:`, {
       exitCode: result.exitCode,
       stdout: result.stdout,

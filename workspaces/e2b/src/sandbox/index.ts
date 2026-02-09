@@ -39,6 +39,9 @@ function validateMountPath(mountPath: string): void {
   }
 }
 
+/** Allowlist for marker filenames from ls output — e.g. "mount-abc123" */
+const SAFE_MARKER_NAME = /^mount-[a-z0-9]+$/;
+
 // =============================================================================
 // E2B Sandbox Options
 // =============================================================================
@@ -411,9 +414,9 @@ export class E2BSandbox extends MastraSandbox {
    * Get list of current mounts in the sandbox.
    */
   async getMounts(): Promise<Array<{ path: string; filesystem: string }>> {
-    return Array.from(this.mounts.entries).map(([path, { filesystem }]) => ({
+    return Array.from(this.mounts.entries).map(([path, entry]) => ({
       path,
-      filesystem: filesystem.provider,
+      filesystem: entry.filesystem?.provider ?? entry.config?.type ?? 'unknown',
     }));
   }
 
@@ -445,7 +448,7 @@ export class E2BSandbox extends MastraSandbox {
     const markerFiles = markersResult.stdout
       .trim()
       .split('\n')
-      .filter(f => f.length > 0 && f.startsWith('mount-'));
+      .filter(f => f.length > 0 && SAFE_MARKER_NAME.test(f));
 
     // Build a map of mount paths → marker filenames for mounts WE created
     const managedMountPaths = new Map<string, string>();
@@ -454,7 +457,7 @@ export class E2BSandbox extends MastraSandbox {
         `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`,
       );
       const parsed = this.mounts.parseMarkerContent(markerResult.stdout.trim());
-      if (parsed) {
+      if (parsed && SAFE_MOUNT_PATH.test(parsed.path)) {
         managedMountPaths.set(parsed.path, markerFile);
       }
     }
@@ -763,7 +766,11 @@ export class E2BSandbox extends MastraSandbox {
     // Unmount all filesystems before stopping
     // Collect keys first since unmount() mutates the map
     for (const mountPath of [...this.mounts.entries.keys()]) {
-      await this.unmount(mountPath);
+      try {
+        await this.unmount(mountPath);
+      } catch {
+        // Best-effort unmount; sandbox may already be dead
+      }
     }
 
     this._sandbox = null;
@@ -814,9 +821,9 @@ export class E2BSandbox extends MastraSandbox {
       provider: this.provider,
       status: this.status,
       createdAt: this._createdAt ?? new Date(),
-      mounts: Array.from(this.mounts.entries).map(([path, { filesystem }]) => ({
+      mounts: Array.from(this.mounts.entries).map(([path, entry]) => ({
         path,
-        filesystem: filesystem.provider,
+        filesystem: entry.filesystem?.provider ?? entry.config?.type ?? 'unknown',
       })),
       metadata: {
         ...this.metadata,
@@ -865,10 +872,22 @@ export class E2BSandbox extends MastraSandbox {
   }
 
   /**
-   * Handle sandbox timeout by clearing the instance and setting status to stopped.
+   * Handle sandbox timeout by clearing the instance and resetting state.
+   *
+   * Bypasses the normal stop() lifecycle because the sandbox is already dead —
+   * we can't unmount filesystems or run cleanup commands. Instead we reset
+   * mount states to 'pending' so they get re-mounted when start() runs again.
    */
   private handleSandboxTimeout(): void {
     this._sandbox = null;
+
+    // Reset mounted entries to pending so they get re-mounted on restart
+    for (const [path, entry] of this.mounts.entries) {
+      if (entry.state === 'mounted' || entry.state === 'mounting') {
+        this.mounts.set(path, { state: 'pending' });
+      }
+    }
+
     this.status = 'stopped';
   }
 

@@ -71,6 +71,7 @@ const useElapsedTime = (isRunning: boolean, startTime?: number) => {
 
   useEffect(() => {
     if (isRunning) {
+      setElapsed(0);
       startRef.current = startTime || Date.now();
       const interval = setInterval(() => {
         if (startRef.current) {

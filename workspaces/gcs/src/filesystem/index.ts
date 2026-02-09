@@ -417,9 +417,11 @@ export class GCSFilesystem extends MastraFilesystem {
 
   async rmdir(path: string, options?: RemoveOptions): Promise<void> {
     if (!options?.recursive) {
-      // Check if directory is empty
-      const entries = await this.readdir(path);
-      if (entries.length > 0) {
+      // Quick emptiness check — only fetch one object instead of full readdir
+      const bucket = await this.getReadyBucket();
+      const prefix = this.toKey(path).replace(/\/$/, '') + '/';
+      const [files] = await bucket.getFiles({ prefix, maxResults: 1 });
+      if (files.length > 0) {
         throw new Error(`Directory not empty: ${path}`);
       }
       return;
@@ -605,8 +607,12 @@ export class GCSFilesystem extends MastraFilesystem {
    * Status management is handled by the base class.
    */
   protected override async _doInit(): Promise<void> {
-    // Verify we can access the bucket by creating the client
-    this.getBucket();
+    // Verify we can access the bucket
+    const bucket = this.getBucket();
+    const [exists] = await bucket.exists();
+    if (!exists) {
+      throw new Error(`Bucket "${this.bucketName}" does not exist or is not accessible`);
+    }
   }
 
   /**

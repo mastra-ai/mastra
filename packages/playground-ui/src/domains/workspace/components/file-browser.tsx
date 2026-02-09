@@ -310,6 +310,7 @@ export function FileBrowser({
             {currentPath === '/' ? 'Workspace is empty' : 'Directory is empty'}
           </div>
         ) : (
+          <TooltipProvider>
           <ul>
             {/* Parent directory link */}
             {currentPath !== '/' && (
@@ -341,16 +342,14 @@ export function FileBrowser({
                       {entry.mount &&
                         mountLabel &&
                         (entry.mount.description ? (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
-                                  {mountLabel}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>{entry.mount.description}</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
+                                {mountLabel}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>{entry.mount.description}</TooltipContent>
+                          </Tooltip>
                         ) : (
                           <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">{mountLabel}</span>
                         ))}
@@ -372,6 +371,7 @@ export function FileBrowser({
               );
             })}
           </ul>
+          </TooltipProvider>
         )}
       </div>
 
@@ -388,9 +388,9 @@ export function FileBrowser({
             <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
             <AlertDialog.Action
               disabled={isDeleting}
-              onClick={() => {
+              onClick={async () => {
                 if (deleteTarget && onDelete) {
-                  onDelete(deleteTarget);
+                  await onDelete(deleteTarget);
                 }
                 setDeleteTarget(null);
               }}

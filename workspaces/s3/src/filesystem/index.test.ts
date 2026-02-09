@@ -1011,7 +1011,9 @@ describe('S3Filesystem SDK Operations', () => {
 
     it('returns true when directory exists (ListObjects has contents)', async () => {
       // HeadObject fails (not a file)
-      mockSend.mockRejectedValueOnce(new Error('NotFound'));
+      const err = new Error('NotFound');
+      err.name = 'NotFound';
+      mockSend.mockRejectedValueOnce(err);
       // ListObjectsV2 finds contents (is a directory)
       mockSend.mockResolvedValueOnce({ Contents: [{ Key: 'dir/file.txt' }] });
 
@@ -1022,7 +1024,9 @@ describe('S3Filesystem SDK Operations', () => {
 
     it('returns false when nothing exists', async () => {
       // HeadObject fails
-      mockSend.mockRejectedValueOnce(new Error('NotFound'));
+      const err = new Error('NotFound');
+      err.name = 'NotFound';
+      mockSend.mockRejectedValueOnce(err);
       // ListObjectsV2 finds nothing
       mockSend.mockResolvedValueOnce({ Contents: [] });
 
@@ -1054,7 +1058,9 @@ describe('S3Filesystem SDK Operations', () => {
 
     it('returns directory stat when file not found but prefix exists', async () => {
       // HeadObject fails
-      mockSend.mockRejectedValueOnce(new Error('NotFound'));
+      const err = new Error('NotFound');
+      err.name = 'NotFound';
+      mockSend.mockRejectedValueOnce(err);
       // isDirectory: ListObjectsV2 finds contents
       mockSend.mockResolvedValueOnce({ Contents: [{ Key: 'mydir/file.txt' }] });
 
@@ -1067,7 +1073,9 @@ describe('S3Filesystem SDK Operations', () => {
 
     it('throws FileNotFoundError when nothing exists', async () => {
       // HeadObject fails
-      mockSend.mockRejectedValueOnce(new Error('NotFound'));
+      const err = new Error('NotFound');
+      err.name = 'NotFound';
+      mockSend.mockRejectedValueOnce(err);
       // isDirectory: ListObjectsV2 finds nothing
       mockSend.mockResolvedValueOnce({ Contents: [] });
 

@@ -95,7 +95,7 @@ export const FileTreeBadge = ({
   const summary = result?.summary || '';
   // Check for error - could be result.error (tool error) or result itself being an Error-like object
   const rawError =
-    result?.error?.message || result?.error || (result?.message && !result?.tree ? result.message : null);
+    result?.error?.message ?? result?.error ?? (result?.message && !result?.tree ? result.message : null);
   const errorMessage = rawError != null ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)) : null;
   const hasError = !!errorMessage;
   const hasResult = !!treeOutput || hasError;
@@ -172,7 +172,7 @@ export const FileTreeBadge = ({
           {/* Error state */}
           {toolCalled && hasError && (
             <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2">
-              <span className="text-xs text-red-400">{String(errorMessage)}</span>
+              <span className="text-xs text-red-400">{errorMessage}</span>
             </div>
           )}
 

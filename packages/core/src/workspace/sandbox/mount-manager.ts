@@ -157,6 +157,8 @@ export class MountManager {
         configHash: updates.config ? this.hashConfig(updates.config) : undefined,
         error: updates.error,
       });
+    } else {
+      this.logger.debug(`set() called for unknown path "${path}" without filesystem — no entry created`);
     }
   }
 
@@ -291,7 +293,7 @@ export class MountManager {
     for (let i = 0; i < mountPath.length; i++) {
       const char = mountPath.charCodeAt(i);
       hash = (hash << 5) - hash + char;
-      hash = hash & hash; // Convert to 32bit integer
+      hash |= 0; // Convert to 32-bit integer
     }
     return `mount-${Math.abs(hash).toString(36)}`;
   }
@@ -358,7 +360,21 @@ export class MountManager {
    * Hash a mount config for comparison.
    */
   private hashConfig(config: FilesystemMountConfig): string {
-    const normalized = JSON.stringify(config, Object.keys(config).sort());
+    const normalized = JSON.stringify(this.sortKeysDeep(config));
     return createHash('sha256').update(normalized).digest('hex').slice(0, 16);
+  }
+
+  private sortKeysDeep(obj: unknown): unknown {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(item => this.sortKeysDeep(item));
+    return Object.keys(obj as Record<string, unknown>)
+      .sort()
+      .reduce(
+        (acc, key) => {
+          acc[key] = this.sortKeysDeep((obj as Record<string, unknown>)[key]);
+          return acc;
+        },
+        {} as Record<string, unknown>,
+      );
   }
 }

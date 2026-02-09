@@ -2,7 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
+import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import { E2BSandbox } from '@mastra/e2b';
 import { GCSFilesystem } from '@mastra/gcs';
 import { S3Filesystem } from '@mastra/s3';
@@ -49,6 +49,9 @@ export const developerAgent = new Agent({
       '/local': new LocalFilesystem({
         basePath: './workspace',
       }),
+      '/.agents': new LocalFilesystem({
+        basePath: './.agents',
+      }),
       // S3 mount — only if S3_BUCKET is configured
       ...(process.env.S3_BUCKET && {
         '/r2': new S3Filesystem({
@@ -73,5 +76,12 @@ export const developerAgent = new Agent({
       id: 'developer-e2b-sandbox',
       logger: new ConsoleLogger({ level: 'debug' }),
     }),
+    skills: ['/.agents/skills', '/local/skills', '/r2/skills'],
+    tools: {
+      [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
+        enabled: true,
+        requireApproval: true,
+      },
+    },
   }),
 });

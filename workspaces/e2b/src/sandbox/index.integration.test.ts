@@ -1125,15 +1125,15 @@ if (canRunSharedIntegration) {
             await setup.filesystem.rmdir(`/${file.name}`, { recursive: true });
           }
         }
-      } catch {
-        // Ignore cleanup errors
+      } catch (e) {
+        console.warn('Cleanup: failed to remove test files', e);
       }
 
       // Destroy sandbox
       try {
         await setup.sandbox.destroy();
-      } catch {
-        // Ignore cleanup errors
+      } catch (e) {
+        console.warn('Cleanup: failed to destroy sandbox', e);
       }
     },
   });
