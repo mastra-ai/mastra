@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.709.0"
+    "@aws-sdk/client-s3": "^3.985.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

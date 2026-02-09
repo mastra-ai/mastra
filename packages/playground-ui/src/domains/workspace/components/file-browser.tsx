@@ -69,7 +69,7 @@ function getMountIcon(mount: FileEntry['mount']) {
     case 'aws-s3':
     case 's3':
       // S3 or S3-compatible storage
-      return <Cloud className="h-4 w-4 text-[#FF9900]" />;
+      return <AmazonIcon className="h-4 w-4 text-[#FF9900]" />;
     case 'google-cloud':
     case 'gcs':
       return <GoogleIcon className="h-4 w-4" />;
@@ -133,8 +133,8 @@ function formatBytes(bytes?: number): string {
   if (bytes === undefined || bytes === null) return '';
   if (bytes === 0) return '0 B';
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 

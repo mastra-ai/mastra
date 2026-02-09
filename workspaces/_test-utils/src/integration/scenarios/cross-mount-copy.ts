@@ -36,6 +36,9 @@ export function createCrossMountCopyTests(getContext: () => TestContext): void {
         const srcFs = setup.mounts[srcMount]!;
         const destFs = setup.mounts[destMount]!;
 
+        // Skip if either mount is read-only
+        if (srcFs.readOnly || destFs.readOnly) return;
+
         const content = 'cross-mount content';
 
         // Write source file
@@ -77,8 +80,8 @@ export function createCrossMountCopyTests(getContext: () => TestContext): void {
         const srcFs = setup.mounts[srcMount]!;
         const destFs = setup.mounts[destMount]!;
 
-        // Skip if source is read-only
-        if (srcFs.readOnly) return;
+        // Skip if either mount is read-only
+        if (srcFs.readOnly || destFs.readOnly) return;
 
         const content = 'move-me content';
 
