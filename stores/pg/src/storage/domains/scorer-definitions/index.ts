@@ -126,6 +126,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
 
       return this.parseScorerRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_SCORER_DEFINITION_BY_ID', 'FAILED'),
@@ -200,6 +201,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         // Ignore cleanup errors
       }
 
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_SCORER_DEFINITION', 'FAILED'),
@@ -357,6 +359,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       await this.deleteVersionsByParentId(id);
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_SCORER_DEFINITION', 'FAILED'),
@@ -441,6 +444,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_SCORER_DEFINITIONS', 'FAILED'),
@@ -496,6 +500,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         createdAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_SCORER_DEFINITION_VERSION', 'FAILED'),
@@ -522,6 +527,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_SCORER_DEFINITION_VERSION', 'FAILED'),
@@ -551,6 +557,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_SCORER_DEFINITION_VERSION_BY_NUMBER', 'FAILED'),
@@ -580,6 +587,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_LATEST_SCORER_DEFINITION_VERSION', 'FAILED'),
@@ -649,6 +657,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_SCORER_DEFINITION_VERSIONS', 'FAILED'),
@@ -669,6 +678,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       });
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_SCORER_DEFINITION_VERSION', 'FAILED'),
@@ -689,6 +699,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       });
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE "scorerDefinitionId" = $1`, [entityId]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_SCORER_DEFINITION_VERSIONS_BY_SCORER_DEFINITION_ID', 'FAILED'),
@@ -713,6 +724,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       );
       return parseInt(result.count, 10);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'COUNT_SCORER_DEFINITION_VERSIONS', 'FAILED'),
@@ -736,6 +748,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
     try {
       return JSON.parse(value);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       const details: Record<string, string> = {
         value: value.length > 100 ? value.substring(0, 100) + '...' : value,
       };

@@ -112,6 +112,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       return this.parseBlockRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_PROMPT_BLOCK_BY_ID', 'FAILED'),
@@ -172,6 +173,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       // Best-effort cleanup
       try {
         const tableName = getTableName({ indexName: TABLE_PROMPT_BLOCKS, schemaName: getSchemaName(this.#schema) });
@@ -340,6 +342,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       await this.deleteVersionsByParentId(id);
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_PROMPT_BLOCK', 'FAILED'),
@@ -424,6 +427,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_PROMPT_BLOCKS', 'FAILED'),
@@ -475,6 +479,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         createdAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -501,6 +506,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -530,6 +536,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_PROMPT_BLOCK_VERSION_BY_NUMBER', 'FAILED'),
@@ -559,6 +566,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_LATEST_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -627,6 +635,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_PROMPT_BLOCK_VERSIONS', 'FAILED'),
@@ -647,6 +656,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       });
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -667,6 +677,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       });
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE "blockId" = $1`, [entityId]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_PROMPT_BLOCK_VERSIONS_BY_BLOCK_ID', 'FAILED'),
@@ -690,6 +701,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       ]);
       return parseInt(result.count, 10);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'COUNT_PROMPT_BLOCK_VERSIONS', 'FAILED'),

@@ -246,6 +246,7 @@ export class AgentsPG extends AgentsStorage {
     try {
       return JSON.parse(value);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       const details: Record<string, string> = {
         value: value.length > 100 ? value.substring(0, 100) + '...' : value,
       };
@@ -290,6 +291,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_AGENT_BY_ID', 'FAILED'),
@@ -354,6 +356,7 @@ export class AgentsPG extends AgentsStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       // Best-effort cleanup to prevent orphaned draft records
       try {
         const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
@@ -555,6 +558,7 @@ export class AgentsPG extends AgentsStorage {
       // Then delete the agent
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_AGENT', 'FAILED'),
@@ -620,6 +624,7 @@ export class AgentsPG extends AgentsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_AGENTS', 'FAILED'),
@@ -679,6 +684,7 @@ export class AgentsPG extends AgentsStorage {
         createdAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_VERSION', 'FAILED'),
@@ -702,6 +708,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_VERSION', 'FAILED'),
@@ -728,6 +735,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_VERSION_BY_NUMBER', 'FAILED'),
@@ -754,6 +762,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_LATEST_VERSION', 'FAILED'),
@@ -821,6 +830,7 @@ export class AgentsPG extends AgentsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_VERSIONS', 'FAILED'),
@@ -838,6 +848,7 @@ export class AgentsPG extends AgentsStorage {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_VERSION', 'FAILED'),
@@ -855,6 +866,7 @@ export class AgentsPG extends AgentsStorage {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE "agentId" = $1`, [entityId]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_VERSIONS_BY_AGENT_ID', 'FAILED'),
@@ -875,6 +887,7 @@ export class AgentsPG extends AgentsStorage {
       ]);
       return parseInt(result.count, 10);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'COUNT_VERSIONS', 'FAILED'),

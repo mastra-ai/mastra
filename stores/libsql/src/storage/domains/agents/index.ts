@@ -263,6 +263,7 @@ export class AgentsLibSQL extends AgentsStorage {
 
       return result ? this.parseRow(result) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_AGENT_BY_ID', 'FAILED'),
@@ -475,6 +476,7 @@ export class AgentsLibSQL extends AgentsStorage {
         keys: { id },
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_AGENT', 'FAILED'),
@@ -539,6 +541,7 @@ export class AgentsLibSQL extends AgentsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_AGENTS', 'FAILED'),
@@ -588,6 +591,7 @@ export class AgentsLibSQL extends AgentsStorage {
         createdAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_VERSION', 'FAILED'),
@@ -613,6 +617,7 @@ export class AgentsLibSQL extends AgentsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_VERSION', 'FAILED'),
@@ -642,6 +647,7 @@ export class AgentsLibSQL extends AgentsStorage {
 
       return this.parseVersionRow(rows[0]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_VERSION_BY_NUMBER', 'FAILED'),
@@ -672,6 +678,7 @@ export class AgentsLibSQL extends AgentsStorage {
 
       return this.parseVersionRow(rows[0]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_LATEST_VERSION', 'FAILED'),
@@ -747,6 +754,7 @@ export class AgentsLibSQL extends AgentsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_VERSIONS', 'FAILED'),
@@ -766,6 +774,7 @@ export class AgentsLibSQL extends AgentsStorage {
         keys: { id },
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_VERSION', 'FAILED'),
@@ -797,6 +806,7 @@ export class AgentsLibSQL extends AgentsStorage {
         });
       }
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_VERSIONS_BY_AGENT_ID', 'FAILED'),
@@ -820,6 +830,7 @@ export class AgentsLibSQL extends AgentsStorage {
       });
       return count;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'COUNT_VERSIONS', 'FAILED'),

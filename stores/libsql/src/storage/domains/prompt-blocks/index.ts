@@ -69,6 +69,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       const row = result.rows?.[0];
       return row ? this.#parseBlockRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_PROMPT_BLOCK', 'FAILED'),
@@ -121,6 +122,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_PROMPT_BLOCK', 'FAILED'),
@@ -237,6 +239,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         args: [id],
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_PROMPT_BLOCK', 'FAILED'),
@@ -317,6 +320,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         hasMore: end < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_PROMPT_BLOCKS', 'FAILED'),
@@ -356,6 +360,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         createdAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -376,6 +381,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       const row = result.rows?.[0];
       return row ? this.#parseVersionRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -396,6 +402,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       const row = result.rows?.[0];
       return row ? this.#parseVersionRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_PROMPT_BLOCK_VERSION_BY_NUMBER', 'FAILED'),
@@ -416,6 +423,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       const row = result.rows?.[0];
       return row ? this.#parseVersionRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_LATEST_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -469,6 +477,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         hasMore: end < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_PROMPT_BLOCK_VERSIONS', 'FAILED'),
@@ -487,6 +496,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         args: [id],
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -505,6 +515,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         args: [entityId],
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_PROMPT_BLOCK_VERSIONS_BY_BLOCK', 'FAILED'),
@@ -524,6 +535,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       });
       return Number(result.rows?.[0]?.count ?? 0);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'COUNT_PROMPT_BLOCK_VERSIONS', 'FAILED'),

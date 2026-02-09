@@ -83,6 +83,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
       const row = result.rows?.[0];
       return row ? this.#parseScorerRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_SCORER_DEFINITION', 'FAILED'),
@@ -135,6 +136,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_SCORER_DEFINITION', 'FAILED'),
@@ -251,6 +253,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
         args: [id],
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_SCORER_DEFINITION', 'FAILED'),
@@ -331,6 +334,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
         hasMore: end < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_SCORER_DEFINITIONS', 'FAILED'),
@@ -374,6 +378,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
         createdAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_SCORER_DEFINITION_VERSION', 'FAILED'),
@@ -394,6 +399,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
       const row = result.rows?.[0];
       return row ? this.#parseVersionRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_SCORER_DEFINITION_VERSION', 'FAILED'),
@@ -414,6 +420,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
       const row = result.rows?.[0];
       return row ? this.#parseVersionRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_SCORER_DEFINITION_VERSION_BY_NUMBER', 'FAILED'),
@@ -434,6 +441,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
       const row = result.rows?.[0];
       return row ? this.#parseVersionRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_LATEST_SCORER_DEFINITION_VERSION', 'FAILED'),
@@ -487,6 +495,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
         hasMore: end < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_SCORER_DEFINITION_VERSIONS', 'FAILED'),
@@ -505,6 +514,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
         args: [id],
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_SCORER_DEFINITION_VERSION', 'FAILED'),
@@ -523,6 +533,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
         args: [entityId],
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_SCORER_DEFINITION_VERSIONS_BY_SCORER', 'FAILED'),
@@ -542,6 +553,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
       });
       return Number(result.rows?.[0]?.count ?? 0);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'COUNT_SCORER_DEFINITION_VERSIONS', 'FAILED'),
