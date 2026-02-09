@@ -1,139 +1,43 @@
 ---
-title: "Guide: Building a Full Dev Assistant with Workspace | Mastra"
+title: "Guide: Building a Dev Assistant"
 description: Build a complete development assistant that combines filesystem, sandbox, skills, and search to write code, run tests, and maintain documentation.
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Building a Full Dev Assistant
+# Building a Dev Assistant
 
-In this guide, you'll build a complete development assistant that combines all workspace features: filesystem for file management, sandbox for code execution, skills for coding standards, and search for finding examples.
+In this guide, you'll build a complete development assistant that combines all workspace features: filesystem for file management, sandbox for code execution, skills for coding standards, and search for finding examples. You'll set up a workspace with a sample project, add coding standards as a skill, and create an agent that writes code following TDD practices. By the end, you'll have an agent that can read existing code, write new implementations, run tests in a sandbox, and iterate based on results.
 
-## Before you begin
+## Prerequisites
 
-- A Mastra project ([Quickstart](/guides/getting-started/quickstart))
-- An OpenAI API key
-- Node.js v22.13.0+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
+
+## Install vitest
+
+The dev assistant uses [vitest](https://vitest.dev/) to run tests inside the workspace sandbox. Install it as a dev dependency in your project:
+
+```bash npm2yarn
+npm install -D vitest
+```
 
 ## Set up the workspace
 
+The workspace uses the following folder structure:
+
+- `workspace/src/` — Source code for the sample project
+- `workspace/tests/` — Test files
+- `workspace/docs/` — Project documentation
+- `workspace/skills/` — Coding standards and guidelines as [Agent Skills](https://agentskills.io)
+
 <Steps>
 
-<StepItem title="Create full workspace structure">
-
-```bash
-mkdir -p workspace/src/utils
-mkdir -p workspace/tests
-mkdir -p workspace/docs
-mkdir -p workspace/skills/coding-standards/references
-```
-
-</StepItem>
-
-<StepItem title="Add sample project files">
-
-```typescript title="workspace/src/utils/string-helpers.ts"
-export function capitalize(str: string): string {
-  if (!str) return str;
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-export function slugify(str: string): string {
-  return str
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-');
-}
-```
-
-```typescript title="workspace/tests/string-helpers.test.ts"
-import { describe, it, expect } from 'vitest';
-import { capitalize, slugify } from '../src/utils/string-helpers';
-
-describe('String Helpers', () => {
-  describe('capitalize', () => {
-    it('capitalizes first letter', () => {
-      expect(capitalize('hello')).toBe('Hello');
-    });
-  });
-
-  describe('slugify', () => {
-    it('converts to lowercase and replaces spaces', () => {
-      expect(slugify('Hello World')).toBe('hello-world');
-    });
-  });
-});
-```
-
-```json title="workspace/package.json"
-{
-  "name": "workspace-project",
-  "scripts": {
-    "test": "vitest run"
-  },
-  "devDependencies": {
-    "vitest": "^1.0.0"
-  }
-}
-```
-
-</StepItem>
-
-<StepItem title="Create coding standards skill">
-
-```markdown title="workspace/skills/coding-standards/SKILL.md"
----
-name: coding-standards
-description: Project coding standards and testing guidelines
----
-
-# Coding Standards
-
-## Code Quality
-- Functions under 50 lines
-- Use descriptive variable names
-- Always add TypeScript types
-
-## Testing
-- Test all exported functions
-- Use AAA pattern: Arrange, Act, Assert
-- Cover happy paths and edge cases
-
-## Before Committing
-1. Write implementation
-2. Write comprehensive tests
-3. Run tests: \`npm test\`
-4. All tests must pass
-```
-
-```markdown title="workspace/skills/coding-standards/references/testing-guide.md"
-# Testing Guide
-
-## AAA Pattern
-
-\`\`\`typescript
-it('descriptive test name', () => {
-  // Arrange: Set up test data
-  const input = 'test';
-
-  // Act: Execute the function
-  const result = doSomething(input);
-
-  // Assert: Verify the result
-  expect(result).toBe('expected');
-});
-\`\`\`
-
-## What to Test
-- Happy paths (normal inputs)
-- Edge cases (empty, null, boundary values)
-- Error cases (invalid inputs, exceptions)
-```
-
-</StepItem>
-
 <StepItem title="Configure full workspace">
+
+Create the workspace configuration in your Mastra entry file. This sets up a local filesystem, a sandbox for running commands, skills for coding standards, and BM25 search indexing:
 
 ```typescript title="src/mastra/index.ts"
 import { resolve } from 'node:path';
@@ -157,6 +61,131 @@ export const mastra = new Mastra({
 
 </StepItem>
 
+<StepItem title="Create workspace folders">
+
+Inside the `workspace` directory at your project root, create the following folders:
+
+- `src/utils/` — For utility source files
+- `tests/` — For test files
+- `docs/` — For documentation
+- `skills/coding-standards/references/` — For the coding standards skill and its reference files
+
+</StepItem>
+
+<StepItem title="Add sample project files">
+
+These files provide a starting point that the agent can read and build upon. The utility file contains string helper functions, and the test file demonstrates the expected testing patterns.
+
+Create the utility source file:
+
+```typescript title="workspace/src/utils/string-helpers.ts"
+export function capitalize(str: string): string {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+export function slugify(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-');
+}
+```
+
+Create the test file that covers the utility functions:
+
+```typescript title="workspace/tests/string-helpers.test.ts"
+import { describe, it, expect } from 'vitest';
+import { capitalize, slugify } from '../src/utils/string-helpers';
+
+describe('String Helpers', () => {
+  describe('capitalize', () => {
+    it('capitalizes first letter', () => {
+      expect(capitalize('hello')).toBe('Hello');
+    });
+  });
+
+  describe('slugify', () => {
+    it('converts to lowercase and replaces spaces', () => {
+      expect(slugify('Hello World')).toBe('hello-world');
+    });
+  });
+});
+```
+
+Add a `package.json` to the workspace so the agent can run tests:
+
+```json title="workspace/package.json"
+{
+  "name": "workspace-project",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^1.0.0"
+  }
+}
+```
+
+</StepItem>
+
+<StepItem title="Create coding standards skill">
+
+Create the skill definition at `workspace/skills/coding-standards/SKILL.md`. This tells the agent how to write and test code:
+
+```markdown title="workspace/skills/coding-standards/SKILL.md"
+---
+name: coding-standards
+description: Project coding standards and testing guidelines
+---
+
+# Coding Standards
+
+## Code Quality
+- Functions under 50 lines
+- Use descriptive variable names
+- Always add TypeScript types
+
+## Testing
+- Test all exported functions
+- Use AAA pattern: Arrange, Act, Assert
+- Cover happy paths and edge cases
+
+## Before Committing
+1. Write implementation
+2. Write comprehensive tests
+3. Run tests: `npm test`
+4. All tests must pass
+```
+
+Create a reference file at `workspace/skills/coding-standards/references/testing-guide.md` with detailed testing patterns:
+
+````markdown title="workspace/skills/coding-standards/references/testing-guide.md"
+# Testing Guide
+
+## AAA Pattern
+
+```typescript
+it('descriptive test name', () => {
+  // Arrange: Set up test data
+  const input = 'test';
+
+  // Act: Execute the function
+  const result = doSomething(input);
+
+  // Assert: Verify the result
+  expect(result).toBe('expected');
+});
+```
+
+## What to Test
+- Happy paths (normal inputs)
+- Edge cases (empty, null, boundary values)
+- Error cases (invalid inputs, exceptions)
+````
+
+</StepItem>
+
 </Steps>
 
 ## Create the dev assistant
@@ -164,6 +193,8 @@ export const mastra = new Mastra({
 <Steps>
 
 <StepItem title="Build the agent">
+
+Create a new file `src/mastra/agents/dev-assistant.ts` and define the agent:
 
 ```typescript title="src/mastra/agents/dev-assistant.ts"
 import { Agent } from '@mastra/core/agent';
@@ -191,6 +222,8 @@ Always explain your reasoning and steps.`,
 </StepItem>
 
 <StepItem title="Register the agent">
+
+Update your `src/mastra/index.ts` file to import and register the dev assistant agent:
 
 ```typescript title="src/mastra/index.ts"
 import { resolve } from 'node:path';
@@ -234,6 +267,8 @@ Open [localhost:4111](http://localhost:4111) and navigate to Dev Assistant.
 
 <StepItem title="Add a new feature with TDD">
 
+Try asking the agent to add a new function using TDD:
+
 ```
 Add a 'truncate' function to string-helpers.ts that shortens
 strings to a max length. Add '...' if truncated.
@@ -241,11 +276,11 @@ strings to a max length. Add '...' if truncated.
 Follow TDD: write tests first, then implementation.
 ```
 
-The agent will:
+Since agent responses are non-deterministic, the exact output will vary. However, you should see the agent follow a process similar to this:
 
-1. Activate coding-standards skill
-2. Search workspace for similar code patterns
-3. Write tests first:
+1. Activate the coding-standards skill
+2. Search the workspace for similar code patterns
+3. Write tests first, for example:
 
 ```typescript
 describe('truncate', () => {
@@ -263,7 +298,7 @@ describe('truncate', () => {
 });
 ```
 
-4. Write implementation:
+4. Write the implementation, for example:
 
 ```typescript
 export function truncate(str: string, maxLength: number): string {
@@ -275,21 +310,6 @@ export function truncate(str: string, maxLength: number): string {
 ```
 
 5. Run tests and verify they pass
-
-</StepItem>
-
-<StepItem title="Refactor with safety">
-
-```
-Refactor string-helpers.ts to be more functional.
-Make sure all tests still pass.
-```
-
-The agent will:
-1. Read current code and tests
-2. Refactor to functional style
-3. Run tests to ensure behavior unchanged
-4. Report results
 
 </StepItem>
 

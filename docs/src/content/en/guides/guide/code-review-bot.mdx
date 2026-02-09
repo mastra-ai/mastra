@@ -1,35 +1,30 @@
 ---
-title: "Guide: Building a Code Review Bot with Workspace Skills | Mastra"
-description: Build an automated code review bot that uses workspace skills to enforce coding standards, run linters, and provide consistent PR feedback.
+title: "Guide: Building a Code Review Bot"
+description: Build an automated code review bot that uses workspace skills to enforce coding standards and provide consistent PR feedback.
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Building a Code Review Bot with Workspace Skills
+# Building a Code Review Bot
 
-In this guide, you'll build a code review bot that automatically reviews pull requests using workspace skills. The bot loads coding standards from skill files, runs automated checks, and provides structured feedback.
+In this guide, you'll build a code review bot that automatically reviews pull requests using workspace skills. The bot loads coding standards from skill files and provides structured feedback. You'll learn how to create a workspace with a skills directory, define an [Agent Skill](https://agentskills.io) with review instructions and reference files, and connect it to an agent that performs automated reviews.
 
-## Before you begin
+## Prerequisites
 
-- A Mastra project ([Quickstart](/guides/getting-started/quickstart))
-- An OpenAI API key
-- Node.js v22.13.0+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
 
 ## Create the workspace
 
+To create a workspace, use the `Workspace` class with a `LocalFilesystem` and configure it with a skills directory.
+
 <Steps>
 
-<StepItem title="Set up workspace structure">
-
-```bash
-mkdir -p workspace/skills/code-standards/references
-mkdir -p workspace/skills/code-standards/scripts
-```
-
-</StepItem>
-
 <StepItem title="Configure workspace with skills">
+
+Create the workspace configuration in your Mastra entry file. This sets up a local filesystem and tells the workspace to look for skills in the `/skills` directory:
 
 ```typescript title="src/mastra/index.ts"
 import { resolve } from 'node:path';
@@ -50,19 +45,28 @@ export const mastra = new Mastra({
 
 </StepItem>
 
+<StepItem title="Set up workspace structure">
+
+Inside the `workspace` directory at your project root, create the folders `skills/code-standards/references`. This is where the skill definition and reference files will live.
+
+</StepItem>
+
 </Steps>
 
 ## Create the code standards skill
+
+Skills are structured directories containing a `SKILL.md` file with instructions for the agent. The code standards skill defines the review process and references a style guide.
 
 <Steps>
 
 <StepItem title="Write the skill instructions">
 
+Inside the `workspace/skills/code-standards` folder, create a file called `SKILL.md`. Give it the following contents:
+
 ```markdown title="workspace/skills/code-standards/SKILL.md"
 ---
 name: code-standards
 description: Automated code review standards and checks
-version: 1.0.0
 ---
 
 # Code Review Standards
@@ -72,7 +76,7 @@ Review code systematically using these steps:
 1. **Critical Issues** - Security vulnerabilities, memory leaks, logic bugs, missing error handling
 2. **Code Quality** - Functions over 50 lines, code duplication, confusing names, missing types
 3. **Style Guide** - Check references/style-guide.md for naming and organization
-4. **Automated Checks** - Run scripts/lint-check.ts
+4. **Linting** - Flag common issues like use of `var`, leftover `console.log` statements, and `debugger` statements
 
 Provide feedback in this format:
 
@@ -89,7 +93,9 @@ Provide feedback in this format:
 
 <StepItem title="Add style guide reference">
 
-```markdown title="workspace/skills/code-standards/references/style-guide.md"
+Create a reference file at `workspace/skills/code-standards/references/style-guide.md` with the project's naming and organization conventions:
+
+````markdown title="workspace/skills/code-standards/references/style-guide.md"
 # Style Guide
 
 ## Naming
@@ -99,7 +105,7 @@ Provide feedback in this format:
 - Booleans: Start with `is`, `has`, `should`
 
 ## Code Organization
-\`\`\`typescript
+```typescript
 // 1. Imports
 import { foo } from 'bar';
 
@@ -114,46 +120,14 @@ function doSomething() {}
 
 // 5. Exports
 export { doSomething };
-\`\`\`
+```
 
 ## Error Handling
 Always handle errors explicitly - never silently catch.
 
 ## Comments
 Write "why" not "what".
-```
-
-</StepItem>
-
-<StepItem title="Add automated check script">
-
-```typescript title="workspace/skills/code-standards/scripts/lint-check.ts"
-interface CheckResult {
-  passed: boolean;
-  issues: string[];
-}
-
-export async function runLintCheck(code: string): Promise<CheckResult> {
-  const issues: string[] = [];
-
-  const checks = [
-    { pattern: /var\s+/g, message: 'Use const or let instead of var' },
-    { pattern: /console\.log/g, message: 'Remove console.log before committing' },
-    { pattern: /TODO:/g, message: 'Resolve TODO comments' },
-    { pattern: /debugger/g, message: 'Remove debugger statements' },
-    { pattern: /\w{100,}/g, message: 'Lines should be under 100 characters' },
-  ];
-
-  for (const check of checks) {
-    const matches = code.match(check.pattern);
-    if (matches) {
-      issues.push(`${check.message} (${matches.length} found)`);
-    }
-  }
-
-  return { passed: issues.length === 0, issues };
-}
-```
+````
 
 </StepItem>
 
@@ -164,6 +138,8 @@ export async function runLintCheck(code: string): Promise<CheckResult> {
 <Steps>
 
 <StepItem title="Build the code reviewer">
+
+Create a new file `src/mastra/agents/code-reviewer.ts` and define the agent:
 
 ```typescript title="src/mastra/agents/code-reviewer.ts"
 import { Agent } from '@mastra/core/agent';
@@ -185,6 +161,8 @@ When asked to review code:
 </StepItem>
 
 <StepItem title="Register the agent">
+
+Update your `src/mastra/index.ts` file to import and register the code reviewer agent:
 
 ```typescript title="src/mastra/index.ts"
 import { resolve } from 'node:path';
@@ -237,7 +215,7 @@ function getData(id) {
 }
 ```
 
-The bot will activate the code-standards skill and provide structured feedback:
+The bot should activate the code-standards skill and provide structured feedback. Since agent responses are non-deterministic, your output may vary, but you should see something similar to:
 
 ```
 **Summary**: Function has several issues with variable declaration,

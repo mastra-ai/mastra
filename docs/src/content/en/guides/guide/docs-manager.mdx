@@ -1,5 +1,5 @@
 ---
-title: "Guide: Building a Docs Manager with Workspace Filesystem | Mastra"
+title: "Guide: Building a Docs Manager"
 description: Build an AI documentation manager that creates, updates, and organizes markdown documentation files using workspace filesystem.
 ---
 
@@ -8,66 +8,23 @@ import StepItem from "@site/src/components/StepItem";
 
 # Building a Docs Manager
 
-In this guide, you'll build a documentation manager that maintains your project's docs. It creates well-structured markdown files, keeps documentation organized, and prevents accidental overwrites.
+In this guide, you'll build a documentation manager that maintains your project's docs. It creates well-structured markdown files, keeps documentation organized, and prevents accidental overwrites. You'll learn how to set up a workspace filesystem, create an agent with document management instructions, and use it to generate and update documentation through conversational prompts.
 
-## Before you begin
+## Prerequisites
 
-- A Mastra project ([Quickstart](/guides/getting-started/quickstart))
-- An OpenAI API key
-- Node.js v22.13.0+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
 
 ## Set up the workspace
 
+The workspace uses a local filesystem to manage documentation files. The agent reads and writes files within the workspace directory.
+
 <Steps>
 
-<StepItem title="Create docs structure">
-
-```bash
-mkdir -p workspace/docs/guides
-mkdir -p workspace/docs/api
-mkdir -p workspace/docs/tutorials
-```
-
-</StepItem>
-
-<StepItem title="Add initial documentation">
-
-```markdown title="workspace/docs/README.md"
-# Project Documentation
-
-Welcome to the documentation!
-
-## Sections
-
-- [Guides](./guides/) - How-to guides
-- [API](./api/) - API reference
-- [Tutorials](./tutorials/) - Step-by-step tutorials
-```
-
-```markdown title="workspace/docs/guides/getting-started.md"
-# Getting Started
-
-Quick start guide for the project.
-
-## Installation
-
-\`\`\`bash
-npm install example-package
-\`\`\`
-
-## Quick Example
-
-\`\`\`typescript
-import { Example } from 'example-package';
-
-const example = new Example();
-example.run();
-\`\`\`
-```
-
-</StepItem>
-
 <StepItem title="Configure workspace">
+
+Create the workspace configuration in your Mastra entry file. This sets up a local filesystem that the agent can use to manage documentation:
 
 ```typescript title="src/mastra/index.ts"
 import { resolve } from 'node:path';
@@ -87,6 +44,57 @@ export const mastra = new Mastra({
 
 </StepItem>
 
+<StepItem title="Create docs structure">
+
+Inside the `workspace` directory at your project root, create the following folders:
+
+- `docs/guides/` — For how-to guides
+- `docs/api/` — For API reference documentation
+- `docs/tutorials/` — For step-by-step tutorials
+
+</StepItem>
+
+<StepItem title="Add initial documentation">
+
+Create a root README to serve as the documentation index:
+
+```markdown title="workspace/docs/README.md"
+# Project Documentation
+
+Welcome to the documentation!
+
+## Sections
+
+- [Guides](./guides/) - How-to guides
+- [API](./api/) - API reference
+- [Tutorials](./tutorials/) - Step-by-step tutorials
+```
+
+Add a sample guide so the agent can see the existing documentation style:
+
+````markdown title="workspace/docs/guides/getting-started.md"
+# Getting Started
+
+Quick start guide for the project.
+
+## Installation
+
+```bash
+npm install example-package
+```
+
+## Quick Example
+
+```typescript
+import { Example } from 'example-package';
+
+const example = new Example();
+example.run();
+```
+````
+
+</StepItem>
+
 </Steps>
 
 ## Create the docs manager
@@ -94,6 +102,8 @@ export const mastra = new Mastra({
 <Steps>
 
 <StepItem title="Build the agent">
+
+Create a new file `src/mastra/agents/docs-manager.ts` and define the agent:
 
 ```typescript title="src/mastra/agents/docs-manager.ts"
 import { Agent } from '@mastra/core/agent';
@@ -126,6 +136,8 @@ Always explain what you're creating and why.`,
 </StepItem>
 
 <StepItem title="Register the agent">
+
+Update your `src/mastra/index.ts` file to import and register the docs manager agent:
 
 ```typescript title="src/mastra/index.ts"
 import { resolve } from 'node:path';
@@ -165,14 +177,16 @@ Open [localhost:4111](http://localhost:4111) and navigate to the Docs Manager.
 
 <StepItem title="Create new documentation">
 
+Ask the agent to create a tutorial:
+
 ```
 Create a tutorial for setting up authentication.
 Cover installation, configuration, and a basic example.
 ```
 
-The agent will create `/docs/tutorials/authentication-setup.md` with:
+The agent should create a file like `/docs/tutorials/authentication-setup.md`. Since agent responses are non-deterministic, the exact content will vary, but you should see something similar to:
 
-```markdown
+````markdown
 # Authentication Setup
 
 Learn how to add authentication to your application.
@@ -181,26 +195,26 @@ Learn how to add authentication to your application.
 
 Install the auth package:
 
-\`\`\`bash
+```bash
 npm install @example/auth
-\`\`\`
+```
 
 ## Configuration
 
 Create a config file:
 
-\`\`\`typescript
+```typescript
 // auth.config.ts
 export const authConfig = {
   provider: 'oauth',
   clientId: process.env.AUTH_CLIENT_ID,
   secret: process.env.AUTH_SECRET,
 };
-\`\`\`
+```
 
 ## Basic Example
 
-\`\`\`typescript
+```typescript
 import { createAuth } from '@example/auth';
 import { authConfig } from './auth.config';
 
@@ -209,46 +223,34 @@ const auth = createAuth(authConfig);
 app.get('/protected', auth.requireAuth(), (req, res) => {
   res.json({ user: req.user });
 });
-\`\`\`
 ```
+````
 
 </StepItem>
 
 <StepItem title="Update existing docs">
+
+Try updating an existing document:
 
 ```
 Update the getting started guide to include
 a section on configuration after the Quick Example
 ```
 
-The agent will:
-1. Read the existing getting-started.md file
-2. Find the right insertion point
-3. Add the new section without disrupting existing content
-4. Save the update
+The agent should read the existing `getting-started.md` file, find the right insertion point, and add the new section without disrupting existing content.
 
 </StepItem>
 
 <StepItem title="Organize documentation">
+
+Ask the agent to create an index:
 
 ```
 List all tutorial files and create an index page
 that links to all of them
 ```
 
-The agent creates `/docs/tutorials/README.md`:
-
-```markdown
-# Tutorials
-
-Step-by-step guides for common tasks.
-
-## Getting Started
-- [Authentication Setup](./authentication-setup.md)
-
-## Advanced Topics
-- [Custom Integrations](./custom-integrations.md)
-```
+The agent should create a file like `/docs/tutorials/README.md` that links to all available tutorials.
 
 </StepItem>
 
