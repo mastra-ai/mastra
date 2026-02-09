@@ -62,13 +62,24 @@ export { RunTriggerDialog } from './components/run-trigger/run-trigger-dialog';
 export { TargetSelector, type TargetType } from './components/run-trigger/target-selector';
 export { ScorerSelector } from './components/run-trigger/scorer-selector';
 
-// Results components
-export { RunResultsList, type RunResultsListProps } from './components/results/run-results-list';
+// Experiment components
 export {
-  RunResultsMasterDetail,
-  type RunResultsMasterDetailProps,
-} from './components/results/run-results-master-detail';
-export { RunStats, type RunStatsProps } from './components/results/run-stats';
+  ExperimentResultsListAndDetails,
+  type ExperimentResultsListAndDetailsProps,
+} from '../experiments/components/experiment-results-list-and-details';
+export {
+  ExperimentPageHeader,
+  type ExperimentPageHeaderProps,
+} from '../experiments/components/experiment-page-header';
+export { ExperimentStats, type ExperimentStatsProps } from '../experiments/components/experiment-stats';
+export {
+  ExperimentResultTracePanel,
+  type ExperimentResultTracePanelProps,
+} from '../experiments/components/experiment-result-trace-panel';
+export {
+  ExperimentResultSpanPane,
+  type ExperimentResultSpanPaneProps,
+} from '../experiments/components/experiment-result-span-pane';
 
 // Comparison components
 export { ComparisonView } from './components/comparison/comparison-view';

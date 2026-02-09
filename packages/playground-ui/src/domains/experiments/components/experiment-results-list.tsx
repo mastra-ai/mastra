@@ -3,48 +3,51 @@ import { DatasetRunResult } from '@mastra/client-js';
 import { ItemList } from '@/ds/components/ItemList';
 import { Badge } from '@/ds/components/Badge';
 
-export type RunResultsListProps = {
+export type ExperimentResultsListProps = {
   results: DatasetRunResult[];
   isLoading: boolean;
-};
-
-export type RunResultsListInternalProps = {
-  results: DatasetRunResult[];
-  isLoading: boolean;
-  selectedResultId: string | null;
+  featuredResultId: string | null;
   onResultClick: (resultId: string) => void;
+  columns: { name: string; label: string; size: string }[];
 };
 
-const resultsListColumns = [
-  { name: 'itemId', label: 'Item ID', size: '10rem' },
-  { name: 'output', label: 'Output', size: '1fr' },
-  { name: 'latency', label: 'Latency', size: '10rem' },
-  { name: 'status', label: 'Status', size: '3rem' },
-  { name: 'error', label: 'Error', size: '3rem' },
-];
+// const resultsListColumns = [
+//   { name: 'itemId', label: 'Item ID', size: '5rem' },
+//   { name: 'output', label: 'Output', size: '1fr' },
+//   { name: 'latency', label: 'Latency', size: '6rem' },
+//   { name: 'status', label: 'Status', size: '3rem' },
+// ];
 
 /**
- * Internal list component - controlled by parent for selection state.
- * Used by RunResultsMasterDetail.
+ * List component for experiment results - controlled by parent for selection state.
+ * Used by ExperimentResultsListAndDetails.
  */
-export function RunResultsListInternal({
+export function ExperimentResultsList({
   results,
   isLoading,
-  selectedResultId,
+  featuredResultId,
   onResultClick,
-}: RunResultsListInternalProps) {
+  columns,
+}: ExperimentResultsListProps) {
   if (isLoading) {
-    return <RunResultsListSkeleton />;
+    return <ExperimentResultsListSkeleton columns={columns} />;
   }
 
   if (results.length === 0) {
     return <div className="text-neutral4 text-sm text-center py-8">No results yet</div>;
   }
 
+  // const resultsListColumns = [
+  //   { name: 'itemId', label: 'Item ID', size: '5rem' },
+  //   { name: 'output', label: 'Output', size: '1fr' },
+  //   { name: 'latency', label: 'Latency', size: '6rem' },
+  //   { name: 'status', label: 'Status', size: '3rem' },
+  // ];
+
   return (
     <ItemList>
-      <ItemList.Header columns={resultsListColumns}>
-        {resultsListColumns.map(col => (
+      <ItemList.Header columns={columns}>
+        {columns?.map(col => (
           <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
         ))}
       </ItemList.Header>
@@ -54,18 +57,20 @@ export function RunResultsListInternal({
           {results.map(result => {
             const hasError = Boolean(result.error);
             const entry = { id: result.id };
-            const isSelected = result.id === selectedResultId;
+            const isSelected = result.id === featuredResultId;
 
             return (
               <ItemList.Row key={result.id} isSelected={isSelected}>
                 <ItemList.RowButton
                   entry={entry}
                   isSelected={isSelected}
-                  columns={resultsListColumns}
+                  columns={columns}
                   onClick={() => onResultClick(result.id)}
                 >
-                  <ItemList.ItemText>{result.itemId}</ItemList.ItemText>
-                  <ItemList.ItemText>{truncate(formatValue(result.output), 200)}</ItemList.ItemText>
+                  <ItemList.ItemText>{result.itemId.slice(0, 8)}</ItemList.ItemText>
+                  {columns.some(col => col.name === 'output') && (
+                    <ItemList.ItemText>{truncate(formatValue(result.output), 200)}</ItemList.ItemText>
+                  )}
                   <ItemList.ItemText>{Math.floor(result.latency)} ms</ItemList.ItemText>
                   <div>
                     {hasError ? (
@@ -78,7 +83,6 @@ export function RunResultsListInternal({
                       </Badge>
                     )}
                   </div>
-                  <ItemList.ItemText>{result.error ? truncate(result.error, 30) : '-'}</ItemList.ItemText>
                 </ItemList.RowButton>
               </ItemList.Row>
             );
@@ -89,26 +93,20 @@ export function RunResultsListInternal({
   );
 }
 
-/**
- * Main export - uses RunResultsMasterDetail for the column layout.
- * This is the component to use on pages.
- */
-export { RunResultsMasterDetail as RunResultsList } from './run-results-master-detail';
-
 /** Skeleton loader for results list */
-function RunResultsListSkeleton() {
+function ExperimentResultsListSkeleton({ columns }: { columns: { name: string; label: string; size: string }[] }) {
   return (
     <ItemList>
-      <ItemList.Header columns={resultsListColumns}>
-        {resultsListColumns.map(col => (
+      <ItemList.Header columns={columns}>
+        {columns.map(col => (
           <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
         ))}
       </ItemList.Header>
       <ItemList.Items>
         {Array.from({ length: 5 }).map((_, index) => (
           <ItemList.Row key={index}>
-            <ItemList.RowButton columns={resultsListColumns}>
-              {resultsListColumns.map((_, colIndex) => (
+            <ItemList.RowButton columns={columns}>
+              {columns.map((_, colIndex) => (
                 <ItemList.ItemText key={colIndex} isLoading>
                   Loading...
                 </ItemList.ItemText>

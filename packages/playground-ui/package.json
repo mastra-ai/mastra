@@ -116,6 +116,7 @@
     "prism-react-renderer": "^2.4.1",
     "react-day-picker": "^8.10.1",
     "react-hook-form": "^7.59.0",
+    "react-horizontal-scrolling-menu": "^8.2.0",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^4.0.15",
     "react-syntax-highlighter": "^15.6.6",
