@@ -594,6 +594,16 @@
       "source": "/docs/tools-mcp/overview",
       "destination": "/docs/agents/using-tools",
       "permanent": true
+    },
+    {
+      "source": "/docs/workflows/input-data-mapping",
+      "destination": "/docs/workflows/control-flow",
+      "permanent": true
+    },
+    {
+      "source": "/reference/tools/client",
+      "destination": "/reference/tools/mcp-client",
+      "permanent": true
     }
   ]
 }
