@@ -113,7 +113,12 @@ export function execute<OUTPUT = undefined>({
   // Anthropic rejects assistant as the final message with output format, interpreting it as
   // pre-filling the response. See: https://github.com/mastra-ai/mastra/issues/12800
   const willUseResponseFormat = structuredOutputMode === 'direct' && !structuredOutput?.jsonPromptInjection;
-  if (willUseResponseFormat && prompt.length > 0 && prompt[prompt.length - 1]?.role === 'assistant') {
+  if (
+    willUseResponseFormat &&
+    model.provider.startsWith('anthropic') &&
+    prompt.length > 0 &&
+    prompt[prompt.length - 1]?.role === 'assistant'
+  ) {
     prompt = [
       ...prompt,
       { role: 'user' as const, content: [{ type: 'text' as const, text: 'Generate the structured response.' }] },

@@ -31,6 +31,7 @@ describe('Structured output with memory - assistant message in final position (#
     const capturedPrompts: any[] = [];
 
     const mockModel = new MockLanguageModelV2({
+      provider: 'anthropic',
       doGenerate: async options => {
         capturedPrompts.push(options.prompt);
         return {
@@ -187,6 +188,7 @@ describe('Structured output with memory - assistant message in final position (#
     const capturedPrompts: any[] = [];
 
     const mockModel = new MockLanguageModelV2({
+      provider: 'anthropic',
       doGenerate: async options => {
         capturedPrompts.push(options.prompt);
         return {
