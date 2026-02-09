@@ -13,6 +13,9 @@ export async function initWorkOS(): Promise<AuthResult> {
   });
 
   const rbacProvider = new MastraRBACWorkos({
+    cache: {
+      ttlMs: 1
+    },
     roleMapping: {
       // Full access
       admin: ['*'],
