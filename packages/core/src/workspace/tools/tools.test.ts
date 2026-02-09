@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { createObservabilityContext } from '../../observability';
 import { WORKSPACE_TOOLS } from '../constants';
 import { LocalFilesystem } from '../filesystem';
 import { LocalSandbox } from '../sandbox';
@@ -692,8 +693,8 @@ describe('createWorkspaceTools', () => {
   // Sandbox Tools
   // ===========================================================================
 
-  // Mock context that satisfies ToolExecutionContext (all properties are optional)
-  const mockToolContext = {};
+  // Mock context that satisfies ToolExecutionContext (no-op observability)
+  const mockToolContext = createObservabilityContext();
 
   describe('workspace_execute_command', () => {
     it('should execute command', async () => {

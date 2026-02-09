@@ -11,7 +11,7 @@ import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import type { TracingContext } from '../../observability';
-import { EntityType, SpanType } from '../../observability';
+import { EntityType, SpanType, createObservabilityContext } from '../../observability';
 import type { Processor } from '../../processors';
 import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
@@ -419,7 +419,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       const context = {
         mastra,
         requestContext,
-        tracingContext: { currentSpan: undefined }, // TODO: Pass proper tracing context when evented workflows support tracing
+        ...createObservabilityContext({ currentSpan: undefined }),
         workflow: {
           runId,
           workflowId,
@@ -587,7 +587,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
-        tracingContext: processorTracingContext,
+        ...createObservabilityContext(processorTracingContext),
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -816,7 +816,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               try {
                 result = await processor.processOutputStream({
                   ...baseContext,
-                  tracingContext: processorTracingContext,
+                  ...createObservabilityContext(processorTracingContext),
                   part: part as ChunkType,
                   streamParts: (streamParts ?? []) as ChunkType[],
                   state: mutableState,

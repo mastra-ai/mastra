@@ -9,4 +9,5 @@
 export * from './types';
 export * from './no-op';
 export * from './utils';
+export * from './context-factory';
 export { wrapMastra } from './context';

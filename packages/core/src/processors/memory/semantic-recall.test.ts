@@ -1,12 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MessageList } from '../../agent';
 import type { MastraDBMessage } from '../../agent';
+import { createObservabilityContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import type { MastraEmbeddingModel, MastraVector } from '../../vector';
 
 import { globalEmbeddingCache } from './embedding-cache';
 import { SemanticRecall } from './semantic-recall';
+
+const observabilityContext = createObservabilityContext();
 
 // Helper function to create test messages in MastraDBMessage format
 function createTestMessage(
@@ -131,6 +134,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       const result = await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -224,6 +228,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -273,6 +278,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       const result = await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -321,6 +327,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -364,6 +371,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -400,6 +408,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       const result = await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -437,6 +446,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       const result = await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -473,6 +483,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       const result = await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -505,6 +516,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       const result = await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -555,6 +567,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -633,6 +646,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       const result = await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -677,6 +691,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -720,6 +735,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -755,6 +771,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -849,6 +866,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       const result = await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -926,6 +944,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       const result = await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -1009,6 +1028,7 @@ describe('SemanticRecall', () => {
       messageList.add([userMessage, assistantMessage], 'input');
 
       const result = await processor.processOutputResult({
+        ...observabilityContext,
         messages: [userMessage, assistantMessage],
         messageList,
         abort: vi.fn() as any,
@@ -1118,6 +1138,7 @@ describe('SemanticRecall', () => {
       messageList.add([systemMessage, userMessage], 'input');
 
       await processor.processOutputResult({
+        ...observabilityContext,
         messages: [systemMessage, userMessage],
         messageList,
         abort: vi.fn() as any,
@@ -1204,6 +1225,7 @@ describe('SemanticRecall', () => {
       messageList.add([emptyMessage, validMessage], 'input');
 
       await processor.processOutputResult({
+        ...observabilityContext,
         messages: [emptyMessage, validMessage],
         messageList,
         abort: vi.fn() as any,
@@ -1274,6 +1296,7 @@ describe('SemanticRecall', () => {
       messageList.add([userMessage], 'input');
 
       await processor.processOutputResult({
+        ...observabilityContext,
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
@@ -1336,6 +1359,7 @@ describe('SemanticRecall', () => {
       messageList.add([userMessage], 'input');
 
       await processor.processOutputResult({
+        ...observabilityContext,
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
@@ -1398,6 +1422,7 @@ describe('SemanticRecall', () => {
       messageList.add([userMessage], 'input');
 
       const result = await processor.processOutputResult({
+        ...observabilityContext,
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
@@ -1457,6 +1482,7 @@ describe('SemanticRecall', () => {
       messageList.add([userMessage], 'input');
 
       const result = await processor.processOutputResult({
+        ...observabilityContext,
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
@@ -1534,6 +1560,7 @@ describe('SemanticRecall', () => {
       messageList.add([assistantMessage], 'response'); // Assistant added as response
 
       const result = await processor.processOutputResult({
+        ...observabilityContext,
         messages: [assistantMessage], // Only response messages passed (like runOutputProcessors does)
         messageList,
         abort: vi.fn() as any,
@@ -1619,6 +1646,7 @@ describe('SemanticRecall', () => {
       messageList.add([userMessage], 'input');
 
       const result = await processor.processOutputResult({
+        ...observabilityContext,
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
@@ -1695,6 +1723,7 @@ describe('SemanticRecall', () => {
 
       // First call - should call embedder
       await processor.processOutputResult({
+        ...observabilityContext,
         messages: [message1],
         messageList: messageList1,
         abort: vi.fn() as any,
@@ -1711,6 +1740,7 @@ describe('SemanticRecall', () => {
 
       // Second call with same content - should use cache, not call embedder again
       await processor.processOutputResult({
+        ...observabilityContext,
         messages: [message2],
         messageList: messageList2,
         abort: vi.fn() as any,
@@ -1725,6 +1755,7 @@ describe('SemanticRecall', () => {
 
       // Third call with different content - should call embedder again
       await processor.processOutputResult({
+        ...observabilityContext,
         messages: [message3],
         messageList: messageList3,
         abort: vi.fn() as any,
@@ -1775,6 +1806,7 @@ describe('SemanticRecall', () => {
 
       // First query
       await processor.processInput({
+        ...observabilityContext,
         messages: [message],
         messageList: messageList1,
         abort: vi.fn() as any,
@@ -1788,6 +1820,7 @@ describe('SemanticRecall', () => {
 
       // Second query with same content - should use cache
       await processor.processInput({
+        ...observabilityContext,
         messages: [message],
         messageList: messageList2,
         abort: vi.fn() as any,
@@ -1838,6 +1871,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -1912,6 +1946,7 @@ describe('SemanticRecall', () => {
       messageList.add([userMessage], 'input');
 
       await processor.processOutputResult({
+        ...observabilityContext,
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
@@ -1960,6 +1995,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -2007,6 +2043,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -2051,6 +2088,7 @@ describe('SemanticRecall', () => {
       messageList.add(inputMessages, 'input');
 
       await processor.processInput({
+        ...observabilityContext,
         messages: inputMessages,
         messageList,
         abort: vi.fn() as any,
@@ -2116,6 +2154,7 @@ describe('SemanticRecall', () => {
 
       // Should not throw, should handle error gracefully
       const result = await processor.processOutputResult({
+        ...observabilityContext,
         messages: [userMessage],
         messageList,
         abort: vi.fn() as any,
@@ -2243,6 +2282,7 @@ describe('SemanticRecall', () => {
       messageList1.add([message1], 'input');
 
       await fastembedProcessor.processOutputResult({
+        ...observabilityContext,
         messages: [message1],
         messageList: messageList1,
         abort: vi.fn() as any,
@@ -2284,6 +2324,7 @@ describe('SemanticRecall', () => {
 
       // After fix: ensureVectorIndex should call createIndex, which catches mismatch early
       const result = await openaiProcessor.processInput({
+        ...observabilityContext,
         messages: [message2],
         messageList: messageList2,
         abort: vi.fn() as any,
@@ -2383,6 +2424,7 @@ describe('SemanticRecall', () => {
       messageList1.add([inputMessage], 'input');
 
       await processor1.processInput({
+        ...observabilityContext,
         messages: [inputMessage],
         messageList: messageList1,
         abort: vi.fn() as any,
@@ -2404,6 +2446,7 @@ describe('SemanticRecall', () => {
 
       await expect(
         processor2.processInput({
+          ...observabilityContext,
           messages: [inputMessage],
           messageList: messageList2,
           abort: vi.fn() as any,

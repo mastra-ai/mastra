@@ -14,6 +14,8 @@ import type {
   IModelSpanTracker,
   AIModelGenerationSpan,
   EntityType,
+  ScoreInput,
+  FeedbackInput,
 } from '@mastra/core/observability';
 
 import { SpanType, InternalSpans } from '@mastra/core/observability';
@@ -184,6 +186,12 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   /** Update span attributes */
   abstract update(options: UpdateSpanOptions<TType>): void;
+
+  /** Add a score to this span (no-op until scores are implemented) */
+  addScore(_score: ScoreInput): void {}
+
+  /** Add feedback to this span (no-op until feedback is implemented) */
+  addFeedback(_feedback: FeedbackInput): void {}
 
   createChildSpan(options: ChildSpanOptions<SpanType.MODEL_GENERATION>): AIModelGenerationSpan;
   createChildSpan<TChildType extends SpanType>(options: ChildSpanOptions<TChildType>): Span<TChildType> {

@@ -7,6 +7,10 @@ import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
+import type { FeedbackEvent, FeedbackInput } from './feedback';
+import type { LogEvent, LogLevel } from './logging';
+import type { MetricEvent, MetricsConfig } from './metrics';
+import type { ScoreEvent, ScoreInput } from './scores';
 
 // ============================================================================
 // Span Types
@@ -440,6 +444,12 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
   /** Update span attributes */
   update(options: UpdateSpanOptions<TType>): void;
+
+  /** Add a score to this span */
+  addScore(score: ScoreInput): void;
+
+  /** Add feedback to this span */
+  addFeedback(feedback: FeedbackInput): void;
 
   /** Create child span - can be any span type independent of parent */
   createChildSpan(options: ChildSpanOptions<SpanType.MODEL_GENERATION>): AIModelGenerationSpan;
@@ -906,6 +916,11 @@ export interface TracingOptions {
    */
   parentSpanId?: string;
   /**
+   * Session identifier for grouping multi-turn conversations.
+   * If provided, it will be propagated across all spans in this trace.
+   */
+  sessionId?: string;
+  /**
    * Tags to apply to this trace.
    * Tags are string labels that can be used to categorize and filter traces
    * Note: Tags are only applied to the root span of a trace.
@@ -935,6 +950,29 @@ export interface SpanIds {
 export interface TracingContext {
   /** Current Span for creating child spans and adding metadata */
   currentSpan?: AnySpan;
+}
+
+/**
+ * Trace interface for working with traces externally.
+ */
+export interface Trace {
+  readonly traceId: string;
+  readonly spans: ReadonlyArray<AnySpan>;
+
+  /** Get a specific span by ID */
+  getSpan(spanId: string): AnySpan | null;
+
+  /**
+   * Add a score at the trace level.
+   * Uses root span's metadata for context.
+   */
+  addScore(score: ScoreInput): void;
+
+  /**
+   * Add feedback at the trace level.
+   * Uses root span's metadata for context.
+   */
+  addFeedback(feedback: FeedbackInput): void;
 }
 
 /**
@@ -984,12 +1022,18 @@ export interface ObservabilityInstanceConfig {
   name: string;
   /** Service name for observability */
   serviceName: string;
+  /** Root log level ceiling for all log exporters */
+  logLevel?: LogLevel;
+  /** Default session identifier for trace grouping */
+  defaultSessionId?: string;
   /** Sampling strategy - controls whether tracing is collected (defaults to ALWAYS) */
   sampling?: SamplingStrategy;
   /** Custom exporters */
   exporters?: ObservabilityExporter[];
   /** Custom processors */
   spanOutputProcessors?: SpanOutputProcessor[];
+  /** Metrics configuration */
+  metrics?: MetricsConfig;
   /** OpenTelemetry bridge for integration with existing OTEL infrastructure */
   bridge?: ObservabilityBridge;
   /** Set to `true` if you want to see spans internal to the operation of mastra */
@@ -1090,6 +1134,14 @@ export interface ObservabilityExporter {
   /** Exporter name */
   name: string;
 
+  // Signal handlers - implement the ones you support
+  // Handler presence = signal support
+  onTracingEvent?(event: TracingEvent): void | Promise<void>;
+  onMetricEvent?(event: MetricEvent): void | Promise<void>;
+  onLogEvent?(event: LogEvent): void | Promise<void>;
+  onScoreEvent?(event: ScoreEvent): void | Promise<void>;
+  onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>;
+
   /** Initialize exporter with tracing configuration and/or access to Mastra */
   init?(options: InitExporterOptions): void;
 
@@ -1099,6 +1151,7 @@ export interface ObservabilityExporter {
   /** Export tracing events */
   exportTracingEvent(event: TracingEvent): Promise<void>;
 
+  /** @deprecated Use span.addScore() or trace.addScore() instead */
   addScoreToTrace?({
     traceId,
     spanId,

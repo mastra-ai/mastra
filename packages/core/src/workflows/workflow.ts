@@ -17,7 +17,7 @@ import type { Event } from '../events/types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
-import { EntityType, SpanType, getOrCreateSpan } from '../observability';
+import { EntityType, SpanType, getOrCreateSpan, createObservabilityContext } from '../observability';
 import { ProcessorRunner } from '../processors';
 import type { Processor } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
@@ -536,7 +536,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       const toolContext = {
         mastra,
         requestContext,
-        tracingContext,
+        ...createObservabilityContext(tracingContext),
         resumeData,
         workflow: {
           runId,
@@ -704,7 +704,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
-        tracingContext: processorTracingContext,
+        ...createObservabilityContext(processorTracingContext),
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -932,7 +932,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               try {
                 result = await processor.processOutputStream({
                   ...baseContext,
-                  tracingContext: processorTracingContext,
+                  ...createObservabilityContext(processorTracingContext),
                   part: part as ChunkType,
                   streamParts: (streamParts ?? []) as ChunkType[],
                   state: mutableState,

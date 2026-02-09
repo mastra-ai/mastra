@@ -12,7 +12,7 @@ import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/type
 
 import type { MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContextMixin, TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
@@ -237,11 +237,10 @@ export interface ToolExecutionContext<
   TSuspend = unknown,
   TResume = unknown,
   TRequestContext extends Record<string, any> | unknown = unknown,
-> {
+> extends ObservabilityContextMixin {
   // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
   requestContext?: RequestContext<TRequestContext>;
-  tracingContext?: TracingContext;
   abortSignal?: AbortSignal;
 
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)

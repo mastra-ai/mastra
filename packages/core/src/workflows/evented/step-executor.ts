@@ -6,6 +6,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
+import { createObservabilityContext } from '../../observability';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
 import type { InnerOutput, LoopConditionFunction, Step } from '../step';
@@ -98,6 +99,7 @@ export class StepExecutor extends MastraBase {
             runId,
             mastra: this.mastra!,
             requestContext,
+            ...createObservabilityContext(),
             inputData,
             state: params.state,
             setState: async (state: any) => {
@@ -132,8 +134,6 @@ export class StepExecutor extends MastraBase {
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
-            // TODO
-            tracingContext: {},
           },
           {
             paramName: 'runCount',

@@ -4,7 +4,7 @@ import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '..
 import type { MastraScorers } from '../../evals';
 import { runScorer } from '../../evals/hooks';
 import type { PubSub } from '../../events/pubsub';
-import { EntityType, SpanType, wrapMastra } from '../../observability';
+import { EntityType, SpanType, wrapMastra, createObservabilityContext } from '../../observability';
 import type { TracingContext, Span } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
@@ -310,6 +310,7 @@ export async function executeStep(
         workflowId,
         mastra: mastraForStep,
         requestContext,
+        ...createObservabilityContext({ currentSpan: stepSpan }),
         inputData,
         state: executionContext.state,
         setState: async (state: any) => {
@@ -327,7 +328,6 @@ export async function executeStep(
         retryCount,
         resumeData: resumeDataToUse,
         suspendData: suspendDataToUse,
-        tracingContext: { currentSpan: stepSpan },
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(null, stepResults),
         suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<void> => {

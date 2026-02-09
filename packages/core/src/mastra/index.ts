@@ -15,8 +15,9 @@ import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
-import type { ObservabilityEntrypoint } from '../observability';
+import type { ObservabilityEntrypoint, LoggerContext, MetricsContext, Trace } from '../observability';
 import { NoOpObservability } from '../observability';
+import { noOpLoggerContext, noOpMetricsContext } from '../observability/no-op/context';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
@@ -294,6 +295,8 @@ export class Mastra<
   #vectors?: TVectors;
   #agents: TAgents;
   #logger: TLogger;
+  #loggerContext: LoggerContext;
+  #metricsContext: MetricsContext;
   #workflows: TWorkflows;
   #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
@@ -485,6 +488,8 @@ export class Mastra<
       }
     }
     this.#logger = logger;
+    this.#loggerContext = noOpLoggerContext;
+    this.#metricsContext = noOpMetricsContext;
 
     this.#idGenerator = config?.idGenerator;
 
@@ -2646,6 +2651,30 @@ export class Mastra<
    */
   public getLogger() {
     return this.#logger;
+  }
+
+  /**
+   * Direct logger for use outside trace context.
+   * Logs emitted via this API will not have trace correlation.
+   */
+  public get logger() {
+    return this.#loggerContext;
+  }
+
+  /**
+   * Direct metrics API for use outside trace context.
+   * Metrics emitted via this API will not have auto-labels from spans.
+   */
+  public get metrics() {
+    return this.#metricsContext;
+  }
+
+  /**
+   * Retrieve a trace for post-hoc score/feedback attachment.
+   * Returns null if trace not found or storage not configured.
+   */
+  public async getTrace(_traceId: string): Promise<Trace | null> {
+    return null;
   }
 
   /**

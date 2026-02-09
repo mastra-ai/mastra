@@ -7,7 +7,7 @@ import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
-import { EntityType, SpanType } from '../observability';
+import { EntityType, SpanType, createObservabilityContext } from '../observability';
 import type { Span, TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
@@ -260,7 +260,7 @@ export class ProcessorRunner {
         messages: processableMessages,
         messageList,
         abort,
-        tracingContext: { currentSpan: processorSpan },
+        ...createObservabilityContext({ currentSpan: processorSpan }),
         requestContext,
         retryCount,
       });
@@ -408,7 +408,7 @@ export class ProcessorRunner {
               abort: <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
                 throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
               },
-              tracingContext: { currentSpan: state.span },
+              ...createObservabilityContext({ currentSpan: state.span }),
               requestContext,
               messageList,
               retryCount,
@@ -589,7 +589,7 @@ export class ProcessorRunner {
         messages: processableMessages,
         systemMessages: currentSystemMessages,
         abort,
-        tracingContext: { currentSpan: processorSpan },
+        ...createObservabilityContext({ currentSpan: processorSpan }),
         messageList,
         requestContext,
         retryCount,
@@ -826,7 +826,7 @@ export class ProcessorRunner {
             messageList,
             ...inputData,
             abort,
-            tracingContext: { currentSpan: processorSpan },
+            ...createObservabilityContext({ currentSpan: processorSpan }),
             retryCount: args.retryCount ?? 0,
           }),
           {
@@ -1014,7 +1014,7 @@ export class ProcessorRunner {
           systemMessages: currentSystemMessages,
           steps,
           abort,
-          tracingContext: { currentSpan: processorSpan },
+          ...createObservabilityContext({ currentSpan: processorSpan }),
           requestContext,
           retryCount,
         });

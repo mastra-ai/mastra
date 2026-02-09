@@ -24,6 +24,14 @@ import {
 
 /** Strategy for how tracing data is persisted to storage */
 export type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
+/** Strategy for how logs data is persisted to storage */
+export type LogsStorageStrategy = 'realtime' | 'batch';
+/** Strategy for how metrics data is persisted to storage */
+export type MetricsStorageStrategy = 'realtime' | 'batch';
+/** Strategy for how scores data is persisted to storage */
+export type ScoresStorageStrategy = 'realtime' | 'batch';
+/** Strategy for how feedback data is persisted to storage */
+export type FeedbackStorageStrategy = 'realtime' | 'batch';
 
 // ============================================================================
 // Helper utilities for creating omit key objects from schema shapes

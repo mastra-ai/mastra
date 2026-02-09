@@ -12,11 +12,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage } from '../agent/message-list';
+import { createObservabilityContext } from '../observability';
 import { globalEmbeddingCache } from '../processors/memory/embedding-cache';
 import type { SemanticRecall } from '../processors/memory/semantic-recall';
 import { RequestContext } from '../request-context';
 import type { MastraStorage, MemoryStorage } from '../storage';
 import type { MastraEmbeddingModel, MastraVector } from '../vector';
+
+const observabilityContext = createObservabilityContext();
 
 import { MockMemory } from './mock';
 
@@ -116,6 +119,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         messages: [message],
         messageList: messageList1,
         abort: vi.fn() as any,
+        ...observabilityContext,
         requestContext,
       });
 
@@ -133,6 +137,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         messages: [message],
         messageList: messageList2,
         abort: vi.fn() as any,
+        ...observabilityContext,
         requestContext,
       });
 
@@ -183,6 +188,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         messages: [message],
         messageList: messageList1,
         abort: vi.fn() as any,
+        ...observabilityContext,
         requestContext,
       });
 
@@ -203,6 +209,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         messages: [message],
         messageList: messageList2,
         abort: vi.fn() as any,
+        ...observabilityContext,
         requestContext,
       });
 
@@ -265,6 +272,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         messages: [message],
         messageList: messageList1,
         abort: vi.fn() as any,
+        ...observabilityContext,
         requestContext,
       });
 
@@ -281,6 +289,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         messages: [message],
         messageList: messageList2,
         abort: vi.fn() as any,
+        ...observabilityContext,
         requestContext,
       });
 

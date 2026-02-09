@@ -11,11 +11,17 @@ import type {
   GetSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  FeedbackStorageStrategy,
   ListTracesArgs,
   ListTracesResponse,
+  LogsStorageStrategy,
+  MetricsStorageStrategy,
+  ScoresStorageStrategy,
   TracingStorageStrategy,
   UpdateSpanArgs,
 } from './types';
+
+type StrategyHint<T> = { preferred: T; supported: T[] } | null;
 
 /**
  * ObservabilityStorage is not abstract because it provides default implementations
@@ -37,14 +43,27 @@ export class ObservabilityStorage extends StorageDomain {
    * Provides hints for tracing strategy selection by the DefaultExporter.
    * Storage adapters can override this to specify their preferred and supported strategies.
    */
-  public get tracingStrategy(): {
-    preferred: TracingStorageStrategy;
-    supported: TracingStorageStrategy[];
-  } {
+  public get tracingStrategy(): StrategyHint<TracingStorageStrategy> {
     return {
       preferred: 'batch-with-updates', // Default for most SQL stores
       supported: ['realtime', 'batch-with-updates', 'insert-only'],
     };
+  }
+
+  public get logsStrategy(): StrategyHint<LogsStorageStrategy> {
+    return null;
+  }
+
+  public get metricsStrategy(): StrategyHint<MetricsStorageStrategy> {
+    return null;
+  }
+
+  public get scoresStrategy(): StrategyHint<ScoresStorageStrategy> {
+    return null;
+  }
+
+  public get feedbackStrategy(): StrategyHint<FeedbackStorageStrategy> {
+    return null;
   }
 
   /**
