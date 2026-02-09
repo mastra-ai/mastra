@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.2.0-alpha.0",
+  "version": "1.2.1-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -76,7 +76,7 @@
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/server",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run",
@@ -86,7 +86,7 @@
   "author": "",
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.1.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
@@ -120,6 +120,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@sindresorhus/slugify": "^2.2.1",
     "hono": "^4.11.3"
   }
 }

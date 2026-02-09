@@ -1,36 +1,52 @@
-'use client';
-
-import { Plus } from 'lucide-react';
-
 import { ContentBlocks } from '@/ds/components/ContentBlocks';
 import { cn } from '@/lib/utils';
 
 import { AgentCMSBlock } from './agent-cms-block';
+import type { JsonSchema } from '@/lib/rule-engine';
+import { createInstructionBlock, type InstructionBlock } from '../agent-edit-page/utils/form-validation';
 
 export interface AgentCMSBlocksProps {
-  items: Array<string>;
-  onChange: (items: Array<string>) => void;
+  items: Array<InstructionBlock>;
+  onChange: (items: Array<InstructionBlock>) => void;
   className?: string;
   placeholder?: string;
+  schema?: JsonSchema;
 }
 
-export const AgentCMSBlocks = ({ items, onChange, className, placeholder }: AgentCMSBlocksProps) => {
+export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema }: AgentCMSBlocksProps) => {
   const handleDelete = (index: number) => {
     const newItems = items.filter((_, idx) => idx !== index);
     onChange(newItems);
   };
 
   const handleAdd = () => {
-    onChange([...items, '']);
+    onChange([...items, createInstructionBlock()]);
+  };
+
+  const handleBlockChange = (index: number, updatedBlock: InstructionBlock) => {
+    const newItems = items.map((item, idx) => (idx === index ? updatedBlock : item));
+    onChange(newItems);
   };
 
   return (
-    <div className={cn('flex flex-col gap-4 w-full', className)}>
-      <ContentBlocks items={items} onChange={onChange} className="flex flex-col gap-2 w-full">
-        {items.map((_, index) => (
-          <AgentCMSBlock key={index} index={index} onDelete={handleDelete} placeholder={placeholder} />
-        ))}
-      </ContentBlocks>
+    <div className={cn('flex flex-col gap-4 w-full h-full overflow-y-auto', className)}>
+      {items.length > 0 && (
+        <div className="overflow-y-auto h-full">
+          <ContentBlocks items={items} onChange={onChange} className="flex flex-col gap-4 w-full">
+            {items.map((block, index) => (
+              <AgentCMSBlock
+                key={block.id}
+                index={index}
+                block={block}
+                onBlockChange={updatedBlock => handleBlockChange(index, updatedBlock)}
+                onDelete={handleDelete}
+                placeholder={placeholder}
+                schema={schema}
+              />
+            ))}
+          </ContentBlocks>
+        </div>
+      )}
 
       <button
         type="button"
@@ -39,7 +55,7 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder }: Agen
           'border border-border1 text-neutral6 text-ui-sm py-2 rounded-md bg-surface1 hover:bg-surface2 active:bg-surface3',
         )}
       >
-        Add content block
+        Add Instruction block
       </button>
     </div>
   );

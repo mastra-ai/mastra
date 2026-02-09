@@ -17,6 +17,7 @@ import type {
   StorageListAgentsResolvedOutput,
   StorageResolvedAgentType,
   CreateIndexOptions,
+  AgentInstructionBlock,
 } from '@mastra/core/storage';
 import type {
   AgentVersion,
@@ -156,7 +157,7 @@ export class AgentsPG extends AgentsStorage {
           1,
           row.name ?? agentId,
           row.description ?? null,
-          row.instructions ?? '',
+          this.serializeInstructions(row.instructions ?? ''),
           row.model ? JSON.stringify(row.model) : '{}',
           row.tools ? JSON.stringify(row.tools) : null,
           row.defaultOptions ? JSON.stringify(row.defaultOptions) : null,
@@ -442,9 +443,13 @@ export class AgentsPG extends AgentsStorage {
         } = latestVersion;
 
         // Merge updates into latest config
+        // Convert null values to undefined (null means "remove this field")
+        const sanitizedConfigFields = Object.fromEntries(
+          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
+        );
         const newConfig = {
           ...latestConfig,
-          ...configFields,
+          ...sanitizedConfigFields,
         };
 
         // Identify which fields changed
@@ -723,7 +728,7 @@ export class AgentsPG extends AgentsStorage {
             ...agent,
             name: row.version_name,
             description: row.version_description,
-            instructions: row.version_instructions,
+            instructions: this.deserializeInstructions(row.version_instructions as string),
             model: this.parseJson(row.version_model, 'model'),
             tools: this.parseJson(row.version_tools, 'tools'),
             defaultOptions: this.parseJson(row.version_defaultOptions, 'defaultOptions'),
@@ -785,7 +790,7 @@ export class AgentsPG extends AgentsStorage {
           input.versionNumber,
           input.name,
           input.description ?? null,
-          input.instructions,
+          this.serializeInstructions(input.instructions),
           JSON.stringify(input.model),
           input.tools ? JSON.stringify(input.tools) : null,
           input.defaultOptions ? JSON.stringify(input.defaultOptions) : null,
@@ -1020,6 +1025,22 @@ export class AgentsPG extends AgentsStorage {
   // Private Helper Methods
   // ==========================================================================
 
+  private serializeInstructions(instructions: string | AgentInstructionBlock[] | undefined | null): string | undefined {
+    if (instructions == null) return undefined;
+    return Array.isArray(instructions) ? JSON.stringify(instructions) : instructions;
+  }
+
+  private deserializeInstructions(raw: string | null | undefined): string | AgentInstructionBlock[] {
+    if (!raw) return '';
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as AgentInstructionBlock[];
+    } catch {
+      // Not JSON — plain string
+    }
+    return raw;
+  }
+
   private parseVersionRow(row: any): AgentVersion {
     return {
       id: row.id as string,
@@ -1027,7 +1048,7 @@ export class AgentsPG extends AgentsStorage {
       versionNumber: row.versionNumber as number,
       name: row.name as string,
       description: row.description as string | undefined,
-      instructions: row.instructions as string,
+      instructions: this.deserializeInstructions(row.instructions as string),
       model: this.parseJson(row.model, 'model'),
       tools: this.parseJson(row.tools, 'tools'),
       defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),

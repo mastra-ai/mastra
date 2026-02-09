@@ -6,12 +6,17 @@ import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
+  ObservationalMemoryRecord,
+  CreateObservationalMemoryInput,
+  UpdateActiveObservationsInput,
+  CreateReflectionGenerationInput,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -23,12 +28,21 @@ import {
   TABLE_THREADS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
+
+/**
+ * Local constant for the observational memory table name.
+ * Defined locally to avoid a static import that crashes on older @mastra/core
+ * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
+ */
+const OM_TABLE = 'mastra_observational_memory' as const;
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
 
 export class MemoryLibSQL extends MemoryStorage {
+  readonly supportsObservationalMemory = true;
+
   #client: Client;
   #db: LibSQLDB;
 
@@ -43,18 +57,50 @@ export class MemoryLibSQL extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+
+    // Dynamically import OM schema to avoid crashing on older @mastra/core versions
+    let omSchema: Record<string, any> | undefined;
+    try {
+      const { OBSERVATIONAL_MEMORY_TABLE_SCHEMA } = await import('@mastra/core/storage');
+      omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
+    } catch {
+      // Older @mastra/core without OM support
+    }
+
+    if (omSchema) {
+      await this.#db.createTable({
+        tableName: OM_TABLE as any,
+        schema: omSchema,
+      });
+      // Add new OM columns for backwards compatibility with existing databases
+      await this.#db.alterTable({
+        tableName: OM_TABLE as any,
+        schema: omSchema,
+        ifNotExists: ['observedMessageIds', 'observedTimezone'],
+      });
+    }
     // Add resourceId column for backwards compatibility
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    if (omSchema) {
+      // Create index on lookupKey for efficient OM queries
+      await this.#client.execute({
+        sql: `CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON "${OM_TABLE}" ("lookupKey")`,
+        args: [],
+      });
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_MESSAGES });
     await this.#db.deleteData({ tableName: TABLE_THREADS });
     await this.#db.deleteData({ tableName: TABLE_RESOURCES });
+    if (OM_TABLE) {
+      await this.#db.deleteData({ tableName: OM_TABLE as any });
+    }
   }
 
   private parseRow(row: any): MastraDBMessage {
@@ -311,6 +357,160 @@ export class MemoryLibSQL extends MemoryStorage {
             threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  public async listMessagesByResourceId(
+    args: StorageListMessagesByResourceIdInput,
+  ): Promise<StorageListMessagesOutput> {
+    const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+
+    if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resourceId: resourceId ?? '' },
+        },
+        new Error('resourceId is required'),
+      );
+    }
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      // Determine sort field and direction
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+      const orderByStatement = `ORDER BY "${field}" ${direction}`;
+
+      // Build WHERE conditions
+      const conditions: string[] = [];
+      const queryParams: InValue[] = [];
+
+      // Add resourceId filter (required for listMessagesByResourceId)
+      conditions.push(`"resourceId" = ?`);
+      queryParams.push(resourceId);
+
+      if (filter?.dateRange?.start) {
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`"createdAt" ${startOp} ?`);
+        queryParams.push(
+          filter.dateRange.start instanceof Date ? filter.dateRange.start.toISOString() : filter.dateRange.start,
+        );
+      }
+
+      if (filter?.dateRange?.end) {
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`"createdAt" ${endOp} ?`);
+        queryParams.push(
+          filter.dateRange.end instanceof Date ? filter.dateRange.end.toISOString() : filter.dateRange.end,
+        );
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+      // Get total count
+      const countResult = await this.#client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      // Step 1: Get paginated messages
+      const limitValue = perPageInput === false ? total : perPage;
+      const dataResult = await this.#client.execute({
+        sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} ${orderByStatement} LIMIT ? OFFSET ?`,
+        args: [...queryParams, limitValue, offset],
+      });
+      const messages: MastraDBMessage[] = (dataResult.rows || []).map((row: any) => this.parseRow(row));
+
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(messages.map(m => m.id));
+      if (include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (includeMessages) {
+          // Deduplicate: only add messages that aren't already in the paginated results
+          for (const includeMsg of includeMessages) {
+            if (!messageIds.has(includeMsg.id)) {
+              messages.push(includeMsg);
+              messageIds.add(includeMsg.id);
+            }
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(messages, 'memory');
+      let finalMessages = list.get.all.db();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
+      });
+
+      // Calculate hasMore based on pagination window
+      const hasMore = perPageInput !== false && offset + perPage < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
         },
         error,
       );
@@ -1148,6 +1348,405 @@ export class MemoryLibSQL extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { sourceThreadId, newThreadId },
+        },
+        error,
+      );
+    }
+  }
+
+  // ============================================
+  // Observational Memory Methods
+  // ============================================
+
+  private getOMKey(threadId: string | null, resourceId: string): string {
+    return threadId ? `thread:${threadId}` : `resource:${resourceId}`;
+  }
+
+  private parseOMRow(row: any): ObservationalMemoryRecord {
+    return {
+      id: row.id,
+      scope: row.scope,
+      threadId: row.threadId || null,
+      resourceId: row.resourceId,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+      lastObservedAt: row.lastObservedAt ? new Date(row.lastObservedAt) : undefined,
+      originType: row.originType || 'initial',
+      generationCount: Number(row.generationCount || 0),
+      activeObservations: row.activeObservations || '',
+      bufferedObservations: row.activeObservationsPendingUpdate || undefined,
+
+      totalTokensObserved: Number(row.totalTokensObserved || 0),
+      observationTokenCount: Number(row.observationTokenCount || 0),
+      pendingMessageTokens: Number(row.pendingMessageTokens || 0),
+      isReflecting: Boolean(row.isReflecting),
+      isObserving: Boolean(row.isObserving),
+      config: row.config ? JSON.parse(row.config) : {},
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      observedMessageIds: row.observedMessageIds ? JSON.parse(row.observedMessageIds) : undefined,
+      observedTimezone: row.observedTimezone || undefined,
+    };
+  }
+
+  async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      const result = await this.#client.execute({
+        // Use generationCount DESC for reliable ordering (incremented for each new record)
+        sql: `SELECT * FROM "${OM_TABLE}" WHERE "lookupKey" = ? ORDER BY "generationCount" DESC LIMIT 1`,
+        args: [lookupKey],
+      });
+      if (!result.rows || result.rows.length === 0) return null;
+      return this.parseOMRow(result.rows[0]);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getObservationalMemoryHistory(
+    threadId: string | null,
+    resourceId: string,
+    limit: number = 10,
+  ): Promise<ObservationalMemoryRecord[]> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      const result = await this.#client.execute({
+        // Use generationCount DESC for reliable ordering (incremented for each new record)
+        sql: `SELECT * FROM "${OM_TABLE}" WHERE "lookupKey" = ? ORDER BY "generationCount" DESC LIMIT ?`,
+        args: [lookupKey, limit],
+      });
+      if (!result.rows) return [];
+      return result.rows.map(row => this.parseOMRow(row));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_OBSERVATIONAL_MEMORY_HISTORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId, limit },
+        },
+        error,
+      );
+    }
+  }
+
+  async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
+    try {
+      const id = crypto.randomUUID();
+      const now = new Date();
+      const lookupKey = this.getOMKey(input.threadId, input.resourceId);
+
+      const record: ObservationalMemoryRecord = {
+        id,
+        scope: input.scope,
+        threadId: input.threadId,
+        resourceId: input.resourceId,
+        createdAt: now,
+        updatedAt: now,
+        lastObservedAt: undefined,
+        originType: 'initial',
+        generationCount: 0,
+        activeObservations: '',
+        totalTokensObserved: 0,
+        observationTokenCount: 0,
+        pendingMessageTokens: 0,
+        isReflecting: false,
+        isObserving: false,
+        config: input.config,
+        observedTimezone: input.observedTimezone,
+      };
+
+      await this.#client.execute({
+        sql: `INSERT INTO "${OM_TABLE}" (
+          id, "lookupKey", scope, "resourceId", "threadId",
+          "activeObservations", "activeObservationsPendingUpdate",
+          "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
+          "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
+          "isObserving", "isReflecting", "observedTimezone", "createdAt", "updatedAt"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          id,
+          lookupKey,
+          input.scope,
+          input.resourceId,
+          input.threadId || null,
+          '',
+          null,
+          'initial',
+          JSON.stringify(input.config),
+          0,
+          null,
+          null,
+          0,
+          0,
+          0,
+          false,
+          false,
+          input.observedTimezone || null,
+          now.toISOString(),
+          now.toISOString(),
+        ],
+      });
+
+      return record;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'INITIALIZE_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: input.threadId, resourceId: input.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    try {
+      const now = new Date();
+
+      const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
+      const result = await this.#client.execute({
+        sql: `UPDATE "${OM_TABLE}" SET
+          "activeObservations" = ?,
+          "lastObservedAt" = ?,
+          "pendingMessageTokens" = 0,
+          "observationTokenCount" = ?,
+          "totalTokensObserved" = "totalTokensObserved" + ?,
+          "observedMessageIds" = ?,
+          "updatedAt" = ?
+        WHERE id = ?`,
+        args: [
+          input.observations,
+          input.lastObservedAt.toISOString(),
+          input.tokenCount,
+          input.tokenCount,
+          observedMessageIdsJson,
+          now.toISOString(),
+          input.id,
+        ],
+      });
+
+      if (result.rowsAffected === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_ACTIVE_OBSERVATIONS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPDATE_ACTIVE_OBSERVATIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    try {
+      const id = crypto.randomUUID();
+      const now = new Date();
+      const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
+
+      const record: ObservationalMemoryRecord = {
+        id,
+        scope: input.currentRecord.scope,
+        threadId: input.currentRecord.threadId,
+        resourceId: input.currentRecord.resourceId,
+        createdAt: now,
+        updatedAt: now,
+        lastObservedAt: input.currentRecord.lastObservedAt,
+        originType: 'reflection',
+        generationCount: input.currentRecord.generationCount + 1,
+        activeObservations: input.reflection,
+        totalTokensObserved: input.currentRecord.totalTokensObserved,
+        observationTokenCount: input.tokenCount,
+        pendingMessageTokens: 0,
+        isReflecting: false,
+        isObserving: false,
+        config: input.currentRecord.config,
+        metadata: input.currentRecord.metadata,
+        observedTimezone: input.currentRecord.observedTimezone,
+      };
+
+      await this.#client.execute({
+        sql: `INSERT INTO "${OM_TABLE}" (
+          id, "lookupKey", scope, "resourceId", "threadId",
+          "activeObservations", "activeObservationsPendingUpdate",
+          "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
+          "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
+          "isObserving", "isReflecting", "observedTimezone", "createdAt", "updatedAt"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          id,
+          lookupKey,
+          record.scope,
+          record.resourceId,
+          record.threadId || null,
+          input.reflection,
+          null,
+          'reflection',
+          JSON.stringify(record.config),
+          input.currentRecord.generationCount + 1,
+          record.lastObservedAt?.toISOString() || null,
+          now.toISOString(),
+          record.pendingMessageTokens,
+          record.totalTokensObserved,
+          record.observationTokenCount,
+          false,
+          false,
+          record.observedTimezone || null,
+          now.toISOString(),
+          now.toISOString(),
+        ],
+      });
+
+      return record;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'CREATE_REFLECTION_GENERATION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { currentRecordId: input.currentRecord.id },
+        },
+        error,
+      );
+    }
+  }
+
+  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
+    try {
+      const result = await this.#client.execute({
+        sql: `UPDATE "${OM_TABLE}" SET "isReflecting" = ?, "updatedAt" = ? WHERE id = ?`,
+        args: [isReflecting, new Date().toISOString(), id],
+      });
+
+      if (result.rowsAffected === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'SET_REFLECTING_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isReflecting },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'SET_REFLECTING_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isReflecting },
+        },
+        error,
+      );
+    }
+  }
+
+  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
+    try {
+      const result = await this.#client.execute({
+        sql: `UPDATE "${OM_TABLE}" SET "isObserving" = ?, "updatedAt" = ? WHERE id = ?`,
+        args: [isObserving, new Date().toISOString(), id],
+      });
+
+      if (result.rowsAffected === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'SET_OBSERVING_FLAG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isObserving },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'SET_OBSERVING_FLAG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, isObserving },
+        },
+        error,
+      );
+    }
+  }
+
+  async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(threadId, resourceId);
+      await this.#client.execute({
+        sql: `DELETE FROM "${OM_TABLE}" WHERE "lookupKey" = ?`,
+        args: [lookupKey],
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'CLEAR_OBSERVATIONAL_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId, resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+    try {
+      const result = await this.#client.execute({
+        sql: `UPDATE "${OM_TABLE}" SET 
+          "pendingMessageTokens" = "pendingMessageTokens" + ?, 
+          "updatedAt" = ? 
+        WHERE id = ?`,
+        args: [tokenCount, new Date().toISOString(), id],
+      });
+
+      if (result.rowsAffected === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'ADD_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, tokenCount },
+        });
+      }
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'ADD_PENDING_MESSAGE_TOKENS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id, tokenCount },
         },
         error,
       );

@@ -1,0 +1,115 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`zod-v3 standard-schema adapter > toStandardSchema > should convert to JSON Schema with draft-07 target 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "age": {
+      "type": "number",
+    },
+    "isActive": {
+      "type": "boolean",
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+    "age",
+    "isActive",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`zod-v3 standard-schema adapter > toStandardSchema > should convert to JSON Schema with openapi-3.0 target 1`] = `
+{
+  "additionalProperties": false,
+  "properties": {
+    "email": {
+      "format": "email",
+      "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+      "type": "string",
+    },
+  },
+  "required": [
+    "email",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`zod-v3 standard-schema adapter > toStandardSchema > should handle complex nested schemas 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "addresses": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "city": {
+            "type": "string",
+          },
+          "street": {
+            "type": "string",
+          },
+          "zip": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "street",
+          "city",
+          "zip",
+        ],
+        "type": "object",
+      },
+      "type": "array",
+    },
+    "metadata": {
+      "additionalProperties": {
+        "type": "string",
+      },
+      "type": "object",
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
+    "addresses",
+    "metadata",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`zod-v3 standard-schema adapter > toStandardSchema > should handle optional and nullable fields 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "nullable": {
+      "type": [
+        "string",
+        "null",
+      ],
+    },
+    "optional": {
+      "type": "string",
+    },
+    "required": {
+      "type": "string",
+    },
+  },
+  "required": [
+    "required",
+    "nullable",
+  ],
+  "type": "object",
+}
+`;

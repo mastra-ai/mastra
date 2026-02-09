@@ -11,6 +11,9 @@ export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
+export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
+export const TABLE_PROMPT_BLOCKS = 'mastra_prompt_blocks';
+export const TABLE_PROMPT_BLOCK_VERSIONS = 'mastra_prompt_block_versions';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -21,7 +24,9 @@ export type TABLE_NAMES =
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
-  | typeof TABLE_AGENT_VERSIONS;
+  | typeof TABLE_AGENT_VERSIONS
+  | typeof TABLE_PROMPT_BLOCKS
+  | typeof TABLE_PROMPT_BLOCK_VERSIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -122,6 +127,56 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false },
 };
 
+export const PROMPT_BLOCKS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
+  activeVersionId: { type: 'text', nullable: true }, // FK to prompt_block_versions.id
+  authorId: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const PROMPT_BLOCK_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  blockId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  content: { type: 'text', nullable: false },
+  rules: { type: 'jsonb', nullable: true },
+  changedFields: { type: 'jsonb', nullable: true },
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  lookupKey: { type: 'text', nullable: false }, // 'resource:{resourceId}' or 'thread:{threadId}'
+  scope: { type: 'text', nullable: false }, // 'resource' or 'thread'
+  resourceId: { type: 'text', nullable: true },
+  threadId: { type: 'text', nullable: true },
+  activeObservations: { type: 'text', nullable: false }, // JSON array of observations
+  activeObservationsPendingUpdate: { type: 'text', nullable: true }, // JSON array, used during updates
+  originType: { type: 'text', nullable: false }, // 'initialization', 'observation', or 'reflection'
+  config: { type: 'text', nullable: false }, // JSON object
+  generationCount: { type: 'integer', nullable: false },
+  lastObservedAt: { type: 'timestamp', nullable: true },
+  lastReflectionAt: { type: 'timestamp', nullable: true },
+  pendingMessageTokens: { type: 'integer', nullable: false }, // Token count
+  totalTokensObserved: { type: 'integer', nullable: false }, // Running total of all observed tokens
+  observationTokenCount: { type: 'integer', nullable: false }, // Current observation size in tokens
+  isObserving: { type: 'boolean', nullable: false },
+  isReflecting: { type: 'boolean', nullable: false },
+  observedMessageIds: { type: 'jsonb', nullable: true }, // JSON array of message IDs already observed
+  observedTimezone: { type: 'text', nullable: true }, // Timezone used for Observer date formatting (e.g., "America/Los_Angeles")
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+/**
+ * Schema definitions for all core tables.
+ */
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -185,4 +240,14 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+  [TABLE_PROMPT_BLOCKS]: PROMPT_BLOCKS_SCHEMA,
+  [TABLE_PROMPT_BLOCK_VERSIONS]: PROMPT_BLOCK_VERSIONS_SCHEMA,
+};
+
+/**
+ * Schema for the observational memory table.
+ * Exported separately as OM is optional and not part of TABLE_NAMES.
+ */
+export const OBSERVATIONAL_MEMORY_TABLE_SCHEMA = {
+  [TABLE_OBSERVATIONAL_MEMORY]: OBSERVATIONAL_MEMORY_SCHEMA,
 };
