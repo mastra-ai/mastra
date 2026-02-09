@@ -53,6 +53,11 @@ const sidebars = {
           id: 'getting-started/hono',
           label: 'Hono',
         },
+        {
+          type: 'doc',
+          id: 'getting-started/electron',
+          label: 'Electron',
+        },
       ],
     },
     {
@@ -86,11 +91,6 @@ const sidebars = {
           type: 'doc',
           id: 'build-your-ui/assistant-ui',
           label: 'Assistant UI',
-        },
-        {
-          type: 'doc',
-          id: 'build-your-ui/electron',
-          label: 'Electron',
         },
       ],
     },
