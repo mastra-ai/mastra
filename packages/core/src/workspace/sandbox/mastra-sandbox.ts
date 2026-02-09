@@ -156,7 +156,9 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       return;
     }
 
-    // Wait for in-flight stop/destroy before starting
+    // Wait for in-flight stop/destroy before starting.
+    // Intentionally no .catch() — if teardown is failing, start() should propagate
+    // that error rather than silently starting on top of a broken state.
     if (this._stopPromise) await this._stopPromise;
     if (this._destroyPromise) await this._destroyPromise;
 

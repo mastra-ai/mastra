@@ -108,6 +108,7 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
    */
   async init(): Promise<void> {
     // Already ready
+    // Note: intentionally allows re-init after destroy() for reconnect scenarios
     if (this.status === 'ready') {
       return;
     }
