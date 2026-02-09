@@ -3,7 +3,7 @@ import { Badge } from '@/ds/components/Badge';
 import { cn } from '@/lib/utils';
 import { CheckIcon, ClockIcon, TimerIcon, XIcon } from 'lucide-react';
 
-export interface RunStatsProps {
+export interface ExperimentStatsProps {
   run: DatasetRun;
   className?: string;
 }
@@ -17,7 +17,7 @@ const statusIconMap: Record<RunStatus, React.ReactNode> = {
   failed: <XIcon />,
 };
 
-export function RunStats({ run, className }: RunStatsProps) {
+export function ExperimentStats({ run, className }: ExperimentStatsProps) {
   const status = run.status as RunStatus;
   const pendingCount = run.totalItems - run.succeededCount - run.failedCount;
 
