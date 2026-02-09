@@ -27,7 +27,6 @@ import type {
   MastraLegacyLanguageModel,
   MastraModelConfig,
 } from '../llm/model/shared.types';
-import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
@@ -1767,24 +1766,16 @@ export class Agent<
   }
 
   /**
-   * Override to propagate logger to workspace if configured.
-   * @internal
-   */
-  override __setLogger(logger: IMastraLogger): void {
-    super.__setLogger(logger);
-
-    // Propagate to workspace if it's a direct instance (not a factory function)
-    if (this.#workspace && typeof this.#workspace !== 'function') {
-      this.#workspace.__setLogger(logger);
-    }
-  }
-
-  /**
    * Registers the Mastra instance with the agent.
    * @internal
    */
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
+
+    // Propagate logger to workspace if it's a direct instance (not a factory function)
+    if (this.#workspace && typeof this.#workspace !== 'function') {
+      this.#workspace.__setLogger(this.logger);
+    }
     // Mastra will be passed to the LLM when it's created in getLLM()
 
     // Auto-register tools with the Mastra instance
