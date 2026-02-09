@@ -1,0 +1,87 @@
+---
+title: "Reference: MastraAuthBetterAuth Class | Auth"
+description: "API reference for the MastraAuthBetterAuth class, which authenticates Mastra applications using Better Auth."
+packages:
+  - "@mastra/auth-better-auth"
+  - "better-auth"
+  - "@mastra/core"
+---
+
+# MastraAuthBetterAuth Class
+
+The `MastraAuthBetterAuth` class provides authentication for Mastra applications using Better Auth. It verifies incoming requests with Better Auth sessions and integrates with the Mastra server using the `auth` option.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthBetterAuth } from "@mastra/auth-better-auth";
+import { betterAuth } from "better-auth";
+
+// Create your Better Auth instance
+const auth = betterAuth({
+  database: {
+    provider: "postgresql",
+    url: process.env.DATABASE_URL,
+  },
+  emailAndPassword: {
+    enabled: true,
+  },
+  baseURL: process.env.BETTER_AUTH_URL,
+  secret: process.env.BETTER_AUTH_SECRET,
+});
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthBetterAuth({
+      auth,
+    }),
+  },
+});
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "auth",
+      type: "Auth",
+      description:
+        "Your Better Auth instance created via betterAuth({ ... }). This is required and must be properly configured with a supported database provider.",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Custom name for the auth provider instance.",
+      isOptional: true,
+      defaultValue: "'better-auth'",
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: BetterAuthUser, request: HonoRequest) => Promise<boolean> | boolean",
+      description:
+        "Custom authorization function to determine if a user should be granted access. Called after session verification. By default, allows all authenticated users with valid sessions.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## BetterAuthUser Type
+
+The `BetterAuthUser` type contains the session and user information returned by Better Auth:
+
+```typescript
+interface BetterAuthUser {
+  session: Session;
+  user: User;
+}
+```
+
+- `session`: The Better Auth session object containing session metadata
+- `user`: The authenticated user object with user details
+
+## Related
+
+[MastraAuthBetterAuth Class](/docs/server/auth/better-auth)
