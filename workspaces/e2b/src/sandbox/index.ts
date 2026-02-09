@@ -28,6 +28,17 @@ import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
 import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, MountContext } from './mounts';
 
+/** Allowlist pattern for mount paths — absolute path with safe characters only. */
+const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
+
+function validateMountPath(mountPath: string): void {
+  if (!SAFE_MOUNT_PATH.test(mountPath)) {
+    throw new Error(
+      `Invalid mount path: ${mountPath}. Must be an absolute path with alphanumeric, dash, dot, underscore, or slash characters only.`,
+    );
+  }
+}
+
 // =============================================================================
 // E2B Sandbox Options
 // =============================================================================
@@ -122,6 +133,7 @@ export class E2BSandbox extends MastraSandbox {
 
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
+  private _isRetrying = false;
 
   private readonly timeout: number;
   private readonly templateSpec?: TemplateSpec;
@@ -204,6 +216,8 @@ export class E2BSandbox extends MastraSandbox {
    * Uses FUSE tools (s3fs, gcsfuse) to mount cloud storage.
    */
   async mount(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
+    validateMountPath(mountPath);
+
     if (!this._sandbox) {
       throw new SandboxNotReadyError(this.id);
     }
@@ -352,6 +366,8 @@ export class E2BSandbox extends MastraSandbox {
    * Unmount a filesystem from a path in the sandbox.
    */
   async unmount(mountPath: string): Promise<void> {
+    validateMountPath(mountPath);
+
     if (!this._sandbox) {
       throw new SandboxNotReadyError(this.id);
     }
@@ -727,7 +743,8 @@ export class E2BSandbox extends MastraSandbox {
    */
   protected override async _doStop(): Promise<void> {
     // Unmount all filesystems before stopping
-    for (const mountPath of this.mounts.entries.keys()) {
+    // Collect keys first since unmount() mutates the map
+    for (const mountPath of [...this.mounts.entries.keys()]) {
       await this.unmount(mountPath);
     }
 
@@ -741,7 +758,8 @@ export class E2BSandbox extends MastraSandbox {
    */
   protected override async _doDestroy(): Promise<void> {
     // Unmount all filesystems
-    for (const mountPath of this.mounts.entries.keys()) {
+    // Collect keys first since unmount() mutates the map
+    for (const mountPath of [...this.mounts.entries.keys()]) {
       try {
         await this.unmount(mountPath);
       } catch {
@@ -848,7 +866,7 @@ export class E2BSandbox extends MastraSandbox {
   async executeCommand(
     command: string,
     args: string[] = [],
-    options: ExecuteCommandOptions & { _isRetry?: boolean } = {},
+    options: ExecuteCommandOptions = {},
   ): Promise<CommandResult> {
     this.logger.debug(`${LOG_PREFIX} Executing: ${command} ${args.join(' ')}`, options);
     const sandbox = await this.ensureSandbox();
@@ -891,9 +909,14 @@ export class E2BSandbox extends MastraSandbox {
       };
     } catch (error) {
       // Handle sandbox-is-dead errors - retry once (not infinitely)
-      if (this.isSandboxDeadError(error) && !options._isRetry) {
+      if (this.isSandboxDeadError(error) && !this._isRetrying) {
         this.handleSandboxTimeout();
-        return this.executeCommand(command, args, { ...options, _isRetry: true });
+        this._isRetrying = true;
+        try {
+          return await this.executeCommand(command, args, options);
+        } finally {
+          this._isRetrying = false;
+        }
       }
 
       const executionTimeMs = Date.now() - startTime;

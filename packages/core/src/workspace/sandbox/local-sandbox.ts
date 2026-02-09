@@ -263,7 +263,10 @@ export class LocalSandbox extends MastraSandbox {
         // Check if file exists at user's path
         try {
           this._seatbeltProfile = await fs.readFile(userProvidedPath, 'utf-8');
-        } catch {
+        } catch (err: unknown) {
+          if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
+            throw err;
+          }
           // File doesn't exist, generate default and write to user's path
           this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
           // Ensure parent directory exists
@@ -396,9 +399,7 @@ export class LocalSandbox extends MastraSandbox {
     this.logger.debug('Executing command', { command, args, cwd: options.cwd ?? this.workingDirectory });
 
     // Auto-start if not running (lazy initialization)
-    if (this.status !== 'running') {
-      await this.start();
-    }
+    await this.ensureRunning();
 
     const startTime = Date.now();
 
@@ -410,7 +411,7 @@ export class LocalSandbox extends MastraSandbox {
     try {
       const result = await execWithStreaming(wrapped.command, wrapped.args, {
         cwd: options.cwd ?? this.workingDirectory,
-        timeout: this.timeout ?? options.timeout ?? 30000,
+        timeout: options.timeout ?? this.timeout ?? 30000,
         env: this.buildEnv(options.env),
         onStdout: options.onStdout,
         onStderr: options.onStderr,

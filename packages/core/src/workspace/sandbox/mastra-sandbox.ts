@@ -156,6 +156,15 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       return;
     }
 
+    // Wait for in-flight stop/destroy before starting
+    if (this._stopPromise) await this._stopPromise;
+    if (this._destroyPromise) await this._destroyPromise;
+
+    // Cannot start a destroyed sandbox
+    if (this.status === 'destroyed') {
+      throw new Error('Cannot start a destroyed sandbox');
+    }
+
     // Start already in progress - return existing promise
     if (this._startPromise) {
       return this._startPromise;
