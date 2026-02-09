@@ -500,8 +500,13 @@ export class GCSFilesystem extends MastraFilesystem {
   // ---------------------------------------------------------------------------
 
   async exists(path: string): Promise<boolean> {
+    const key = this.toKey(path);
+
+    // Root path always exists (it's the bucket itself)
+    if (!key) return true;
+
     const bucket = await this.getReadyBucket();
-    const file = bucket.file(this.toKey(path));
+    const file = bucket.file(key);
 
     // Check if it's a file
     const [exists] = await file.exists();
@@ -509,7 +514,7 @@ export class GCSFilesystem extends MastraFilesystem {
 
     // Check if it's a "directory" (has objects with this prefix)
     const [files] = await bucket.getFiles({
-      prefix: this.toKey(path).replace(/\/$/, '') + '/',
+      prefix: key.replace(/\/$/, '') + '/',
       maxResults: 1,
     });
 
@@ -517,8 +522,22 @@ export class GCSFilesystem extends MastraFilesystem {
   }
 
   async stat(path: string): Promise<FileStat> {
+    const key = this.toKey(path);
+
+    // Root path is always a directory
+    if (!key) {
+      return {
+        name: '',
+        path,
+        type: 'directory',
+        size: 0,
+        createdAt: new Date(),
+        modifiedAt: new Date(),
+      };
+    }
+
     const bucket = await this.getReadyBucket();
-    const file = bucket.file(this.toKey(path));
+    const file = bucket.file(key);
 
     const [exists] = await file.exists();
     if (exists) {
@@ -553,18 +572,24 @@ export class GCSFilesystem extends MastraFilesystem {
   }
 
   async isFile(path: string): Promise<boolean> {
+    const key = this.toKey(path);
+    if (!key) return false; // Root is a directory, not a file
+
     const bucket = await this.getReadyBucket();
-    const file = bucket.file(this.toKey(path));
+    const file = bucket.file(key);
 
     const [exists] = await file.exists();
     return exists;
   }
 
   async isDirectory(path: string): Promise<boolean> {
+    const key = this.toKey(path);
+    if (!key) return true; // Root is always a directory
+
     const bucket = await this.getReadyBucket();
 
     const [files] = await bucket.getFiles({
-      prefix: this.toKey(path).replace(/\/$/, '') + '/',
+      prefix: key.replace(/\/$/, '') + '/',
       maxResults: 1,
     });
 

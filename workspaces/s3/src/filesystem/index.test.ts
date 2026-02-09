@@ -975,6 +975,31 @@ describe('S3Filesystem SDK Operations', () => {
     });
   });
 
+  describe('root path handling', () => {
+    it('exists("/") returns true without API calls', async () => {
+      mockSend.mockClear();
+      const result = await fs.exists('/');
+      expect(result).toBe(true);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('stat("/") returns directory stat', async () => {
+      const stat = await fs.stat('/');
+      expect(stat.type).toBe('directory');
+      expect(stat.path).toBe('/');
+    });
+
+    it('isFile("/") returns false', async () => {
+      const result = await fs.isFile('/');
+      expect(result).toBe(false);
+    });
+
+    it('isDirectory("/") returns true', async () => {
+      const result = await fs.isDirectory('/');
+      expect(result).toBe(true);
+    });
+  });
+
   describe('exists()', () => {
     it('returns true when file exists (HeadObject succeeds)', async () => {
       mockSend.mockResolvedValueOnce({}); // HeadObjectCommand succeeds

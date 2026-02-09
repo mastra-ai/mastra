@@ -7,6 +7,7 @@ settings:
 overrides:
   '@mastra/core': link:../../packages/core
   '@mastra/e2b': link:../../workspaces/e2b
+  '@mastra/gcs': link:../../workspaces/gcs
   '@mastra/s3': link:../../workspaces/s3
   '@mastra/memory': link:../../packages/memory
   '@mastra/libsql': link:../../stores/libsql
@@ -34,6 +35,9 @@ importers:
       '@mastra/fastembed':
         specifier: link:../../packages/fastembed
         version: link:../../packages/fastembed
+      '@mastra/gcs':
+        specifier: link:../../workspaces/gcs
+        version: link:../../workspaces/gcs
       '@mastra/libsql':
         specifier: link:../../stores/libsql
         version: link:../../stores/libsql

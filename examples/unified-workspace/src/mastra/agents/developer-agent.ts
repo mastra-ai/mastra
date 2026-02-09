@@ -4,6 +4,7 @@ import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { E2BSandbox } from '@mastra/e2b';
+import { GCSFilesystem } from '@mastra/gcs';
 import { S3Filesystem } from '@mastra/s3';
 import { ConsoleLogger } from '@mastra/core/logger';
 
@@ -48,12 +49,24 @@ export const developerAgent = new Agent({
       '/local': new LocalFilesystem({
         basePath: './workspace',
       }),
-      '/bucket': new S3Filesystem({
-        bucket: process.env.S3_BUCKET as string,
-        region: 'auto',
-        accessKeyId: process.env.S3_ACCESS_KEY_ID as string,
-        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY as string,
-        endpoint: process.env.S3_ENDPOINT as string,
+      // S3 mount — only if S3_BUCKET is configured
+      ...(process.env.S3_BUCKET && {
+        '/r2': new S3Filesystem({
+          bucket: process.env.S3_BUCKET,
+          region: 'auto',
+          accessKeyId: process.env.S3_ACCESS_KEY_ID as string,
+          secretAccessKey: process.env.S3_SECRET_ACCESS_KEY as string,
+          endpoint: process.env.S3_ENDPOINT as string,
+        }),
+      }),
+      // GCS mount — only if GCS_BUCKET is configured
+      ...(process.env.GCS_BUCKET && {
+        '/gcs': new GCSFilesystem({
+          bucket: process.env.GCS_BUCKET,
+          credentials: process.env.GCS_SERVICE_ACCOUNT_KEY
+            ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY)
+            : undefined,
+        }),
       }),
     },
     sandbox: new E2BSandbox({

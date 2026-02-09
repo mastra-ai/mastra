@@ -654,6 +654,9 @@ export class S3Filesystem extends MastraFilesystem {
   // ---------------------------------------------------------------------------
 
   async exists(path: string): Promise<boolean> {
+    const key = this.toKey(path);
+    if (!key) return true; // Root always exists
+
     const client = await this.getReadyClient();
 
     // Check if it's a file
@@ -661,7 +664,7 @@ export class S3Filesystem extends MastraFilesystem {
       await client.send(
         new HeadObjectCommand({
           Bucket: this.bucket,
-          Key: this.toKey(path),
+          Key: key,
         }),
       );
       return true;
@@ -673,7 +676,7 @@ export class S3Filesystem extends MastraFilesystem {
     const response: { Contents?: unknown[] } = await client.send(
       new ListObjectsV2Command({
         Bucket: this.bucket,
-        Prefix: this.toKey(path).replace(/\/$/, '') + '/',
+        Prefix: key.replace(/\/$/, '') + '/',
         MaxKeys: 1,
       }),
     );
@@ -682,13 +685,27 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async stat(path: string): Promise<FileStat> {
+    const key = this.toKey(path);
+
+    // Root is always a directory
+    if (!key) {
+      return {
+        name: '',
+        path,
+        type: 'directory',
+        size: 0,
+        createdAt: new Date(),
+        modifiedAt: new Date(),
+      };
+    }
+
     const client = await this.getReadyClient();
 
     try {
       const response: { ContentLength?: number; LastModified?: Date } = await client.send(
         new HeadObjectCommand({
           Bucket: this.bucket,
-          Key: this.toKey(path),
+          Key: key,
         }),
       );
 
@@ -720,13 +737,16 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async isFile(path: string): Promise<boolean> {
+    const key = this.toKey(path);
+    if (!key) return false; // Root is a directory, not a file
+
     const client = await this.getReadyClient();
 
     try {
       await client.send(
         new HeadObjectCommand({
           Bucket: this.bucket,
-          Key: this.toKey(path),
+          Key: key,
         }),
       );
       return true;
@@ -736,12 +756,15 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   async isDirectory(path: string): Promise<boolean> {
+    const key = this.toKey(path);
+    if (!key) return true; // Root is always a directory
+
     const client = await this.getReadyClient();
 
     const response: { Contents?: unknown[] } = await client.send(
       new ListObjectsV2Command({
         Bucket: this.bucket,
-        Prefix: this.toKey(path).replace(/\/$/, '') + '/',
+        Prefix: key.replace(/\/$/, '') + '/',
         MaxKeys: 1,
       }),
     );

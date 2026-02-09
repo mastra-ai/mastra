@@ -725,6 +725,31 @@ describe('GCSFilesystem SDK Operations', () => {
     });
   });
 
+  describe('root path handling', () => {
+    it('exists("/") returns true without calling bucket.file', async () => {
+      const result = await fs.exists('/');
+      expect(result).toBe(true);
+      // Should not call bucket.file('') which would throw
+      expect(mockBucket.file).not.toHaveBeenCalled();
+    });
+
+    it('stat("/") returns directory stat', async () => {
+      const stat = await fs.stat('/');
+      expect(stat.type).toBe('directory');
+      expect(stat.path).toBe('/');
+    });
+
+    it('isFile("/") returns false', async () => {
+      const result = await fs.isFile('/');
+      expect(result).toBe(false);
+    });
+
+    it('isDirectory("/") returns true', async () => {
+      const result = await fs.isDirectory('/');
+      expect(result).toBe(true);
+    });
+  });
+
   describe('exists()', () => {
     it('returns true when file exists', async () => {
       const mockFile = mockBucket.file();
