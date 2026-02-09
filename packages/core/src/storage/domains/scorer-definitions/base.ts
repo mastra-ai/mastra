@@ -83,7 +83,7 @@ export abstract class ScorerDefinitionsStorage extends VersionedStorageDomain<
     'changedFields',
     'changeMessage',
     'createdAt',
-  ];
+  ] satisfies (keyof ScorerDefinitionVersion)[];
 
   constructor() {
     super({

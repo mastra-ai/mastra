@@ -24,17 +24,9 @@ export interface VersionBase {
 
 /**
  * Base interface for version creation input.
+ * Same as VersionBase but without the server-assigned `createdAt` timestamp.
  */
-export interface CreateVersionInputBase {
-  /** UUID identifier for this version */
-  id: string;
-  /** Sequential version number */
-  versionNumber: number;
-  /** Array of field names that changed from the previous version */
-  changedFields?: string[];
-  /** Optional message describing the changes */
-  changeMessage?: string;
-}
+export interface CreateVersionInputBase extends Omit<VersionBase, 'createdAt'> {}
 
 /**
  * Sort direction for version listings.

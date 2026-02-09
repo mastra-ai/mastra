@@ -82,7 +82,7 @@ export abstract class PromptBlocksStorage extends VersionedStorageDomain<
     'changedFields',
     'changeMessage',
     'createdAt',
-  ];
+  ] satisfies (keyof PromptBlockVersion)[];
 
   constructor() {
     super({

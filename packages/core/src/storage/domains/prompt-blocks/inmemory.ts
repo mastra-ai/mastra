@@ -150,18 +150,20 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
             JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
       );
 
-      // Create new version
-      const newVersionId = crypto.randomUUID();
-      const newVersionNumber = latestVersion.versionNumber + 1;
+      // Only create a new version if something actually changed
+      if (changedFields.length > 0) {
+        const newVersionId = crypto.randomUUID();
+        const newVersionNumber = latestVersion.versionNumber + 1;
 
-      await this.createVersion({
-        id: newVersionId,
-        blockId: id,
-        versionNumber: newVersionNumber,
-        ...newConfig,
-        changedFields,
-        changeMessage: `Updated ${changedFields.join(', ')}`,
-      });
+        await this.createVersion({
+          id: newVersionId,
+          blockId: id,
+          versionNumber: newVersionNumber,
+          ...newConfig,
+          changedFields,
+          changeMessage: `Updated ${changedFields.join(', ')}`,
+        });
+      }
     }
 
     // Save the updated block record

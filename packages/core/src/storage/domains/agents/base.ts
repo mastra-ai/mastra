@@ -82,7 +82,7 @@ export abstract class AgentsStorage extends VersionedStorageDomain<
     'changedFields',
     'changeMessage',
     'createdAt',
-  ];
+  ] satisfies (keyof AgentVersion)[];
 
   constructor() {
     super({
