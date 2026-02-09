@@ -1,6 +1,6 @@
 import { globSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { loadConfigFromFile } from 'vite';
 import type { TestProjectConfiguration, UserWorkspaceConfig } from 'vitest/config';
 import { defineConfig } from 'vitest/config';
 
@@ -58,12 +58,15 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
       continue;
     }
 
-    // Config has nested projects - import it to extract them
+    // Config has nested projects - load it using Vite's config loader
     try {
       const absolutePath = resolve(process.cwd(), configPath);
-      const configUrl = pathToFileURL(absolutePath).href;
-      const configModule = await import(/* @vite-ignore */ configUrl);
-      const config = configModule.default as UserWorkspaceConfig;
+      const loaded = await loadConfigFromFile({} as any, absolutePath);
+      if (!loaded) {
+        projects.push(projectDir);
+        continue;
+      }
+      const config = loaded.config as UserWorkspaceConfig;
 
       if (!config.test?.projects) {
         // Fallback if config parsing didn't work as expected
