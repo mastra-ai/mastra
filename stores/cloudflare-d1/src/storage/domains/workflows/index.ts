@@ -27,6 +27,13 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     this.#db = new D1DB(resolveD1Config(config));
   }
 
+  supportsConcurrentUpdates(): boolean {
+    // D1 doesn't support atomic read-modify-write operations needed for concurrent updates
+    // batch() executes all statements atomically but requires all statements upfront,
+    // so we can't use SELECT result to construct UPDATE in the same transaction
+    return false;
+  }
+
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
   }
@@ -35,35 +42,153 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    try {
+      const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+      const now = new Date().toISOString();
+
+      // Load existing snapshot
+      const existingDoc = await this.#db.load<{ snapshot: unknown }>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: { workflow_name: workflowName, run_id: runId },
+      });
+
+      let snapshot: WorkflowRunState;
+      if (!existingDoc) {
+        snapshot = {
+          context: {},
+          activePaths: [],
+          timestamp: Date.now(),
+          suspendedPaths: {},
+          activeStepsPath: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          status: 'pending',
+          value: {},
+          waitingPaths: {},
+          runId: runId,
+          requestContext: {},
+        } as WorkflowRunState;
+      } else {
+        const existingSnapshot = existingDoc.snapshot;
+        snapshot =
+          typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : (existingSnapshot as WorkflowRunState);
+      }
+
+      // Merge the new step result and request context
+      snapshot.context[stepId] = result;
+      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+      // Upsert the snapshot
+      const record = {
+        workflow_name: workflowName,
+        run_id: runId,
+        snapshot: JSON.stringify(snapshot),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const processedRecord = await this.#db.processRecord(record);
+      const columns = Object.keys(processedRecord);
+      const values = Object.values(processedRecord);
+
+      const updateMap: Record<string, string> = {
+        snapshot: 'excluded.snapshot',
+        updatedAt: 'excluded.updatedAt',
+      };
+
+      const query = createSqlBuilder().insert(fullTableName, columns, values, ['workflow_name', 'run_id'], updateMap);
+      const { sql, params } = query.build();
+
+      await this.#db.executeQuery({ sql, params });
+
+      return snapshot.context;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to update workflow results: ${error instanceof Error ? error.message : String(error)}`,
+          details: {
+            workflowName,
+            runId,
+            stepId,
+          },
+        },
+        error,
+      );
+    }
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: UpdateWorkflowStateOptions;
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    try {
+      const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+      const now = new Date().toISOString();
+
+      // Load existing snapshot
+      const existingDoc = await this.#db.load<{ snapshot: unknown }>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: { workflow_name: workflowName, run_id: runId },
+      });
+
+      if (!existingDoc) {
+        return undefined;
+      }
+
+      const existingSnapshot = existingDoc.snapshot;
+      const snapshot =
+        typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : (existingSnapshot as WorkflowRunState);
+
+      if (!snapshot || !snapshot?.context) {
+        throw new Error(`Snapshot not found for runId ${runId}`);
+      }
+
+      // Merge the new options with the existing snapshot
+      const updatedSnapshot = { ...snapshot, ...opts };
+
+      // Update the snapshot
+      const sql = `UPDATE ${fullTableName} SET snapshot = ?, updatedAt = ? WHERE workflow_name = ? AND run_id = ?`;
+      const params: SqlParam[] = [JSON.stringify(updatedSnapshot), now, workflowName, runId];
+
+      await this.#db.executeQuery({ sql, params });
+
+      return updatedSnapshot;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to update workflow state: ${error instanceof Error ? error.message : String(error)}`,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async persistWorkflowSnapshot({

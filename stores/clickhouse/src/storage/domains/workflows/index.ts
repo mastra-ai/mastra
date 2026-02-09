@@ -28,6 +28,12 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     this.#db = new ClickhouseDB({ client, ttl });
   }
 
+  supportsConcurrentUpdates(): boolean {
+    // ClickHouse is an OLAP database using ReplacingMergeTree for deduplication
+    // It doesn't support atomic read-modify-write operations needed for concurrent updates
+    return false;
+  }
+
   async init(): Promise<void> {
     const schema = TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT];
     await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema });
