@@ -816,6 +816,12 @@ export class MastraClient extends BaseResource {
         searchParams.set('orderBy[direction]', params.orderBy.direction);
       }
     }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
 
     const queryString = searchParams.toString();
     return this.request(`/stored/agents${queryString ? `?${queryString}` : ''}`);
@@ -867,6 +873,12 @@ export class MastraClient extends BaseResource {
       if (params.orderBy.direction) {
         searchParams.set('orderBy[direction]', params.orderBy.direction);
       }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
     }
 
     const queryString = searchParams.toString();
