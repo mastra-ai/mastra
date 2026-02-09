@@ -16,6 +16,7 @@ import type { MountResult } from '../filesystem/mount';
 import type { ProviderStatus } from '../lifecycle';
 
 import { MastraSandbox } from './mastra-sandbox';
+import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 
 /**
@@ -30,8 +31,23 @@ class MountableSandbox extends MastraSandbox {
   readonly provider = 'test';
   status: ProviderStatus = 'pending';
 
-  constructor() {
-    super({ name: 'MountableSandbox' });
+  /** Track _do* calls for ordering verification */
+  readonly calls: string[] = [];
+
+  constructor(options?: Omit<MastraSandboxOptions, 'name'>) {
+    super({ name: 'MountableSandbox', ...options });
+  }
+
+  protected override async _doStart(): Promise<void> {
+    this.calls.push('_doStart');
+  }
+
+  protected override async _doStop(): Promise<void> {
+    this.calls.push('_doStop');
+  }
+
+  protected override async _doDestroy(): Promise<void> {
+    this.calls.push('_doDestroy');
   }
 
   async mount(_filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult> {
@@ -204,6 +220,186 @@ describe('MastraSandbox Base Class', () => {
       await sandbox.destroy();
 
       expect(sandbox.status).toBe('destroyed');
+    });
+
+    it('start() on destroyed sandbox throws', async () => {
+      const sandbox = new MountableSandbox();
+      await sandbox.start();
+      await sandbox.destroy();
+
+      await expect(sandbox.start()).rejects.toThrow(/destroyed/);
+    });
+  });
+
+  describe('Lifecycle Hooks', () => {
+    it('onStart fires after sandbox is running', async () => {
+      let statusDuringHook: ProviderStatus | undefined;
+
+      const sandbox = new MountableSandbox({
+        onStart: ({ sandbox: s }) => {
+          statusDuringHook = s.status;
+        },
+      });
+
+      await sandbox.start();
+
+      expect(statusDuringHook).toBe('running');
+    });
+
+    it('onStart fires after _doStart but before mount processing', async () => {
+      const sandbox = new MountableSandbox({
+        onStart: () => {
+          sandbox.calls.push('onStart');
+        },
+      });
+
+      const processPendingSpy = vi.spyOn(sandbox.mounts, 'processPending').mockImplementation(async () => {
+        sandbox.calls.push('processPending');
+      });
+
+      await sandbox.start();
+
+      expect(sandbox.calls).toEqual(['_doStart', 'onStart', 'processPending']);
+
+      processPendingSpy.mockRestore();
+    });
+
+    it('onStop fires before _doStop', async () => {
+      const sandbox = new MountableSandbox({
+        onStop: () => {
+          sandbox.calls.push('onStop');
+        },
+      });
+
+      await sandbox.start();
+      sandbox.calls.length = 0; // reset after start
+
+      await sandbox.stop();
+
+      expect(sandbox.calls).toEqual(['onStop', '_doStop']);
+    });
+
+    it('onDestroy fires before _doDestroy', async () => {
+      const sandbox = new MountableSandbox({
+        onDestroy: () => {
+          sandbox.calls.push('onDestroy');
+        },
+      });
+
+      await sandbox.start();
+      sandbox.calls.length = 0;
+
+      await sandbox.destroy();
+
+      expect(sandbox.calls).toEqual(['onDestroy', '_doDestroy']);
+    });
+
+    it('hooks receive { sandbox } arg referencing the sandbox instance', async () => {
+      let receivedArg: unknown;
+
+      const sandbox = new MountableSandbox({
+        onStart: arg => {
+          receivedArg = arg;
+        },
+      });
+
+      await sandbox.start();
+
+      expect(receivedArg).toEqual({ sandbox });
+    });
+
+    it('async hooks are awaited before continuing', async () => {
+      let sideEffect = false;
+
+      const sandbox = new MountableSandbox({
+        onStart: async () => {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          sideEffect = true;
+        },
+      });
+
+      await sandbox.start();
+
+      expect(sideEffect).toBe(true);
+    });
+
+    it('onStart error sets status to error and propagates', async () => {
+      const sandbox = new MountableSandbox({
+        onStart: () => {
+          throw new Error('onStart boom');
+        },
+      });
+
+      await expect(sandbox.start()).rejects.toThrow('onStart boom');
+      expect(sandbox.status).toBe('error');
+    });
+
+    it('onStop error sets status to error and propagates', async () => {
+      const sandbox = new MountableSandbox({
+        onStop: () => {
+          throw new Error('onStop boom');
+        },
+      });
+
+      await sandbox.start();
+      await expect(sandbox.stop()).rejects.toThrow('onStop boom');
+      expect(sandbox.status).toBe('error');
+    });
+
+    it('onDestroy error sets status to error and propagates', async () => {
+      const sandbox = new MountableSandbox({
+        onDestroy: () => {
+          throw new Error('onDestroy boom');
+        },
+      });
+
+      await sandbox.start();
+      await expect(sandbox.destroy()).rejects.toThrow('onDestroy boom');
+      expect(sandbox.status).toBe('error');
+    });
+
+    it('lifecycle methods work without hooks', async () => {
+      const sandbox = new MountableSandbox(); // no hooks
+
+      await sandbox.start();
+      expect(sandbox.status).toBe('running');
+
+      await sandbox.stop();
+      expect(sandbox.status).toBe('stopped');
+    });
+
+    it('onStart hook can call sandbox methods', async () => {
+      let commandResult: { exitCode: number; stdout: string } | undefined;
+
+      const sandbox = new MountableSandbox({
+        onStart: async ({ sandbox: s }) => {
+          commandResult = await s.executeCommand!('echo', ['hello']);
+        },
+      });
+
+      await sandbox.start();
+
+      expect(commandResult).toBeDefined();
+      expect(commandResult!.exitCode).toBe(0);
+      expect(commandResult!.stdout).toContain('hello');
+    });
+
+    it('concurrent start() calls only fire onStart once', async () => {
+      let callCount = 0;
+
+      const sandbox = new MountableSandbox({
+        onStart: async () => {
+          callCount++;
+          // Simulate async work so both callers overlap
+          await new Promise(resolve => setTimeout(resolve, 20));
+        },
+      });
+
+      // Fire two concurrent start() calls
+      await Promise.all([sandbox.start(), sandbox.start()]);
+
+      expect(callCount).toBe(1);
+      expect(sandbox.status).toBe('running');
     });
   });
 });

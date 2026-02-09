@@ -925,6 +925,293 @@ describe('E2BSandbox Reconcile Mounts', () => {
       nextItems: vi.fn().mockResolvedValue([]),
     });
   });
+
+  it('unmounts stale managed FUSE mounts but keeps expected ones', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    // Both mounts have marker files (we created both), but only /data/keep is expected
+    const keepMarker = sandbox.mounts.markerFilename('/data/keep');
+    const staleMarker = sandbox.mounts.markerFilename('/data/stale');
+
+    mockSandbox.commands.run.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('/proc/mounts')) {
+        return { exitCode: 0, stdout: '/data/keep\n/data/stale\n', stderr: '' };
+      }
+      if (cmd.includes('ls /tmp/.mastra-mounts')) {
+        return { exitCode: 0, stdout: `${keepMarker}\n${staleMarker}`, stderr: '' };
+      }
+      if (cmd.includes('cat') && cmd.includes(keepMarker)) {
+        return { exitCode: 0, stdout: '/data/keep|hash1', stderr: '' };
+      }
+      if (cmd.includes('cat') && cmd.includes(staleMarker)) {
+        return { exitCode: 0, stdout: '/data/stale|hash2', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await sandbox.reconcileMounts(['/data/keep']);
+
+    // fusermount should only be called for /data/stale, not /data/keep
+    const fusermountCalls = mockSandbox.commands.run.mock.calls.filter((c: any[]) => c[0].includes('fusermount'));
+    expect(fusermountCalls.length).toBe(1);
+    expect(fusermountCalls[0][0]).toContain('/data/stale');
+  });
+
+  it('never unmounts non-FUSE mounts or unmanaged FUSE mounts', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    // grep for fuse mounts returns only FUSE mounts (ext4 etc are filtered by grep).
+    // /data/fuse-stale is a FUSE mount but has no marker file — it's external.
+    mockSandbox.commands.run.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('/proc/mounts')) {
+        return { exitCode: 0, stdout: '/data/fuse-stale\n', stderr: '' };
+      }
+      if (cmd.includes('ls /tmp/.mastra-mounts')) {
+        // No marker files — we didn't create this mount
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await sandbox.reconcileMounts([]);
+
+    // No fusermount calls — the FUSE mount is external (no marker)
+    const fusermountCalls = mockSandbox.commands.run.mock.calls.filter((c: any[]) => c[0].includes('fusermount'));
+    expect(fusermountCalls).toHaveLength(0);
+  });
+
+  it('leaves all mounts alone when all are expected', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    mockSandbox.commands.run.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('/proc/mounts')) {
+        return { exitCode: 0, stdout: '/data/mount1\n/data/mount2\n', stderr: '' };
+      }
+      if (cmd.includes('ls /tmp/.mastra-mounts')) {
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await sandbox.reconcileMounts(['/data/mount1', '/data/mount2']);
+
+    // No fusermount calls
+    const fusermountCalls = mockSandbox.commands.run.mock.calls.filter((c: any[]) => c[0].includes('fusermount'));
+    expect(fusermountCalls).toHaveLength(0);
+  });
+
+  it('cleans up orphaned marker files and directories', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    // Generate the marker filename for /data/orphaned to match what reconcileMounts expects
+    const orphanMarker = sandbox.mounts.markerFilename('/data/orphaned');
+
+    mockSandbox.commands.run.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('/proc/mounts')) {
+        return { exitCode: 0, stdout: '', stderr: '' }; // no active FUSE mounts
+      }
+      if (cmd.includes('ls /tmp/.mastra-mounts')) {
+        return { exitCode: 0, stdout: orphanMarker, stderr: '' };
+      }
+      if (cmd.includes('cat') && cmd.includes(orphanMarker)) {
+        return { exitCode: 0, stdout: '/data/orphaned|abc123hash', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await sandbox.reconcileMounts([]); // no expected mounts
+
+    // Marker file should be deleted
+    const rmCalls = mockSandbox.commands.run.mock.calls.filter(
+      (c: any[]) => c[0].includes('rm -f') && c[0].includes(orphanMarker),
+    );
+    expect(rmCalls.length).toBe(1);
+
+    // Orphaned directory should be cleaned up
+    const rmdirCalls = mockSandbox.commands.run.mock.calls.filter(
+      (c: any[]) => c[0].includes('rmdir') && c[0].includes('/data/orphaned'),
+    );
+    expect(rmdirCalls.length).toBe(1);
+  });
+
+  it('deletes malformed marker files without error', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    mockSandbox.commands.run.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('/proc/mounts')) {
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      if (cmd.includes('ls /tmp/.mastra-mounts')) {
+        return { exitCode: 0, stdout: 'mount-badfile', stderr: '' };
+      }
+      if (cmd.includes('cat') && cmd.includes('mount-badfile')) {
+        // Malformed content — no pipe separator
+        return { exitCode: 0, stdout: 'garbage-content-no-pipe', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    // Should not throw
+    await sandbox.reconcileMounts([]);
+
+    // Malformed marker should be deleted
+    const rmCalls = mockSandbox.commands.run.mock.calls.filter(
+      (c: any[]) => c[0].includes('rm -f') && c[0].includes('mount-badfile'),
+    );
+    expect(rmCalls.length).toBe(1);
+  });
+
+  it('does not unmount external FUSE mounts (no marker file)', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    // The sandbox has two FUSE mounts: one managed by us (has marker), one external (no marker)
+    const managedMarker = sandbox.mounts.markerFilename('/data/managed');
+
+    mockSandbox.commands.run.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('/proc/mounts')) {
+        // Both show up as FUSE mounts
+        return { exitCode: 0, stdout: '/data/managed\n/data/external\n', stderr: '' };
+      }
+      if (cmd.includes('ls /tmp/.mastra-mounts')) {
+        // Only /data/managed has a marker file
+        return { exitCode: 0, stdout: managedMarker, stderr: '' };
+      }
+      if (cmd.includes('cat') && cmd.includes(managedMarker)) {
+        return { exitCode: 0, stdout: '/data/managed|abc123hash', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    // Neither mount is "expected" (simulating a config change that removed both)
+    await sandbox.reconcileMounts([]);
+
+    // Only the managed mount should be unmounted
+    const fusermountCalls = mockSandbox.commands.run.mock.calls.filter((c: any[]) => c[0].includes('fusermount'));
+    expect(fusermountCalls.length).toBe(1);
+    expect(fusermountCalls[0][0]).toContain('/data/managed');
+    // /data/external should NOT appear in any fusermount call
+    expect(fusermountCalls.every((c: any[]) => !c[0].includes('/data/external'))).toBe(true);
+  });
+
+  it('treats mount as external when marker file read fails', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    // A FUSE mount exists, and a marker file exists, but reading the marker fails
+    mockSandbox.commands.run.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('/proc/mounts')) {
+        return { exitCode: 0, stdout: '/data/mystery\n', stderr: '' };
+      }
+      if (cmd.includes('ls /tmp/.mastra-mounts')) {
+        return { exitCode: 0, stdout: 'mount-broken', stderr: '' };
+      }
+      if (cmd.includes('cat') && cmd.includes('mount-broken')) {
+        // Read fails — empty output
+        return { exitCode: 1, stdout: '', stderr: 'No such file' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await sandbox.reconcileMounts([]);
+
+    // Mount should NOT be unmounted — we can't confirm we own it
+    const fusermountCalls = mockSandbox.commands.run.mock.calls.filter((c: any[]) => c[0].includes('fusermount'));
+    expect(fusermountCalls).toHaveLength(0);
+  });
+
+  it('does not clean up marker files for expected mounts', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    const expectedMarker = sandbox.mounts.markerFilename('/data/expected');
+
+    mockSandbox.commands.run.mockImplementation(async (cmd: string) => {
+      if (cmd.includes('/proc/mounts')) {
+        return { exitCode: 0, stdout: '/data/expected\n', stderr: '' };
+      }
+      if (cmd.includes('ls /tmp/.mastra-mounts')) {
+        return { exitCode: 0, stdout: expectedMarker, stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await sandbox.reconcileMounts(['/data/expected']);
+
+    // No rm calls for the expected marker
+    const rmCalls = mockSandbox.commands.run.mock.calls.filter(
+      (c: any[]) => c[0].includes('rm -f') && c[0].includes(expectedMarker),
+    );
+    expect(rmCalls).toHaveLength(0);
+  });
+});
+
+/**
+ * Stop/destroy only unmount managed mounts
+ */
+describe('E2BSandbox stop/destroy only unmount managed mounts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+  });
+
+  it('stop() only unmounts mounts in the manager, not all FUSE mounts', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    // Mount one filesystem through the manager
+    const mockFs = {
+      id: 'fs1',
+      name: 'FS1',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({ type: 's3', bucket: 'b1', region: 'us-east-1', accessKeyId: 'k', secretAccessKey: 's' }),
+    } as any;
+
+    await sandbox.mount(mockFs, '/data/managed');
+
+    // Clear to track only stop() calls
+    mockSandbox.commands.run.mockClear();
+
+    await sandbox.stop();
+
+    // Should only unmount /data/managed — no query of /proc/mounts
+    const procMountsCalls = mockSandbox.commands.run.mock.calls.filter((c: any[]) => c[0].includes('/proc/mounts'));
+    expect(procMountsCalls).toHaveLength(0);
+
+    // fusermount should be called for the managed mount
+    const fusermountCalls = mockSandbox.commands.run.mock.calls.filter((c: any[]) => c[0].includes('fusermount'));
+    expect(fusermountCalls.length).toBeGreaterThanOrEqual(1);
+    expect(fusermountCalls[0][0]).toContain('/data/managed');
+  });
+
+  it('destroy() only unmounts mounts in the manager, not all FUSE mounts', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.start();
+
+    const mockFs = {
+      id: 'fs1',
+      name: 'FS1',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({ type: 's3', bucket: 'b1', region: 'us-east-1', accessKeyId: 'k', secretAccessKey: 's' }),
+    } as any;
+
+    await sandbox.mount(mockFs, '/data/managed');
+
+    mockSandbox.commands.run.mockClear();
+
+    await sandbox.destroy();
+
+    // Should not query /proc/mounts during destroy
+    const procMountsCalls = mockSandbox.commands.run.mock.calls.filter((c: any[]) => c[0].includes('/proc/mounts'));
+    expect(procMountsCalls).toHaveLength(0);
+  });
 });
 
 /**

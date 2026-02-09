@@ -440,44 +440,62 @@ export class E2BSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Current FUSE mounts in sandbox:`, currentMounts);
 
-    // Find mounts that exist but shouldn't
+    // Read our marker files to know which mounts WE created
+    const markersResult = await this._sandbox.commands.run(`ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""`);
+    const markerFiles = markersResult.stdout
+      .trim()
+      .split('\n')
+      .filter(f => f.length > 0 && f.startsWith('mount-'));
+
+    // Build a map of mount paths → marker filenames for mounts WE created
+    const managedMountPaths = new Map<string, string>();
+    for (const markerFile of markerFiles) {
+      const markerResult = await this._sandbox.commands.run(
+        `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`,
+      );
+      const parsed = this.mounts.parseMarkerContent(markerResult.stdout.trim());
+      if (parsed) {
+        managedMountPaths.set(parsed.path, markerFile);
+      }
+    }
+
+    // Find mounts that exist but shouldn't — only unmount if WE created them (have a marker)
     const staleMounts = currentMounts.filter(path => !expectedMountPaths.includes(path));
 
     for (const stalePath of staleMounts) {
-      this.logger.debug(`${LOG_PREFIX} Found stale FUSE mount at ${stalePath}, unmounting...`);
-      await this.unmount(stalePath);
+      if (managedMountPaths.has(stalePath)) {
+        this.logger.debug(`${LOG_PREFIX} Found stale managed FUSE mount at ${stalePath}, unmounting...`);
+        await this.unmount(stalePath);
+      } else {
+        this.logger.debug(`${LOG_PREFIX} Found external FUSE mount at ${stalePath}, leaving untouched`);
+      }
     }
 
-    // Also clean up orphaned marker files and empty directories from failed mounts
+    // Clean up orphaned marker files and empty directories from failed mounts
     try {
-      const markersResult = await this._sandbox.commands.run(`ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""`);
-      const markerFiles = markersResult.stdout
-        .trim()
-        .split('\n')
-        .filter(f => f.length > 0 && f.startsWith('mount-'));
-
-      // Get the expected marker filenames for comparison
       const expectedMarkerFiles = new Set(expectedMountPaths.map(p => this.mounts.markerFilename(p)));
+
+      // Build a reverse map: markerFile → mountPath
+      const markerToPath = new Map<string, string>();
+      for (const [path, file] of managedMountPaths) {
+        markerToPath.set(file, path);
+      }
 
       for (const markerFile of markerFiles) {
         // If this marker file doesn't correspond to an expected mount path, clean it up
         if (!expectedMarkerFiles.has(markerFile)) {
-          // Read the marker file to get the actual mount path
-          const markerResult = await this._sandbox.commands.run(
-            `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`,
-          );
-          const parsed = this.mounts.parseMarkerContent(markerResult.stdout.trim());
+          const mountPath = markerToPath.get(markerFile);
 
-          if (parsed) {
-            // Only clean up if not currently FUSE mounted
-            if (!currentMounts.includes(parsed.path)) {
-              this.logger.debug(`${LOG_PREFIX} Cleaning up orphaned marker and directory for ${parsed.path}`);
+          if (mountPath) {
+            // Only clean up directory if not currently FUSE mounted
+            if (!currentMounts.includes(mountPath)) {
+              this.logger.debug(`${LOG_PREFIX} Cleaning up orphaned marker and directory for ${mountPath}`);
 
               // Remove marker file
               await this._sandbox.commands.run(`rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`);
 
               // Try to remove the directory (will fail if not empty or doesn't exist, which is fine)
-              await this._sandbox.commands.run(`sudo rmdir "${parsed.path}" 2>/dev/null || true`);
+              await this._sandbox.commands.run(`sudo rmdir "${mountPath}" 2>/dev/null || true`);
             }
           } else {
             // Malformed marker file - just delete it
