@@ -7,7 +7,7 @@
       "outputs": ["dist/**", "!dist/docs/**"]
     },
     "build:docs": {
-      "dependsOn": ["build:lib"],
+      "dependsOn": ["build:lib", "mastra-docs#build"],
       "outputs": ["dist/docs/**"]
     },
     "build": {

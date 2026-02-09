@@ -1,6 +1,6 @@
 {
   "name": "@mastra/arize",
-  "version": "1.0.2-alpha.1",
+  "version": "1.0.2",
   "description": "Arize observability provider for Mastra - includes tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@arizeai/openinference-genai": "0.1.5",
+    "@arizeai/openinference-genai": "0.1.6",
     "@arizeai/openinference-semantic-conventions": "^2.1.7",
     "@mastra/otel-exporter": "workspace:*",
     "@opentelemetry/core": "^2.1.0",
