@@ -62,6 +62,7 @@ type PromiseResults<OUTPUT = undefined> = Pick<
   | 'request'
 > & {
   suspendPayload: any;
+  resumeSchema: any;
   object: OUTPUT;
   reasoningText: string | undefined;
   totalUsage: LLMStepResult<OUTPUT>['usage'];
@@ -124,6 +125,8 @@ export type FullOutput<OUTPUT = undefined> = {
   runId: string | undefined;
   /** Payload for resuming suspended tool calls */
   suspendPayload: any;
+  /** Resume schema of suspended step if available */
+  resumeSchema?: any;
   /** All messages from this execution (input + memory history + response) */
   messages: MastraDBMessage[];
   /** Only messages loaded from memory (conversation history) */
@@ -187,6 +190,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   #delayedPromises: DelayedPromises<OUTPUT> = {
     suspendPayload: new DelayedPromise<PromiseResults<OUTPUT>['suspendPayload']>(),
+    resumeSchema: new DelayedPromise<PromiseResults<OUTPUT>['resumeSchema']>(),
     object: new DelayedPromise<PromiseResults<OUTPUT>['object']>(),
     finishReason: new DelayedPromise<PromiseResults<OUTPUT>['finishReason']>(),
     usage: new DelayedPromise<PromiseResults<OUTPUT>['usage']>(),
@@ -389,6 +393,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             case 'tool-call-approval':
               self.#status = 'suspended';
               self.#delayedPromises.suspendPayload.resolve(chunk.payload);
+              self.#delayedPromises.resumeSchema.resolve(chunk.payload.resumeSchema);
               break;
             case 'raw':
               if (!self.#options.includeRawChunks) {
@@ -629,6 +634,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 totalUsage: self.#usageCount,
                 content: [],
                 suspendPayload: undefined, // Tripwire doesn't suspend, so resolve to undefined
+                resumeSchema: undefined,
               });
 
               // Emit the tripwire chunk for listeners
@@ -797,6 +803,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 totalUsage: self.#getTotalUsage(),
                 content: messageList.get.response.aiV5.stepContent(),
                 suspendPayload: undefined,
+                resumeSchema: undefined,
               });
 
               const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
@@ -994,6 +1001,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     return this.#getDelayedPromise(this.#delayedPromises.suspendPayload);
   }
 
+  get resumeSchema() {
+    return this.#getDelayedPromise(this.#delayedPromises.resumeSchema);
+  }
+
   /**
    * Stream of all chunks. Provides complete control over stream processing.
    */
@@ -1187,6 +1198,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       traceId: this.traceId,
       runId: this.runId,
       suspendPayload: await this.suspendPayload,
+      resumeSchema: await this.resumeSchema,
       // All messages from this execution (input + memory history + response)
       messages: this.messageList.get.all.db(),
       // Only messages loaded from memory (conversation history)

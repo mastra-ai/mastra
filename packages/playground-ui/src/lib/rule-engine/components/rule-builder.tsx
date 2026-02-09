@@ -47,14 +47,22 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({ schema, rules, onChang
   return (
     <div className={cn('border-t border-border1 bg-surface3 overflow-hidden', className)}>
       {rules.map((rule, index) => (
-        <div key={index} className="border-b border-border1 border-l-4 p-4">
-          <RuleRow
-            key={index}
-            schema={schema}
-            rule={rule}
-            onChange={updatedRule => handleRuleChange(index, updatedRule)}
-            onRemove={() => handleRemoveRule(index)}
-          />
+        <div key={index} className="border-b border-border1 border-dashed">
+          <div className="p-4 relative border-l-4 border-border1">
+            {index > 0 && (
+              <div className="absolute left-1/2 -translate-x-1/2 z-10 -translate-y-1/2 bg-surface3 top-0 text-ui-xs px-1.5 rounded-md text-neutral2">
+                and
+              </div>
+            )}
+
+            <RuleRow
+              key={index}
+              schema={schema}
+              rule={rule}
+              onChange={updatedRule => handleRuleChange(index, updatedRule)}
+              onRemove={() => handleRemoveRule(index)}
+            />
+          </div>
         </div>
       ))}
 

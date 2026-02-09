@@ -24,7 +24,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/mcp",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test:client": "vitest run ./src/client/client.test.ts",
     "test:server": "vitest run ./src/server/server.test.ts",
@@ -49,7 +49,7 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.6",
+    "@hono/node-server": "^1.19.9",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

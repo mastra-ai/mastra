@@ -53,6 +53,11 @@ const sidebars = {
           id: 'getting-started/hono',
           label: 'Hono',
         },
+        {
+          type: 'doc',
+          id: 'getting-started/electron',
+          label: 'Electron',
+        },
       ],
     },
     {
@@ -166,6 +171,11 @@ const sidebars = {
               label: 'Client SDK',
             },
             {
+              id: 'migrations/upgrade-to-v1/deployment',
+              type: 'doc',
+              label: 'Deployment',
+            },
+            {
               id: 'migrations/upgrade-to-v1/evals',
               type: 'doc',
               label: 'Evals',
@@ -189,6 +199,11 @@ const sidebars = {
               id: 'migrations/upgrade-to-v1/processors',
               type: 'doc',
               label: 'Processors',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/rag',
+              type: 'doc',
+              label: 'RAG',
             },
             {
               id: 'migrations/upgrade-to-v1/storage',

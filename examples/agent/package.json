@@ -12,6 +12,7 @@
     "@ai-sdk/provider": "^2.0.0",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
+    "@mastra/editor": "latest",
     "@mastra/evals": "latest",
     "@mastra/libsql": "latest",
     "@mastra/loggers": "latest",
@@ -29,6 +30,7 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
+      "@mastra/editor": "link:../../packages/editor",
       "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/voice-openai": "link:../../voice/openai",
       "@mastra/memory": "link:../../packages/memory",

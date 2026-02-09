@@ -14,6 +14,7 @@ type AddToolMetadataOptions = {
   toolName: string;
   args: unknown;
   resumeSchema: string;
+  suspendedToolRunId?: string;
 } & (
   | {
       type: 'approval';
@@ -58,6 +59,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         suspendPayload,
         resumeSchema,
         type,
+        suspendedToolRunId,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         // Find the last assistant message in the response (which should contain this tool call)
@@ -79,7 +81,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             toolName,
             args,
             type,
-            runId, // Store the runId so we can resume after page refresh
+            runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
             ...(type === 'suspension' ? { suspendPayload } : {}),
             resumeSchema,
           };
@@ -364,46 +366,141 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // Pass workspace from _internal (set by llmExecutionStep via prepareStep/processInputStep)
           workspace: _internal?.stepWorkspace,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
-            controller.enqueue({
-              type: 'tool-call-suspended',
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: {
+            if (options?.requireToolApproval) {
+              controller.enqueue({
+                type: 'tool-call-approval',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  args: inputData.args,
+                  resumeSchema: JSON.stringify(
+                    zodToJsonSchema(
+                      z.object({
+                        approved: z
+                          .boolean()
+                          .describe(
+                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                          ),
+                      }),
+                    ),
+                  ),
+                },
+              });
+
+              // Add approval metadata to message before persisting
+              addToolMetadata({
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
-                suspendPayload,
                 args: inputData.args,
-                resumeSchema: options?.resumeSchema,
-              },
-            });
+                type: 'approval',
+                suspendedToolRunId: options.runId,
+                resumeSchema: JSON.stringify(
+                  zodToJsonSchema(
+                    z.object({
+                      approved: z
+                        .boolean()
+                        .describe(
+                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                        ),
+                    }),
+                  ),
+                ),
+              });
 
-            // Add suspension metadata to message before persisting
-            addToolMetadata({
-              toolCallId: inputData.toolCallId,
-              toolName: inputData.toolName,
-              args,
-              suspendPayload,
-              type: 'suspension',
-              resumeSchema: options?.resumeSchema,
-            });
+              // Flush messages before suspension to ensure they are persisted
+              await flushMessagesBeforeSuspension();
 
-            // Flush messages before suspension to ensure they are persisted
-            await flushMessagesBeforeSuspension();
+              return suspend(
+                {
+                  requireToolApproval: {
+                    toolCallId: inputData.toolCallId,
+                    toolName: inputData.toolName,
+                    args: inputData.args,
+                  },
+                  __streamState: streamState.serialize(),
+                },
+                {
+                  resumeLabel: inputData.toolCallId,
+                },
+              );
+            } else {
+              controller.enqueue({
+                type: 'tool-call-suspended',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  suspendPayload,
+                  args: inputData.args,
+                  resumeSchema: options?.resumeSchema,
+                },
+              });
 
-            return await suspend(
-              {
-                toolCallSuspended: suspendPayload,
-                __streamState: streamState.serialize(),
+              // Add suspension metadata to message before persisting
+              addToolMetadata({
+                toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
-                resumeLabel: options?.resumeLabel,
-              },
-              {
-                resumeLabel: inputData.toolCallId,
-              },
-            );
+                args,
+                suspendPayload,
+                suspendedToolRunId: options?.isAgentSuspend ? options.runId : undefined,
+                type: 'suspension',
+                resumeSchema: options?.resumeSchema,
+              });
+
+              // Flush messages before suspension to ensure they are persisted
+              await flushMessagesBeforeSuspension();
+
+              return await suspend(
+                {
+                  toolCallSuspended: suspendPayload,
+                  __streamState: streamState.serialize(),
+                  toolName: inputData.toolName,
+                  resumeLabel: options?.resumeLabel,
+                },
+                {
+                  resumeLabel: inputData.toolCallId,
+                },
+              );
+            }
           },
           resumeData: resumeDataToPassToToolOptions,
         };
+
+        //if resuming a subAgent tool, we want to find the runId from when the subAgent got suspended.
+        if (resumeDataToPassToToolOptions && inputData.toolName?.startsWith('agent-') && !isResumeToolCall) {
+          let suspendedToolRunId = '';
+          const messages = messageList.get.all.db();
+          const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
+
+          for (const message of assistantMessages) {
+            const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
+              message.content.metadata?.pendingToolApprovals) as Record<string, any>;
+            if (pendingOrSuspendedTools && pendingOrSuspendedTools[inputData.toolName]) {
+              suspendedToolRunId = pendingOrSuspendedTools[inputData.toolName].runId;
+              break;
+            }
+
+            const dataToolSuspendedParts = message.content.parts?.filter(
+              part =>
+                (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                !(part.data as any).resumed,
+            );
+            if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
+              const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
+              if (foundTool) {
+                suspendedToolRunId = (foundTool as any).data.runId;
+                break;
+              }
+            }
+          }
+
+          if (suspendedToolRunId) {
+            args.suspendedToolRunId = suspendedToolRunId;
+          }
+        }
 
         const result = await tool.execute(args, toolOptions);
 

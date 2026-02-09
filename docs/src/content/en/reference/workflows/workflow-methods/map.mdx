@@ -12,7 +12,7 @@ The `.map()` method maps output data from a previous step to the input of a subs
 ## Usage example
 
 ```typescript
-workflow.map(async ({ inputData }) => `${inputData.value} - map`
+workflow.map(async ({ inputData }) => `${inputData.value} - map`)
 ```
 
 ## Parameters
@@ -70,7 +70,7 @@ Use `getInitData<typeof workflow>()` to access the initial input data provided t
 ```typescript {3} filename="src/mastra/workflows/test-workflow.ts"
   .then(step1)
   .map(async ({ getInitData }) => {
-      console.log(getInitData());
+    console.log(getInitData<any>());
   })
 ```
 

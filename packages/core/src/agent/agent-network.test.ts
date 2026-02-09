@@ -1072,6 +1072,91 @@ describe('Agent - network - text streaming', () => {
     const textContent = textDeltaEvents.map(e => e.payload?.text || '').join('');
     expect(textContent).toContain('I am a helpful assistant');
   });
+
+  it('should not emit selectionReason as text-delta when routing agent handles request directly', async () => {
+    const memory = new MockMemory();
+
+    // The selectionReason is internal routing logic, distinct from the actual answer
+    const routingReason =
+      'The user is asking a simple question that can be answered directly. No sub-agent is needed because the answer is available in context.';
+
+    const selfHandleResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: routingReason,
+    });
+
+    const completionCheckResponse = JSON.stringify({
+      isComplete: true,
+      completionReason: 'The routing agent provided a direct answer.',
+      finalResult: 'The answer is 42.',
+    });
+
+    let callCount = 0;
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const response = callCount === 1 ? selfHandleResponse : completionCheckResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: response }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const response = callCount === 1 ? selfHandleResponse : completionCheckResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: response },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'no-reason-text-agent',
+      name: 'No Reason Text Agent',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('What is the answer?', {
+      memory: {
+        thread: 'test-thread-no-reason-text',
+        resource: 'test-resource-no-reason-text',
+      },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    const routingAgentEndEvents = chunks.filter(c => c.type === 'routing-agent-end');
+    expect(routingAgentEndEvents.length).toBeGreaterThan(0);
+
+    const endEvent = routingAgentEndEvents[0];
+    expect(endEvent.payload.primitiveType).toBe('none');
+    expect(endEvent.payload.primitiveId).toBe('none');
+
+    // The selectionReason is internal routing logic and should appear
+    // in the routing-agent-end payload (as metadata), but NOT as text-delta events
+    expect(endEvent.payload.selectionReason).toBe(routingReason);
+
+    // routing-agent-text-delta events should NOT contain the selectionReason
+    const textDeltaEvents = chunks.filter(c => c.type === 'routing-agent-text-delta');
+    const textContent = textDeltaEvents.map(e => e.payload?.text || '').join('');
+    expect(textContent).not.toContain(routingReason);
+  });
 });
 
 describe('Agent - network - tool context validation', () => {
