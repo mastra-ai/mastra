@@ -202,13 +202,6 @@ function generateTableSQL({
     baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
     schemaName: parsedSchemaName || undefined,
   });
-  // Legacy shortened name — used during a brief window between the initial PR
-  // and this follow-up.  We check for it so databases that ran with the
-  // shortened name are also detected and we don't try to add a duplicate.
-  const workflowSnapshotLegacyConstraint = buildConstraintName({
-    baseName: 'mastra_wf_snapshot_wf_name_run_id_key',
-    schemaName: parsedSchemaName || undefined,
-  });
   const spansPrimaryKeyConstraint = buildConstraintName({
     baseName: 'mastra_ai_spans_traceid_spanid_pk',
     schemaName: parsedSchemaName || undefined,
@@ -227,10 +220,6 @@ function generateTableSQL({
                 SELECT 1 FROM pg_constraint WHERE conname = lower('${workflowSnapshotConstraint}')
               ) AND NOT EXISTS (
                 SELECT 1 FROM pg_indexes WHERE indexname = lower('${workflowSnapshotConstraint}')
-              ) AND NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = lower('${workflowSnapshotLegacyConstraint}')
-              ) AND NOT EXISTS (
-                SELECT 1 FROM pg_indexes WHERE indexname = lower('${workflowSnapshotLegacyConstraint}')
               ) THEN
                 ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
                 ADD CONSTRAINT ${workflowSnapshotConstraint}
