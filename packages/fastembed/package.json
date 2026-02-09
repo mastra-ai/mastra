@@ -37,7 +37,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "fastembed": "^1.14.4"
+    "fastembed": "^2.1.0"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
