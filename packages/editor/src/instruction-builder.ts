@@ -37,18 +37,16 @@ export async function resolveInstructionBlocks(
   const segments: string[] = [];
 
   // Batch-fetch all prompt block ref IDs to avoid N+1 queries
-  const blockIds = [
-    ...new Set(
+  const blockIds = Array.from(
+    new Set(
       blocks.filter((b): b is { type: 'prompt_block_ref'; id: string } => b.type === 'prompt_block_ref').map(b => b.id),
     ),
-  ];
+  );
 
   const resolvedBlocksMap = new Map<string, StorageResolvedPromptBlockType>();
   if (blockIds.length > 0) {
     // Fetch all blocks in parallel
-    const fetchResults = await Promise.all(
-      blockIds.map(id => deps.promptBlocksStorage.getPromptBlockByIdResolved({ id })),
-    );
+    const fetchResults = await Promise.all(blockIds.map(id => deps.promptBlocksStorage.getByIdResolved(id)));
     for (let i = 0; i < blockIds.length; i++) {
       const result = fetchResults[i];
       if (result) {
