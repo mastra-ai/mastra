@@ -493,12 +493,9 @@ describe('runExperiment', () => {
       });
 
       expect(result.status).toBe('completed');
-      expect(result.results[0].output).toBe('processed-Hello');
-      expect(result.results[1].output).toBe('processed-Goodbye');
-      // No agent was resolved — verify getAgentById was not called for this experiment
-      // (it may have been called in beforeEach setup, so we check traceId is null)
+      const outputs = result.results.map(r => r.output).sort();
+      expect(outputs).toEqual(['processed-Goodbye', 'processed-Hello']);
       for (const r of result.results) {
-        // Inline tasks don't generate traces — traceId not in ItemResult but error should be null
         expect(r.error).toBeNull();
       }
     });

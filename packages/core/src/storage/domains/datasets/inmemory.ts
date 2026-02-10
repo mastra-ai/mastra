@@ -263,8 +263,8 @@ export class DatasetsInMemory extends DatasetsStorage {
       });
     }
 
-    // Sort by createdAt descending
-    items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    // Sort by createdAt descending, then by id descending for stability
+    items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
 
     const { page, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
@@ -319,7 +319,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       }
     }
 
-    items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
     return items;
   }
 

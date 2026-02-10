@@ -271,8 +271,14 @@ describe('P1 Regression', () => {
       });
 
       expect(result.results).toHaveLength(5);
+      // Each result's output index must match its position in the results array,
+      // proving p-map didn't scramble ordering despite variable completion times.
+      const prompts = result.results.map(r => (r.input as any).prompt as string);
+      // All 5 items present
+      expect(new Set(prompts).size).toBe(5);
+      // Output at position i was produced by the i-th item in the items array
       for (let i = 0; i < 5; i++) {
-        expect((result.results[i]!.input as any).prompt).toBe(`item-${i}`);
+        expect(result.results[i]!.output).toEqual({ text: `result-${i}` });
       }
     });
   });
