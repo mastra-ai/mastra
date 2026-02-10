@@ -806,24 +806,17 @@ export class Agent<
   }
 
   /**
-   * Checks if this agent has its own workspace configured (static or dynamic).
+   * Checks if this agent has its own workspace configured.
    *
-   * @deprecated Use {@link hasStaticWorkspace} to check for eagerly-available workspaces,
-   * or just call {@link getWorkspace} which handles both static and dynamic cases.
-   * This method returns true for dynamic workspace functions that may not produce
-   * a workspace without proper request context.
+   * @example
+   * ```typescript
+   * if (agent.hasOwnWorkspace()) {
+   *   const workspace = await agent.getWorkspace();
+   * }
+   * ```
    */
   public hasOwnWorkspace(): boolean {
     return Boolean(this.#workspace);
-  }
-
-  /**
-   * Checks if this agent has a static (non-function) workspace that can be resolved
-   * without request context. Dynamic workspace functions return false here since they
-   * depend on request-time context and may return undefined.
-   */
-  public hasStaticWorkspace(): boolean {
-    return Boolean(this.#workspace) && typeof this.#workspace !== 'function';
   }
 
   /**
