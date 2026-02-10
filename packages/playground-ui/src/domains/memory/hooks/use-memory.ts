@@ -41,18 +41,20 @@ export const useThreads = ({
   agentId,
   isMemoryEnabled,
 }: {
-  resourceId: string;
+  resourceId?: string;
   agentId: string;
   isMemoryEnabled: boolean;
 }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
+  const resourceKey = resourceId ?? null;
+
   return useQuery({
-    queryKey: ['memory', 'threads', resourceId, agentId],
+    queryKey: ['memory', 'threads', resourceKey, agentId],
     queryFn: async () => {
       if (!isMemoryEnabled) return null;
-      const result = await client.listMemoryThreads({ resourceId, agentId, requestContext });
+      const result = await client.listMemoryThreads({ ...(resourceId ? { resourceId } : {}), agentId, requestContext });
       return result.threads;
     },
     enabled: Boolean(isMemoryEnabled),
@@ -69,14 +71,14 @@ export const useDeleteThread = () => {
   const { requestContext } = usePlaygroundStore();
 
   return useMutation({
-    mutationFn: ({ threadId, agentId }: { threadId: string; agentId: string }) => {
+    mutationFn: ({ threadId, agentId, resourceId }: { threadId: string; agentId: string; resourceId: string }) => {
       const thread = client.getMemoryThread({ threadId, agentId });
       return thread.delete({ requestContext });
     },
     onSuccess: (_, variables) => {
-      const { agentId } = variables;
+      const { agentId, resourceId } = variables;
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', resourceId, agentId] });
       }
       toast.success('Chat deleted successfully');
     },
@@ -110,14 +112,24 @@ export const useCloneThread = () => {
   const { requestContext } = usePlaygroundStore();
 
   return useMutation({
-    mutationFn: async ({ threadId, agentId, title }: { threadId: string; agentId: string; title?: string }) => {
+    mutationFn: async ({
+      threadId,
+      agentId,
+      title,
+      resourceId,
+    }: {
+      threadId: string;
+      agentId: string;
+      title?: string;
+      resourceId: string;
+    }) => {
       const thread = client.getMemoryThread({ threadId, agentId });
       return thread.clone({ title, requestContext });
     },
     onSuccess: (_, variables) => {
-      const { agentId } = variables;
+      const { agentId, resourceId } = variables;
       if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', resourceId, agentId] });
       }
       toast.success('Thread cloned successfully');
     },

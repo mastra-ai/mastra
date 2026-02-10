@@ -14,9 +14,10 @@ import { Skeleton } from '@/ds/components/Skeleton';
 interface AgentMemoryProps {
   agentId: string;
   threadId: string;
+  resourceId: string;
 }
 
-export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
+export function AgentMemory({ agentId, threadId, resourceId }: AgentMemoryProps) {
   const { threadInput: chatInputValue } = useThreadInput();
 
   const { paths, navigate } = useLinkComponent();
@@ -31,7 +32,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   // Check if observational memory is enabled
   const { data: omStatus } = useMemoryWithOMStatus({
     agentId,
-    resourceId: agentId, // In playground, agentId is the resourceId
+    resourceId,
     threadId,
   });
   const isOMEnabled = omStatus?.observationalMemory?.enabled ?? false;
@@ -39,7 +40,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   // Get memory search hook
   const { mutateAsync: searchMemory, data: searchMemoryData } = useMemorySearch({
     agentId: agentId || '',
-    resourceId: agentId || '', // In playground, agentId is the resourceId
+    resourceId: resourceId || '',
     threadId,
   });
 
@@ -50,12 +51,12 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   const handleCloneThread = useCallback(async () => {
     if (!threadId || !agentId) return;
 
-    const result = await cloneThread({ threadId, agentId });
+    const result = await cloneThread({ threadId, agentId, resourceId });
     // Navigate to the cloned thread
     if (result?.thread?.id) {
       navigate(paths.agentThreadLink(agentId, result.thread.id));
     }
-  }, [threadId, agentId, cloneThread, navigate, paths]);
+  }, [threadId, agentId, resourceId, cloneThread, navigate, paths]);
 
   // Handle clicking on a search result to scroll to the message
   const handleResultClick = useCallback(
@@ -112,7 +113,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
       {/* Observational Memory Section - moved above Semantic Recall */}
       {isOMEnabled && (
         <div className="border-b border-border1 min-w-0 overflow-hidden">
-          <AgentObservationalMemory agentId={agentId} resourceId={agentId} threadId={threadId} />
+          <AgentObservationalMemory agentId={agentId} resourceId={resourceId} threadId={threadId} />
         </div>
       )}
 

@@ -309,6 +309,7 @@ const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
 export function MastraRuntimeProvider({
   children,
   agentId,
+  resourceId,
   initialMessages,
   initialLegacyMessages,
   memory,
@@ -344,6 +345,7 @@ export function MastraRuntimeProvider({
     networkToolCallApprovals,
   } = useChat({
     agentId,
+    resourceId: resourceId ?? agentId,
     initializeMessages: () => initialMessages || [],
   });
 
@@ -668,7 +670,7 @@ export function MastraRuntimeProvider({
             seed,
             instructions,
             requestContext: requestContextInstance,
-            ...(memory ? { threadId, resourceId: agentId } : {}),
+            ...(memory ? { threadId, resourceId: resourceId ?? agentId } : {}),
             providerOptions,
           });
           if (generateResponse.response && 'messages' in generateResponse.response) {
@@ -785,7 +787,7 @@ export function MastraRuntimeProvider({
             seed,
             instructions,
             requestContext: requestContextInstance,
-            ...(memory ? { threadId, resourceId: agentId } : {}),
+            ...(memory ? { threadId, resourceId: resourceId ?? agentId } : {}),
             providerOptions,
           });
 
