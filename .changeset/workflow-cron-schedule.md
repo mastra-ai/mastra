@@ -19,10 +19,11 @@ const billing = createWorkflow({
     description: 'Daily billing run',
   },
 });
+billing.then(processBilling).commit();
 
 // Start the scheduler
 const mastra = new Mastra({ workflows: { billing } });
-await mastra.startScheduler();
+mastra.startScheduler();
 
 // List scheduled workflows
 mastra.listScheduledWorkflows();
