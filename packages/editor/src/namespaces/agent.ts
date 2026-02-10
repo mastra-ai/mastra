@@ -311,21 +311,22 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             storedAgent.defaultOptions as StorageConditionalVariant<StorageDefaultOptions>[],
             ctx,
           );
-          return {
-            maxSteps: resolved?.maxSteps,
-          };
+          return resolved ?? {};
         }
       : {
-          maxSteps: staticDefaultOptions?.maxSteps,
-          modelSettings: staticModelConfig
-            ? {
-                temperature: staticModelConfig.temperature,
-                topP: staticModelConfig.topP,
-                frequencyPenalty: staticModelConfig.frequencyPenalty,
-                presencePenalty: staticModelConfig.presencePenalty,
-                maxOutputTokens: staticModelConfig.maxCompletionTokens,
-              }
-            : undefined,
+          ...staticDefaultOptions,
+          modelSettings: {
+            ...staticDefaultOptions?.modelSettings,
+            ...(staticModelConfig
+              ? {
+                  temperature: staticModelConfig.temperature,
+                  topP: staticModelConfig.topP,
+                  frequencyPenalty: staticModelConfig.frequencyPenalty,
+                  presencePenalty: staticModelConfig.presencePenalty,
+                  maxOutputTokens: staticModelConfig.maxCompletionTokens,
+                }
+              : undefined),
+          },
         };
 
     // Convert requestContextSchema from JSON Schema to ZodSchema if present
