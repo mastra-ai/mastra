@@ -1,5 +1,6 @@
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core';
+import { convertSchemaToZod } from '@mastra/schema-compat';
 
 import type {
   Mastra,
@@ -21,12 +22,17 @@ import type {
   StorageListAgentsInput,
   StorageListAgentsOutput,
   StorageListAgentsResolvedOutput,
+  StorageConditionalVariant,
+  StorageConditionalField,
+  StorageDefaultOptions,
+  StorageModelConfig,
+  AgentInstructionBlock,
 } from '@mastra/core/storage';
 
 import type { RequestContext } from '@mastra/core/request-context';
-import type { AgentInstructionBlock } from '@mastra/core/storage';
 import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 
+import { evaluateRuleGroup } from '../rule-evaluator';
 import { resolveInstructionBlocks } from '../instruction-builder';
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
@@ -105,6 +111,51 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   // Private helpers
   // ============================================================================
 
+  /**
+   * Detect whether a StorageConditionalField value is a conditional variant array
+   * (as opposed to the plain static value T).
+   */
+  private isConditionalVariants<T>(field: StorageConditionalField<T>): field is StorageConditionalVariant<T>[] {
+    return Array.isArray(field) && field.length > 0 && typeof field[0] === 'object' && field[0] !== null && 'value' in field[0];
+  }
+
+  /**
+   * Accumulate all matching variants for an array-typed field.
+   * Each matching variant's value (an array) is concatenated in order.
+   * Variants with no rules are treated as unconditional (always included).
+   */
+  private accumulateArrayVariants<T>(
+    variants: StorageConditionalVariant<T[]>[],
+    context: Record<string, unknown>,
+  ): T[] {
+    const result: T[] = [];
+    for (const variant of variants) {
+      if (!variant.rules || evaluateRuleGroup(variant.rules, context)) {
+        result.push(...variant.value);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Accumulate all matching variants for an object/record-typed field.
+   * Each matching variant's value is shallow-merged in order, so later
+   * matches override keys from earlier ones.
+   * Variants with no rules are treated as unconditional (always included).
+   */
+  private accumulateObjectVariants<T extends Record<string, unknown>>(
+    variants: StorageConditionalVariant<T>[],
+    context: Record<string, unknown>,
+  ): T | undefined {
+    let result: T | undefined;
+    for (const variant of variants) {
+      if (!variant.rules || evaluateRuleGroup(variant.rules, context)) {
+        result = result ? { ...result, ...variant.value } : { ...variant.value };
+      }
+    }
+    return result;
+  }
+
   private async createAgentFromStoredConfig(storedAgent: StorageResolvedAgentType): Promise<Agent> {
     if (!this.mastra) {
       throw new Error('MastraEditor is not registered with a Mastra instance');
@@ -112,25 +163,141 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     this.logger?.debug(`[createAgentFromStoredConfig] Creating agent from stored config "${storedAgent.id}"`);
 
-    const tools = this.resolveStoredTools(storedAgent.tools);
-    const workflows = this.resolveStoredWorkflows(storedAgent.workflows);
-    const agents = this.resolveStoredAgents(storedAgent.agents);
-    const memory = this.resolveStoredMemory(storedAgent.memory);
-    const scorers = await this.resolveStoredScorers(storedAgent.scorers);
-    const inputProcessors = this.resolveStoredInputProcessors(storedAgent.inputProcessors);
-    const outputProcessors = this.resolveStoredOutputProcessors(storedAgent.outputProcessors);
-
-    const modelConfig = storedAgent.model;
-    if (!modelConfig || !modelConfig.provider || !modelConfig.name) {
-      throw new Error(
-        `Stored agent "${storedAgent.id}" has no active version or invalid model configuration. Both provider and name are required.`,
-      );
-    }
-    const model = `${modelConfig.provider}/${modelConfig.name}`;
-
-    const defaultOptions = storedAgent.defaultOptions;
     const instructions = this.resolveStoredInstructions(storedAgent.instructions);
 
+    // Determine if any conditional fields exist that require dynamic resolution
+    const hasConditionalTools = storedAgent.tools != null && this.isConditionalVariants(storedAgent.tools);
+    const hasConditionalWorkflows = storedAgent.workflows != null && this.isConditionalVariants(storedAgent.workflows);
+    const hasConditionalAgents = storedAgent.agents != null && this.isConditionalVariants(storedAgent.agents);
+    const hasConditionalMemory = storedAgent.memory != null && this.isConditionalVariants(storedAgent.memory);
+    const hasConditionalScorers = storedAgent.scorers != null && this.isConditionalVariants(storedAgent.scorers);
+    const hasConditionalInputProcessors = storedAgent.inputProcessors != null && this.isConditionalVariants(storedAgent.inputProcessors);
+    const hasConditionalOutputProcessors = storedAgent.outputProcessors != null && this.isConditionalVariants(storedAgent.outputProcessors);
+    const hasConditionalDefaultOptions = storedAgent.defaultOptions != null && this.isConditionalVariants(storedAgent.defaultOptions);
+    const hasConditionalModel = this.isConditionalVariants(storedAgent.model);
+
+    // --- Resolve fields: conditional fields accumulate all matching variants ---
+
+    // Tools (Record): accumulate by merging objects from all matching variants
+    const tools = hasConditionalTools
+      ? ({ requestContext }: { requestContext: RequestContext }) => {
+          const ctx = requestContext.toJSON();
+          const resolved = this.accumulateObjectVariants(storedAgent.tools as StorageConditionalVariant<Record<string, StorageToolConfig>>[], ctx);
+          return this.resolveStoredTools(resolved);
+        }
+      : this.resolveStoredTools(storedAgent.tools as Record<string, StorageToolConfig> | undefined);
+
+    // Workflows (array): accumulate by concatenating all matching variants
+    const workflows = hasConditionalWorkflows
+      ? ({ requestContext }: { requestContext: RequestContext }) => {
+          const ctx = requestContext.toJSON();
+          const resolved = this.accumulateArrayVariants(storedAgent.workflows as StorageConditionalVariant<string[]>[], ctx);
+          return this.resolveStoredWorkflows(resolved);
+        }
+      : this.resolveStoredWorkflows(storedAgent.workflows as string[] | undefined);
+
+    // Agents (array): accumulate by concatenating all matching variants
+    const agents = hasConditionalAgents
+      ? ({ requestContext }: { requestContext: RequestContext }) => {
+          const ctx = requestContext.toJSON();
+          const resolved = this.accumulateArrayVariants(storedAgent.agents as StorageConditionalVariant<string[]>[], ctx);
+          return this.resolveStoredAgents(resolved);
+        }
+      : this.resolveStoredAgents(storedAgent.agents as string[] | undefined);
+
+    // Memory (object): accumulate by merging config from all matching variants
+    const memory = hasConditionalMemory
+      ? ({ requestContext }: { requestContext: RequestContext }) => {
+          const ctx = requestContext.toJSON();
+          const resolved = this.accumulateObjectVariants(storedAgent.memory as StorageConditionalVariant<SerializedMemoryConfig>[], ctx);
+          return this.resolveStoredMemory(resolved as SerializedMemoryConfig | undefined);
+        }
+      : this.resolveStoredMemory(storedAgent.memory as SerializedMemoryConfig | undefined);
+
+    // Scorers (Record): accumulate by merging objects from all matching variants
+    const scorers = hasConditionalScorers
+      ? async ({ requestContext }: { requestContext: RequestContext }) => {
+          const ctx = requestContext.toJSON();
+          const resolved = this.accumulateObjectVariants(storedAgent.scorers as StorageConditionalVariant<Record<string, StorageScorerConfig>>[], ctx);
+          return this.resolveStoredScorers(resolved);
+        }
+      : await this.resolveStoredScorers(storedAgent.scorers as Record<string, StorageScorerConfig> | undefined);
+
+    // Input processors (array): accumulate by concatenating all matching variants
+    const inputProcessors = hasConditionalInputProcessors
+      ? ({ requestContext }: { requestContext: RequestContext }) => {
+          const ctx = requestContext.toJSON();
+          const resolved = this.accumulateArrayVariants(storedAgent.inputProcessors as StorageConditionalVariant<string[]>[], ctx);
+          return this.resolveStoredInputProcessors(resolved);
+        }
+      : this.resolveStoredInputProcessors(storedAgent.inputProcessors as string[] | undefined);
+
+    // Output processors (array): accumulate by concatenating all matching variants
+    const outputProcessors = hasConditionalOutputProcessors
+      ? ({ requestContext }: { requestContext: RequestContext }) => {
+          const ctx = requestContext.toJSON();
+          const resolved = this.accumulateArrayVariants(storedAgent.outputProcessors as StorageConditionalVariant<string[]>[], ctx);
+          return this.resolveStoredOutputProcessors(resolved);
+        }
+      : this.resolveStoredOutputProcessors(storedAgent.outputProcessors as string[] | undefined);
+
+    // Model (object): accumulate by merging config from all matching variants
+    let model: string | (({ requestContext }: { requestContext: RequestContext }) => string);
+    let staticModelConfig: StorageModelConfig | undefined;
+
+    if (hasConditionalModel) {
+      model = ({ requestContext }: { requestContext: RequestContext }) => {
+        const ctx = requestContext.toJSON();
+        const resolved = this.accumulateObjectVariants(storedAgent.model as StorageConditionalVariant<StorageModelConfig>[], ctx);
+        if (!resolved || !resolved.provider || !resolved.name) {
+          throw new Error(
+            `Stored agent "${storedAgent.id}" conditional model resolved to invalid configuration. Both provider and name are required.`,
+          );
+        }
+        return `${resolved.provider}/${resolved.name}`;
+      };
+    } else {
+      staticModelConfig = storedAgent.model as StorageModelConfig;
+      if (!staticModelConfig || !staticModelConfig.provider || !staticModelConfig.name) {
+        throw new Error(
+          `Stored agent "${storedAgent.id}" has no active version or invalid model configuration. Both provider and name are required.`,
+        );
+      }
+      model = `${staticModelConfig.provider}/${staticModelConfig.name}`;
+    }
+
+    // Default options (object): accumulate by merging from all matching variants
+    const staticDefaultOptions = hasConditionalDefaultOptions
+      ? undefined
+      : (storedAgent.defaultOptions as StorageDefaultOptions | undefined);
+
+    const defaultOptions = hasConditionalDefaultOptions
+      ? ({ requestContext }: { requestContext: RequestContext }) => {
+          const ctx = requestContext.toJSON();
+          const resolved = this.accumulateObjectVariants(storedAgent.defaultOptions as StorageConditionalVariant<StorageDefaultOptions>[], ctx);
+          return {
+            maxSteps: resolved?.maxSteps,
+          };
+        }
+      : {
+          maxSteps: staticDefaultOptions?.maxSteps,
+          modelSettings: staticModelConfig ? {
+            temperature: staticModelConfig.temperature,
+            topP: staticModelConfig.topP,
+            frequencyPenalty: staticModelConfig.frequencyPenalty,
+            presencePenalty: staticModelConfig.presencePenalty,
+            maxOutputTokens: staticModelConfig.maxCompletionTokens,
+          } : undefined,
+        };
+
+    // Convert requestContextSchema from JSON Schema to ZodSchema if present
+    const requestContextSchema = storedAgent.requestContextSchema
+      ? convertSchemaToZod(storedAgent.requestContextSchema as Record<string, unknown>)
+      : undefined;
+
+    // Cast to `any` to avoid TS2589 "excessively deep" errors caused by the
+    // complex generic inference of Agent<TTools, TRequestContext, …>.  The
+    // individual field values have already been validated above.
     const agent = new Agent({
       id: storedAgent.id,
       name: storedAgent.name,
@@ -146,17 +313,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       inputProcessors,
       outputProcessors,
       rawConfig: storedAgent as unknown as Record<string, unknown>,
-      defaultOptions: {
-        maxSteps: defaultOptions?.maxSteps,
-        modelSettings: {
-          temperature: modelConfig.temperature,
-          topP: modelConfig.topP,
-          frequencyPenalty: modelConfig.frequencyPenalty,
-          presencePenalty: modelConfig.presencePenalty,
-          maxOutputTokens: modelConfig.maxCompletionTokens,
-        },
-      },
-    });
+      defaultOptions,
+      requestContextSchema,
+    } as any);
 
     this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);
