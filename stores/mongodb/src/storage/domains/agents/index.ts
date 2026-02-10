@@ -15,8 +15,6 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
-  StorageListAgentsResolvedOutput,
-  StorageResolvedAgentType,
 } from '@mastra/core/storage';
 import type {
   AgentVersion,
@@ -130,7 +128,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     await agentsCollection.deleteMany({});
   }
 
-  async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
+  async getById(id: string): Promise<StorageAgentType | null> {
     try {
       const collection = await this.getCollection(TABLE_AGENTS);
       const result = await collection.findOne<any>({ id });
@@ -153,7 +151,8 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
-  async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+  async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    const { agent } = input;
     try {
       const collection = await this.getCollection(TABLE_AGENTS);
 
@@ -216,7 +215,8 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
-  async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
+  async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
+    const { id, ...updates } = input;
     try {
       const collection = await this.getCollection(TABLE_AGENTS);
 
@@ -328,10 +328,10 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
-  async deleteAgent({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       // Delete all versions for this agent first
-      await this.deleteVersionsByAgentId(id);
+      await this.deleteVersionsByParentId(id);
 
       // Then delete the agent
       const collection = await this.getCollection(TABLE_AGENTS);
@@ -350,7 +350,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
-  async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+  async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     try {
       const { page = 0, perPage: perPageInput, orderBy } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -412,151 +412,6 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'LIST_AGENTS', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
-  }
-
-  async listAgentsResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsResolvedOutput> {
-    try {
-      const { page = 0, perPage: perPageInput, orderBy } = args || {};
-      const { field, direction } = this.parseOrderBy(orderBy);
-
-      if (page < 0) {
-        throw new MastraError(
-          {
-            id: createStorageErrorId('MONGODB', 'LIST_AGENTS_RESOLVED', 'INVALID_PAGE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { page },
-          },
-          new Error('page must be >= 0'),
-        );
-      }
-
-      const perPage = normalizePerPage(perPageInput, 100);
-      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-
-      const agentsCollection = await this.getCollection(TABLE_AGENTS);
-      const total = await agentsCollection.countDocuments({});
-
-      if (total === 0 || perPage === 0) {
-        return {
-          agents: [],
-          total,
-          page,
-          perPage: perPageForResponse,
-          hasMore: false,
-        };
-      }
-
-      // MongoDB sort: 1 = ASC, -1 = DESC
-      const sortOrder = direction === 'ASC' ? 1 : -1;
-
-      // Use aggregation to join agents with their versions
-      const pipeline: any[] = [
-        // Sort agents
-        { $sort: { [field]: sortOrder } },
-
-        // Paginate
-        { $skip: offset },
-      ];
-
-      if (perPageInput !== false) {
-        pipeline.push({ $limit: perPage });
-      }
-
-      // Lookup active version
-      pipeline.push({
-        $lookup: {
-          from: TABLE_AGENT_VERSIONS,
-          localField: 'activeVersionId',
-          foreignField: 'id',
-          as: 'activeVersion',
-        },
-      });
-
-      // If no active version, lookup latest version
-      pipeline.push({
-        $lookup: {
-          from: TABLE_AGENT_VERSIONS,
-          let: { agentId: '$id' },
-          pipeline: [
-            { $match: { $expr: { $eq: ['$agentId', '$$agentId'] } } },
-            { $sort: { versionNumber: -1 } },
-            { $limit: 1 },
-          ],
-          as: 'latestVersion',
-        },
-      });
-
-      // Add computed field for the version to use
-      pipeline.push({
-        $addFields: {
-          version: {
-            $cond: {
-              if: { $gt: [{ $size: '$activeVersion' }, 0] },
-              then: { $arrayElemAt: ['$activeVersion', 0] },
-              else: { $arrayElemAt: ['$latestVersion', 0] },
-            },
-          },
-        },
-      });
-
-      // Remove helper fields
-      pipeline.push({
-        $project: {
-          activeVersion: 0,
-          latestVersion: 0,
-        },
-      });
-
-      const results = await agentsCollection.aggregate(pipeline).toArray();
-
-      // Transform results
-      const resolvedAgents = results.map((doc: any) => {
-        const agent = this.transformAgent(doc);
-
-        // If we have version data, merge it with agent
-        if (doc.version) {
-          const version = this.transformVersion(doc.version);
-          const {
-            id: _versionId,
-            agentId: _agentId,
-            versionNumber: _versionNumber,
-            changedFields: _changedFields,
-            changeMessage: _changeMessage,
-            createdAt: _createdAt,
-            ...snapshotConfig
-          } = version;
-
-          return {
-            ...agent,
-            ...snapshotConfig,
-          } as StorageResolvedAgentType;
-        }
-
-        // No versions exist - return thin record cast as resolved
-        return agent as StorageResolvedAgentType;
-      });
-
-      return {
-        agents: resolvedAgents,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: perPageInput !== false && offset + perPage < total,
-      };
-    } catch (error) {
-      if (error instanceof MastraError) {
-        throw error;
-      }
-      throw new MastraError(
-        {
-          id: createStorageErrorId('MONGODB', 'LIST_AGENTS_RESOLVED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -799,7 +654,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
-  async deleteVersionsByAgentId(agentId: string): Promise<void> {
+  async deleteVersionsByParentId(agentId: string): Promise<void> {
     try {
       const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
       await collection.deleteMany({ agentId });
