@@ -44,6 +44,7 @@ import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
+import { TrailingAssistantGuard } from '../processors/trailing-assistant-guard';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type {
   StorageCreateAgentInput,
@@ -562,13 +563,16 @@ export class Agent<
   ): Promise<InputProcessorOrWorkflow[]> {
     // Get configured input processors - use overrides if provided (from generate/stream options),
     // otherwise use agent constructor processors
-    const configuredProcessors = configuredProcessorOverrides
-      ? configuredProcessorOverrides
-      : this.#inputProcessors
-        ? typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
-          : this.#inputProcessors
-        : [];
+    const configuredProcessors = [
+      ...(configuredProcessorOverrides
+        ? configuredProcessorOverrides
+        : this.#inputProcessors
+          ? typeof this.#inputProcessors === 'function'
+            ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+            : this.#inputProcessors
+          : []),
+      new TrailingAssistantGuard(),
+    ];
 
     // Get memory input processors (with deduplication)
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
