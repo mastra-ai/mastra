@@ -4,7 +4,7 @@ import {
   AppendMessage,
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
-import { useState, ReactNode, useRef, useEffect } from 'react';
+import { useState, useMemo, ReactNode, useRef, useEffect } from 'react';
 import { RequestContext } from '@mastra/core/di';
 import { ChatProps } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
@@ -1200,10 +1200,27 @@ export function MastraRuntimeProvider({
 
   const { adapters, isReady } = useAdapters(agentId);
 
+  // Build activated cycle IDs synchronously from messages so the first render
+  // correctly shows buffering markers as activated (the useEffect-based context
+  // set wouldn't be populated until after the first render, causing a flash).
+  const allActivatedCycleIds = useMemo(() => {
+    const ids = new Set(activatedCycleIds);
+    for (const msg of messages) {
+      const parts = (msg as any).parts || [];
+      if (!Array.isArray(parts)) continue;
+      for (const part of parts) {
+        if (part?.type === 'data-om-activation' && part?.data?.cycleId) {
+          ids.add(part.data.cycleId);
+        }
+      }
+    }
+    return ids;
+  }, [messages, activatedCycleIds]);
+
   // Convert data-om-* parts to dynamic-tool format BEFORE toAssistantUIMessage
-  // Pass activatedCycleIds so buffering badges can be marked as activated
+  // Pass allActivatedCycleIds so buffering badges can be marked as activated
   const vnextmessages = messages.map(msg => {
-    const converted = convertOmPartsInMastraMessage(msg, activatedCycleIds);
+    const converted = convertOmPartsInMastraMessage(msg, allActivatedCycleIds);
     return toAssistantUIMessage(converted);
   });
 
