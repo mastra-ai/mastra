@@ -35,7 +35,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test:integration": "cd integration-tests && pnpm run test",
     "test:unit": "pnpm vitest run ./src/*",
