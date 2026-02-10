@@ -1290,8 +1290,10 @@ describe('Tracing Integration Tests', () => {
 
     const delayedMockModel = new MockLanguageModelV2({
       doStream: async () => {
-        // Simulate model processing delay (use microtask to avoid fake timer interference from other test files)
-        await Promise.resolve();
+        // Simulate model processing delay before first token.
+        // This must be a real delay (not a microtask) because the test asserts
+        // that the generation span duration exceeds 50ms.
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         return {
           stream: convertArrayToReadableStream([
