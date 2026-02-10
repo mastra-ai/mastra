@@ -56,36 +56,27 @@ export function setPKCECookie(verifier: string, state: string, isProduction: boo
  * @throws PKCEError if cookie is missing, expired, or malformed
  */
 export function parsePKCECookie(cookieHeader: string | null): PKCECookieData {
-  console.log('[auth-cloud] parsePKCECookie called, cookieHeader:', cookieHeader?.slice(0, 100));
-
   if (!cookieHeader) {
-    console.log('[auth-cloud] parsePKCECookie: no cookie header');
     throw PKCEError.missingVerifier();
   }
 
   const match = cookieHeader.match(new RegExp(`${PKCE_COOKIE_NAME}=([^;]+)`));
-  console.log('[auth-cloud] parsePKCECookie: looking for', PKCE_COOKIE_NAME, 'found:', !!match?.[1]);
 
   if (!match?.[1]) {
-    console.log('[auth-cloud] parsePKCECookie: cookie not found in header');
     throw PKCEError.missingVerifier();
   }
 
   let data: PKCECookieData;
   try {
     data = JSON.parse(decodeURIComponent(match[1])) as PKCECookieData;
-    console.log('[auth-cloud] parsePKCECookie: parsed data', { hasVerifier: !!data.verifier, hasState: !!data.state, expiresAt: data.expiresAt });
   } catch (e) {
-    console.log('[auth-cloud] parsePKCECookie: JSON parse failed', e);
     throw PKCEError.invalid(e instanceof Error ? e : undefined);
   }
 
   if (data.expiresAt < Date.now()) {
-    console.log('[auth-cloud] parsePKCECookie: cookie expired', { expiresAt: data.expiresAt, now: Date.now() });
     throw PKCEError.expired();
   }
 
-  console.log('[auth-cloud] parsePKCECookie: success');
   return data;
 }
 

@@ -117,33 +117,25 @@ export class MastraCloudAuthProvider
       // Get raw Request for cookie access
       const rawRequest = 'raw' in request ? request.raw : request;
       const cookieHeader = rawRequest.headers.get('cookie');
-      console.log('[auth-cloud] authenticateToken', { hasToken: !!token, hasCookie: !!cookieHeader });
 
       // Parse session token from cookie
       const sessionToken = parseSessionCookie(cookieHeader);
-      console.log('[auth-cloud] session cookie parsed', { hasSessionToken: !!sessionToken, sessionTokenPreview: sessionToken?.slice(0, 20) + '...' });
 
       if (sessionToken) {
         // Verify session token with Cloud API
-        console.log('[auth-cloud] verifying session token...');
         const { user, role } = await this.client.verifyToken(sessionToken);
-        console.log('[auth-cloud] session verified', { userId: user.id, role });
         return { ...user, role };
       }
 
       // Fall back to bearer token if no cookie
       if (token) {
-        console.log('[auth-cloud] verifying bearer token...');
         const { user, role } = await this.client.verifyToken(token);
-        console.log('[auth-cloud] bearer verified', { userId: user.id, role });
         return { ...user, role };
       }
 
-      console.log('[auth-cloud] no token or session found');
       return null;
-    } catch (err) {
+    } catch {
       // Per Phase 10 decision: return null on any error
-      console.log('[auth-cloud] authenticateToken error', err);
       return null;
     }
   }
@@ -232,7 +224,6 @@ export class MastraCloudAuthProvider
     // Get cookie header for PKCE validation, then clear
     const cookieHeader = this._lastCallbackCookieHeader;
     this._lastCallbackCookieHeader = null;
-    console.log('[auth-cloud] provider.handleCallback', { hasCode: !!code, hasState: !!state, hasCookieHeader: !!cookieHeader });
 
     // Exchange code for tokens and get user (includes /auth/verify call)
     const result = await this.client.handleCallback({
@@ -240,21 +231,17 @@ export class MastraCloudAuthProvider
       state,
       cookieHeader,
     });
-    console.log('[auth-cloud] client.handleCallback result', { userId: result.user?.id, hasToken: !!result.accessToken, cookieCount: result.cookies?.length });
 
     // Build session cookie
     const sessionCookie = this.client.setSessionCookie(result.accessToken);
-    console.log('[auth-cloud] session cookie created', { cookiePreview: sessionCookie?.slice(0, 50) + '...' });
 
-    const response = {
+    return {
       user: result.user, // Already has role from handleCallback
       tokens: {
         accessToken: result.accessToken,
       },
       cookies: [...result.cookies, sessionCookie],
     };
-    console.log('[auth-cloud] handleCallback returning', { userId: response.user?.id, totalCookies: response.cookies?.length });
-    return response;
   }
 
   /**

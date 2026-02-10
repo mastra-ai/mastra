@@ -85,7 +85,6 @@ export class MastraRBACCloud implements IRBACProvider<CloudUser> {
    */
   async getRoles(user: CloudUser): Promise<string[]> {
     // Role attached to user from verifyToken() call
-    console.log('[rbac-cloud] getRoles', { user, role: user.role });
     return user.role ? [user.role] : [];
   }
 
@@ -135,9 +134,7 @@ export class MastraRBACCloud implements IRBACProvider<CloudUser> {
    */
   async hasPermission(user: CloudUser, permission: string): Promise<boolean> {
     const permissions = await this.getPermissions(user);
-    const result = permissions.some(p => matchesPermission(p, permission));
-    console.log('[rbac-cloud] hasPermission', { permission, permissions, result });
-    return result;
+    return permissions.some(p => matchesPermission(p, permission));
   }
 
   /**

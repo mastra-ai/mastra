@@ -40,9 +40,7 @@ export function parseSessionCookie(cookieHeader: string | null): string | null {
     return null;
   }
 
-  console.log('[auth-cloud] parseSessionCookie looking for', SESSION_COOKIE_NAME, 'in', cookieHeader.slice(0, 100));
   const match = cookieHeader.match(new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`));
-  console.log('[auth-cloud] parseSessionCookie result', { found: !!match });
   return match?.[1] ?? null;
 }
 

@@ -109,58 +109,30 @@ export function getLoginUrl(options: LoginUrlOptions): LoginUrlResult {
 export async function handleCallback(options: CallbackOptions): Promise<CallbackResult> {
   const { projectId, cloudBaseUrl, redirectUri, code, state, cookieHeader } = options;
 
-  console.log('[auth-cloud] handleCallback called', { cloudBaseUrl, code: code?.slice(0, 10) + '...', state: state?.slice(0, 20) + '...', hasCookie: !!cookieHeader });
-
   // Parse PKCE cookie (throws PKCEError if missing/expired)
-  let pkceData;
-  try {
-    pkceData = parsePKCECookie(cookieHeader);
-    console.log('[auth-cloud] PKCE cookie parsed', { hasVerifier: !!pkceData.verifier, hasState: !!pkceData.state });
-  } catch (err) {
-    console.log('[auth-cloud] PKCE cookie parse FAILED', err);
-    throw err;
-  }
+  const pkceData = parsePKCECookie(cookieHeader);
 
   // Decode state parameter (throws AuthError if malformed)
-  console.log('[auth-cloud] Decoding state...');
-  let stateData;
-  try {
-    stateData = decodeState(state);
-    console.log('[auth-cloud] State decoded', { csrf: stateData.csrf?.slice(0, 10) + '...', returnTo: stateData.returnTo });
-  } catch (decodeError) {
-    console.log('[auth-cloud] State decode FAILED', decodeError);
-    throw decodeError;
-  }
+  const stateData = decodeState(state);
 
   // Validate CSRF token matches
-  console.log('[auth-cloud] Validating CSRF...', { stateCsrf: stateData.csrf?.slice(0, 10), pkceCsrf: pkceData.state?.slice(0, 10) });
   if (stateData.csrf !== pkceData.state) {
-    console.log('[auth-cloud] CSRF mismatch!', { stateCsrf: stateData.csrf, pkceCsrf: pkceData.state });
     throw AuthError.stateMismatch();
   }
-  console.log('[auth-cloud] CSRF validated');
 
   // Exchange code for tokens
-  console.log('[auth-cloud] Exchanging code for tokens...', { cloudBaseUrl, codeLength: code?.length, verifierLength: pkceData.verifier?.length, redirectUri });
-  let response;
-  try {
-    response = await fetchWithRetry(`${cloudBaseUrl}/auth/callback`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Project-ID': projectId,
-      },
-      body: JSON.stringify({
-        code,
-        redirect_uri: redirectUri,
-        code_verifier: pkceData.verifier,
-      }),
-    });
-    console.log('[auth-cloud] Token exchange response', { status: response.status, ok: response.ok });
-  } catch (fetchError) {
-    console.log('[auth-cloud] Token exchange fetch FAILED', fetchError);
-    throw fetchError;
-  }
+  const response = await fetchWithRetry(`${cloudBaseUrl}/auth/callback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Project-ID': projectId,
+    },
+    body: JSON.stringify({
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: pkceData.verifier,
+    }),
+  });
 
   // Handle error responses
   if (!response.ok) {
@@ -171,9 +143,8 @@ export async function handleCallback(options: CallbackOptions): Promise<Callback
       const errorBody = (await response.json()) as { code?: string; message?: string };
       cloudCode = errorBody.code;
       cloudMessage = errorBody.message;
-      console.log('[auth-cloud] Token exchange error response', { status: response.status, cloudCode, cloudMessage });
     } catch {
-      console.log('[auth-cloud] Token exchange error, could not parse body', { status: response.status });
+      // Could not parse error body
     }
 
     throw AuthError.tokenExchangeFailed({ cloudCode, cloudMessage });
@@ -185,27 +156,17 @@ export async function handleCallback(options: CallbackOptions): Promise<Callback
     token_type: string;
     expires_in: number;
   };
-  console.log('[auth-cloud] Token exchange success', { hasToken: !!body.access_token, expiresIn: body.expires_in });
 
   // Get user info from /auth/verify endpoint
-  console.log('[auth-cloud] Calling /auth/verify...');
-  let verifyResponse;
-  try {
-    verifyResponse = await fetchWithRetry(`${cloudBaseUrl}/auth/verify`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${body.access_token}`,
-        'X-Project-ID': projectId,
-      },
-    });
-    console.log('[auth-cloud] Verify response', { status: verifyResponse.status, ok: verifyResponse.ok });
-  } catch (verifyError) {
-    console.log('[auth-cloud] Verify fetch FAILED', verifyError);
-    throw verifyError;
-  }
+  const verifyResponse = await fetchWithRetry(`${cloudBaseUrl}/auth/verify`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${body.access_token}`,
+      'X-Project-ID': projectId,
+    },
+  });
 
   if (!verifyResponse.ok) {
-    console.log('[auth-cloud] Verify failed', { status: verifyResponse.status });
     throw AuthError.verificationFailed();
   }
 
@@ -217,7 +178,6 @@ export async function handleCallback(options: CallbackOptions): Promise<Callback
     avatar_url?: string;
     role: string;
   };
-  console.log('[auth-cloud] Verify success', { userId: verifyBody.sub, email: verifyBody.email, role: verifyBody.role });
 
   // Clear PKCE cookie (no longer needed)
   const clearCookie = clearPKCECookie();
