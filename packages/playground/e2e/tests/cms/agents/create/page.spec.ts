@@ -6,7 +6,7 @@ function uniqueAgentName(prefix = 'Test Agent') {
   return `${prefix} ${Date.now().toString(36)}`;
 }
 
-// Helper to fill identity form fields
+// Helper to fill identity sidebar fields (name, description, provider, model)
 async function fillIdentityFields(
   page: Page,
   options: {
@@ -14,7 +14,6 @@ async function fillIdentityFields(
     description?: string;
     provider?: string;
     model?: string;
-    instructions?: string;
   },
 ) {
   if (options.name !== undefined) {
@@ -42,15 +41,15 @@ async function fillIdentityFields(
     await modelCombobox.click();
     await page.getByRole('option', { name: options.model }).click();
   }
+}
 
-  if (options.instructions !== undefined) {
-    // Instructions uses a CodeMirror editor
-    const editor = page.locator('.cm-content');
-    await editor.click();
-    // Clear existing content with keyboard
-    await page.keyboard.press('Meta+a');
-    await page.keyboard.type(options.instructions);
-  }
+// Helper to fill an instruction block's content in the main area
+// The form defaults to one empty block, so `.cm-content` is always present
+async function fillInstructionBlock(page: Page, content: string, blockIndex = 0) {
+  const editor = page.locator('.cm-content').nth(blockIndex);
+  await editor.click();
+  await page.keyboard.press('Meta+a');
+  await page.keyboard.type(content);
 }
 
 // Helper to fill all required fields with valid data
@@ -59,8 +58,80 @@ async function fillRequiredFields(page: Page, agentName?: string) {
     name: agentName || uniqueAgentName(),
     provider: 'OpenAI',
     model: 'gpt-4o-mini',
-    instructions: 'You are a helpful assistant.',
   });
+  await fillInstructionBlock(page, 'You are a helpful assistant.');
+}
+
+// Helper to add a new instruction block
+async function addInstructionBlock(page: Page) {
+  const countBefore = await page.locator('.cm-content').count();
+  await page.getByRole('button', { name: 'Add Instruction block' }).click();
+  await expect(page.locator('.cm-content')).toHaveCount(countBefore + 1);
+}
+
+// Helper to delete an instruction block by index
+async function deleteInstructionBlock(page: Page, blockIndex: number) {
+  await page.getByRole('button', { name: 'Delete block' }).nth(blockIndex).click();
+}
+
+// Helper to navigate to the Variables tab
+async function navigateToVariablesTab(page: Page) {
+  await page.getByRole('tab', { name: 'Variables' }).click();
+}
+
+// Helper to add a variable with name and type
+async function addVariable(page: Page, { name, type }: { name: string; type: string }) {
+  await page.getByRole('button', { name: /Add variable/ }).click();
+  await page.getByPlaceholder('Variable name').last().fill(name);
+  const typeSelect = page.getByPlaceholder('Type').last();
+  await typeSelect.click();
+  await page.getByRole('option', { name: type, exact: true }).click();
+}
+
+// Helper to open Display Conditions on a specific block
+async function openDisplayConditions(page: Page, blockIndex: number) {
+  await page.getByText('Display Conditions').nth(blockIndex).click();
+}
+
+// Helper to configure a rule in the rule builder
+async function configureRule(
+  page: Page,
+  {
+    field,
+    operator,
+    value,
+    isFirstRule = true,
+  }: { field: string; operator?: string; value: string; isFirstRule?: boolean },
+) {
+  if (isFirstRule) {
+    await page.getByRole('button', { name: 'Add conditional rule' }).click();
+  } else {
+    await page.getByRole('button', { name: /^Add rule$/ }).click();
+  }
+
+  // Select field
+  const fieldSelect = page.locator('[role="combobox"]').filter({ hasText: /Select field/ }).last();
+  await fieldSelect.click();
+  await page.getByRole('option', { name: field }).click();
+
+  // Select operator if non-default
+  if (operator) {
+    const operatorSelect = page.locator('[role="combobox"]').filter({ hasText: 'equals' }).last();
+    await operatorSelect.click();
+    await page.getByRole('option', { name: operator }).click();
+  }
+
+  // Fill value
+  await page.getByPlaceholder('Enter value').last().fill(value);
+}
+
+// Helper to navigate to the edit page after agent creation
+async function navigateToEditPage(page: Page) {
+  const url = page.url();
+  const match = url.match(/\/agents\/([a-z0-9-]+)\/chat/);
+  const agentId = match?.[1];
+  await page.goto(`/cms/agents/${agentId}/edit`);
+  await expect(page.getByText(/Edit agent:/)).toBeVisible({ timeout: 10000 });
 }
 
 test.afterEach(async () => {
@@ -87,6 +158,14 @@ test.describe('Page Structure & Initial State', () => {
     await expect(capabilitiesTab).toBeVisible();
   });
 
+  // Behavior: Variables tab is visible alongside Identity and Capabilities
+  test('displays Variables tab', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const variablesTab = page.getByRole('tab', { name: 'Variables' });
+    await expect(variablesTab).toBeVisible();
+  });
+
   // Behavior: Create agent button is visible and accessible
   test('displays Create agent button', async ({ page }) => {
     await page.goto('/cms/agents/create');
@@ -108,8 +187,8 @@ test.describe('Required Field Validation', () => {
     await fillIdentityFields(page, {
       provider: 'OpenAI',
       model: 'gpt-4o-mini',
-      instructions: 'Test instructions',
     });
+    await fillInstructionBlock(page, 'Test instructions');
 
     await page.getByRole('button', { name: 'Create agent' }).click();
 
@@ -117,8 +196,9 @@ test.describe('Required Field Validation', () => {
     await expect(page.getByText('Name is required')).toBeVisible();
   });
 
-  // Behavior: Form validates that instructions are required before submission
-  test('shows validation error when instructions are empty', async ({ page }) => {
+  // Behavior: Form validates that instruction blocks must have content before submission
+  test('shows validation error when instruction blocks are empty', async ({ page }) => {
+    // Fill identity fields but leave instruction blocks empty (default has one empty block)
     await fillIdentityFields(page, {
       name: uniqueAgentName(),
       provider: 'OpenAI',
@@ -127,16 +207,16 @@ test.describe('Required Field Validation', () => {
 
     await page.getByRole('button', { name: 'Create agent' }).click();
 
-    // Should show validation error for instructions
-    await expect(page.getByText('Instructions are required')).toBeVisible();
+    // Should show error toast since instruction blocks are empty
+    await expect(page.getByText('Please fill in all required fields')).toBeVisible();
   });
 
   // Behavior: Form validates that provider is required before submission
   test('shows validation error when provider is not selected', async ({ page }) => {
     await fillIdentityFields(page, {
       name: uniqueAgentName(),
-      instructions: 'Test instructions',
     });
+    await fillInstructionBlock(page, 'Test instructions');
 
     await page.getByRole('button', { name: 'Create agent' }).click();
 
@@ -152,8 +232,8 @@ test.describe('Required Field Validation', () => {
     await fillIdentityFields(page, {
       name: uniqueAgentName(),
       provider: 'OpenAI',
-      instructions: 'Test instructions',
     });
+    await fillInstructionBlock(page, 'Test instructions');
 
     await page.getByRole('button', { name: 'Create agent' }).click();
 
@@ -244,8 +324,8 @@ test.describe('Identity Tab Configuration', () => {
       description,
       provider: 'OpenAI',
       model: 'gpt-4o-mini',
-      instructions: 'You are helpful.',
     });
+    await fillInstructionBlock(page, 'You are helpful.');
 
     await page.getByRole('button', { name: 'Create agent' }).click();
     await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
@@ -526,6 +606,204 @@ test.describe('Form Reset After Creation', () => {
   });
 });
 
+test.describe('Instruction Blocks Management', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/cms/agents/create');
+  });
+
+  // Behavior: Page starts with one instruction block by default
+  test('displays one instruction block by default', async ({ page }) => {
+    await expect(page.locator('.cm-content')).toHaveCount(1);
+  });
+
+  // Behavior: Clicking "Add Instruction block" adds a second block
+  test('adds a second instruction block', async ({ page }) => {
+    await addInstructionBlock(page);
+    await expect(page.locator('.cm-content')).toHaveCount(2);
+  });
+
+  // Behavior: Multiple blocks are persisted and visible on the edit page after creation
+  test('creates agent with multiple instruction blocks and verifies on edit page', async ({ page }) => {
+    const agentName = uniqueAgentName('Multi Block');
+
+    await fillIdentityFields(page, {
+      name: agentName,
+      provider: 'OpenAI',
+      model: 'gpt-4o-mini',
+    });
+
+    await fillInstructionBlock(page, 'You are a helpful assistant.', 0);
+    await addInstructionBlock(page);
+    await fillInstructionBlock(page, 'Always respond in JSON format.', 1);
+
+    await page.getByRole('button', { name: 'Create agent' }).click();
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
+
+    // Navigate to edit page and verify both blocks
+    await navigateToEditPage(page);
+    await expect(page.locator('.cm-content')).toHaveCount(2);
+    await expect(page.locator('.cm-content').nth(0)).toContainText('You are a helpful assistant.');
+    await expect(page.locator('.cm-content').nth(1)).toContainText('Always respond in JSON format.');
+  });
+
+  // Behavior: Deleting a block removes it from the form
+  test('deletes an instruction block', async ({ page }) => {
+    await addInstructionBlock(page);
+    await expect(page.locator('.cm-content')).toHaveCount(2);
+
+    await deleteInstructionBlock(page, 0);
+    await expect(page.locator('.cm-content')).toHaveCount(1);
+  });
+
+  // Behavior: After deleting a block, remaining content persists through creation
+  test('creates agent after deleting a block', async ({ page }) => {
+    const agentName = uniqueAgentName('Delete Block');
+
+    await fillIdentityFields(page, {
+      name: agentName,
+      provider: 'OpenAI',
+      model: 'gpt-4o-mini',
+    });
+
+    await fillInstructionBlock(page, 'Block to delete', 0);
+    await addInstructionBlock(page);
+    await fillInstructionBlock(page, 'Block to keep', 1);
+
+    // Delete the first block
+    await deleteInstructionBlock(page, 0);
+    await expect(page.locator('.cm-content')).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'Create agent' }).click();
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
+
+    // Verify the remaining block content in the overview
+    const systemPromptSection = page.locator('h3:has-text("System Prompt")').locator('..');
+    await expect(systemPromptSection.getByText('Block to keep')).toBeVisible({ timeout: 10000 });
+  });
+});
+
+test.describe('Variables Tab', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/cms/agents/create');
+  });
+
+  // Behavior: Variables tab shows "Add variable" button
+  test('displays Add variable button', async ({ page }) => {
+    await navigateToVariablesTab(page);
+    await expect(page.getByRole('button', { name: /Add variable/ })).toBeVisible();
+  });
+
+  // Behavior: Can add a variable with a name and type
+  test('adds a variable with name and type', async ({ page }) => {
+    await navigateToVariablesTab(page);
+    await addVariable(page, { name: 'status', type: 'String' });
+
+    // Verify the variable name input has the entered value
+    await expect(page.getByPlaceholder('Variable name').last()).toHaveValue('status');
+  });
+
+  // Behavior: Display Conditions appear only when variables are defined
+  test('shows Display Conditions when variables are defined', async ({ page }) => {
+    // Initially no Display Conditions (no variables)
+    await expect(page.getByText('Display Conditions')).toHaveCount(0);
+
+    // Add a variable
+    await navigateToVariablesTab(page);
+    await addVariable(page, { name: 'status', type: 'String' });
+
+    // Switch back to Identity tab
+    await page.getByRole('tab', { name: 'Identity' }).click();
+
+    // Display Conditions should now be visible
+    await expect(page.getByText('Display Conditions')).toBeVisible();
+  });
+});
+
+test.describe('Display Conditions & Rule Builder', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    // Add a variable so Display Conditions appear
+    await navigateToVariablesTab(page);
+    await addVariable(page, { name: 'status', type: 'String' });
+    await page.getByRole('tab', { name: 'Identity' }).click();
+  });
+
+  // Behavior: Opening Display Conditions shows the empty rule builder
+  test('opens Display Conditions and shows empty builder', async ({ page }) => {
+    await openDisplayConditions(page, 0);
+    await expect(page.getByRole('button', { name: 'Add conditional rule' })).toBeVisible();
+  });
+
+  // Behavior: Adding a conditional rule with field, operator, and value shows rule count badge
+  test('adds a conditional rule with field, operator, value', async ({ page }) => {
+    await openDisplayConditions(page, 0);
+    await configureRule(page, { field: 'status', value: 'active' });
+
+    // Verify rule count badge
+    await expect(page.getByText('(1 rule)')).toBeVisible();
+  });
+
+  // Behavior: Multiple rules can be added and AND/OR toggled
+  test('adds multiple rules and toggles AND/OR', async ({ page }) => {
+    // Add a second variable for the second rule
+    await navigateToVariablesTab(page);
+    await addVariable(page, { name: 'priority', type: 'String' });
+    await page.getByRole('tab', { name: 'Identity' }).click();
+
+    await openDisplayConditions(page, 0);
+
+    // Add first rule
+    await configureRule(page, { field: 'status', value: 'active' });
+
+    // Add second rule
+    await configureRule(page, { field: 'priority', value: 'high', isFirstRule: false });
+
+    // Verify 2 rules badge
+    await expect(page.getByText('(2 rules)')).toBeVisible();
+
+    // Toggle AND -> OR (click the operator button between rules)
+    const operatorToggle = page.getByRole('button', { name: /^and$/ });
+    await operatorToggle.click();
+    await expect(page.getByRole('button', { name: /^or$/ })).toBeVisible();
+  });
+
+  // Behavior: Display conditions are persisted after agent creation and visible on edit page
+  test('creates agent with display conditions and verifies on edit page', async ({ page }) => {
+    const agentName = uniqueAgentName('Rules Test');
+
+    await fillIdentityFields(page, {
+      name: agentName,
+      provider: 'OpenAI',
+      model: 'gpt-4o-mini',
+    });
+    await fillInstructionBlock(page, 'You are a helpful assistant.');
+
+    // Open Display Conditions and add a rule
+    await openDisplayConditions(page, 0);
+    await configureRule(page, { field: 'status', value: 'active' });
+    await expect(page.getByText('(1 rule)')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Create agent' }).click();
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
+
+    // Navigate to edit page and verify rule persisted
+    await navigateToEditPage(page);
+    await expect(page.getByText('(1 rule)')).toBeVisible({ timeout: 10000 });
+  });
+
+  // Behavior: Removing a conditional rule updates the count badge
+  test('removes a conditional rule', async ({ page }) => {
+    await openDisplayConditions(page, 0);
+    await configureRule(page, { field: 'status', value: 'active' });
+    await expect(page.getByText('(1 rule)')).toBeVisible();
+
+    // Remove the rule
+    await page.getByRole('button', { name: 'Remove rule' }).click();
+    await expect(page.getByText('(1 rule)')).toHaveCount(0);
+  });
+});
+
 test.describe('Full Agent Creation Flow', () => {
   /**
    * FEATURE: Agent Creation with All Capabilities
@@ -545,8 +823,24 @@ test.describe('Full Agent Creation Flow', () => {
       description: 'A comprehensive test agent',
       provider: 'OpenAI',
       model: 'gpt-4o-mini',
-      instructions: 'You are a comprehensive test assistant with various capabilities.',
     });
+
+    // Fill first instruction block content in the main area
+    await fillInstructionBlock(page, 'You are a comprehensive test assistant with various capabilities.');
+
+    // Add a second instruction block
+    await addInstructionBlock(page);
+    await fillInstructionBlock(page, 'Always respond with detailed explanations.', 1);
+
+    // Add a variable for display conditions
+    await navigateToVariablesTab(page);
+    await addVariable(page, { name: 'userRole', type: 'String' });
+    await page.getByRole('tab', { name: 'Identity' }).click();
+
+    // Open Display Conditions on the first block and add a rule
+    await openDisplayConditions(page, 0);
+    await configureRule(page, { field: 'userRole', value: 'admin' });
+    await expect(page.getByText('(1 rule)')).toBeVisible();
 
     // Navigate to Capabilities tab
     await page.getByRole('tab', { name: 'Capabilities' }).click();
@@ -626,10 +920,28 @@ test.describe('Full Agent Creation Flow', () => {
     const scorersSection = page.locator('h3:has-text("Scorers")').locator('..');
     await expect(scorersSection.getByText(/Response Quality/i)).toBeVisible({ timeout: 10000 });
 
-    // 7. System Prompt: Verify the instructions are displayed
+    // 7. System Prompt: Verify the instructions are displayed (both blocks)
     const systemPromptSection = page.locator('h3:has-text("System Prompt")').locator('..');
     await expect(systemPromptSection.getByText('You are a comprehensive test assistant')).toBeVisible({
       timeout: 10000,
     });
+    await expect(systemPromptSection.getByText('Always respond with detailed explanations')).toBeVisible({
+      timeout: 10000,
+    });
+
+    // ========================================
+    // VERIFY BLOCKS AND RULES ON EDIT PAGE
+    // ========================================
+    await navigateToEditPage(page);
+
+    // 8. Verify 2 instruction blocks exist on the edit page
+    await expect(page.locator('.cm-content')).toHaveCount(2);
+    await expect(page.locator('.cm-content').nth(0)).toContainText(
+      'You are a comprehensive test assistant with various capabilities.',
+    );
+    await expect(page.locator('.cm-content').nth(1)).toContainText('Always respond with detailed explanations.');
+
+    // 9. Verify Display Conditions on the first block show the persisted rule
+    await expect(page.getByText('(1 rule)')).toBeVisible({ timeout: 10000 });
   });
 });
