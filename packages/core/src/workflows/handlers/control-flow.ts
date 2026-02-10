@@ -911,9 +911,15 @@ export async function executeForeach(
         };
 
         if (execResults.status === 'suspended') {
-          foreachIndexObj[k] = execResults;
+          // Guard: only record if not already set by a concurrent worker
+          if (!foreachIndexObj[k]) {
+            foreachIndexObj[k] = execResults;
+          }
         } else {
-          errorResult = result;
+          // Guard: preserve the first observed failure across concurrent workers
+          if (!errorResult) {
+            errorResult = result;
+          }
         }
         // Remove all waiting tasks; in-flight ones will finish naturally.
         // Subtract waiting tasks from inFlight since they'll never call cb().
@@ -929,8 +935,20 @@ export async function executeForeach(
       }
 
       prevForeachOutput[k] = { ...result, suspendPayload: {} } as any;
-    } catch {
-      // Unexpected error – ensure completion still resolves
+    } catch (err) {
+      // Surface unexpected errors (e.g. from applyMutableContext or Object.assign)
+      // so the queue drains with a visible failure instead of silently swallowing.
+      if (!errorResult) {
+        errorResult = {
+          status: 'failed',
+          error: err instanceof Error ? err.message : String(err),
+          payload: undefined,
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        } as unknown as StepResult<any, any, any, any>;
+      }
+      inFlight -= queue.length();
+      queue.kill();
     }
 
     inFlight--;
