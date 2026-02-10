@@ -83,6 +83,59 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
  */
 const OM_TOOL_NAME = 'mastra-memory-om-observation';
 
+type OmCycleParts = {
+  start?: any;
+  end?: any;
+  failed?: any;
+  bufferingStart?: any;
+  bufferingEnd?: any;
+  bufferingFailed?: any;
+  activation?: any;
+};
+
+/**
+ * Index data-om-* parts by cycleId from an array of parts.
+ * Merges into an existing map so it can be called across multiple messages.
+ */
+const indexOmPartsByCycleId = (parts: any[], target: Map<string, OmCycleParts>) => {
+  for (const part of parts) {
+    const cycleId = (part as any).data?.cycleId;
+    if (!cycleId) continue;
+
+    const typeToKey: Record<string, keyof OmCycleParts> = {
+      'data-om-observation-start': 'start',
+      'data-om-observation-end': 'end',
+      'data-om-observation-failed': 'failed',
+      'data-om-buffering-start': 'bufferingStart',
+      'data-om-buffering-end': 'bufferingEnd',
+      'data-om-buffering-failed': 'bufferingFailed',
+      'data-om-activation': 'activation',
+    };
+
+    const key = typeToKey[part.type];
+    if (key) {
+      const existing = target.get(cycleId) || {};
+      existing[key] = part;
+      target.set(cycleId, existing);
+    }
+  }
+  return target;
+};
+
+/**
+ * Build a global map of all OM cycle parts across all messages.
+ * This gives each per-message converter the full picture of a cycle's state
+ * (e.g., buffering-start on message A, activation on message B).
+ */
+const buildGlobalOmPartsByCycleId = (messages: MastraUIMessage[]) => {
+  const map = new Map<string, OmCycleParts>();
+  for (const msg of messages) {
+    if (!msg || !Array.isArray(msg.parts)) continue;
+    indexOmPartsByCycleId(msg.parts, map);
+  }
+  return map;
+};
+
 /**
  * Combines data-om-* parts in a message into single tool calls by cycleId.
  * - start marker creates a tool call in 'input-available' (loading) state
@@ -92,82 +145,22 @@ const OM_TOOL_NAME = 'mastra-memory-om-observation';
  *
  * Note: cycleId is unique per observation cycle, while recordId is constant for the entire
  * memory record. Using cycleId ensures each observation cycle gets its own UI element.
+ *
+ * @param globalOmParts - Pre-built map of all OM cycle parts across ALL messages.
+ *   This allows the converter to know the full state of a cycle even when its parts
+ *   span multiple messages (e.g., buffering-start on msg A, activation on msg B).
  */
 const convertOmPartsInMastraMessage = (
   message: MastraUIMessage,
-  activatedCycleIds?: Set<string>,
+  globalOmParts: Map<string, OmCycleParts>,
 ): MastraUIMessage => {
   if (!message || !Array.isArray(message.parts)) {
     return message;
   }
 
-  // First pass: collect all OM parts grouped by cycleId
-  // Supports both blocking observation/reflection parts, async buffering parts, and activation parts
-  const omPartsByCycleId = new Map<
-    string,
-    { start?: any; end?: any; failed?: any; bufferingStart?: any; bufferingEnd?: any; bufferingFailed?: any; activation?: any }
-  >();
-
-  for (const part of message.parts) {
-    // Blocking observation/reflection markers
-    if (part.type === 'data-om-observation-start') {
-      const cycleId = part.data?.cycleId;
-      if (cycleId) {
-        const existing = omPartsByCycleId.get(cycleId) || {};
-        existing.start = part;
-        omPartsByCycleId.set(cycleId, existing);
-      }
-    } else if (part.type === 'data-om-observation-end') {
-      const cycleId = part.data?.cycleId;
-      if (cycleId) {
-        const existing = omPartsByCycleId.get(cycleId) || {};
-        existing.end = part;
-        omPartsByCycleId.set(cycleId, existing);
-      }
-    } else if (part.type === 'data-om-observation-failed') {
-      const cycleId = part.data?.cycleId;
-      if (cycleId) {
-        const existing = omPartsByCycleId.get(cycleId) || {};
-        existing.failed = part;
-        omPartsByCycleId.set(cycleId, existing);
-      }
-    }
-    // Async buffering markers
-    else if (part.type === 'data-om-buffering-start') {
-      const cycleId = part.data?.cycleId;
-      if (cycleId) {
-        const existing = omPartsByCycleId.get(cycleId) || {};
-        existing.bufferingStart = part;
-        omPartsByCycleId.set(cycleId, existing);
-      }
-    } else if (part.type === 'data-om-buffering-end') {
-      const cycleId = part.data?.cycleId;
-      if (cycleId) {
-        const existing = omPartsByCycleId.get(cycleId) || {};
-        existing.bufferingEnd = part;
-        omPartsByCycleId.set(cycleId, existing);
-      }
-    } else if (part.type === 'data-om-buffering-failed') {
-      const cycleId = part.data?.cycleId;
-      if (cycleId) {
-        const existing = omPartsByCycleId.get(cycleId) || {};
-        existing.bufferingFailed = part;
-        omPartsByCycleId.set(cycleId, existing);
-      }
-    }
-    // Activation markers (single marker, no start/end pair)
-    else if (part.type === 'data-om-activation') {
-      const cycleId = part.data?.cycleId;
-      if (cycleId) {
-        const existing = omPartsByCycleId.get(cycleId) || {};
-        existing.activation = part;
-        omPartsByCycleId.set(cycleId, existing);
-      }
-    }
-  }
-
-  // Second pass: build new parts array, replacing start markers with merged tool calls
-  // and removing end/failed markers (they're merged into the start position)
+  // Build new parts array, replacing the first OM part for each cycleId with a merged tool call
+  // and skipping subsequent parts for the same cycleId (they're merged into the first position).
+  // Uses the global map to look up the full cycle state even when parts span multiple messages.
   const convertedParts: any[] = [];
   const processedCycleIds = new Set<string>();
 
@@ -177,102 +170,44 @@ const convertOmPartsInMastraMessage = (
 
     const cycleId = (part as any).data?.cycleId;
 
-    // Handle blocking observation/reflection markers
-    if (part.type === 'data-om-observation-start' && cycleId && !processedCycleIds.has(cycleId)) {
-      // Replace start marker with merged tool call
-      const parts = omPartsByCycleId.get(cycleId)!;
-      const startData = parts.start?.data || {};
-      const endData = parts.end?.data || {};
-      const failedData = parts.failed?.data || {};
-
-      const isFailed = !!parts.failed;
-      const isComplete = !!parts.end;
-      const isDisconnected = isComplete && !!endData.disconnectedAt;
-      const isLoading = !isFailed && !isComplete;
-
-      const mergedData = {
-        ...startData,
-        ...(isComplete ? endData : {}),
-        ...(isFailed ? failedData : {}),
-        _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : isComplete ? 'complete' : 'loading',
-      };
-
-      convertedParts.push({
-        type: 'dynamic-tool',
-        toolCallId: `om-observation-${cycleId}`,
-        toolName: OM_TOOL_NAME,
-        input: mergedData,
-        output: isLoading
-          ? undefined
-          : {
-              status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
-              omData: mergedData,
-            },
-        state: isLoading ? 'input-available' : 'output-available',
-      });
-
-      processedCycleIds.add(cycleId);
+    // Skip OM parts for cycles we've already rendered a badge for in this message
+    if (cycleId && processedCycleIds.has(cycleId)) {
+      // Still let non-OM parts through (they won't have a cycleId match in the type check below)
+      const isOmPart = part.type?.startsWith('data-om-');
+      if (isOmPart) continue;
     }
-    // Handle async buffering markers
-    else if (part.type === 'data-om-buffering-start' && cycleId && !processedCycleIds.has(cycleId)) {
-      // Replace buffering start marker with merged tool call
-      const parts = omPartsByCycleId.get(cycleId)!;
-      const startData = parts.bufferingStart?.data || {};
-      const endData = parts.bufferingEnd?.data || {};
-      const failedData = parts.bufferingFailed?.data || {};
-      const activationData = parts.activation?.data || {};
 
-      const isFailed = !!parts.bufferingFailed;
-      // Check both local activation part and global activatedCycleIds set
-      const isActivated = !!parts.activation || activatedCycleIds?.has(cycleId);
-      const isComplete = !!parts.bufferingEnd;
-      const isLoading = !isFailed && !isActivated && !isComplete;
+    const isOmPartWithCycleId = cycleId && part.type?.startsWith('data-om-');
 
-      const mergedData: Record<string, unknown> = {
-        ...startData,
-        ...(isComplete ? endData : {}),
-        ...(isFailed ? failedData : {}),
-        ...(isActivated ? activationData : {}),
-        _state: isFailed ? 'buffering-failed' : isActivated ? 'activated' : isComplete ? 'buffering-complete' : 'buffering',
-      };
-      // Map activation fields to badge fields so they display correctly on reload
-      // (activation markers use tokensActivated, but the badge reads tokensObserved)
-      if (!mergedData.tokensObserved && mergedData.tokensActivated) {
-        mergedData.tokensObserved = mergedData.tokensActivated;
+    if (isOmPartWithCycleId) {
+      // Look up full cycle state from the global map (spans all messages)
+      const cycle = globalOmParts.get(cycleId);
+      if (!cycle) {
+        // Unknown cycle, keep part as-is
+        convertedParts.push(part);
+        continue;
       }
 
-      convertedParts.push({
-        type: 'dynamic-tool',
-        toolCallId: `om-buffering-${cycleId}`,
-        toolName: OM_TOOL_NAME,
-        input: mergedData,
-        output: isLoading
-          ? undefined
-          : {
-              status: isFailed ? 'buffering-failed' : isActivated ? 'activated' : 'buffering-complete',
-              omData: mergedData,
-            },
-        state: isLoading ? 'input-available' : 'output-available',
-      });
+      // Determine the cycle category and render accordingly
+      const isBlocking = !!cycle.start || !!cycle.end || !!cycle.failed;
+      const isBuffering = !!cycle.bufferingStart || !!cycle.bufferingEnd || !!cycle.bufferingFailed || !!cycle.activation;
 
-      processedCycleIds.add(cycleId);
-    } else if (
-      (part.type === 'data-om-observation-end' || part.type === 'data-om-observation-failed') &&
-      cycleId &&
-      !processedCycleIds.has(cycleId)
-    ) {
-      // Handle end/failed markers that don't have a corresponding start (e.g., disconnected state)
-      const parts = omPartsByCycleId.get(cycleId);
-      if (parts && !parts.start) {
-        // No start marker - this is likely a disconnected observation
-        const endData = parts.end?.data || {};
-        const failedData = parts.failed?.data || {};
-        const isFailed = !!parts.failed;
-        const isDisconnected = !!endData.disconnectedAt;
+      if (isBlocking) {
+        // Blocking observation/reflection markers
+        const startData = cycle.start?.data || {};
+        const endData = cycle.end?.data || {};
+        const failedData = cycle.failed?.data || {};
+
+        const isFailed = !!cycle.failed;
+        const isComplete = !!cycle.end;
+        const isDisconnected = isComplete && !!endData.disconnectedAt;
+        const isLoading = !isFailed && !isComplete;
 
         const mergedData = {
-          ...(parts.end ? endData : failedData),
-          _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
+          ...startData,
+          ...(isComplete ? endData : {}),
+          ...(isFailed ? failedData : {}),
+          _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : isComplete ? 'complete' : 'loading',
         };
 
         convertedParts.push({
@@ -280,37 +215,35 @@ const convertOmPartsInMastraMessage = (
           toolCallId: `om-observation-${cycleId}`,
           toolName: OM_TOOL_NAME,
           input: mergedData,
-          output: {
-            status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
-            omData: mergedData,
-          },
-          state: 'output-available',
+          output: isLoading
+            ? undefined
+            : {
+                status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
+                omData: mergedData,
+              },
+          state: isLoading ? 'input-available' : 'output-available',
         });
+      } else if (isBuffering) {
+        // Async buffering markers
+        const startData = cycle.bufferingStart?.data || {};
+        const endData = cycle.bufferingEnd?.data || {};
+        const failedData = cycle.bufferingFailed?.data || {};
+        const activationData = cycle.activation?.data || {};
 
-        processedCycleIds.add(cycleId);
-      }
-      // Skip if already processed or has a start marker (will be merged there)
-      continue;
-    } else if (
-      (part.type === 'data-om-buffering-end' || part.type === 'data-om-buffering-failed') &&
-      cycleId &&
-      !processedCycleIds.has(cycleId)
-    ) {
-      // Handle buffering end/failed markers without corresponding start
-      const parts = omPartsByCycleId.get(cycleId);
-      if (parts && !parts.bufferingStart) {
-        const endData = parts.bufferingEnd?.data || {};
-        const failedData = parts.bufferingFailed?.data || {};
-        const activationData = parts.activation?.data || {};
-        const isFailed = !!parts.bufferingFailed;
-        // Check both local activation part and global activatedCycleIds set
-        const isActivated = !!parts.activation || activatedCycleIds?.has(cycleId);
+        const isFailed = !!cycle.bufferingFailed;
+        const isActivated = !!cycle.activation;
+        const isComplete = !!cycle.bufferingEnd;
+        const isLoading = !isFailed && !isActivated && !isComplete;
 
         const mergedData: Record<string, unknown> = {
-          ...(parts.bufferingEnd ? endData : failedData),
+          ...startData,
+          ...(isComplete ? endData : {}),
+          ...(isFailed ? failedData : {}),
           ...(isActivated ? activationData : {}),
-          _state: isFailed ? 'buffering-failed' : isActivated ? 'activated' : 'buffering-complete',
+          _state: isFailed ? 'buffering-failed' : isActivated ? 'activated' : isComplete ? 'buffering-complete' : 'buffering',
         };
+        // Map activation fields to badge fields so they display correctly on reload
+        // (activation markers use tokensActivated, but the badge reads tokensObserved)
         if (!mergedData.tokensObserved && mergedData.tokensActivated) {
           mergedData.tokensObserved = mergedData.tokensActivated;
         }
@@ -320,46 +253,17 @@ const convertOmPartsInMastraMessage = (
           toolCallId: `om-buffering-${cycleId}`,
           toolName: OM_TOOL_NAME,
           input: mergedData,
-          output: {
-            status: isFailed ? 'buffering-failed' : isActivated ? 'activated' : 'buffering-complete',
-            omData: mergedData,
-          },
-          state: 'output-available',
+          output: isLoading
+            ? undefined
+            : {
+                status: isFailed ? 'buffering-failed' : isActivated ? 'activated' : 'buffering-complete',
+                omData: mergedData,
+              },
+          state: isLoading ? 'input-available' : 'output-available',
         });
-
-        processedCycleIds.add(cycleId);
       }
-      continue;
-    } else if (part.type === 'data-om-activation' && cycleId && !processedCycleIds.has(cycleId)) {
-      // Handle activation-only markers (e.g., on reload where buffering start/end weren't persisted)
-      const parts = omPartsByCycleId.get(cycleId);
-      if (parts) {
-        const activationData = parts.activation?.data || {};
 
-        const mergedData: Record<string, unknown> = {
-          ...activationData,
-          _state: 'activated',
-        };
-        // Map activation fields to badge fields
-        if (!mergedData.tokensObserved && mergedData.tokensActivated) {
-          mergedData.tokensObserved = mergedData.tokensActivated;
-        }
-
-        convertedParts.push({
-          type: 'dynamic-tool',
-          toolCallId: `om-buffering-${cycleId}`,
-          toolName: OM_TOOL_NAME,
-          input: mergedData,
-          output: {
-            status: 'activated',
-            omData: mergedData,
-          },
-          state: 'output-available',
-        });
-
-        processedCycleIds.add(cycleId);
-      }
-      continue;
+      processedCycleIds.add(cycleId);
     } else {
       // Keep non-OM parts as-is
       convertedParts.push(part);
@@ -514,7 +418,6 @@ export function MastraRuntimeProvider({
     setIsReflectingFromStream,
     signalObservationsUpdated,
     setStreamProgress,
-    activatedCycleIds,
     markCycleIdActivated,
   } = useObservationalMemoryContext();
 
@@ -1241,27 +1144,14 @@ export function MastraRuntimeProvider({
 
   const { adapters, isReady } = useAdapters(agentId);
 
-  // Build activated cycle IDs synchronously from messages so the first render
-  // correctly shows buffering markers as activated (the useEffect-based context
-  // set wouldn't be populated until after the first render, causing a flash).
-  const allActivatedCycleIds = useMemo(() => {
-    const ids = new Set(activatedCycleIds);
-    for (const msg of messages) {
-      const parts = (msg as any).parts || [];
-      if (!Array.isArray(parts)) continue;
-      for (const part of parts) {
-        if (part?.type === 'data-om-activation' && part?.data?.cycleId) {
-          ids.add(part.data.cycleId);
-        }
-      }
-    }
-    return ids;
-  }, [messages, activatedCycleIds]);
+  // Build a global index of all OM cycle parts across all messages synchronously.
+  // This gives each per-message converter the full picture of a cycle's state even when
+  // parts are spread across messages (e.g., buffering-start on msg A, activation on msg B).
+  const globalOmParts = useMemo(() => buildGlobalOmPartsByCycleId(messages), [messages]);
 
   // Convert data-om-* parts to dynamic-tool format BEFORE toAssistantUIMessage
-  // Pass allActivatedCycleIds so buffering badges can be marked as activated
   const vnextmessages = messages.map(msg => {
-    const converted = convertOmPartsInMastraMessage(msg, allActivatedCycleIds);
+    const converted = convertOmPartsInMastraMessage(msg, globalOmParts);
     return toAssistantUIMessage(converted);
   });
 
