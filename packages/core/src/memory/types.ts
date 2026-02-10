@@ -474,7 +474,7 @@ export interface ObservationalMemoryObservationConfig {
    *
    * Requires `bufferTokens` to also be set.
    *
-   * @default 1 (activate all buffered observations)
+   * @default 0.8 (activate 80% of buffered observations, keeping 20% in reserve)
    * @example
    * ```ts
    * // Activate 70% of buffered observations, keep 30% in reserve
@@ -500,8 +500,10 @@ export interface ObservationalMemoryObservationConfig {
    * - An **absolute token count** (≥ 2): must be greater than `messageTokens`.
    *   e.g. `blockAfter: 80_000` → blocks at 80,000 tokens.
    *
-   * Only relevant when `bufferTokens` is set.
-   * If not set, synchronous observation is never used when async buffering is enabled.
+   * Only relevant when `bufferTokens` is set. When `bufferTokens` is not set,
+   * synchronous observation is used directly at `messageTokens` and this setting has no effect.
+   *
+   * @default 1.2 (120% of `messageTokens`) when `bufferTokens` is set.
    *
    * @example
    * ```ts
@@ -580,8 +582,10 @@ export interface ObservationalMemoryReflectionConfig {
    * - An **absolute token count** (≥ 2): must be greater than `observationTokens`.
    *   e.g. `blockAfter: 50_000` → blocks at 50,000 tokens.
    *
-   * Only relevant when `bufferActivation` is set.
-   * If not set, synchronous reflection is never used when async reflection is enabled.
+   * Only relevant when `bufferActivation` is set. When `bufferActivation` is not set,
+   * synchronous reflection is used directly at `observationTokens` and this setting has no effect.
+   *
+   * @default 1.2 (120% of `observationTokens`) when `bufferActivation` is set.
    */
   blockAfter?: number;
 
