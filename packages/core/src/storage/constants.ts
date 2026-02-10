@@ -228,6 +228,19 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   isReflecting: { type: 'boolean', nullable: false },
   observedMessageIds: { type: 'jsonb', nullable: true }, // JSON array of message IDs already observed
   observedTimezone: { type: 'text', nullable: true }, // Timezone used for Observer date formatting (e.g., "America/Los_Angeles")
+  // Async buffering columns
+  bufferedObservations: { type: 'text', nullable: true }, // JSON string of buffered observation content
+  bufferedObservationTokens: { type: 'integer', nullable: true }, // Token count of buffered observations
+  bufferedMessageIds: { type: 'jsonb', nullable: true }, // JSON array of message IDs in the buffer
+  bufferedReflection: { type: 'text', nullable: true }, // JSON string of buffered reflection content
+  bufferedReflectionTokens: { type: 'integer', nullable: true }, // Token count of buffered reflection (post-compression)
+  bufferedReflectionInputTokens: { type: 'integer', nullable: true }, // Token count of observations fed to reflector (pre-compression)
+  reflectedObservationLineCount: { type: 'integer', nullable: true }, // Number of observation lines that were reflected on during async buffering
+  bufferedObservationChunks: { type: 'jsonb', nullable: true }, // JSON array of BufferedObservationChunk objects
+  isBufferingObservation: { type: 'boolean', nullable: false },
+  isBufferingReflection: { type: 'boolean', nullable: false },
+  lastBufferedAtTokens: { type: 'integer', nullable: false },
+  lastBufferedAtTime: { type: 'timestamp', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };

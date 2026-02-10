@@ -2331,6 +2331,12 @@ export class Mastra<
       });
     }
 
+    if (this.#workflows) {
+      Object.keys(this.#workflows).forEach(key => {
+        this.#workflows?.[key]?.__setLogger(this.#logger);
+      });
+    }
+
     if (this.#serverAdapter) {
       this.#serverAdapter.__setLogger(this.#logger);
     }

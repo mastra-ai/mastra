@@ -28,6 +28,10 @@ import type {
   WorkflowRuns,
   StorageListMessagesInput,
   ObservationalMemoryRecord,
+  Rule,
+  RuleGroup,
+  StorageConditionalVariant,
+  StorageConditionalField,
 } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
@@ -716,6 +720,16 @@ export interface StoredAgentScorerConfig {
   sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
 }
 
+// ============================================================================
+// Conditional Field Types (for rule-based dynamic agent configuration)
+// Re-exported from @mastra/core/storage for convenience
+// ============================================================================
+
+export type StoredAgentRule = Rule;
+export type StoredAgentRuleGroup = RuleGroup;
+export type ConditionalVariant<T> = StorageConditionalVariant<T>;
+export type ConditionalField<T> = StorageConditionalField<T>;
+
 /**
  * Stored agent data returned from API
  */
@@ -732,20 +746,21 @@ export interface StoredAgentResponse {
   name: string;
   description?: string;
   instructions: string;
-  model: {
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: Record<string, StoredAgentToolConfig>;
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -801,20 +816,21 @@ export interface CreateStoredAgentParams {
   name: string;
   description?: string;
   instructions: string;
-  model: {
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: Record<string, StoredAgentToolConfig>;
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -826,20 +842,21 @@ export interface UpdateStoredAgentParams {
   name?: string;
   description?: string;
   instructions?: string;
-  model?: {
+  model?: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: Record<string, StoredAgentToolConfig>;
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -1083,20 +1100,21 @@ export interface AgentVersionResponse {
   name: string;
   description?: string;
   instructions: string;
-  model: {
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: Record<string, StoredAgentToolConfig>;
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
   changedFields?: string[];
   changeMessage?: string;
   createdAt: string;
