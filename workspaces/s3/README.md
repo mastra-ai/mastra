@@ -30,7 +30,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'my-agent',
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   workspace,
 });
 ```
