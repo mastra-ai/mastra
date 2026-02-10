@@ -108,6 +108,33 @@ describe('CompositeFilesystem', () => {
   });
 
   // ===========================================================================
+  // 2b. Prefix Mount Path Routing
+  // ===========================================================================
+  describe('prefix mount path routing', () => {
+    let cfs: CompositeFilesystem;
+
+    beforeEach(async () => {
+      // /data and /data2 are NOT nested — tests the startsWith(mountPath + '/') check
+      cfs = new CompositeFilesystem({
+        mounts: { '/data': localA, '/data2': localB },
+      });
+      await cfs.init();
+    });
+
+    it('should route /data/file.txt to /data mount, not /data2', async () => {
+      await cfs.writeFile('/data/file.txt', 'in data');
+      expect(await cfs.readFile('/data/file.txt', { encoding: 'utf-8' })).toBe('in data');
+      expect(await cfs.exists('/data2/file.txt')).toBe(false);
+    });
+
+    it('should route /data2/file.txt to /data2 mount, not /data', async () => {
+      await cfs.writeFile('/data2/file.txt', 'in data2');
+      expect(await cfs.readFile('/data2/file.txt', { encoding: 'utf-8' })).toBe('in data2');
+      expect(await cfs.exists('/data/file.txt')).toBe(false);
+    });
+  });
+
+  // ===========================================================================
   // 3. Single-Mount File Operation Routing
   // ===========================================================================
   describe('single-mount routing', () => {

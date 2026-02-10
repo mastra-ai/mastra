@@ -1154,6 +1154,63 @@ Line 3 conclusion`;
   });
 
   // ===========================================================================
+  // Workspace mounts config (auto-creates CompositeFilesystem)
+  // ===========================================================================
+  describe('mounts config', () => {
+    let tempDirA: string;
+    let tempDirB: string;
+
+    beforeEach(async () => {
+      tempDirA = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-mounts-a-'));
+      tempDirB = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-mounts-b-'));
+    });
+
+    afterEach(async () => {
+      for (const dir of [tempDirA, tempDirB]) {
+        try {
+          await fs.rm(dir, { recursive: true, force: true });
+        } catch {
+          // Ignore
+        }
+      }
+    });
+
+    it('should auto-create CompositeFilesystem from mounts config', async () => {
+      const workspace = new Workspace({
+        mounts: {
+          '/a': new LocalFilesystem({ basePath: tempDirA }),
+          '/b': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      await workspace.init();
+
+      expect(workspace.filesystem).toBeInstanceOf(CompositeFilesystem);
+
+      const composite = workspace.filesystem as CompositeFilesystem;
+      expect(composite.mountPaths.sort()).toEqual(['/a', '/b']);
+
+      // Verify operations work through the auto-created composite
+      await workspace.filesystem!.writeFile('/a/test.txt', 'from mount a');
+      expect(await workspace.filesystem!.readFile('/a/test.txt', { encoding: 'utf-8' })).toBe('from mount a');
+      expect(await workspace.filesystem!.exists('/b/test.txt')).toBe(false);
+
+      await workspace.destroy();
+    });
+
+    it('should throw when both filesystem and mounts are provided', () => {
+      expect(
+        () =>
+          new Workspace({
+            filesystem: new LocalFilesystem({ basePath: tempDirA }),
+            mounts: {
+              '/b': new LocalFilesystem({ basePath: tempDirB }),
+            },
+          }),
+      ).toThrow('Cannot use both "filesystem" and "mounts"');
+    });
+  });
+
+  // ===========================================================================
   // Lifecycle error handling
   // ===========================================================================
   describe('lifecycle error handling', () => {
