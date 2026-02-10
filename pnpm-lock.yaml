@@ -3889,7 +3889,7 @@ importers:
         specifier: 22.19.7
         version: 22.19.7
       '@types/swagger-ui-express':
-        specifier: ^4.1.6
+        specifier: ^4.1.8
         version: 4.1.8
       cors:
         specifier: ^2.8.5
