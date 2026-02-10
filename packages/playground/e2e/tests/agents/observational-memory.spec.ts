@@ -29,7 +29,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     test('should display progress bars when OM is enabled', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');
-      await page.goto('/agents/om-agent/chat?new=true');
+      await page.goto('/agents/om-agent/chat/new');
 
       // Wait for the page to load and OM to initialize
       await expect(page.locator('h2')).toContainText('OM Agent');
@@ -54,7 +54,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     test('should show threshold info tooltip on hover', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');
-      await page.goto('/agents/om-agent/chat?new=true');
+      await page.goto('/agents/om-agent/chat/new');
 
       // Wait for page to load
       await expect(page.locator('h2')).toContainText('OM Agent');
@@ -92,7 +92,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     test('should show observing indicator when observation starts', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');
-      await page.goto('/agents/om-agent/chat?new=true');
+      await page.goto('/agents/om-agent/chat/new');
 
       // Wait for page to load
       await expect(page.locator('h2')).toContainText('OM Agent');
@@ -139,7 +139,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     test('should show completion stats when observation finishes', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');
-      await page.goto('/agents/om-agent/chat?new=true');
+      await page.goto('/agents/om-agent/chat/new');
 
       const chatInput = page.locator('textarea[placeholder*="message"]').first();
       const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
@@ -170,7 +170,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     test('should persist observations after page reload', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');
-      await page.goto('/agents/om-agent/chat?new=true');
+      await page.goto('/agents/om-agent/chat/new');
 
       // Wait for page to load
       await expect(page.locator('h2')).toContainText('OM Agent');
@@ -231,7 +231,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     test('should show reflection indicator when reflection occurs', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-reflection');
-      await page.goto('/agents/om-agent/chat?new=true');
+      await page.goto('/agents/om-agent/chat/new');
 
       // Wait for page to load
       await expect(page.locator('h2')).toContainText('OM Agent');
@@ -269,7 +269,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     test('should show adaptive threshold indicator', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-shared-budget');
-      await page.goto('/agents/om-adaptive-agent/chat?new=true');
+      await page.goto('/agents/om-adaptive-agent/chat/new');
 
       // Wait for page to load
       await expect(page.locator('h2')).toContainText('OM Adaptive Agent');
@@ -310,7 +310,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     test('should show previous observations when history exists', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-reflection');
-      await page.goto('/agents/om-agent/chat?new=true');
+      await page.goto('/agents/om-agent/chat/new');
 
       // Click on the Memory tab to see OM sidebar
       await page.getByRole('tab', { name: 'Memory' }).click();
@@ -345,7 +345,7 @@ test.describe('Observational Memory - Edge Cases', () => {
   test('should handle interrupted observation gracefully', async ({ page }) => {
     // ARRANGE
     await selectFixture(page, 'om-observation-success');
-    await page.goto('/agents/om-agent/chat?new=true');
+    await page.goto('/agents/om-agent/chat/new');
 
     // ACT: Start a message then navigate away
     const chatInput = page.locator('textarea[placeholder*="message"]').first();
@@ -357,7 +357,7 @@ test.describe('Observational Memory - Edge Cases', () => {
     await page.goto('/agents');
 
     // Navigate back
-    await page.goto('/agents/om-agent/chat?new=true');
+    await page.goto('/agents/om-agent/chat/new');
 
     // ASSERT: Page should load without stuck loading states
     await expect(page.locator('h2')).toContainText('OM Agent', { timeout: 10000 });
@@ -376,7 +376,7 @@ test.describe('Observational Memory - Edge Cases', () => {
     await selectFixture(page, 'om-observation-success');
 
     // Create first thread
-    await page.goto('/agents/om-agent/chat?new=true');
+    await page.goto('/agents/om-agent/chat/new');
     await expect(page.locator('h2')).toContainText('OM Agent');
 
     const chatInput = page.locator('textarea[placeholder*="message"]').first();
@@ -388,7 +388,7 @@ test.describe('Observational Memory - Edge Cases', () => {
     const thread1Url = page.url();
 
     // ACT: Create second thread
-    await page.goto('/agents/om-agent/chat?new=true');
+    await page.goto('/agents/om-agent/chat/new');
     await expect(page.locator('h2')).toContainText('OM Agent');
 
     // ASSERT: Second thread should start fresh
