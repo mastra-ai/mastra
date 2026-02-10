@@ -455,8 +455,8 @@ export type StorageUpdateAgentInput = {
   /** Agent status: 'draft' or 'published' */
   status?: 'draft' | 'published' | 'archived';
 } & Partial<Omit<StorageAgentSnapshotType, 'memory'>> & {
-    /** Memory configuration object, or null to disable memory */
-    memory?: SerializedMemoryConfig | null;
+    /** Memory configuration object (static or conditional), or null to disable memory */
+    memory?: StorageConditionalField<SerializedMemoryConfig> | null;
   };
 
 export type StorageListAgentsInput = {
