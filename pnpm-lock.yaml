@@ -33,6 +33,7 @@ overrides:
   js-yaml: ^3.14.2
   glob@<=10.5.0: 10.5.0
   body-parser@<=2.2.1: 2.2.1
+  qs@<=6.14.1: 6.14.1
 
 patchedDependencies:
   '@changesets/get-dependents-graph':
@@ -5002,8 +5003,8 @@ importers:
   stores/upstash:
     dependencies:
       '@upstash/redis':
-        specifier: ^1.36.2
-        version: 1.36.2
+        specifier: ^1.36.0
+        version: 1.36.0
       '@upstash/vector':
         specifier: ^1.2.2
         version: 1.2.2
@@ -13354,8 +13355,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@upstash/redis@1.36.2':
-    resolution: {integrity: sha512-C0Yt8hc12vLaQYRG1fMci8iPrLtnTdbJG0HR5T8vKnvEP/1RdMMblsOJs5/jp0JXZJ1oSzMnQz4J9EVezNpI6A==}
+  '@upstash/redis@1.36.0':
+    resolution: {integrity: sha512-9zN2UV9QJGPnXfWU3yZBLVQaqqENDh7g+Y4J2vJuSxBCi9FQ0aUOtaXlzuFhnsiZvCqM+eS27ic+tgmkWUsfOg==}
 
   '@upstash/vector@1.2.2':
     resolution: {integrity: sha512-ptQ9xnxtKqmpNK52PCcHCszlPOLxIBfjsv7ty8RoF95pkjctS9rSjTQ3Pl9bx5VFbpDj+0dMXw88WLt6swDkgQ==}
@@ -19666,8 +19667,8 @@ packages:
     resolution: {integrity: sha512-pMpnA0qRdFp32b1sJl1wOJNxZLQ2cbQx+k6tjNtZ8CpvVhNqEPRgivZ2WOUev2YMajecdH7ctUPDvEe87nariQ==}
     engines: {node: '>=6.0.0'}
 
-  qs@6.14.0:
-    resolution: {integrity: sha512-YWWTjgABSKcvs/nWBi9PycY/JiPJqOD4JA6o9Sej2AtvSGarXxKC3OQSk4pAarbdQlKAh5D4FCQkJNkW+GAn3w==}
+  qs@6.14.1:
+    resolution: {integrity: sha512-4EK3+xJl8Ts67nLYNwqw/dsFVnCf+qR7RgXSK9jEEm9unao3njwMDdmsdvoKBKHzxd7tCYz5e5M+SnMjdtXGQQ==}
     engines: {node: '>=0.6'}
 
   quansync@0.2.11:
@@ -25325,7 +25326,7 @@ snapshots:
       json-stringify-safe: 5.0.1
       mime-types: 2.1.35
       performance-now: 2.1.0
-      qs: 6.14.0
+      qs: 6.14.1
       safe-buffer: 5.2.1
       tough-cookie: 5.1.2
       tunnel-agent: 0.6.0
@@ -32312,7 +32313,7 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
 
-  '@upstash/redis@1.36.2':
+  '@upstash/redis@1.36.0':
     dependencies:
       uncrypto: 0.1.3
 
@@ -32836,7 +32837,7 @@ snapshots:
       jose: 5.6.3
       leb: 1.0.0
       pluralize: 8.0.0
-      qs: 6.14.0
+      qs: 6.14.1
     transitivePeerDependencies:
       - express
       - koa
@@ -33435,7 +33436,7 @@ snapshots:
       http-errors: 2.0.0
       iconv-lite: 0.7.0
       on-finished: 2.4.1
-      qs: 6.14.0
+      qs: 6.14.1
       raw-body: 3.0.1
       type-is: 2.0.1
     transitivePeerDependencies:
@@ -33914,7 +33915,7 @@ snapshots:
     dependencies:
       '@hapi/bourne': 3.0.0
       inflation: 2.1.0
-      qs: 6.14.0
+      qs: 6.14.1
       raw-body: 2.5.2
       type-is: 1.6.18
 
@@ -34692,7 +34693,7 @@ snapshots:
       form-data-encoder: 4.1.0
       formdata-node: 6.0.3
       node-fetch: 2.7.0(encoding@0.1.13)
-      qs: 6.14.0
+      qs: 6.14.1
       readable-stream: 4.7.0
       url-join: 4.0.1
     transitivePeerDependencies:
@@ -35371,7 +35372,7 @@ snapshots:
       parseurl: 1.3.3
       path-to-regexp: 0.1.12
       proxy-addr: 2.0.7
-      qs: 6.14.0
+      qs: 6.14.1
       range-parser: 1.2.1
       safe-buffer: 5.2.1
       send: 0.19.0
@@ -35405,7 +35406,7 @@ snapshots:
       once: 1.4.0
       parseurl: 1.3.3
       proxy-addr: 2.0.7
-      qs: 6.14.0
+      qs: 6.14.1
       range-parser: 1.2.1
       router: 2.2.0
       send: 1.2.0
@@ -39980,7 +39981,7 @@ snapshots:
 
   pvutils@1.1.3: {}
 
-  qs@6.14.0:
+  qs@6.14.1:
     dependencies:
       side-channel: 1.1.0
 
