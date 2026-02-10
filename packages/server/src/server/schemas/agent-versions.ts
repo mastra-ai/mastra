@@ -80,7 +80,10 @@ export const agentVersionSchema = z.object({
   description: z.string().optional().describe('Description of the agent'),
   instructions: instructionsSchema,
   model: z.record(z.string(), z.unknown()).describe('Model configuration (provider, name, etc.)'),
-  tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
+  tools: z
+    .record(z.string(), z.object({ description: z.string().optional() }))
+    .optional()
+    .describe('Tool keys mapped to per-tool config (e.g., description overrides)'),
   defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),
   workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
   agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
