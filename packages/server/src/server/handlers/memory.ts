@@ -101,7 +101,7 @@ async function getMemoryFromContext({
   if (agentId && !agent) {
     logger.debug('Agent not found in registered agents, trying stored agents', { agentId });
     try {
-      const storedAgent = (await mastra.getEditor()?.getStoredAgentById(agentId)) ?? null;
+      const storedAgent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
       if (storedAgent) {
         agent = storedAgent;
       }
@@ -172,7 +172,7 @@ async function getAgentFromContext({
   if (!agent) {
     logger.debug('Agent not found in registered agents, trying stored agents', { agentId });
     try {
-      const storedAgent = (await mastra.getEditor()?.getStoredAgentById(agentId)) ?? null;
+      const storedAgent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
       if (storedAgent) {
         agent = storedAgent;
       }

@@ -76,6 +76,19 @@ function parseObservationLine(line: string, isNested: boolean = false): ParsedOb
     };
   }
 
+  // Check for indented dash list item: - content (used as sub-items)
+  if (isNested && trimmed.startsWith('-')) {
+    const content = trimmed.replace(/^-\s*/, '');
+    if (!content) return null;
+    return {
+      priority: null,
+      time: null,
+      content,
+      children: [],
+      isNested: true,
+    };
+  }
+
   // Check for standard format: * 🔴 (14:30) Content
   const match = trimmed.match(/^\*\s*(🔴|🟡|🟢)?\s*(?:\((\d{1,2}:\d{2})\))?\s*(.+)$/);
 
@@ -171,7 +184,8 @@ function parseObservations(raw: string): ParsedObservations {
       // Check indentation for nested observations
       const indentMatch = line.match(/^(\s*)/);
       const indent = indentMatch ? indentMatch[1].length : 0;
-      const isNested = indent >= 2 && (trimmedLine.startsWith('* ->') || trimmedLine.startsWith('->'));
+      const isNested =
+        indent >= 2 && (trimmedLine.startsWith('* ->') || trimmedLine.startsWith('->') || trimmedLine.startsWith('-'));
 
       const observation = parseObservationLine(trimmedLine, isNested);
 

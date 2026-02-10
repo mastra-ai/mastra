@@ -28,6 +28,10 @@ import type {
   WorkflowRuns,
   StorageListMessagesInput,
   ObservationalMemoryRecord,
+  Rule,
+  RuleGroup,
+  StorageConditionalVariant,
+  StorageConditionalField,
 } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
@@ -703,11 +707,28 @@ export interface DefaultOptions {
 }
 
 /**
+ * Per-tool config for stored agents (e.g., description overrides)
+ */
+export interface StoredAgentToolConfig {
+  description?: string;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
   sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
 }
+
+// ============================================================================
+// Conditional Field Types (for rule-based dynamic agent configuration)
+// Re-exported from @mastra/core/storage for convenience
+// ============================================================================
+
+export type StoredAgentRule = Rule;
+export type StoredAgentRuleGroup = RuleGroup;
+export type ConditionalVariant<T> = StorageConditionalVariant<T>;
+export type ConditionalField<T> = StorageConditionalField<T>;
 
 /**
  * Stored agent data returned from API
@@ -725,20 +746,21 @@ export interface StoredAgentResponse {
   name: string;
   description?: string;
   instructions: string;
-  model: {
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -767,30 +789,48 @@ export interface ListStoredAgentsResponse {
 }
 
 /**
+ * Parameters for cloning an agent to a stored agent
+ */
+export interface CloneAgentParams {
+  /** ID for the cloned agent. If not provided, derived from agent ID. */
+  newId?: string;
+  /** Name for the cloned agent. Defaults to "{name} (Clone)". */
+  newName?: string;
+  /** Additional metadata for the cloned agent. */
+  metadata?: Record<string, unknown>;
+  /** Author identifier for the cloned agent. */
+  authorId?: string;
+  /** Request context for resolving dynamic agent configuration (instructions, model, tools, etc.) */
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+/**
  * Parameters for creating a stored agent.
  * Flat union of agent-record fields and config fields.
  */
 export interface CreateStoredAgentParams {
-  id: string;
+  /** Unique identifier for the agent. If not provided, derived from name via slugify. */
+  id?: string;
   authorId?: string;
   metadata?: Record<string, unknown>;
   name: string;
   description?: string;
   instructions: string;
-  model: {
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -802,26 +842,161 @@ export interface UpdateStoredAgentParams {
   name?: string;
   description?: string;
   instructions?: string;
-  model?: {
+  model?: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
  * Response for deleting a stored agent
  */
 export interface DeleteStoredAgentResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
+// Stored Scorer Definition Types
+// ============================================================================
+
+/**
+ * Sampling configuration for scorers
+ */
+export type ScorerSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
+
+/**
+ * Scorer type discriminator
+ */
+export type StoredScorerType =
+  | 'llm-judge'
+  | 'answer-relevancy'
+  | 'answer-similarity'
+  | 'bias'
+  | 'context-precision'
+  | 'context-relevance'
+  | 'faithfulness'
+  | 'hallucination'
+  | 'noise-sensitivity'
+  | 'prompt-alignment'
+  | 'tool-call-accuracy'
+  | 'toxicity';
+
+/**
+ * Stored scorer definition data returned from API
+ */
+export interface StoredScorerResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Parameters for listing stored scorer definitions
+ */
+export interface ListStoredScorersParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored scorer definitions
+ */
+export interface ListStoredScorersResponse {
+  scorerDefinitions: StoredScorerResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored scorer definition
+ */
+export interface CreateStoredScorerParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Parameters for updating a stored scorer definition
+ */
+export interface UpdateStoredScorerParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  type?: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Response for deleting a stored scorer definition
+ */
+export interface DeleteStoredScorerResponse {
   success: boolean;
   message: string;
 }
@@ -837,20 +1012,21 @@ export interface AgentVersionResponse {
   name: string;
   description?: string;
   instructions: string;
-  model: {
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
   changedFields?: string[];
   changeMessage?: string;
   createdAt: string;

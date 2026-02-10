@@ -1,0 +1,21 @@
+name: Labeler
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  - pull_request_target
+
+jobs:
+  labeler:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          fetch-tags: false
+          filter: 'blob:none'
+          show-progress: false
+      - uses: actions/labeler@v6
