@@ -7,37 +7,49 @@
 '@mastra/pg': patch
 ---
 
-Added async buffering for observational memory. Observations can now be pre-computed in the background before the main threshold is reached, reducing latency when the context window fills up.
+**Async buffering for observational memory is now enabled by default.** Observations are pre-computed in the background as conversations grow — when the context window fills up, buffered observations activate instantly with no blocking LLM call. This keeps agents responsive during long conversations.
 
-**New configuration options:**
+**Default settings:**
+- `observation.bufferTokens: 0.2` — buffer every 20% of `messageTokens` (~6k tokens with the default 30k threshold)
+- `observation.bufferActivation: 0.8` — on activation, retain 20% of the message window
+- `reflection.bufferActivation: 0.5` — start background reflection at 50% of the observation threshold
 
-- `observation.bufferTokens` — Token interval for triggering background observation buffering (e.g., `6000` buffers every 6k tokens)
-- `observation.bufferActivation` — Ratio of the message token threshold to activate when buffered observations are applied (0-1 float, e.g., `0.6` activates 60% of the threshold worth of message tokens)
-- `observation.blockAfter` — Token count (or 1.x multiplier of the threshold) at which synchronous observation blocks the response. Defaults to 1.2x when async buffering is enabled
-- `reflection.bufferActivation` — Same as observation but for reflections. Background reflection runs when observation tokens cross the activation point
-- `reflection.blockAfter` — Same as observation but for reflections
+**Disabling async buffering:**
 
-**Example:**
+Set `observation.bufferTokens: false` to disable async buffering for both observations and reflections:
 
 ```ts
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:memory.db' }),
   options: {
     observationalMemory: {
+      model: "google/gemini-2.5-flash",
       observation: {
-        messageTokens: 30_000,
-        bufferTokens: 6_000,
-        bufferActivation: 0.6,
-        blockAfter: 1.5,
-      },
-      reflection: {
-        observationTokens: 5_000,
-        bufferActivation: 0.5,
-        blockAfter: 1.2,
+        bufferTokens: false,
       },
     },
   },
 });
+```
+
+**Model is now required** when passing an observational memory config object. Use `observationalMemory: true` for the default (google/gemini-2.5-flash), or set a model explicitly:
+
+```ts
+// Uses default model (google/gemini-2.5-flash)
+observationalMemory: true
+
+// Explicit model
+observationalMemory: {
+  model: "google/gemini-2.5-flash",
+}
+```
+
+**`shareTokenBudget` requires `bufferTokens: false`** (temporary limitation). If you use `shareTokenBudget: true`, you must explicitly disable async buffering:
+
+```ts
+observationalMemory: {
+  shareTokenBudget: true,
+  observation: { bufferTokens: false },
+}
 ```
 
 **New streaming event:** `data-om-status` replaces `data-om-progress` with a structured status object containing active window usage, buffered observation/reflection state, and projected activation impact.
