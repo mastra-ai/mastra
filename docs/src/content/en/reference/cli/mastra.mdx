@@ -35,6 +35,23 @@ Start the development server in inspect mode and break at the beginning of the s
 
 Comma-separated list of custom arguments to pass to the Node.js process, e.g. `--require=newrelic` or `--experimental-transform-types`.
 
+#### `--request-context-presets`
+
+Path to a JSON file containing named [request context](/docs/server/request-context) presets. When provided, a dropdown appears in Studio's request context editor, letting you quickly switch between preset configurations.
+
+```bash
+mastra dev --request-context-presets ./presets.json
+```
+
+The file must be a JSON object where each key is a preset name and each value is an object:
+
+```json
+{
+  "development": { "userId": "dev-user", "env": "development" },
+  "production": { "userId": "prod-user", "env": "production" }
+}
+```
+
 ### Configs
 
 You can set certain environment variables to modify the behavior of `mastra dev`.
@@ -173,6 +190,14 @@ The port of the Mastra API server to connect to. Defaults to `4111`.
 #### `--server-protocol`
 
 The protocol of the Mastra API server to connect to. Defaults to `http`.
+
+#### `--request-context-presets`
+
+Path to a JSON file containing named [request context](/docs/server/request-context) presets. Works the same as the [`mastra dev` flag](#--request-context-presets).
+
+```bash
+mastra studio --request-context-presets ./presets.json
+```
 
 ## `mastra lint`
 
