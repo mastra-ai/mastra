@@ -5651,7 +5651,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/_types-builder
       '@koa/router':
-        specifier: ^13.0.0
+        specifier: ^13.1.1
         version: 13.1.1
       '@mastra/core':
         specifier: workspace:*
