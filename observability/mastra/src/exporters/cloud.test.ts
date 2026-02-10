@@ -165,9 +165,6 @@ describe('CloudExporter', () => {
       const buffer = (exporter as any).buffer;
       const firstTime = buffer.firstEventTime;
 
-      // Yield to ensure time difference (use microtask to avoid fake timer interference from other test files)
-      await Promise.resolve();
-
       // Add second span
       const secondSpan = { ...mockSpan, id: 'span-456' };
       await exporter.exportTracingEvent({

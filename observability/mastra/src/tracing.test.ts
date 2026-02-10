@@ -519,7 +519,7 @@ describe('Tracing', () => {
         attributes: {},
       });
 
-      // Wait for async export to complete (use microtask to avoid fake timer interference from other test files)
+      // Wait for fire-and-forget async export to complete
       await Promise.resolve();
 
       // Should continue with other exporters despite failure

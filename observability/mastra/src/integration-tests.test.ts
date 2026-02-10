@@ -1194,9 +1194,6 @@ describe('Tracing Integration Tests', () => {
             },
           });
 
-          // Simulate some processing (use microtask to avoid fake timer interference from other test files)
-          await Promise.resolve();
-
           // Update and end child span
           childSpan?.update({
             metadata: {
