@@ -1,15 +1,18 @@
 export const POSTGRES_IDENTIFIER_MAX_LENGTH = 63;
 
 export function truncateIdentifier(value: string, maxLength = POSTGRES_IDENTIFIER_MAX_LENGTH): string {
-  if (!maxLength || Buffer.byteLength(value, 'utf-8') <= maxLength) {
-    return value;
-  }
+  if (maxLength <= 0) return '';
+  if (Buffer.byteLength(value, 'utf-8') <= maxLength) return value;
 
-  let truncated = value;
-  while (truncated && Buffer.byteLength(truncated, 'utf-8') > maxLength) {
-    truncated = truncated.slice(0, -1);
+  let bytes = 0;
+  let end = 0;
+  for (const ch of value) {
+    const chBytes = Buffer.byteLength(ch, 'utf-8');
+    if (bytes + chBytes > maxLength) break;
+    bytes += chBytes;
+    end += ch.length; // surrogate pairs have .length === 2
   }
-  return truncated;
+  return value.slice(0, end);
 }
 
 /**
