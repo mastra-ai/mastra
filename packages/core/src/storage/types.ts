@@ -356,8 +356,9 @@ export interface StorageConditionalVariant<T> {
 
 /**
  * A field that can be either a static value or an array of conditional variants.
- * When an array of variants, they are evaluated in order; the first variant whose rules pass wins.
- * A variant with no rules acts as the default fallback.
+ * When an array of variants, all matching variants accumulate:
+ * arrays are concatenated and objects are shallow-merged.
+ * A variant with no rules always matches (acts as the default/base).
  */
 export type StorageConditionalField<T> = T | StorageConditionalVariant<T>[];
 
