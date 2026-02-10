@@ -10,7 +10,7 @@ import { workflowLoopStream } from './workflows/stream';
 export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   resumeContext,
   models,
-  logger,
+  mastraLogger,
   runId,
   idGenerator,
   messageList,
@@ -26,7 +26,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
-    logger ||
+    mastraLogger ||
     new ConsoleLogger({
       level: 'debug',
     });
@@ -89,7 +89,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     resumeContext,
     models,
     runId: runIdToUse,
-    logger: loggerToUse,
+    mastraLogger: loggerToUse,
     startTimestamp: startTimestamp!,
     messageList,
     includeRawChunks: !!includeRawChunks,

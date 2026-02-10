@@ -513,7 +513,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   structuredOutput,
   outputProcessors,
   inputProcessors,
-  logger,
+  mastraLogger,
   agentId,
   downloadRetries,
   downloadConcurrency,
@@ -549,7 +549,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         stepWorkspace?: Workspace;
       }>(
         models,
-        logger,
+        mastraLogger,
       )(async (modelConfig, isLastModel) => {
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
@@ -594,7 +594,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           const processorRunner = new ProcessorRunner({
             inputProcessors: inputStepProcessors,
             outputProcessors: [],
-            logger: logger || new ConsoleLogger({ level: 'error' }),
+            logger: mastraLogger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
             processorStates,
           });
@@ -672,7 +672,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 stepTools: tools,
               };
             }
-            logger?.error('Error in processInputStep processors:', error);
+            mastraLogger?.error('Error in processInputStep processors:', error);
             throw error;
           }
         }
@@ -859,7 +859,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               request,
               rawResponse,
             },
-            logger,
+            logger: mastraLogger,
           });
         } catch (error) {
           const provider = model?.provider;
@@ -869,14 +869,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           if (isUpstreamError) {
             const providerInfo = provider ? ` from ${provider}` : '';
             const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
-            logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+            mastraLogger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
               error,
               runId,
               ...(provider && { provider }),
               ...(modelIdStr && { modelId: modelIdStr }),
             });
           } else {
-            logger?.error('Error in LLM execution', {
+            mastraLogger?.error('Error in LLM execution', {
               error,
               runId,
               ...(provider && { provider }),
@@ -1016,7 +1016,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const processorRunner = new ProcessorRunner({
           inputProcessors: [],
           outputProcessors,
-          logger: logger || new ConsoleLogger({ level: 'error' }),
+          logger: mastraLogger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
           processorStates,
         });
@@ -1063,7 +1063,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // If retry is requested, we'll handle it below
             // For now, we just capture the tripwire
           } else {
-            logger?.error('Error in processOutputStep processors:', error);
+            mastraLogger?.error('Error in processOutputStep processors:', error);
             throw error;
           }
         }
@@ -1090,9 +1090,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Log if retry was requested but not allowed
       if (retryRequested && !canRetry) {
         if (maxProcessorRetries === undefined) {
-          logger?.warn?.(`Processor requested retry but maxProcessorRetries is not set. Treating as abort.`);
+          mastraLogger?.warn?.(`Processor requested retry but maxProcessorRetries is not set. Treating as abort.`);
         } else {
-          logger?.warn?.(
+          mastraLogger?.warn?.(
             `Processor requested retry but maxProcessorRetries (${maxProcessorRetries}) exceeded. ` +
               `Current count: ${currentProcessorRetryCount}. Treating as abort.`,
           );

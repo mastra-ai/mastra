@@ -93,7 +93,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   };
   toolCallId?: string;
   models: ModelManagerModelConfig[];
-  logger?: IMastraLogger;
+  mastraLogger?: IMastraLogger;
   mode?: 'generate' | 'stream';
   runId?: string;
   idGenerator?: MastraIdGenerator;

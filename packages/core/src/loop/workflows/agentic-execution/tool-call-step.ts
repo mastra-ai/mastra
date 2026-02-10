@@ -36,7 +36,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   streamState,
   modelSpanTracker,
   _internal,
-  logger,
+  mastraLogger,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -176,7 +176,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             try {
               await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
             } catch (error) {
-              logger?.error('Error removing tool suspension metadata:', error);
+              mastraLogger?.error('Error removing tool suspension metadata:', error);
             }
           }
         }
@@ -208,7 +208,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // Flush all pending messages immediately
           await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
         } catch (error) {
-          logger?.error('Error flushing messages before suspension:', error);
+          mastraLogger?.error('Error flushing messages before suspension:', error);
         }
       };
 
@@ -233,7 +233,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             abortSignal: options?.abortSignal,
           });
         } catch (error) {
-          logger?.error('Error calling onInputAvailable', error);
+          mastraLogger?.error('Error calling onInputAvailable', error);
         }
       }
 
@@ -270,7 +270,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             toolRequiresApproval = needsApprovalResult;
           } catch (error) {
             // Log error to help developers debug faulty needsApprovalFn implementations
-            logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
+            mastraLogger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
             // On error, default to requiring approval to be safe
             toolRequiresApproval = true;
           }
@@ -514,7 +514,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
-            logger?.error('Error calling onOutput', error);
+            mastraLogger?.error('Error calling onOutput', error);
           }
         }
 
