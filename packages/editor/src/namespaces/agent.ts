@@ -12,6 +12,7 @@ import type {
   StorageScorerConfig,
   SerializedMemoryConfig,
   SharedMemoryConfig,
+  StorageToolConfig,
 } from '@mastra/core';
 
 import type {
@@ -183,18 +184,45 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     };
   }
 
-  private resolveStoredTools(storedTools?: string[]): Record<string, ToolAction<any, any, any, any, any, any>> {
-    if (!storedTools || storedTools.length === 0) return {};
-    if (!this.mastra) return {};
+  /**
+   * Resolve stored tool IDs to actual tool instances from Mastra's registry.
+   * Applies description overrides from per-tool config when present.
+   */
+  private resolveStoredTools(
+    storedTools?: Record<string, StorageToolConfig> | string[],
+  ): Record<string, ToolAction<any, any, any, any, any, any>> {
+    if (
+      !storedTools ||
+      (Array.isArray(storedTools) ? storedTools.length === 0 : Object.keys(storedTools).length === 0)
+    ) {
+      return {};
+    }
+
+    if (!this.mastra) {
+      return {};
+    }
+
+    // Normalize legacy string[] format to Record
+    const normalized: Record<string, StorageToolConfig> = Array.isArray(storedTools)
+      ? Object.fromEntries(storedTools.map(key => [key, {}]))
+      : storedTools;
 
     const resolvedTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
-    for (const toolKey of storedTools) {
+
+    for (const [toolKey, toolConfig] of Object.entries(normalized)) {
       try {
-        resolvedTools[toolKey] = this.mastra.getToolById(toolKey);
+        const tool = this.mastra.getToolById(toolKey);
+
+        if (toolConfig.description) {
+          resolvedTools[toolKey] = { ...tool, description: toolConfig.description };
+        } else {
+          resolvedTools[toolKey] = tool;
+        }
       } catch {
         this.logger?.warn(`Tool "${toolKey}" referenced in stored agent but not registered in Mastra`);
       }
     }
+
     return resolvedTools;
   }
 

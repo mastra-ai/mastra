@@ -163,8 +163,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
 
-      // Only include tools/integrationTools if they're actually arrays from the body (not {} from adapter)
-      const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      // Only include integrationTools if they're actually arrays from the body (not {} from adapter)
       const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
       // Create agent with flat StorageCreateAgentInput
@@ -177,7 +176,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           description,
           instructions,
           model,
-          tools: toolsFromBody,
+          tools,
           defaultOptions,
           workflows,
           agents,
@@ -258,8 +257,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
-      // Only include tools/integrationTools if they're actually arrays from the body (not {} from adapter)
-      const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      // Only include integrationTools if they're actually arrays from the body (not {} from adapter)
       const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
       // Update the agent with both metadata-level and config-level fields
@@ -273,7 +271,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         description,
         instructions,
         model,
-        tools: toolsFromBody,
+        tools,
         defaultOptions,
         workflows,
         agents,
@@ -290,7 +288,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         description,
         instructions,
         model,
-        tools: toolsFromBody,
+        tools,
         defaultOptions,
         workflows,
         agents,

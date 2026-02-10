@@ -8,7 +8,7 @@ export type { IMastraLogger as Logger } from './logger';
 export type { ToolAction } from './tools';
 export type { Workflow } from './workflows';
 export type { MastraScorers, ScoringSamplingConfig } from './evals';
-export type { StorageResolvedAgentType, StorageScorerConfig } from './storage';
+export type { StorageResolvedAgentType, StorageScorerConfig, StorageToolConfig } from './storage';
 export type {
   IMastraEditor,
   MastraEditorConfig,

@@ -1656,7 +1656,7 @@ export class Agent<
       description: this.getDescription() || undefined,
       instructions: instructionsStr,
       model,
-      tools: toolKeys.length > 0 ? toolKeys : undefined,
+      tools: toolKeys.length > 0 ? Object.fromEntries(toolKeys.map(key => [key, {}])) : undefined,
       workflows: workflowKeys.length > 0 ? workflowKeys : undefined,
       agents: agentKeys.length > 0 ? agentKeys : undefined,
       memory: memoryConfig,
