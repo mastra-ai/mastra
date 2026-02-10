@@ -154,7 +154,7 @@ export const searchResponseSchema = z.object({
 export const indexBodySchema = z.object({
   path: z.string().describe('Path to use as document ID'),
   content: z.string().describe('Content to index'),
-  metadata: z.record(z.unknown()).optional().describe('Optional metadata'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata'),
 });
 
 export const indexResponseSchema = z.object({
@@ -245,7 +245,7 @@ export const skillMetadataSchema = z.object({
   description: z.string(),
   license: z.string().optional(),
   compatibility: z.unknown().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const skillSourceSchema = z.discriminatedUnion('type', [

@@ -9,13 +9,13 @@ import {
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
-import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import { z } from 'zod/v4';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { SpanType, wrapMastra, executeWithContext, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { isZodObject } from '../../utils/zod-utils';
@@ -59,7 +59,8 @@ export class CoreToolBuilder extends MastraBase {
     this.logType = input.logType;
     if (
       !isVercelTool(this.originalTool) &&
-      (input.autoResumeSuspendedTools || (this.originalTool as ToolAction<any, any>).id?.startsWith('agent-'))
+      (input.autoResumeSuspendedTools ||
+        (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-'))
     ) {
       let schema = this.originalTool.inputSchema;
       if (typeof schema === 'function') {

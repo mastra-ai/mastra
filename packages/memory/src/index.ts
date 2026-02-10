@@ -14,8 +14,8 @@ import type {
   WorkingMemoryTemplate,
   MessageDeleteInput,
   ObservationalMemoryOptions,
+  MemoryConfig,
 } from '@mastra/core/memory';
-import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/core/schema';
 
 /**
  * Normalize a `boolean | object` observational memory config.
@@ -48,6 +48,7 @@ import type {
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
+import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';

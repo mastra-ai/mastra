@@ -209,7 +209,7 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, 'Error getting workflow runs');
     }
-  }) as any,
+  },
 });
 
 export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({

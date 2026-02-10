@@ -368,14 +368,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   args: inputData.args,
                   resumeSchema: JSON.stringify(
-                    zodToJsonSchema(
-                      z.object({
-                        approved: z
-                          .boolean()
-                          .describe(
-                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                          ),
-                      }),
+                    standardSchemaToJSONSchema(
+                      toStandardSchema(
+                        z.object({
+                          approved: z
+                            .boolean()
+                            .describe(
+                              'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                            ),
+                        }),
+                      ),
                     ),
                   ),
                 },
@@ -389,14 +391,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 type: 'approval',
                 suspendedToolRunId: options.runId,
                 resumeSchema: JSON.stringify(
-                  zodToJsonSchema(
-                    z.object({
-                      approved: z
-                        .boolean()
-                        .describe(
-                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                        ),
-                    }),
+                  standardSchemaToJSONSchema(
+                    toStandardSchema(
+                      z.object({
+                        approved: z
+                          .boolean()
+                          .describe(
+                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                          ),
+                      }),
+                    ),
                   ),
                 ),
               });

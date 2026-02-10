@@ -1,4 +1,5 @@
 import z from 'zod';
+import type { RuleGroup } from '@mastra/core/storage';
 import { paginationInfoSchema, createPagePaginationSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 import { serializedMemoryConfigSchema } from './memory-config';
@@ -73,10 +74,7 @@ const ruleSchema = z.object({
   value: z.unknown(),
 });
 
-type RuleGroupZod = z.ZodType<{ operator: 'AND' | 'OR'; conditions: (z.infer<typeof ruleSchema> | RuleGroupInput)[] }>;
-type RuleGroupInput = z.infer<RuleGroupZod>;
-
-const ruleGroupSchema: RuleGroupZod = z.lazy(() =>
+const ruleGroupSchema: z.ZodType<RuleGroup> = z.lazy(() =>
   z.object({
     operator: z.enum(['AND', 'OR']),
     conditions: z.array(z.union([ruleSchema, ruleGroupSchema])),
