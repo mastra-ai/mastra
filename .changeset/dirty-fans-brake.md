@@ -1,5 +1,5 @@
 ---
-'@mastra/server': patch
+'@mastra/client-js': patch
 ---
 
 Fixed multiple issues with stored agents:

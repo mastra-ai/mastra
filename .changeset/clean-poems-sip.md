@@ -1,6 +1,6 @@
 ---
 '@mastra/core': patch
-'@mastra/client-js': patch
+'@mastra/server': patch
 '@mastra/mongodb': patch
 '@mastra/libsql': patch
 '@mastra/pg': patch
