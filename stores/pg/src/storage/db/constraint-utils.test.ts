@@ -218,4 +218,3 @@ describe('backward compatibility', () => {
     expect(mixedCase.toLowerCase()).toBe(mixedCase);
   });
 });
-
