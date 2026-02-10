@@ -172,6 +172,9 @@ const convertOmPartsInMastraMessage = (
   const processedCycleIds = new Set<string>();
 
   for (const part of message.parts) {
+    // Skip ephemeral status parts — they're useful during streaming but shouldn't render on reload
+    if (part.type === 'data-om-status') continue;
+
     const cycleId = (part as any).data?.cycleId;
 
     // Handle blocking observation/reflection markers
