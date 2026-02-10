@@ -31,6 +31,7 @@ import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
+import { CronScheduler } from '../workflows/cron';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
@@ -349,6 +350,8 @@ export class Mastra<
   #promptBlocks: Record<string, StorageResolvedPromptBlockType> = {};
   // Editor instance for handling agent instantiation and configuration
   #editor?: IMastraEditor;
+  // Cron scheduler for workflows with schedule configs
+  #scheduler?: CronScheduler;
 
   get pubsub() {
     return this.#pubsub;
@@ -2279,6 +2282,51 @@ export class Mastra<
   }
 
   /**
+   * Starts the cron scheduler for all workflows that have a `schedule` config.
+   * Each scheduled workflow will be executed automatically at its cron interval.
+   * Call `shutdown()` to stop the scheduler.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   workflows: { billingWorkflow }
+   * });
+   * mastra.startScheduler();
+   * ```
+   */
+  startScheduler(): void {
+    if (this.#scheduler) {
+      this.#scheduler.stop();
+    }
+    this.#scheduler = new CronScheduler();
+    this.#scheduler.start(this.#workflows as Record<string, Workflow>, this.getLogger());
+  }
+
+  /**
+   * Returns a list of all workflows that have a cron schedule configured.
+   *
+   * @example
+   * ```typescript
+   * const scheduled = mastra.listScheduledWorkflows();
+   * // [{ workflowId: 'billing', cron: '0 0 * * *', description: 'Daily billing' }]
+   * ```
+   */
+  listScheduledWorkflows(): Array<{ workflowId: string; cron: string; description?: string }> {
+    const result: Array<{ workflowId: string; cron: string; description?: string }> = [];
+    for (const workflow of Object.values(this.#workflows)) {
+      const schedule = (workflow as Workflow).schedule;
+      if (schedule?.cron) {
+        result.push({
+          workflowId: (workflow as Workflow).id,
+          cron: schedule.cron,
+          ...(schedule.description ? { description: schedule.description } : {}),
+        });
+      }
+    }
+    return result;
+  }
+
+  /**
    * Sets the storage provider for the Mastra instance.
    *
    * @example
@@ -3119,6 +3167,10 @@ export class Mastra<
    * ```
    */
   async shutdown(): Promise<void> {
+    // Stop cron scheduler if running
+    this.#scheduler?.stop();
+    this.#scheduler = undefined;
+
     await this.stopEventEngine();
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();
