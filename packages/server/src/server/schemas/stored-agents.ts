@@ -73,15 +73,24 @@ const ruleSchema = z.object({
   value: z.unknown(),
 });
 
-type RuleGroupZod = z.ZodType<{ operator: 'AND' | 'OR'; conditions: (z.infer<typeof ruleSchema> | RuleGroupInput)[] }>;
-type RuleGroupInput = z.infer<RuleGroupZod>;
+/**
+ * Rule group schema with a fixed nesting depth (3 levels) to avoid
+ * infinite recursion when converting to JSON Schema / OpenAPI.
+ */
+const ruleGroupDepth2 = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(ruleSchema),
+});
 
-const ruleGroupSchema: RuleGroupZod = z.lazy(() =>
-  z.object({
-    operator: z.enum(['AND', 'OR']),
-    conditions: z.array(z.union([ruleSchema, ruleGroupSchema])),
-  }),
-);
+const ruleGroupDepth1 = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(z.union([ruleSchema, ruleGroupDepth2])),
+});
+
+const ruleGroupSchema = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(z.union([ruleSchema, ruleGroupDepth1])),
+});
 
 /**
  * Agent instruction block schema for prompt-block-based instructions.

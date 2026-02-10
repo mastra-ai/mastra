@@ -522,10 +522,28 @@ export interface Rule {
   value?: unknown;
 }
 
-/** Recursive rule group for AND/OR logic */
+/**
+ * Rule group with a fixed nesting depth of 3 levels.
+ * Depth is capped to keep TypeScript and Zod/JSON-Schema types aligned
+ * (recursive types cause infinite-depth issues in JSON Schema generation).
+ *
+ * Innermost groups (depth 2) may only contain leaf Rules.
+ * Mid-level groups (depth 1) may contain Rules or depth-2 groups.
+ * Top-level groups (depth 0, exported as `RuleGroup`) may contain Rules or depth-1 groups.
+ */
+interface RuleGroupDepth2 {
+  operator: 'AND' | 'OR';
+  conditions: Rule[];
+}
+
+interface RuleGroupDepth1 {
+  operator: 'AND' | 'OR';
+  conditions: (Rule | RuleGroupDepth2)[];
+}
+
 export interface RuleGroup {
   operator: 'AND' | 'OR';
-  conditions: (Rule | RuleGroup)[];
+  conditions: (Rule | RuleGroupDepth1)[];
 }
 
 /**
