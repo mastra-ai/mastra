@@ -54,12 +54,6 @@ export function DatasetVersionsPanel({
           <DatasetVersionsListSkeleton />
         ) : (
           <ItemList>
-            <ItemList.Header columns={versionsListColumns}>
-              {versionsListColumns.map(col => (
-                <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
-              ))}
-            </ItemList.Header>
-
             <ItemList.Scroller>
               <ItemList.Items>
                 {versions?.map((item, index) => {
@@ -79,7 +73,7 @@ export function DatasetVersionsPanel({
                         isSelected={isVersionSelected(item)}
                         onClick={() => handleVersionClick(item)}
                       >
-                        <ItemList.ItemText>{entry.version}</ItemList.ItemText>
+                        <ItemList.TextCell>{entry.version}</ItemList.TextCell>
                       </ItemList.RowButton>
                     </ItemList.Row>
                   );
@@ -113,9 +107,9 @@ function DatasetVersionsListSkeleton() {
           <ItemList.Row key={index}>
             <ItemList.RowButton columns={versionsListColumns}>
               {versionsListColumns.map((col, colIndex) => (
-                <ItemList.ItemText key={colIndex} isLoading>
+                <ItemList.TextCell key={colIndex} isLoading>
                   Loading...
-                </ItemList.ItemText>
+                </ItemList.TextCell>
               ))}
             </ItemList.RowButton>
           </ItemList.Row>

@@ -70,7 +70,7 @@ export function DatasetItemsList({
   }
 
   const allIds = items.map(i => i.id);
-  const itemsListColumnsWithCheckbox = [{ name: 'checkbox', label: 'c', size: '2.5rem' }, ...columns];
+  const itemsListColumnsWithCheckbox = [{ name: 'checkbox', label: 'c', size: '1.25rem' }, ...columns];
   const columnsToRender = isSelectionActive ? itemsListColumnsWithCheckbox : columns;
 
   // Select all state
@@ -92,17 +92,17 @@ export function DatasetItemsList({
 
   return (
     <ItemList>
-      <ItemList.Header columns={columns}>
+      <ItemList.Header columns={columnsToRender}>
         {columnsToRender?.map(col => (
           <>
             {col.name === 'checkbox' ? (
-              <ItemList.HeaderCol key={col.name} className="flex items-center justify-center">
+              <ItemList.FlexCell key={col.name}>
                 <Checkbox
                   checked={isIndeterminate ? 'indeterminate' : isAllSelected}
                   onCheckedChange={handleSelectAllToggle}
                   aria-label="Select all items"
                 />
-              </ItemList.HeaderCol>
+              </ItemList.FlexCell>
             ) : (
               <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
             )}
@@ -129,34 +129,29 @@ export function DatasetItemsList({
 
               return (
                 <ItemList.Row key={item.id} isSelected={featuredItemId === item.id}>
+                  {isSelectionActive && (
+                    <ItemList.FlexCell className="w-12 pl-4">
+                      <Checkbox
+                        checked={selectedIds.has(item.id)}
+                        onCheckedChange={() => {}}
+                        onClick={e => {
+                          e.stopPropagation();
+                          onToggleSelection(item.id, e.shiftKey, allIds);
+                        }}
+                        aria-label={`Select item ${item.id}`}
+                      />
+                    </ItemList.FlexCell>
+                  )}
                   <ItemList.RowButton
                     entry={entry}
                     isSelected={featuredItemId === item.id}
-                    columns={columnsToRender}
+                    columns={columns}
                     onClick={handleEntryClick}
                   >
-                    {isSelectionActive && (
-                      <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                        <Checkbox
-                          checked={selectedIds.has(item.id)}
-                          onCheckedChange={() => {}}
-                          onClick={e => {
-                            e.stopPropagation();
-                            onToggleSelection(item.id, e.shiftKey, allIds);
-                          }}
-                          aria-label={`Select item ${item.id}`}
-                        />
-                      </div>
-                    )}
                     <ItemList.TextCell>{entry.id}</ItemList.TextCell>
-                    {columns.some(col => col.name === 'input') && <ItemList.TextCell>{entry.input}</ItemList.TextCell>}
-                    {columns.some(col => col.name === 'expectedOutput') && (
-                      <ItemList.TextCell>{entry.expectedOutput}</ItemList.TextCell>
-                    )}
-                    {columns.some(col => col.name === 'metadata') && (
-                      <ItemList.TextCell>{entry.metadata}</ItemList.TextCell>
-                    )}
-                    {columns.some(col => col.name === 'date') && <ItemList.TextCell>{entry.date}</ItemList.TextCell>}
+                    <ItemList.TextCell>{entry.input}</ItemList.TextCell>
+                    <ItemList.TextCell>{entry.expectedOutput}</ItemList.TextCell>
+                    <ItemList.TextCell>{entry.date}</ItemList.TextCell>
                   </ItemList.RowButton>
                 </ItemList.Row>
               );

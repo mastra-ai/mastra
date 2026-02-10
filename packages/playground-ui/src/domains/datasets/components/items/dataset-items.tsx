@@ -155,7 +155,6 @@ export function DatasetItems({
     { name: 'id', label: 'ID', size: '5rem' },
     { name: 'input', label: 'Input', size: '1fr' },
     { name: 'expectedOutput', label: 'Expected Output', size: '1fr' },
-    { name: 'metadata', label: 'Metadata', size: '8rem' },
     { name: 'date', label: 'Created', size: '5rem' },
   ];
 

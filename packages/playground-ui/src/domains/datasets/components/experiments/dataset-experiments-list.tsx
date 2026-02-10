@@ -1,30 +1,16 @@
 import { DatasetExperiment } from '@mastra/client-js';
-import { Badge } from '@/ds/components/Badge';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Play } from 'lucide-react';
-
-type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
-
-const statusVariantMap: Record<RunStatus, 'warning' | 'info' | 'success' | 'error'> = {
-  pending: 'warning',
-  running: 'info',
-  completed: 'success',
-  failed: 'error',
-};
-
-const statusLabelMap: Record<RunStatus, string> = {
-  pending: 'Pending',
-  running: 'Running',
-  completed: 'Completed',
-  failed: 'Failed',
-};
+import { cn } from '@/index';
 
 const experimentsListColumns = [
-  { name: 'experimentId', label: 'Experiment ID', size: '6rem' },
+  { name: 'experimentId', label: 'ID', size: '6rem' },
+  { name: 'status', label: 'Status', size: '4rem' },
+  { name: 'targetType', label: 'Type', size: '4rem' },
   { name: 'target', label: 'Target', size: '1fr' },
-  { name: 'status', label: 'Status', size: '6rem' },
+  { name: 'counts', label: 'Counts', size: '7rem' },
   { name: 'date', label: 'Created', size: '10rem' },
 ];
 
@@ -76,6 +62,8 @@ export function DatasetExperimentsList({
     return <EmptyDatasetExperimentsList />;
   }
 
+  console.log({ experiments });
+
   return (
     <ItemList>
       <ItemList.Header columns={columns}>
@@ -87,7 +75,7 @@ export function DatasetExperimentsList({
       <ItemList.Scroller>
         <ItemList.Items>
           {experiments.map(experiment => {
-            const status = experiment.status as RunStatus;
+            const status = experiment.status;
             const isSelected = selectedExperimentIds.includes(experiment.id);
             const entry = { id: experiment.id };
 
@@ -112,14 +100,18 @@ export function DatasetExperimentsList({
                       />
                     </div>
                   )}
-                  <ItemList.ItemText>{truncateExperimentId(experiment.id)}</ItemList.ItemText>
-                  <ItemList.ItemText>
-                    <span className="text-neutral3">{experiment.targetType}:</span> {experiment.targetId}
-                  </ItemList.ItemText>
-                  <div>
-                    <Badge variant={statusVariantMap[status]}>{statusLabelMap[status]}</Badge>
-                  </div>
-                  <ItemList.ItemText>{formatDate(experiment.createdAt)}</ItemList.ItemText>
+                  <ItemList.TextCell>{truncateExperimentId(experiment.id)}</ItemList.TextCell>
+                  <ItemList.StatusCell status={status} />
+                  <ItemList.TextCell>{experiment.targetType}</ItemList.TextCell>
+                  <ItemList.TextCell>{experiment.targetId}</ItemList.TextCell>
+                  <ItemList.FlexCell className={cn('[&>small]:text-neutral3')}>
+                    <b>{experiment.totalItems}</b>
+                    <small>|</small>
+                    <b>{experiment.succeededCount}</b>
+                    <small>|</small>
+                    <b>{experiment.failedCount}</b>
+                  </ItemList.FlexCell>
+                  <ItemList.TextCell>{formatDate(experiment.createdAt)}</ItemList.TextCell>
                 </ItemList.RowButton>
               </ItemList.Row>
             );

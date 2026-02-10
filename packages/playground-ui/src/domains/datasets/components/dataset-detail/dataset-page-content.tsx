@@ -187,7 +187,7 @@ export function DatasetPageContent({
                   <Tab value="experiments">Experiments ({experiments.length})</Tab>
                 </TabList>
 
-                <TabContent value="items" className="grid overflow-auto mt-8">
+                <TabContent value="items" className="grid overflow-auto mt-5">
                   <DatasetItems
                     datasetId={datasetId}
                     items={items}
@@ -214,7 +214,7 @@ export function DatasetPageContent({
                   />
                 </TabContent>
 
-                <TabContent value="experiments" className="grid overflow-auto mt-8">
+                <TabContent value="experiments" className="grid overflow-auto mt-5">
                   <DatasetExperiments
                     experiments={experiments}
                     isLoading={isExperimentsLoading}

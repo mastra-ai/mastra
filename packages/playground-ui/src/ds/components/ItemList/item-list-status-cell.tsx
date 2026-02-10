@@ -1,24 +1,33 @@
 import { cn } from '@/lib/utils';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 export type ItemListStatusCellProps = {
-  status?: 'success' | 'failed';
+  status?: string;
 };
 
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export function ItemListStatusCell({ status }: ItemListStatusCellProps) {
+  if (!status) {
+    return null;
+  }
+
   return (
-    <div className={cn('flex justify-center items-center w-full relative')}>
-      {status ? (
-        <div
-          className={cn('w-[0.6rem] h-[0.6rem] rounded-full', {
-            'bg-green-600': status === 'success',
-            'bg-red-700': status === 'failed',
-          })}
-        ></div>
-      ) : (
-        <div className="text-neutral2 text-ui-sm leading-none">-</div>
-      )}
-      <VisuallyHidden>Status: {status ? status : 'not provided'}</VisuallyHidden>
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className={cn('flex items-center justify-center w-full relative bg-transparent h-full')}>
+          <div
+            className={cn('w-[0.5rem] h-[0.5rem] rounded-full', {
+              'bg-green-600': ['success', 'completed'].includes(status),
+              'bg-red-700': ['error', 'failed'].includes(status),
+              'bg-yellow-500': ['pending', 'running'].includes(status),
+            })}
+          ></div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>{capitalize(status)}</TooltipContent>
+    </Tooltip>
   );
 }

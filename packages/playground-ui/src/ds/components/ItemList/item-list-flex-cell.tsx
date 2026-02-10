@@ -7,9 +7,9 @@ export type ItemListTextCellProps = {
   className?: string;
 };
 
-export function ItemListTextCell({ children, isLoading, className }: ItemListTextCellProps) {
+export function ItemListFlexCell({ children, isLoading, className }: ItemListTextCellProps) {
   return (
-    <div className={cn('text-neutral4 text-ui-md truncate capitalize', className)}>
+    <div className={cn('flex items-center gap-2', className)}>
       {isLoading ? (
         <div className="bg-surface4 rounded-md animate-pulse text-transparent h-[1rem] select-none"></div>
       ) : (

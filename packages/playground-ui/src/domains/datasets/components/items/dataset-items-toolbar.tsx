@@ -1,7 +1,7 @@
 'use client';
 
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Button } from '@/ds/components/Button';
+import { Button, ButtonWithTooltip } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
 import {
   Plus,
@@ -20,6 +20,7 @@ import {
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Badge } from '@/ds/components/Badge';
 import { Input } from '@/ds/components/Input';
+import { Column } from '@/ds/components/Columns/column';
 
 interface ActionsMenuProps {
   onExportClick: () => void;
@@ -125,7 +126,7 @@ export function DatasetItemsToolbar({
 }: DatasetItemsToolbarProps) {
   if (isSelectionActive) {
     return (
-      <div className="flex items-center justify-between gap-4 w-full">
+      <Column.Toolbar>
         {/* Search input - always visible */}
         <div className="relative flex-1 max-w-xs">
           <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral4 pointer-events-none">
@@ -146,19 +147,25 @@ export function DatasetItemsToolbar({
             <MoveRightIcon />
           </div>
           <ButtonsGroup>
-            <Button variant="standard" size="default" disabled={selectedCount === 0} onClick={onExecuteAction}>
+            <ButtonWithTooltip
+              variant="standard"
+              size="default"
+              disabled={selectedCount === 0}
+              onClick={onExecuteAction}
+              tooltipContent={selectedCount === 0 ? 'Select at least one item' : undefined}
+            >
               {selectionMode === 'export' && 'Export Items as CSV'}
               {selectionMode === 'export-json' && 'Export Items as JSON'}
               {selectionMode === 'create-dataset' && 'Create a new Dataset with Items'}
               {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
               {selectionMode === 'delete' && 'Delete Items'}
-            </Button>
+            </ButtonWithTooltip>
             <Button variant="secondary" size="default" onClick={onCancelSelection}>
               Cancel
             </Button>
           </ButtonsGroup>
         </div>
-      </div>
+      </Column.Toolbar>
     );
   }
 
