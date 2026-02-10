@@ -11,6 +11,10 @@
  *   * * * * *
  *
  * Each field supports: *, N, N-M, N,M, and /N step values.
+ *
+ * Day-of-month / day-of-week interaction follows standard cron semantics:
+ * when both fields are restricted (not `*`), the match is OR'd — fire if
+ * either field matches. When only one is restricted, only that field is checked.
  */
 
 import type { IMastraLogger } from '../logger';
@@ -22,13 +26,18 @@ export interface CronFields {
   daysOfMonth: Set<number>;
   months: Set<number>;
   daysOfWeek: Set<number>;
+  /** True when the day-of-month field was `*` (or equivalent full range). */
+  domWildcard: boolean;
+  /** True when the day-of-week field was `*` (or equivalent full range). */
+  dowWildcard: boolean;
 }
 
 /**
  * Parse a single cron field into the set of matching integer values.
  */
-function parseCronField(field: string, min: number, max: number): Set<number> {
+function parseCronField(field: string, min: number, max: number): { values: Set<number>; isWildcard: boolean } {
   const values = new Set<number>();
+  let isWildcard = false;
 
   for (const part of field.split(',')) {
     const trimmed = part.trim();
@@ -43,20 +52,21 @@ function parseCronField(field: string, min: number, max: number): Set<number> {
       let start = min;
       let end = max;
 
-      if (range !== '*') {
-        if (range!.includes('-')) {
-          const [s, e] = range!.split('-');
-          start = parseInt(s!, 10);
-          end = parseInt(e!, 10);
-        } else {
-          start = parseInt(range!, 10);
-        }
+      if (range === '*') {
+        isWildcard = true;
+      } else if (range!.includes('-')) {
+        const [s, e] = range!.split('-');
+        start = parseInt(s!, 10);
+        end = parseInt(e!, 10);
+      } else {
+        start = parseInt(range!, 10);
       }
 
       for (let i = start; i <= end; i += step) {
         values.add(i);
       }
     } else if (trimmed === '*') {
+      isWildcard = true;
       for (let i = min; i <= max; i++) {
         values.add(i);
       }
@@ -85,7 +95,7 @@ function parseCronField(field: string, min: number, max: number): Set<number> {
     }
   }
 
-  return values;
+  return { values, isWildcard };
 }
 
 /**
@@ -98,11 +108,11 @@ export function parseCron(expr: string): CronFields {
     throw new Error(`Invalid cron expression "${expr}": expected 5 fields, got ${parts.length}`);
   }
 
-  const minutes = parseCronField(parts[0]!, 0, 59);
-  const hours = parseCronField(parts[1]!, 0, 23);
-  const daysOfMonth = parseCronField(parts[2]!, 1, 31);
-  const months = parseCronField(parts[3]!, 1, 12);
-  const daysOfWeek = parseCronField(parts[4]!, 0, 7);
+  const { values: minutes } = parseCronField(parts[0]!, 0, 59);
+  const { values: hours } = parseCronField(parts[1]!, 0, 23);
+  const { values: daysOfMonth, isWildcard: domWildcard } = parseCronField(parts[2]!, 1, 31);
+  const { values: months } = parseCronField(parts[3]!, 1, 12);
+  const { values: daysOfWeek, isWildcard: dowWildcard } = parseCronField(parts[4]!, 0, 7);
 
   // Normalize: 7 (Sunday) → 0
   if (daysOfWeek.has(7)) {
@@ -110,7 +120,7 @@ export function parseCron(expr: string): CronFields {
     daysOfWeek.delete(7);
   }
 
-  return { minutes, hours, daysOfMonth, months, daysOfWeek };
+  return { minutes, hours, daysOfMonth, months, daysOfWeek, domWildcard, dowWildcard };
 }
 
 /**
@@ -126,11 +136,39 @@ export function validateCron(expr: string): boolean {
 }
 
 /**
- * Compute the next Date matching the given cron expression, strictly after `from`.
- * Scans forward efficiently by skipping non-matching months, days, and hours.
+ * Check whether a date's day matches the DOM/DOW fields using standard cron
+ * semantics: when both fields are restricted, use OR; when only one is
+ * restricted, check only that field; when both are wildcards, always match.
  */
-export function getNextCronDate(cronExpr: string, from: Date): Date {
-  const { minutes, hours, daysOfMonth, months, daysOfWeek } = parseCron(cronExpr);
+function dayMatches(date: Date, fields: CronFields): boolean {
+  const domMatch = fields.daysOfMonth.has(date.getDate());
+  const dowMatch = fields.daysOfWeek.has(date.getDay());
+
+  if (fields.domWildcard && fields.dowWildcard) {
+    // Both wildcards — always matches
+    return true;
+  }
+  if (fields.domWildcard) {
+    // Only DOW is restricted
+    return dowMatch;
+  }
+  if (fields.dowWildcard) {
+    // Only DOM is restricted
+    return domMatch;
+  }
+  // Both restricted — OR semantics per cron spec
+  return domMatch || dowMatch;
+}
+
+/**
+ * Compute the next Date matching the given cron fields, strictly after `from`.
+ * Scans forward efficiently by skipping non-matching months, days, and hours.
+ *
+ * Accepts either a pre-parsed `CronFields` object or a cron expression string.
+ */
+export function getNextCronDate(cronOrFields: string | CronFields, from: Date): Date {
+  const fields = typeof cronOrFields === 'string' ? parseCron(cronOrFields) : cronOrFields;
+  const { minutes, hours, months } = fields;
 
   // Start from the next whole minute after `from`
   const date = new Date(from.getTime());
@@ -146,7 +184,7 @@ export function getNextCronDate(cronExpr: string, from: Date): Date {
       continue;
     }
 
-    if (!daysOfMonth.has(date.getDate()) || !daysOfWeek.has(date.getDay())) {
+    if (!dayMatches(date, fields)) {
       date.setDate(date.getDate() + 1);
       date.setHours(0, 0, 0, 0);
       continue;
@@ -165,12 +203,21 @@ export function getNextCronDate(cronExpr: string, from: Date): Date {
     return date;
   }
 
-  throw new Error(`No matching cron date found within 4 years for: "${cronExpr}"`);
+  throw new Error(
+    `No matching cron date found within 4 years for: "${typeof cronOrFields === 'string' ? cronOrFields : 'CronFields'}"`,
+  );
 }
+
+/** Maximum safe delay for setTimeout (2^31 - 1 ms, ~24.8 days). */
+const MAX_TIMEOUT_DELAY = 2_147_483_647;
 
 /**
  * A lightweight cron scheduler that manages setTimeout-chained execution
  * of workflows with `schedule` configs.
+ *
+ * Runs don't overlap — the next execution is scheduled only after the
+ * current run completes. If a run takes longer than the cron interval,
+ * intermediate fires are silently skipped.
  */
 export class CronScheduler {
   #timers: Map<string, ReturnType<typeof setTimeout>> = new Map();
@@ -195,6 +242,8 @@ export class CronScheduler {
 
   #scheduleWorkflow(workflow: Workflow<any, any, any, any, any, any, any>, logger?: IMastraLogger): void {
     const { cron, inputData } = workflow.schedule!;
+    // Parse once and reuse the fields for every scheduling cycle
+    const fields = parseCron(cron);
 
     const scheduleNext = () => {
       if (!this.#running) return;
@@ -202,7 +251,7 @@ export class CronScheduler {
       const now = new Date();
       let next: Date;
       try {
-        next = getNextCronDate(cron, now);
+        next = getNextCronDate(fields, now);
       } catch {
         logger?.error?.(`Failed to compute next cron date for workflow "${workflow.id}"`);
         return;
@@ -210,7 +259,7 @@ export class CronScheduler {
 
       const delay = next.getTime() - now.getTime();
 
-      const timer = setTimeout(async () => {
+      const executeAndReschedule = async () => {
         if (!this.#running) return;
         try {
           const run = await workflow.createRun();
@@ -219,9 +268,19 @@ export class CronScheduler {
           logger?.error?.(`Cron execution failed for workflow "${workflow.id}":`, err);
         }
         scheduleNext();
-      }, delay);
+      };
 
-      this.#timers.set(workflow.id, timer);
+      // Chain intermediate timeouts for delays that exceed Node's 32-bit limit
+      if (delay > MAX_TIMEOUT_DELAY) {
+        const timer = setTimeout(() => {
+          if (!this.#running) return;
+          scheduleNext();
+        }, MAX_TIMEOUT_DELAY);
+        this.#timers.set(workflow.id, timer);
+      } else {
+        const timer = setTimeout(executeAndReschedule, delay);
+        this.#timers.set(workflow.id, timer);
+      }
     };
 
     scheduleNext();

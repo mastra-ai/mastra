@@ -2122,10 +2122,10 @@ export class Mastra<
    * const mastra = new Mastra({
    *   workflows: { billingWorkflow }
    * });
-   * await mastra.startScheduler();
+   * mastra.startScheduler();
    * ```
    */
-  async startScheduler(): Promise<void> {
+  startScheduler(): void {
     if (this.#scheduler) {
       this.#scheduler.stop();
     }
