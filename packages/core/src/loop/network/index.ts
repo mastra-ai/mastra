@@ -299,7 +299,13 @@ export async function prepareMemoryStep({
       resourceId: thread?.resourceId,
     });
     messageList.add(messages, 'user');
-    const messagesToSave = messageList.get.all.db();
+    const messagesToSave = messageList.get.all.db().map(msg => ({
+      ...msg,
+      content: {
+        ...msg.content,
+        metadata: { ...msg.content?.metadata, source: msg.content?.metadata?.source ?? 'user' },
+      },
+    }));
 
     if (memory) {
       promises.push(
@@ -1751,7 +1757,7 @@ export async function createNetworkLoop({
                             isNetwork: true,
                             selectionReason: inputData.selectionReason,
                             primitiveType: inputData.primitiveType,
-                            primitiveId: toolId,
+                            primitiveId: inputData.primitiveId,
                             finalResult: { result: '', toolCallId },
                             input: inputDataToUse,
                           }),
@@ -1761,7 +1767,7 @@ export async function createNetworkLoop({
                       metadata: {
                         mode: 'network',
                         source: 'agent-network',
-                        primitiveId: toolId,
+                        primitiveId: inputData.primitiveId,
                         primitiveType: inputData.primitiveType,
                         suspendedTools: {
                           [inputData.primitiveId]: {
@@ -1859,7 +1865,7 @@ export async function createNetworkLoop({
                     isNetwork: true,
                     selectionReason: inputData.selectionReason,
                     primitiveType: inputData.primitiveType,
-                    primitiveId: toolId,
+                    primitiveId: inputData.primitiveId,
                     finalResult: { result: finalResult, toolCallId },
                     input: inputDataToUse,
                   }),
@@ -1869,7 +1875,7 @@ export async function createNetworkLoop({
               metadata: {
                 mode: 'network',
                 source: 'agent-network',
-                primitiveId: toolId,
+                primitiveId: inputData.primitiveId,
                 primitiveType: inputData.primitiveType,
               },
             },
