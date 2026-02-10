@@ -1,12 +1,9 @@
-import { z } from 'zod';
-import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
-import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
+import type { JSONSchema7 } from 'json-schema';
 import type { Targets } from 'zod-to-json-schema';
+import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
-import type { AllZodType as AllZodTypeV3 } from '../schema-compatibility-v3';
-import type { AllZodType as AllZodTypeV4 } from '../schema-compatibility-v4';
+import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
-import { isOptional, isObj, isArr, isUnion, isString } from '../zodTypes';
 
 export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -21,27 +18,18 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
     return this.getModel().modelId.includes('claude');
   }
 
-  processZodType(value: ZodTypeV3): ZodTypeV3;
-  processZodType(value: ZodTypeV4): ZodTypeV4;
-  processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
-    if (isOptional(z)(value)) {
-      const handleTypes: AllZodTypeV3[] | AllZodTypeV4 = [
-        'ZodObject',
-        'ZodArray',
-        'ZodUnion',
-        'ZodNever',
-        'ZodUndefined',
-        'ZodTuple',
-      ];
+  processZodType(value: ZodType): ZodType {
+    if (this.isOptional(value)) {
+      const handleTypes: string[] = ['ZodObject', 'ZodArray', 'ZodUnion', 'ZodNever', 'ZodUndefined', 'ZodTuple'];
       if (this.getModel().modelId.includes('claude-3.5-haiku')) handleTypes.push('ZodString');
       return this.defaultZodOptionalHandler(value, handleTypes);
-    } else if (isObj(z)(value)) {
+    } else if (this.isObj(value)) {
       return this.defaultZodObjectHandler(value);
-    } else if (isArr(z)(value)) {
+    } else if (this.isArr(value)) {
       return this.defaultZodArrayHandler(value, []);
-    } else if (isUnion(z)(value)) {
+    } else if (this.isUnion(value)) {
       return this.defaultZodUnionHandler(value);
-    } else if (isString(z)(value)) {
+    } else if (this.isString(value)) {
       // the claude-3.5-haiku model support these properties but the model doesn't respect them, but it respects them when they're
       // added to the tool description
 
@@ -52,10 +40,45 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
       }
     }
 
-    return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>, [
-      'ZodNever',
-      'ZodTuple',
-      'ZodUndefined',
-    ]);
+    return this.defaultUnsupportedZodTypeHandler(value);
+  }
+
+  preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+    // Process based on schema type
+    if (isObjectSchema(schema)) {
+      this.defaultObjectHandler(schema);
+    } else if (isArraySchema(schema)) {
+      this.defaultArrayHandler(schema);
+    } else if (isStringSchema(schema)) {
+      // claude-3.5-haiku doesn't respect string constraints, so convert them to description
+      if (this.getModel().modelId.includes('claude-3.5-haiku')) {
+        this.defaultStringHandler(schema);
+      }
+    }
+  }
+
+  postProcessJSONNode(schema: JSONSchema7): void {
+    // Handle union schemas in post-processing (after children are processed)
+    if (isUnionSchema(schema)) {
+      this.defaultUnionHandler(schema);
+    }
+
+    // Fix v4-specific issues in post-processing
+    if (isObjectSchema(schema)) {
+      // Fix passthrough objects: convert additionalProperties: {} to additionalProperties: true
+      if (
+        schema.additionalProperties !== undefined &&
+        typeof schema.additionalProperties === 'object' &&
+        schema.additionalProperties !== null &&
+        Object.keys(schema.additionalProperties).length === 0
+      ) {
+        schema.additionalProperties = true;
+      }
+
+      // Fix record schemas: remove propertyNames (v4 adds this but it's not needed)
+      if ('propertyNames' in schema) {
+        delete (schema as Record<string, unknown>).propertyNames;
+      }
+    }
   }
 }

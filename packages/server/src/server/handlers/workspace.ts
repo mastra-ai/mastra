@@ -61,6 +61,13 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
 // =============================================================================
+// Constants
+// =============================================================================
+
+/** Directory path for skills installed via skills.sh */
+const SKILLS_SH_DIR = '.agents/skills';
+
+// =============================================================================
 // Helper Functions
 // =============================================================================
 
@@ -108,18 +115,12 @@ function requireWorkspaceV1Support(): void {
 
 /**
  * Get a workspace by ID from Mastra's workspace registry.
- * If no workspaceId is provided, returns the global workspace.
  *
  * Backwards compatible: Falls back to searching through agents if
  * mastra.getWorkspaceById() is not available (older @mastra/core versions).
  */
-async function getWorkspaceById(mastra: any, workspaceId?: string): Promise<Workspace | undefined> {
+async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Workspace | undefined> {
   requireWorkspaceV1Support();
-
-  // If no workspaceId specified, return global workspace
-  if (!workspaceId) {
-    return mastra.getWorkspace?.();
-  }
 
   // Check if the global workspace matches
   const globalWorkspace = mastra.getWorkspace?.();
@@ -153,10 +154,9 @@ async function getWorkspaceById(mastra: any, workspaceId?: string): Promise<Work
 
 /**
  * Get skills from a specific workspace by ID.
- * If no workspaceId is provided, returns skills from the global workspace.
  * Note: getWorkspaceById already checks for workspace v1 support.
  */
-async function getSkillsById(mastra: any, workspaceId?: string): Promise<WorkspaceSkills | undefined> {
+async function getSkillsById(mastra: any, workspaceId: string): Promise<WorkspaceSkills | undefined> {
   const workspace = await getWorkspaceById(mastra, workspaceId);
   return workspace?.skills;
 }
@@ -197,62 +197,86 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
         };
       }> = [];
 
-      const seenIds = new Set<string>();
+      // Prefer the workspace registry if available (duck-type check for newer @mastra/core).
+      // This avoids calling dynamic workspace functions without proper request context.
+      // Dynamic workspaces get lazily registered during agent execution (stream/generate).
+      if (typeof mastra.listWorkspaces === 'function') {
+        const registeredWorkspaces = mastra.listWorkspaces();
+        for (const [, ws] of Object.entries(registeredWorkspaces) as [string, Workspace][]) {
+          workspaces.push({
+            id: ws.id,
+            name: ws.name,
+            status: ws.status,
+            source: 'mastra',
+            capabilities: {
+              hasFilesystem: !!ws.filesystem,
+              hasSandbox: !!ws.sandbox,
+              canBM25: ws.canBM25,
+              canVector: ws.canVector,
+              canHybrid: ws.canHybrid,
+              hasSkills: !!ws.skills,
+            },
+            safety: {
+              readOnly: ws.filesystem?.readOnly ?? false,
+            },
+          });
+        }
+      } else {
+        // Fallback for older @mastra/core without workspace registry:
+        // Check global workspace and loop through agents
+        const seenIds = new Set<string>();
+        const globalWorkspace = mastra.getWorkspace?.();
+        if (globalWorkspace) {
+          seenIds.add(globalWorkspace.id);
+          workspaces.push({
+            id: globalWorkspace.id,
+            name: globalWorkspace.name,
+            status: globalWorkspace.status,
+            source: 'mastra',
+            capabilities: {
+              hasFilesystem: !!globalWorkspace.filesystem,
+              hasSandbox: !!globalWorkspace.sandbox,
+              canBM25: globalWorkspace.canBM25,
+              canVector: globalWorkspace.canVector,
+              canHybrid: globalWorkspace.canHybrid,
+              hasSkills: !!globalWorkspace.skills,
+            },
+            safety: {
+              readOnly: globalWorkspace.filesystem?.readOnly ?? false,
+            },
+          });
+        }
 
-      // Get workspace from Mastra instance
-      const globalWorkspace = mastra.getWorkspace?.();
-      if (globalWorkspace) {
-        seenIds.add(globalWorkspace.id);
-        workspaces.push({
-          id: globalWorkspace.id,
-          name: globalWorkspace.name,
-          status: globalWorkspace.status,
-          source: 'mastra',
-          capabilities: {
-            hasFilesystem: !!globalWorkspace.filesystem,
-            hasSandbox: !!globalWorkspace.sandbox,
-            canBM25: globalWorkspace.canBM25,
-            canVector: globalWorkspace.canVector,
-            canHybrid: globalWorkspace.canHybrid,
-            hasSkills: !!globalWorkspace.skills,
-          },
-          safety: {
-            readOnly: globalWorkspace.filesystem?.readOnly ?? false,
-          },
-        });
-      }
-
-      // Get workspaces from agents
-      const agents = mastra.listAgents?.() ?? {};
-      for (const [agentId, agent] of Object.entries(agents)) {
-        if (agent.hasOwnWorkspace?.()) {
-          try {
-            const agentWorkspace = await agent.getWorkspace?.();
-            if (agentWorkspace && !seenIds.has(agentWorkspace.id)) {
-              seenIds.add(agentWorkspace.id);
-              workspaces.push({
-                id: agentWorkspace.id,
-                name: agentWorkspace.name,
-                status: agentWorkspace.status,
-                source: 'agent',
-                agentId,
-                agentName: agent.name,
-                capabilities: {
-                  hasFilesystem: !!agentWorkspace.filesystem,
-                  hasSandbox: !!agentWorkspace.sandbox,
-                  canBM25: agentWorkspace.canBM25,
-                  canVector: agentWorkspace.canVector,
-                  canHybrid: agentWorkspace.canHybrid,
-                  hasSkills: !!agentWorkspace.skills,
-                },
-                safety: {
-                  readOnly: agentWorkspace.filesystem?.readOnly ?? false,
-                },
-              });
+        const agents = mastra.listAgents?.() ?? {};
+        for (const [agentId, agent] of Object.entries(agents)) {
+          if ((agent as any).hasOwnWorkspace?.()) {
+            try {
+              const agentWorkspace = await (agent as any).getWorkspace?.();
+              if (agentWorkspace && !seenIds.has(agentWorkspace.id)) {
+                seenIds.add(agentWorkspace.id);
+                workspaces.push({
+                  id: agentWorkspace.id,
+                  name: agentWorkspace.name,
+                  status: agentWorkspace.status,
+                  source: 'agent',
+                  agentId,
+                  agentName: (agent as any).name,
+                  capabilities: {
+                    hasFilesystem: !!agentWorkspace.filesystem,
+                    hasSandbox: !!agentWorkspace.sandbox,
+                    canBM25: agentWorkspace.canBM25,
+                    canVector: agentWorkspace.canVector,
+                    canHybrid: agentWorkspace.canHybrid,
+                    hasSkills: !!agentWorkspace.skills,
+                  },
+                  safety: {
+                    readOnly: agentWorkspace.filesystem?.readOnly ?? false,
+                  },
+                });
+              }
+            } catch {
+              continue;
             }
-          } catch {
-            // Skip agents with dynamic workspaces that fail without thread context
-            continue;
           }
         }
       }
@@ -718,6 +742,9 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
 // Skills Routes (under /workspaces/:workspaceId/skills)
 // =============================================================================
 
+/** Path prefix for skills installed via skills.sh (with trailing slash for prefix matching) */
+const SKILLS_SH_PATH_PREFIX = `${SKILLS_SH_DIR}/`;
+
 export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   method: 'GET',
   path: '/workspaces/:workspaceId/skills',
@@ -731,7 +758,8 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
     try {
       requireWorkspaceV1Support();
 
-      const skills = await getSkillsById(mastra, workspaceId);
+      const workspace = await getWorkspaceById(mastra, workspaceId);
+      const skills = workspace?.skills;
       if (!skills) {
         return { skills: [], isSkillsConfigured: false };
       }
@@ -746,12 +774,30 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
       const skillsWithPath = await Promise.all(
         skillsList.map(async skillMeta => {
           let path = '';
+          let skillsShSource: { owner: string; repo: string } | undefined;
+
           try {
             const fullSkill = await skills.get(skillMeta.name);
             path = fullSkill?.path ?? '';
+
+            // For skills installed via skills.sh, read source info from .meta.json
+            if (path.startsWith(SKILLS_SH_PATH_PREFIX) && workspace.filesystem) {
+              try {
+                const metaPath = `${path}/.meta.json`;
+                const metaContent = await workspace.filesystem.readFile(metaPath);
+                const metaText = typeof metaContent === 'string' ? metaContent : metaContent.toString('utf-8');
+                const meta = JSON.parse(metaText) as { owner?: string; repo?: string };
+                if (meta.owner && meta.repo) {
+                  skillsShSource = { owner: meta.owner, repo: meta.repo };
+                }
+              } catch {
+                // .meta.json might not exist or be invalid - that's ok
+              }
+            }
           } catch {
             // Fall back to empty path if skill details can't be loaded
           }
+
           return {
             name: skillMeta.name,
             description: skillMeta.description,
@@ -759,6 +805,7 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
             compatibility: skillMeta.compatibility,
             metadata: skillMeta.metadata,
             path,
+            skillsShSource,
           };
         }),
       );
@@ -1247,7 +1294,7 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
 
       // Validate skill name to prevent path traversal
       const safeSkillId = assertSafeSkillName(result.skillId);
-      const installPath = `.agents/skills/${safeSkillId}`;
+      const installPath = `${SKILLS_SH_DIR}/${safeSkillId}`;
 
       // Ensure the skills directory exists
       try {
@@ -1344,7 +1391,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
 
       // Validate skill name to prevent path traversal
       const safeSkillName = assertSafeSkillName(skillName);
-      const skillPath = `.agents/skills/${safeSkillName}`;
+      const skillPath = `${SKILLS_SH_DIR}/${safeSkillName}`;
 
       // Check if skill exists
       try {
@@ -1398,7 +1445,6 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         throw new HTTPException(403, { message: 'Workspace is read-only' });
       }
 
-      const skillsPath = '.agents/skills';
       const results: Array<{
         skillName: string;
         success: boolean;
@@ -1413,7 +1459,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         skillsToUpdate = [assertSafeSkillName(skillName)];
       } else {
         try {
-          const entries = await workspace?.filesystem?.readdir(skillsPath);
+          const entries = await workspace?.filesystem?.readdir(SKILLS_SH_DIR);
           skillsToUpdate = entries?.filter(e => e.type === 'directory').map(e => e.name) ?? [];
         } catch {
           // Skills directory doesn't exist or isn't readable - no skills to update
@@ -1434,7 +1480,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
           });
           continue;
         }
-        const metaPath = `${skillsPath}/${skill}/.meta.json`;
+        const metaPath = `${SKILLS_SH_DIR}/${skill}/.meta.json`;
         try {
           const metaContent = await workspace?.filesystem?.readFile(metaPath, { encoding: 'utf-8' });
           const meta: SkillMetaFile = JSON.parse(metaContent as string);
@@ -1451,7 +1497,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
             continue;
           }
 
-          const installPath = `${skillsPath}/${skill}`;
+          const installPath = `${SKILLS_SH_DIR}/${skill}`;
           let filesWritten = 0;
 
           for (const file of fetchResult.files) {

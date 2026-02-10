@@ -3,7 +3,7 @@ import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
-import { getZodTypeName } from '../utils/zod-utils';
+import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
 export type StoragePagination = {
@@ -57,9 +57,10 @@ export type PaginationInfo = {
 
 export type MastraMessageFormat = 'v1' | 'v2';
 
-export type StorageListMessagesInput = {
-  threadId: string | string[];
-  resourceId?: string;
+/**
+ * Common options for listing messages (pagination, filtering, ordering)
+ */
+type StorageListMessagesOptions = {
   include?: {
     id: string;
     threadId?: string;
@@ -97,8 +98,34 @@ export type StorageListMessagesInput = {
   orderBy?: StorageOrderBy<'createdAt'>;
 };
 
+/**
+ * Input for listing messages by thread ID.
+ * The resource ID can be optionally provided to filter messages within the thread.
+ */
+export type StorageListMessagesInput = StorageListMessagesOptions & {
+  /**
+   * Thread ID(s) to query messages from.
+   */
+  threadId: string | string[];
+  /**
+   * Optional resource ID to further filter messages within the thread(s).
+   */
+  resourceId?: string;
+};
+
 export type StorageListMessagesOutput = PaginationInfo & {
   messages: MastraDBMessage[];
+};
+
+/**
+ * Input for listing messages by resource ID only (across all threads).
+ * Used by Observational Memory and LongMemEval for resource-scoped queries.
+ */
+export type StorageListMessagesByResourceIdInput = StorageListMessagesOptions & {
+  /**
+   * Resource ID to query ALL messages for the resource across all threads.
+   */
+  resourceId: string;
 };
 
 export type StorageListWorkflowRunsInput = {
@@ -317,8 +344,8 @@ export interface StorageAgentSnapshotType {
   name: string;
   /** Purpose description */
   description?: string;
-  /** System instructions/prompt */
-  instructions: string;
+  /** System instructions/prompt — plain string for backward compatibility, or array of instruction blocks */
+  instructions: string | AgentInstructionBlock[];
   /** Model configuration (provider, name, etc.) */
   model: StorageModelConfig;
   /** Array of tool keys to resolve from Mastra's tool registry */
@@ -385,6 +412,8 @@ export type StorageCreateAgentInput = {
 /**
  * Input for updating an agent. Includes metadata-level fields and optional config fields.
  * The handler layer separates these into agent-record updates vs new-version creation.
+ *
+ * Memory can be set to `null` to explicitly disable/remove memory from the agent.
  */
 export type StorageUpdateAgentInput = {
   id: string;
@@ -396,7 +425,10 @@ export type StorageUpdateAgentInput = {
   activeVersionId?: string;
   /** Agent status: 'draft' or 'published' */
   status?: string;
-} & Partial<StorageAgentSnapshotType>;
+} & Partial<Omit<StorageAgentSnapshotType, 'memory'>> & {
+    /** Memory configuration object, or null to disable memory */
+    memory?: SerializedMemoryConfig | null;
+  };
 
 export type StorageListAgentsInput = {
   /**
@@ -428,6 +460,137 @@ export type StorageListAgentsOutput = PaginationInfo & {
 
 export type StorageListAgentsResolvedOutput = PaginationInfo & {
   agents: StorageResolvedAgentType[];
+};
+
+// ============================================
+// Prompt Block Storage Types
+// ============================================
+
+/** Instruction block discriminated union, stored in agent snapshots */
+export type AgentInstructionBlock =
+  | { type: 'text'; content: string }
+  | { type: 'prompt_block_ref'; id: string }
+  | { type: 'prompt_block'; content: string; rules?: RuleGroup };
+
+/** Condition operators for rule evaluation */
+export type ConditionOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'greater_than'
+  | 'less_than'
+  | 'greater_than_or_equal'
+  | 'less_than_or_equal'
+  | 'in'
+  | 'not_in'
+  | 'exists'
+  | 'not_exists';
+
+/** Leaf rule: evaluates a single condition against a context field */
+export interface Rule {
+  field: string;
+  operator: ConditionOperator;
+  value?: unknown;
+}
+
+/** Recursive rule group for AND/OR logic */
+export interface RuleGroup {
+  operator: 'AND' | 'OR';
+  conditions: (Rule | RuleGroup)[];
+}
+
+/**
+ * Thin prompt block record (metadata only).
+ * All configuration lives in version snapshots (StoragePromptBlockSnapshotType).
+ */
+export interface StoragePromptBlockType {
+  /** Unique identifier */
+  id: string;
+  /** Block status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to prompt_block_versions.id — the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Prompt block version snapshot containing the content fields.
+ * These fields live exclusively in version snapshot rows.
+ */
+export interface StoragePromptBlockSnapshotType {
+  /** Display name of the prompt block */
+  name: string;
+  /** Purpose description */
+  description?: string;
+  /** Template content with {{variable}} interpolation */
+  content: string;
+  /** Rules for conditional inclusion */
+  rules?: RuleGroup;
+}
+
+/** Resolved prompt block: thin record merged with active version snapshot */
+export type StorageResolvedPromptBlockType = StoragePromptBlockType & StoragePromptBlockSnapshotType;
+
+/** Input for creating a new prompt block */
+export type StorageCreatePromptBlockInput = {
+  /** Unique identifier for the prompt block */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+} & StoragePromptBlockSnapshotType;
+
+/** Input for updating a prompt block */
+export type StorageUpdatePromptBlockInput = {
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+  /** FK to prompt_block_versions.id — the currently active version */
+  activeVersionId?: string;
+  /** Block status */
+  status?: string;
+} & Partial<StoragePromptBlockSnapshotType>;
+
+export type StorageListPromptBlocksInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter prompt blocks by author identifier.
+   */
+  authorId?: string;
+  /**
+   * Filter prompt blocks by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+};
+
+/** Paginated list output for thin prompt block records */
+export type StorageListPromptBlocksOutput = PaginationInfo & {
+  promptBlocks: StoragePromptBlockType[];
+};
+
+/** Paginated list output for resolved prompt blocks */
+export type StorageListPromptBlocksResolvedOutput = PaginationInfo & {
+  promptBlocks: StorageResolvedPromptBlockType[];
 };
 
 // Basic Index Management Types
@@ -467,7 +630,166 @@ export interface StorageIndexStats extends IndexInfo {
   method?: string; // Index method (btree, hash, etc)
 }
 
+// ============================================
+// Observational Memory Types
+// ============================================
+
+/**
+ * Scope of observational memory
+ */
+export type ObservationalMemoryScope = 'thread' | 'resource';
+
+/**
+ * How the observational memory record was created
+ */
+export type ObservationalMemoryOriginType = 'initial' | 'reflection';
+
+/**
+ * Core database record for observational memory
+ *
+ * For resource scope: One active record per resource, containing observations from ALL threads.
+ * For thread scope: One record per thread.
+ *
+ * Derived values (not stored, computed at runtime):
+ * - reflectionCount: count records with originType: 'reflection'
+ * - lastReflectionAt: createdAt of most recent reflection record
+ * - previousGeneration: record with next-oldest createdAt
+ */
+export interface ObservationalMemoryRecord {
+  // Identity
+  /** Unique record ID */
+  id: string;
+  /** Memory scope - thread or resource */
+  scope: ObservationalMemoryScope;
+  /** Thread ID (null for resource scope) */
+  threadId: string | null;
+  /** Resource ID (always present) */
+  resourceId: string;
+
+  // Timestamps (top-level for easy querying)
+  /** When this record was created */
+  createdAt: Date;
+  /** When this record was last updated */
+  updatedAt: Date;
+  /**
+   * Single cursor for message loading - when we last observed ANY thread for this resource.
+   * Undefined means no observations have been made yet (all messages are "unobserved").
+   */
+  lastObservedAt?: Date;
+
+  // Generation tracking
+  /** How this record was created */
+  originType: ObservationalMemoryOriginType;
+  /** Generation counter - incremented each time a reflection creates a new record */
+  generationCount: number;
+
+  // Observation content
+  /**
+   * Currently active observations.
+   * For resource scope: Contains <thread id="...">...</thread> sections for attribution.
+   * For thread scope: Plain observation text.
+   */
+  activeObservations: string;
+  /** Observations waiting to be activated (async buffering) */
+  bufferedObservations?: string;
+  /** Reflection waiting to be swapped in (async buffering) */
+  bufferedReflection?: string;
+
+  /**
+   * Message IDs observed in the current generation.
+   * Used as a safeguard against re-observation if timestamp filtering fails.
+   * Reset on reflection (new generation starts fresh).
+   */
+  observedMessageIds?: string[];
+
+  /**
+   * The timezone used when formatting dates for the Observer agent.
+   * Stored for debugging and auditing observation dates.
+   * Example: "America/Los_Angeles", "Europe/London"
+   */
+  observedTimezone?: string;
+
+  // Token tracking
+  /** Running total of all tokens observed */
+  totalTokensObserved: number;
+  /** Current size of active observations */
+  observationTokenCount: number;
+  /** Accumulated tokens from pending (unobserved) messages across sessions */
+  pendingMessageTokens: number;
+
+  // State flags
+  /** Is a reflection currently in progress? */
+  isReflecting: boolean;
+  /** Is observation currently in progress? */
+  isObserving: boolean;
+
+  // Configuration
+  /** Current configuration (stored as JSON) */
+  config: Record<string, unknown>;
+
+  // Extensible metadata (app-specific, optional)
+  /** Optional metadata for app-specific extensions */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Input for creating a new observational memory record
+ */
+export interface CreateObservationalMemoryInput {
+  threadId: string | null;
+  resourceId: string;
+  scope: ObservationalMemoryScope;
+  config: Record<string, unknown>;
+  /** The timezone used when formatting dates for the Observer agent (e.g., "America/Los_Angeles") */
+  observedTimezone?: string;
+}
+
+/**
+ * Input for updating active observations.
+ * Uses cursor-based message tracking via lastObservedAt instead of message IDs.
+ */
+export interface UpdateActiveObservationsInput {
+  id: string;
+  observations: string;
+  tokenCount: number;
+  /** Timestamp when these observations were created (for cursor-based message loading) */
+  lastObservedAt: Date;
+  /**
+   * IDs of messages that were observed in this cycle.
+   * Stored in record metadata as a safeguard against re-observation on process restart.
+   * These are appended to any existing IDs and pruned to only include IDs newer than lastObservedAt.
+   */
+  observedMessageIds?: string[];
+  /**
+   * The timezone used when formatting dates for the Observer agent.
+   * Captured from Intl.DateTimeFormat().resolvedOptions().timeZone
+   */
+  observedTimezone?: string;
+}
+
+/**
+ * Input for updating buffered observations.
+ * Note: Async buffering is currently disabled but types are retained for future use.
+ */
+export interface UpdateBufferedObservationsInput {
+  id: string;
+  observations: string;
+  suggestedContinuation?: string;
+}
+
+/**
+ * Input for creating a reflection generation (creates a new record, archives the old one)
+ */
+export interface CreateReflectionGenerationInput {
+  currentRecord: ObservationalMemoryRecord;
+  reflection: string;
+  tokenCount: number;
+}
+
+// ============================================
 // Workflow Storage Types
+// ============================================
+
 export interface UpdateWorkflowStateOptions {
   status: WorkflowRunStatus;
   result?: StepResult<any, any, any, any>;
@@ -477,83 +799,21 @@ export interface UpdateWorkflowStateOptions {
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
 }
 
-/**
- * Get the inner type from a wrapper schema (nullable, optional, default, effects, branded).
- * Compatible with both Zod 3 and Zod 4.
- */
-function getInnerType(schema: z.ZodTypeAny, typeName: string): z.ZodTypeAny | undefined {
-  const schemaAny = schema as any;
-
-  // For nullable, optional, default - the inner type is at _def.innerType
-  if (typeName === 'ZodNullable' || typeName === 'ZodOptional' || typeName === 'ZodDefault') {
-    return schemaAny._zod?.def?.innerType ?? schemaAny._def?.innerType;
-  }
-
-  // For effects - the inner type is at _def.schema
-  if (typeName === 'ZodEffects') {
-    return schemaAny._zod?.def?.schema ?? schemaAny._def?.schema;
-  }
-
-  // For branded - the inner type is at _def.type
-  if (typeName === 'ZodBranded') {
-    return schemaAny._zod?.def?.type ?? schemaAny._def?.type;
-  }
-
-  return undefined;
-}
-
 function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {
   let current = schema;
   let nullable = false;
 
   while (true) {
     const typeName = getZodTypeName(current);
+    if (!typeName) break;
 
-    if (typeName === 'ZodNullable') {
+    if (typeName === 'ZodNullable' || typeName === 'ZodOptional') {
       nullable = true;
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
     }
 
-    if (typeName === 'ZodOptional') {
-      // For DB purposes, we usually treat "optional" as "nullable"
-      nullable = true;
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    if (typeName === 'ZodDefault') {
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    if (typeName === 'ZodEffects') {
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    if (typeName === 'ZodBranded') {
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    // If you ever use ZodCatch/ZodPipeline, you can unwrap them here too.
-    break;
+    const inner = getZodInnerType(current, typeName);
+    if (!inner) break;
+    current = inner;
   }
 
   return { base: current, nullable };

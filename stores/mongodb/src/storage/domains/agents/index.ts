@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -186,7 +188,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
 
       // Create version 1 from the config
-      const versionId = crypto.randomUUID();
+      const versionId = randomUUID();
       await this.createVersion({
         id: versionId,
         agentId: agent.id,
@@ -265,13 +267,18 @@ export class MongoDBAgentsStorage extends AgentsStorage {
           });
         }
 
+        // Convert null values to undefined (null means "remove this field")
+        const sanitizedConfigFields = Object.fromEntries(
+          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
+        );
+
         // Create new version with the config updates
         const versionInput: CreateVersionInput = {
-          id: crypto.randomUUID(),
+          id: randomUUID(),
           agentId: id,
           versionNumber: nextVersionNumber,
           ...this.extractSnapshotFields(latestVersion), // Start from latest version
-          ...configFields, // Apply updates
+          ...sanitizedConfigFields, // Apply updates (null values converted to undefined)
           changedFields: Object.keys(configFields),
           changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
         } as CreateVersionInput;

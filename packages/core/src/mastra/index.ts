@@ -879,8 +879,9 @@ export class Mastra<
         this.#logger?.debug(`Failed to register processor workflows for agent ${agentKey}:`, err);
       });
 
-    // Register agent workspace in the workspaces registry for direct lookup
-    // Use .then() to handle async resolution without blocking
+    // Register agent workspace in the workspaces registry for direct lookup.
+    // Dynamic workspace functions may return undefined without request context — that's fine,
+    // the if (workspace) guard below will skip registration and they'll register lazily later.
     if (mastraAgent.hasOwnWorkspace?.()) {
       Promise.resolve(mastraAgent.getWorkspace?.())
         .then(workspace => {
@@ -892,6 +893,64 @@ export class Mastra<
           this.#logger?.debug(`Failed to register workspace for agent ${agentKey}:`, err);
         });
     }
+
+    // Register scorers from the agent to the Mastra instance
+    // This makes agent-level scorers discoverable via mastra.getScorer()/getScorerById()
+    mastraAgent
+      .listScorers()
+      .then(scorers => {
+        for (const [, entry] of Object.entries(scorers || {})) {
+          this.addScorer(entry.scorer);
+        }
+      })
+      .catch(err => {
+        this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
+      });
+  }
+
+  /**
+   * Removes an agent from the Mastra instance by its key or ID.
+   * Used when stored agents are updated/deleted to allow fresh data to be loaded.
+   *
+   * @param keyOrId - The agent key or ID to remove
+   * @returns true if an agent was removed, false if no agent was found
+   *
+   * @example
+   * ```typescript
+   * // Remove by key
+   * mastra.removeAgent('myAgent');
+   *
+   * // Remove by ID
+   * mastra.removeAgent('agent-123');
+   * ```
+   */
+  public removeAgent(keyOrId: string): boolean {
+    const agents = this.#agents as Record<string, Agent<any>>;
+
+    // Try direct key lookup first
+    if (agents[keyOrId]) {
+      const agentId = agents[keyOrId]?.id;
+      delete agents[keyOrId];
+      // Clear from stored agents cache to prevent stale data
+      if (agentId) {
+        this.#storedAgentsCache.delete(agentId);
+      }
+      return true;
+    }
+
+    // Try finding by ID
+    const key = Object.keys(agents).find(k => agents[k]?.id === keyOrId);
+    if (key) {
+      const agentId = agents[key]?.id;
+      delete agents[key];
+      // Clear from stored agents cache to prevent stale data
+      if (agentId) {
+        this.#storedAgentsCache.delete(agentId);
+      }
+      return true;
+    }
+
+    return false;
   }
 
   /**

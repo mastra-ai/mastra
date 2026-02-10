@@ -1,10 +1,32 @@
 import * as React from 'react';
+import { Braces, Hash, List, ToggleLeft, Type } from 'lucide-react';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
+import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
-import type { FieldOption, JsonSchema, RuleFieldSelectProps } from './types';
+import type { FieldOption, RuleFieldSelectProps } from './types';
 import { getFieldOptionsFromSchema, getFieldOptionAtPath, getChildFieldOptions, parseFieldPath } from './schema-utils';
+
+/**
+ * Get icon for a field type
+ */
+const getFieldTypeIcon = (type: string): React.ReactNode => {
+  switch (type) {
+    case 'object':
+      return <Braces />;
+    case 'array':
+      return <List />;
+    case 'number':
+    case 'integer':
+      return <Hash />;
+    case 'boolean':
+      return <ToggleLeft />;
+    case 'string':
+    default:
+      return <Type />;
+  }
+};
 
 /**
  * A single level of field selection
@@ -25,19 +47,26 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
   className,
 }) => {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={cn('min-w-[140px] text-neutral6', className)} size="sm">
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map(option => (
-          <SelectItem key={option.path} value={option.path}>
-            {option.label}
-            {option.hasChildren && <span className="ml-1 text-neutral3">...</span>}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className={cn('relative', className)}>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="min-w-[140px] text-neutral6 bg-surface4" size="sm">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map(option => (
+            <SelectItem key={option.path} value={option.path}>
+              <span className="flex items-center gap-2">
+                <Icon size="sm" className="text-neutral3">
+                  {getFieldTypeIcon(option.type)}
+                </Icon>
+                {option.label}
+                {option.hasChildren && <span className="text-neutral3">...</span>}
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 };
 

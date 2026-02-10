@@ -1,27 +1,7 @@
 import type { ConditionOperator, Rule } from '../types';
+import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 
-/**
- * JSON Schema property definition (simplified for rule building)
- */
-export type JsonSchemaProperty = {
-  type?: string | string[];
-  properties?: Record<string, JsonSchemaProperty>;
-  items?: JsonSchemaProperty;
-  enum?: unknown[];
-  title?: string;
-  description?: string;
-};
-
-/**
- * JSON Schema definition for rule building
- */
-export type JsonSchema = {
-  type?: string;
-  properties?: Record<string, JsonSchemaProperty>;
-  required?: string[];
-  title?: string;
-  description?: string;
-};
+export type { JsonSchema, JsonSchemaProperty };
 
 /**
  * Represents a field option extracted from JSON Schema
@@ -93,6 +73,8 @@ export type RuleOperatorSelectProps = {
   value: ConditionOperator;
   /** Callback when operator changes */
   onChange: (operator: ConditionOperator) => void;
+  /** Subset of operators to show. Defaults to all operators. */
+  operators?: readonly ConditionOperator[];
   /** Optional class name */
   className?: string;
 };
@@ -107,6 +89,8 @@ export type RuleValueInputProps = {
   onChange: (value: unknown) => void;
   /** The operator (affects input behavior for "in" and "not_in") */
   operator: ConditionOperator;
+  /** The field type from JSON Schema (string, number, boolean, etc.) */
+  fieldType?: string;
   /** Optional placeholder */
   placeholder?: string;
   /** Optional class name */

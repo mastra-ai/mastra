@@ -12,6 +12,7 @@ import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/mo
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
+import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
@@ -523,6 +524,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   autoResumeSuspendedTools,
   maxProcessorRetries,
   workspace,
+  outputWriter,
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
 
@@ -594,11 +596,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            processorStates,
           });
 
           try {
             // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
             const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+
+            // Create a ProcessorStreamWriter from outputWriter if available
+            const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
+              ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+              : undefined;
+
             const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
@@ -614,6 +623,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               structuredOutput,
               retryCount: inputData.processorRetryCount || 0,
               workspace: currentStep.workspace,
+              writer: inputStepWriter,
+              abortSignal: options?.abortSignal,
             });
             Object.assign(currentStep, processInputStepResult);
           } catch (error) {
@@ -921,7 +932,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // without going through workflow serialization (which would lose execute functions)
       if (_internal) {
         _internal.stepTools = stepTools;
-        _internal.stepWorkspace = stepWorkspace;
+        _internal.stepWorkspace = stepWorkspace ?? _internal.stepWorkspace;
       }
 
       if (callBail) {
@@ -1008,6 +1019,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          processorStates,
         });
 
         try {
@@ -1027,6 +1039,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
           const outputStepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+
+          // Create a ProcessorStreamWriter from outputWriter if available
+          const processorWriter: ProcessorStreamWriter | undefined = outputWriter
+            ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+            : undefined;
+
           await processorRunner.runProcessOutputStep({
             steps: inputData.output?.steps ?? [],
             messages: messageList.get.all.db(),
@@ -1038,6 +1056,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tracingContext: outputStepTracingContext,
             requestContext,
             retryCount: currentRetryCount,
+            writer: processorWriter,
           });
         } catch (error) {
           if (error instanceof TripWire) {
@@ -1117,6 +1136,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           tripwire: stepTripwireData,
         }),
       );
+
+      // Remove rejected response messages from the messageList before the next iteration.
+      // Without this, the LLM sees the rejected assistant response in its prompt on retry,
+      // which confuses models and often causes empty text responses.
+      if (shouldRetry) {
+        messageList.removeByIds([messageId]);
+      }
 
       // Build retry feedback text if retrying
       // This will be passed through workflow state to survive the system message reset

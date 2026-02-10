@@ -34,11 +34,24 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
 import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
+import type {
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ProcessorWorkflow,
+  Processor,
+} from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
+import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import type {
+  StorageCreateAgentInput,
+  StorageDefaultOptions,
+  StorageModelConfig,
+  StorageResolvedAgentType,
+  StorageScorerConfig,
+} from '../storage/types';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -146,7 +159,7 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: MastraVoice;
-  #workspace?: DynamicArgument<Workspace>;
+  #workspace?: DynamicArgument<Workspace | undefined>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
@@ -404,21 +417,23 @@ export class Agent<
     requestContext,
     inputProcessorOverrides,
     outputProcessorOverrides,
+    processorStates,
   }: {
     requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+    processorStates?: Map<string, ProcessorState>;
   }): Promise<ProcessorRunner> {
-    // Use overrides if provided, otherwise resolve from agent config + memory
-    const inputProcessors = inputProcessorOverrides ?? (await this.listResolvedInputProcessors(requestContext));
-
-    const outputProcessors = outputProcessorOverrides ?? (await this.listResolvedOutputProcessors(requestContext));
+    // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
+    const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
+    const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
 
     return new ProcessorRunner({
       inputProcessors,
       outputProcessors,
       logger: this.logger,
       agentName: this.name,
+      processorStates,
     });
   }
 
@@ -510,13 +525,19 @@ export class Agent<
    * All processors are combined into a single workflow for consistency.
    * @internal
    */
-  private async listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
-    // Get configured output processors
-    const configuredProcessors = this.#outputProcessors
-      ? typeof this.#outputProcessors === 'function'
-        ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
-        : this.#outputProcessors
-      : [];
+  private async listResolvedOutputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: OutputProcessorOrWorkflow[],
+  ): Promise<OutputProcessorOrWorkflow[]> {
+    // Get configured output processors - use overrides if provided (from generate/stream options),
+    // otherwise use agent constructor processors
+    const configuredProcessors = configuredProcessorOverrides
+      ? configuredProcessorOverrides
+      : this.#outputProcessors
+        ? typeof this.#outputProcessors === 'function'
+          ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
+          : this.#outputProcessors
+        : [];
 
     // Get memory output processors (with deduplication)
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
@@ -535,13 +556,19 @@ export class Agent<
    * All processors are combined into a single workflow for consistency.
    * @internal
    */
-  private async listResolvedInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
-    // Get configured input processors
-    const configuredProcessors = this.#inputProcessors
-      ? typeof this.#inputProcessors === 'function'
-        ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
-        : this.#inputProcessors
-      : [];
+  private async listResolvedInputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+  ): Promise<InputProcessorOrWorkflow[]> {
+    // Get configured input processors - use overrides if provided (from generate/stream options),
+    // otherwise use agent constructor processors
+    const configuredProcessors = configuredProcessorOverrides
+      ? configuredProcessorOverrides
+      : this.#inputProcessors
+        ? typeof this.#inputProcessors === 'function'
+          ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+          : this.#inputProcessors
+        : [];
 
     // Get memory input processors (with deduplication)
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
@@ -571,6 +598,63 @@ export class Agent<
    */
   public async listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
     return this.listResolvedOutputProcessors(requestContext);
+  }
+
+  /**
+   * Resolves a processor by its ID from both input and output processors.
+   * This method resolves dynamic processor functions and includes memory-derived processors.
+   * Returns the processor if found, null otherwise.
+   *
+   * @example
+   * ```typescript
+   * const omProcessor = await agent.resolveProcessorById('observational-memory');
+   * if (omProcessor) {
+   *   // Observational memory is configured
+   * }
+   * ```
+   */
+  public async resolveProcessorById<TId extends string = string>(
+    processorId: TId,
+    requestContext?: RequestContext,
+  ): Promise<Processor<TId> | null> {
+    const ctx = requestContext || new RequestContext();
+
+    // Get raw input processors (before combining into workflow)
+    const configuredInputProcessors = this.#inputProcessors
+      ? typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ requestContext: ctx })
+        : this.#inputProcessors
+      : [];
+
+    // Get memory input processors
+    const memory = await this.getMemory({ requestContext: ctx });
+    const memoryInputProcessors = memory ? await memory.getInputProcessors(configuredInputProcessors, ctx) : [];
+
+    // Search all input processors
+    for (const p of [...memoryInputProcessors, ...configuredInputProcessors]) {
+      if (!isProcessorWorkflow(p) && isProcessor(p) && p.id === processorId) {
+        return p as Processor<TId>;
+      }
+    }
+
+    // Get raw output processors (before combining into workflow)
+    const configuredOutputProcessors = this.#outputProcessors
+      ? typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ requestContext: ctx })
+        : this.#outputProcessors
+      : [];
+
+    // Get memory output processors
+    const memoryOutputProcessors = memory ? await memory.getOutputProcessors(configuredOutputProcessors, ctx) : [];
+
+    // Search all output processors
+    for (const p of [...memoryOutputProcessors, ...configuredOutputProcessors]) {
+      if (!isProcessorWorkflow(p) && isProcessor(p) && p.id === processorId) {
+        return p as Processor<TId>;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -753,34 +837,20 @@ export class Agent<
   }: { requestContext?: RequestContext } = {}): Promise<Workspace | undefined> {
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
-      let resolvedWorkspace: Workspace;
-
       if (typeof this.#workspace !== 'function') {
-        resolvedWorkspace = this.#workspace;
-      } else {
-        const result = this.#workspace({ requestContext, mastra: this.#mastra });
-        resolvedWorkspace = await Promise.resolve(result);
+        return this.#workspace;
+      }
 
-        if (!resolvedWorkspace) {
-          const mastraError = new MastraError({
-            id: 'AGENT_GET_WORKSPACE_FUNCTION_EMPTY_RETURN',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-            details: {
-              agentName: this.name,
-            },
-            text: `[Agent:${this.name}] - Function-based workspace returned empty value`,
-          });
-          this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
-          throw mastraError;
-        }
+      const result = this.#workspace({ requestContext, mastra: this.#mastra });
+      const resolvedWorkspace = await Promise.resolve(result);
 
-        // Auto-register dynamically created workspace with Mastra for lookup via listWorkspaces()/getWorkspaceById()
-        // This follows the same pattern as static workspace registration in Mastra.addAgent()
-        if (this.#mastra) {
-          this.#mastra.addWorkspace(resolvedWorkspace);
-        }
+      if (!resolvedWorkspace) {
+        return undefined;
+      }
+
+      // Auto-register dynamically created workspace with Mastra for lookup via listWorkspaces()/getWorkspaceById()
+      if (this.#mastra) {
+        this.#mastra.addWorkspace(resolvedWorkspace);
       }
 
       return resolvedWorkspace;
@@ -1390,6 +1460,233 @@ export class Agent<
     this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
   }
 
+  /**
+   * Clones this agent's configuration to storage, creating a stored agent that behaves identically.
+   * The cloned agent will have source='stored' when loaded from storage.
+   *
+   * @param options - Options for the clone operation
+   * @param options.newId - The ID for the cloned stored agent. Required.
+   * @param options.newName - Optional new name. Defaults to "{originalName} (Clone)".
+   * @param options.metadata - Optional metadata for the stored agent.
+   * @param options.authorId - Optional author ID for the stored agent.
+   * @returns The StorageResolvedAgentType of the created stored agent.
+   *
+   * @example
+   * ```typescript
+   * const cloned = await agent.cloneAgent({
+   *   newId: 'my-agent-clone',
+   *   newName: 'My Agent Clone',
+   * });
+   * console.log(cloned.id); // 'my-agent-clone'
+   * ```
+   */
+  public async cloneAgent(options: {
+    newId: string;
+    newName?: string;
+    metadata?: Record<string, unknown>;
+    authorId?: string;
+    requestContext?: RequestContext;
+  }): Promise<StorageResolvedAgentType> {
+    const requestContext = options.requestContext ?? new RequestContext();
+
+    // 1. Get the mastra instance
+    const mastra = this.getMastraInstance();
+    if (!mastra) {
+      const mastraError = new MastraError({
+        id: 'AGENT_CLONE_MISSING_MASTRA',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: `[Agent:${this.name}] - Cannot clone agent without a registered Mastra instance.`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
+
+    // 2. Get storage and agents store
+    const storage = mastra.getStorage();
+    if (!storage) {
+      const mastraError = new MastraError({
+        id: 'AGENT_CLONE_MISSING_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: `[Agent:${this.name}] - Cannot clone agent without storage configured on the Mastra instance.`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
+
+    const agentsStore = await storage.getStore('agents');
+    if (!agentsStore) {
+      const mastraError = new MastraError({
+        id: 'AGENT_CLONE_MISSING_AGENTS_STORE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: `[Agent:${this.name}] - Cannot clone agent: agents storage domain is not available.`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
+
+    // 3. Extract model config via getLLM (resolve dynamic model with requestContext)
+    const llm = await this.getLLM({ requestContext });
+    const provider = llm.getProvider();
+    const modelId = llm.getModelId();
+
+    // Extract model settings from default options (resolve dynamic defaultOptions with requestContext)
+    const defaultOptions = await this.getDefaultOptions({ requestContext });
+    const modelSettings = (defaultOptions as Record<string, any>)?.modelSettings;
+
+    const model: StorageModelConfig = {
+      provider,
+      name: modelId,
+      ...(modelSettings?.temperature !== undefined && { temperature: modelSettings.temperature }),
+      ...(modelSettings?.topP !== undefined && { topP: modelSettings.topP }),
+      ...(modelSettings?.frequencyPenalty !== undefined && { frequencyPenalty: modelSettings.frequencyPenalty }),
+      ...(modelSettings?.presencePenalty !== undefined && { presencePenalty: modelSettings.presencePenalty }),
+      ...(modelSettings?.maxOutputTokens !== undefined && { maxCompletionTokens: modelSettings.maxOutputTokens }),
+    };
+
+    // 4. Extract instructions as string (resolve dynamic instructions with requestContext)
+    const instructions = await this.getInstructions({ requestContext });
+    let instructionsStr: string;
+    if (typeof instructions === 'string') {
+      instructionsStr = instructions;
+    } else if (Array.isArray(instructions)) {
+      instructionsStr = instructions
+        .map(msg => {
+          if (typeof msg === 'string') {
+            return msg;
+          }
+          return typeof msg.content === 'string' ? msg.content : '';
+        })
+        .filter(Boolean)
+        .join('\n\n');
+    } else if (instructions && typeof instructions === 'object' && 'content' in instructions) {
+      instructionsStr = typeof instructions.content === 'string' ? instructions.content : '';
+    } else {
+      instructionsStr = '';
+    }
+
+    // 5. Extract tool keys (resolve dynamic tools with requestContext)
+    const tools = await this.listTools({ requestContext });
+    const toolKeys = Object.keys(tools || {});
+
+    // 6. Extract workflow keys (resolve dynamic workflows with requestContext)
+    const workflows = await this.listWorkflows({ requestContext });
+    const workflowKeys = Object.keys(workflows || {});
+
+    // 7. Extract sub-agent keys (resolve dynamic agents with requestContext)
+    const agents = await this.listAgents({ requestContext });
+    const agentKeys = Object.keys(agents || {});
+
+    // 8. Extract memory config (resolve dynamic memory with requestContext)
+    const memory = await this.getMemory({ requestContext });
+    const memoryConfig = memory?.getConfig();
+
+    // 9. Extract input/output processor keys (resolve dynamic processors with requestContext)
+    let inputProcessorKeys: string[] | undefined;
+    if (this.#inputProcessors) {
+      const configuredInputProcessors =
+        typeof this.#inputProcessors === 'function'
+          ? await this.#inputProcessors({ requestContext })
+          : this.#inputProcessors;
+      const ids = configuredInputProcessors.map(p => p.id).filter(Boolean);
+      if (ids.length > 0) inputProcessorKeys = ids;
+    }
+
+    let outputProcessorKeys: string[] | undefined;
+    if (this.#outputProcessors) {
+      const configuredOutputProcessors =
+        typeof this.#outputProcessors === 'function'
+          ? await this.#outputProcessors({ requestContext })
+          : this.#outputProcessors;
+      const ids = configuredOutputProcessors.map(p => p.id).filter(Boolean);
+      if (ids.length > 0) outputProcessorKeys = ids;
+    }
+
+    // 10. Extract scorer keys with sampling config (resolve dynamic scorers with requestContext)
+    let storedScorers: Record<string, StorageScorerConfig> | undefined;
+    const resolvedScorers = await this.listScorers({ requestContext });
+    if (resolvedScorers && Object.keys(resolvedScorers).length > 0) {
+      storedScorers = {};
+      for (const [key, entry] of Object.entries(resolvedScorers)) {
+        storedScorers[key] = {
+          ...(entry.sampling && { sampling: entry.sampling }),
+        };
+      }
+    }
+
+    // 11. Extract default options (serializable parts only)
+    const storageDefaultOptions: StorageDefaultOptions | undefined = defaultOptions
+      ? {
+          maxSteps: (defaultOptions as Record<string, any>)?.maxSteps,
+          runId: (defaultOptions as Record<string, any>)?.runId,
+          savePerStep: (defaultOptions as Record<string, any>)?.savePerStep,
+          activeTools: (defaultOptions as Record<string, any>)?.activeTools,
+          toolChoice: (defaultOptions as Record<string, any>)?.toolChoice,
+          modelSettings: (defaultOptions as Record<string, any>)?.modelSettings,
+          returnScorerData: (defaultOptions as Record<string, any>)?.returnScorerData,
+          requireToolApproval: (defaultOptions as Record<string, any>)?.requireToolApproval,
+          autoResumeSuspendedTools: (defaultOptions as Record<string, any>)?.autoResumeSuspendedTools,
+          toolCallConcurrency: (defaultOptions as Record<string, any>)?.toolCallConcurrency,
+          maxProcessorRetries: (defaultOptions as Record<string, any>)?.maxProcessorRetries,
+          includeRawChunks: (defaultOptions as Record<string, any>)?.includeRawChunks,
+        }
+      : undefined;
+
+    // 12. Create the stored agent
+    const createInput: StorageCreateAgentInput = {
+      id: options.newId,
+      name: options.newName || `${this.name} (Clone)`,
+      description: this.getDescription() || undefined,
+      instructions: instructionsStr,
+      model,
+      tools: toolKeys.length > 0 ? toolKeys : undefined,
+      workflows: workflowKeys.length > 0 ? workflowKeys : undefined,
+      agents: agentKeys.length > 0 ? agentKeys : undefined,
+      memory: memoryConfig,
+      inputProcessors: inputProcessorKeys,
+      outputProcessors: outputProcessorKeys,
+      scorers: storedScorers,
+      defaultOptions: storageDefaultOptions,
+      metadata: options.metadata,
+      authorId: options.authorId,
+    };
+
+    await agentsStore.createAgent({ agent: createInput });
+
+    const resolved = await agentsStore.getAgentByIdResolved({ id: options.newId });
+    if (!resolved) {
+      const mastraError = new MastraError({
+        id: 'AGENT_CLONE_FAILED_TO_RESOLVE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+          cloneId: options.newId,
+        },
+        text: `[Agent:${this.name}] - Failed to resolve cloned agent '${options.newId}' after creation.`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
+
+    return resolved;
+  }
+
   reorderModels(modelIds: string[]) {
     if (!Array.isArray(this.model)) {
       this.logger.warn(`[Agents:${this.name}] model is not an array`);
@@ -1803,11 +2100,13 @@ export class Agent<
     tracingContext,
     messageList,
     inputProcessorOverrides,
+    processorStates,
   }: {
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
+    processorStates?: Map<string, ProcessorState>;
   }): Promise<{
     messageList: MessageList;
     tripwire?: {
@@ -1823,6 +2122,7 @@ export class Agent<
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
+        processorStates,
       });
       try {
         messageList = await runner.runInputProcessors(messageList, tracingContext, requestContext);
@@ -2214,6 +2514,10 @@ export class Agent<
                 }) ||
                 `${slugify.default(this.id)}-${agentName}`;
 
+              const suspendedToolRunId = (inputData as any).suspendedToolRunId;
+
+              const { resumeData, suspend } = context?.agent ?? {};
+
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(modelVersion)
@@ -2230,20 +2534,40 @@ export class Agent<
                 //   },
                 // ]);
 
-                const generateResult = await agent.generate(inputData.prompt, {
-                  requestContext,
-                  tracingContext: context?.tracingContext,
-                  ...(inputData.instructions && { instructions: inputData.instructions }),
-                  ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
-                  ...(resourceId && threadId
-                    ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                        },
-                      }
-                    : {}),
-                });
+                const generateResult = resumeData
+                  ? await agent.resumeGenerate(resumeData, {
+                      runId: suspendedToolRunId,
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(inputData.instructions && { instructions: inputData.instructions }),
+                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...(resourceId && threadId
+                        ? { memory: { resource: subAgentResourceId, thread: subAgentThreadId } }
+                        : {}),
+                    })
+                  : await agent.generate(inputData.prompt, {
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(inputData.instructions && { instructions: inputData.instructions }),
+                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...(resourceId && threadId
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                            },
+                          }
+                        : {}),
+                    });
+
+                if (generateResult.finishReason === 'suspended') {
+                  return suspend?.(generateResult.suspendPayload, {
+                    resumeSchema: generateResult.resumeSchema,
+                    runId: generateResult.runId,
+                    isAgentSuspend: true,
+                  });
+                }
+
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
                 const generateResult = await agent.generateLegacy(inputData.prompt, {
@@ -2259,20 +2583,36 @@ export class Agent<
                   agent.__setMemory(this.#memory);
                 }
 
-                const streamResult = await agent.stream(inputData.prompt, {
-                  requestContext,
-                  tracingContext: context?.tracingContext,
-                  ...(inputData.instructions && { instructions: inputData.instructions }),
-                  ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
-                  ...(resourceId && threadId
-                    ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                        },
-                      }
-                    : {}),
-                });
+                const streamResult = resumeData
+                  ? await agent.resumeStream(resumeData, {
+                      runId: suspendedToolRunId,
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(inputData.instructions && { instructions: inputData.instructions }),
+                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...(resourceId && threadId
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                            },
+                          }
+                        : {}),
+                    })
+                  : await agent.stream(inputData.prompt, {
+                      requestContext,
+                      tracingContext: context?.tracingContext,
+                      ...(inputData.instructions && { instructions: inputData.instructions }),
+                      ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
+                      ...(resourceId && threadId
+                        ? {
+                            memory: {
+                              resource: subAgentResourceId,
+                              thread: subAgentThreadId,
+                            },
+                          }
+                        : {}),
+                    });
 
                 let fullText = '';
                 for await (const chunk of streamResult.fullStream) {
@@ -2281,8 +2621,36 @@ export class Agent<
                     if (chunk.type.startsWith('data-')) {
                       // Write data chunks directly to original stream to bubble up
                       await context.writer.custom(chunk as any);
+                      if (chunk.type === 'data-tool-call-approval') {
+                        return suspend?.(
+                          {},
+                          { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
+                        );
+                      }
+
+                      if (chunk.type === 'data-tool-call-suspended') {
+                        return suspend?.(chunk.data.suspendPayload, {
+                          resumeSchema: chunk.data.resumeSchema,
+                          runId: streamResult.runId,
+                          isAgentSuspend: true,
+                        });
+                      }
                     } else {
                       await context.writer.write(chunk);
+                      if (chunk.type === 'tool-call-approval') {
+                        return suspend?.(
+                          {},
+                          { requireToolApproval: true, runId: streamResult.runId, isAgentSuspend: true },
+                        );
+                      }
+
+                      if (chunk.type === 'tool-call-suspended') {
+                        return suspend?.(chunk.payload.suspendPayload, {
+                          resumeSchema: chunk.payload.resumeSchema,
+                          runId: streamResult.runId,
+                          isAgentSuspend: true,
+                        });
+                      }
                     }
                   }
 
@@ -3129,10 +3497,20 @@ export class Agent<
       getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
       executeOnFinish: this.#executeOnFinish.bind(this),
-      inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
-        this.listResolvedInputProcessors(requestContext),
-      outputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
-        this.listResolvedOutputProcessors(requestContext),
+      inputProcessors: async ({
+        requestContext,
+        overrides,
+      }: {
+        requestContext: RequestContext;
+        overrides?: InputProcessorOrWorkflow[];
+      }) => this.listResolvedInputProcessors(requestContext, overrides),
+      outputProcessors: async ({
+        requestContext,
+        overrides,
+      }: {
+        requestContext: RequestContext;
+        overrides?: OutputProcessorOrWorkflow[];
+      }) => this.listResolvedOutputProcessors(requestContext, overrides),
       llm,
     };
 
