@@ -107,4 +107,14 @@ export interface ISSOProvider<TUser = unknown> {
    * @returns Login button configuration
    */
   getLoginButtonConfig(): SSOLoginConfig;
+
+  /**
+   * Optional: Get cookies to set during login redirect.
+   * Used by PKCE-enabled providers to store code verifier.
+   *
+   * @param redirectUri - OAuth callback URL
+   * @param state - State parameter
+   * @returns Array of Set-Cookie header values, or undefined
+   */
+  getLoginCookies?(redirectUri: string, state: string): string[] | undefined;
 }
