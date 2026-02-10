@@ -2,7 +2,7 @@ import z from 'zod';
 import { paginationInfoSchema, createPagePaginationSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 import { serializedMemoryConfigSchema } from './memory-config';
-import { scorerConfigSchema } from './stored-agents';
+import { scorerConfigSchema, instructionsSchema } from './stored-agents';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -78,7 +78,7 @@ export const agentVersionSchema = z.object({
   // Top-level config fields (from StorageAgentSnapshotType)
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
-  instructions: z.string().describe('System instructions for the agent'),
+  instructions: instructionsSchema,
   model: z.record(z.string(), z.unknown()).describe('Model configuration (provider, name, etc.)'),
   tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
   defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),

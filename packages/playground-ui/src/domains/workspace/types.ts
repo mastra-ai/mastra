@@ -47,6 +47,13 @@ export interface FileEntry {
   name: string;
   type: 'file' | 'directory';
   size?: number;
+  /** Mount point metadata (only set for CompositeFilesystem mount points) */
+  mount?: {
+    provider: string;
+    icon?: string;
+    displayName?: string;
+    description?: string;
+  };
 }
 
 export interface FileReadResponse {
