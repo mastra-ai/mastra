@@ -684,8 +684,8 @@ export function pgTests() {
         expect(schema).toContain('"my_custom_schema"."mastra_threads"');
         expect(schema).toContain('"my_custom_schema"."mastra_messages"');
 
-        // Verify constraint names include the schema prefix
-        expect(schema).toContain('my_custom_schema_mastra_workflow_snapshot_workflow_name_run_id_key');
+        // Verify constraint names include the schema prefix (truncated to 63 bytes for PG limit)
+        expect(schema).toContain('my_custom_schema_mastra_workflow_snapshot_workflow_name_run_id_');
         expect(schema).toContain('my_custom_schema_mastra_ai_spans_traceid_spanid_pk');
       });
 
