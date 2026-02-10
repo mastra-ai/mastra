@@ -19,7 +19,7 @@ import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vites
 import { E2BSandbox } from './index';
 
 // Use vi.hoisted to define the mock before vi.mock is hoisted
-const { mockSandbox, createMockSandboxApi } = vi.hoisted(() => {
+const { mockSandbox, createMockSandboxApi, resetMockDefaults } = vi.hoisted(() => {
   const mockSandbox = {
     sandboxId: 'mock-sandbox-id',
     commands: {
@@ -66,15 +66,38 @@ const { mockSandbox, createMockSandboxApi } = vi.hoisted(() => {
     Template: createMockTemplate(),
   });
 
-  return { mockSandbox, createMockSandboxApi };
+  /**
+   * Re-apply default mock implementations.
+   * vi.clearAllMocks() only clears call tracking, not implementations.
+   * Tests that override mocks with mockResolvedValue/mockReturnValue leak
+   * those overrides into subsequent tests. This function restores defaults.
+   */
+  const resetMockDefaults = async () => {
+    const { Sandbox, Template } = await import('e2b');
+    (Sandbox.betaCreate as any).mockResolvedValue(mockSandbox);
+    (Sandbox.connect as any).mockResolvedValue(mockSandbox);
+    (Sandbox.list as any).mockReturnValue({
+      nextItems: vi.fn().mockResolvedValue([]),
+    });
+    (Template.exists as any).mockResolvedValue(false);
+    (Template.build as any).mockResolvedValue({ templateId: 'mock-template-id' });
+    mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    mockSandbox.files.write.mockResolvedValue(undefined);
+    mockSandbox.files.read.mockResolvedValue('');
+    mockSandbox.files.list.mockResolvedValue([]);
+    mockSandbox.kill.mockResolvedValue(undefined);
+  };
+
+  return { mockSandbox, createMockSandboxApi, resetMockDefaults };
 });
 
 // Mock the E2B SDK
 vi.mock('e2b', () => createMockSandboxApi());
 
 describe('E2BSandbox', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await resetMockDefaults();
   });
 
   describe('Constructor & Options', () => {
@@ -209,12 +232,7 @@ describe('E2BSandbox', () => {
       const sandbox = new E2BSandbox({ id: 'existing-id' });
       await sandbox._start();
 
-      expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox');
-
-      // Reset mock
-      (Sandbox.list as any).mockReturnValue({
-        nextItems: vi.fn().mockResolvedValue([]),
-      });
+      expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.any(Object));
     });
   });
 
@@ -467,8 +485,9 @@ describe('E2BSandbox', () => {
  * Mount-related tests (unit tests with mocks)
  */
 describe('E2BSandbox Mounting', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await resetMockDefaults();
     mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: 'ok', stderr: '' });
   });
 
@@ -500,8 +519,9 @@ describe('E2BSandbox Mounting', () => {
  * Additional unit tests for race conditions and edge cases
  */
 describe('E2BSandbox Race Conditions', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await resetMockDefaults();
   });
 
   it('start() clears _startPromise after completion', async () => {
@@ -533,8 +553,9 @@ describe('E2BSandbox Race Conditions', () => {
  * Template handling edge cases
  */
 describe('E2BSandbox Template Handling', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await resetMockDefaults();
   });
 
   it('rebuilds template on 404 error', async () => {
@@ -610,8 +631,9 @@ describe('E2BSandbox Template Handling', () => {
  * Mount configuration unit tests
  */
 describe('E2BSandbox Mount Configuration', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await resetMockDefaults();
     // Mock s3fs as installed
     mockSandbox.commands.run.mockImplementation((cmd: string) => {
       if (cmd.includes('which s3fs')) {
@@ -702,8 +724,9 @@ describe('E2BSandbox Mount Configuration', () => {
  * S3 public bucket mount tests
  */
 describe('E2BSandbox S3 Public Bucket Mount', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await resetMockDefaults();
     mockSandbox.commands.run.mockImplementation((cmd: string) => {
       if (cmd.includes('which s3fs')) {
         return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/s3fs', stderr: '' });
@@ -751,8 +774,9 @@ describe('E2BSandbox S3 Public Bucket Mount', () => {
  * GCS mount command flag tests
  */
 describe('E2BSandbox GCS Mount Configuration', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await resetMockDefaults();
     mockSandbox.commands.run.mockImplementation((cmd: string) => {
       if (cmd.includes('which gcsfuse')) {
         return Promise.resolve({ exitCode: 0, stdout: '/usr/bin/gcsfuse', stderr: '' });
@@ -827,8 +851,9 @@ describe('E2BSandbox GCS Mount Configuration', () => {
  * Error handling unit tests
  */
 describe('E2BSandbox Error Handling', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await resetMockDefaults();
   });
 
   it('SandboxNotReadyError thrown if instance accessed before start', () => {
@@ -887,9 +912,9 @@ describe('E2BSandbox Error Handling', () => {
  * Reconcile mounts unit tests
  */
 describe('E2BSandbox Reconcile Mounts', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    await resetMockDefaults();
   });
 
   it('reconcileMounts is called on reconnect before processPending', async () => {
@@ -1156,9 +1181,9 @@ describe('E2BSandbox Reconcile Mounts', () => {
  * Stop/destroy only unmount managed mounts
  */
 describe('E2BSandbox stop/destroy only unmount managed mounts', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    await resetMockDefaults();
   });
 
   it('stop() only unmounts mounts in the manager, not all FUSE mounts', async () => {
@@ -1219,9 +1244,9 @@ describe('E2BSandbox stop/destroy only unmount managed mounts', () => {
  * Stop behavior unit tests
  */
 describe('E2BSandbox Stop Behavior', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    mockSandbox.commands.run.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    await resetMockDefaults();
   });
 
   it('stop() unmounts all filesystems', async () => {
@@ -1267,8 +1292,9 @@ describe('E2BSandbox Stop Behavior', () => {
  * if not present in the sandbox template.
  */
 describe('E2BSandbox Runtime Installation', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await resetMockDefaults();
   });
 
   describe('S3 (s3fs)', () => {
@@ -1528,8 +1554,9 @@ describe('E2BSandbox Runtime Installation', () => {
  * state management, and retry logic.
  */
 describe('E2BSandbox Internal Methods', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await resetMockDefaults();
   });
 
   describe('isSandboxDeadError()', () => {
@@ -1695,8 +1722,9 @@ describe('E2BSandbox Internal Methods', () => {
  * Self-hosted connection options tests
  */
 describe('E2BSandbox Self-Hosted Connection Options', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await resetMockDefaults();
   });
 
   it('forwards domain/apiUrl/apiKey/accessToken to Sandbox.betaCreate', async () => {
