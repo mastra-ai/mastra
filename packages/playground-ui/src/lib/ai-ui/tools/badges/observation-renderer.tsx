@@ -79,6 +79,7 @@ function parseObservationLine(line: string, isNested: boolean = false): ParsedOb
   // Check for indented dash list item: - content (used as sub-items)
   if (isNested && trimmed.startsWith('-')) {
     const content = trimmed.replace(/^-\s*/, '');
+    if (!content) return null;
     return {
       priority: null,
       time: null,
