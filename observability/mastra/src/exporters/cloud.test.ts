@@ -383,12 +383,9 @@ describe('CloudExporter', () => {
       output: { response: 'result' },
     });
 
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
+    afterEach(async () => {
+      await exporter.shutdown();
+      vi.restoreAllMocks();
     });
 
     it('should set timer when scheduling flush', async () => {
@@ -420,17 +417,23 @@ describe('CloudExporter', () => {
     });
 
     it('should trigger flush when timer expires', async () => {
-      const flushSpy = vi.spyOn(exporter as any, 'flush').mockResolvedValue(undefined);
+      const shortExporter = new CloudExporter({
+        accessToken: createTestJWT({ teamId: 'team-123', projectId: 'project-456' }),
+        endpoint: 'http://localhost:3000',
+        maxBatchWaitMs: 50,
+      });
+      const flushSpy = vi.spyOn(shortExporter as any, 'flush').mockResolvedValue(undefined);
 
-      await exporter.exportTracingEvent({
+      await shortExporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
-      // Fast-forward timer
-      vi.advanceTimersByTime(5000);
+      // Wait for the real timer to fire
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(flushSpy).toHaveBeenCalled();
+      await shortExporter.shutdown();
     });
 
     it('should clear timer after flush', async () => {
@@ -449,23 +452,26 @@ describe('CloudExporter', () => {
     });
 
     it('should handle timer errors gracefully', async () => {
-      const loggerErrorSpy = vi.spyOn((exporter as any).logger, 'error');
+      const shortExporter = new CloudExporter({
+        accessToken: createTestJWT({ teamId: 'team-123', projectId: 'project-456' }),
+        endpoint: 'http://localhost:3000',
+        maxBatchWaitMs: 50,
+      });
+      const loggerErrorSpy = vi.spyOn((shortExporter as any).logger, 'error');
 
       // Mock flush to throw error
-      vi.spyOn(exporter as any, 'flush').mockRejectedValue(new Error('Flush failed'));
+      vi.spyOn(shortExporter as any, 'flush').mockRejectedValue(new Error('Flush failed'));
 
-      await exporter.exportTracingEvent({
+      await shortExporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
-      // Fast-forward timer to trigger flush
-      vi.advanceTimersByTime(5000);
-
-      // Wait for error handling
-      await vi.runAllTimersAsync();
+      // Wait for the real timer to fire and error to be handled
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(loggerErrorSpy).toHaveBeenCalledWith('Scheduled flush failed', expect.any(Object));
+      await shortExporter.shutdown();
     });
 
     it('should clear timer on flush and set flushTimer to null', async () => {
@@ -682,14 +688,9 @@ describe('CloudExporter', () => {
     });
 
     beforeEach(() => {
-      vi.useFakeTimers();
       vi.clearAllMocks();
       // Reset mock to default success behavior
       mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
     });
 
     it('should retry on API failures using fetchWithRetry', async () => {
@@ -770,27 +771,30 @@ describe('CloudExporter', () => {
     });
 
     it('should handle flush errors gracefully in background', async () => {
-      const loggerErrorSpy = vi.spyOn((exporter as any).logger, 'error');
+      const shortExporter = new CloudExporter({
+        accessToken: createTestJWT({ teamId: 'team-123', projectId: 'project-456' }),
+        endpoint: 'http://localhost:3000',
+        maxBatchWaitMs: 50,
+      });
+      const loggerErrorSpy = vi.spyOn((shortExporter as any).logger, 'error');
 
       // Mock fetchWithRetry to fail
       mockFetchWithRetry.mockRejectedValue(new Error('API down'));
 
-      await exporter.exportTracingEvent({
+      await shortExporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
-      // Fast-forward to trigger scheduled flush - errors should be caught
-      vi.advanceTimersByTime(5000);
-
-      // Wait for async error handling
-      await vi.runAllTimersAsync();
+      // Wait for the real timer to fire and error to be handled
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Should log the batch upload failure, not scheduled flush failure
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Batch upload failed after all retries, dropping batch',
         expect.any(Object),
       );
+      await shortExporter.shutdown();
     });
   });
 
@@ -875,12 +879,8 @@ describe('CloudExporter', () => {
       output: { response: 'result' },
     });
 
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
     afterEach(() => {
-      vi.useRealTimers();
+      vi.restoreAllMocks();
     });
 
     it('should clear timer on shutdown', async () => {
