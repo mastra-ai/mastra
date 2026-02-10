@@ -389,7 +389,7 @@ export function FileBrowser({
                           <span className="text-xs text-icon3 tabular-nums">{formatBytes(entry.size)}</span>
                         )}
                       </button>
-                      {onDelete && (
+                      {onDelete && !entry.mount && (
                         <button
                           onClick={() => handleDelete(entry)}
                           aria-label={`Delete ${entry.name}`}
