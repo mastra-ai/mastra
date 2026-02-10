@@ -172,8 +172,8 @@ describe('BaseExporter', () => {
 
     it('should apply async customSpanFormatter to exported spans', async () => {
       const asyncFormatter: CustomSpanFormatter = async span => {
-        // Simulate async operation
-        await new Promise(resolve => setTimeout(resolve, 10));
+        // Simulate async operation (use microtask to avoid fake timer interference from other test files)
+        await Promise.resolve();
         return {
           ...span,
           input: 'async-formatted-input',
@@ -194,7 +194,7 @@ describe('BaseExporter', () => {
 
     it('should handle async formatter errors gracefully and use original span', async () => {
       const errorAsyncFormatter: CustomSpanFormatter = async () => {
-        await new Promise(resolve => setTimeout(resolve, 5));
+        await Promise.resolve();
         throw new Error('Async formatter error');
       };
 
@@ -336,14 +336,14 @@ describe('chainFormatters', () => {
 
   it('should chain async formatters in order', async () => {
     const asyncFormatter1: CustomSpanFormatter = async span => {
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await Promise.resolve();
       return {
         ...span,
         input: `${span.input}-async1`,
       };
     };
     const asyncFormatter2: CustomSpanFormatter = async span => {
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await Promise.resolve();
       return {
         ...span,
         input: `${span.input}-async2`,
@@ -365,7 +365,7 @@ describe('chainFormatters', () => {
       input: `${span.input}-sync`,
     });
     const asyncFormatter: CustomSpanFormatter = async span => {
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await Promise.resolve();
       return {
         ...span,
         input: `${span.input}-async`,
@@ -388,9 +388,8 @@ describe('chainFormatters', () => {
   it('should handle async formatter enrichment use case', async () => {
     // Simulate an async enrichment formatter that fetches external data
     const enrichmentFormatter: CustomSpanFormatter = async span => {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 10));
-      // Simulate enriched data from external source
+      // Simulate async API call (use microtask to avoid fake timer interference from other test files)
+      await Promise.resolve();
       const enrichedData = { userName: 'John Doe', department: 'Engineering' };
       return {
         ...span,
