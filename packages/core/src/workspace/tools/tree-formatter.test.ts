@@ -66,13 +66,13 @@ describe('tree-formatter', () => {
 
       const result = await formatAsTree(filesystem, '/');
 
-      // Directories first, then files, all alphabetical (ASCII order: uppercase before lowercase)
+      // Directories first, then files, all case-insensitive alphabetical (to match native tree)
       expect(result.tree).toBe(
         `.
 ├── src
 │   └── index.ts
-├── README.md
-└── package.json`,
+├── package.json
+└── README.md`,
       );
       expect(result.dirCount).toBe(1);
       expect(result.fileCount).toBe(3);
