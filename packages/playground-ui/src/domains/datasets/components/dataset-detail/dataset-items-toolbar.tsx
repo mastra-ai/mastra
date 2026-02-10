@@ -71,7 +71,7 @@ function ActionsMenu({
   );
 }
 
-export type ItemsToolbarProps = {
+export type DatasetItemsToolbarProps = {
   // Normal mode actions
   onAddClick: () => void;
   onImportClick: () => void;
@@ -96,11 +96,12 @@ export type ItemsToolbarProps = {
 
   // Versions panel
   onVersionsClick: () => void;
+  isItemPanelOpen?: boolean;
   isVersionsPanelOpen?: boolean;
-  hideVersionsButton?: boolean;
+  isViewingOldVersion?: boolean;
 };
 
-export function ItemsToolbar({
+export function DatasetItemsToolbar({
   onAddClick,
   onImportClick,
   onImportJsonClick,
@@ -111,16 +112,17 @@ export function ItemsToolbar({
   onDeleteClick,
   hasItems,
   searchQuery,
-  onSearchChange,
   isSelectionActive,
+  onSearchChange,
   selectedCount,
   onExecuteAction,
   onCancelSelection,
   selectionMode,
   onVersionsClick,
+  isItemPanelOpen,
   isVersionsPanelOpen,
-  hideVersionsButton,
-}: ItemsToolbarProps) {
+  isViewingOldVersion,
+}: DatasetItemsToolbarProps) {
   if (isSelectionActive) {
     return (
       <div className="flex items-center justify-between gap-4 w-full">
@@ -175,33 +177,31 @@ export function ItemsToolbar({
         />
       </div>
 
-      <div className="flex justify-end gap-3">
-        <div className="flex items-center gap-[.1rem]">
-          <Button variant="secondary" size="default" hasRightSibling={true} onClick={onAddClick}>
-            <Plus />
-            New Item
-          </Button>
+      <ButtonsGroup>
+        {!isItemPanelOpen && !isViewingOldVersion && (
+          <ButtonsGroup spacing="close">
+            <Button variant="secondary" size="default" hasRightSibling={true} onClick={onAddClick}>
+              <Plus /> New Item
+            </Button>
+            <DropdownMenu>
+              <DropdownMenu.Trigger asChild>
+                <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Dataset actions menu">
+                  <ChevronDownIcon />
+                </Button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="end">
+                <DropdownMenu.Item onSelect={onImportClick}>
+                  <Upload /> Import CSV
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={onImportJsonClick}>
+                  <FileJson /> Import JSON
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          </ButtonsGroup>
+        )}
 
-          <DropdownMenu>
-            <DropdownMenu.Trigger asChild>
-              <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Dataset actions menu">
-                <ChevronDownIcon />
-              </Button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end">
-              <DropdownMenu.Item onSelect={onImportClick}>
-                <Upload />
-                <span>Import CSV</span>
-              </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={onImportJsonClick}>
-                <FileJson />
-                <span>Import JSON</span>
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu>
-        </div>
-
-        {hasItems && (
+        {hasItems && !isViewingOldVersion && (
           <ActionsMenu
             onExportClick={onExportClick}
             onExportJsonClick={onExportJsonClick}
@@ -211,13 +211,13 @@ export function ItemsToolbar({
           />
         )}
 
-        {!hideVersionsButton && (
+        {!isItemPanelOpen && !isVersionsPanelOpen && (
           <Button variant="secondary" size="default" onClick={onVersionsClick} aria-label="View versions">
             <History className="w-4 h-4" />
             Versions
           </Button>
         )}
-      </div>
+      </ButtonsGroup>
     </div>
   );
 }

@@ -1,18 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import type { DatasetItem } from '@mastra/client-js';
-import { cn } from '@/lib/utils';
-import { transitions } from '@/ds/primitives/transitions';
-import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
+import { Alert, AlertTitle } from '@/ds/components/Alert';
 import { Button } from '@/ds/components/Button';
-import { DatasetItemList } from './items-list';
+import { DatasetItemsList } from './dataset-items-list';
+import { DatasetItemsToolbar } from './dataset-items-toolbar';
 import { ItemDetailPanel } from './item-detail-panel';
 import { DatasetVersionsPanel } from '../versions';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { ArrowRightToLineIcon } from 'lucide-react';
-import { ListAndDetails } from '@/ds/components/ListAndDetails/list-and-details';
+import { useItemSelection } from '../../hooks/use-item-selection';
+import { exportItemsToCSV } from '../../utils/csv-export';
+import { exportItemsToJSON } from '../../utils/json-export';
+import { toast } from '@/lib/toast';
+import { cn } from '@/index';
+import { Columns, Column } from '@/ds/components/Columns';
+
+type SelectionMode = 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete';
+
 export interface ItemsMasterDetailProps {
   datasetId: string;
   items: DatasetItem[];
@@ -20,7 +27,6 @@ export interface ItemsMasterDetailProps {
   featuredItemId: string | null;
   onItemSelect: (itemId: string) => void;
   onItemClose: () => void;
-  // Pass-through props for ItemsList
   onAddClick: () => void;
   onImportClick?: () => void;
   onImportJsonClick?: () => void;
@@ -54,13 +60,35 @@ export function ItemsMasterDetail({
   featuredItemId,
   onItemSelect,
   onItemClose,
+  onAddClick,
+  onImportClick,
+  onImportJsonClick,
+  onBulkDeleteClick,
+  onCreateDatasetClick,
+  onAddToDatasetClick,
+  datasetName,
+  clearSelectionTrigger,
+  setEndOfListElement,
+  isFetchingNextPage,
+  hasNextPage,
+  searchQuery,
+  onSearchChange,
   activeDatasetVersion,
   currentDatasetVersion,
   onVersionSelect,
-  ...listProps
 }: ItemsMasterDetailProps) {
   const [isVersionsPanelOpen, setIsVersionsPanelOpen] = useState(false);
-  const selectedItem = items.find(i => i.id === featuredItemId) ?? null;
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
+  const selection = useItemSelection();
+  const featuredItem = items.find(i => i.id === featuredItemId) ?? null;
+
+  // Clear selection when parent increments trigger (after dialog closes or action completes)
+  useEffect(() => {
+    if (clearSelectionTrigger !== undefined && clearSelectionTrigger > 0) {
+      selection.clearSelection();
+      setSelectionMode('idle');
+    }
+  }, [clearSelectionTrigger]);
 
   // Check if viewing an old version
   const isViewingOldVersion =
@@ -77,20 +105,91 @@ export function ItemsMasterDetail({
   };
 
   const handleVersionsClick = () => {
-    setIsVersionsPanelOpen(prev => !prev);
+    console.log('Toggling versions panel. Currently open:', isVersionsPanelOpen);
+    setIsVersionsPanelOpen(true);
   };
 
   const handleVersionsPanelClose = () => {
     setIsVersionsPanelOpen(false);
   };
 
-  // Show side panel if versions is open OR an item is selected
-  const isSidePanelActive = Boolean(isVersionsPanelOpen || selectedItem);
+  const handleCancelSelection = () => {
+    setSelectionMode('idle');
+    selection.clearSelection();
+  };
+
+  const handleExecuteAction = () => {
+    if (selection.selectedCount === 0) return;
+    const selectedItems = items.filter(i => selection.selectedIds.has(i.id));
+
+    if (selectionMode === 'export') {
+      try {
+        exportItemsToCSV(selectedItems, `${datasetName || 'dataset'}-items.csv`);
+        toast.success(`Exported ${selection.selectedCount} items to CSV`);
+      } catch (error) {
+        toast.error('Failed to export items to CSV');
+        console.error('CSV export error:', error);
+      }
+      handleCancelSelection();
+    } else if (selectionMode === 'export-json') {
+      try {
+        exportItemsToJSON(selectedItems, `${datasetName || 'dataset'}-items.json`);
+        toast.success(`Exported ${selection.selectedCount} items to JSON`);
+      } catch (error) {
+        toast.error('Failed to export items to JSON');
+        console.error('JSON export error:', error);
+      }
+      handleCancelSelection();
+    } else if (selectionMode === 'create-dataset') {
+      onCreateDatasetClick?.(selectedItems);
+    } else if (selectionMode === 'add-to-dataset') {
+      onAddToDatasetClick?.(selectedItems);
+    } else if (selectionMode === 'delete') {
+      onBulkDeleteClick?.(Array.from(selection.selectedIds));
+    }
+  };
+
+  const isSelectionActive = selectionMode !== 'idle';
+
+  const itemsListColumns = [
+    { name: 'id', label: 'ID', size: '5rem' },
+    { name: 'input', label: 'Input', size: '1fr' },
+    { name: 'expectedOutput', label: 'Expected Output', size: '1fr' },
+    { name: 'metadata', label: 'Metadata', size: '8rem' },
+    { name: 'date', label: 'Created', size: '5rem' },
+  ];
 
   return (
-    <ListAndDetails isDetailsActive={isSidePanelActive}>
-      {/* List column - always visible */}
-      <div className={cn('flex flex-col h-full overflow-hidden gap-4')}>
+    <Columns
+      className={cn({
+        'grid-cols-[1fr_1fr]': !!featuredItem,
+        'grid-cols-[1fr_auto]': isVersionsPanelOpen,
+      })}
+    >
+      <Column>
+        <DatasetItemsToolbar
+          onAddClick={onAddClick}
+          onImportClick={onImportClick ?? (() => {})}
+          onImportJsonClick={onImportJsonClick ?? (() => {})}
+          onExportClick={() => setSelectionMode('export')}
+          onExportJsonClick={() => setSelectionMode('export-json')}
+          onCreateDatasetClick={() => setSelectionMode('create-dataset')}
+          onAddToDatasetClick={() => setSelectionMode('add-to-dataset')}
+          onDeleteClick={() => setSelectionMode('delete')}
+          hasItems={items.length > 0}
+          searchQuery={searchQuery}
+          onSearchChange={onSearchChange}
+          isSelectionActive={isSelectionActive}
+          selectedCount={selection.selectedCount}
+          onExecuteAction={handleExecuteAction}
+          onCancelSelection={handleCancelSelection}
+          selectionMode={selectionMode}
+          onVersionsClick={handleVersionsClick}
+          isItemPanelOpen={!!featuredItem}
+          isVersionsPanelOpen={isVersionsPanelOpen}
+          isViewingOldVersion={isViewingOldVersion}
+        />
+
         {isViewingOldVersion && activeDatasetVersion && (
           <Alert variant="warning">
             <AlertTitle>
@@ -107,49 +206,46 @@ export function ItemsMasterDetail({
             </Button>
           </Alert>
         )}
-        <DatasetItemList
+
+        <DatasetItemsList
           items={items}
           isLoading={isLoading}
           onItemClick={handleItemClick}
           featuredItemId={featuredItemId}
-          onVersionsClick={handleVersionsClick}
-          isVersionsPanelOpen={isVersionsPanelOpen}
-          hideVersionsButton={!!selectedItem || isVersionsPanelOpen}
-          {...listProps}
+          columns={itemsListColumns}
+          setEndOfListElement={setEndOfListElement}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={hasNextPage}
+          isSelectionActive={isSelectionActive}
+          selectedIds={selection.selectedIds}
+          onToggleSelection={selection.toggle}
+          onSelectAll={selection.selectAll}
+          onClearSelection={selection.clearSelection}
+          onAddClick={onAddClick}
+          onImportClick={onImportClick}
+          onImportJsonClick={onImportJsonClick}
+          searchQuery={searchQuery}
         />
-      </div>
+      </Column>
 
-      {/* Detail column - shows versions panel or item detail */}
-      {isSidePanelActive && (
-        <>
-          <ListAndDetails.Separator />
-          <div
-            className={cn('flex flex-col h-full overflow-hidden', {
-              'w-[12rem]': isVersionsPanelOpen && !selectedItem,
-              'w-[20rem] xl:w-[30rem] 2xl:w-[40rem]': selectedItem,
-            })}
-          >
-            {selectedItem ? (
-              <ItemDetailPanel
-                datasetId={datasetId}
-                item={selectedItem}
-                items={items}
-                onItemChange={onItemSelect}
-                onClose={onItemClose}
-              />
-            ) : (
-              isVersionsPanelOpen && (
-                <DatasetVersionsPanel
-                  datasetId={datasetId}
-                  onClose={handleVersionsPanelClose}
-                  onVersionSelect={onVersionSelect}
-                  activeVersion={activeDatasetVersion}
-                />
-              )
-            )}
-          </div>
-        </>
+      {!!featuredItem && (
+        <ItemDetailPanel
+          datasetId={datasetId}
+          item={featuredItem}
+          items={items}
+          onItemChange={onItemSelect}
+          onClose={onItemClose}
+        />
       )}
-    </ListAndDetails>
+
+      {isVersionsPanelOpen && (
+        <DatasetVersionsPanel
+          datasetId={datasetId}
+          onClose={handleVersionsPanelClose}
+          onVersionSelect={onVersionSelect}
+          activeVersion={activeDatasetVersion}
+        />
+      )}
+    </Columns>
   );
 }

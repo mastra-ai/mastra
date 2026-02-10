@@ -34,8 +34,8 @@ export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
 export { EmptyDatasetsTable } from './components/empty-datasets-table';
 
 // Dataset detail components
-export { DatasetDetail } from './components/dataset-detail/dataset-detail';
-export { DatasetItemList } from './components/dataset-detail/items-list';
+export { DatasetPageContent } from './components/dataset-detail/dataset-page-content';
+export { DatasetItemsList } from './components/dataset-detail/dataset-items-list';
 export { ExperimentHistory } from './components/dataset-detail/experiment-history';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';

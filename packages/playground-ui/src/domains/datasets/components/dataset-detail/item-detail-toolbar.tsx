@@ -4,6 +4,7 @@ import { Button } from '@/ds/components/Button';
 import { Pencil, Trash2, Copy, ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, XIcon, History } from 'lucide-react';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { useLinkComponent } from '@/lib/framework';
+import { Column } from '@/ds/components/Columns';
 
 export interface ItemDetailToolbarProps {
   datasetId: string;
@@ -28,7 +29,7 @@ export function ItemDetailToolbar({
 }: ItemDetailToolbarProps) {
   const { Link } = useLinkComponent();
   return (
-    <div className="flex items-center justify-between">
+    <Column.Toolbar>
       {/* Left side: Navigation */}
       <div className="flex items-center gap-[2px]">
         <Button
@@ -93,6 +94,6 @@ export function ItemDetailToolbar({
           <XIcon />
         </Button>
       </div>
-    </div>
+    </Column.Toolbar>
   );
 }

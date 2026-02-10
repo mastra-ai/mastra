@@ -9,6 +9,8 @@ import { ItemListNextPageLoading } from './item-list-next-page-loading';
 import { ItemListPagination } from './item-list-pagination';
 import { ItemListItemStatus, ItemListItemText } from './item-list-item-col';
 import { ItemListItemsScroller } from './item-list-items-scroller';
+import { ItemListTextCell } from './item-list-text-cell';
+import { ItemListStatusCell } from './item-list-status-cell';
 
 export const ItemList = Object.assign(ItemListRoot, {
   Header: ItemListHeader,
@@ -22,4 +24,6 @@ export const ItemList = Object.assign(ItemListRoot, {
   Pagination: ItemListPagination,
   ItemText: ItemListItemText,
   ItemStatus: ItemListItemStatus,
+  TextCell: ItemListTextCell,
+  StatusCell: ItemListStatusCell,
 });

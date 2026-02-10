@@ -10,6 +10,7 @@ import { ItemDetailToolbar } from './item-detail-toolbar';
 import { DatasetItemHeader } from './dataset-item-header';
 import { DatasetItemContent } from './dataset-item-content';
 import { EditModeContent } from './dataset-item-form';
+import { Column } from '@/ds/components/Columns';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
@@ -213,7 +214,7 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
 
   return (
     <>
-      <div className="grid grid-rows-[auto_1fr] h-full gap-9">
+      <Column withLeftSeparator={true}>
         <ItemDetailToolbar
           datasetId={datasetId}
           itemId={item.id}
@@ -225,7 +226,7 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
           isEditing={isEditing}
         />
 
-        <div className="grid overflow-y-auto">
+        <Column.Content>
           {isEditing ? (
             <EditModeContent
               inputValue={inputValue}
@@ -240,13 +241,14 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
               isSaving={updateItem.isPending}
             />
           ) : (
-            <div className="grid gap-8 content-start">
+            <>
               <DatasetItemHeader item={item} />
               <DatasetItemContent item={item} Link={Link} />
-            </div>
+            </>
           )}
-        </div>
-      </div>
+        </Column.Content>
+      </Column>
+
       {/* Delete confirmation - uses portal, renders above panel */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialog.Content>

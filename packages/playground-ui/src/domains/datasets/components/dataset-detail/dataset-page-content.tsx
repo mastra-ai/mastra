@@ -20,7 +20,7 @@ import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 
-export interface DatasetDetailProps {
+export interface DatasetPageContentProps {
   datasetId: string;
   onExperimentClick?: () => void;
   onEditClick?: () => void;
@@ -35,7 +35,7 @@ export interface DatasetDetailProps {
 
 type TabValue = 'items' | 'experiments';
 
-export function DatasetDetail({
+export function DatasetPageContent({
   datasetId,
   onExperimentClick,
   onEditClick,
@@ -45,7 +45,7 @@ export function DatasetDetail({
   onNavigateToDataset,
   activeDatasetVersion: controlledVersion,
   onVersionSelect: onVersionSelectProp,
-}: DatasetDetailProps) {
+}: DatasetPageContentProps) {
   const [activeTab, setActiveTab] = useState<TabValue>('items');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importJsonDialogOpen, setImportJsonDialogOpen] = useState(false);

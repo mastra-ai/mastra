@@ -5,6 +5,7 @@ import { XIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { ItemList } from '@/ds/components/ItemList';
 import { useDatasetVersions, type DatasetVersion } from '../../hooks/use-dataset-versions';
+import { Column } from '@/ds/components/Columns';
 
 export interface DatasetVersionsPanelProps {
   datasetId: string;
@@ -40,17 +41,15 @@ export function DatasetVersionsPanel({
   };
 
   return (
-    <div className="grid grid-rows-[auto_auto_1fr] h-full gap-4">
-      {/* Toolbar */}
-      <div className="flex items-center justify-end">
+    <Column withLeftSeparator={true}>
+      <Column.Toolbar>
         <Button variant="secondary" size="default" onClick={onClose}>
           <XIcon />
           Hide Versions History
         </Button>
-      </div>
+      </Column.Toolbar>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto rounded-lg">
+      <Column.Content>
         {isLoading ? (
           <DatasetVersionsListSkeleton />
         ) : (
@@ -92,7 +91,7 @@ export function DatasetVersionsPanel({
                   size="default"
                   onClick={() => fetchNextPage()}
                   disabled={isFetchingNextPage}
-                  className="w-full mt-2"
+                  className="mt-2"
                 >
                   {isFetchingNextPage ? 'Loading...' : 'Load More'}
                 </Button>
@@ -100,8 +99,8 @@ export function DatasetVersionsPanel({
             </ItemList.Scroller>
           </ItemList>
         )}
-      </div>
-    </div>
+      </Column.Content>
+    </Column>
   );
 }
 
