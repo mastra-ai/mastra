@@ -609,9 +609,32 @@ export class GCSFilesystem extends MastraFilesystem {
   async init(): Promise<void> {
     // Verify we can access the bucket
     const bucket = this.getBucket();
-    const [exists] = await bucket.exists();
-    if (!exists) {
-      throw new Error(`Bucket "${this.bucketName}" does not exist or is not accessible`);
+    try {
+      const [exists] = await bucket.exists();
+      if (!exists) {
+        const err = new Error(`Bucket "${this.bucketName}" does not exist`) as Error & { status?: number };
+        err.status = 404;
+        throw err;
+      }
+    } catch (error) {
+      // Check if error already has status (from our 404 throw above)
+      if ((error as { status?: number }).status) {
+        throw error;
+      }
+      // Extract status code from GCS errors and add to error for proper HTTP response
+      const code = (error as { code?: number }).code;
+      if (typeof code === 'number') {
+        const message = error instanceof Error ? error.message : String(error);
+        const err = new Error(
+          message,
+          // code === 403
+          //   ? `Access denied to bucket "${this.bucketName}" - check credentials and permissions`
+          //   : message,
+        ) as Error & { status?: number };
+        err.status = code;
+        throw err;
+      }
+      throw error;
     }
   }
 

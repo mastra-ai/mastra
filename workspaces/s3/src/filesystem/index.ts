@@ -214,8 +214,6 @@ export class S3Filesystem extends MastraFilesystem {
   readonly readOnly?: boolean;
 
   status: ProviderStatus = 'pending';
-  /** Error message when status is 'error' */
-  error?: string;
 
   // Display metadata for UI
   readonly displayName?: string;
@@ -822,7 +820,32 @@ export class S3Filesystem extends MastraFilesystem {
   async init(): Promise<void> {
     // Verify we can access the bucket
     const client = this.getClient();
-    await client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+    try {
+      await client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+    } catch (error) {
+      // Extract httpStatusCode if available
+      const statusCode = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+
+      // Create error with status property for proper HTTP response codes
+      const createError = (message: string) => {
+        const err = new Error(message) as Error & { status?: number };
+        if (statusCode) err.status = statusCode;
+        return err;
+      };
+
+      // Provide better error messages for common S3 errors
+      if (isAccessDeniedError(error)) {
+        throw createError(`Access denied to bucket "${this.bucket}" - check credentials and permissions`);
+      }
+      if (isNotFoundError(error)) {
+        throw createError(`Bucket "${this.bucket}" not found`);
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      if (statusCode) {
+        throw createError(`Failed to access bucket "${this.bucket}" (HTTP ${statusCode}): ${message}`);
+      }
+      throw error;
+    }
   }
 
   /**
