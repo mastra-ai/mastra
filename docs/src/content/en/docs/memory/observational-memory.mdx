@@ -36,9 +36,13 @@ export const agent = new Agent({
 That's it. The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `google/gemini-2.5-flash` by default. To use a different model or customize thresholds, pass a config object instead:
 
 ```typescript
-observationalMemory: {
-  model: "deepseek/deepseek-reasoner",
-},
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: "deepseek/deepseek-reasoner",
+    },
+  },
+});
 ```
 
 See [configuration options](/reference/memory/observational-memory) for full API details.
@@ -122,9 +126,14 @@ See [model configuration](/reference/memory/observational-memory#custom-model) f
 Each thread has its own observations.
 
 ```typescript
-observationalMemory: {
-  scope: "thread",
-}
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: "google/gemini-2.5-flash",
+      scope: "thread",
+    },
+  },
+});
 ```
 
 ### Resource scope
@@ -132,9 +141,14 @@ observationalMemory: {
 Observations are shared across all threads for a resource (typically a user). Enables cross-conversation memory.
 
 ```typescript
-observationalMemory: {
-  scope: "resource",
-}
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: "google/gemini-2.5-flash",
+      scope: "resource",
+    },
+  },
+});
 ```
 
 :::warning
@@ -151,6 +165,7 @@ OM uses token thresholds to decide when to observe and reflect. See [token budge
 const memory = new Memory({
   options: {
     observationalMemory: {
+      model: "google/gemini-2.5-flash",
       observation: {
         // when to run the Observer (default: 30,000)
         messageTokens: 30_000,
@@ -196,12 +211,16 @@ Reflection works similarly — the Reflector runs in the background when observa
 To disable async buffering and use synchronous observation/reflection instead:
 
 ```typescript
-observationalMemory: {
-  model: "google/gemini-2.5-flash",
-  observation: {
-    bufferTokens: false,
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: "google/gemini-2.5-flash",
+      observation: {
+        bufferTokens: false,
+      },
+    },
   },
-}
+});
 ```
 
 Setting `bufferTokens: false` disables both observation and reflection async buffering. See [async buffering configuration](/reference/memory/observational-memory#async-buffering) for the full API.
