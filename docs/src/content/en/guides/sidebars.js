@@ -126,7 +126,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/netlify-deployer',
+          id: 'deployment/netlify',
           label: 'Netlify',
         },
         {
