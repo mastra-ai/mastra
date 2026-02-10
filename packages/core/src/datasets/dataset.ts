@@ -109,6 +109,7 @@ export class Dataset {
    * Zod schemas are automatically converted to JSON Schema.
    */
   async update(input: {
+    name?: string;
     description?: string;
     metadata?: Record<string, unknown>;
     inputSchema?: unknown;

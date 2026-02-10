@@ -50,7 +50,6 @@ export const listItemsQuerySchema = z.object({
   page: z.coerce.number().optional().default(0),
   perPage: z.coerce.number().optional().default(10),
   version: z.coerce.date().optional(), // Optional version filter for snapshot semantics
-  search: z.string().optional(), // Optional search term for input/groundTruth
 });
 
 // ============================================================================
@@ -96,16 +95,6 @@ export const triggerExperimentBodySchema = z.object({
 export const compareExperimentsBodySchema = z.object({
   experimentIdA: z.string().describe('ID of baseline experiment'),
   experimentIdB: z.string().describe('ID of candidate experiment'),
-  thresholds: z
-    .record(
-      z.string(),
-      z.object({
-        value: z.number().describe('Threshold value for regression detection'),
-        direction: z.enum(['higher-is-better', 'lower-is-better']).optional().describe('Score direction'),
-      }),
-    )
-    .optional()
-    .describe('Per-scorer threshold configuration'),
 });
 
 // ============================================================================
@@ -182,49 +171,26 @@ export const experimentResultResponseSchema = z.object({
   createdAt: z.coerce.date(),
 });
 
-// Scorer stats schema
-const scorerStatsSchema = z.object({
-  errorRate: z.number(),
-  errorCount: z.number(),
-  passRate: z.number(),
-  passCount: z.number(),
-  avgScore: z.number(),
-  scoreCount: z.number(),
-  totalItems: z.number(),
-});
-
-// Scorer comparison schema
-const scorerComparisonSchema = z.object({
-  statsA: scorerStatsSchema,
-  statsB: scorerStatsSchema,
-  delta: z.number(),
-  regressed: z.boolean(),
-  threshold: z.number(),
-});
-
-// Item comparison schema
-const itemComparisonSchema = z.object({
+// Comparison item schema (MVP shape)
+const comparisonItemSchema = z.object({
   itemId: z.string(),
-  inBothRuns: z.boolean(),
-  scoresA: z.record(z.string(), z.number().nullable()),
-  scoresB: z.record(z.string(), z.number().nullable()),
+  input: z.unknown().nullable(),
+  groundTruth: z.unknown().nullable(),
+  results: z.record(
+    z.string(),
+    z
+      .object({
+        output: z.unknown().nullable(),
+        scores: z.record(z.string(), z.number().nullable()),
+      })
+      .nullable(),
+  ),
 });
 
 // Comparison result schema
 export const comparisonResponseSchema = z.object({
-  runA: z.object({
-    id: z.string(),
-    datasetVersion: z.coerce.date(),
-  }),
-  runB: z.object({
-    id: z.string(),
-    datasetVersion: z.coerce.date(),
-  }),
-  versionMismatch: z.boolean(),
-  hasRegression: z.boolean(),
-  scorers: z.record(z.string(), scorerComparisonSchema),
-  items: z.array(itemComparisonSchema),
-  warnings: z.array(z.string()),
+  baselineId: z.string(),
+  items: z.array(comparisonItemSchema),
 });
 
 // Experiment summary schema (returned by trigger experiment)

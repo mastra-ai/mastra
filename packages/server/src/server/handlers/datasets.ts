@@ -1,11 +1,7 @@
-import {
-  runExperiment,
-  compareExperiments,
-  SchemaValidationError,
-  SchemaUpdateValidationError,
-} from '@mastra/core/datasets';
-import type { StoragePagination } from '@mastra/core/storage';
+import { SchemaValidationError, SchemaUpdateValidationError } from '@mastra/core/datasets';
+import { MastraError } from '@mastra/core/error';
 import { HTTPException } from '../http-exception';
+import type { StatusCode } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
 import {
   datasetIdPathParams,
@@ -41,6 +37,20 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
 // ============================================================================
+// Helper: Map MastraError IDs to HTTP status codes
+// ============================================================================
+
+function getHttpStatusForMastraError(errorId: string): number {
+  switch (errorId) {
+    case 'DATASET_NOT_FOUND':
+    case 'EXPERIMENT_NOT_FOUND':
+      return 404;
+    default:
+      return 500;
+  }
+}
+
+// ============================================================================
 // Dataset CRUD Routes
 // ============================================================================
 
@@ -57,23 +67,15 @@ export const LIST_DATASETS_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     try {
       const { page, perPage } = params;
-      const pagination: StoragePagination = {
-        page: page ?? 0,
-        perPage: perPage ?? 10,
-      };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      const result = await datasetsStore.listDatasets({ pagination });
-      // Cast JSONSchema7 to Record<string, unknown> for response schema compatibility
+      const result = await mastra.datasets.list({ page: page ?? 0, perPage: perPage ?? 10 });
       return {
         datasets: result.datasets as any,
         pagination: result.pagination,
       };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error listing datasets');
     }
   },
@@ -98,22 +100,19 @@ export const CREATE_DATASET_ROUTE = createRoute({
         inputSchema?: Record<string, unknown> | null;
         groundTruthSchema?: Record<string, unknown> | null;
       };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      const dataset = await datasetsStore.createDataset({
+      const ds = await mastra.datasets.create({
         name,
         description,
         metadata,
-        inputSchema: inputSchema as any,
-        groundTruthSchema: groundTruthSchema as any,
+        inputSchema: inputSchema ?? undefined,
+        groundTruthSchema: groundTruthSchema ?? undefined,
       });
-      // Cast JSONSchema7 to Record<string, unknown> for response schema compatibility
-      return dataset as any;
+      const details = await ds.getDetails();
+      return details as any;
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error creating dataset');
     }
   },
@@ -131,19 +130,12 @@ export const GET_DATASET_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId }) => {
     try {
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      // Cast JSONSchema7 to Record<string, unknown> for response schema compatibility
-      return dataset as any;
+      const ds = await mastra.datasets.get({ id: datasetId });
+      return (await ds.getDetails()) as any;
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error getting dataset');
     }
   },
@@ -169,28 +161,15 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         inputSchema?: Record<string, unknown> | null;
         groundTruthSchema?: Record<string, unknown> | null;
       };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const existing = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!existing) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      const dataset = await datasetsStore.updateDataset({
-        id: datasetId,
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const result = await ds.update({
         name,
         description,
         metadata,
-        inputSchema: inputSchema as any,
-        groundTruthSchema: groundTruthSchema as any,
+        inputSchema: inputSchema ?? undefined,
+        groundTruthSchema: groundTruthSchema ?? undefined,
       });
-      // Cast JSONSchema7 to Record<string, unknown> for response schema compatibility
-      return dataset as any;
+      return result as any;
     } catch (error) {
       if (error instanceof SchemaUpdateValidationError) {
         throw new HTTPException(400, {
@@ -203,6 +182,9 @@ export const UPDATE_DATASET_ROUTE = createRoute({
           message: error.message,
           cause: { field: error.field, errors: error.errors },
         });
+      }
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error updating dataset');
     }
@@ -221,20 +203,13 @@ export const DELETE_DATASET_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId }) => {
     try {
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const existing = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!existing) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      await datasetsStore.deleteDataset({ id: datasetId });
+      await mastra.datasets.get({ id: datasetId }); // validates existence
+      await mastra.datasets.delete({ id: datasetId });
       return { success: true };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error deleting dataset');
     }
   },
@@ -257,34 +232,22 @@ export const LIST_ITEMS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
-      const { page, perPage, version, search } = params;
-      const pagination: StoragePagination = {
+      const { page, perPage, version } = params;
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const result = await ds.listItems({
         page: page ?? 0,
         perPage: perPage ?? 10,
-      };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      const result = await datasetsStore.listItems({
-        datasetId,
-        pagination,
         version: version instanceof Date ? version : undefined,
-        search,
       });
-      return {
-        items: result.items,
-        pagination: result.pagination,
-      };
+      // listItems returns different shapes depending on version
+      if (Array.isArray(result)) {
+        return { items: result, pagination: { total: result.length, page: 0, perPage: result.length, hasMore: false } };
+      }
+      return { items: result.items, pagination: result.pagination };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error listing dataset items');
     }
   },
@@ -308,26 +271,17 @@ export const ADD_ITEM_ROUTE = createRoute({
         groundTruth?: unknown;
         metadata?: Record<string, unknown>;
       };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      const item = await datasetsStore.addItem({ datasetId, input, groundTruth, metadata });
-      return item;
+      const ds = await mastra.datasets.get({ id: datasetId });
+      return await ds.addItem({ input, groundTruth, metadata });
     } catch (error) {
       if (error instanceof SchemaValidationError) {
         throw new HTTPException(400, {
           message: error.message,
           cause: { field: error.field, errors: error.errors },
         });
+      }
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error adding item to dataset');
     }
@@ -346,24 +300,16 @@ export const GET_ITEM_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, itemId }) => {
     try {
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      const item = await datasetsStore.getItemById({ id: itemId });
-      if (!item || item.datasetId !== datasetId) {
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const item = await ds.getItem({ itemId });
+      if (!item || (item as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
-
-      return item;
+      return item as any;
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error getting dataset item');
     }
   },
@@ -387,32 +333,22 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         groundTruth?: unknown;
         metadata?: Record<string, unknown>;
       };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      // Check if item exists
-      const existing = await datasetsStore.getItemById({ id: itemId });
-      if (!existing || existing.datasetId !== datasetId) {
+      const ds = await mastra.datasets.get({ id: datasetId });
+      // Check if item exists and belongs to dataset
+      const existing = await ds.getItem({ itemId });
+      if (!existing || (existing as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
-
-      const item = await datasetsStore.updateItem({ id: itemId, datasetId, input, groundTruth, metadata });
-      return item;
+      return await ds.updateItem({ itemId, input, groundTruth, metadata });
     } catch (error) {
       if (error instanceof SchemaValidationError) {
         throw new HTTPException(400, {
           message: error.message,
           cause: { field: error.field, errors: error.errors },
         });
+      }
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error updating dataset item');
     }
@@ -431,26 +367,17 @@ export const DELETE_ITEM_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, itemId }) => {
     try {
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      // Check if item exists
-      const existing = await datasetsStore.getItemById({ id: itemId });
-      if (!existing || existing.datasetId !== datasetId) {
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const existing = await ds.getItem({ itemId });
+      if (!existing || (existing as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
-
-      await datasetsStore.deleteItem({ id: itemId, datasetId });
+      await ds.deleteItem({ itemId });
       return { success: true };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error deleting dataset item');
     }
   },
@@ -474,29 +401,13 @@ export const LIST_EXPERIMENTS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
       const { page, perPage } = params;
-      const pagination: StoragePagination = {
-        page: page ?? 0,
-        perPage: perPage ?? 10,
-      };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      const runsStore = await mastra.getStorage()?.getStore('runs');
-      if (!datasetsStore || !runsStore) {
-        throw new HTTPException(500, { message: 'Storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      const result = await runsStore.listRuns({ datasetId, pagination });
-      return {
-        experiments: result.runs,
-        pagination: result.pagination,
-      };
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const result = await ds.listExperiments({ page: page ?? 0, perPage: perPage ?? 10 });
+      return { experiments: result.runs, pagination: result.pagination };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error listing experiments');
     }
   },
@@ -523,107 +434,29 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         version?: Date;
         maxConcurrency?: number;
       };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      const runsStore = await mastra.getStorage()?.getStore('runs');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-      if (!runsStore) {
-        throw new HTTPException(500, { message: 'Runs storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      // Get items differently based on whether version is specified
-      // - No version: use current items from live table
-      // - Version specified: use historical snapshot
-      let items: Awaited<ReturnType<typeof datasetsStore.getItemsByVersion>>;
-      let datasetVersion: Date;
-
-      if (version instanceof Date) {
-        // Historical version - fetch from version snapshots
-        datasetVersion = version;
-        items = await datasetsStore.getItemsByVersion({
-          datasetId,
-          version: datasetVersion,
-        });
-      } else {
-        // Latest version - fetch current items from live table
-        datasetVersion = dataset.version;
-        const result = await datasetsStore.listItems({
-          datasetId,
-          pagination: { page: 0, perPage: false }, // Get all items
-        });
-        items = result.items;
-      }
-
-      if (items.length === 0) {
-        throw new HTTPException(400, {
-          message: version
-            ? `No items in dataset ${datasetId} at version ${datasetVersion.toISOString()}`
-            : `No items in dataset ${datasetId}`,
-        });
-      }
-
-      // Create run record with 'pending' status BEFORE spawning execution
-      const runId = crypto.randomUUID();
-      const createdAt = new Date();
-
-      await runsStore.createRun({
-        id: runId,
-        datasetId,
-        datasetVersion,
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const result = await ds.startExperimentAsync({
         targetType,
         targetId,
-        totalItems: items.length,
+        scorers: scorerIds,
+        version: version instanceof Date ? version : undefined,
+        maxConcurrency,
       });
-
-      // Spawn runExperiment() without await - fire and forget
-      // The runExperiment function will update run status to 'running' then 'completed'/'failed'
-      void (async () => {
-        try {
-          await runExperiment(mastra, {
-            datasetId,
-            targetType,
-            targetId,
-            scorers: scorerIds,
-            // Only pass version for historical runs - latest uses current items
-            version: version instanceof Date ? version : undefined,
-            maxConcurrency,
-            experimentId: runId, // Pass pre-created experimentId to avoid duplicate creation
-          });
-        } catch (err) {
-          // Log error and update run status to failed
-          console.error(`[runExperiment] Background execution failed for experiment ${runId}:`, err);
-          try {
-            await runsStore.updateRun({
-              id: runId,
-              status: 'failed',
-              completedAt: new Date(),
-            });
-          } catch (updateErr) {
-            console.error(`[runExperiment] Failed to update run status to failed:`, updateErr);
-          }
-        }
-      })();
-
-      // Return immediately with pending status
+      // Return shape matching experimentSummaryResponseSchema
       return {
-        experimentId: runId,
-        status: 'pending' as const,
-        totalItems: items.length,
+        experimentId: result.experimentId,
+        status: result.status,
+        totalItems: 0,
         succeededCount: 0,
         failedCount: 0,
-        startedAt: createdAt,
+        startedAt: new Date(),
         completedAt: null,
         results: [],
       };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error triggering experiment');
     }
   },
@@ -641,25 +474,16 @@ export const GET_EXPERIMENT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, experimentId }) => {
     try {
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      const runsStore = await mastra.getStorage()?.getStore('runs');
-      if (!datasetsStore || !runsStore) {
-        throw new HTTPException(500, { message: 'Storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      const run = await runsStore.getRunById({ id: experimentId });
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const run = await ds.getExperiment({ experimentId });
       if (!run || run.datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
       }
-
       return run;
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error getting experiment');
     }
   },
@@ -679,35 +503,21 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     try {
       const { page, perPage } = params;
-      const pagination: StoragePagination = {
-        page: page ?? 0,
-        perPage: perPage ?? 10,
-      };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      const runsStore = await mastra.getStorage()?.getStore('runs');
-      if (!datasetsStore || !runsStore) {
-        throw new HTTPException(500, { message: 'Storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      // Check if experiment exists and belongs to dataset
-      const run = await runsStore.getRunById({ id: experimentId });
+      const ds = await mastra.datasets.get({ id: datasetId });
+      // Validate experiment belongs to dataset
+      const run = await ds.getExperiment({ experimentId });
       if (!run || run.datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
       }
-
-      const result = await runsStore.listResults({ runId: experimentId, pagination });
+      const result = await ds.listExperimentResults({ experimentId, page: page ?? 0, perPage: perPage ?? 10 });
       return {
-        results: result.results.map(({ runId: experimentId, ...rest }) => ({ experimentId, ...rest })),
+        results: result.results.map(({ runId: _runId, ...rest }) => ({ experimentId, ...rest })),
         pagination: result.pagination,
       };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error listing experiment results');
     }
   },
@@ -730,51 +540,21 @@ export const COMPARE_EXPERIMENTS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
-      const { experimentIdA, experimentIdB, thresholds } = params as {
+      const { experimentIdA, experimentIdB } = params as {
         experimentIdA: string;
         experimentIdB: string;
-        thresholds?: Record<string, { value: number; direction?: 'higher-is-better' | 'lower-is-better' }>;
       };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      const runsStore = await mastra.getStorage()?.getStore('runs');
-      if (!datasetsStore || !runsStore) {
-        throw new HTTPException(500, { message: 'Storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      // Validate both experiments belong to the dataset (or warn)
-      const [runA, runB] = await Promise.all([
-        runsStore.getRunById({ id: experimentIdA }),
-        runsStore.getRunById({ id: experimentIdB }),
-      ]);
-
-      if (!runA) {
-        throw new HTTPException(404, { message: `Experiment A not found: ${experimentIdA}` });
-      }
-      if (!runB) {
-        throw new HTTPException(404, { message: `Experiment B not found: ${experimentIdB}` });
-      }
-
-      // Compare experiments
-      const result = await compareExperiments(mastra, {
-        runIdA: experimentIdA,
-        runIdB: experimentIdB,
-        thresholds,
+      // Validate dataset exists
+      await mastra.datasets.get({ id: datasetId });
+      const result = await mastra.datasets.compareExperiments({
+        experimentIds: [experimentIdA, experimentIdB],
+        baselineId: experimentIdA,
       });
-
-      // Add warning if experiments are from different datasets
-      if (runA.datasetId !== datasetId || runB.datasetId !== datasetId) {
-        result.warnings.push('One or both experiments belong to a different dataset than the comparison endpoint');
-      }
-
       return result;
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error comparing experiments');
     }
   },
@@ -798,32 +578,13 @@ export const LIST_DATASET_VERSIONS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
       const { page, perPage } = params;
-      const pagination: StoragePagination = {
-        page: page ?? 0,
-        perPage: perPage ?? 10,
-      };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      const result = await datasetsStore.listDatasetVersions({
-        datasetId,
-        pagination,
-      });
-
-      return {
-        versions: result.versions,
-        pagination: result.pagination,
-      };
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const result = await ds.listVersions({ page: page ?? 0, perPage: perPage ?? 10 });
+      return { versions: result.versions, pagination: result.pagination };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error listing dataset versions');
     }
   },
@@ -843,39 +604,17 @@ export const LIST_ITEM_VERSIONS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     try {
       const { page, perPage } = params;
-      const pagination: StoragePagination = {
-        page: page ?? 0,
-        perPage: perPage ?? 10,
-      };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      // Get versions directly - don't require item to exist (may be deleted)
-      // Versions include tombstone records for deleted items
-      const result = await datasetsStore.listItemVersions({
-        itemId,
-        pagination,
-      });
-
-      // Check versions belong to this dataset (first version check)
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const result = await ds.listItemVersions({ itemId, page: page ?? 0, perPage: perPage ?? 10 });
+      // Check versions belong to this dataset
       if (result.versions.length > 0 && result.versions[0]?.datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found in dataset: ${itemId}` });
       }
-
-      return {
-        versions: result.versions,
-        pagination: result.pagination,
-      };
+      return { versions: result.versions, pagination: result.pagination };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error listing item versions');
     }
   },
@@ -893,30 +632,19 @@ export const GET_ITEM_VERSION_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, itemId, versionNumber }) => {
     try {
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      // Get version directly - don't require item to exist (may be deleted)
-      const version = await datasetsStore.getItemVersion(itemId, versionNumber);
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const version = await ds.getItem({ itemId, version: versionNumber });
       if (!version) {
         throw new HTTPException(404, { message: `Version ${versionNumber} not found for item: ${itemId}` });
       }
-
-      // Check version belongs to this dataset
-      if (version.datasetId !== datasetId) {
+      if ((version as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found in dataset: ${itemId}` });
       }
-
-      return version;
+      return version as any;
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error getting item version');
     }
   },
@@ -940,39 +668,20 @@ export const BULK_ADD_ITEMS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
       const { items } = params as {
-        items: Array<{
-          input: unknown;
-          groundTruth?: unknown;
-          metadata?: Record<string, unknown>;
-        }>;
+        items: Array<{ input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }>;
       };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      const addedItems = await datasetsStore.bulkAddItems({
-        datasetId,
-        items,
-      });
-
-      return {
-        items: addedItems,
-        count: addedItems.length,
-      };
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const addedItems = await ds.addItems({ items });
+      return { items: addedItems, count: addedItems.length };
     } catch (error) {
       if (error instanceof SchemaValidationError) {
         throw new HTTPException(400, {
           message: error.message,
           cause: { field: error.field, errors: error.errors },
         });
+      }
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error bulk adding items');
     }
@@ -993,28 +702,13 @@ export const BULK_DELETE_ITEMS_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
       const { itemIds } = params as { itemIds: string[] };
-
-      const datasetsStore = await mastra.getStorage()?.getStore('datasets');
-      if (!datasetsStore) {
-        throw new HTTPException(500, { message: 'Datasets storage not configured' });
-      }
-
-      // Check if dataset exists
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
-        throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
-      }
-
-      await datasetsStore.bulkDeleteItems({
-        datasetId,
-        itemIds,
-      });
-
-      return {
-        success: true,
-        deletedCount: itemIds.length,
-      };
+      const ds = await mastra.datasets.get({ id: datasetId });
+      await ds.deleteItems({ itemIds });
+      return { success: true, deletedCount: itemIds.length };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
       return handleError(error, 'Error bulk deleting items');
     }
   },
