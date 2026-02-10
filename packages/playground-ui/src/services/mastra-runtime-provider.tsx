@@ -225,13 +225,18 @@ const convertOmPartsInMastraMessage = (
       const isComplete = !!parts.bufferingEnd;
       const isLoading = !isFailed && !isActivated && !isComplete;
 
-      const mergedData = {
+      const mergedData: Record<string, unknown> = {
         ...startData,
         ...(isComplete ? endData : {}),
         ...(isFailed ? failedData : {}),
         ...(isActivated ? activationData : {}),
         _state: isFailed ? 'buffering-failed' : isActivated ? 'activated' : isComplete ? 'buffering-complete' : 'buffering',
       };
+      // Map activation fields to badge fields so they display correctly on reload
+      // (activation markers use tokensActivated, but the badge reads tokensObserved)
+      if (!mergedData.tokensObserved && mergedData.tokensActivated) {
+        mergedData.tokensObserved = mergedData.tokensActivated;
+      }
 
       convertedParts.push({
         type: 'dynamic-tool',
@@ -298,11 +303,14 @@ const convertOmPartsInMastraMessage = (
         // Check both local activation part and global activatedCycleIds set
         const isActivated = !!parts.activation || activatedCycleIds?.has(cycleId);
 
-        const mergedData = {
+        const mergedData: Record<string, unknown> = {
           ...(parts.bufferingEnd ? endData : failedData),
           ...(isActivated ? activationData : {}),
           _state: isFailed ? 'buffering-failed' : isActivated ? 'activated' : 'buffering-complete',
         };
+        if (!mergedData.tokensObserved && mergedData.tokensActivated) {
+          mergedData.tokensObserved = mergedData.tokensActivated;
+        }
 
         convertedParts.push({
           type: 'dynamic-tool',
@@ -311,6 +319,36 @@ const convertOmPartsInMastraMessage = (
           input: mergedData,
           output: {
             status: isFailed ? 'buffering-failed' : isActivated ? 'activated' : 'buffering-complete',
+            omData: mergedData,
+          },
+          state: 'output-available',
+        });
+
+        processedCycleIds.add(cycleId);
+      }
+      continue;
+    } else if (part.type === 'data-om-activation' && cycleId && !processedCycleIds.has(cycleId)) {
+      // Handle activation-only markers (e.g., on reload where buffering start/end weren't persisted)
+      const parts = omPartsByCycleId.get(cycleId);
+      if (parts) {
+        const activationData = parts.activation?.data || {};
+
+        const mergedData: Record<string, unknown> = {
+          ...activationData,
+          _state: 'activated',
+        };
+        // Map activation fields to badge fields
+        if (!mergedData.tokensObserved && mergedData.tokensActivated) {
+          mergedData.tokensObserved = mergedData.tokensActivated;
+        }
+
+        convertedParts.push({
+          type: 'dynamic-tool',
+          toolCallId: `om-buffering-${cycleId}`,
+          toolName: OM_TOOL_NAME,
+          input: mergedData,
+          output: {
+            status: 'activated',
             omData: mergedData,
           },
           state: 'output-available',
