@@ -71,8 +71,9 @@ type NetworkIdGenerator = (context?: IdGeneratorContext) => string;
  * - isNetwork: true JSON (result markers after primitive execution)
  * - Routing agent decision JSON (has primitiveId/primitiveType/selectionReason)
  * - Completion feedback messages (metadata.mode === 'network' or metadata.completionResult)
+ *
+ * @internal Exported for testing purposes
  */
-/** @internal Exported for testing purposes */
 export function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage[] {
   return messages.filter(msg => {
     // Include all user messages
