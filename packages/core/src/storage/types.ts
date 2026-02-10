@@ -792,6 +792,55 @@ export type ObservationalMemoryScope = 'thread' | 'resource';
 export type ObservationalMemoryOriginType = 'initial' | 'reflection';
 
 /**
+ * A chunk of buffered observations from a single observation cycle.
+ * Multiple chunks can accumulate before being activated together.
+ */
+export interface BufferedObservationChunk {
+  /** Unique identifier for this chunk */
+  id: string;
+  /** Cycle ID for linking to UI buffering markers */
+  cycleId: string;
+  /** The observation text content */
+  observations: string;
+  /** Token count of this chunk's observations */
+  tokenCount: number;
+  /** Message IDs that were observed in this chunk */
+  messageIds: string[];
+  /** Token count of the messages that were observed (for activation calculation) */
+  messageTokens: number;
+  /** When the messages were last observed */
+  lastObservedAt: Date;
+  /** When this chunk was created */
+  createdAt: Date;
+  /** Optional suggested continuation from the observer */
+  suggestedContinuation?: string;
+  /** Optional current task context */
+  currentTask?: string;
+}
+
+/**
+ * Input for creating a new buffered observation chunk.
+ */
+export interface BufferedObservationChunkInput {
+  /** Cycle ID for linking to UI buffering markers */
+  cycleId: string;
+  /** The observation text content */
+  observations: string;
+  /** Token count of this chunk's observations */
+  tokenCount: number;
+  /** Message IDs that were observed in this chunk */
+  messageIds: string[];
+  /** Token count of the messages that were observed (for activation calculation) */
+  messageTokens: number;
+  /** When the messages were observed */
+  lastObservedAt: Date;
+  /** Optional suggested continuation from the observer */
+  suggestedContinuation?: string;
+  /** Optional current task context */
+  currentTask?: string;
+}
+
+/**
  * Core database record for observational memory
  *
  * For resource scope: One active record per resource, containing observations from ALL threads.
@@ -837,10 +886,39 @@ export interface ObservationalMemoryRecord {
    * For thread scope: Plain observation text.
    */
   activeObservations: string;
-  /** Observations waiting to be activated (async buffering) */
+  /**
+   * Array of buffered observation chunks waiting to be activated.
+   * Each chunk represents observations from a single observation cycle.
+   * Multiple chunks can accumulate before being activated together.
+   */
+  bufferedObservationChunks?: BufferedObservationChunk[];
+  /**
+   * @deprecated Use bufferedObservationChunks instead. Legacy field for backwards compatibility.
+   * Observations waiting to be activated (async buffering)
+   */
   bufferedObservations?: string;
+  /**
+   * @deprecated Use bufferedObservationChunks instead. Legacy field for backwards compatibility.
+   * Token count of buffered observations
+   */
+  bufferedObservationTokens?: number;
+  /**
+   * @deprecated Use bufferedObservationChunks instead. Legacy field for backwards compatibility.
+   * Message IDs being processed in async buffering
+   */
+  bufferedMessageIds?: string[];
   /** Reflection waiting to be swapped in (async buffering) */
   bufferedReflection?: string;
+  /** Token count of buffered reflection (post-compression output) */
+  bufferedReflectionTokens?: number;
+  /** Observation tokens that were fed into the reflector (pre-compression input) */
+  bufferedReflectionInputTokens?: number;
+  /**
+   * The number of lines in activeObservations that were reflected on
+   * when the buffered reflection was created. Used at activation time
+   * to separate reflected vs unreflected observations.
+   */
+  reflectedObservationLineCount?: number;
 
   /**
    * Message IDs observed in the current generation.
@@ -869,6 +947,23 @@ export interface ObservationalMemoryRecord {
   isReflecting: boolean;
   /** Is observation currently in progress? */
   isObserving: boolean;
+  /** Is async observation buffering currently in progress? */
+  isBufferingObservation: boolean;
+  /** Is async reflection buffering currently in progress? */
+  isBufferingReflection: boolean;
+  /**
+   * The pending message token count at which the last async observation buffer was triggered.
+   * Used to determine when the next bufferTokens interval is crossed.
+   * Persisted so new instances (created per request) can pick up where the last left off.
+   */
+  lastBufferedAtTokens: number;
+  /**
+   * Timestamp cursor for buffered messages.
+   * Set to the max message timestamp (+1ms) of the last successfully buffered chunk.
+   * Used to filter out already-buffered messages when starting the next buffer.
+   * Reset on activation.
+   */
+  lastBufferedAtTime: Date | null;
 
   // Configuration
   /** Current configuration (stored as JSON) */
@@ -916,12 +1011,107 @@ export interface UpdateActiveObservationsInput {
 
 /**
  * Input for updating buffered observations.
- * Note: Async buffering is currently disabled but types are retained for future use.
+ * Used when async buffering is enabled via `bufferTokens` config.
+ * Adds a new chunk to the bufferedObservationChunks array.
  */
 export interface UpdateBufferedObservationsInput {
   id: string;
-  observations: string;
-  suggestedContinuation?: string;
+  /** The observation chunk to add to the buffer */
+  chunk: BufferedObservationChunkInput;
+  /** Timestamp cursor for the last buffered message boundary. Set to max message timestamp + 1ms. */
+  lastBufferedAtTime?: Date;
+}
+
+/**
+ * Input for swapping buffered observations to active.
+ * Supports partial activation via `activationRatio`.
+ */
+export interface SwapBufferedToActiveInput {
+  id: string;
+  /**
+   * Ratio controlling how much context to retain after activation (0-1 float).
+   * `1 - activationRatio` is the fraction of the threshold to keep as raw messages.
+   * Target tokens to remove = `currentPendingTokens - messageTokensThreshold * (1 - activationRatio)`.
+   * Chunks are selected by boundary, biased under the target.
+   */
+  activationRatio: number;
+  /**
+   * The message token threshold (e.g., observation.messageTokens config value).
+   * Used with `activationRatio` to compute the retention floor.
+   */
+  messageTokensThreshold: number;
+  /**
+   * Current total pending message tokens in the context window.
+   * Used to compute how many tokens need to be removed to reach the retention floor.
+   */
+  currentPendingTokens: number;
+  /**
+   * Optional timestamp to use as lastObservedAt after swap.
+   * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
+   */
+  lastObservedAt?: Date;
+}
+
+/**
+ * Result from swapping buffered observations to active.
+ * Contains info about what was activated for UI feedback.
+ */
+export interface SwapBufferedToActiveResult {
+  /** Number of chunks that were activated */
+  chunksActivated: number;
+  /** Total message tokens from activated chunks (context cleared) */
+  messageTokensActivated: number;
+  /** Total observation tokens from activated chunks */
+  observationTokensActivated: number;
+  /** Total messages from activated chunks */
+  messagesActivated: number;
+  /** CycleIds of the activated chunks (for linking UI markers) */
+  activatedCycleIds: string[];
+  /** All message IDs from activated chunks (for removing from context) */
+  activatedMessageIds: string[];
+  /** Concatenated observations from activated chunks (for UI display) */
+  observations?: string;
+  /** Per-chunk breakdown for individual UI markers */
+  perChunk?: Array<{
+    cycleId: string;
+    messageTokens: number;
+    observationTokens: number;
+    messageCount: number;
+    observations: string;
+  }>;
+}
+
+/**
+ * Input for updating buffered reflection.
+ * Used when async reflection buffering is enabled via `bufferTokens` config.
+ */
+export interface UpdateBufferedReflectionInput {
+  id: string;
+  reflection: string;
+  /** Token count of the buffered reflection (post-compression output) */
+  tokenCount: number;
+  /** Observation tokens that were fed into the reflector (pre-compression input) */
+  inputTokenCount: number;
+  /**
+   * The number of lines in activeObservations at the time of reflection.
+   * Used at activation time to know which observations were already reflected on.
+   */
+  reflectedObservationLineCount: number;
+}
+
+/**
+ * Input for swapping buffered reflection to active (creates new generation).
+ * Uses the stored `reflectedObservationLineCount` to determine which observations
+ * were already reflected on, replaces those with the buffered reflection,
+ * and appends any unreflected observations that were added after the reflection started.
+ */
+export interface SwapBufferedReflectionToActiveInput {
+  currentRecord: ObservationalMemoryRecord;
+  /**
+   * Token count for the combined new activeObservations (bufferedReflection + unreflected).
+   * Computed by the processor using its token counter before calling the adapter.
+   */
+  tokenCount: number;
 }
 
 /**
