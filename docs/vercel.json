@@ -452,7 +452,7 @@
     },
     {
       "source": "/docs/deployment/cloud-providers/vercel-deployer",
-      "destination": "/guides/deployment/vercel-deployer",
+      "destination": "/guides/deployment/vercel",
       "permanent": true
     },
     {
@@ -578,6 +578,11 @@
     {
       "source": "/guides/deployment/netlify-deployer",
       "destination": "/guides/deployment/netlify",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/vercel-deployer",
+      "destination": "/guides/deployment/vercel",
       "permanent": true
     },
     {
