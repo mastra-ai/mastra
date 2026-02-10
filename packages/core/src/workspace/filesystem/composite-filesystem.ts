@@ -20,6 +20,7 @@
  */
 
 import { PermissionError } from '../errors';
+import { callLifecycle } from '../lifecycle';
 import type { ProviderStatus } from '../lifecycle';
 import type {
   WorkspaceFilesystem,
@@ -208,7 +209,7 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     const errors: Error[] = [];
     for (const fs of this._mounts.values()) {
       try {
-        if (fs.init) await fs.init();
+        await callLifecycle(fs, 'init');
       } catch (e) {
         errors.push(e instanceof Error ? e : new Error(String(e)));
       }
@@ -225,7 +226,7 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     const errors: Error[] = [];
     for (const fs of this._mounts.values()) {
       try {
-        if (fs.destroy) await fs.destroy();
+        await callLifecycle(fs, 'destroy');
       } catch (e) {
         errors.push(e instanceof Error ? e : new Error(String(e)));
       }

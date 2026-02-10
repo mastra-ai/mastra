@@ -37,6 +37,7 @@ import { WorkspaceError, SearchNotAvailableError } from './errors';
 import { CompositeFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemMountConfig, FilesystemIcon } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
+import { callLifecycle } from './lifecycle';
 import type { WorkspaceSandbox } from './sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
@@ -711,12 +712,12 @@ export class Workspace {
     this._status = 'initializing';
 
     try {
-      if (this._fs?.init) {
-        await this._fs.init();
+      if (this._fs) {
+        await callLifecycle(this._fs, 'init');
       }
 
-      if (this._sandbox?.start) {
-        await this._sandbox.start();
+      if (this._sandbox) {
+        await callLifecycle(this._sandbox, 'start');
       }
 
       // Auto-index files if autoIndexPaths is configured
@@ -738,12 +739,12 @@ export class Workspace {
     this._status = 'destroying';
 
     try {
-      if (this._sandbox?.destroy) {
-        await this._sandbox.destroy();
+      if (this._sandbox) {
+        await callLifecycle(this._sandbox, 'destroy');
       }
 
-      if (this._fs?.destroy) {
-        await this._fs.destroy();
+      if (this._fs) {
+        await callLifecycle(this._fs, 'destroy');
       }
 
       this._status = 'destroyed';

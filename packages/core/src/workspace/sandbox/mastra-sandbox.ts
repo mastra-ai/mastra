@@ -9,13 +9,14 @@
  *
  * ## Lifecycle Management
  *
- * The base class provides race-condition-safe lifecycle methods:
- * - `start()` - Handles concurrent calls, status management, and mount processing
- * - `stop()` - Handles concurrent calls and status management
- * - `destroy()` - Handles concurrent calls and status management
+ * The base class provides race-condition-safe lifecycle wrappers:
+ * - `_start()` - Handles concurrent calls, status management, and mount processing
+ * - `_stop()` - Handles concurrent calls and status management
+ * - `_destroy()` - Handles concurrent calls and status management
  *
- * Subclasses should override the protected `_doStart()`, `_doStop()`, and `_doDestroy()`
- * methods instead of the public lifecycle methods.
+ * Subclasses override the plain `start()`, `stop()`, and `destroy()` methods
+ * to provide their implementation. Callers use the `_`-prefixed wrappers
+ * (or `callLifecycle()`) which add status tracking and race-condition safety.
  *
  * External providers can extend this class to get logger support, or implement
  * the WorkspaceSandbox interface directly if they don't need logging.
@@ -71,8 +72,8 @@ export interface MastraSandboxOptions {
  *     super({ name: 'MyCustomSandbox' });
  *   }
  *
- *   // Override _doStart instead of start()
- *   protected async _doStart(): Promise<void> {
+ *   // Override start() to provide startup logic
+ *   async start(): Promise<void> {
  *     // Your startup logic here
  *   }
  *
@@ -108,13 +109,13 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   // Lifecycle Promise Tracking (prevents race conditions)
   // ---------------------------------------------------------------------------
 
-  /** Promise for start() to prevent race conditions from concurrent calls */
+  /** Promise for _start() to prevent race conditions from concurrent calls */
   protected _startPromise?: Promise<void>;
 
-  /** Promise for stop() to prevent race conditions from concurrent calls */
+  /** Promise for _stop() to prevent race conditions from concurrent calls */
   protected _stopPromise?: Promise<void>;
 
-  /** Promise for destroy() to prevent race conditions from concurrent calls */
+  /** Promise for _destroy() to prevent race conditions from concurrent calls */
   protected _destroyPromise?: Promise<void>;
 
   /** Lifecycle callbacks */
@@ -139,25 +140,25 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   }
 
   // ---------------------------------------------------------------------------
-  // Lifecycle Methods (race-condition-safe wrappers)
+  // Lifecycle Wrappers (race-condition-safe)
   // ---------------------------------------------------------------------------
 
   /**
-   * Start the sandbox.
+   * Start the sandbox (wrapper with status management and race-condition safety).
    *
    * This method is race-condition-safe - concurrent calls will return the same promise.
    * Handles status management and automatically processes pending mounts after startup.
    *
-   * Subclasses should override `_doStart()` instead of this method.
+   * Subclasses override `start()` to provide their startup logic.
    */
-  async start(): Promise<void> {
+  async _start(): Promise<void> {
     // Already running
     if (this.status === 'running') {
       return;
     }
 
     // Wait for in-flight stop/destroy before starting.
-    // Intentionally no .catch() — if teardown is failing, start() should propagate
+    // Intentionally no .catch() — if teardown is failing, _start() should propagate
     // that error rather than silently starting on top of a broken state.
     if (this._stopPromise) await this._stopPromise;
     if (this._destroyPromise) await this._destroyPromise;
@@ -189,7 +190,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     this.status = 'starting';
 
     try {
-      await this._doStart();
+      await this.start();
       this.status = 'running';
 
       // Fire onStart callback after sandbox is running — treat failure as non-fatal
@@ -218,24 +219,24 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   /**
    * Override this method to implement sandbox startup logic.
    *
-   * Called by `start()` after status is set to 'starting'.
+   * Called by `_start()` after status is set to 'starting'.
    * Status will be set to 'running' on success, 'error' on failure.
    *
    * @example
    * ```typescript
-   * protected async _doStart(): Promise<void> {
+   * async start(): Promise<void> {
    *   this._sandbox = await Sandbox.create({ ... });
    * }
    * ```
    */
-  protected async _doStart(): Promise<void> {
+  async start(): Promise<void> {
     // Default no-op - subclasses override
   }
 
   /**
    * Ensure the sandbox is running.
    *
-   * Calls `start()` if status is not 'running'. Useful for lazy initialization
+   * Calls `_start()` if status is not 'running'. Useful for lazy initialization
    * where operations should automatically start the sandbox if needed.
    *
    * @throws {SandboxNotReadyError} if the sandbox fails to reach 'running' status
@@ -250,7 +251,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    */
   protected async ensureRunning(): Promise<void> {
     if (this.status !== 'running') {
-      await this.start();
+      await this._start();
     }
     if (this.status !== 'running') {
       throw new SandboxNotReadyError(this.id);
@@ -258,14 +259,14 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   }
 
   /**
-   * Stop the sandbox.
+   * Stop the sandbox (wrapper with status management and race-condition safety).
    *
    * This method is race-condition-safe - concurrent calls will return the same promise.
    * Handles status management.
    *
-   * Subclasses should override `_doStop()` instead of this method.
+   * Subclasses override `stop()` to provide their stop logic.
    */
-  async stop(): Promise<void> {
+  async _stop(): Promise<void> {
     // Already stopped
     if (this.status === 'stopped') {
       return;
@@ -299,7 +300,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       // Fire onStop callback before stopping
       await this._onStop?.({ sandbox: this });
 
-      await this._doStop();
+      await this.stop();
       this.status = 'stopped';
     } catch (error) {
       this.status = 'error';
@@ -310,22 +311,22 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   /**
    * Override this method to implement sandbox stop logic.
    *
-   * Called by `stop()` after status is set to 'stopping'.
+   * Called by `_stop()` after status is set to 'stopping'.
    * Status will be set to 'stopped' on success, 'error' on failure.
    */
-  protected async _doStop(): Promise<void> {
+  async stop(): Promise<void> {
     // Default no-op - subclasses override
   }
 
   /**
-   * Destroy the sandbox and clean up all resources.
+   * Destroy the sandbox and clean up all resources (wrapper with status management).
    *
    * This method is race-condition-safe - concurrent calls will return the same promise.
    * Handles status management.
    *
-   * Subclasses should override `_doDestroy()` instead of this method.
+   * Subclasses override `destroy()` to provide their destroy logic.
    */
-  async destroy(): Promise<void> {
+  async _destroy(): Promise<void> {
     // Already destroyed
     if (this.status === 'destroyed') {
       return;
@@ -360,7 +361,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       // Fire onDestroy callback before destroying
       await this._onDestroy?.({ sandbox: this });
 
-      await this._doDestroy();
+      await this.destroy();
       this.status = 'destroyed';
     } catch (error) {
       this.status = 'error';
@@ -371,10 +372,10 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
   /**
    * Override this method to implement sandbox destroy logic.
    *
-   * Called by `destroy()` after status is set to 'destroying'.
+   * Called by `_destroy()` after status is set to 'destroying'.
    * Status will be set to 'destroyed' on success, 'error' on failure.
    */
-  protected async _doDestroy(): Promise<void> {
+  async destroy(): Promise<void> {
     // Default no-op - subclasses override
   }
 

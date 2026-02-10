@@ -395,7 +395,7 @@ describe('Workspace Logger Integration', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       filesystem.__setLogger(mockLogger);
 
-      await filesystem.init();
+      await filesystem._init();
 
       expect(mockLogger.debug).toHaveBeenCalledWith('Initializing filesystem', expect.any(Object));
       expect(mockLogger.debug).toHaveBeenCalledWith('Filesystem initialized', expect.any(Object));
@@ -461,7 +461,7 @@ describe('Workspace Logger Integration', () => {
       const filesystem = new LocalFilesystem({ basePath: '/invalid\x00path' });
       filesystem.__setLogger(mockLogger);
 
-      await expect(filesystem.init()).rejects.toThrow();
+      await expect(filesystem._init()).rejects.toThrow();
 
       expect(mockLogger.error).toHaveBeenCalledWith('Failed to initialize filesystem', expect.any(Object));
     });
@@ -476,12 +476,12 @@ describe('Workspace Logger Integration', () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       sandbox.__setLogger(mockLogger);
 
-      await sandbox.start();
+      await sandbox._start();
 
       expect(mockLogger.debug).toHaveBeenCalledWith('Starting sandbox', expect.any(Object));
       expect(mockLogger.debug).toHaveBeenCalledWith('Sandbox started', expect.any(Object));
 
-      await sandbox.destroy();
+      await sandbox._destroy();
     });
 
     it('should log when stopping', async () => {
@@ -489,12 +489,12 @@ describe('Workspace Logger Integration', () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       sandbox.__setLogger(mockLogger);
 
-      await sandbox.start();
-      await sandbox.stop();
+      await sandbox._start();
+      await sandbox._stop();
 
       expect(mockLogger.debug).toHaveBeenCalledWith('Stopping sandbox', expect.any(Object));
 
-      await sandbox.destroy();
+      await sandbox._destroy();
     });
 
     it('should log when destroying', async () => {
@@ -502,8 +502,8 @@ describe('Workspace Logger Integration', () => {
       const sandbox = new LocalSandbox({ workingDirectory: tempDir });
       sandbox.__setLogger(mockLogger);
 
-      await sandbox.start();
-      await sandbox.destroy();
+      await sandbox._start();
+      await sandbox._destroy();
 
       expect(mockLogger.debug).toHaveBeenCalledWith('Destroying sandbox', expect.any(Object));
     });
@@ -519,7 +519,7 @@ describe('Workspace Logger Integration', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith('Executing command', expect.objectContaining({ command: 'echo' }));
       expect(mockLogger.info).toHaveBeenCalledWith('Command completed', expect.any(Object));
 
-      await sandbox.destroy();
+      await sandbox._destroy();
     });
 
     it('should log when command fails', async () => {
@@ -533,7 +533,7 @@ describe('Workspace Logger Integration', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith('Executing command', expect.any(Object));
       expect(mockLogger.error).toHaveBeenCalledWith('Command failed', expect.any(Object));
 
-      await sandbox.destroy();
+      await sandbox._destroy();
     });
   });
 
@@ -718,7 +718,7 @@ describe('Workspace Logger Integration', () => {
 
 /**
  * A sandbox that uses the base class lifecycle properly
- * (overrides _doStart/_doStop/_doDestroy, not start/stop/destroy).
+ * (overrides start/stop/destroy, wrapper is _start/_stop/_destroy).
  */
 class LifecycleTestSandbox extends MastraSandbox {
   readonly id = 'lifecycle-test';
@@ -734,15 +734,15 @@ class LifecycleTestSandbox extends MastraSandbox {
     super({ name: 'LifecycleTestSandbox' });
   }
 
-  protected override async _doStart(): Promise<void> {
+  async start(): Promise<void> {
     await this.doStartFn();
   }
 
-  protected override async _doStop(): Promise<void> {
+  async stop(): Promise<void> {
     await this.doStopFn();
   }
 
-  protected override async _doDestroy(): Promise<void> {
+  async destroy(): Promise<void> {
     await this.doDestroyFn();
   }
 
@@ -756,120 +756,120 @@ class LifecycleTestSandbox extends MastraSandbox {
 }
 
 describe('MastraSandbox Base Class Lifecycle', () => {
-  describe('start() status transitions', () => {
+  describe('_start() status transitions', () => {
     it('sets status to running on success', async () => {
       const sandbox = new LifecycleTestSandbox();
 
-      await sandbox.start();
+      await sandbox._start();
 
       expect(sandbox.status).toBe('running');
     });
 
-    it('sets status to error when _doStart throws', async () => {
+    it('sets status to error when start() throws', async () => {
       const sandbox = new LifecycleTestSandbox();
       sandbox.doStartFn.mockRejectedValueOnce(new Error('Start failed'));
 
-      await expect(sandbox.start()).rejects.toThrow('Start failed');
+      await expect(sandbox._start()).rejects.toThrow('Start failed');
 
       expect(sandbox.status).toBe('error');
     });
 
-    it('concurrent start() calls return same promise', async () => {
+    it('concurrent _start() calls return same promise', async () => {
       const sandbox = new LifecycleTestSandbox();
       sandbox.doStartFn.mockImplementation(() => new Promise(r => setTimeout(r, 10)));
 
-      await Promise.all([sandbox.start(), sandbox.start(), sandbox.start()]);
+      await Promise.all([sandbox._start(), sandbox._start(), sandbox._start()]);
 
       expect(sandbox.doStartFn).toHaveBeenCalledTimes(1);
     });
 
     it('is idempotent when already running', async () => {
       const sandbox = new LifecycleTestSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
-      await sandbox.start(); // Should no-op
+      await sandbox._start(); // Should no-op
 
       expect(sandbox.doStartFn).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('stop() status transitions', () => {
+  describe('_stop() status transitions', () => {
     it('sets status to stopped on success', async () => {
       const sandbox = new LifecycleTestSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
-      await sandbox.stop();
+      await sandbox._stop();
 
       expect(sandbox.status).toBe('stopped');
     });
 
-    it('sets status to error when _doStop throws', async () => {
+    it('sets status to error when stop() throws', async () => {
       const sandbox = new LifecycleTestSandbox();
-      await sandbox.start();
+      await sandbox._start();
       sandbox.doStopFn.mockRejectedValueOnce(new Error('Stop failed'));
 
-      await expect(sandbox.stop()).rejects.toThrow('Stop failed');
+      await expect(sandbox._stop()).rejects.toThrow('Stop failed');
 
       expect(sandbox.status).toBe('error');
     });
 
-    it('concurrent stop() calls return same promise', async () => {
+    it('concurrent _stop() calls return same promise', async () => {
       const sandbox = new LifecycleTestSandbox();
-      await sandbox.start();
+      await sandbox._start();
       sandbox.doStopFn.mockImplementation(() => new Promise(r => setTimeout(r, 10)));
 
-      await Promise.all([sandbox.stop(), sandbox.stop(), sandbox.stop()]);
+      await Promise.all([sandbox._stop(), sandbox._stop(), sandbox._stop()]);
 
       expect(sandbox.doStopFn).toHaveBeenCalledTimes(1);
     });
 
     it('is idempotent when already stopped', async () => {
       const sandbox = new LifecycleTestSandbox();
-      await sandbox.start();
-      await sandbox.stop();
+      await sandbox._start();
+      await sandbox._stop();
 
-      await sandbox.stop(); // Should no-op
+      await sandbox._stop(); // Should no-op
 
       expect(sandbox.doStopFn).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('destroy() status transitions', () => {
+  describe('_destroy() status transitions', () => {
     it('sets status to destroyed on success', async () => {
       const sandbox = new LifecycleTestSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
-      await sandbox.destroy();
+      await sandbox._destroy();
 
       expect(sandbox.status).toBe('destroyed');
     });
 
-    it('sets status to error when _doDestroy throws', async () => {
+    it('sets status to error when destroy() throws', async () => {
       const sandbox = new LifecycleTestSandbox();
-      await sandbox.start();
+      await sandbox._start();
       sandbox.doDestroyFn.mockRejectedValueOnce(new Error('Destroy failed'));
 
-      await expect(sandbox.destroy()).rejects.toThrow('Destroy failed');
+      await expect(sandbox._destroy()).rejects.toThrow('Destroy failed');
 
       expect(sandbox.status).toBe('error');
     });
 
-    it('concurrent destroy() calls return same promise', async () => {
+    it('concurrent _destroy() calls return same promise', async () => {
       const sandbox = new LifecycleTestSandbox();
-      await sandbox.start();
+      await sandbox._start();
       sandbox.doDestroyFn.mockImplementation(() => new Promise(r => setTimeout(r, 10)));
 
-      await Promise.all([sandbox.destroy(), sandbox.destroy(), sandbox.destroy()]);
+      await Promise.all([sandbox._destroy(), sandbox._destroy(), sandbox._destroy()]);
 
       expect(sandbox.doDestroyFn).toHaveBeenCalledTimes(1);
     });
 
     it('is idempotent when already destroyed', async () => {
       const sandbox = new LifecycleTestSandbox();
-      await sandbox.start();
-      await sandbox.destroy();
+      await sandbox._start();
+      await sandbox._destroy();
 
-      await sandbox.destroy(); // Should no-op
+      await sandbox._destroy(); // Should no-op
 
       expect(sandbox.doDestroyFn).toHaveBeenCalledTimes(1);
     });
@@ -885,7 +885,7 @@ describe('MastraSandbox Base Class Lifecycle', () => {
       expect(sandbox.doStartFn).toHaveBeenCalledTimes(1);
     });
 
-    it('propagates start error when _doStart fails', async () => {
+    it('propagates start error when start() fails', async () => {
       const sandbox = new LifecycleTestSandbox();
       sandbox.doStartFn.mockRejectedValue(new Error('Start failed'));
 
@@ -901,12 +901,12 @@ describe('MastraSandbox Base Class Lifecycle', () => {
       });
 
       // First start fails
-      await expect(sandbox.start()).rejects.toThrow('Start failed');
+      await expect(sandbox._start()).rejects.toThrow('Start failed');
       expect(sandbox.status).toBe('error');
 
       // Fix the issue and retry
       shouldFail = false;
-      await sandbox.start();
+      await sandbox._start();
       expect(sandbox.status).toBe('running');
     });
   });

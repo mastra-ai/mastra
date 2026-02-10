@@ -246,7 +246,7 @@ export class LocalSandbox extends MastraSandbox {
    * Creates working directory and sets up seatbelt profile if using macOS isolation.
    * Status management is handled by the base class.
    */
-  protected override async _doStart(): Promise<void> {
+  async start(): Promise<void> {
     this.logger.debug('Starting sandbox', { workingDirectory: this._workingDirectory, isolation: this._isolation });
 
     await fs.mkdir(this.workingDirectory, { recursive: true });
@@ -302,7 +302,7 @@ export class LocalSandbox extends MastraSandbox {
    * Stop the local sandbox.
    * Status management is handled by the base class.
    */
-  protected override async _doStop(): Promise<void> {
+  async stop(): Promise<void> {
     this.logger.debug('Stopping sandbox', { workingDirectory: this._workingDirectory });
   }
 
@@ -311,7 +311,7 @@ export class LocalSandbox extends MastraSandbox {
    * Cleans up seatbelt profile if auto-generated.
    * Status management is handled by the base class.
    */
-  protected override async _doDestroy(): Promise<void> {
+  async destroy(): Promise<void> {
     this.logger.debug('Destroying sandbox', { workingDirectory: this._workingDirectory });
     // Clean up seatbelt profile only if it was auto-generated (not user-provided)
     if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {
